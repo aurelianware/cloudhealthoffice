@@ -97,7 +97,7 @@ public static class GlEventOutbox
     }
 
     /// <summary>The PaymentVoidedBeforeTransmission event of one payment (deterministic per payment).</summary>
-    public static PaymentFileOutboxMessage PaymentVoidedBeforeTransmission(PaymentRun run, Payment payment, string? reversalRunId,
+    public static PaymentFileOutboxMessage PaymentVoidedBeforeTransmission(PaymentRun run, Payment payment, PaymentVoid plan,
         string supersededFileReference, string newFileReference, string by, DateTime at)
     {
         var eventId = GlEventTypes.EventIdFor(run.TenantId, $"payment-void:{payment.Id}", GlEventTypes.PaymentVoidedBeforeTransmission);
@@ -110,8 +110,12 @@ public static class GlEventOutbox
             PaymentId = payment.Id,
             CheckNumber = payment.CheckNumber,
             PayeeNpi = payment.PayeeNPI,
-            Amount = payment.TotalPaymentAmount,
-            ReversalRunId = reversalRunId,
+            // The payable never to be paid; a part that was not reversed stays payable (reissue).
+            Amount = plan.PayableRelieved,
+            UnpaidRemainder = plan.UnpaidRemainder,
+            ReversalRunId = plan.ReversalRunId,
+            ReversalRunExecutedAt = plan.ReversalExecutedAt,
+            ExcludedByOverride = plan.ByOverride,
             SupersededFileReference = supersededFileReference,
             NewFileReference = newFileReference,
             VoidedAt = at,

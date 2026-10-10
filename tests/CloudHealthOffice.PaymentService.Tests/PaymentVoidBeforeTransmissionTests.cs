@@ -42,18 +42,18 @@ public class PaymentVoidBeforeTransmissionTests
             new TestActor(user, FfsRunHarness.Tenant).SeparationOfDuties(),
             Options.Create(_options), new AchEffectiveDatePolicy(Options.Create(_options), _clock), _log, _clock, _h.Ledger);
 
-    private async Task<(PaymentRun Run, Payment Voided, Payment Kept)> PinnedRunAsync()
+    private async Task<(PaymentRun Run, Payment Voided, Payment Kept)> PinnedRunAsync(decimal expectedTotal = 250m)
     {
         var run = await _h.ExecuteRunAsync(FfsRunHarness.Claim("c1", Npi, 125m), FfsRunHarness.Claim("c2", Npi, 75m), FfsRunHarness.Claim("c3", OtherNpi, 50m));
         var pinned = (await _h.EftFiles().GenerateAsync(run.Id, "approver-2")).Run;
-        Assert.Equal(250m, pinned.EftFile!.TotalCreditAmount);
+        Assert.Equal(expectedTotal, pinned.EftFile!.TotalCreditAmount);
         var payments = _h.Payments.All.Where(p => p.RunId == run.Id && !p.IsReversal).ToList();
         return (pinned, payments.Single(p => p.PayeeNPI == OtherNpi), payments.First(p => p.PayeeNPI == Npi));
     }
 
     /// <summary>What a completed reversal run leaves behind for <paramref name="claimIds"/>: reservations, reversal payments in one 835, the receivable.</summary>
     private async Task<ProviderReceivableRecord?> ReverseAsync(Payment original, string reversalRunId = "rr-1", string envelopeId = "env-rev-1",
-        bool complete = true, bool receivable = true, params string[] claimIds)
+        bool complete = true, bool receivable = true, bool held = false, params string[] claimIds)
     {
         var claims = claimIds.Length > 0 ? claimIds : original.ClaimPayments.Select(c => c.ClaimId).ToArray();
         foreach (var claimId in claims)
@@ -75,7 +75,12 @@ public class PaymentVoidBeforeTransmissionTests
         if (!receivable)
             return null;
         var owed = claims.Sum(c => original.ClaimPayments.Single(x => x.ClaimId == c).PaymentAmount);
-        return await _h.SeedReceivableAsync(original.PayeeNPI!, owed, envelopeId: envelopeId);
+        if (!held)
+            return await _h.SeedReceivableAsync(original.PayeeNPI!, owed, envelopeId: envelopeId);
+        // As the reversal run now records it: the original's file was not sent, so it is held.
+        return await _h.Ledger.RecordForwardBalanceAsync(FfsRunHarness.Tenant, original.PayeeNPI!, "TP-A",
+            new ReversalRun { Id = reversalRunId, ReversalRunNumber = "RR-1", TenantId = FfsRunHarness.Tenant },
+            envelopeId, "R-TRACE", owed, "approver-0", new[] { original.Id });
     }
 
     [Fact]
@@ -145,14 +150,12 @@ public class PaymentVoidBeforeTransmissionTests
     {
         var (run, voided, _) = await PinnedRunAsync();
         var receivable = (await ReverseAsync(voided))!;
-        // The re-pin lands but the cancellation of the receivable fails once (the ledger is unreachable).
+        // The re-pin lands but the cancellation of the receivable fails once (the ledger is unreachable):
+        // the re-pin still succeeds; the void is finished later.
         var flaky = new FlakyReceivables(_h.LedgerStore) { FailNextReplace = true };
-        var ledger = new ProviderReceivableLedger(flaky, _h.Configuration, Microsoft.Extensions.Logging.Abstractions.NullLogger<ProviderReceivableLedger>.Instance);
-        var redater = new PaymentFileTransmissionService(_h.Runs, _h.Payments, _h.Reservations, _h.EftFiles(), _store, _bank, _bank,
-            new TestActor("treasury-2", FfsRunHarness.Tenant).SeparationOfDuties(), Options.Create(_options),
-            new AchEffectiveDatePolicy(Options.Create(_options), _clock), _log, _clock, ledger);
+        var redater = WithLedger("treasury-2", flaky);
 
-        await Assert.ThrowsAsync<TimeoutException>(() => redater.RedateAsync(run.Id, "payment reversed"));
+        await redater.RedateAsync(run.Id, "payment reversed");
 
         var pinned = (await _h.Runs.GetByIdAsync(run.Id))!.EftFile!;
         Assert.False(Assert.Single(pinned.VoidedPayments).Completed);
@@ -206,22 +209,171 @@ public class PaymentVoidBeforeTransmissionTests
         Assert.Null(await _store.GetAsync(FfsRunHarness.Tenant, run.EftFile!.FileReference));
     }
 
+    private PaymentFileTransmissionService WithLedger(string user, IProviderReceivableRepository store)
+        => new(_h.Runs, _h.Payments, _h.Reservations, _h.EftFiles(), _store, _bank, _bank,
+            new TestActor(user, FfsRunHarness.Tenant).SeparationOfDuties(), Options.Create(_options),
+            new AchEffectiveDatePolicy(Options.Create(_options), _clock), _log, _clock,
+            new ProviderReceivableLedger(store, _h.Configuration, Microsoft.Extensions.Logging.Abstractions.NullLogger<ProviderReceivableLedger>.Instance));
+
+    private Payment LaterPayment(string npi, decimal amount) => new()
+    {
+        Id = "later-" + Guid.NewGuid().ToString("N")[..6], CheckNumber = "0009990001", PayeeNPI = npi, PaymentMethod = "ACH",
+        TotalPaymentAmount = amount, RunId = "run-later", PaymentDate = new DateTime(2026, 5, 1),
+    };
+
     [Fact]
-    public async Task A_receivable_already_partly_recovered_is_refused()
+    public async Task A_receivable_held_for_an_unsent_payment_is_never_recovered_before_the_void()
     {
         var (run, voided, _) = await PinnedRunAsync();
-        var receivable = (await ReverseAsync(voided))!;
-        // A later run already recovered part of it from the provider.
-        var current = (await _h.LedgerStore.GetAsync(FfsRunHarness.Tenant, receivable.Id))!;
-        var version = current.Version;
-        current.OutstandingAmount = 20m;
-        current.RecoveredAmount = 30m;
-        current.Version = version + 1;
-        Assert.True(await _h.LedgerStore.TryReplaceAsync(current, version));
+        var receivable = (await ReverseAsync(voided, held: true))!;
+        Assert.Equal(ReceivableStatus.PendingVoid, receivable.Status);
+        Assert.Equal(new[] { voided.Id }, receivable.PendingPaymentIds);
 
-        var ex = await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-2").RedateAsync(run.Id, "reversed"));
+        // A later payment run to the same provider takes nothing from it.
+        var later = LaterPayment(OtherNpi, 30m);
+        Assert.Empty(await _h.Ledger.ApplyRecoveriesAsync(FfsRunHarness.Tenant, later, "run-later", "PR-LATER", "approver-9"));
+        Assert.Equal(30m, later.TotalPaymentAmount);
+        Assert.Empty(await _h.LedgerStore.ListOutstandingAsync(FfsRunHarness.Tenant, OtherNpi));
 
-        Assert.Contains("only 20.00 outstanding", ex.Message);
+        await Service("treasury-2").RedateAsync(run.Id, "payment reversed before transmission");
+
+        var cancelled = (await _h.Ledger.GetAsync(FfsRunHarness.Tenant, receivable.Id))!;
+        Assert.Equal((ReceivableStatus.Cancelled, 0m, 0m), (cancelled.Status, cancelled.OutstandingAmount, cancelled.RecoveredAmount));
+        Assert.Empty(cancelled.PendingPaymentIds);
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").TransmitAsync(run.Id)).Status);
+    }
+
+    [Fact]
+    public async Task A_held_receivable_is_released_when_the_payment_turns_out_to_have_been_sent()
+    {
+        var (run, _, kept) = await PinnedRunAsync();
+        // Held for "kept" (its reversal ran while the file was, say, awaiting review); then the file is confirmed sent.
+        var held = await _h.Ledger.RecordForwardBalanceAsync(FfsRunHarness.Tenant, Npi, "TP-A",
+            new ReversalRun { Id = "rr-9", ReversalRunNumber = "RR-9", TenantId = FfsRunHarness.Tenant }, "env-rev-9", "R-9", 125m, "approver-0", new[] { kept.Id });
+        Assert.Equal(ReceivableStatus.PendingVoid, held.Status);
+
+        await Service("treasury-3").TransmitAsync(run.Id);
+
+        var released = (await _h.Ledger.GetAsync(FfsRunHarness.Tenant, held.Id))!;
+        Assert.Equal((ReceivableStatus.Open, 125m), (released.Status, released.OutstandingAmount));
+        Assert.Contains(released.Entries, e => e.Type == ReceivableEntryType.Activated);
+        Assert.Single(await _h.LedgerStore.ListOutstandingAsync(FfsRunHarness.Tenant, Npi));
+    }
+
+    [Fact]
+    public async Task A_held_receivable_can_be_released_by_a_person_with_a_reason()
+    {
+        var held = await _h.Ledger.RecordForwardBalanceAsync(FfsRunHarness.Tenant, Npi, "TP-A",
+            new ReversalRun { Id = "rr-9", ReversalRunNumber = "RR-9", TenantId = FfsRunHarness.Tenant }, "env-rev-9", "R-9", 60m, "approver-0", new[] { "p-x" });
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _h.Ledger.ActivateAsync(FfsRunHarness.Tenant, held.Id, "finance-1", " "));
+        var released = await _h.Ledger.ActivateAsync(FfsRunHarness.Tenant, held.Id, "finance-1", "file sent by hand on 2026-05-02, bank ref 123");
+
+        Assert.Equal(ReceivableStatus.Open, released.Status);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _h.Ledger.ActivateAsync(FfsRunHarness.Tenant, held.Id, "finance-1", "again"));
+    }
+
+    [Fact]
+    public async Task A_receivable_recovered_before_the_void_is_settled_by_reversing_the_recovery_and_recording_the_refund()
+    {
+        var (run, voided, _) = await PinnedRunAsync();
+        var receivable = (await ReverseAsync(voided))!; // opened before receivables were held (Open)
+        var later = LaterPayment(OtherNpi, 30m);
+        var offsets = await _h.Ledger.ApplyRecoveriesAsync(FfsRunHarness.Tenant, later, "run-later", "PR-LATER", "approver-9");
+        Assert.Equal(30m, Assert.Single(offsets).Amount);
+
+        // Not refused: the file is not frozen for the other payees.
+        var repinned = await Service("treasury-2").RedateAsync(run.Id, "payment reversed before transmission");
+
+        var notice = Assert.Single((await _h.Runs.GetByIdAsync(run.Id))!.EftFile!.VoidedPayments);
+        Assert.True(notice.Completed);
+        Assert.False(notice.NeedsAttention);
+        Assert.Contains(later.Id, Assert.Single(notice.RefundsOwed));
+        var settled = (await _h.Ledger.GetAsync(FfsRunHarness.Tenant, receivable.Id))!;
+        Assert.Equal((ReceivableStatus.Cancelled, 0m, 0m), (settled.Status, settled.OutstandingAmount, settled.RecoveredAmount));
+        Assert.Contains(settled.Entries, e => e.Type == ReceivableEntryType.RecoveryReversed && e.PaymentId == later.Id);
+        Assert.Contains((await _h.Runs.GetByIdAsync(run.Id))!.Warnings, w => w.Contains("owed that amount back"));
+        Assert.Equal(200m, repinned.TotalCreditAmount);
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").TransmitAsync(run.Id)).Status);
+    }
+
+    [Fact]
+    public async Task A_void_the_ledger_cannot_settle_needs_a_person_but_never_blocks_the_file()
+    {
+        var (run, voided, _) = await PinnedRunAsync();
+        await ReverseAsync(voided);
+        var stuck = new FlakyReceivables(_h.LedgerStore) { AlwaysConflict = true };
+
+        await WithLedger("treasury-2", stuck).RedateAsync(run.Id, "payment reversed");
+        var sent = await WithLedger("treasury-3", stuck).TransmitAsync(run.Id);
+
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, sent.Status);
+        var notice = Assert.Single((await _h.Runs.GetByIdAsync(run.Id))!.EftFile!.VoidedPayments);
+        Assert.True(notice.Completed && notice.NeedsAttention);
+        Assert.Contains("kept changing", notice.Problem);
+        Assert.Contains((await _h.Runs.GetByIdAsync(run.Id))!.Warnings, w => w.Contains("needs a person"));
+        Assert.NotNull((await _h.Payments.GetByIdAsync(voided.Id))!.VoidedBeforePaymentAt);
+    }
+
+    [Fact]
+    public async Task Finance_can_exclude_a_partly_reversed_payment_and_its_unreversed_part_stays_payable()
+    {
+        var (run, _, kept) = await PinnedRunAsync();
+        var reversedClaim = kept.ClaimPayments.Single(c => c.PaymentAmount == 125m).ClaimId;
+        var receivable = (await ReverseAsync(kept, held: true, claimIds: reversedClaim))!;
+        var refused = await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-2").RedateAsync(run.Id, "reversed"));
+        Assert.Contains("exclude-payments", refused.Message);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Service("treasury-2").ExcludePaymentsAsync(run.Id, Array.Empty<string>(), "x"));
+        var file = await Service("treasury-2").ExcludePaymentsAsync(run.Id, new[] { kept.Id }, "c1 recouped; c2 to be reissued by check");
+
+        Assert.Equal(50m, file.TotalCreditAmount); // the other payee is paid
+        var notice = Assert.Single(file.VoidedPayments);
+        Assert.Equal((kept.Id, 200m, 125m, 75m, true, false), (notice.PaymentId, notice.Amount, notice.PayableRelieved, notice.UnpaidRemainder,
+            notice.ExcludedByOverride, notice.OffsetsReversed));
+        Assert.Equal((ReceivableStatus.Cancelled, 0m), ((await _h.Ledger.GetAsync(FfsRunHarness.Tenant, receivable.Id))!.Status,
+            (await _h.Ledger.GetAsync(FfsRunHarness.Tenant, receivable.Id))!.OutstandingAmount));
+        var stored = (await _h.Runs.GetByIdAsync(run.Id))!;
+        var gl = JsonSerializer.Deserialize<PaymentVoidedBeforeTransmissionEvent>(
+            Assert.Single(stored.GlOutbox, m => m.Type == GlEventTypes.PaymentVoidedBeforeTransmission).PayloadJson, GlEventTypes.Json)!;
+        Assert.Equal((125m, 75m, true), (gl.Amount, gl.UnpaidRemainder, gl.ExcludedByOverride));
+        Assert.Contains(stored.Warnings, w => w.Contains("75.00 of it was not reversed") && w.Contains("reissued"));
+        Assert.Contains("excluded by finance", Assert.Single(stored.EftFileHistory).SupersededReason);
+
+        // Second person: the one who excluded it may not send the new file.
+        await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("treasury-2").TransmitAsync(run.Id));
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").TransmitAsync(run.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Finance_can_exclude_a_payment_that_recovered_receivables_and_its_recoveries_are_undone()
+    {
+        // The provider owed 10 from before: the run's payment to it recovers that (net 40).
+        var old = await _h.SeedReceivableAsync(OtherNpi, 10m, envelopeId: "env-old");
+        var (run, voided, _) = await PinnedRunAsync(expectedTotal: 240m);
+        Assert.Equal((40m, 10m), (voided.TotalPaymentAmount, voided.ReceivableOffsets.Sum(o => o.Amount)));
+        var reversal = (await ReverseAsync(voided, held: true))!;
+        var refused = await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-2").RedateAsync(run.Id, "reversed"));
+        Assert.Contains("recovered receivables", refused.Message);
+
+        var file = await Service("treasury-2").ExcludePaymentsAsync(run.Id, new[] { voided.Id }, "reversed; its recovery never happened");
+
+        var notice = Assert.Single(file.VoidedPayments);
+        Assert.Equal((40m, 0m, true), (notice.PayableRelieved, notice.UnpaidRemainder, notice.OffsetsReversed));
+        // The payment never went out: the old receivable is owed again, the reversal's is cancelled.
+        Assert.Equal(10m, (await _h.Ledger.GetAsync(FfsRunHarness.Tenant, old.Id))!.OutstandingAmount);
+        Assert.Equal(ReceivableStatus.Cancelled, (await _h.Ledger.GetAsync(FfsRunHarness.Tenant, reversal.Id))!.Status);
+    }
+
+    [Fact]
+    public async Task Excluding_a_payment_without_a_completed_reversal_is_refused()
+    {
+        var (run, voided, kept) = await PinnedRunAsync();
+
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-2").ExcludePaymentsAsync(run.Id, new[] { kept.Id }, "x"));
+        await ReverseAsync(voided, complete: false, receivable: false);
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-2").ExcludePaymentsAsync(run.Id, new[] { voided.Id }, "x"));
+        Assert.Null(await _store.GetAsync(FfsRunHarness.Tenant, run.EftFile!.FileReference));
     }
 
     [Fact]
@@ -236,6 +388,7 @@ public class PaymentVoidBeforeTransmissionTests
     {
         private readonly IProviderReceivableRepository _inner;
         public bool FailNextReplace { get; set; }
+        public bool AlwaysConflict { get; set; }
         public FlakyReceivables(IProviderReceivableRepository inner) => _inner = inner;
         public Task<ProviderReceivableRecord> CreateIfAbsentAsync(ProviderReceivableRecord record) => _inner.CreateIfAbsentAsync(record);
         public Task<ProviderReceivableRecord?> GetAsync(string tenantId, string id) => _inner.GetAsync(tenantId, id);
@@ -244,6 +397,8 @@ public class PaymentVoidBeforeTransmissionTests
             => _inner.SearchAsync(tenantId, providerNpi, status);
         public Task<bool> TryReplaceAsync(ProviderReceivableRecord record, long expectedVersion)
         {
+            if (AlwaysConflict)
+                return Task.FromResult(false);
             if (FailNextReplace)
             {
                 FailNextReplace = false;

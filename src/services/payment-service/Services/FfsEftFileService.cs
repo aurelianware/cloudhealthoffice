@@ -59,7 +59,17 @@ public interface IFfsEftFileService
 }
 
 /// <summary>A payment to leave out of a re-pinned file because it was reversed before the file was sent.</summary>
-public sealed record PaymentVoid(string PaymentId, string? ReversalRunId, string? ReceivableId);
+/// <param name="ReversalRunId">The reversal run(s) that recouped it (comma separated when split).</param>
+/// <param name="Cancellations">What to cancel on each receivable its reversal opened (one per reversal 835).</param>
+/// <param name="PayableRelieved">The payable that is never to be paid: what the reversal took back, net of the payment's own recoveries.</param>
+/// <param name="UnpaidRemainder">The part of the payment that was not reversed: still owed to the provider, to be reissued.</param>
+/// <param name="ReverseOffsets">The payment recovered receivables; those recoveries are undone (it is never made).</param>
+/// <param name="ReversalExecutedAt">When the (latest) reversal run executed: decides the GL cutover of the void.</param>
+/// <param name="ByOverride">Excluded by a finance decision (exclude-payments), not by the automatic re-pin.</param>
+public sealed record PaymentVoid(string PaymentId, string? ReversalRunId, IReadOnlyList<ReceivableCancellation> Cancellations,
+    decimal PayableRelieved, decimal UnpaidRemainder, bool ReverseOffsets, DateTime? ReversalExecutedAt, bool ByOverride);
+
+public sealed record ReceivableCancellation(string ReceivableId, decimal Amount);
 
 public sealed class FfsEftFileOutcome
 {
@@ -289,12 +299,21 @@ public sealed class FfsEftFileService : IFfsEftFileService
                 TradingPartnerId = envelope?.TradingPartnerId,
                 ControlNumber = envelope?.ControlNumber,
                 ReversalRunId = v.ReversalRunId,
-                ReceivableId = v.ReceivableId,
+                ReceivableId = v.Cancellations.FirstOrDefault()?.ReceivableId,
+                Cancellations = v.Cancellations.Select(c => new VoidedReceivableCancellation { ReceivableId = c.ReceivableId, Amount = c.Amount }).ToList(),
+                PayableRelieved = v.PayableRelieved,
+                UnpaidRemainder = v.UnpaidRemainder,
+                OffsetsReversed = v.ReverseOffsets,
+                ExcludedByOverride = v.ByOverride,
+                ReversalExecutedAt = v.ReversalExecutedAt,
             });
-            glEvents.Add(GlEventOutbox.PaymentVoidedBeforeTransmission(run, payment, v.ReversalRunId, old.FileReference, file.FileReference, actorUserId, now));
+            glEvents.Add(GlEventOutbox.PaymentVoidedBeforeTransmission(run, payment, v, old.FileReference, file.FileReference, actorUserId, now));
             warnings.Add($"Payment {payment.CheckNumber} ({payment.TotalPaymentAmount:F2}) to NPI {payment.PayeeNPI} was reversed before its EFT file was sent " +
                          $"and is left out of {file.FileReference}: it will not be paid. Its 835 ({envelope?.TradingPartnerId} ISA13 {envelope?.ControlNumber}) " +
-                         "said it would be; tell the provider.");
+                         "said it would be; tell the provider." +
+                         (v.UnpaidRemainder > 0m
+                             ? $" {v.UnpaidRemainder:F2} of it was not reversed: that is still owed to the provider and must be reissued by a person."
+                             : string.Empty));
         }
 
         old.SupersededAt = now;

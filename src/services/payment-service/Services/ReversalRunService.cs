@@ -57,6 +57,8 @@ public class ReversalRunService : IReversalRunService
     private readonly ICarcRarcMappingService _carcRarcMapper;
     private readonly IProviderReceivableLedger? _receivables;
 
+    private readonly IUnsentAchPayments? _unsentPayments;
+
     public ReversalRunService(
         IPaymentRepository paymentRepository,
         IReversalRunRepository reversalRunRepository,
@@ -70,8 +72,10 @@ public class ReversalRunService : IReversalRunService
         IRunSeparationOfDuties separationOfDuties,
         IClaimReservationRepository reservations,
         ICarcRarcMappingService carcRarcMapper,
-        IProviderReceivableLedger? receivables = null)
+        IProviderReceivableLedger? receivables = null,
+        IUnsentAchPayments? unsentPayments = null)
     {
+        _unsentPayments = unsentPayments;
         _reservations = reservations;
         _carcRarcMapper = carcRarcMapper;
         _receivables = receivables;
@@ -507,8 +511,16 @@ public class ReversalRunService : IReversalRunService
 
             try
             {
+                // A reversed payment whose NACHA file has not been sent may never be paid: its
+                // receivable is held (PendingVoid, never recovered) until it is voided or paid.
+                var pending = await UnsentOriginalsAsync(eraInputs, env.TradingPartnerId, npi, run.Id);
                 var ledger = await _receivables.RecordForwardBalanceAsync(
-                    run.TenantId, npi, env.TradingPartnerId, run, envelopeId, trace, owed, approver);
+                    run.TenantId, npi, env.TradingPartnerId, run, envelopeId, trace, owed, approver, pending);
+                if (pending.Count > 0)
+                    run.Warnings.Add(
+                        $"Provider receivable {ledger.Id} (NPI {npi}, {owed:F2}) is held, not recovered: it reverses payment(s) " +
+                        $"{string.Join(", ", pending)} whose NACHA file has not been sent. Re-pin that file without them " +
+                        "(POST /api/paymentruns/{id}/eft-file/redate), or release the receivable once they are confirmed paid.");
                 receivable.ReceivableId = ledger.Id;
                 run.Warnings.Add(
                     $"Trading partner {env.TradingPartnerId}: NPI {npi} owes {owed:F2}, carried forward (PLB FB) in reversal 835 {envelopeId} " +
@@ -524,6 +536,31 @@ public class ReversalRunService : IReversalRunService
                     $"but the receivable could not be recorded ({ex.GetType().Name}); it is UNRECORDED in the ledger and needs a person");
             }
         }
+    }
+
+    /// <summary>The original (reversed) payments of <paramref name="npi"/> in this 835 whose money may not have left.</summary>
+    private async Task<List<string>> UnsentOriginalsAsync(List<EraPaymentInput> eraInputs, string tradingPartnerId, string npi, string reversalRunId)
+    {
+        var pending = new List<string>();
+        if (_unsentPayments == null)
+            return pending;
+        var claimIds = eraInputs
+            .Where(i => i.TradingPartnerId == tradingPartnerId && i.IsReversal && string.Equals(i.Payment.PayeeNPI, npi, StringComparison.Ordinal))
+            .SelectMany(i => i.Payment.ClaimPayments.Select(c => c.ClaimId))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        foreach (var claimId in claimIds)
+        {
+            var originals = ((await _paymentRepository.GetByClaimIdAsync(claimId)) ?? Enumerable.Empty<Payment>())
+                .Where(p => !p.IsReversal && !string.Equals(p.RunId, reversalRunId, StringComparison.Ordinal))
+                .ToList();
+            foreach (var original in originals)
+            {
+                if (!pending.Contains(original.Id) && await _unsentPayments.IsUnsentAsync(original))
+                    pending.Add(original.Id);
+            }
+        }
+        return pending;
     }
 
     public async Task<ReversalRun> RetryVoidsAsync(string reversalRunId)

@@ -533,7 +533,7 @@ public class ReversalRunServiceTests
     }
 
     /// <summary>One reversal whose (substituted) 835 carries <paramref name="envelope"/>'s forward balance.</summary>
-    private ReversalRunService ServiceReturningEnvelope(EraEnvelope envelope, IProviderReceivableLedger ledger)
+    private ReversalRunService ServiceReturningEnvelope(EraEnvelope envelope, IProviderReceivableLedger ledger, IUnsentAchPayments? unsent = null)
     {
         var run = PendingRun();
         _runRepo.GetByIdAsync(run.Id).Returns(run);
@@ -547,7 +547,45 @@ public class ReversalRunServiceTests
             .Returns(new List<EraEnvelope> { envelope });
         return new ReversalRunService(
             _paymentRepo, _runRepo, _batchGen, _envelopeRepo, _tpClient, _httpFactory, NullLogger<ReversalRunService>.Instance,
-            _configuration, _actor, _actor.SeparationOfDuties(), _reservations, _mapper, ledger);
+            _configuration, _actor, _actor.SeparationOfDuties(), _reservations, _mapper, ledger, unsent);
+    }
+
+    private sealed class Unsent : IUnsentAchPayments
+    {
+        private readonly bool _answer;
+        public Unsent(bool answer) => _answer = answer;
+        public Task<bool> IsUnsentAsync(Payment payment, CancellationToken cancellationToken = default) => Task.FromResult(_answer);
+    }
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_OfAPaymentWhoseFileWasNotSent_HoldsTheReceivable_SoNothingIsRecovered()
+    {
+        var store = new InMemoryProviderReceivableRepository();
+        var ledger = new ProviderReceivableLedger(store, _configuration, NullLogger<ProviderReceivableLedger>.Instance);
+        var service = ServiceReturningEnvelope(
+            ReversalEnvelope(-650m, new Dictionary<string, decimal> { ["1234567890"] = -650m }), ledger, new Unsent(true));
+
+        var executed = await service.ExecuteReversalRunAsync("rr-1");
+
+        Assert.Equal(ReversalRunStatus.Completed, executed.Status);
+        var held = Assert.Single(store.All);
+        Assert.Equal(ReceivableStatus.PendingVoid, held.Status);
+        Assert.NotEmpty(held.PendingPaymentIds);
+        Assert.Empty(await store.ListOutstandingAsync("test-tenant", "1234567890"));
+        Assert.Contains(executed.Warnings, w => w.Contains("is held, not recovered"));
+    }
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_OfASentPayment_OpensTheReceivable()
+    {
+        var store = new InMemoryProviderReceivableRepository();
+        var ledger = new ProviderReceivableLedger(store, _configuration, NullLogger<ProviderReceivableLedger>.Instance);
+        var service = ServiceReturningEnvelope(
+            ReversalEnvelope(-650m, new Dictionary<string, decimal> { ["1234567890"] = -650m }), ledger, new Unsent(false));
+
+        await service.ExecuteReversalRunAsync("rr-1");
+
+        Assert.Equal(ReceivableStatus.Open, Assert.Single(store.All).Status);
     }
 
     private static EraEnvelope ReversalEnvelope(decimal forward, IReadOnlyDictionary<string, decimal> byProvider) =>

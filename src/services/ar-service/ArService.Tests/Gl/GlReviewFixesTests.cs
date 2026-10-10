@@ -129,6 +129,38 @@ public class GlReviewFixesTests
         _gl.Entries.Single().Reason.Should().Contain("before the GL cutover").And.Contain("left out of the opening balance");
     }
 
+    [Fact]
+    public async Task A_void_follows_its_recoupment_across_the_cutover_not_its_payment_run()
+    {
+        var before = new DateTime(2026, 4, 28, 14, 0, 0, DateTimeKind.Utc);
+        // The payment run is before the cutover (in the opening balances); its file was never sent.
+        (await Service().IngestAsync(GlFixtures.RunExecuted("old-1", before, AchPayments("old-1", 40m)), GlFixtures.Tenant)).ParkReason
+            .Should().Be(GlParkReason.PreCutover);
+        // The reversal run is after it: its recoupment posts here, so the void must post too.
+        (await Service().IngestAsync(GlFixtures.ReversalExecuted("rr-1", amount: 40m), GlFixtures.Tenant)).Status.Should().Be(GlSourceEventStatus.Posted);
+
+        var voided = await Service().IngestAsync(GlFixtures.PaymentVoided("old-1", "old-1-p1", 40m, runExecutedAt: before,
+            reversalExecutedAt: new DateTime(2026, 5, 22, 10, 0, 0, DateTimeKind.Utc)), GlFixtures.Tenant);
+
+        voided.Status.Should().Be(GlSourceEventStatus.Posted);
+        Balance(GlPostingRole.ProviderReceivable).Should().Be(0m); // recoupment receivable cleared by the void
+    }
+
+    [Fact]
+    public async Task A_void_whose_recoupment_is_before_the_cutover_stays_out_of_this_GL()
+    {
+        var before = new DateTime(2026, 4, 28, 14, 0, 0, DateTimeKind.Utc);
+        var oldReversal = GlFixtures.ReversalExecuted("rr-old");
+        await Service().IngestAsync(oldReversal with { PayloadJson = oldReversal.PayloadJson.Replace("2026-05-22T10:00:00Z", "2026-04-29T10:00:00Z") },
+            GlFixtures.Tenant);
+
+        var voided = await Service().IngestAsync(GlFixtures.PaymentVoided("old-1", "old-1-p1", 40m, runExecutedAt: before, reversalRunId: "rr-old",
+            reversalExecutedAt: new DateTime(2026, 5, 3, 0, 0, 0, DateTimeKind.Utc)), GlFixtures.Tenant);
+
+        voided.ParkReason.Should().Be(GlParkReason.PreCutover);
+        voided.ParkDetail.Should().Contain("recoupment");
+    }
+
     // ── 3. Repost after reversal ───────────────────────────────────────────────
 
     [Fact]
@@ -146,13 +178,16 @@ public class GlReviewFixesTests
             .Should().ThrowAsync<ArgumentException>();
 
         await Service().ReverseAsync(GlFixtures.Tenant, first.EntryId!, "posted from the wrong file", null, "controller-1");
-        var reposted = await Service().RepostAsync(GlFixtures.Tenant, second.EventId, "the R1 file is the one at the bank", null, "controller-1");
+        // Second person: whoever reversed the entry may not repost its replacement.
+        await FluentActions.Awaiting(() => Service().RepostAsync(GlFixtures.Tenant, second.EventId, "the R1 file is the one at the bank", null, "controller-1"))
+            .Should().ThrowAsync<GlForbiddenException>();
+        var reposted = await Service().RepostAsync(GlFixtures.Tenant, second.EventId, "the R1 file is the one at the bank", null, "controller-2");
 
         reposted.Status.Should().Be(GlSourceEventStatus.Posted);
         reposted.EntryId.Should().Be("tenant-1:ach:run-1:r1");
         var entry = _gl.Entries.Single(e => e.Id == reposted.EntryId);
         entry.RepostOf.Should().Be("tenant-1:ach:run-1");
-        entry.PostedBy.Should().Be("controller-1");
+        entry.PostedBy.Should().Be("controller-2");
         entry.Reason.Should().Contain("repost of tenant-1:ach:run-1");
         _gl.Events.Single(e => e.EventId == second.EventId).EntryId.Should().Be(reposted.EntryId);
 
@@ -160,7 +195,7 @@ public class GlReviewFixesTests
         await FluentActions.Awaiting(() => Service().RepostAsync(GlFixtures.Tenant, first.EventId, "back to R0", null, "controller-1"))
             .Should().ThrowAsync<GlStateException>();
         await Service().ReverseAsync(GlFixtures.Tenant, reposted.EntryId!, "wrong again", null, "controller-1");
-        (await Service().RepostAsync(GlFixtures.Tenant, first.EventId, "R0 after all", null, "controller-1")).EntryId.Should().Be("tenant-1:ach:run-1:r2");
+        (await Service().RepostAsync(GlFixtures.Tenant, first.EventId, "R0 after all", null, "controller-2")).EntryId.Should().Be("tenant-1:ach:run-1:r2");
 
         // Chain-aware: one live ACH entry for the run, net 90 of payable relieved.
         var run = GlReconciliationBuilder.Build(GlFixtures.Tenant, null, _gl.Events, _gl.Entries).Runs.Single();
@@ -177,7 +212,7 @@ public class GlReviewFixesTests
         _options = GlFixtures.Options(unmapped: GlPostingRole.ClaimsExpense);
         var before = _gl.Events.Single();
 
-        await FluentActions.Awaiting(() => Service().RepostAsync(GlFixtures.Tenant, before.EventId, "again", null, "controller-1"))
+        await FluentActions.Awaiting(() => Service().RepostAsync(GlFixtures.Tenant, before.EventId, "again", null, "controller-2"))
             .Should().ThrowAsync<GlStateException>().WithMessage("*NeedsMapping*");
 
         _gl.Events.Single().Should().BeEquivalentTo(before);

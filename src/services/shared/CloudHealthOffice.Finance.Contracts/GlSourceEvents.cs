@@ -169,11 +169,23 @@ public sealed record PaymentVoidedBeforeTransmissionEvent
     public string CheckNumber { get; init; } = string.Empty;
     public string? PayeeNpi { get; init; }
 
-    /// <summary>The payment's net amount, accrued as payable and now never to be paid.</summary>
+    /// <summary>
+    /// The payable now never to be paid: what the reversal recouped of the payment, net of
+    /// receivables the payment itself recovered. Normally the payment's net amount.
+    /// </summary>
     public decimal Amount { get; init; }
 
-    /// <summary>The reversal run whose recoupment opened the receivable this void cancels.</summary>
+    /// <summary>The part of the payment that was not reversed: still payable (to be reissued). Informational.</summary>
+    public decimal UnpaidRemainder { get; init; }
+
+    /// <summary>The reversal run(s) whose recoupment opened the receivable this void cancels (comma separated when split).</summary>
     public string? ReversalRunId { get; init; }
+
+    /// <summary>When the (latest) recouping reversal run executed: the void follows its recoupment across the GL cutover.</summary>
+    public DateTime? ReversalRunExecutedAt { get; init; }
+
+    /// <summary>Excluded from the file by a finance decision rather than the automatic re-pin.</summary>
+    public bool ExcludedByOverride { get; init; }
     public string SupersededFileReference { get; init; } = string.Empty;
     public string NewFileReference { get; init; } = string.Empty;
     public DateTime VoidedAt { get; init; }

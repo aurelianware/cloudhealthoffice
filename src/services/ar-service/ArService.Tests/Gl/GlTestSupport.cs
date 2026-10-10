@@ -290,7 +290,8 @@ internal static class GlFixtures
             PaymentRunExecutedAt = runExecutedAt,
         });
 
-    public static GlEventEnvelope PaymentVoided(string runId, string paymentId, decimal amount, DateTime? at = null, DateTime? runExecutedAt = null)
+    public static GlEventEnvelope PaymentVoided(string runId, string paymentId, decimal amount, DateTime? at = null, DateTime? runExecutedAt = null,
+        string reversalRunId = "rr-1", DateTime? reversalExecutedAt = null)
         => Envelope(GlEventTypes.PaymentVoidedBeforeTransmission, $"payment-void:{paymentId}", new PaymentVoidedBeforeTransmissionEvent
         {
             TenantId = Tenant,
@@ -300,7 +301,8 @@ internal static class GlFixtures
             CheckNumber = "0001000003",
             PayeeNpi = "3333333333",
             Amount = amount,
-            ReversalRunId = "rr-1",
+            ReversalRunId = reversalRunId,
+            ReversalRunExecutedAt = reversalExecutedAt,
             SupersededFileReference = $"FFS-PR-{runId}",
             NewFileReference = $"FFS-PR-{runId}-R1",
             VoidedAt = at ?? new DateTime(2026, 5, 22, 11, 0, 0, DateTimeKind.Utc),

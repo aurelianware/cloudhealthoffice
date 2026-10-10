@@ -148,9 +148,39 @@ public class VoidedPaymentNotice
     public string? ControlNumber { get; set; }
 
     public string? ReversalRunId { get; set; }
+
+    /// <summary>The first receivable cancelled (see <see cref="Cancellations"/>).</summary>
     public string? ReceivableId { get; set; }
+    public List<VoidedReceivableCancellation> Cancellations { get; set; } = new();
+
+    /// <summary>The payable never to be paid (what was reversed, net of the payment's own recoveries).</summary>
+    public decimal PayableRelieved { get; set; }
+
+    /// <summary>Not reversed: still owed to the provider, to be reissued by a person.</summary>
+    public decimal UnpaidRemainder { get; set; }
+
+    /// <summary>The payment recovered receivables; those recoveries were undone.</summary>
+    public bool OffsetsReversed { get; set; }
+
+    /// <summary>Excluded by a finance decision (exclude-payments).</summary>
+    public bool ExcludedByOverride { get; set; }
+    public DateTime? ReversalExecutedAt { get; set; }
+
+    /// <summary>Recoveries reversed because the receivable had been recovered for this never-made payment: refunds owed.</summary>
+    public List<string> RefundsOwed { get; set; } = new();
+
     public bool Completed { get; set; }
     public DateTime? CompletedAt { get; set; }
+
+    /// <summary>The ledger refused part of the completion (see <see cref="Problem"/>): a person must settle it. The file is not blocked.</summary>
+    public bool NeedsAttention { get; set; }
+    public string? Problem { get; set; }
+}
+
+public class VoidedReceivableCancellation
+{
+    public string ReceivableId { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
 }
 
 /// <summary>One NACHA credit (entry detail + addenda), without full numbers.</summary>

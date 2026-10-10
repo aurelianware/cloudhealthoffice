@@ -343,6 +343,36 @@ public class PaymentRunsController : ControllerBase
         return result.Result!;
     }
 
+    /// <summary>
+    /// A finance decision for reversed payments the re-date refuses (partly or split reversed,
+    /// or with receivable offsets): re-pins the file without them so the other payees are paid.
+    /// Same rules as re-date (record states, drop probe for a Failed file, fresh approval by
+    /// someone other than the caller) and the same void, receivable, 835-notice and GL handling.
+    /// A part of a payment that was not reversed stays payable and is listed for reissue.
+    /// payments:approve, a user who neither created nor executed the run; reason required.
+    /// </summary>
+    [HttpPost("{id}/eft-file/exclude-payments")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(PaymentRunEftFile), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<PaymentRunEftFile>> ExcludePaymentsFromEftFile(
+        string id, [FromBody] ExcludePaymentsRequest? request,
+        [FromServices] IPaymentFileTransmissionService transmissions, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Reason) || request.PaymentIds.Count == 0)
+            return Problem(title: "Reason and payments required", detail: "Name the payments to exclude and give a reason.",
+                statusCode: StatusCodes.Status400BadRequest);
+        var result = await TransmissionAction(async () =>
+        {
+            var file = await transmissions.ExcludePaymentsAsync(id, request.PaymentIds, request.Reason, cancellationToken);
+            return new ObjectResult(file) { StatusCode = StatusCodes.Status200OK };
+        });
+        return result.Result!;
+    }
+
     private async Task<ActionResult<PaymentFileTransmission>> TransmissionAction(Func<Task<ActionResult<PaymentFileTransmission>>> action)
     {
         if (_actor.IsService)
@@ -477,6 +507,12 @@ internal static class ReservationRelease
             return controller.Problem(title: "Reservation not released", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
         }
     }
+}
+
+public class ExcludePaymentsRequest
+{
+    public List<string> PaymentIds { get; set; } = new();
+    public string? Reason { get; set; }
 }
 
 public class RedateEftFileRequest

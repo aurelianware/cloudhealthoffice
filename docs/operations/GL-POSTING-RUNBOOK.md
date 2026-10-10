@@ -106,15 +106,54 @@ expense is reversed once, there is no receivable for a payment never made, and t
 payable nets to zero. It is not Dr ClaimsPayable / Cr ClaimsExpense, because that would
 reverse the expense a second time.
 
-The re-pin is refused, and nothing changes, when a person must decide:
+**Receivables are held until the void.** When a reversal run recoups a payment whose NACHA
+file has not been recorded as Transmitted (never generated, Pending, Failed, Transmitting or
+NeedsReview), the receivable it opens is `PendingVoid`. Its `pendingPaymentIds` lists those
+payments. A held receivable is never offset against later payments to the provider.
+- The void cancels its part. Once no payment is pending, the remainder opens.
+- If the file is later recorded as Transmitted (upload, reconcile, or a resolve saying the
+  bank received it), the payments were paid. The receivable is released (`Activated`
+  entry) and later runs recover it.
+- For a file sent outside this system, a person releases it:
+  `POST /api/receivables/{id}/release` `{ "reason": "..." }` (payments:approve, a user).
+
+A receivable opened before this existed may already have been partly recovered when the
+void completes. The completion then reverses the newest recoveries until the cancellation
+fits, records each in the notice's `refundsOwed` and a run warning, and logs it at critical
+level. **The provider is owed those amounts back: refund them, and post the refund in the GL
+by hand** (Dr ProviderReceivable / Cr ClaimsPayable or cash).
+
+Completing a void never blocks the file. An outage is retried on the next transmit. If the
+ledger refuses (for example the receivable keeps changing), the notice is marked
+`needsAttention` with the problem, a run warning is added, and the payment stays out of the
+file.
+
+The automatic re-pin is refused, and nothing changes, when a person must decide:
 - the payment recovered receivables;
 - only some of its claims were reversed;
 - its claims were reversed in different reversal runs or 835s;
-- the reversal has not completed;
 - the reversed amount differs from the payment;
-- the reversal opened no receivable for the payee;
-- less than the payment is still outstanding on the receivable, because part was already
-  recovered.
+- the reversal opened no receivable for the payee.
+
+For those cases a finance user excludes the payment:
+`POST /api/paymentruns/{id}/eft-file/exclude-payments` `{ "paymentIds": [...], "reason": "..." }`
+(payments:approve). It follows the re-date rules: the user must be neither the run's maker
+nor its executor, the drop is probed for a Failed file, and someone else approves and sends
+the new file. The other payees are paid, with the same void, receivable, 835-notice and GL
+handling, plus:
+- **Partly reversed:** only the reversed part is relieved (`payableRelieved`). The rest
+  (`unpaidRemainder`) stays payable and is still owed to the provider; a person must reissue
+  it (run warning).
+- **Offsets:** the receivables the payment recovered are owed again (its recoveries are
+  undone, since it is never made). The GL void entry is the payable net of those offsets.
+
+A reversal still running is always refused (wait for it). Excluding a payment that has no
+completed reversal is refused.
+
+**Cutover:** a void follows its recoupment, not its payment run. It posts here whenever the
+recouping reversal run's `ReversalRunExecuted` posted here. If that run is before the cutover
+(`PreCutover`), the void is PreCutover too. Without the recoupment in the register, the
+reversal run's execution date decides.
 
 ## 2. Accounts (per tenant, validated at startup)
 
@@ -180,7 +219,8 @@ A tenant with no mapping is not an error: its events park as `NeedsMapping`.
 first day this GL owns. Every event about a run executed **before** it is registered and
 listed, but parked as `PreCutover`, not posted:
 - the accrual of the run;
-- its transmitted file and its voids, even when they happen after the cutover;
+- its transmitted file, even when it is sent after the cutover (its voids follow their
+  recoupment instead; see "Payments reversed before their file was sent");
 - reversal runs executed before the cutover.
 
 The run's execution date comes from the event. Older transmission events lack it; for
@@ -210,7 +250,7 @@ Opening-balance step, once, before enabling:
 | `GET /api/gl/entries?period=yyyy-MM&after=…&limit=…` | finance:read | the journal, by entry id, in pages (default 500, at most 5000; `after` = last id of the previous page) |
 | `GET /api/gl/events?status=Parked&after=…&limit=…` | finance:read | parked events and why (paged the same way) |
 | `POST /api/gl/events/{eventId}/retry` `{ "entryDate"?: "...", "reason"?: "...", "includeBeforeCutover"?: true }` | finance:write user | post a parked event once the mapping, chart or period is fixed. `entryDate` (with a reason, never earlier) moves a closed-period event to an open date. `includeBeforeCutover` (with a reason) posts a `PreCutover` event (section 3a) |
-| `POST /api/gl/events/{eventId}/repost` `{ "reason": "...", "entryDate"?: "..." }` | finance:write user | after the latest entry of the event's business key was reversed: post the event (parked, e.g. `DuplicateBusinessKey`, or posted) as `{key}:r{n}`, naming the reversed entry in `repostOf`. Refused while that entry stands; nothing changes if it cannot post |
+| `POST /api/gl/events/{eventId}/repost` `{ "reason": "...", "entryDate"?: "..." }` | finance:write user, not the one who reversed the entry it replaces (403) | after the latest entry of the event's business key was reversed: post the event (parked, e.g. `DuplicateBusinessKey`, or posted) as `{key}:r{n}`, naming the reversed entry in `repostOf`. Refused while that entry stands; nothing changes if it cannot post |
 | `POST /api/gl/events/{eventId}/dismiss` `{ "reason": "..." }` | finance:write user | decide not to post a parked event (e.g. a duplicate transmission confirmed against payment-service) |
 | `POST /api/gl/entries/{id}/reverse` `{ "reason": "...", "entryDate"?: "..." }` | finance:write user | reversing entry, in an open period |
 | `POST /api/gl/periods/{yyyy-MM}/close` `{ "reason": "..." }` | finance:write user | close a period (idempotent; never a future one; there is no reopen). 409 while an entry is being posted into it: close again in a moment. Records the period's extract control (SHA-256, counts, totals) |

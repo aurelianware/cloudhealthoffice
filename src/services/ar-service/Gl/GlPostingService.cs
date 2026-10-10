@@ -261,8 +261,10 @@ public sealed class GlPostingService
         }
         if (latest == null)
             throw new GlStateException($"No entry of {proposal.Key} exists; retry the event instead of reposting it.");
-        if (await _journal.GetAsync(tenantId, GlJournal.ReversalId(latest.Id), cancellationToken) == null)
-            throw new GlStateException($"GL entry {latest.Id} of {proposal.Key} stands; reverse it before reposting the event.");
+        var reversalOfLatest = await _journal.GetAsync(tenantId, GlJournal.ReversalId(latest.Id), cancellationToken)
+                               ?? throw new GlStateException($"GL entry {latest.Id} of {proposal.Key} stands; reverse it before reposting the event.");
+        if (string.Equals(reversalOfLatest.PostedBy, actor, StringComparison.OrdinalIgnoreCase))
+            throw new GlForbiddenException($"You reversed {latest.Id}; another finance user must repost it.");
 
         var attempt = Copy(record);
         attempt.Attempts++;
@@ -607,6 +609,19 @@ public sealed class GlPostingService
     {
         if (_options.CutoverFor(record.TenantId) is not { } cutover)
             return null; // tenant not configured: it parks as NeedsMapping; while enabled the validator requires a cutover
+        if (proposal.RecoupmentReversalRunIds.Count > 0)
+        {
+            // A void settles its recoupment: it is in this GL exactly when the recoupment is.
+            var recoupments = new List<GlSourceEvent?>();
+            foreach (var reversalRunId in proposal.RecoupmentReversalRunIds)
+                recoupments.Add(await _events.GetAsync(record.TenantId,
+                    GlEventTypes.EventIdFor(record.TenantId, $"reversal-run:{reversalRunId}", GlEventTypes.ReversalRunExecuted), cancellationToken));
+            if (recoupments.Any(r => r?.Status == GlSourceEventStatus.Posted))
+                return null;
+            if (recoupments.All(r => r is { Status: GlSourceEventStatus.Parked, ParkReason: GlParkReason.PreCutover }))
+                return $"its recoupment (reversal run {string.Join(", ", proposal.RecoupmentReversalRunIds)}) is before the GL cutover {cutover:yyyy-MM-dd}; " +
+                       "it is in the opening balances";
+        }
         if (proposal.RunExecutedAt is { } executed)
             return executed < cutover
                 ? $"run {proposal.SourceReference} was executed {executed:yyyy-MM-dd}, before the GL cutover {cutover:yyyy-MM-dd}; its accounting is in the opening balances"

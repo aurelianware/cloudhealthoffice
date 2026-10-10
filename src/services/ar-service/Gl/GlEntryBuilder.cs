@@ -28,6 +28,12 @@ public sealed class GlProposedEntry
 
     /// <summary>The payment run whose accrual decides the cutover when <see cref="RunExecutedAt"/> is null.</summary>
     public string? PaymentRunId { get; init; }
+
+    /// <summary>
+    /// For a void: the reversal runs whose recoupment it settles. The void follows them across
+    /// the cutover: it posts whenever one of their recoupments posted in this GL.
+    /// </summary>
+    public IReadOnlyList<string> RecoupmentReversalRunIds { get; init; } = Array.Empty<string>();
     public required IReadOnlyList<(GlPostingRole Role, decimal Debit, decimal Credit, string Memo)> Lines { get; init; }
 }
 
@@ -186,8 +192,11 @@ public static class GlEntryBuilder
                           $"(left out of {e.NewFileReference}, reversed by {e.ReversalRunId})",
             PostedBy = e.VoidedBy,
             ClaimedAmount = e.Amount,
-            RunExecutedAt = e.PaymentRunExecutedAt,
-            PaymentRunId = e.PaymentRunId,
+            // Dated by its recoupment's reversal run, not the payment run: a post-cutover
+            // recoupment of a pre-cutover payment is in this GL, so is its void.
+            RunExecutedAt = e.ReversalRunExecutedAt ?? e.PaymentRunExecutedAt,
+            PaymentRunId = e.ReversalRunExecutedAt == null ? e.PaymentRunId : null,
+            RecoupmentReversalRunIds = (e.ReversalRunId ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             Lines =
             [
                 (GlPostingRole.ClaimsPayable, e.Amount, 0m, $"payable relieved: payment {e.CheckNumber} is never paid (file {e.SupersededFileReference} superseded)"),

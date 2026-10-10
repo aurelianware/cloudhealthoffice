@@ -91,6 +91,7 @@ public sealed class GlController : ControllerBase
     /// </summary>
     [HttpPost("events/{eventId}/repost")]
     [RequirePermission("finance:write")]
+    // Second person: the user who reversed the entry being replaced may not repost it (403).
     public Task<IActionResult> Repost(string eventId, [FromBody] GlRetryRequest request, CancellationToken cancellationToken)
         => Run(async () => Ok(await _posting.RepostAsync(_actor.TenantId, eventId, request.Reason ?? string.Empty, request.EntryDate, _actor.UserId, cancellationToken)));
 
