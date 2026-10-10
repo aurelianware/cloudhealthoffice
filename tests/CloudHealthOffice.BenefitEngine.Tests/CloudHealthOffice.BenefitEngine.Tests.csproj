@@ -16,6 +16,11 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <!-- Redis store tests skip when no redis-server is reachable (CI provides one). -->
     <PackageReference Include="Xunit.SkippableFact" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Cosmos DB emulator fixture; see tests/Shared/CosmosEmulator. -->
+    <Compile Include="..\Shared\CosmosEmulator\*.cs" Link="Shared\CosmosEmulator\%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\engines\CloudHealthOffice.BenefitEngine\CloudHealthOffice.BenefitEngine.csproj" />

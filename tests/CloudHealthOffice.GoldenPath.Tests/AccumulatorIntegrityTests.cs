@@ -16,7 +16,9 @@ using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.GoldenPath.Tests.Harness;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Testing.Cosmos;
 using CloudHealthOffice.Testing.Mongo;
+using Microsoft.Azure.Cosmos;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
@@ -29,10 +31,12 @@ using Claims = ClaimsService.Models;
 namespace CloudHealthOffice.GoldenPath.Tests;
 
 /// <summary>
-/// Accumulator integrity of the claims pipeline, end to end on a real mongod:
-/// claims-service (Mongo claim repository, the orchestrator, the real
+/// Accumulator integrity of the claims pipeline, end to end on a real database —
+/// MongoDB (<see cref="AccumulatorIntegrityMongoTests"/>, EphemeralMongo) and Cosmos DB
+/// (<see cref="AccumulatorIntegrityCosmosTests"/>, the emulator): claims-service (the claim
+/// repository of that backend, the orchestrator, the real
 /// <see cref="ClaimsController.ResolvePendedClaim"/>) and benefit-plan-service's
-/// engine over the real Mongo accumulator store (<c>ChoAccumulatorService</c>),
+/// engine over the real accumulator store of that backend (<c>ChoAccumulatorService</c>),
 /// reached over its HTTP contract.
 /// <list type="bullet">
 ///   <item>Part 1 — a claim pended after benefit calculation (NCCI at Order
@@ -44,14 +48,12 @@ namespace CloudHealthOffice.GoldenPath.Tests;
 /// Claim: golden 01 (99213, allowed $100), no prior accumulators: the member
 /// owes the $100 as deductible, so an applied claim shows deductible 100 / OOP 100.
 /// </summary>
-[Collection(MongoRunnerFixture.CollectionName)]
-public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsyncLifetime
+public abstract class AccumulatorIntegrityTests : IAsyncLifetime
 {
-    private const string Tenant = GoldenScenario.TenantId;
+    protected const string Tenant = GoldenScenario.TenantId;
     private const string NcciReason = "NCCI PTP edit: 99213 is bundled into a procedure on this date (modifier not allowed).";
 
-    private IMongoDatabase _db = null!;
-    private ClaimRepositoryMongo _claims = null!;
+    private IClaimRepository _claims = null!;
     private IAccumulatorService _accumulators = null!;
     private HttpBenefitCalculationEngineClient _engine = null!;
     private ClaimAdjudicationOrchestrator _orchestrator = null!;
@@ -61,15 +63,24 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
     /// <summary>Runs once, inside the next approval re-run, between COB (275) and benefit calculation (300).</summary>
     private Func<Task>? _midRerun;
 
-    public Task InitializeAsync()
+    /// <summary>The backend: the claim repository and the engine's accumulator repository.</summary>
+    protected abstract Task<(IClaimRepository Claims, IAccumulatorRepository Accumulators)> CreateStoresAsync(
+        AdjudicationTenantContext tenantContext);
+
+    /// <summary>Moves the claim's resolution lock into the past, in the backend's own store.</summary>
+    protected abstract Task ExpireResolutionLockAsync(string claimId);
+
+    /// <summary>Every engine accumulator document of the test tenant.</summary>
+    protected abstract Task<List<AccumulatorDocument>> AccumulatorDocumentsAsync();
+
+    public abstract Task DisposeAsync();
+
+    public async Task InitializeAsync()
     {
-        _db = mongo.CreateDatabase("accumulator_integrity");
         var tenantContext = new AdjudicationTenantContext { TenantId = Tenant };
-        _claims = new ClaimRepositoryMongo(_db, new HttpContextAccessor(), NullLogger<ClaimRepositoryMongo>.Instance, tenantContext);
-        _accumulators = new ChoAccumulatorService(
-            new AccumulatorRepositoryMongo(_db, new ConfigurationBuilder().Build(), NullLogger<AccumulatorRepositoryMongo>.Instance),
-            new FixedTenant(Tenant),
-            NullLogger<ChoAccumulatorService>.Instance);
+        var (claimStore, accumulatorStore) = await CreateStoresAsync(tenantContext);
+        _claims = claimStore;
+        _accumulators = new ChoAccumulatorService(accumulatorStore, new FixedTenant(Tenant), NullLogger<ChoAccumulatorService>.Instance);
 
         var scenario = GoldenInputs.Scenario(null);
         _planGuid = Guid.Parse(GoldenPathHarness.LoadPlan(scenario.PlanDocument).Id);
@@ -125,12 +136,9 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
             Substitute.For<IClaimAdjustmentService>(), Options.Create(new AdjudicationPipelineOptions()),
             NullLogger<ClaimAdjudicationOrchestrator>.Instance);
         _submit = (adapterFactory, http);
-        return Task.CompletedTask;
     }
 
     private (ClaimAdapterFactory Adapters, RoutingHttpClientFactory Http) _submit;
-
-    public Task DisposeAsync() => mongo.DropDatabaseAsync(_db);
 
     // ── the pipeline and the resolver ─────────────────────────────────────
 
@@ -214,7 +222,6 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
         Assert.Equal(oop, await Balance(AccumulatorType.IndividualOutOfPocketMax));
     }
 
-    private IMongoCollection<AccumulatorDocument> Documents => _db.GetCollection<AccumulatorDocument>("Accumulators");
 
     // ── part 1: no write while pended ─────────────────────────────────────
 
@@ -226,14 +233,14 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
     /// approval writes it once ($100 deductible, $100 OOP), and repeating the
     /// commit, or redelivering the submission, changes nothing.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task NcciPendedClaim_WritesNothingUntilApproved_ThenExactlyOnce()
     {
         var pended = await SubmitAndAdjudicateAsync();
 
         Assert.Equal(Claims.ClaimStatus.Pended, pended.Status);
         Assert.Equal("NCCI", pended.PendDetails!.PendCode);
-        Assert.Equal(0L, await Documents.CountDocumentsAsync(FilterDefinition<AccumulatorDocument>.Empty));
+        Assert.Empty(await AccumulatorDocumentsAsync());
         await AssertBalances(0m, 0m);
         // The pended pricing prepared the write, it did not make it.
         Assert.Equal(PlanYear, _calculated[0].PreparedAccumulatorCommit!.PlanYear);
@@ -245,7 +252,7 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
         Assert.Equal(200, StatusOf(approved));
         Assert.Equal(Claims.ClaimStatus.Approved, (await _claims.GetByIdAsync(pended.Id))!.Status);
         await AssertBalances(100m, 100m);
-        var individual = await Documents.Find(d => d.Scope == "Individual").SingleAsync();
+        var individual = Assert.Single(await AccumulatorDocumentsAsync(), d => d.Scope == "Individual");
         var transaction = Assert.Single(individual.Transactions, t => !t.IsReversed);
         Assert.Equal(pended.Id, transaction.ClaimId);
         Assert.NotNull(transaction.CommitId);
@@ -264,7 +271,7 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
     /// — and the claim id is fenced, so the write the pended pricing prepared
     /// can never be committed later.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task NcciPendedClaim_Denied_LeavesNothing_AndALateCommitIsRefused()
     {
         var pended = await SubmitAndAdjudicateAsync();
@@ -274,7 +281,7 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
         Assert.Equal(200, StatusOf(denied));
         Assert.Equal(Claims.ClaimStatus.Denied, (await _claims.GetByIdAsync(pended.Id))!.Status);
         await AssertBalances(0m, 0m);
-        var individual = await Documents.Find(d => d.Scope == "Individual").SingleAsync();
+        var individual = Assert.Single(await AccumulatorDocumentsAsync(), d => d.Scope == "Individual");
         Assert.Empty(individual.Transactions);
         Assert.Contains(pended.Id, individual.ReversedClaimIds);
 
@@ -288,7 +295,7 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
     /// benefit calculation. Approving it replaces that write (deductible 100,
     /// not 200); denying such a claim backs it out.
     /// </summary>
-    [Theory]
+    [SkippableTheory]
     [InlineData("Approved", 100)]
     [InlineData("Denied", 0)]
     public async Task ClaimPendedBeforeTheChange_WithAccumulatorsWritten_IsReplacedOrReversed(string disposition, int expected)
@@ -316,7 +323,7 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
     /// re-run writes nothing, its fenced persistence is refused (409), and the
     /// commit is never made: zero.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task ApprovalRerun_LockExpiresMidRun_NewHolderDenies_LeavesNoAccumulators()
     {
         var pended = await SubmitAndAdjudicateAsync();
@@ -350,7 +357,7 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
     /// denied) is refused inside the versioned write; a commit that lands
     /// first is reversed by the denial. Either order: zero.
     /// </summary>
-    [Theory]
+    [SkippableTheory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task CommitAndDenial_InEitherOrder_LeaveNothing(bool commitFirst)
@@ -367,16 +374,6 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
 
         await AssertBalances(0m, 0m);
         Assert.Equal(0m, await Balance(AccumulatorType.FamilyDeductible, AccumulatorScope.Family));
-    }
-
-    /// <summary>Moves the claim's resolution lock into the past (it expired while the re-run stalled).</summary>
-    private async Task ExpireResolutionLockAsync(string claimId)
-    {
-        var claims = _db.GetCollection<Claims.Claim>("Claims");
-        var result = await claims.UpdateOneAsync(
-            Builders<Claims.Claim>.Filter.Eq(c => c.Id, claimId),
-            Builders<Claims.Claim>.Update.Set(c => c.ResolutionLock!.ExpiresAt, DateTime.UtcNow.AddMinutes(-1)));
-        Assert.Equal(1, result.ModifiedCount);
     }
 
     // ── stages standing in for NCCI and for a stall ───────────────────────
@@ -420,5 +417,108 @@ public sealed class AccumulatorIntegrityTests(MongoRunnerFixture mongo) : IAsync
     private sealed class FixedTenant(string tenantId) : IBenefitEngineTenantContext
     {
         public string TenantId { get; } = tenantId;
+    }
+}
+
+/// <summary><see cref="AccumulatorIntegrityTests"/> on MongoDB: <see cref="ClaimRepositoryMongo"/> and <see cref="AccumulatorRepositoryMongo"/>.</summary>
+[Collection(MongoRunnerFixture.CollectionName)]
+public sealed class AccumulatorIntegrityMongoTests(MongoRunnerFixture mongo) : AccumulatorIntegrityTests
+{
+    private IMongoDatabase _db = null!;
+
+    protected override Task<(IClaimRepository Claims, IAccumulatorRepository Accumulators)> CreateStoresAsync(
+        AdjudicationTenantContext tenantContext)
+    {
+        _db = mongo.CreateDatabase("accumulator_integrity");
+        return Task.FromResult<(IClaimRepository, IAccumulatorRepository)>((
+            new ClaimRepositoryMongo(_db, new HttpContextAccessor(), NullLogger<ClaimRepositoryMongo>.Instance, tenantContext),
+            new AccumulatorRepositoryMongo(_db, new ConfigurationBuilder().Build(), NullLogger<AccumulatorRepositoryMongo>.Instance)));
+    }
+
+    protected override async Task ExpireResolutionLockAsync(string claimId)
+    {
+        var result = await _db.GetCollection<Claims.Claim>("Claims").UpdateOneAsync(
+            Builders<Claims.Claim>.Filter.Eq(c => c.Id, claimId),
+            Builders<Claims.Claim>.Update.Set(c => c.ResolutionLock!.ExpiresAt, DateTime.UtcNow.AddMinutes(-1)));
+        Assert.Equal(1, result.ModifiedCount);
+    }
+
+    protected override Task<List<AccumulatorDocument>> AccumulatorDocumentsAsync() =>
+        _db.GetCollection<AccumulatorDocument>("Accumulators").Find(FilterDefinition<AccumulatorDocument>.Empty).ToListAsync();
+
+    public override Task DisposeAsync() => mongo.DropDatabaseAsync(_db);
+}
+
+/// <summary>
+/// <see cref="AccumulatorIntegrityTests"/> on Cosmos DB (the emulator): claims-service's
+/// <see cref="ClaimRepository"/> (its System.Text.Json serializer, conditional patch and
+/// ETag fences) and the engine's <see cref="AccumulatorRepositoryCosmos"/> (ETag replace).
+/// </summary>
+[Trait("Category", CosmosEmulator.Category)]
+[Collection(CosmosEmulatorFixture.CollectionName)]
+public sealed class AccumulatorIntegrityCosmosTests(CosmosEmulatorFixture cosmos) : AccumulatorIntegrityTests
+{
+    private const string ClaimsContainer = "ClaimsV2";
+    private Container _claimsContainer = null!;
+    private Container _accumulatorContainer = null!;
+
+    protected override async Task<(IClaimRepository Claims, IAccumulatorRepository Accumulators)> CreateStoresAsync(
+        AdjudicationTenantContext tenantContext)
+    {
+        cosmos.SkipIfUnavailable();
+        // claims-service: the serializer AddChoDatabase registers.
+        var claimsClient = cosmos.CreateClient(new CloudHealthOffice.Infrastructure.Serialization.CosmosSystemTextJsonSerializer());
+        var claimsDb = await cosmos.CreateDatabaseAsync(claimsClient, "integrity_claims");
+        _claimsContainer = await CosmosEmulatorFixture.CreateContainerAsync(claimsDb, ClaimsContainer);
+        var claimsConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["CosmosDb:DatabaseName"] = claimsDb.Id,
+            ["CosmosDb:ContainerName"] = ClaimsContainer,
+        }).Build();
+        // The tenant is read from the request context at call time; a plain
+        // (non-AsyncLocal) accessor carries it into every test method.
+        var accessor = new FixedAccessor(Tenant);
+        var claims = new ClaimRepository(claimsClient, claimsConfig, accessor, NullLogger<ClaimRepository>.Instance);
+
+        var accumulatorClient = cosmos.CreateClient(serializerOptions: new CosmosSerializationOptions
+        {
+            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase,
+        });
+        var accumulatorDb = await cosmos.CreateDatabaseAsync(accumulatorClient, "integrity_accumulators");
+        _accumulatorContainer = await CosmosEmulatorFixture.CreateContainerAsync(accumulatorDb, "Accumulators");
+        var accumulatorConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["CosmosDb:DatabaseName"] = accumulatorDb.Id,
+        }).Build();
+        return (claims, new AccumulatorRepositoryCosmos(accumulatorClient, accumulatorConfig, NullLogger<AccumulatorRepositoryCosmos>.Instance));
+    }
+
+    protected override async Task ExpireResolutionLockAsync(string claimId)
+    {
+        var response = await _claimsContainer.PatchItemAsync<System.Text.Json.JsonElement>(
+            claimId, new PartitionKey(Tenant),
+            [PatchOperation.Set("/resolutionLock/expiresAt", DateTime.UtcNow.AddMinutes(-1))]);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    protected override async Task<List<AccumulatorDocument>> AccumulatorDocumentsAsync()
+    {
+        var docs = new List<AccumulatorDocument>();
+        using var feed = _accumulatorContainer.GetItemQueryIterator<AccumulatorDocument>("SELECT * FROM c");
+        while (feed.HasMoreResults) docs.AddRange(await feed.ReadNextAsync());
+        return docs;
+    }
+
+    public override Task DisposeAsync() => Task.CompletedTask;
+
+    private sealed class FixedAccessor : IHttpContextAccessor
+    {
+        public FixedAccessor(string tenant)
+        {
+            HttpContext = new DefaultHttpContext();
+            HttpContext.Items["TenantId"] = tenant;
+        }
+
+        public HttpContext? HttpContext { get; set; }
     }
 }
