@@ -56,14 +56,14 @@
     "featureList": [
       "CMS-0057-F Readiness Surface",
       "FHIR R4 APIs (Patient Access, Provider Access, Payer-to-Payer, Prior Auth)",
-      "Da Vinci IGs (PDex, PAS, CRD, DTR)",
-      "X12 EDI Processing (270/271, 278, 837, 835, 275)",
+      "Da Vinci IGs (PDex, PAS, CRD, DTR) in development",
+      "X12 EDI Processing (270/271, 837, 835, 275); X12 278 bridging planned",
       "Outbound clearinghouse EDI via Stedi; Availity and Change Healthcare adapters are scaffolds",
       "Kubernetes-Native Multi-Cloud Deployment",
       "HIPAA Security Controls for Deployment Validation",
       "Multi-Tenant Architecture",
-      "OAuth 2.0 / SMART on FHIR",
-      "Bulk FHIR Export",
+      "OAuth 2.0 / SMART on FHIR (SMART App Launch, v1 scopes)",
+      "Bulk FHIR Export (planned)",
       "USCDI v1/v2 Data Class Coverage"
     ]
   }
@@ -145,7 +145,7 @@
         "name": "Does PAS replace X12 278?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Not entirely. CMS-0057-F adds a FHIR-based Prior Authorization API built on Da Vinci PAS, but the X12 278 transaction remains part of the ecosystem — clearinghouses and many trading partners still exchange 278. In practice PAS and X12 278 coexist, and a payer needs to translate between them. Cloud Health Office maps X12 278 to and from FHIR PAS resources so a single prior authorization can move across both worlds. The prior authorization guide covers the 278 ↔ FHIR mapping."
+          "text": "Not entirely. CMS-0057-F adds a FHIR-based Prior Authorization API built on Da Vinci PAS, but the X12 278 transaction remains part of the ecosystem — clearinghouses and many trading partners still exchange 278. In practice PAS and X12 278 coexist, and a payer needs to translate between them. X12 278 bridging in Cloud Health Office is planned: the goal is to map X12 278 to and from FHIR PAS resources so a single prior authorization can move across both worlds. Today there is a 278 mapping prototype only. The prior authorization guide covers current status."
         }
       },
       {
@@ -153,7 +153,7 @@
         "name": "What does a payer still need to configure during implementation?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Cloud Health Office provides the implemented technical capability; a payer-specific implementation still requires configuration. During onboarding a payer maps its core data (members, coverage, claims, provider contracts) to FHIR resources, connects the core through the appropriate adapter, loads or reviews terminology and plan-specific coding overrides, sets prior authorization timelines and decision rationale, configures OAuth 2.0 and consent, and validates USCDI coverage. See the payer compliance checklist for the full list."
+          "text": "Cloud Health Office provides the technical surfaces, which are still in development (CMS-0057-F conformance in progress); a payer-specific implementation also requires configuration. During onboarding a payer maps its core data (members, coverage, claims, provider contracts) to FHIR resources, connects the core through the appropriate adapter, loads or reviews terminology and plan-specific coding overrides, sets prior authorization timelines and decision rationale, configures OAuth 2.0 and consent, and validates USCDI coverage. See the payer compliance checklist for the full list."
         }
       }
     ]
@@ -385,6 +385,7 @@
   <div class="hero-eyebrow">CMS-0057-F Compliance Guide</div>
   <h1>A <em>Vendor-Neutral</em> CMS-0057-F Compliance Layer for Payer CAPS Platforms</h1>
   <p class="hero-sub">Achieve CMS Interoperability and Prior Authorization compliance without replacing your core admin system. FHIR R4 APIs, Da Vinci IGs, and X12 EDI on a Kubernetes-native compliance layer.</p>
+  <p class="hero-pillar-link" style="margin:.1rem 0 .2rem;font-size:.95rem">CMS-0057-F conformance in progress &mdash; see the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer" style="color:var(--cyan)">ePA gap matrix</a> for requirement-by-requirement status.</p>
   <p class="hero-pillar-link" style="margin:.1rem 0 .2rem;font-size:.95rem">
     <a href="/cms-0057-f/implementation-architecture/" style="color:var(--cyan);text-decoration:none;font-weight:600;border-bottom:1px solid rgba(0,255,255,.35)">See how the pieces fit together: CMS-0057-F implementation architecture for QNXT, Facets, HealthEdge, and Cloud Health Office →</a>
   </p>
@@ -415,7 +416,7 @@
     </div>
     <div class="stat">
       <div class="stat-num cyan">4 / 4</div>
-      <div class="stat-label">Required APIs<br/>Implemented</div>
+      <div class="stat-label">Required APIs<br/>In development</div>
     </div>
     <div class="stat">
       <div class="stat-num green">&lt;1hr</div>
@@ -475,7 +476,7 @@
       <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Coverage</text>
       <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Claim / EOB</text>
       <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Encounter</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">Implemented</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#ffc857" text-anchor="end">In progress</text>
     </g>
 
     <!-- API 2: Provider Access -->
@@ -493,7 +494,7 @@
       <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">DocumentReference</text>
       <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Claim / EOB</text>
       <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Condition / Procedure</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">Implemented</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#ffc857" text-anchor="end">In progress</text>
     </g>
 
     <!-- API 3: Payer-to-Payer -->
@@ -511,7 +512,7 @@
       <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">Enrollment Trigger</text>
       <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">Lifecycle Retention</text>
       <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">OAuth 2.0 Consent</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">Implemented</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#ffc857" text-anchor="end">In progress</text>
     </g>
 
     <!-- API 4: Prior Auth -->
@@ -528,8 +529,8 @@
       <text x="14" y="144" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">ServiceRequest</text>
       <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">ClaimResponse</text>
       <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">DocumentReference</text>
-      <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">X12 278 ↔ FHIR</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#00ff88" text-anchor="end">Implemented</text>
+      <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">X12 278 (planned)</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#ffc857" text-anchor="end">In progress</text>
     </g>
   </svg>
 </div>
@@ -590,12 +591,12 @@
 
       <div class="qa">
         <h3>Does PAS replace X12 278?</h3>
-        <p>Not entirely. CMS-0057-F adds a FHIR-based Prior Authorization API built on Da Vinci PAS, but the X12 278 transaction remains part of the ecosystem — clearinghouses and many trading partners still exchange 278. In practice PAS and X12 278 coexist, and a payer needs to translate between them. Cloud Health Office maps X12 278 to and from FHIR PAS resources so a single prior authorization can move across both worlds. The <a href="/docs/prior-auth-guide">prior authorization guide</a> covers the 278 ↔ FHIR mapping.</p>
+        <p>Not entirely. CMS-0057-F adds a FHIR-based Prior Authorization API built on Da Vinci PAS, but the X12 278 transaction remains part of the ecosystem — clearinghouses and many trading partners still exchange 278. In practice PAS and X12 278 coexist, and a payer needs to translate between them. X12 278 bridging in Cloud Health Office is planned: the goal is to map X12 278 to and from FHIR PAS resources so a single prior authorization can move across both worlds. Today there is a 278 mapping prototype only. The <a href="/docs/prior-auth-guide">prior authorization guide</a> covers current status.</p>
       </div>
 
       <div class="qa">
         <h3>What does a payer still need to configure during implementation?</h3>
-        <p>Cloud Health Office provides the implemented technical capability; a payer-specific implementation still requires configuration. During onboarding a payer maps its core data (members, coverage, claims, provider contracts) to FHIR resources, connects the core through the appropriate adapter, loads or reviews terminology and plan-specific coding overrides, sets prior authorization timelines and decision rationale, configures OAuth 2.0 and consent, and validates USCDI coverage. See the <a href="#checklist">payer compliance checklist</a> for the full list.</p>
+        <p>Cloud Health Office provides the technical surfaces, which are still in development (CMS-0057-F conformance in progress); a payer-specific implementation also requires configuration. During onboarding a payer maps its core data (members, coverage, claims, provider contracts) to FHIR resources, connects the core through the appropriate adapter, loads or reviews terminology and plan-specific coding overrides, sets prior authorization timelines and decision rationale, configures OAuth 2.0 and consent, and validates USCDI coverage. See the <a href="#checklist">payer compliance checklist</a> for the full list.</p>
       </div>
     </div>
   </div>
@@ -747,7 +748,7 @@
 <!-- X12 Parsers -->
 <rect x="490" y="618" width="380" height="100" rx="10" fill="rgba(0,160,255,0.06)" stroke="rgba(0,160,255,0.2)" stroke-width="1"/>
 <text class="box-title" x="680" y="655" text-anchor="middle" fill="#50b0ff">X12 EDI parsers</text>
-<text class="box-sub" x="680" y="680" text-anchor="middle" fill="rgba(80,176,255,0.55)">278 · 837 · 835 · 834 · 276/277 · encoder</text>
+<text class="box-sub" x="680" y="680" text-anchor="middle" fill="rgba(80,176,255,0.55)">837 · 835 · 834 · 276/277 · encoder · 278 planned</text>
 <text class="box-sub" x="680" y="700" text-anchor="middle" fill="rgba(80,176,255,0.55)">6 parsers · zero dependencies · bidirectional</text>
 
 <!-- Claims + Benefit -->
@@ -1101,7 +1102,7 @@
   <div class="container">
     <div class="section-label">EDI Transformation</div>
     <h2 class="section-title">X12 EDI ↔ FHIR R4 — Bidirectional Implementation Evidence</h2>
-    <p class="section-desc">X12 transactions from the core admin system can be transformed to FHIR R4 resources conforming to Da Vinci profiles through configurable, auditable mapping pipelines.</p>
+    <p class="section-desc">X12 transactions from the core admin system can be transformed to FHIR R4 resources aligned to Da Vinci profiles through configurable, auditable mapping pipelines. X12 278 bridging is planned: the 278 mapping shown is a prototype that is not yet wired into the platform.</p>
 
 <!-- X12-FHIR Flow SVG -->
 <div class="flow-diagram" data-reveal>
@@ -1116,7 +1117,7 @@
     <text x="120" y="28" font-family="JetBrains Mono,monospace" font-size="9" font-weight="600" fill="#606060" text-anchor="middle" letter-spacing="2">X12 EDI</text>
     <g transform="translate(120,55)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ffff" text-anchor="middle">270 Eligibility</text></g>
     <g transform="translate(120,95)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ffff" text-anchor="middle">837 Claims</text></g>
-    <g transform="translate(120,135)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ffff" text-anchor="middle">278 Prior Auth</text></g>
+    <g transform="translate(120,135)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ffff" text-anchor="middle">278 Prior Auth (planned)</text></g>
     <g transform="translate(120,175)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ffff" text-anchor="middle">835 Remittance</text></g>
     <g transform="translate(120,215)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ffff" text-anchor="middle">275 Attachments</text></g>
 
@@ -1180,10 +1181,10 @@
     <p>When SNOMED maps to multiple ICD-10-CM codes, the context rule engine uses patient age, gender, state, co-morbidities, and plan coding policy to select the best match — not just the first match.</p>
   </article>
   <article class="api-card">
-    <span class="status">Implemented</span>
+    <span class="status" style="color:#ffc857">Partial</span>
     <span class="api-tag">CRD + PAS + DTR</span>
     <h3>Da Vinci Integration</h3>
-    <p>The CRD server, PAS server, and DTR engine consume the crosswalk at runtime. SNOMED codes from EHRs are translated to payer code space for coverage rules, prior auth decisions, and questionnaire pre-population.</p>
+    <p>The CRD server and PAS server (both in development) can consume the crosswalk at runtime, so SNOMED codes from EHRs are translated to payer code space for coverage rules and prior auth decisions. Questionnaire pre-population for DTR is not yet built.</p>
   </article>
   <article class="api-card">
     <span class="status">Implemented</span>
@@ -1212,7 +1213,7 @@
         <h3>Coverage Requirements Discovery (CRD)</h3>
         <div class="cap-row"><span class="cap-label">Quick answer</span><p>CRD tells a provider, while they are placing an order, whether a service needs prior authorization and what documentation applies. It runs through CDS Hooks so the answer appears inside the provider's EHR workflow.</p></div>
         <div class="cap-row"><span class="cap-label">How it works</span><p>The EHR fires an <code>order-select</code> or <code>order-sign</code> CDS Hook to the payer's CRD service, which evaluates coverage rules for the ordered code and member coverage, then returns cards indicating authorization requirements and pointing to a DTR questionnaire when documentation is needed.</p></div>
-        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office evaluates coverage rules against the member's benefit configuration and the terminology service, so SNOMED-coded orders resolve to the payer's CPT/ICD code space before a rule fires. Coverage rules are payer-specific and configured during onboarding.</p></div>
+        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office's CRD service (in development, not yet conformant) evaluates coverage rules using the terminology service, so SNOMED-coded orders resolve to the payer's CPT/ICD code space before a rule fires. It does not yet use the member's real benefit context, and it returns free-text cards without the CRD coverage-information extension. Coverage rules are payer-specific and configured during onboarding.</p></div>
         <div class="cap-row evidence"><span class="cap-label">Implementation evidence</span><p><a href="/docs/prior-auth-guide">Prior authorization guide</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/tree/main/src/engines/CloudHealthOffice.PriorAuthRuleEngine">PriorAuthRuleEngine source</a></p></div>
       </div>
 
@@ -1221,7 +1222,7 @@
         <h3>Documentation Templates and Rules (DTR)</h3>
         <div class="cap-row"><span class="cap-label">Quick answer</span><p>DTR collects the clinical documentation a prior authorization needs using a FHIR Questionnaire, pre-populating answers from the patient record so the provider fills in as little as possible.</p></div>
         <div class="cap-row"><span class="cap-label">How it works</span><p>The payer publishes a FHIR <code>Questionnaire</code> with embedded CQL logic. A DTR app renders it, pulls known values from the EHR, and returns a <code>QuestionnaireResponse</code> that travels with the authorization request into PAS.</p></div>
-        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office produces and consumes FHIR Questionnaire and QuestionnaireResponse resources and carries the response through to the prior authorization submission. Questionnaire content is Da Vinci-aligned and tailored to each payer's policies during onboarding.</p></div>
+        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office's DTR service (in development, not yet conformant) stores and serves FHIR Questionnaire and QuestionnaireResponse resources. CQL, pre-population and linking the response to the prior authorization submission are not yet built; CHO plans to serve DTR packages to external and EHR-native DTR apps rather than ship its own. Questionnaire content is tailored to each payer's policies during onboarding.</p></div>
         <div class="cap-row evidence"><span class="cap-label">Implementation evidence</span><p><a href="/docs/prior-auth-guide">Prior authorization guide</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/src/services/fhir-service/Controllers/DtrController.cs">DtrController.cs</a></p></div>
       </div>
 
@@ -1230,7 +1231,7 @@
         <h3>Prior Authorization Support (PAS)</h3>
         <div class="cap-row"><span class="cap-label">Quick answer</span><p>PAS is the FHIR mechanism behind the CMS-0057-F Prior Authorization API. It submits the authorization request and returns the decision, status, and rationale to the provider.</p></div>
         <div class="cap-row"><span class="cap-label">How it works</span><p>A provider system sends a <code>Claim/$submit</code> bundle containing the ServiceRequest and supporting documentation. The payer responds with a ClaimResponse carrying the decision. Where trading partners still use EDI, the request is bridged to and from the X12 278 transaction.</p></div>
-        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office exposes a Da Vinci-aligned PAS endpoint and includes a 278&rarr;FHIR mapping prototype. Response timelines and decision rationale are set to each payer's policies during onboarding.</p></div>
+        <div class="cap-row"><span class="cap-label">How Cloud Health Office implements it</span><p>Cloud Health Office exposes a Da Vinci-aligned PAS endpoint (in development, not yet conformant) and includes a 278&rarr;FHIR mapping prototype; X12 278 bridging is planned. Response timelines and decision rationale are set to each payer's policies during onboarding.</p></div>
         <div class="cap-row evidence"><span class="cap-label">Implementation evidence</span><p><a href="/docs/prior-auth-guide">Prior authorization guide</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/src/services/fhir-service/Controllers/PasController.cs">PasController.cs</a> · <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/src/fhir/mapping/x12-to-fhir.ts">278→FHIR mapping prototype</a></p></div>
       </div>
 
@@ -1303,7 +1304,7 @@
   <div class="container">
     <div class="section-label">Compliance Status</div>
     <h2 class="section-title">CMS-0057-F Coverage</h2>
-    <p class="section-desc">Coverage for the required FHIR and prior authorization surfaces, validated through automated tests and implementation artifacts rather than brittle release-count claims.</p>
+    <p class="section-desc">Current status of the required FHIR and prior authorization surfaces. CMS-0057-F conformance is in progress; the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer" style="color:var(--cyan)">ePA gap matrix</a> is the source of truth for each requirement.</p>
 
 <table class="compliance-table" data-reveal>
   <thead>
@@ -1318,16 +1319,16 @@
     <tr><td>Patient Access API</td><td>PDex Patient / Coverage / Claim / EOB</td><td>19</td><td><span class="status-badge partial">Implemented surface / integration required</span><br><span style="font-size:.62rem;color:var(--text-dim)">Patient and Coverage data is synthetic</span></td></tr>
     <tr><td>Provider Access API</td><td>PDex + PAS ServiceRequest / DocumentRef</td><td>8</td><td><span class="status-badge partial">Implemented surface / integration required</span><br><span style="font-size:.62rem;color:var(--text-dim)">Patient and Coverage data is synthetic</span></td></tr>
     <tr><td>Payer-to-Payer API</td><td>Bulk FHIR $export / Enrollment Trigger</td><td>6</td><td><span class="status-badge partial">Phase 2 required</span><br><span style="font-size:.62rem;color:var(--text-dim)">Bulk $export is a scaffold; not yet producing data</span></td></tr>
-    <tr><td>Prior Authorization API</td><td>Da Vinci PAS 2.0.1+</td><td>12</td><td><span class="status-badge partial">Implemented surface / integration required</span></td></tr>
-    <tr><td>72-Hour Urgent Response</td><td>Compliance Checker — automated tracking</td><td>Auto</td><td><span class="status-badge done">✅ Automated</span></td></tr>
-    <tr><td>7-Day Standard Response</td><td>Compliance Checker — automated tracking</td><td>Auto</td><td><span class="status-badge done">✅ Automated</span></td></tr>
+    <tr><td>Prior Authorization API</td><td>Da Vinci PAS 2.0.1+</td><td>12</td><td><span class="status-badge partial">In development</span><br><span style="font-size:.62rem;color:var(--text-dim)">CRD, DTR and PAS not yet conformant</span></td></tr>
+    <tr><td>72-Hour Urgent Response</td><td>Decision timeframe tracking</td><td>—</td><td><span class="status-badge partial">In progress</span></td></tr>
+    <tr><td>7-Day Standard Response</td><td>Decision timeframe tracking</td><td>—</td><td><span class="status-badge partial">In progress</span></td></tr>
     <tr><td>USCDI v1 / v2 Coverage</td><td>US Core 3.1.1+ data class mapping</td><td>Mapped</td><td><span class="status-badge done">✅ Complete</span></td></tr>
     <tr><td>X12 270 → FHIR</td><td>Patient + CoverageEligibilityRequest</td><td>—</td><td><span class="status-badge prod">Implemented</span></td></tr>
     <tr><td>X12 837 → FHIR</td><td>Da Vinci PDex Claim</td><td>—</td><td><span class="status-badge prod">Implemented</span></td></tr>
-    <tr><td>X12 278 → FHIR</td><td>Da Vinci PAS ServiceRequest</td><td>—</td><td><span class="status-badge prod">Implemented</span></td></tr>
+    <tr><td>X12 278 → FHIR</td><td>Da Vinci PAS ServiceRequest</td><td>—</td><td><span class="status-badge partial">Planned</span></td></tr>
     <tr><td>X12 835 → FHIR</td><td>Da Vinci PDex EOB</td><td>—</td><td><span class="status-badge prod">Mapped</span></td></tr>
     <tr><td>X12 275 → FHIR</td><td>US Core DocumentReference</td><td>—</td><td><span class="status-badge partial">Partial</span></td></tr>
-    <tr><td>OAuth 2.0 / SMART on FHIR</td><td>Azure AD + SMART scopes</td><td>—</td><td><span class="status-badge done">Implemented</span></td></tr>
+    <tr><td>OAuth 2.0 / SMART on FHIR</td><td>SMART authorization server (OpenIddict), v1 scopes</td><td>—</td><td><span class="status-badge partial">Partial</span><br><span style="font-size:.62rem;color:var(--text-dim)">v2 scopes, launch context in token response and asymmetric client auth in progress</span></td></tr>
     <tr><td>HIPAA Security Controls</td><td>TLS 1.2+ / AES-256 / Key Vault / BAA</td><td>—</td><td><span class="status-badge done">Validate per deployment</span></td></tr>
     <tr><td>Terminology Translation (SNOMED ↔ CPT/ICD)</td><td>FHIR R4 ConceptMap/$translate</td><td>—</td><td><span class="status-badge done">Implemented</span></td></tr>
     <tr><td>Provider Verification &amp; Directory</td><td>NPPES / OIG / PECOS / FSMB Integrity Score</td><td>—</td><td><span class="status-badge done">Implemented</span></td></tr>
@@ -1421,28 +1422,28 @@
 
 <div class="api-grid">
   <article class="api-card">
-    <span class="status">Implemented</span>
+    <span class="status" style="color:#ffc857">Partial</span>
     <span class="api-tag">Da Vinci PDex 2.0+</span>
     <h3>Payer Data Exchange</h3>
-    <p>Standardized FHIR profiles for payer-sourced data. US Core Patient v3.1.1+, PDex Claim, ExplanationOfBenefit, Coverage. Complete USCDI v1 &amp; v2 data classes.</p>
+    <p>Standardized FHIR profiles for payer-sourced data. US Core Patient v3.1.1+, PDex Claim, ExplanationOfBenefit, Coverage. USCDI v1 &amp; v2 data class mapping. Reads are served from a mock data adapter today.</p>
   </article>
   <article class="api-card">
-    <span class="status">Implemented</span>
+    <span class="status" style="color:#ffc857">In development</span>
     <span class="api-tag">Da Vinci PAS 2.0.1+</span>
     <h3>Prior Authorization Support</h3>
-    <p>ServiceRequest for authorization requests. ClaimResponse for decisions. DocumentReference for attachments. 72-hour urgent and 7-day standard timeline compliance.</p>
+    <p>ServiceRequest for authorization requests. ClaimResponse for decisions. DocumentReference for attachments. 72-hour urgent and 7-day standard timeline tracking is in progress. Not yet conformant.</p>
   </article>
   <article class="api-card">
-    <span class="status">Implemented</span>
+    <span class="status" style="color:#ffc857">In development</span>
     <span class="api-tag">Da Vinci CRD 2.0+</span>
     <h3>Coverage Requirements Discovery</h3>
-    <p>Real-time coverage rules discovery. Documentation requirements identification during provider workflow. CDS Hooks integration pathway.</p>
+    <p>Real-time coverage rules discovery. Documentation requirements identification during provider workflow. CDS Hooks <code>order-select</code> and <code>order-sign</code>. Not yet conformant.</p>
   </article>
   <article class="api-card">
-    <span class="status">Implemented</span>
+    <span class="status" style="color:#ffc857">In development</span>
     <span class="api-tag">Da Vinci DTR 2.0+</span>
     <h3>Documentation Templates &amp; Rules</h3>
-    <p>FHIR Questionnaire and QuestionnaireResponse. Automated clinical documentation collection from payer rules. Reduced provider administrative burden.</p>
+    <p>FHIR Questionnaire and QuestionnaireResponse. CQL and pre-population for automated documentation collection are not yet built. Not yet conformant.</p>
   </article>
 </div>
 

@@ -90,22 +90,22 @@
         <!-- COMPLIANCE DASHBOARD                                         -->
         <!-- ============================================================ -->
         <h2 id="compliance-dashboard">Compliance Dashboard</h2>
-        <p>CMS-0057-F coverage is validated through automated tests and implementation artifacts spanning FHIR API conformance, X12 EDI parsing, claims adjudication, benefit calculation, terminology translation, and provider verification.</p>
+        <p>CMS-0057-F conformance is in progress. The tests below exercise parts of the FHIR API, X12 EDI parsing, claims adjudication, benefit calculation, terminology translation, and provider verification surfaces; they do not by themselves demonstrate conformance. The <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer">ePA gap matrix</a> is the source of truth for requirement-by-requirement status.</p>
 
         <table>
           <thead><tr><th>Requirement</th><th>Status</th><th>Tests</th><th>Da Vinci IG</th></tr></thead>
           <tbody>
-            <tr><td>Patient Access API</td><td><span class="badge badge-complete">Complete</span></td><td>19 FHIR tests</td><td>PDex 2.0+</td></tr>
-            <tr><td>Provider Access API</td><td><span class="badge badge-complete">Complete</span></td><td>8 FHIR tests</td><td>PDex 2.0+</td></tr>
-            <tr><td>Payer-to-Payer API</td><td><span class="badge badge-complete">Complete</span></td><td>6 FHIR tests</td><td>PDex (Bulk $export)</td></tr>
-            <tr><td>Prior Authorization API</td><td><span class="badge badge-complete">Complete</span></td><td>12 FHIR tests</td><td>PAS 2.0.1 + CRD + DTR</td></tr>
-            <tr><td>72-Hour Urgent Response</td><td><span class="badge badge-complete">Automated</span></td><td>Compliance Checker</td><td>&mdash;</td></tr>
-            <tr><td>7-Day Standard Response</td><td><span class="badge badge-complete">Automated</span></td><td>Compliance Checker</td><td>&mdash;</td></tr>
+            <tr><td>Patient Access API</td><td><span class="badge badge-required">In progress</span></td><td>19 FHIR tests</td><td>PDex 2.0+</td></tr>
+            <tr><td>Provider Access API</td><td><span class="badge badge-required">In progress</span></td><td>8 FHIR tests</td><td>PDex 2.0+</td></tr>
+            <tr><td>Payer-to-Payer API</td><td><span class="badge badge-required">In progress</span></td><td>6 FHIR tests</td><td>PDex (Bulk $export)</td></tr>
+            <tr><td>Prior Authorization API</td><td><span class="badge badge-required">In progress</span></td><td>12 FHIR tests</td><td>PAS 2.0.1 + CRD + DTR</td></tr>
+            <tr><td>72-Hour Urgent Response</td><td><span class="badge badge-required">In progress</span></td><td>Compliance Checker</td><td>&mdash;</td></tr>
+            <tr><td>7-Day Standard Response</td><td><span class="badge badge-required">In progress</span></td><td>Compliance Checker</td><td>&mdash;</td></tr>
             <tr><td>USCDI v1/v2 Data Classes</td><td><span class="badge badge-complete">Complete</span></td><td>Data Class Mapping</td><td>US Core 3.1.1+</td></tr>
             <tr><td>Terminology Translation (SNOMED &#8596; CPT/ICD)</td><td><span class="badge badge-complete">Complete</span></td><td>ConceptMap/$translate</td><td>FHIR R4 ConceptMap</td></tr>
             <tr><td>Provider Verification &amp; Directory</td><td><span class="badge badge-complete">Complete</span></td><td>Integrity Score Engine</td><td>Da Vinci PDex Plan-Net</td></tr>
-            <tr><td>OAuth 2.0 / SMART on FHIR</td><td><span class="badge badge-complete">Complete</span></td><td>Auth flow tests</td><td>SMART App Launch</td></tr>
-            <tr><td>X12 EDI &#8596; FHIR Bidirectional</td><td><span class="badge badge-complete">Implemented</span></td><td>Mapping and parser coverage</td><td>&mdash;</td></tr>
+            <tr><td>OAuth 2.0 / SMART on FHIR</td><td><span class="badge badge-required">Partial</span></td><td>Auth flow tests</td><td>SMART App Launch (v1 scopes); v2 scopes, launch context in the token response and asymmetric client auth in progress</td></tr>
+            <tr><td>X12 EDI &#8596; FHIR Bidirectional (X12 278 bridging planned)</td><td><span class="badge badge-complete">Implemented</span></td><td>Mapping and parser coverage</td><td>&mdash;</td></tr>
             <tr><td>Claims Adjudication Pipeline</td><td><span class="badge badge-complete">Evidence-backed</span></td><td>MCC benchmark runs</td><td>&mdash;</td></tr>
           </tbody>
         </table>
@@ -117,20 +117,20 @@
         <h2 id="required-apis">Required APIs</h2>
 
         <h3>Patient Access API</h3>
-        <p>Empowers patients to access their complete health data electronically &mdash; claims history, Explanation of Benefits, clinical data, coverage, and eligibility. Transforms X12 837/835 transactions into FHIR Claim and ExplanationOfBenefit resources conforming to Da Vinci PDex profiles. Secured with OAuth 2.0 patient consent flow via SMART on FHIR. Includes USCDI v1 and v2 data class coverage for clinical data exchange.</p>
+        <p>Empowers patients to access their complete health data electronically &mdash; claims history, Explanation of Benefits, clinical data, coverage, and eligibility. Designed to transform X12 837/835 transactions into FHIR Claim and ExplanationOfBenefit resources aligned to Da Vinci PDex profiles. Today Patient, Coverage and Claim reads are served from a mock data adapter, and prior authorization data is not yet exposed through this API. Secured with OAuth 2.0 patient consent flow via SMART on FHIR. Includes USCDI v1 and v2 data class coverage for clinical data exchange.</p>
 
         <h3>Provider Access API</h3>
-        <p>Gives in-network providers access to member clinical and claims data with appropriate consent. Implements Da Vinci PDex with <code>$member-match</code> for patient identification across payers without sharing raw identifiers. Provider identity is validated against CHO's multi-source provider verification engine before data access is granted.</p>
+        <p>Gives in-network providers access to member clinical and claims data with appropriate consent. Implements Da Vinci PDex with <code>$member-match</code> for patient identification across payers without sharing raw identifiers. Provider identity is validated against CHO's multi-source provider verification engine before data access is granted. In progress: patient opt-out (today the API is opt-in), real attribution, and prior authorization data.</p>
 
         <h3>Payer-to-Payer API</h3>
-        <p>Enables data exchange when members switch health plans. Supports Bulk FHIR <code>$export</code> for efficient batch transfer of member records &mdash; including five years of historical data &mdash; between payers while maintaining HIPAA compliance. Enrollment-triggered workflows automate the initiation of data transfer on member plan changes.</p>
+        <p>Enables data exchange when members switch health plans. Opt-in consent and <code>$member-match</code> logic exist. Bulk FHIR <code>$export</code> for batch transfer of member records &mdash; including five years of historical data &mdash; is planned: the export path is a stub today, and prior authorization data is not yet included. Enrollment-triggered transfer workflows are also planned.</p>
 
         <h3>Prior Authorization API</h3>
-        <p>Converts the prior auth workflow from phone/fax to real-time FHIR-based requests. Full X12 278 bidirectional mapping to FHIR ServiceRequest using Da Vinci PAS, CRD, and DTR implementation guides. Automates the 72-hour urgent and 7-day standard response timelines required by the rule. Decision rationale is captured and returned as structured data per CMS requirements.</p>
+        <p>Converts the prior auth workflow from phone/fax to real-time FHIR-based requests. Uses the Da Vinci PAS, CRD, and DTR implementation guides (in development, not yet conformant); X12 278 bridging is planned. Tracking of the 72-hour urgent and 7-day standard decision timeframes required by the rule, and structured denial reasons on every decision, are in progress. See the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer">ePA gap matrix</a>.</p>
         <p>The Prior Authorization API depends on three foundational capabilities that most competing implementations leave as &ldquo;customer responsibility&rdquo;:</p>
         <ul style="margin-top:8px;">
           <li><strong>Coverage Requirements Discovery (CRD)</strong> &mdash; Real-time coverage rules evaluated during the provider workflow via CDS Hooks. Requires SNOMED-to-CPT/ICD translation to match clinical codes against payer benefit configuration. CHO's <a href="#terminology-translation">Terminology Crosswalk</a> handles this natively.</li>
-          <li><strong>Documentation Templates &amp; Rules (DTR)</strong> &mdash; FHIR Questionnaire and QuestionnaireResponse for automated clinical documentation collection. Questionnaire answer codes are resolved across code systems by the crosswalk engine so pre-populated values are clinically accurate and machine-readable.</li>
+          <li><strong>Documentation Templates &amp; Rules (DTR)</strong> &mdash; FHIR Questionnaire and QuestionnaireResponse for automated clinical documentation collection. Questionnaire answer codes can be resolved across code systems by the crosswalk engine. Pre-population (CQL) is not yet built.</li>
           <li><strong>Provider Identity Verification</strong> &mdash; Authorization requests must be validated against credentialed, non-excluded providers. CHO's <a href="#provider-verification">Provider Verification</a> engine screens against NPPES, OIG/LEIE, PECOS, and state licensing boards in real time.</li>
         </ul>
 
@@ -147,7 +147,7 @@
             <tr><td>X12 270/271 Eligibility</td><td>Patient, CoverageEligibilityRequest/Response</td><td>US Core 3.1.1</td><td><span class="badge badge-complete">Implemented</span></td></tr>
             <tr><td>X12 837 Claims (I/P/D)</td><td>Claim</td><td>Da Vinci PDex</td><td><span class="badge badge-complete">Implemented</span></td></tr>
             <tr><td>X12 835 Remittance</td><td>ExplanationOfBenefit</td><td>Da Vinci PDex</td><td><span class="badge badge-complete">Mapped</span></td></tr>
-            <tr><td>X12 278 Prior Auth</td><td>ServiceRequest, ClaimResponse</td><td>Da Vinci PAS</td><td><span class="badge badge-complete">Implemented</span></td></tr>
+            <tr><td>X12 278 Prior Auth</td><td>ServiceRequest, ClaimResponse</td><td>Da Vinci PAS</td><td><span class="badge badge-required">Planned</span></td></tr>
             <tr><td>X12 276/277 Claim Status</td><td>Claim (status query)</td><td>US Core</td><td><span class="badge badge-complete">Implemented</span></td></tr>
             <tr><td>X12 275 Attachments</td><td>DocumentReference</td><td>US Core</td><td><span class="badge badge-complete">Implemented</span></td></tr>
             <tr><td>X12 834 Enrollment</td><td>Coverage, Patient</td><td>US Core</td><td><span class="badge badge-complete">Implemented</span></td></tr>
@@ -195,7 +195,7 @@
         <p>The Terminology Service is consumed by three CHO microservices at runtime to fulfill CMS-0057-F requirements:</p>
         <ul style="margin-top:8px;">
           <li><strong>CRD Server</strong> &mdash; Translates SNOMED CT codes from EHR CDS Hook requests into the payer's CPT/ICD code space, then checks against benefit configuration to determine prior auth requirements.</li>
-          <li><strong>PAS Server</strong> &mdash; Translates procedure and diagnosis codes during X12 278 &#8596; FHIR conversion using <code>$batch-translate</code> for low-latency bulk translation in real-time prior auth decisions.</li>
+          <li><strong>PAS Server</strong> &mdash; Designed to translate procedure and diagnosis codes using <code>$batch-translate</code> (X12 278 &#8596; FHIR conversion is planned) for low-latency bulk translation in real-time prior auth decisions.</li>
           <li><strong>DTR Engine</strong> &mdash; Resolves questionnaire answer codes across code systems so pre-populated FHIR QuestionnaireResponse values are clinically accurate and machine-readable.</li>
         </ul>
 
@@ -227,7 +227,7 @@
         <h3>Where provider verification fits in CMS-0057-F</h3>
         <ul style="margin-top:8px;">
           <li><strong>Provider Access API</strong> &mdash; Provider identity is verified before granting access to member clinical and claims data. NPI is validated against NPPES, exclusion status is checked against OIG/LEIE, and license status is confirmed.</li>
-          <li><strong>Prior Authorization API</strong> &mdash; Requesting and servicing provider NPIs are verified during X12 278 processing. Excluded or unlicensed providers trigger an automatic deny with structured rationale.</li>
+          <li><strong>Prior Authorization API</strong> &mdash; Requesting and servicing provider NPIs are verified during PAS submission. Excluded or unlicensed providers trigger an automatic deny with structured rationale.</li>
           <li><strong>Provider Directory API</strong> &mdash; Directory entries are enriched with verification metadata, ensuring that provider information exposed through FHIR endpoints reflects current, validated data.</li>
           <li><strong>Claims Adjudication</strong> &mdash; Step 4 of the 10-step adjudication pipeline validates the servicing provider before benefit calculation proceeds.</li>
         </ul>
@@ -285,10 +285,10 @@
         <table>
           <thead><tr><th>Requirement</th><th>CMS Effective Date</th><th>CHO Status</th><th>CHO Ready Since</th></tr></thead>
           <tbody>
-            <tr><td>Patient Access API</td><td>January 1, 2026</td><td><span class="badge badge-complete">Implemented</span></td><td>November 2024</td></tr>
-            <tr><td>Provider Access API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Implemented</span></td><td>November 2024</td></tr>
-            <tr><td>Payer-to-Payer API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Implemented</span></td><td>November 2024</td></tr>
-            <tr><td>Prior Authorization API</td><td>January 1, 2027</td><td><span class="badge badge-complete">Implemented</span></td><td>November 2024</td></tr>
+            <tr><td>Patient Access API</td><td>January 1, 2026</td><td><span class="badge badge-required">In progress</span></td><td>Not yet</td></tr>
+            <tr><td>Provider Access API</td><td>January 1, 2027</td><td><span class="badge badge-required">In progress</span></td><td>Not yet</td></tr>
+            <tr><td>Payer-to-Payer API</td><td>January 1, 2027</td><td><span class="badge badge-required">In progress</span></td><td>Not yet</td></tr>
+            <tr><td>Prior Authorization API</td><td>January 1, 2027</td><td><span class="badge badge-required">In progress</span></td><td>Not yet</td></tr>
             <tr><td>Terminology Translation</td><td>Required for CRD/DTR/PAS</td><td><span class="badge badge-complete">Implemented</span></td><td>March 2025</td></tr>
             <tr><td>Provider Directory Accuracy</td><td>Required for Provider Access</td><td><span class="badge badge-complete">Implemented</span></td><td>April 2025</td></tr>
           </tbody>
@@ -319,7 +319,7 @@ targetsystem=http://hl7.org/fhir/sid/icd-10-cm" | jq .
 <span class="code-comment"># Verify provider integrity score</span>
 curl http://localhost:5029/api/providers/1234567890/verify | jq '.integrityScore'</code></pre>
 
-        <p>The compliance checker validates all CMS-0057-F data classes, response timelines, USCDI coverage, Da Vinci IG conformance, terminology translation availability, and provider verification engine connectivity.</p>
+        <p>The compliance checker runs structural presence checks over CMS-0057-F data classes, response timelines, USCDI coverage, terminology translation availability, and provider verification engine connectivity. It does not validate Da Vinci IG conformance: FHIR profile validation is not yet in place.</p>
 
         <div class="callout callout-info">
           <div class="callout-title">Detailed compliance page</div>

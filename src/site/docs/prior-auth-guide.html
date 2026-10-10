@@ -157,7 +157,7 @@
 
         <h1>Prior Authorization Guide</h1>
         <p class="docs-subtitle">
-          End-to-end guide to prior authorization in Cloud Health Office &mdash; from X12 278 request receipt through clinical decision engine evaluation, authorization lifecycle, and Da Vinci FHIR IG integration. Covers CMS-0057-F prior auth API compliance.
+          End-to-end guide to prior authorization in Cloud Health Office &mdash; from X12 278 request receipt through clinical decision engine evaluation, authorization lifecycle, and Da Vinci FHIR IG integration. Covers CHO&rsquo;s CMS-0057-F prior auth API work; CMS-0057-F conformance is in progress.
         </p>
 
         <!-- Overview -->
@@ -169,7 +169,7 @@
           <div class="docs-hub-card" style="cursor:default;">
             <span class="docs-hub-card-icon">&#x1F4CB;</span>
             <h3>Auth Requests</h3>
-            <p>X12 278 request receipt via clearinghouse EDI, FHIR Prior Auth API, and portal manual entry.</p>
+            <p>FHIR Prior Auth API (Da Vinci PAS, in development), REST API, and portal manual entry. X12 278 receipt via clearinghouse EDI is planned.</p>
           </div>
           <div class="docs-hub-card" style="cursor:default;">
             <span class="docs-hub-card-icon">&#x1F9E0;</span>
@@ -179,12 +179,12 @@
           <div class="docs-hub-card" style="cursor:default;">
             <span class="docs-hub-card-icon">&#x1F504;</span>
             <h3>Auth Lifecycle</h3>
-            <p>Request &rarr; Pend &rarr; Approved/Denied/Partial &rarr; Extended &rarr; Expired; real-time status via 278 response and FHIR API.</p>
+            <p>Request &rarr; Pend &rarr; Approved/Denied/Partial &rarr; Extended &rarr; Expired; status via the FHIR and REST APIs. X12 278 responses are planned.</p>
           </div>
           <div class="docs-hub-card" style="cursor:default;">
             <span class="docs-hub-card-icon">&#x1F517;</span>
             <h3>CMS-0057-F</h3>
-            <p>Da Vinci CRD (Coverage Requirements Discovery), DTR (Documentation Templates &amp; Rules), PAS (Prior Auth Support) integration.</p>
+            <p>Da Vinci CRD (Coverage Requirements Discovery), DTR (Documentation Templates &amp; Rules), PAS (Prior Auth Support): in development, not yet conformant.</p>
           </div>
         </div>
 
@@ -204,8 +204,8 @@
             <tr><th>Channel</th><th>Protocol</th><th>Mode</th><th>Typical Use</th></tr>
           </thead>
           <tbody>
-            <tr><td><strong>X12 278 via Clearinghouse</strong></td><td>SFTP / AS2</td><td>Batch &amp; real-time</td><td>Standard EDI channel via Availity, Change Healthcare, or other clearinghouses</td></tr>
-            <tr><td><strong>FHIR PriorAuth/$submit</strong></td><td>HTTPS (FHIR R4)</td><td>Real-time</td><td>Da Vinci PAS-enabled EHR systems submitting via FHIR API</td></tr>
+            <tr><td><strong>X12 278 via Clearinghouse (planned)</strong></td><td>SFTP / AS2</td><td>Planned</td><td>Standard EDI channel via Availity, Change Healthcare, or other clearinghouses. X12 278 bridging is planned; there is no 278 parser or encoder yet.</td></tr>
+            <tr><td><strong>FHIR Claim/$submit (Da Vinci PAS, in development)</strong></td><td>HTTPS (FHIR R4)</td><td>Real-time</td><td>Da Vinci PAS-enabled EHR systems submitting via FHIR API</td></tr>
             <tr><td><strong>Portal Manual Entry</strong></td><td>HTTPS (portal UI)</td><td>Real-time</td><td>Payer staff entering requests received by phone, fax, or mail</td></tr>
             <tr><td><strong>Phone / Fax (Digitized)</strong></td><td>Portal data entry</td><td>Asynchronous</td><td>Legacy requests digitized by utilization management staff into the portal</td></tr>
           </tbody>
@@ -486,10 +486,10 @@
         <p>Authorization decisions are communicated back to the requesting provider and the member through multiple channels:</p>
 
         <ul>
-          <li><strong>X12 278 Response</strong> &mdash; Sent back through the originating clearinghouse channel (Availity, Change Healthcare, etc.)</li>
+          <li><strong>X12 278 Response (planned)</strong> &mdash; To be sent back through the originating clearinghouse channel (Availity, Change Healthcare, etc.) once X12 278 bridging is built</li>
           <li><strong>FHIR ClaimResponse</strong> &mdash; Returned via the Da Vinci PAS API for FHIR-enabled providers</li>
           <li><strong>Portal</strong> &mdash; Real-time status update visible in the provider and member portals</li>
-          <li><strong>Letter generation</strong> &mdash; For denials and partial approvals, a formal determination letter is generated with appeal rights, clinical rationale, and the specific plan provision applied</li>
+          <li><strong>Letter generation (planned)</strong> &mdash; For denials and partial approvals, a formal determination letter with appeal rights, clinical rationale, and the specific plan provision applied. Today the portal shows a template only; there is no notice backend yet.</li>
         </ul>
 
         <h3 id="newborn-auth">Newborn Authorization</h3>
@@ -504,7 +504,7 @@
         <!-- ============================= -->
         <h2 id="cms-0057f-apis">4. CMS-0057-F Prior Auth APIs</h2>
 
-        <p>The CMS Interoperability and Prior Authorization Final Rule (CMS-0057-F) requires payers to implement three Da Vinci FHIR Implementation Guides for prior authorization by January 1, 2027. Cloud Health Office implements those API surfaces for customer validation and readiness evidence.</p>
+        <p>The CMS Interoperability and Prior Authorization Final Rule (CMS-0057-F) requires payers to implement three Da Vinci FHIR Implementation Guides for prior authorization by January 1, 2027. Cloud Health Office is building those API surfaces. CMS-0057-F conformance is in progress &mdash; see the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer">ePA gap matrix</a> for requirement-by-requirement status.</p>
 
         <h3 id="da-vinci-crd">Da Vinci CRD (Coverage Requirements Discovery)</h3>
 
@@ -528,10 +528,10 @@
         <p>DTR reduces provider documentation burden by pre-filling clinical questionnaires with data already available in the EHR:</p>
 
         <ul>
-          <li><strong>SMART-on-FHIR app</strong> &mdash; Launches within the EHR workflow when the provider clicks the DTR link from a CRD response card</li>
-          <li><strong>Questionnaire pre-fill</strong> &mdash; The DTR app retrieves the payer&rsquo;s clinical questionnaire (FHIR Questionnaire resource) and pre-fills answers using CQL (Clinical Quality Language) expressions that query the EHR&rsquo;s FHIR server</li>
+          <li><strong>External DTR apps</strong> &mdash; CHO does not ship its own DTR app. The plan is to serve DTR questionnaire packages to external and EHR-native DTR apps</li>
+          <li><strong>Questionnaire package (in development)</strong> &mdash; <code>Questionnaire/$questionnaire-package</code> exists today but returns the Questionnaire only. CQL Libraries, ValueSets and pre-fill (CQL expressions that query the EHR&rsquo;s FHIR server) are not yet built</li>
           <li><strong>Provider review</strong> &mdash; The provider reviews pre-filled answers, corrects any inaccuracies, and submits the completed questionnaire</li>
-          <li><strong>Attachment to auth request</strong> &mdash; The completed QuestionnaireResponse is attached to the prior auth request, providing the clinical documentation the decision engine needs</li>
+          <li><strong>Attachment to auth request (planned)</strong> &mdash; Linking the completed QuestionnaireResponse to the prior auth request, so the decision engine can use it, is not yet built</li>
         </ul>
 
         <h3 id="da-vinci-pas">Da Vinci PAS (Prior Authorization Support)</h3>
@@ -541,8 +541,8 @@
         <ul>
           <li><strong>FHIR Claim/$submit</strong> &mdash; Providers submit a prior auth request as a FHIR Claim resource with <code>use = preauthorization</code></li>
           <li><strong>Synchronous response</strong> &mdash; For auto-approve/auto-deny decisions, the ClaimResponse is returned immediately</li>
-          <li><strong>Asynchronous (pended)</strong> &mdash; For requests requiring clinical review, a pended ClaimResponse is returned with a reference ID; the provider can poll for updates via <code>Claim/$inquire</code></li>
-          <li><strong>Update and cancel</strong> &mdash; Providers can update a pending request (add documentation) or cancel a request via the PAS API</li>
+          <li><strong>Asynchronous (pended)</strong> &mdash; For requests requiring clinical review, a pended ClaimResponse is returned with a reference ID; the provider can poll for updates via <code>Claim/$inquire</code>. Known gap: <code>$inquire</code> cannot yet find authorizations issued through <code>$submit</code></li>
+          <li><strong>Update and cancel (not yet supported)</strong> &mdash; Only <code>Claim/$submit</code> and <code>Claim/$inquire</code> exist today; updating or cancelling a submitted request via PAS is not yet built</li>
         </ul>
 
         <h3 id="cms-compliance-table">Implementation Status</h3>
@@ -552,15 +552,15 @@
             <tr><th>Implementation Guide</th><th>FHIR Operation</th><th>Endpoint</th><th>Status</th></tr>
           </thead>
           <tbody>
-            <tr><td><strong>Da Vinci CRD</strong></td><td>CDS Hooks (<code>order-sign</code>, <code>order-select</code>)</td><td><code>/cds-services/prior-auth-check</code></td><td>&#x1F7E2; Production</td></tr>
-            <tr><td><strong>Da Vinci DTR</strong></td><td>SMART-on-FHIR Launch + Questionnaire/$populate</td><td><code>/fhir/Questionnaire/$populate</code></td><td>&#x1F7E2; Production</td></tr>
-            <tr><td><strong>Da Vinci PAS</strong></td><td>Claim/$submit, Claim/$inquire</td><td><code>/fhir/Claim/$submit</code></td><td>&#x1F7E2; Production</td></tr>
+            <tr><td><strong>Da Vinci CRD</strong></td><td>CDS Hooks (<code>order-sign</code>, <code>order-select</code>)</td><td><code>/cds-services/cho-order-sign</code>, <code>/cds-services/cho-order-select</code></td><td>&#x1F7E1; In development</td></tr>
+            <tr><td><strong>Da Vinci DTR</strong></td><td>Questionnaire/$questionnaire-package (Questionnaire only)</td><td><code>/fhir/r4/Questionnaire/$questionnaire-package</code></td><td>&#x1F7E1; In development</td></tr>
+            <tr><td><strong>Da Vinci PAS</strong></td><td>Claim/$submit, Claim/$inquire</td><td><code>/fhir/r4/Claim/$submit</code>, <code>/fhir/r4/Claim/$inquire</code></td><td>&#x1F7E1; In development</td></tr>
           </tbody>
         </table>
 
         <div class="callout callout-info">
           <div class="callout-title">CMS-0057-F deadline</div>
-          <p>The CMS Interoperability and Prior Authorization Final Rule requires all impacted payers (Medicaid, CHIP, Medicare Advantage, and QHP issuers on the FFE) to implement CRD, DTR, and PAS by <strong>January 1, 2027</strong>. Cloud Health Office&rsquo;s implementations have passed Touchstone and Inferno testing suites and are production-deployed.</p>
+          <p>The CMS Interoperability and Prior Authorization Final Rule requires all impacted payers (Medicaid, CHIP, Medicare Advantage, and QHP issuers on the FFE) to implement CRD, DTR, and PAS by <strong>January 1, 2027</strong>. Cloud Health Office&rsquo;s CRD, DTR and PAS implementations are in development and not yet conformant. No Inferno or Touchstone suite has been run against CHO as a payer server yet. See the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer">ePA gap matrix</a> for current status and the order of remaining work.</p>
         </div>
 
         <!-- ============================= -->
@@ -620,9 +620,9 @@
         <ol>
           <li><strong>Configure auth-required rules</strong> &mdash; Define which services require prior authorization per plan and LOB</li>
           <li><strong>Load clinical criteria rules</strong> &mdash; Import or configure decision rules in the PriorAuthDecisionEngine for each authorization pathway</li>
-          <li><strong>Configure clearinghouse 278 inbound/outbound</strong> &mdash; Set up X12 278 request receipt and response transmission via Availity, Change Healthcare, etc.</li>
-          <li><strong>Set up Da Vinci CRD/DTR/PAS endpoints</strong> &mdash; Configure the FHIR-based prior auth APIs for CMS-0057-F compliance</li>
-          <li><strong>Submit a test 278 request</strong> &mdash; Send a sample authorization request through the clearinghouse or API</li>
+          <li><strong>Configure clearinghouse 278 inbound/outbound (planned)</strong> &mdash; X12 278 bridging is planned; once built, this step sets up X12 278 request receipt and response transmission via Availity, Change Healthcare, etc.</li>
+          <li><strong>Set up Da Vinci CRD/DTR/PAS endpoints</strong> &mdash; Configure the FHIR-based prior auth APIs (in development; CMS-0057-F conformance in progress)</li>
+          <li><strong>Submit a test request</strong> &mdash; Send a sample authorization request through the API or portal (X12 278 via clearinghouse is planned)</li>
           <li><strong>Review the decision trace log</strong> &mdash; Verify which rules were evaluated, which rule fired, and confirm the expected disposition</li>
         </ol>
 

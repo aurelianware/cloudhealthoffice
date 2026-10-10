@@ -70,8 +70,8 @@
         <h3>Calculation Engines (9)</h3>
         <p>Benefit Engine (HDHP/HSA, aggregate family accumulators, DRG inpatient), <a href="/docs/fee-schedule-engine">Fee Schedule Engine</a> (DRG lookup, Medicaid cross-schedule, multiple procedure ranking), NCCI Engine, COB Engine, Risk Adjustment Engine, Encounter Engine, Claims Scrub Engine, Capitation Engine, and Operating Mode Engine.</p>
 
-        <h3>X12 Parsers (5) + Encoder</h3>
-        <p>Five inbound parsers — 837 Claims, 835 Remittance, 834 Enrollment, 276/277 Claim Status, and 278 Prior Auth — plus a shared X12 Encoder for outbound generation. All written in C# (.NET 8) with zero external dependencies.</p>
+        <h3>X12 Parsers (4) + Encoder</h3>
+        <p>Four inbound parsers — 837 Claims, 835 Remittance, 834 Enrollment, and 276/277 Claim Status — plus a shared X12 Encoder for outbound generation. All written in C# (.NET 8) with zero external dependencies. An X12 278 Prior Auth parser and encoder are planned, following the same pattern.</p>
 
         <h2 id="adjudication">Claims Adjudication Pipeline</h2>
         <p>The 10-step claims adjudication pipeline processes an 837 from SFTP ingestion through Argo Workflows to adjudication with full benefit calculation.</p>

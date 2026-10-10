@@ -567,7 +567,7 @@ curl -s -X POST http://localhost:5010/fhir/ConceptMap/\$batch-translate \
 
         <h3>PAS Server (Prior Authorization Support)</h3>
         <p>
-          The PAS server receives X12 278 prior authorization requests and converts them to FHIR. During this conversion, procedure and diagnosis codes may need to be translated between code systems. The PAS server uses the <code>$batch-translate</code> endpoint to convert all codes in a single round trip, keeping latency low for real-time prior auth decisions.
+          The PAS server receives FHIR prior authorization requests (X12 278 bridging is planned). Procedure and diagnosis codes in those requests may need to be translated between code systems. The PAS server uses the <code>$batch-translate</code> endpoint to convert all codes in a single round trip, keeping latency low for real-time prior auth decisions.
         </p>
 
         <h3>DTR Engine (Documentation Templates and Rules)</h3>
