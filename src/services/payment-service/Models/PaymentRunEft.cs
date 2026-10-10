@@ -92,6 +92,13 @@ public class PaymentRunEftFile
     /// </summary>
     public List<RemittanceDateNotice> RemittanceDateNotices { get; set; } = new();
 
+    /// <summary>
+    /// Payments of the run reversed before any file carrying them was sent, and left out
+    /// of this file: their 835 (already issued) said they would be paid, so each provider
+    /// must be told the payment will not arrive. Carried forward on every later re-pin.
+    /// </summary>
+    public List<VoidedPaymentNotice> VoidedPayments { get; set; } = new();
+
     public DateTime FirstGeneratedAt { get; set; }
     public string? FirstGeneratedBy { get; set; }
     public DateTime? LastVerifiedAt { get; set; }
@@ -121,6 +128,68 @@ public class RemittanceDateNotice
 
     /// <summary>The date the funds actually settle (the re-dated file's effective entry date).</summary>
     public DateTime EffectiveEntryDate { get; set; }
+}
+
+/// <summary>
+/// A payment reversed before its EFT file was sent and left out of the re-pinned file.
+/// <see cref="Completed"/> is set once the payment is marked voided-before-payment and the
+/// receivable the reversal opened is cancelled (the provider was never paid, so owes nothing).
+/// </summary>
+public class VoidedPaymentNotice
+{
+    public string PaymentId { get; set; } = string.Empty;
+    public string CheckNumber { get; set; } = string.Empty;
+    public string PayeeNpi { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string? EraEnvelopeId { get; set; }
+    public string? TradingPartnerId { get; set; }
+
+    /// <summary>ISA13 of the 835 that announced the payment.</summary>
+    public string? ControlNumber { get; set; }
+
+    public string? ReversalRunId { get; set; }
+
+    /// <summary>The first receivable cancelled (see <see cref="Cancellations"/>).</summary>
+    public string? ReceivableId { get; set; }
+    public List<VoidedReceivableCancellation> Cancellations { get; set; } = new();
+
+    /// <summary>The payable never to be paid (what was reversed, net of the payment's own recoveries).</summary>
+    public decimal PayableRelieved { get; set; }
+
+    /// <summary>Not reversed: still owed to the provider, to be reissued by a person (reissue-remainder).</summary>
+    public decimal UnpaidRemainder { get; set; }
+
+    /// <summary>Who left the payment out (the re-pin or exclusion); may not record its reissue.</summary>
+    public string? VoidedBy { get; set; }
+
+    /// <summary>The remainder was paid to the provider (recorded by reissue-remainder).</summary>
+    public DateTime? RemainderReissuedAt { get; set; }
+    public string? RemainderReissuedBy { get; set; }
+    public string? RemainderReissueMethod { get; set; }
+    public string? RemainderReissueReference { get; set; }
+
+    /// <summary>The payment recovered receivables; those recoveries were undone.</summary>
+    public bool OffsetsReversed { get; set; }
+
+    /// <summary>Excluded by a finance decision (exclude-payments).</summary>
+    public bool ExcludedByOverride { get; set; }
+    public DateTime? ReversalExecutedAt { get; set; }
+
+    /// <summary>Recoveries reversed because the receivable had been recovered for this never-made payment: refunds owed.</summary>
+    public List<string> RefundsOwed { get; set; } = new();
+
+    public bool Completed { get; set; }
+    public DateTime? CompletedAt { get; set; }
+
+    /// <summary>The ledger refused part of the completion (see <see cref="Problem"/>): a person must settle it. The file is not blocked.</summary>
+    public bool NeedsAttention { get; set; }
+    public string? Problem { get; set; }
+}
+
+public class VoidedReceivableCancellation
+{
+    public string ReceivableId { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
 }
 
 /// <summary>One NACHA credit (entry detail + addenda), without full numbers.</summary>
