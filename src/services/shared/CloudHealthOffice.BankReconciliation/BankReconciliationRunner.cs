@@ -40,6 +40,9 @@ public sealed class BankReconciliationSummary
     /// <summary>Claimed by a run still in progress.</summary>
     public int InProgress { get; set; }
 
+    /// <summary>Not decided: the statement is frozen by a supersession.</summary>
+    public int Frozen { get; set; }
+
     public List<ReconciliationItem> Items { get; } = [];
 }
 
@@ -94,6 +97,14 @@ public sealed class BankReconciliationRunner
         var id = ReconciliationItem.IdFor(_options.ServiceName, tx.Id);
         var claim = NewItem(tx, id, now);
 
+        // A statement under supersession is not decided (checked again by the
+        // matchers right before they post anything).
+        if ((await _store.GetSupersessionAsync(tx.TenantId, tx.StatementId, ct))?.Freezes == true)
+        {
+            summary.Frozen++;
+            return null;
+        }
+
         if (!await _store.TryCreateItemAsync(claim, ct))
         {
             var existing = await _store.GetItemAsync(tx.TenantId, id, ct);
@@ -141,7 +152,22 @@ public sealed class BankReconciliationRunner
                     $"PossibleDuplicate: another line with the same account, type, bank reference, amount and date was already reconciled ({earlier.Id}); confirm whether this is the same money.",
                     Candidates: [$"ReconciliationItem:{earlier.Id}"]);
         else
-            decision = await matcher.DecideAsync(tx, ct);
+        {
+            try
+            {
+                decision = await matcher.DecideAsync(tx, ct);
+            }
+            catch (StatementFrozenException)
+            {
+                // A supersession was requested while this run was deciding: give
+                // the claim up (lease expired) so nothing holds the statement.
+                claim.CreatedAt = DateTime.MinValue;
+                claim.Reason = "Not decided: the statement was frozen by a supersession request";
+                await _store.TryUpdateItemAsync(claim, claim.Version, ct);
+                summary.Frozen++;
+                return null;
+            }
+        }
 
         claim.Kind = decision.Kind;
         claim.Status = decision.Status;
@@ -189,8 +215,8 @@ public sealed class BankReconciliationRunner
     /// <exception cref="InvalidOperationException">The statement has a supersession.</exception>
     public async Task EnsureNotSupersededAsync(string tenantId, string statementId, CancellationToken ct = default)
     {
-        if (await _store.GetSupersessionAsync(tenantId, statementId, ct) is { } s)
-            throw new InvalidOperationException(
+        if (await _store.GetSupersessionAsync(tenantId, statementId, ct) is { Freezes: true } s)
+            throw new StatementFrozenException(
                 $"Statement {statementId} is {(s.Status == SupersessionStatus.Approved ? "superseded" : "being superseded")} by a corrected bank file; work its lines from the corrected statement.");
     }
 
@@ -293,5 +319,31 @@ public static class BankReferenceTokens
         Add(tx.BankReference);
         Add(tx.Text);
         return tokens;
+    }
+}
+
+/// <summary>The statement has a Requested or Approved supersession: its lines may not be worked or decided.</summary>
+public sealed class StatementFrozenException : InvalidOperationException
+{
+    public StatementFrozenException(string message) : base(message) { }
+}
+
+/// <summary>
+/// The freeze check matchers call at their commit point (right before they
+/// post cash or record a settlement), so a run that started before a
+/// supersession request cannot act on the statement after it.
+/// </summary>
+public sealed class BankStatementFreeze
+{
+    private readonly IBankReconciliationStore _store;
+
+    public BankStatementFreeze(IBankReconciliationStore store) => _store = store;
+
+    /// <exception cref="StatementFrozenException">The statement has a Requested or Approved supersession.</exception>
+    public async Task EnsureNotFrozenAsync(string tenantId, string statementId, CancellationToken ct = default)
+    {
+        if (await _store.GetSupersessionAsync(tenantId, statementId, ct) is { Freezes: true } s)
+            throw new StatementFrozenException(
+                $"Statement {statementId} is {(s.Status == SupersessionStatus.Approved ? "superseded" : "being superseded")} by a corrected bank file; nothing is posted from it.");
     }
 }

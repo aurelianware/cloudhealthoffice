@@ -175,7 +175,7 @@ public sealed class BankStatementIngestion
             var earlier = await _store.ListAcceptedByBankFileKeyAsync(tenantId, parsed.BankFileKey, ct);
             var latest = earlier.LastOrDefault();
             var supersession = latest is null ? null : await _store.GetSupersessionAsync(tenantId, latest.Id, ct);
-            if (latest is not null && supersession?.Status != SupersessionStatus.Approved)
+            if (latest is not null && supersession is not { Status: SupersessionStatus.Approved, DismissalsComplete: true })
             {
                 // Kept for audit under its own id, not the file's hash id: once a
                 // supersession is approved, the same corrected bytes can be sent again.
@@ -233,7 +233,7 @@ public sealed class BankStatementIngestion
         // Frozen as soon as a supersession is requested, not only once approved:
         // nothing on the statement may be decided while it is being replaced.
         var superseded = existing.Status == BankStatementStatus.Accepted
-                         && await _store.GetSupersessionAsync(existing.TenantId, existing.Id, ct) is not null;
+                         && (await _store.GetSupersessionAsync(existing.TenantId, existing.Id, ct))?.Freezes == true;
         return await DuplicateResultAsync(existing, superseded, ct);
     }
 

@@ -81,14 +81,17 @@ public sealed class PremiumBankTransactionMatcher : IBankTransactionMatcher
     private readonly IPremiumInvoiceRepository _invoices;
     private readonly PremiumBankReconciliationOptions _options;
     private readonly ILogger<PremiumBankTransactionMatcher> _logger;
+    private readonly BankStatementFreeze _freeze;
 
     public PremiumBankTransactionMatcher(
         ICashApplicationService cash,
         IRemittanceBatchRepository batches,
         IPremiumInvoiceRepository invoices,
         IOptions<PremiumBankReconciliationOptions> options,
-        ILogger<PremiumBankTransactionMatcher> logger)
+        ILogger<PremiumBankTransactionMatcher> logger,
+        BankStatementFreeze freeze)
     {
+        _freeze = freeze;
         _cash = cash;
         _batches = batches;
         _invoices = invoices;
@@ -176,6 +179,8 @@ public sealed class PremiumBankTransactionMatcher : IBankTransactionMatcher
     /// <summary>Applies the bank line to <paramref name="invoice"/> through cash application (also used to resolve a suspense item).</summary>
     public async Task<MatchDecision> ApplyAsync(BankTransaction tx, PremiumInvoice invoice, decimal? amount = null)
     {
+        // Commit point: a supersession requested since the run started stops the posting.
+        await _freeze.EnsureNotFrozenAsync(tx.TenantId, tx.StatementId);
         var advice = ToAdvice(tx, invoice.InvoiceNumber, amount ?? tx.Amount);
         RemittanceBatch batch;
         try

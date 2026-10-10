@@ -141,6 +141,21 @@ public enum SupersessionStatus
 
     /// <summary>Approved by a second person: a corrected file with the same bank file id is accepted.</summary>
     Approved,
+
+    /// <summary>The requester took the request back. The statement is workable again.</summary>
+    Withdrawn,
+
+    /// <summary>A second person turned the request down. The statement is workable again.</summary>
+    Rejected,
+}
+
+/// <summary>One step in a supersession's life (requested, approved, withdrawn, rejected).</summary>
+public sealed class SupersessionHistoryEntry
+{
+    public SupersessionStatus Status { get; set; }
+    public string By { get; set; } = string.Empty;
+    public DateTime At { get; set; }
+    public string? Reason { get; set; }
 }
 
 /// <summary>
@@ -168,7 +183,29 @@ public sealed class BankStatementSupersession
     /// <summary>The corrected file accepted in its place, once received.</summary>
     public string? ReplacedByStatementId { get; set; }
 
+    /// <summary>
+    /// Set once every open line of the statement was dismissed after approval.
+    /// An approval interrupted before that is finished by approving again.
+    /// </summary>
+    public bool DismissalsComplete { get; set; }
+
+    /// <summary>Who withdrew or rejected it, when, and why.</summary>
+    public string? ClosedBy { get; set; }
+    public DateTime? ClosedAt { get; set; }
+    public string? CloseReason { get; set; }
+
+    /// <summary>Every request, approval, withdrawal and rejection, oldest first.</summary>
+    public List<SupersessionHistoryEntry> History { get; set; } = [];
+
+    /// <summary>Requested or Approved: the statement's lines may not be worked or decided.</summary>
+    public bool Freezes => Status is SupersessionStatus.Requested or SupersessionStatus.Approved;
+
     public static string IdFor(string tenantId, string statementId) => $"{tenantId}|{statementId}";
 
-    public BankStatementSupersession Copy() => (BankStatementSupersession)MemberwiseClone();
+    public BankStatementSupersession Copy()
+    {
+        var copy = (BankStatementSupersession)MemberwiseClone();
+        copy.History = [.. History];
+        return copy;
+    }
 }

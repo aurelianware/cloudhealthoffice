@@ -138,6 +138,22 @@ public sealed class PaymentBankStatementsController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
+    /// <summary>
+    /// Takes a Requested supersession back, with a reason: the requester
+    /// withdraws it, anyone else with this permission rejects it. The
+    /// statement's lines can be worked again.
+    /// </summary>
+    [HttpPost("{id}/supersede/withdraw")]
+    public async Task<ActionResult<BankStatementSupersession>> WithdrawSupersession(string id, [FromBody] SupersedeRequest request, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _supersessions.WithdrawOrRejectAsync(_actor.TenantId, id, request.Reason, _actor.UserId, ct));
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return BadRequest(new { error = ex.Message }); }
+    }
+
     [HttpGet("{id}/supersession")]
     public async Task<ActionResult<BankStatementSupersession>> GetSupersession(string id, CancellationToken ct) =>
         await _supersessions.GetAsync(_actor.TenantId, id, ct) is { } s ? Ok(s) : NotFound(new { error = $"No supersession for statement {id}" });

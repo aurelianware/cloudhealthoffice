@@ -53,6 +53,7 @@ public sealed class NachaSettlementMatcher : IBankTransactionMatcher
     private readonly NachaSettlementOptions _options;
     private readonly BankReconciliationOptions _reconciliation;
     private readonly TimeProvider _clock;
+    private readonly BankStatementFreeze _freeze;
 
     public NachaSettlementMatcher(
         INachaSettlementCandidateSource candidates,
@@ -60,8 +61,10 @@ public sealed class NachaSettlementMatcher : IBankTransactionMatcher
         IOptions<NachaSettlementOptions> options,
         IOptions<BankReconciliationOptions> reconciliation,
         IConfiguration configuration,
+        BankStatementFreeze freeze,
         TimeProvider? clock = null)
     {
+        _freeze = freeze;
         _candidates = candidates;
         _settlements = settlements;
         _options = options.Value;
@@ -113,6 +116,8 @@ public sealed class NachaSettlementMatcher : IBankTransactionMatcher
     /// <summary>Records <paramref name="file"/> as settled by <paramref name="tx"/> (also used to resolve a suspense item).</summary>
     public async Task<MatchDecision> SettleAsync(BankTransaction tx, PaymentFileTransmission file, string settledBy, CancellationToken ct = default)
     {
+        // Commit point: a supersession requested since the run started stops the settlement.
+        await _freeze.EnsureNotFrozenAsync(tx.TenantId, tx.StatementId, ct);
         var itemId = ReconciliationItem.IdFor(_reconciliation.ServiceName, tx.Id);
         var settlement = new NachaFileSettlement
         {

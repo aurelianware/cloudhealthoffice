@@ -35,7 +35,7 @@ public class NachaSettlementReconciliationTests
     {
         var options = Options.Create(new BankReconciliationOptions { ServiceName = "payment-service" });
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Era:OriginatingCompanyId"] = "1999999999" }).Build();
-        _matcher = new NachaSettlementMatcher(_nacha, _nacha, Options.Create(new NachaSettlementOptions()), options, config);
+        _matcher = new NachaSettlementMatcher(_nacha, _nacha, Options.Create(new NachaSettlementOptions()), options, config, new BankStatementFreeze(_store));
         _ingestion = new BankStatementIngestion(_store, new DataProtectionFieldProtector(new EphemeralDataProtectionProvider(), "t"),
             options, NullLogger<BankStatementIngestion>.Instance);
         _runner = new BankReconciliationRunner(_store, new LoggingBankReconciliationEventSink(NullLogger<LoggingBankReconciliationEventSink>.Instance),
@@ -156,6 +156,19 @@ public class NachaSettlementReconciliationTests
         var again = await Reconcile(bai2);
 
         Assert.Equal(1, again.AlreadyDecided);
+    }
+
+    [Fact]
+    public async Task FrozenStatement_SettlesNothing_AtTheCommitPoint()
+    {
+        var file = File("FFS-PR-70", 20m);
+        var ingest = await _ingestion.IngestAsync(Tenant, Single(new Tx("466", 2000)).Bytes(), null, "treasury-1");
+        await new BankStatementSupersessionService(_store, Options.Create(new BankReconciliationOptions { ServiceName = "payment-service" }),
+            NullLogger<BankStatementSupersessionService>.Instance).RequestAsync(Tenant, ingest.Statement.Id, "corrected file arriving", "alice");
+
+        await Assert.ThrowsAsync<StatementFrozenException>(() => _matcher.SettleAsync(ingest.Transactions.Single(), file, "treasury-2"));
+        Assert.Null(await _nacha.GetAsync(Tenant, "FFS-PR-70"));
+        Assert.Equal(1, (await _runner.RunAsync(ingest.Transactions, _matcher)).Frozen);
     }
 
     [Fact]

@@ -238,6 +238,129 @@ public class SupersessionAndInterimTests
         (await Supersessions().GetAsync(Tenant, original.Statement.Id))!.Status.Should().Be(SupersessionStatus.Requested);
     }
 
+    [Theory]
+    [InlineData("alice", SupersessionStatus.Withdrawn)]
+    [InlineData("bob", SupersessionStatus.Rejected)]
+    public async Task WithdrawnOrRejectedRequest_UnfreezesTheStatement(string actor, SupersessionStatus expected)
+    {
+        var original = await Ingestion().IngestAsync(Tenant, Statement(1000).Bytes(), null, "u1");
+        var item = (await Runner().RunAsync(original.Transactions, new CountingMatcher { Default = ReconciliationStatus.Suspense })).Items.Single();
+        await Supersessions().RequestAsync(Tenant, original.Statement.Id, "corrected file coming", "alice");
+
+        var closed = await Supersessions().WithdrawOrRejectAsync(Tenant, original.Statement.Id, "bank says the original is right", actor);
+
+        closed.Status.Should().Be(expected);
+        closed.ClosedBy.Should().Be(actor);
+        closed.History.Select(h => h.Status).Should().Equal(SupersessionStatus.Requested, expected);
+        (await Runner().ResolveAsync(Tenant, item.Id, false, "worked after the withdrawal", "carol")).Status.Should().Be(ReconciliationStatus.Resolved);
+        await FluentActions.Invoking(() => Supersessions().WithdrawOrRejectAsync(Tenant, original.Statement.Id, "again", actor))
+            .Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task WithdrawnRequest_CanBeAskedAgain_AndApproved()
+    {
+        var original = await Ingestion().IngestAsync(Tenant, Statement(1000).Bytes(), null, "u1");
+        await Supersessions().RequestAsync(Tenant, original.Statement.Id, "first try", "alice");
+        await Supersessions().WithdrawOrRejectAsync(Tenant, original.Statement.Id, "wrong file", "alice");
+
+        await Supersessions().RequestAsync(Tenant, original.Statement.Id, "second try", "alice");
+        var approved = await Supersessions().ApproveAsync(Tenant, original.Statement.Id, "bob");
+
+        approved.Status.Should().Be(SupersessionStatus.Approved);
+        approved.DismissalsComplete.Should().BeTrue();
+        approved.History.Select(h => h.Status).Should().Equal(
+            SupersessionStatus.Requested, SupersessionStatus.Withdrawn, SupersessionStatus.Requested, SupersessionStatus.Approved);
+    }
+
+    [Fact]
+    public async Task InterruptedApproval_IsFinishedByApprovingAgain_AndTheCorrectedFileWaitsForIt()
+    {
+        var original = await Ingestion().IngestAsync(Tenant, Statement(1000).Bytes(), null, "u1");
+        var item = (await Runner().RunAsync(original.Transactions, new CountingMatcher { Default = ReconciliationStatus.Suspense })).Items.Single();
+        await Supersessions().RequestAsync(Tenant, original.Statement.Id, "corrected", "alice");
+
+        // The approval was saved, then the process stopped before the lines were dismissed.
+        var saved = (await _store.GetSupersessionAsync(Tenant, original.Statement.Id))!;
+        saved.Status = SupersessionStatus.Approved;
+        saved.ApprovedBy = "bob";
+        saved.ApprovedAt = DateTime.UtcNow;
+        (await _store.TryUpdateSupersessionAsync(saved, SupersessionStatus.Requested)).Should().BeTrue();
+
+        (await Ingestion().IngestAsync(Tenant, Statement(1100).Bytes(), null, "u1")).Status.Should().Be(BankStatementIngestStatus.Rejected);
+
+        var finished = await Supersessions().ApproveAsync(Tenant, original.Statement.Id, "bob");
+        finished.DismissalsComplete.Should().BeTrue();
+        (await _store.GetItemAsync(Tenant, item.Id))!.Status.Should().Be(ReconciliationStatus.Dismissed);
+        (await Supersessions().ApproveAsync(Tenant, original.Statement.Id, "bob")).DismissalsComplete.Should().BeTrue("approving again is a no-op");
+        (await Ingestion().IngestAsync(Tenant, Statement(1100).Bytes(), null, "u1")).Status.Should().Be(BankStatementIngestStatus.Ingested);
+    }
+
+    [Fact]
+    public async Task Approval_ChecksEveryLineBeforeDismissingAny()
+    {
+        var bai2 = new Bai2Builder
+        {
+            FileId = "7",
+            Groups = [new Group { Accounts = [new Account { Transactions = [new Tx("165", 100, BankReference: "REF-0001"), new Tx("165", 200, BankReference: "REF-0002")] }] }],
+        };
+        var original = await Ingestion().IngestAsync(Tenant, bai2.Bytes(), null, "u1");
+        var items = (await Runner().RunAsync(original.Transactions, new CountingMatcher { Default = ReconciliationStatus.Suspense })).Items;
+        await Supersessions().RequestAsync(Tenant, original.Statement.Id, "corrected", "alice");
+
+        var second = (await _store.GetItemAsync(Tenant, items[1].Id))!;
+        second.Status = ReconciliationStatus.Resolved;
+        await _store.TryUpdateItemAsync(second, second.Version);
+
+        await FluentActions.Invoking(() => Supersessions().ApproveAsync(Tenant, original.Statement.Id, "bob"))
+            .Should().ThrowAsync<InvalidOperationException>();
+        (await _store.GetItemAsync(Tenant, items[0].Id))!.Status.Should().Be(ReconciliationStatus.Suspense, "nothing was dismissed");
+        (await Supersessions().GetAsync(Tenant, original.Statement.Id))!.Status.Should().Be(SupersessionStatus.Requested);
+    }
+
+    /// <summary>Requests a supersession of the statement it is deciding, then posts at its commit point.</summary>
+    private sealed class RequestDuringRunMatcher(BankStatementSupersessionService supersessions, BankStatementFreeze freeze, string tenant) : IBankTransactionMatcher
+    {
+        public bool Posted { get; private set; }
+
+        public async Task<MatchDecision> DecideAsync(BankTransaction tx, CancellationToken ct = default)
+        {
+            await supersessions.RequestAsync(tenant, tx.StatementId, "corrected file arriving", "alice", ct);
+            await freeze.EnsureNotFrozenAsync(tx.TenantId, tx.StatementId, ct); // what the real matchers do before posting
+            Posted = true;
+            return new MatchDecision("PremiumCash", ReconciliationStatus.Applied, "applied");
+        }
+    }
+
+    [Fact]
+    public async Task RunThatStartedBeforeARequest_CannotPostAfterIt_AndDoesNotBlockTheApproval()
+    {
+        var original = await Ingestion().IngestAsync(Tenant, Statement(1000).Bytes(), null, "u1");
+        var matcher = new RequestDuringRunMatcher(Supersessions(), new BankStatementFreeze(_store), Tenant);
+
+        var summary = await Runner().RunAsync(original.Transactions, matcher);
+
+        matcher.Posted.Should().BeFalse();
+        summary.Frozen.Should().Be(1);
+        summary.Applied.Should().Be(0);
+        // The abandoned claim does not hold the approval.
+        (await Supersessions().ApproveAsync(Tenant, original.Statement.Id, "bob")).DismissalsComplete.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FrozenStatement_IsNotClaimedByARun()
+    {
+        var original = await Ingestion().IngestAsync(Tenant, Statement(1000).Bytes(), null, "u1");
+        await Supersessions().RequestAsync(Tenant, original.Statement.Id, "corrected", "alice");
+        var matcher = new CountingMatcher { Default = ReconciliationStatus.Applied };
+
+        var summary = await Runner().RunAsync(original.Transactions, matcher);
+
+        summary.Frozen.Should().Be(1);
+        matcher.Calls.Should().Be(0);
+        (await _store.ListItemsByStatementAsync(Tenant, original.Statement.Id)).Should().BeEmpty();
+    }
+
     [Fact]
     public async Task InterimReports_CanBeSkipped()
     {

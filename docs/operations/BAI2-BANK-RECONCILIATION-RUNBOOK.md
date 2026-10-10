@@ -74,12 +74,27 @@ The errors name the line number and show account numbers masked (`****6789`).
     1. `POST /api/v1/bank-statements/{id}/supersede` with `{ "reason": "..." }`.
     2. A **different** user calls `POST /api/v1/bank-statements/{id}/supersede/approve`.
 
-    From the request on, the statement is frozen: its items cannot be
-    resolved (including `ApplyToInvoice`), and re-ingesting it decides
-    nothing. On approval the old statement's open items are dismissed, each
-    with its version checked. If a line was acted on meanwhile, the approval
-    fails and nothing is approved. A request that is never approved leaves the
-    statement frozen; there is no cancel yet. The corrected
+    From the request on, the statement is frozen until the request is
+    approved, withdrawn or rejected:
+    - its items cannot be resolved (including `ApplyToInvoice`);
+    - re-ingesting it decides nothing;
+    - a reconciliation run already under way when the request was made is
+      stopped at its commit point. The premium matcher checks right before
+      cash application posts, and the NACHA matcher right before a settlement
+      is recorded. The line's claim is given up rather than posted.
+
+    To unfreeze it: `POST /api/v1/bank-statements/{id}/supersede/withdraw`
+    with `{ "reason": "..." }`. When the requester calls it, the request is
+    Withdrawn; when anyone else with the permission calls it, the request is
+    Rejected. A withdrawn or rejected request can be made again later, and
+    every step is kept in the supersession's `history`.
+
+    Approval checks every line **before** changing anything. It refuses if
+    any line was applied, matched, settled or resolved, or if a run is
+    deciding lines right now. It then saves the approval and dismisses the
+    open lines, including claims an interrupted run abandoned. The dismissal
+    is idempotent: if it stops part-way, approving again finishes it. The
+    corrected file is accepted only once the dismissal is complete. The corrected
     file, even byte-for-byte the one refused earlier, is then accepted, under
     bank key `{key}#2`.
 

@@ -57,7 +57,8 @@ public sealed class PremiumBankReconciliationTests : IAsyncLifetime
         actor.SetupGet(a => a.IsAuthenticated).Returns(true);
         _cash = new CashApplicationService(_batches, _exceptions, _invoices, accounts, actor.Object, NullLogger<CashApplicationService>.Instance);
         _matcher = new PremiumBankTransactionMatcher(_cash, _batches, _invoices,
-            Options.Create(new PremiumBankReconciliationOptions()), NullLogger<PremiumBankTransactionMatcher>.Instance);
+            Options.Create(new PremiumBankReconciliationOptions()), NullLogger<PremiumBankTransactionMatcher>.Instance,
+            new BankStatementFreeze(_store));
 
         _reconOptions = new BankReconciliationOptions { ServiceName = "premium-billing-service" };
         var options = Options.Create(_reconOptions);
@@ -346,6 +347,19 @@ public sealed class PremiumBankReconciliationTests : IAsyncLifetime
         late.UnappliedCreditAmount.Should().Be(0);
         (await _exceptions.ListAsync()).Should().Contain(e => e.Reason == RemittanceExceptionReason.PossibleDuplicate && e.TraceNumber == "TRN8007");
         (await Reload(invoice))!.Payments.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task FrozenStatement_PostsNoCash_AtTheCommitPoint()
+    {
+        var invoice = await Invoice("INV-2026-8009", 250m);
+        var ingest = await _ingestion.IngestAsync(Tenant, Line(new Tx("165", 25000, CustomerReference: "INV-2026-8009")).Bytes(), null, null);
+        await new BankStatementSupersessionService(_store, Options.Create(_reconOptions), NullLogger<BankStatementSupersessionService>.Instance)
+            .RequestAsync(Tenant, ingest.Statement.Id, "corrected file arriving", "alice");
+
+        await FluentActions.Invoking(() => _matcher.ApplyAsync(ingest.Transactions.Single(), invoice))
+            .Should().ThrowAsync<StatementFrozenException>();
+        (await Reload(invoice))!.Payments.Should().BeEmpty();
     }
 
     [Fact]
