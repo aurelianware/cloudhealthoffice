@@ -63,7 +63,7 @@ public interface IPricingScheduleSource
 ///   <item>MPFS multiple procedure indicator → the engine's indicator. An OPPS entry has
 ///   none: status indicator T (multiple procedure discount) maps to 2, any other
 ///   status indicator to 9 (concept does not apply).</item>
-///   <item>Inpatient claim → DRG schedule with the claim's DRG row: <c>Rate</c> = base
+///   <item>Inpatient claim (or institutional claim against an MS-DRG schedule) → DRG schedule with the claim's DRG row: <c>Rate</c> = base
 ///   rate, <c>DrgWeight</c> = relative weight (case rate = base × weight).</item>
 ///   <item>Schedule type: RBRVS → MedicareMpfs, OPPS → MedicareOpps, Medicaid → Medicaid,
 ///   Commercial → Commercial.</item>
@@ -100,7 +100,10 @@ public sealed class LegacyEntryScheduleSource : IPricingScheduleSource
         var details = new Dictionary<string, PricingLineDetail>(StringComparer.OrdinalIgnoreCase);
         var unpriced = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        if (query.ClaimType == ClaimType.Inpatient)
+        // An inpatient claim prices by its DRG; so does an institutional claim (setting
+        // unstated) against an MS-DRG schedule.
+        if (query.ClaimType == ClaimType.Inpatient
+            || (query.ClaimType == ClaimType.Institutional && info.Type == FeeScheduleType.MedicareDrg))
         {
             schedule.Type = EngineDomain.FeeScheduleType.Drg;
             if (!string.IsNullOrWhiteSpace(query.DrgCode)

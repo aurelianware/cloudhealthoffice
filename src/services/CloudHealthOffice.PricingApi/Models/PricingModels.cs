@@ -16,10 +16,29 @@ public record RepricingRequest
     /// <summary>Medicare locality / MAC region for geographic adjustment (e.g., "05", "01").</summary>
     public string? Locality { get; init; }
 
-    /// <summary>Claim type: Professional, Outpatient, Inpatient.</summary>
-    public required ClaimType ClaimType { get; init; }
+    /// <summary>
+    /// Claim type: <c>professional</c>, <c>institutional</c>, <c>outpatient</c>, <c>inpatient</c> or
+    /// <c>dental</c>. Optional: when absent the claim is <c>institutional</c> if
+    /// <see cref="BillType"/> is a valid type of bill and <c>professional</c> otherwise.
+    /// Institutional, outpatient and inpatient claims (837I) always take the facility rate,
+    /// as in claims adjudication; professional and dental claims take the facility rate only
+    /// for a facility <see cref="PlaceOfService"/>. Inpatient claims (and institutional claims
+    /// against an MS-DRG schedule) are priced by <see cref="DrgCode"/>.
+    /// </summary>
+    public ClaimType? ClaimType { get; init; }
 
-    /// <summary>Place of service code (relevant for professional claims).</summary>
+    /// <summary>
+    /// NUBC type of bill (837I CLM05-1 facility type + CLM05-3 frequency), three digits
+    /// ("131") or four with a leading zero ("0131"). Optional; institutional claims only.
+    /// A valid type of bill marks the claim institutional (facility rate). A malformed value,
+    /// or a type of bill on a professional or dental claim, is rejected with 400.
+    /// </summary>
+    public string? BillType { get; init; }
+
+    /// <summary>
+    /// Place of service code (relevant for professional and dental claims). On an
+    /// institutional claim it is not read for the facility decision.
+    /// </summary>
     public string? PlaceOfService { get; init; }
 
     /// <summary>Primary diagnosis code (ICD-10-CM). Required for DRG-based pricing.</summary>
@@ -64,7 +83,11 @@ public record RepricingResponse
     public required string RequestId { get; init; }
     public required string FeeScheduleId { get; init; }
     public required string FeeScheduleVersion { get; init; }
+    /// <summary>The claim type priced: the request's, or the one inferred when it sent none.</summary>
     public required ClaimType ClaimType { get; init; }
+
+    /// <summary>The request's type of bill, normalized to three digits; absent when none was sent.</summary>
+    public string? BillType { get; init; }
     public string? DrgCode { get; init; }
     public decimal? DrgWeight { get; init; }
     public decimal TotalAllowed { get; init; }
@@ -326,11 +349,22 @@ public record UsageRecord
 //  Enums
 // ─────────────────────────────────────────────────────────────
 
+/// <summary>
+/// Repricing claim type. Outpatient, Inpatient and Institutional are institutional (837I)
+/// claims and always take the facility rate; Professional and Dental are priced by place of
+/// service. New values are appended so existing numeric values keep their meaning.
+/// </summary>
 public enum ClaimType
 {
     Professional,
     Outpatient,
-    Inpatient
+    Inpatient,
+
+    /// <summary>An institutional (837I) claim whose setting is not stated; see <see cref="RepricingRequest.BillType"/>.</summary>
+    Institutional,
+
+    /// <summary>A dental (837D) claim: priced like a professional claim, by place of service.</summary>
+    Dental
 }
 
 public enum FeeScheduleType
