@@ -12,6 +12,7 @@ COPY src/services/premium-billing-service/premium-billing-service.csproj src/ser
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
 COPY src/services/shared/CloudHealthOffice.FieldProtection/CloudHealthOffice.FieldProtection.csproj src/services/shared/CloudHealthOffice.FieldProtection/
 COPY src/services/shared/CloudHealthOffice.NachaTransmission/CloudHealthOffice.NachaTransmission.csproj src/services/shared/CloudHealthOffice.NachaTransmission/
+COPY src/services/shared/CloudHealthOffice.BankReconciliation/CloudHealthOffice.BankReconciliation.csproj src/services/shared/CloudHealthOffice.BankReconciliation/
 RUN dotnet restore src/services/premium-billing-service/premium-billing-service.csproj
 
 # Copy source code and build
@@ -19,6 +20,7 @@ COPY src/services/premium-billing-service/ src/services/premium-billing-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
 COPY src/services/shared/CloudHealthOffice.FieldProtection/ src/services/shared/CloudHealthOffice.FieldProtection/
 COPY src/services/shared/CloudHealthOffice.NachaTransmission/ src/services/shared/CloudHealthOffice.NachaTransmission/
+COPY src/services/shared/CloudHealthOffice.BankReconciliation/ src/services/shared/CloudHealthOffice.BankReconciliation/
 RUN dotnet build src/services/premium-billing-service/premium-billing-service.csproj -c Release --no-restore
 
 # Publish stage

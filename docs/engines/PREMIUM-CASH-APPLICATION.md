@@ -7,6 +7,11 @@ saves the invoice balances and the sponsor account balances as it posts.
 Code: `Edi/Edi820Parser.cs`, `Edi/LockboxCsvParser.cs`, `Services/CashApplicationService.cs`,
 `Controllers/RemittancesController.cs`.
 
+The bank's BAI2 statement confirms this cash, and can apply a credit that
+names exactly one open invoice for its exact balance (source `BankStatement`).
+Everything else waits in a suspense queue. See
+[BAI2 bank reconciliation](../operations/BAI2-BANK-RECONCILIATION-RUNBOOK.md).
+
 ## Table of contents
 
 - [Endpoints](#endpoints)

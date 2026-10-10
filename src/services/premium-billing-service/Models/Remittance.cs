@@ -13,7 +13,13 @@ public enum RemittanceSource
     X12820,
 
     /// <summary>Bank lockbox file (CSV).</summary>
-    Lockbox
+    Lockbox,
+
+    /// <summary>
+    /// A BAI2 bank statement credit applied directly to the one open invoice it
+    /// names for its exact balance (BankReconciliation/PremiumBankTransactionMatcher).
+    /// </summary>
+    BankStatement
 }
 
 /// <summary>Whether the remittance detail is for the whole group or one member.</summary>
