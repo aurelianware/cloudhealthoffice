@@ -71,6 +71,18 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
             pendDetails.DuplicateFindings = context.DuplicateFindings.ToList();
         }
 
+        // Accumulator outbox: a passing claim's prepared commit is written in
+        // the same conditional status write that makes it Approved, then
+        // driven by the outbox (immediately after this run, else by the
+        // dispatcher). An examiner-approval re-run writes none here — the
+        // resolver writes it with its lock-fenced final write.
+        var pendingCommit = resolvedOutcome == ClaimAdjudicationOutcome.Pass
+                            && context.ExaminerApproval is null
+                            && context.BenefitResolutionResult?.PreparedAccumulatorCommit is { } prepared
+            ? AccumulatorOutboxItem.ForCommit(prepared, DateTime.UtcNow)
+            : null;
+        context.PendingAccumulatorCommit = pendingCommit;
+
         try
         {
             var written = await _repository
@@ -84,7 +96,8 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
                     isPend: isPend,
                     resolvedStatus: resolvedStatus,
                     resolvedBenefitPlanId: context.Claim.BenefitPlanId,
-                    requiredResolutionLockToken: context.ExaminerApproval?.ResolutionLockToken)
+                    requiredResolutionLockToken: context.ExaminerApproval?.ResolutionLockToken,
+                    pendingAccumulatorCommit: pendingCommit)
                 .ConfigureAwait(false);
 
             if (!written && context.ExaminerApproval?.ResolutionLockToken is not null)
