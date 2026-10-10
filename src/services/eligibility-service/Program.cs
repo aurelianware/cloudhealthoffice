@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.Azure.Cosmos;
@@ -118,6 +119,9 @@ builder.Services.AddScoped<IEligibilityService, EligibilityServiceImpl>();
 builder.Services.AddScoped<IEdi270Parser, Edi270Parser>();
 builder.Services.AddScoped<IEdi271Generator, Edi271Generator>();
 
+// X12 interchange control: ISA/IEA validation, TA1, duplicate ISA13, outbound 271 TA1 tracking.
+builder.Services.AddChoX12Interchange(builder.Configuration);
+
 // Temporal eligibility (date-bound read projection over coverage-service)
 builder.Services.AddSingleton<IAccumulatorClient, StubAccumulatorClient>();
 builder.Services.AddScoped<ITemporalEligibilityService, TemporalEligibilityService>();
@@ -163,6 +167,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseChoAuthentication();
 app.MapControllers();
+app.MapChoX12InterchangeEndpoints("api/eligibility/interchange");
 app.MapChoHealthChecks();
 
 app.Run();
