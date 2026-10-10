@@ -81,10 +81,16 @@ public class PaymentEstimateService : IPaymentEstimateService
         var authority = await ResolveAuthorityAsync(tenantId, request.ClaimType, lobCode, ct);
 
         // ── Step 1: Fee-schedule pricing (read-only) ──
+        // Same institutional inputs the claims pipeline sends: for an 837I only, the
+        // claim-level DRG and length of stay go on every line (the engine pays a DRG
+        // case rate / all-inclusive per diem once per stay); the revenue code per line.
+        var isInstitutional = claimTypeCode == "837I";
+        var drgCode = isInstitutional && !string.IsNullOrWhiteSpace(request.DrgCode) ? request.DrgCode.Trim() : null;
+        var lengthOfStay = isInstitutional ? NormalizeLengthOfStay(request.LengthOfStay) : null;
         var pricingRequests = request.Lines.Select(line => new PricingRequest
         {
             TenantId = tenantId,
-            ProcedureCode = line.ProcedureCode,
+            ProcedureCode = line.ProcedureCode ?? string.Empty,
             Modifiers = line.Modifiers,
             ProviderNpi = request.ProviderNpi,
             PlaceOfServiceCode = string.IsNullOrWhiteSpace(line.PlaceOfService) ? "11" : line.PlaceOfService,
@@ -93,10 +99,13 @@ public class PaymentEstimateService : IPaymentEstimateService
             BilledAmount = line.ChargeAmount,
             Units = line.Units,
             LineNumber = line.LineNumber,
+            DrgCode = drgCode,
+            LengthOfStay = lengthOfStay,
+            RevenueCode = string.IsNullOrWhiteSpace(line.RevenueCode) ? null : line.RevenueCode.Trim(),
             // Same facility-setting inputs AdjudicationController sends, so an
             // institutional estimate prices at the rate adjudication will allow.
             BillType = request.BillType,
-            IsInstitutional = claimTypeCode == "837I",
+            IsInstitutional = isInstitutional,
         }).ToList();
 
         var pricing = await _rateEngine.ResolveBatchAsync(pricingRequests, ct);
@@ -109,27 +118,29 @@ public class PaymentEstimateService : IPaymentEstimateService
             pricedByLine[priced.LineNumber] = priced;
 
         // ── Step 2: Benefit calculation in read-only PROSPECTIVE mode ──
-        // Mirror the production adjudication seam: feed the priced allowed
-        // amount as the benefit line's billed amount so the cost-sharing
-        // waterfall operates on the allowed amount, exactly as
-        // AdjudicationController.Adjudicate does.
+        // Same seam as AdjudicationController.Adjudicate: the original billed
+        // charges stay on the lines and the priced allowed amounts go through
+        // AllowedAmounts, so the engine's checks that compare them (e.g. a per-stay
+        // allocation allowing a line more than it billed → pricing review) apply.
         var benefitLines = request.Lines.Select(line =>
         {
-            var priced = pricedByLine.GetValueOrDefault(line.LineNumber);
-            var allowed = priced?.AllowedAmount ?? line.ChargeAmount;
             return new ClaimLineInput
             {
                 LineNumber = line.LineNumber,
-                ProcedureCode = line.ProcedureCode,
+                ProcedureCode = line.ProcedureCode ?? string.Empty,
                 CodeType = line.CodeType,
                 Modifiers = line.Modifiers,
                 RevenueCode = line.RevenueCode,
                 PlaceOfService = string.IsNullOrWhiteSpace(line.PlaceOfService) ? "11" : line.PlaceOfService,
-                BilledAmount = allowed,
+                BilledAmount = line.ChargeAmount,
                 Units = line.Units,
                 DiagnosisCodes = line.DiagnosisCodes
             };
         }).ToList();
+
+        // DRG / all-inclusive per-diem stays: cost share once per stay, on the
+        // claim's total allowed (same rule as adjudication).
+        var perStay = PerStayPricing.Resolve(claimTypeCode, drgCode, lengthOfStay, pricing);
 
         var benefitRequest = new BenefitResolutionRequest
         {
@@ -144,10 +155,36 @@ public class PaymentEstimateService : IPaymentEstimateService
             ClaimId = request.RequestId ?? $"estimate-{Guid.NewGuid():N}",
             Lines = benefitLines,
             AllowedAmounts = pricedByLine.ToDictionary(kv => kv.Key, kv => kv.Value.AllowedAmount),
+            DrgCode = perStay?.DrgCode,
+            DrgAllowedAmount = perStay?.ClaimAllowed,
+            LengthOfStay = perStay?.LengthOfStay,
+            InpatientPricingMethod = perStay?.Method,
             ExecutionMode = AdjudicationExecutionMode.Prospective
         };
 
         var benefitResult = await _benefitEngine.CalculateAsync(benefitRequest, ct);
+
+        // ── Pricing review: the engine would pend the claim (e.g. a per-stay rate
+        //    above total billed). No amount is quoted; the estimate needs review. ──
+        if (benefitResult.RequiresReview)
+            return PricingReview(request, authority, warnings, benefitResult);
+
+        // ── Claim-level service denial (DRG / per-diem stay path: no benefit
+        //    mapping, not covered): every line carries the denial and its reason. ──
+        if (benefitResult.Lines.Count == 0 && benefitResult.DenialReasonCode is "96" or "204")
+        {
+            benefitResult = benefitResult with
+            {
+                Lines = request.Lines.Select(l => new LineBenefitResult
+                {
+                    LineNumber = l.LineNumber,
+                    IsCovered = false,
+                    DenialReasonCode = benefitResult.DenialReasonCode,
+                    DenialReasonDescription = benefitResult.DenialReasonDescription,
+                    BilledAmount = l.ChargeAmount,
+                }).ToList(),
+            };
+        }
 
         // ── Insufficient data: plan not found / no lines processed. ──
         if (benefitResult.Lines.Count == 0)
@@ -190,7 +227,7 @@ public class PaymentEstimateService : IPaymentEstimateService
         {
             var benefitLine = benefitResult.Lines.FirstOrDefault(b => b.LineNumber == reqLine.LineNumber);
             var priced = pricedByLine.GetValueOrDefault(reqLine.LineNumber);
-            estimateLines.Add(MapLine(reqLine, benefitLine, priced));
+            estimateLines.Add(MapLine(reqLine, benefitLine, priced, drgCode, lengthOfStay));
         }
 
         var totals = SumLineTotals(estimateLines);
@@ -209,6 +246,67 @@ public class PaymentEstimateService : IPaymentEstimateService
             Confidence = confidence
         };
     }
+
+    /// <summary>
+    /// The benefit engine pended the estimate for pricing review (it would pend the
+    /// real claim the same way, e.g. 422 PRICING_REVIEW from /adjudicate). No allowed
+    /// amount or cost share is quoted: every line is <c>needs_review</c> with the reason.
+    /// </summary>
+    private static PaymentEstimateResponse PricingReview(
+        PaymentEstimateRequest request, EstimateAuthority authority,
+        List<EstimateMessage> warnings, BenefitResolutionResult benefitResult)
+    {
+        var reason = benefitResult.PendReason ?? "Benefit calculation requires manual pricing review.";
+        warnings.Add(new EstimateMessage
+        {
+            Code = "PRICING_REVIEW",
+            Severity = EstimateMessageSeverity.Warning,
+            Description = reason,
+        });
+
+        var lines = request.Lines.OrderBy(l => l.LineNumber).Select(l => new EstimateLine
+        {
+            LineNumber = l.LineNumber,
+            ProcedureCode = l.ProcedureCode ?? string.Empty,
+            RevenueCode = l.RevenueCode,
+            ToothNumber = l.ToothNumber,
+            BilledAmount = l.ChargeAmount,
+            Status = "needs_review",
+            Messages =
+            [
+                new EstimateMessage
+                {
+                    Code = "PRICING_REVIEW",
+                    Severity = EstimateMessageSeverity.Warning,
+                    Description = reason,
+                },
+            ],
+        }).ToList();
+
+        return new PaymentEstimateResponse
+        {
+            RequestId = request.RequestId,
+            Status = "needs_review",
+            Authority = authority,
+            Totals = SumLineTotals(lines),
+            Lines = lines,
+            Warnings = warnings,
+            Confidence = new EstimateConfidence
+            {
+                Level = EstimateConfidenceLevel.Low,
+                Reasons = ["Benefit plan resolved"],
+                MissingData = ["Manual pricing review (" + (benefitResult.PendReasonCode ?? "PRICING") + ")"],
+            },
+        };
+    }
+
+    /// <summary>
+    /// Length of stay as the claims pipeline counts it (claims-service
+    /// <c>Claim.CalculateLengthOfStay</c>): at least one day, so a same-day stay
+    /// (0) is one day. Negative values are rejected by the controller.
+    /// </summary>
+    internal static int? NormalizeLengthOfStay(int? lengthOfStay)
+        => lengthOfStay is { } days ? Math.Max(days, 1) : null;
 
     // ═══════════════════════════════════════════════════════════════════
     // AUTHORITY
@@ -306,7 +404,8 @@ public class PaymentEstimateService : IPaymentEstimateService
                 ServicingProviderTaxonomy = request.ProviderTaxonomy,
                 MemberId = request.MemberId,
                 ServiceDate = request.ServiceDate,
-                ProcedureCodes = request.Lines.Select(l => l.ProcedureCode).Distinct().ToList(),
+                ProcedureCodes = request.Lines.Select(l => l.ProcedureCode)
+                    .Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct().ToList(),
                 DiagnosisCodes = request.Lines.SelectMany(l => l.DiagnosisCodes).Distinct().ToList(),
                 PlaceOfServiceCode = request.Lines.Select(l => l.PlaceOfService).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p)),
                 EstimatedCost = request.Lines.Sum(l => l.ChargeAmount)
@@ -347,7 +446,9 @@ public class PaymentEstimateService : IPaymentEstimateService
     private static EstimateLine MapLine(
         PaymentEstimateLineRequest reqLine,
         LineBenefitResult? benefitLine,
-        PricingResult? priced)
+        PricingResult? priced,
+        string? drgCode,
+        int? lengthOfStay)
     {
         var billed = reqLine.ChargeAmount;
         var allowed = priced?.AllowedAmount ?? benefitLine?.AllowedAmount ?? billed;
@@ -384,7 +485,8 @@ public class PaymentEstimateService : IPaymentEstimateService
             return new EstimateLine
             {
                 LineNumber = reqLine.LineNumber,
-                ProcedureCode = reqLine.ProcedureCode,
+                ProcedureCode = reqLine.ProcedureCode ?? string.Empty,
+                RevenueCode = reqLine.RevenueCode,
                 ToothNumber = reqLine.ToothNumber,
                 BilledAmount = billed,
                 AllowedAmount = 0m,
@@ -409,6 +511,11 @@ public class PaymentEstimateService : IPaymentEstimateService
                     ? $"Allowed amount from {DescribeFeeSchedule(priced)} ({priced.NetworkStatus})."
                     : "No contracted or fee-schedule rate matched; billed charges used as the allowed amount."
             });
+
+            if (priced.IsPerStayRate && rateResolved)
+                messages.Add(Info(
+                    priced.FeeScheduleType == FeeScheduleType.Drg ? "DRG_CASE_RATE_APPLIED" : "PER_DIEM_STAY_APPLIED",
+                    DescribePerStay(priced, drgCode, lengthOfStay)));
 
             // e.g. missing / unsupported CMS multiple procedure indicator — priced without reduction
             foreach (var warning in priced.Warnings)
@@ -447,7 +554,8 @@ public class PaymentEstimateService : IPaymentEstimateService
             return new EstimateLine
             {
                 LineNumber = reqLine.LineNumber,
-                ProcedureCode = reqLine.ProcedureCode,
+                ProcedureCode = reqLine.ProcedureCode ?? string.Empty,
+                RevenueCode = reqLine.RevenueCode,
                 ToothNumber = reqLine.ToothNumber,
                 BilledAmount = billed,
                 AllowedAmount = allowed,
@@ -485,7 +593,8 @@ public class PaymentEstimateService : IPaymentEstimateService
         return new EstimateLine
         {
             LineNumber = reqLine.LineNumber,
-            ProcedureCode = reqLine.ProcedureCode,
+            ProcedureCode = reqLine.ProcedureCode ?? string.Empty,
+            RevenueCode = reqLine.RevenueCode,
             ToothNumber = reqLine.ToothNumber,
             BilledAmount = billed,
             AllowedAmount = allowed,
@@ -516,6 +625,15 @@ public class PaymentEstimateService : IPaymentEstimateService
         null => ("NO_BENEFIT_MAPPING", "needs_review"),
         _ => ("SERVICE_DENIED", "denied")
     };
+
+    /// <summary>The stay's claim-level rate, paid once and allocated across the lines by billed charge.</summary>
+    private static string DescribePerStay(PricingResult priced, string? drgCode, int? lengthOfStay)
+        => priced.FeeScheduleType == FeeScheduleType.Drg
+            ? $"DRG {drgCode} case rate from {DescribeFeeSchedule(priced)}, paid once for the stay; " +
+              "this line's share is allocated by billed charges and the stay is cost-shared once."
+            : $"All-inclusive per diem from {DescribeFeeSchedule(priced)}" +
+              (lengthOfStay is { } days ? $" for {days} day(s)" : string.Empty) +
+              ", paid once for the stay; this line's share is allocated by billed charges and the stay is cost-shared once.";
 
     private static string DescribeFeeSchedule(PricingResult priced)
     {

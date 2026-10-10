@@ -73,6 +73,25 @@ public record PaymentEstimateRequest
     public string? BillType { get; init; }
 
     /// <summary>
+    /// Institutional: the DRG billed on the claim (837I HI*DR, e.g. MS-DRG "470").
+    /// Optional; institutional claims only (ignored otherwise). Sent to pricing on every line, as adjudication does: a DRG-contracted
+    /// provider's stay is priced at the DRG case rate, paid once and allocated across
+    /// the lines by billed charge, and cost-shared once for the stay. There is no DRG
+    /// grouper: without a DRG, a DRG-contracted stay finds no rate (billed charges).
+    /// </summary>
+    public string? DrgCode { get; init; }
+
+    /// <summary>
+    /// Institutional: length of stay in days (discharge − admission). Optional; must not
+    /// be negative; a same-day stay (0) counts as one day, as in claims adjudication.
+    /// Ignored (with <see cref="DrgCode"/>) unless the claim type is Institutional. Drives an all-inclusive per diem contract (daily rate × days, paid once
+    /// per stay). Line-level daily rates keyed by revenue code use each line's
+    /// <see cref="PaymentEstimateLineRequest.Units"/> as the day count instead. It does not
+    /// adjust a DRG case rate (no short-stay / transfer / outlier logic).
+    /// </summary>
+    public int? LengthOfStay { get; init; }
+
+    /// <summary>
     /// Line of business name (e.g. "Commercial", "Medicare", "Medicaid",
     /// "CHIP", "Exchange"). Optional; drives operating-mode routing and
     /// LOB-specific rules. Note that dental is a <see cref="ClaimType"/>,
@@ -106,9 +125,12 @@ public record PaymentEstimateLineRequest
     /// <summary>1-based line number, echoed onto the response line.</summary>
     public int LineNumber { get; init; }
 
-    /// <summary>Procedure code (CPT/HCPCS for professional, CDT for dental, etc.).</summary>
-    [Required]
-    public string ProcedureCode { get; init; } = default!;
+    /// <summary>
+    /// Procedure code (CPT/HCPCS for professional, CDT for dental, etc.). An institutional
+    /// line may send a <see cref="RevenueCode"/> instead (e.g. room and board "0120");
+    /// every line needs one or the other.
+    /// </summary>
+    public string? ProcedureCode { get; init; }
 
     /// <summary>Code system for <see cref="ProcedureCode"/> — "CPT", "HCPCS", "CDT". Defaults to CPT.</summary>
     public string CodeType { get; init; } = "CPT";
@@ -125,7 +147,11 @@ public record PaymentEstimateLineRequest
     /// <summary>Place of service code (e.g. "11" office, "21" inpatient).</summary>
     public string? PlaceOfService { get; init; }
 
-    /// <summary>Revenue code (institutional claims).</summary>
+    /// <summary>
+    /// UB-04 revenue code (institutional claims, e.g. "0120", "0450"). Sent to pricing:
+    /// it matches a revenue-code rate line (e.g. a per diem by accommodation code) when
+    /// no procedure-code line matches, and to the benefit engine for the service category.
+    /// </summary>
     public string? RevenueCode { get; init; }
 
     /// <summary>Diagnosis codes supporting this line.</summary>

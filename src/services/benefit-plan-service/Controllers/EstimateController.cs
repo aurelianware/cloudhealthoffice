@@ -73,6 +73,10 @@ public class EstimateController : ControllerBase
             return BadRequest(new { error = "Each service line requires a positive LineNumber" });
         if (request.Lines.Select(l => l.LineNumber).Distinct().Count() != request.Lines.Count)
             return BadRequest(new { error = "Service line numbers must be unique" });
+        if (request.Lines.Any(l => string.IsNullOrWhiteSpace(l.ProcedureCode) && string.IsNullOrWhiteSpace(l.RevenueCode)))
+            return BadRequest(new { error = "Each service line requires a ProcedureCode or a RevenueCode" });
+        if (request.LengthOfStay is < 0)
+            return BadRequest(new { error = "LengthOfStay must not be negative" });
 
         using var span = ChoActivitySource.StartActivity(
             "adjudication.estimate",
