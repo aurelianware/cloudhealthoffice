@@ -148,20 +148,66 @@ public sealed class CosmosEmulatorFixture : IAsyncLifetime
         return response.Container;
     }
 
+    /// <summary>Attempts per database delete in teardown before giving up on it.</summary>
+    public const int CleanupAttempts = 5;
+
+    /// <summary>
+    /// Best-effort cleanup: never fails the run. The vnext emulator answers a
+    /// database delete with a transient 500 (PostgreSQL deadlock, SqlState
+    /// E40P01), 503 or 429 under load; those are retried with backoff, and a
+    /// delete that still fails is reported on stderr and left behind (the
+    /// database names are unique, so a leftover never affects another test).
+    /// </summary>
     public async Task DisposeAsync()
     {
         foreach (var (client, id) in _databases)
+            await DeleteDatabaseBestEffortAsync(client, id);
+        foreach (var client in _clients)
+        {
+            try
+            {
+                client.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"CosmosEmulatorFixture: disposing a client failed: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>Deletes a database, retrying transient emulator errors; never throws.</summary>
+    public static async Task DeleteDatabaseBestEffortAsync(CosmosClient client, string id, TimeSpan? firstDelay = null)
+    {
+        var delay = firstDelay ?? TimeSpan.FromMilliseconds(500);
+        for (var attempt = 1; ; attempt++)
         {
             try
             {
                 await client.GetDatabase(id).DeleteAsync();
+                return;
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {
+                return;
+            }
+            catch (CosmosException ex) when (IsTransient(ex.StatusCode) && attempt < CleanupAttempts)
+            {
+                await Task.Delay(ex.RetryAfter is { } retryAfter && retryAfter > delay ? retryAfter : delay);
+                delay *= 2;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"CosmosEmulatorFixture: could not delete test database {id} after {attempt} attempt(s); leaving it behind. " +
+                    $"{ex.GetType().Name}: {ex.Message.Split('\n')[0]}");
+                return;
             }
         }
-        foreach (var client in _clients) client.Dispose();
     }
+
+    private static bool IsTransient(HttpStatusCode status) =>
+        status is HttpStatusCode.TooManyRequests or HttpStatusCode.InternalServerError or HttpStatusCode.ServiceUnavailable
+            or HttpStatusCode.RequestTimeout or HttpStatusCode.GatewayTimeout;
 
     private static CosmosClient NewClient(CosmosSerializer? serializer, CosmosSerializationOptions? serializerOptions)
     {

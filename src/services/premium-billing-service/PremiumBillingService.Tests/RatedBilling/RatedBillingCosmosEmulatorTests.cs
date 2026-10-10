@@ -42,6 +42,21 @@ public sealed class RatedBillingCosmosEmulatorTests(CosmosEmulatorFixture cosmos
     public override Task DisposeAsync() => Task.CompletedTask;
 
     [SkippableFact]
+    public async Task TeardownDatabaseDelete_IsBestEffort_AndNeverThrows()
+    {
+        // CI saw the vnext emulator answer a database delete with 500 (PostgreSQL deadlock E40P01),
+        // which failed every test of the collection at cleanup. Cleanup now retries and then gives up quietly.
+        cosmos.SkipIfUnavailable();
+        var client = cosmos.CreateClient();
+        await CosmosEmulatorFixture.DeleteDatabaseBestEffortAsync(client, $"never_created_{Guid.NewGuid():N}");
+
+        var broken = new Microsoft.Azure.Cosmos.CosmosClient(CosmosEmulator.Endpoint, CosmosEmulator.Key);
+        broken.Dispose();
+        var delete = () => CosmosEmulatorFixture.DeleteDatabaseBestEffortAsync(broken, "anything", TimeSpan.FromMilliseconds(1));
+        await delete.Should().NotThrowAsync();
+    }
+
+    [SkippableFact]
     public async Task StoredStatusIsAString_SoAnEnumNumberNeverMatchesIt()
     {
         // Why the repository compares with StoredStatus: the service's serializer writes "sent", "voided"…
