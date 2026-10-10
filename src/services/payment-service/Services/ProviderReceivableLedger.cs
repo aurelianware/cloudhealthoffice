@@ -49,6 +49,13 @@ public interface IProviderReceivableLedger
     /// </summary>
     Task ReverseRecoveriesAsync(string tenantId, Payment payment, string? by, string reason);
 
+    /// <summary>
+    /// Cancels <paramref name="amount"/> of the receivable <paramref name="receivableId"/> because
+    /// the reversed payment <paramref name="paymentId"/> was never paid. Idempotent per payment.
+    /// Throws when less is outstanding (part was already recovered: it needs a person).
+    /// </summary>
+    Task CancelForUnpaidPaymentAsync(string tenantId, string receivableId, string paymentId, decimal amount, string? by, string reason);
+
     Task<IReadOnlyList<ProviderReceivableRecord>> SearchAsync(string tenantId, string? providerNpi = null, ReceivableStatus? status = null);
 
     Task<ProviderReceivableRecord?> GetAsync(string tenantId, string id);
@@ -322,6 +329,28 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
             }
         }
         return unreversed;
+    }
+
+    public async Task CancelForUnpaidPaymentAsync(string tenantId, string receivableId, string paymentId, decimal amount, string? by, string reason)
+    {
+        for (var attempt = 0; attempt < MaxConflictRetries; attempt++)
+        {
+            var current = await _repository.GetAsync(tenantId, receivableId)
+                          ?? throw new InvalidOperationException($"Receivable {receivableId} does not exist; the void of payment {paymentId} needs a person.");
+            if (current.HasCancellationFor(paymentId))
+                return;
+            var expected = current.Version;
+            current.CancelForUnpaidPayment(paymentId, amount, by, _time.GetUtcNow().UtcDateTime, reason);
+            current.Version = expected + 1;
+            if (await _repository.TryReplaceAsync(current, expected))
+            {
+                _logger.LogWarning(
+                    "AUDIT provider receivable {ReceivableId}: {Amount:F2} cancelled, payment {PaymentId} was never paid ({Reason}); {Outstanding:F2} outstanding",
+                    Sanitize(current.Id), amount, Sanitize(paymentId), Sanitize(reason), current.OutstandingAmount);
+                return;
+            }
+        }
+        throw new InvalidOperationException($"Receivable {receivableId} kept changing; the void of payment {paymentId} was not recorded.");
     }
 
     public Task<IReadOnlyList<ProviderReceivableRecord>> SearchAsync(string tenantId, string? providerNpi = null, ReceivableStatus? status = null)

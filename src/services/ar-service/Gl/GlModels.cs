@@ -44,6 +44,13 @@ public enum GlEntryKind
 
     /// <summary>An operator's correction: the mirror image of an earlier entry.</summary>
     Reversal,
+
+    /// <summary>
+    /// A payment reversed before its NACHA file was sent and left out of the re-pinned file:
+    /// Dr claims payable (never to be paid), Cr provider receivable (the receivable its
+    /// reversal run opened is cancelled; the recoupment already reversed the expense).
+    /// </summary>
+    PaymentVoid,
 }
 
 /// <summary>One side of one account. Exactly one of Debit / Credit is positive; amounts are money (2 decimals).</summary>
@@ -106,8 +113,14 @@ public sealed class GlJournalEntry
     /// <summary>For a <see cref="GlEntryKind.Reversal"/>: the entry it mirrors (unique: an entry is reversed at most once).</summary>
     public string? ReversesEntryId { get; set; }
 
-    /// <summary>Why (reversals, re-dated parked events).</summary>
+    /// <summary>Why (reversals, re-dated parked events, reposts).</summary>
     public string? Reason { get; set; }
+
+    /// <summary>
+    /// For a repost (<c>{key}:r{n}</c>): the entry of the same business key it replaces, which
+    /// was reversed first. Null for the first entry of a key.
+    /// </summary>
+    public string? RepostOf { get; set; }
 }
 
 /// <summary>Where an ingested source event stands.</summary>
@@ -141,6 +154,13 @@ public enum GlParkReason
 
     /// <summary>The payload cannot be posted as is (amounts negative, not money, inconsistent totals).</summary>
     InvalidPayload,
+
+    /// <summary>
+    /// The run was executed before the tenant's GL cutover (<c>GlPosting:Tenants:{t}:CutoverDate</c>):
+    /// its accounting is in the opening balances. Registered and visible, never posted
+    /// unless a finance user retries it with includeBeforeCutover and a reason.
+    /// </summary>
+    PreCutover,
 }
 
 /// <summary>
@@ -181,17 +201,57 @@ public sealed class GlSourceEvent
     public static string KeyFor(string tenantId, string eventId) => $"{tenantId}:{eventId}";
 }
 
-/// <summary>A closed accounting period (yyyy-MM) of a tenant. Closing is final here; nothing posts into it.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum GlPeriodStatus
+{
+    Open,
+    Closed,
+}
+
+/// <summary>A post in flight in a period: the close waits for it (or for its expiry).</summary>
 [BsonIgnoreExtraElements]
-public sealed class GlClosedPeriod
+public sealed class GlPostLease
+{
+    public string Token { get; set; } = string.Empty;
+    public DateTime ExpiresAt { get; set; }
+}
+
+/// <summary>
+/// An accounting period (yyyy-MM) of a tenant. A post reserves a lease in it while the
+/// period is open and releases it after its write; the close is one conditional write that
+/// succeeds only while no live lease is held, so a post and the close serialize: a post
+/// either lands before the close or is refused (parked) after it. Closing is final here.
+/// At close the period's extract control (SHA-256 and totals) is recorded; a later extract
+/// that differs is refused as an integrity failure.
+/// </summary>
+[BsonIgnoreExtraElements]
+public sealed class GlPeriod
 {
     /// <summary>{tenant}:{yyyy-MM}.</summary>
     [BsonId] public string Id { get; set; } = string.Empty;
     public string TenantId { get; set; } = string.Empty;
     public string Period { get; set; } = string.Empty;
-    public DateTime ClosedAt { get; set; }
-    public string ClosedBy { get; set; } = string.Empty;
+    public GlPeriodStatus Status { get; set; }
+    public List<GlPostLease> Leases { get; set; } = new();
+    public DateTime? ClosedAt { get; set; }
+    public string? ClosedBy { get; set; }
     public string? Reason { get; set; }
 
+    /// <summary>The extract's SHA-256 recorded at close (<see cref="GlExtractControl.Sha256"/>).</summary>
+    public string? ExtractSha256 { get; set; }
+    public int ExtractEntryCount { get; set; }
+    public int ExtractLineCount { get; set; }
+    [BsonRepresentation(MongoDB.Bson.BsonType.Decimal128)] public decimal ExtractTotalDebit { get; set; }
+    [BsonRepresentation(MongoDB.Bson.BsonType.Decimal128)] public decimal ExtractTotalCredit { get; set; }
+
     public static string KeyFor(string tenantId, string period) => $"{tenantId}:{period}";
+}
+
+public enum GlPeriodCloseOutcome
+{
+    Closed,
+    AlreadyClosed,
+
+    /// <summary>A post holds a live lease in the period: nothing changed; try again.</summary>
+    Busy,
 }

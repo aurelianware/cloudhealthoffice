@@ -18,8 +18,15 @@ public static class GlEventOutbox
     /// Attaches PaymentRunExecuted for <paramref name="issued"/> (the payments the run
     /// actually created, also when it then failed). Nothing when none were issued.
     /// </summary>
-    public static void AttachPaymentRunExecuted(PaymentRun run, IReadOnlyCollection<Payment> issued, DateTime at)
+    /// <param name="replaceUnpublished">
+    /// The failure path: an event attached for a Completed outcome that was never saved (the
+    /// save failed) is replaced, so the payload states the run's final persisted status.
+    /// A published event is never changed.
+    /// </param>
+    public static void AttachPaymentRunExecuted(PaymentRun run, IReadOnlyCollection<Payment> issued, DateTime at, bool replaceUnpublished = false)
     {
+        if (replaceUnpublished)
+            run.GlOutbox.RemoveAll(m => m.Type == GlEventTypes.PaymentRunExecuted && m.PublishedAt == null);
         if (issued.Count == 0 || run.GlOutbox.Any(m => m.Type == GlEventTypes.PaymentRunExecuted))
             return;
 
@@ -55,8 +62,10 @@ public static class GlEventOutbox
     }
 
     /// <summary>Attaches ReversalRunExecuted for the reversal payments <paramref name="issued"/> created.</summary>
-    public static void AttachReversalRunExecuted(ReversalRun run, IReadOnlyCollection<Payment> issued, DateTime at)
+    public static void AttachReversalRunExecuted(ReversalRun run, IReadOnlyCollection<Payment> issued, DateTime at, bool replaceUnpublished = false)
     {
+        if (replaceUnpublished)
+            run.GlOutbox.RemoveAll(m => m.Type == GlEventTypes.ReversalRunExecuted && m.PublishedAt == null);
         if (issued.Count == 0 || run.GlOutbox.Any(m => m.Type == GlEventTypes.ReversalRunExecuted))
             return;
 
@@ -85,6 +94,31 @@ public static class GlEventOutbox
             TotalAmount = lines.Sum(l => l.Amount),
         };
         run.GlOutbox.Add(Message(eventId, GlEventTypes.ReversalRunExecuted, JsonSerializer.Serialize(payload, GlEventTypes.Json), at));
+    }
+
+    /// <summary>The PaymentVoidedBeforeTransmission event of one payment (deterministic per payment).</summary>
+    public static PaymentFileOutboxMessage PaymentVoidedBeforeTransmission(PaymentRun run, Payment payment, string? reversalRunId,
+        string supersededFileReference, string newFileReference, string by, DateTime at)
+    {
+        var eventId = GlEventTypes.EventIdFor(run.TenantId, $"payment-void:{payment.Id}", GlEventTypes.PaymentVoidedBeforeTransmission);
+        var payload = new PaymentVoidedBeforeTransmissionEvent
+        {
+            EventId = eventId,
+            TenantId = run.TenantId,
+            PaymentRunId = run.Id,
+            PaymentRunNumber = run.PaymentRunNumber,
+            PaymentId = payment.Id,
+            CheckNumber = payment.CheckNumber,
+            PayeeNpi = payment.PayeeNPI,
+            Amount = payment.TotalPaymentAmount,
+            ReversalRunId = reversalRunId,
+            SupersededFileReference = supersededFileReference,
+            NewFileReference = newFileReference,
+            VoidedAt = at,
+            VoidedBy = by,
+            PaymentRunExecutedAt = run.ExecutionStartedAt,
+        };
+        return Message(eventId, GlEventTypes.PaymentVoidedBeforeTransmission, JsonSerializer.Serialize(payload, GlEventTypes.Json), at);
     }
 
     private static PaymentFileOutboxMessage Message(string eventId, string type, string payload, DateTime at) => new()

@@ -136,8 +136,13 @@ public sealed class BankTransmissionMongoRepositoryTests : IAsyncLifetime
         await runs.TrySaveEftFileAsync("run-r", first, null, Array.Empty<CheckFallbackPayment>(), Array.Empty<string>());
 
         first.SupersededByFileReference = "FFS-PR-R-R1";
-        var second = new PaymentRunEftFile { FileReference = "FFS-PR-R-R1", Sha256 = new string('e', 64), Revision = 1 };
-        Assert.True(await runs.TryRepinEftFileAsync("run-r", second, first, new[] { "835 date notice" }));
+        var second = new PaymentRunEftFile
+        {
+            FileReference = "FFS-PR-R-R1", Sha256 = new string('e', 64), Revision = 1,
+            VoidedPayments = { new VoidedPaymentNotice { PaymentId = "p-9", Amount = 12.5m, ReceivableId = "rcv-1" } },
+        };
+        var voidEvent = new PaymentFileOutboxMessage { EventId = "ev-void", Type = "PaymentVoidedBeforeTransmission", PayloadJson = "{}", CreatedAt = DateTime.UtcNow };
+        Assert.True(await runs.TryRepinEftFileAsync("run-r", second, first, new[] { "835 date notice" }, new[] { voidEvent }));
         // A second re-pin against the old file (a concurrent re-date) is refused.
         Assert.False(await runs.TryRepinEftFileAsync("run-r", new PaymentRunEftFile { Sha256 = new string('f', 64) }, first));
 
@@ -145,6 +150,9 @@ public sealed class BankTransmissionMongoRepositoryTests : IAsyncLifetime
         Assert.Equal(("FFS-PR-R-R1", 1), (stored.EftFile!.FileReference, stored.EftFile.Revision));
         Assert.Equal("FFS-PR-R-R1", Assert.Single(stored.EftFileHistory).SupersededByFileReference);
         Assert.Equal(new[] { "835 date notice" }, stored.Warnings);
+        // The void's notice and its GL event land in the same conditional write as the new file.
+        Assert.Equal(("p-9", 12.5m), (Assert.Single(stored.EftFile.VoidedPayments).PaymentId, stored.EftFile.VoidedPayments[0].Amount));
+        Assert.Equal("ev-void", Assert.Single(stored.GlOutbox).EventId);
     }
 
     [Fact]

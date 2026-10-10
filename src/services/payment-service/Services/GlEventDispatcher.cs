@@ -48,8 +48,8 @@ public interface IGlOutboxStore
     /// <summary>Undelivered events due now (oldest first), at most <paramref name="limit"/>.</summary>
     Task<IReadOnlyList<PendingGlEvent>> ListDueAsync(DateTime now, int limit, CancellationToken cancellationToken = default);
 
-    /// <summary>A tenant's undelivered events (for operators), whether due or backing off.</summary>
-    Task<IReadOnlyList<PendingGlEvent>> ListUnpublishedAsync(string tenantId, CancellationToken cancellationToken = default);
+    /// <summary>A tenant's undelivered events (for operators), whether due or backing off, oldest first, at most <paramref name="limit"/>.</summary>
+    Task<IReadOnlyList<PendingGlEvent>> ListUnpublishedAsync(string tenantId, int limit = 500, CancellationToken cancellationToken = default);
 
     Task MarkPublishedAsync(PendingGlEvent pending, DateTime at, CancellationToken cancellationToken = default);
     Task MarkFailedAsync(PendingGlEvent pending, string error, DateTime nextAttemptAt, CancellationToken cancellationToken = default);
@@ -68,39 +68,55 @@ public sealed class MongoGlOutboxStore : IGlOutboxStore
         _transmissions = database.GetCollection<PaymentFileTransmission>(Repositories.PaymentFileTransmissionRepositoryMongo.CollectionName);
     }
 
-    public async Task<IReadOnlyList<PendingGlEvent>> ListDueAsync(DateTime now, int limit, CancellationToken cancellationToken = default)
-    {
-        var all = await ListAsync(null, cancellationToken);
-        return all.Where(e => e.Message.NextAttemptAt == null || e.Message.NextAttemptAt <= now)
-            .OrderBy(e => e.Message.CreatedAt).ThenBy(e => e.Message.EventId, StringComparer.Ordinal)
-            .Take(limit).ToList();
-    }
+    public Task<IReadOnlyList<PendingGlEvent>> ListDueAsync(DateTime now, int limit, CancellationToken cancellationToken = default)
+        => ListAsync(null, now, limit, cancellationToken);
 
-    public Task<IReadOnlyList<PendingGlEvent>> ListUnpublishedAsync(string tenantId, CancellationToken cancellationToken = default)
-        => ListAsync(tenantId, cancellationToken);
+    public Task<IReadOnlyList<PendingGlEvent>> ListUnpublishedAsync(string tenantId, int limit = 500, CancellationToken cancellationToken = default)
+        => ListAsync(tenantId, null, limit, cancellationToken);
 
-    private async Task<IReadOnlyList<PendingGlEvent>> ListAsync(string? tenantId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<PendingGlEvent>> ListAsync(string? tenantId, DateTime? dueBy, int limit, CancellationToken cancellationToken)
     {
+        limit = Math.Clamp(limit, 1, 5000);
         var result = new List<PendingGlEvent>();
-        result.AddRange(await FindAsync(_runs, GlOutboxSource.PaymentRun, r => r.GlOutbox, r => r.Id, r => r.TenantId, tenantId, cancellationToken));
-        result.AddRange(await FindAsync(_reversals, GlOutboxSource.ReversalRun, r => r.GlOutbox, r => r.Id, r => r.TenantId, tenantId, cancellationToken));
-        result.AddRange(await FindAsync(_transmissions, GlOutboxSource.PaymentFileTransmission, t => t.Outbox, t => t.Id, t => t.TenantId, tenantId, cancellationToken));
-        return result.OrderBy(e => e.Message.CreatedAt).ThenBy(e => e.Message.EventId, StringComparer.Ordinal).ToList();
+        result.AddRange(await FindAsync(_runs, GlOutboxSource.PaymentRun, r => r.GlOutbox, nameof(PaymentRun.GlOutbox), r => r.Id, r => r.TenantId, tenantId, dueBy, limit, cancellationToken));
+        result.AddRange(await FindAsync(_reversals, GlOutboxSource.ReversalRun, r => r.GlOutbox, nameof(ReversalRun.GlOutbox), r => r.Id, r => r.TenantId, tenantId, dueBy, limit, cancellationToken));
+        result.AddRange(await FindAsync(_transmissions, GlOutboxSource.PaymentFileTransmission, t => t.Outbox, nameof(PaymentFileTransmission.Outbox), t => t.Id, t => t.TenantId, tenantId, dueBy, limit, cancellationToken));
+        return result.OrderBy(e => e.Message.CreatedAt).ThenBy(e => e.Message.EventId, StringComparer.Ordinal).Take(limit).ToList();
     }
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> Indexed = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Only documents holding an undelivered (and, for the dispatcher, due) event, through an
+    /// index on the outbox's PublishedAt, at most <paramref name="limit"/> documents per
+    /// collection: a cycle never reads the whole history of runs.
+    /// </summary>
     private static async Task<List<PendingGlEvent>> FindAsync<T>(
         IMongoCollection<T> collection, GlOutboxSource source,
-        Expression<Func<T, IEnumerable<PaymentFileOutboxMessage>>> outbox,
-        Func<T, string> id, Func<T, string> tenant, string? tenantId, CancellationToken cancellationToken)
+        Expression<Func<T, IEnumerable<PaymentFileOutboxMessage>>> outbox, string field,
+        Func<T, string> id, Func<T, string> tenant, string? tenantId, DateTime? dueBy, int limit, CancellationToken cancellationToken)
     {
+        var key = $"{collection.Database.DatabaseNamespace.DatabaseName}.{collection.CollectionNamespace.CollectionName}";
+        if (!Indexed.ContainsKey(key))
+        {
+            // Created on first use (the dispatcher only runs when enabled): undelivered elements
+            // have PublishedAt null, which the multikey index serves.
+            await collection.Indexes.CreateOneAsync(new CreateIndexModel<T>(
+                Builders<T>.IndexKeys.Ascending($"{field}.{nameof(PaymentFileOutboxMessage.PublishedAt)}").Ascending("TenantId"),
+                new CreateIndexOptions { Name = $"gl_outbox_unpublished_{field}" }), cancellationToken: cancellationToken);
+            Indexed[key] = true;
+        }
+
         var f = Builders<T>.Filter;
-        var filter = f.ElemMatch(outbox, m => m.PublishedAt == null);
+        var filter = dueBy is { } now
+            ? f.ElemMatch(outbox, m => m.PublishedAt == null && (m.NextAttemptAt == null || m.NextAttemptAt <= now))
+            : f.ElemMatch(outbox, m => m.PublishedAt == null);
         if (tenantId != null)
             filter &= f.Eq("TenantId", tenantId);
         var compiled = outbox.Compile();
-        var docs = await collection.Find(filter).ToListAsync(cancellationToken);
+        var docs = await collection.Find(filter).Sort(Builders<T>.Sort.Ascending("_id")).Limit(limit).ToListAsync(cancellationToken);
         return docs.SelectMany(d => compiled(d)
-                .Where(m => m.PublishedAt == null)
+                .Where(m => m.PublishedAt == null && (dueBy == null || m.NextAttemptAt == null || m.NextAttemptAt <= dueBy))
                 .Select(m => new PendingGlEvent(source, id(d), tenant(d), m)))
             .ToList();
     }
@@ -247,7 +263,7 @@ public sealed class GlEventDispatcher : BackgroundService
                 await _store.MarkPublishedAsync(pending, _clock.GetUtcNow().UtcDateTime, cancellationToken);
                 delivered++;
                 _logger.LogInformation(DeliveredEvent, "GL event {EventId} ({Type}) of tenant {TenantId} delivered",
-                    envelope.EventId, envelope.Type, envelope.TenantId);
+                    SanitizeForLog(envelope.EventId), SanitizeForLog(envelope.Type), SanitizeForLog(envelope.TenantId));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -256,14 +272,14 @@ public sealed class GlEventDispatcher : BackgroundService
                 var reason = ex is GlEventDeliveryException ? ex.Message : $"Delivery failed ({ex.GetType().Name}).";
                 _logger.LogWarning(DeliveryFailedEvent,
                     "GL event {EventId} ({Type}) of tenant {TenantId} not delivered (attempt {Attempt}): {Reason}; next attempt in {Backoff}",
-                    envelope.EventId, envelope.Type, envelope.TenantId, attempts, reason, backoff);
+                    SanitizeForLog(envelope.EventId), SanitizeForLog(envelope.Type), SanitizeForLog(envelope.TenantId), attempts, SanitizeForLog(reason), backoff);
                 try
                 {
                     await _store.MarkFailedAsync(pending, reason, now.Add(backoff), cancellationToken);
                 }
                 catch (Exception markError) when (markError is not OperationCanceledException)
                 {
-                    _logger.LogWarning("Could not record the failed delivery of GL event {EventId}: {Error}", envelope.EventId, markError.GetType().Name);
+                    _logger.LogWarning("Could not record the failed delivery of GL event {EventId}: {Error}", SanitizeForLog(envelope.EventId), markError.GetType().Name);
                 }
             }
         }
@@ -290,5 +306,12 @@ public sealed class GlEventDispatcher : BackgroundService
             try { await Task.Delay(_options.Interval, _clock, stoppingToken); }
             catch (OperationCanceledException) { return; }
         }
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

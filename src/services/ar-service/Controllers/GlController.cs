@@ -11,7 +11,9 @@ namespace ArService.Controllers;
 /// events, periods, the ERP extract and the claims payable reconciliation. The tenant
 /// comes from the token. Reads need finance:read; GL writes need finance:write from a
 /// user (never a service token), and every GL write is refused (409) while
-/// GlPosting:Enabled is false. See docs/operations/GL-POSTING-RUNBOOK.md.
+/// GlPosting:Enabled is false. Lists are paged (<c>after</c> = the last id of the previous
+/// page, <c>limit</c> at most 5000). ar-service runs on MongoDB only (it refuses to start
+/// without it), so there is no Cosmos path to answer for. See docs/operations/GL-POSTING-RUNBOOK.md.
 /// </summary>
 [ApiController]
 [Route("api/gl")]
@@ -48,11 +50,12 @@ public sealed class GlController : ControllerBase
 
     [HttpGet("entries")]
     [RequirePermission("finance:read")]
-    public async Task<ActionResult<IEnumerable<GlJournalEntry>>> Entries([FromQuery] string? period, CancellationToken cancellationToken)
+    public async Task<ActionResult<IEnumerable<GlJournalEntry>>> Entries([FromQuery] string? period, [FromQuery] string? after,
+        [FromQuery] int? limit, CancellationToken cancellationToken)
     {
         if (period != null && !GlPostingService.IsPeriod(period))
             return Problem(title: "Invalid period", detail: "A period is yyyy-MM.", statusCode: StatusCodes.Status400BadRequest);
-        return Ok(await _journal.ListAsync(_actor.TenantId, period, cancellationToken));
+        return Ok(await _journal.ListPageAsync(_actor.TenantId, period, after, limit ?? 500, cancellationToken));
     }
 
     [HttpGet("entries/{entryId}")]
@@ -68,14 +71,28 @@ public sealed class GlController : ControllerBase
 
     [HttpGet("events")]
     [RequirePermission("finance:read")]
-    public async Task<ActionResult<IEnumerable<GlSourceEventView>>> Events([FromQuery] GlSourceEventStatus? status, CancellationToken cancellationToken)
-        => Ok((await _events.ListAsync(_actor.TenantId, status, cancellationToken)).Select(GlSourceEventView.From));
+    public async Task<ActionResult<IEnumerable<GlSourceEventView>>> Events([FromQuery] GlSourceEventStatus? status, [FromQuery] string? after,
+        [FromQuery] int? limit, CancellationToken cancellationToken)
+        => Ok((await _events.ListPageAsync(_actor.TenantId, status, after, limit ?? 500, cancellationToken)).Select(GlSourceEventView.From));
 
-    /// <summary>Retries a parked event; <c>entryDate</c> (with a reason) moves a closed-period event to a later open date.</summary>
+    /// <summary>
+    /// Retries a parked event; <c>entryDate</c> (with a reason) moves a closed-period event to a
+    /// later open date; <c>includeBeforeCutover</c> (with a reason) posts a PreCutover event.
+    /// </summary>
     [HttpPost("events/{eventId}/retry")]
     [RequirePermission("finance:write")]
     public Task<IActionResult> Retry(string eventId, [FromBody] GlRetryRequest? request, CancellationToken cancellationToken)
-        => Run(async () => Ok(await _posting.RetryAsync(_actor.TenantId, eventId, request?.EntryDate, request?.Reason, _actor.UserId, cancellationToken)));
+        => Run(async () => Ok(await _posting.RetryAsync(_actor.TenantId, eventId, request?.EntryDate, request?.Reason, _actor.UserId, cancellationToken,
+            request?.IncludeBeforeCutover == true)));
+
+    /// <summary>
+    /// Posts a parked or posted event again as <c>{key}:r{n}</c> once the latest entry of its
+    /// business key has been reversed (audited, with a reason; optional later <c>entryDate</c>).
+    /// </summary>
+    [HttpPost("events/{eventId}/repost")]
+    [RequirePermission("finance:write")]
+    public Task<IActionResult> Repost(string eventId, [FromBody] GlRetryRequest request, CancellationToken cancellationToken)
+        => Run(async () => Ok(await _posting.RepostAsync(_actor.TenantId, eventId, request.Reason ?? string.Empty, request.EntryDate, _actor.UserId, cancellationToken)));
 
     [HttpPost("events/{eventId}/dismiss")]
     [RequirePermission("finance:write")]
@@ -84,7 +101,7 @@ public sealed class GlController : ControllerBase
 
     [HttpGet("periods")]
     [RequirePermission("finance:read")]
-    public async Task<ActionResult<IEnumerable<GlClosedPeriod>>> Periods(CancellationToken cancellationToken)
+    public async Task<ActionResult<IEnumerable<GlPeriod>>> Periods(CancellationToken cancellationToken)
         => Ok(await _periods.ListAsync(_actor.TenantId, cancellationToken));
 
     [HttpPost("periods/{period}/close")]
@@ -95,7 +112,8 @@ public sealed class GlController : ControllerBase
     /// <summary>
     /// The period's journal lines for the ERP: <c>format=csv</c> (default; header, rows,
     /// CONTROL trailer) or <c>json</c> (rows and control). Deterministic; the control's
-    /// SHA-256 is also returned in <c>X-GL-Extract-Sha256</c>.
+    /// SHA-256 is also returned in <c>X-GL-Extract-Sha256</c>. For a closed period it must be
+    /// the SHA-256 recorded at close, or nothing is returned (409 GlExtractIntegrity).
     /// </summary>
     [HttpGet("extract")]
     [RequirePermission("finance:read")]
@@ -103,24 +121,34 @@ public sealed class GlController : ControllerBase
     {
         if (!GlPostingService.IsPeriod(period))
             return Problem(title: "Invalid period", detail: "period=yyyy-MM is required.", statusCode: StatusCodes.Status400BadRequest);
-        var extract = GlExtractBuilder.Build(_actor.TenantId, period!, await _journal.ListAsync(_actor.TenantId, period, cancellationToken));
+        if (format != null && !string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase) && !string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
+            return Problem(title: "Invalid format", detail: "format is csv or json.", statusCode: StatusCodes.Status400BadRequest);
+        GlExtract extract;
+        try
+        {
+            extract = await _posting.GetExtractAsync(_actor.TenantId, period!, cancellationToken);
+        }
+        catch (GlIntegrityException ex)
+        {
+            return Problem(title: "GlExtractIntegrity", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+        }
         Response.Headers["X-GL-Extract-Sha256"] = extract.Control.Sha256;
         if (string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
             return Ok(new { control = extract.Control, rows = extract.Rows });
-        if (format != null && !string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
-            return Problem(title: "Invalid format", detail: "format is csv or json.", statusCode: StatusCodes.Status400BadRequest);
         return File(Encoding.UTF8.GetBytes(extract.Csv), "text/csv", $"gl-{_actor.TenantId}-{period}.csv");
     }
 
     [HttpGet("reconciliation")]
     [RequirePermission("finance:read")]
-    public async Task<ActionResult<GlReconciliationReport>> Reconciliation([FromQuery] string? period, CancellationToken cancellationToken)
+    public async Task<ActionResult<GlReconciliationReport>> Reconciliation([FromQuery] string? period, [FromQuery] int? offset, [FromQuery] int? limit,
+        CancellationToken cancellationToken)
     {
         if (period != null && !GlPostingService.IsPeriod(period))
             return Problem(title: "Invalid period", detail: "A period is yyyy-MM.", statusCode: StatusCodes.Status400BadRequest);
+        // Both stores are read in pages; the report's runs are paged too (the totals are the ledger's).
         var events = await _events.ListAsync(_actor.TenantId, null, cancellationToken);
         var journal = await _journal.ListAsync(_actor.TenantId, null, cancellationToken);
-        return Ok(GlReconciliationBuilder.Build(_actor.TenantId, period, events, journal));
+        return Ok(GlReconciliationBuilder.Build(_actor.TenantId, period, events, journal, offset ?? 0, Math.Clamp(limit ?? 200, 1, 5000)));
     }
 
     private async Task<IActionResult> Run(Func<Task<IActionResult>> action, bool userOnly = true)
@@ -169,6 +197,9 @@ public sealed class GlRetryRequest
 {
     public DateTime? EntryDate { get; set; }
     public string? Reason { get; set; }
+
+    /// <summary>Retry only: post a PreCutover event (its accounting must not be in the opening balances too).</summary>
+    public bool IncludeBeforeCutover { get; set; }
 }
 
 public sealed class GlReasonRequest

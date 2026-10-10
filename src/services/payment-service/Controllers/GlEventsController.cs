@@ -22,13 +22,13 @@ public sealed class GlEventsController : ControllerBase
     [ProducesResponseType(typeof(IEnumerable<UnpublishedGlEventView>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status501NotImplemented)]
     public async Task<ActionResult<IEnumerable<UnpublishedGlEventView>>> Unpublished(
-        [FromServices] IServiceProvider services, CancellationToken cancellationToken)
+        [FromServices] IServiceProvider services, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
         var store = services.GetService<IGlOutboxStore>();
         if (store == null)
             return Problem(title: "Not available", detail: "GL event outboxes are read from MongoDB only.",
                 statusCode: StatusCodes.Status501NotImplemented);
-        var pending = await store.ListUnpublishedAsync(_actor.TenantId, cancellationToken);
+        var pending = await store.ListUnpublishedAsync(_actor.TenantId, Math.Clamp(limit ?? 500, 1, 5000), cancellationToken);
         return Ok(pending.Select(p => new UnpublishedGlEventView
         {
             EventId = p.Message.EventId,

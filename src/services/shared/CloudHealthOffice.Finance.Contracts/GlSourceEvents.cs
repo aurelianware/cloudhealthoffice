@@ -20,12 +20,18 @@ public static class GlEventTypes
     /// <summary>A payment run's NACHA file is at the bank: the payable moves to ACH in transit.</summary>
     public const string PaymentFileTransmitted = "PaymentFileTransmitted";
 
+    /// <summary>
+    /// A payment was reversed before its NACHA file was sent and was taken out of the file:
+    /// it will never be paid. Its payable is relieved against the receivable the reversal opened.
+    /// </summary>
+    public const string PaymentVoidedBeforeTransmission = "PaymentVoidedBeforeTransmission";
+
     // Seams, not produced yet:
     //   PaymentFileSettled   - bank acknowledgement / settlement: ACH in transit -> cash.
     //   PaymentFileReturned  - an ACH return: cash/in transit -> payable again.
     //   CapitationDisbursed, PremiumCashReceived - capitation-service / premium-billing-service.
 
-    public static readonly IReadOnlyList<string> All = [PaymentRunExecuted, ReversalRunExecuted, PaymentFileTransmitted];
+    public static readonly IReadOnlyList<string> All = [PaymentRunExecuted, ReversalRunExecuted, PaymentFileTransmitted, PaymentVoidedBeforeTransmission];
 
     /// <summary>The JSON options every GL payload is written and read with (camelCase).</summary>
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -136,4 +142,43 @@ public sealed record PaymentFileTransmittedEvent
     public DateTime TransmittedAt { get; init; }
     public string ApprovedBy { get; init; } = string.Empty;
     public string ConfirmedBy { get; init; } = string.Empty;
+
+    /// <summary>
+    /// The payments the file pays (sorted). Payments of the run not listed here are not in
+    /// the file: check fallbacks decided after execution, zero amounts, payments voided before
+    /// transmission. Empty on events written before this field existed.
+    /// </summary>
+    public List<string> PaymentIds { get; init; } = new();
+
+    /// <summary>When the run was executed (its accrual's date): decides the GL cutover. Null on older events.</summary>
+    public DateTime? PaymentRunExecutedAt { get; init; }
+}
+
+/// <summary>
+/// A payment of a run was reversed before the run's NACHA file went to the bank, and a
+/// re-pinned file leaves it out: it is never paid. Its 835 already told the provider it
+/// would be; the provider must be told it will not.
+/// </summary>
+public sealed record PaymentVoidedBeforeTransmissionEvent
+{
+    public string EventId { get; init; } = string.Empty;
+    public string TenantId { get; init; } = string.Empty;
+    public string PaymentRunId { get; init; } = string.Empty;
+    public string PaymentRunNumber { get; init; } = string.Empty;
+    public string PaymentId { get; init; } = string.Empty;
+    public string CheckNumber { get; init; } = string.Empty;
+    public string? PayeeNpi { get; init; }
+
+    /// <summary>The payment's net amount, accrued as payable and now never to be paid.</summary>
+    public decimal Amount { get; init; }
+
+    /// <summary>The reversal run whose recoupment opened the receivable this void cancels.</summary>
+    public string? ReversalRunId { get; init; }
+    public string SupersededFileReference { get; init; } = string.Empty;
+    public string NewFileReference { get; init; } = string.Empty;
+    public DateTime VoidedAt { get; init; }
+    public string VoidedBy { get; init; } = string.Empty;
+
+    /// <summary>When the payment's run was executed (its accrual's date): decides the GL cutover.</summary>
+    public DateTime? PaymentRunExecutedAt { get; init; }
 }

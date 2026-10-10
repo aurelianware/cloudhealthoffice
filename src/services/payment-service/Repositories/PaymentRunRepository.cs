@@ -43,7 +43,8 @@ public interface IPaymentRunRepository
     /// is still <c>superseded.Sha256</c>, appending <paramref name="addWarnings"/> in the
     /// same write. Touches nothing else on the run.
     /// </summary>
-    Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null);
+    Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null);
 
     Task DeleteAsync(string id);
 }
@@ -276,7 +277,8 @@ public class PaymentRunRepository : IPaymentRunRepository
         throw new InvalidOperationException($"Payment run {id} kept changing; its EFT file was not recorded");
     }
 
-    public async Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null)
+    public async Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null)
     {
         var tenantId = GetTenantId();
         for (var attempt = 0; attempt < 5; attempt++)
@@ -298,6 +300,8 @@ public class PaymentRunRepository : IPaymentRunRepository
             run.EftFileHistory.Add(superseded);
             if (addWarnings != null)
                 run.Warnings.AddRange(addWarnings);
+            if (addGlEvents != null)
+                run.GlOutbox.AddRange(addGlEvents.Where(e => run.GlOutbox.All(x => x.EventId != e.EventId)));
             try
             {
                 await _container.ReplaceItemAsync(run, id, new PartitionKey(tenantId),

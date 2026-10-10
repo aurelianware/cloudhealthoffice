@@ -125,12 +125,20 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
     /// <summary>When set, the next UpdateAsync throws it (a transient database error).</summary>
     public Exception? FailNextUpdate { get; set; }
 
+    /// <summary>When it returns an exception for the run being saved, that save throws it (once).</summary>
+    public Func<PaymentRun, Exception?>? FailUpdateWhen { get; set; }
+
     public Task<PaymentRun> UpdateAsync(PaymentRun run)
     {
         if (FailNextUpdate is { } failure)
         {
             FailNextUpdate = null;
             throw failure;
+        }
+        if (FailUpdateWhen?.Invoke(run) is { } conditional)
+        {
+            FailUpdateWhen = null;
+            throw conditional;
         }
         lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); }
         return Task.FromResult(run);
@@ -157,7 +165,8 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
         }
     }
 
-    public Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null)
+    public Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null)
     {
         lock (_items)
         {
@@ -168,6 +177,8 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
             run.EftFileHistory.Add(JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(superseded))!);
             if (addWarnings != null)
                 run.Warnings.AddRange(addWarnings);
+            if (addGlEvents != null)
+                run.GlOutbox.AddRange(addGlEvents);
             return Task.FromResult(true);
         }
     }

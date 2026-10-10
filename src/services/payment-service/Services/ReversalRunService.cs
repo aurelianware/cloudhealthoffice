@@ -444,7 +444,7 @@ public class ReversalRunService : IReversalRunService
             run.ExecutionDurationSeconds = run.ExecutionStartedAt.HasValue
                 ? (run.ExecutionCompletedAt.Value - run.ExecutionStartedAt.Value).TotalSeconds
                 : 0;
-            GlEventOutbox.AttachReversalRunExecuted(run, issuedForGl, DateTime.UtcNow);
+            GlEventOutbox.AttachReversalRunExecuted(run, issuedForGl, DateTime.UtcNow, replaceUnpublished: true);
             await _reversalRunRepository.UpdateAsync(run);
             throw;
         }

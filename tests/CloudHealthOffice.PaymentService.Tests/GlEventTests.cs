@@ -62,6 +62,37 @@ public class GlEventTests
     }
 
     [Fact]
+    public async Task A_run_whose_completed_save_fails_reports_the_status_it_was_saved_with()
+    {
+        var h = new FfsRunHarness();
+        h.Partner(Npi, "TP-A");
+        h.Accounts.Eft(Npi);
+        // The write recording Completed fails; the run is then saved as Failed.
+        h.Runs.FailUpdateWhen = r => r.Status == PaymentRunStatus.Completed ? new TimeoutException("database") : null;
+
+        await Assert.ThrowsAsync<TimeoutException>(() => h.ExecuteRunAsync(FfsRunHarness.Claim("c1", Npi, 100m)));
+
+        var stored = Assert.Single(await h.Runs.SearchAsync(DateTime.MinValue, DateTime.MaxValue));
+        Assert.Equal(PaymentRunStatus.Failed, stored.Status);
+        var payload = JsonSerializer.Deserialize<PaymentRunExecutedEvent>(Assert.Single(stored.GlOutbox).PayloadJson, GlEventTypes.Json)!;
+        Assert.Equal(("Failed", 100m), (payload.RunStatus, payload.TotalNetAmount));
+    }
+
+    [Fact]
+    public void A_published_accrual_is_never_replaced()
+    {
+        var run = new PaymentRun { Id = "run-p", TenantId = "t1", PaymentRunNumber = "PR-P", Status = PaymentRunStatus.Completed };
+        var issued = new List<Payment> { new() { Id = "p1", CheckNumber = "1", PayeeNPI = Npi, PaymentMethod = "ACH", TotalPaymentAmount = 10m } };
+        GlEventOutbox.AttachPaymentRunExecuted(run, issued, DateTime.UtcNow);
+        run.GlOutbox[0].PublishedAt = DateTime.UtcNow;
+        run.Status = PaymentRunStatus.Failed;
+
+        GlEventOutbox.AttachPaymentRunExecuted(run, issued, DateTime.UtcNow, replaceUnpublished: true);
+
+        Assert.Equal("Completed", JsonSerializer.Deserialize<PaymentRunExecutedEvent>(Assert.Single(run.GlOutbox).PayloadJson, GlEventTypes.Json)!.RunStatus);
+    }
+
+    [Fact]
     public void A_reversal_run_reports_the_recouped_amounts_as_positive()
     {
         var run = new ReversalRun { Id = "rr-1", TenantId = "t1", ReversalRunNumber = "RR-1", Status = ReversalRunStatus.Completed };
@@ -85,7 +116,7 @@ public class GlEventTests
             => Task.FromResult<IReadOnlyList<PendingGlEvent>>(Pending
                 .Where(p => p.Message.PublishedAt == null && (p.Message.NextAttemptAt == null || p.Message.NextAttemptAt <= now)).Take(limit).ToList());
 
-        public Task<IReadOnlyList<PendingGlEvent>> ListUnpublishedAsync(string tenantId, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<PendingGlEvent>> ListUnpublishedAsync(string tenantId, int limit = 500, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<PendingGlEvent>>(Pending.Where(p => p.TenantId == tenantId && p.Message.PublishedAt == null).ToList());
 
         public Task MarkPublishedAsync(PendingGlEvent pending, DateTime at, CancellationToken cancellationToken = default)
@@ -234,6 +265,31 @@ public sealed class MongoGlOutboxStoreTests : IAsyncLifetime
         Assert.Equal("PR-1", run1.PaymentRunNumber); // the run itself is untouched
         Assert.NotNull(run1.GlOutbox.Single(m => m.EventId == "a").PublishedAt);
         Assert.Equal(2, run1.GlOutbox.Count);
+    }
+
+    [Fact]
+    public async Task A_cycle_reads_a_bounded_number_of_documents_through_an_index_and_skips_backing_off_events()
+    {
+        var runs = _db.GetCollection<PaymentRun>("PaymentRuns");
+        await runs.InsertManyAsync(Enumerable.Range(0, 30).Select(i => new PaymentRun
+        {
+            Id = $"run-{i:D2}", TenantId = "t1", PaymentRunNumber = $"PR-{i}",
+            GlOutbox = { i % 2 == 0 ? Message($"e{i:D2}", i) : Message($"done{i:D2}", i, DateTime.UtcNow) },
+        }));
+        var backingOff = Message("later", 1);
+        backingOff.NextAttemptAt = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        await runs.InsertOneAsync(new PaymentRun { Id = "run-zz", TenantId = "t1", GlOutbox = { backingOff } });
+        var store = new MongoGlOutboxStore(_db);
+        var now = new DateTime(2026, 5, 2, 0, 0, 0, DateTimeKind.Utc);
+
+        var due = await store.ListDueAsync(now, 5);
+
+        Assert.Equal(5, due.Count);
+        Assert.DoesNotContain(due, d => d.Message.EventId == "later" || d.Message.EventId.StartsWith("done"));
+        Assert.Equal(16, (await store.ListUnpublishedAsync("t1", 100)).Count);
+        Assert.Equal(3, (await store.ListUnpublishedAsync("t1", 3)).Count);
+        var indexes = await (await runs.Indexes.ListAsync()).ToListAsync();
+        Assert.Contains(indexes, i => i["name"].AsString == "gl_outbox_unpublished_GlOutbox");
     }
 
     [Fact]

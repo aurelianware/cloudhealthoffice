@@ -89,14 +89,26 @@ public class GlExtractAndOptionsTests
         GlExtractBuilder.Build(GlFixtures.Tenant, "2026-05", [foreign]).Control.EntryCount.Should().Be(0);
     }
 
-    private static ValidateOutcome Validate(Dictionary<string, string> accounts)
+    private static ValidateOutcome Validate(Dictionary<string, string> accounts, DateTime? cutover = null, bool enabled = true, bool noCutover = false)
     {
         var result = new GlPostingOptionsValidator().Validate(null, new GlPostingOptions
         {
-            Enabled = true,
-            Tenants = { ["tenant-1"] = new GlTenantPostingOptions { Accounts = accounts } },
+            Enabled = enabled,
+            Tenants = { ["tenant-1"] = new GlTenantPostingOptions { Accounts = accounts, CutoverDate = noCutover ? null : cutover ?? new DateTime(2026, 6, 1) } },
         });
         return new ValidateOutcome(result.Succeeded, string.Join("; ", result.Failures ?? Array.Empty<string>()));
+    }
+
+    [Fact]
+    public void A_cutover_date_is_required_while_posting_is_enabled()
+    {
+        var accounts = new Dictionary<string, string> { ["ClaimsPayable"] = "2100" };
+
+        var missing = Validate(accounts, noCutover: true);
+        missing.Ok.Should().BeFalse();
+        missing.Failures.Should().Contain("CutoverDate is required");
+        Validate(accounts, noCutover: true, enabled: false).Ok.Should().BeTrue("off: nothing posts, so no cutover is needed yet");
+        Validate(accounts, cutover: new DateTime(2026, 6, 1, 13, 0, 0)).Failures.Should().Contain("must be a date");
     }
 
     private sealed record ValidateOutcome(bool Ok, string Failures);

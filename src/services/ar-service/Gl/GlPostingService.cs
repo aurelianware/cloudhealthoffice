@@ -26,6 +26,12 @@ public sealed class GlStateException : Exception
     public GlStateException(string message) : base(message) { }
 }
 
+/// <summary>A closed period's journal no longer matches the extract recorded at close: nothing is extracted.</summary>
+public sealed class GlIntegrityException : Exception
+{
+    public GlIntegrityException(string message) : base(message) { }
+}
+
 /// <summary>The caller may not do this (403).</summary>
 public sealed class GlForbiddenException : Exception
 {
@@ -70,6 +76,14 @@ public sealed class GlPostingService
     public static readonly EventId ReversedEvent = new(4963, "GlEntryReversed");
     public static readonly EventId PeriodClosedEvent = new(4964, "GlPeriodClosed");
     public static readonly EventId DismissedEvent = new(4965, "GlEventDismissed");
+    public static readonly EventId RepostedEvent = new(4966, "GlEventReposted");
+    public static readonly EventId IntegrityEvent = new(4967, "GlClosedPeriodIntegrity");
+
+    /// <summary>How long a post may hold its period open against a close (the close ignores an expired lease).</summary>
+    public static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
+
+    /// <summary>A post that ran longer than this before its write is abandoned (well inside <see cref="LeaseDuration"/>).</summary>
+    public static readonly TimeSpan MaxPostDuration = TimeSpan.FromMinutes(1);
 
     private static readonly Regex SafeId = new("^[A-Za-z0-9._:\\-]{1,128}$", RegexOptions.Compiled);
     private static readonly Regex PeriodFormat = new("^[0-9]{4}-(0[1-9]|1[0-2])$", RegexOptions.Compiled);
@@ -152,22 +166,22 @@ public sealed class GlPostingService
     /// <summary>
     /// Retries a parked event (after its mapping, chart or period was fixed). For a closed
     /// period, <paramref name="entryDate"/> moves it to a later date in an open period,
-    /// with a reason (both recorded on the entry).
+    /// with a reason (both recorded on the entry). A PreCutover event posts only with
+    /// <paramref name="includeBeforeCutover"/> and a reason (its accounting must then not be
+    /// in the opening balances as well).
     /// </summary>
-    public async Task<GlIngestResult> RetryAsync(string tenantId, string eventId, DateTime? entryDate, string? reason, string actor, CancellationToken cancellationToken = default)
+    public async Task<GlIngestResult> RetryAsync(string tenantId, string eventId, DateTime? entryDate, string? reason, string actor,
+        CancellationToken cancellationToken = default, bool includeBeforeCutover = false)
     {
         EnsureEnabled();
         var record = await _events.GetAsync(tenantId, eventId, cancellationToken)
                      ?? throw new KeyNotFoundException($"No GL event {eventId}.");
         if (record.Status != GlSourceEventStatus.Parked)
             throw new GlStateException($"GL event {eventId} is {record.Status}, not parked.");
-        if (entryDate != null && string.IsNullOrWhiteSpace(reason))
-            throw new ArgumentException("A reason is required to post an event on another date.");
+        if ((entryDate != null || includeBeforeCutover) && string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason is required to post an event on another date or from before the cutover.");
 
-        var envelope = new GlEventEnvelope
-        {
-            EventId = record.EventId, Type = record.Type, TenantId = record.TenantId, Source = record.Source, PayloadJson = record.PayloadJson,
-        };
+        var envelope = EnvelopeOf(record);
         if (entryDate != null)
         {
             var original = SafeBuild(envelope)?.EntryDate;
@@ -179,7 +193,8 @@ public sealed class GlPostingService
         record.Attempts++;
         record.LastAttemptAt = Now;
         record.LastAttemptBy = actor;
-        await PostAsync(envelope, record, entryDate?.Date, reason == null ? null : Clean(reason), actor, cancellationToken);
+        await PostAsync(envelope, record, entryDate?.Date, reason == null ? null : Clean(reason), actor, cancellationToken,
+            new PostOptions { IncludeBeforeCutover = includeBeforeCutover });
         if (!await _events.TryReplaceAsync(record, readVersion, cancellationToken))
             throw new GlStateException($"GL event {eventId} changed meanwhile; check it and retry.");
         return GlIngestResult.From(record, duplicate: false);
@@ -203,8 +218,66 @@ public sealed class GlPostingService
         if (!await _events.TryReplaceAsync(record, readVersion, cancellationToken))
             throw new GlStateException($"GL event {eventId} changed meanwhile; check it and retry.");
         _logger.LogWarning(DismissedEvent, "AUDIT GL event {EventId} ({Type}) of tenant {TenantId} dismissed by {User}: {Reason}",
-            record.EventId, record.Type, Clean(tenantId), Clean(actor), Clean(reason));
+            SanitizeForLog(record.EventId), SanitizeForLog(record.Type), SanitizeForLog(tenantId), SanitizeForLog(actor), SanitizeForLog(reason));
         return GlIngestResult.From(record, duplicate: false);
+    }
+
+    /// <summary>
+    /// Posts an event again after the entry of its business key was reversed: a parked event
+    /// (e.g. DuplicateBusinessKey: a second transmitted file for a run whose first ACH entry was
+    /// reversed) or a posted one whose own entry was reversed (e.g. to post it on another date).
+    /// The new entry is <c>{key}:r{n}</c>, naming the reversed entry it replaces, so the journal
+    /// keeps one live entry per business key. Refused while the latest entry of the key stands.
+    /// Nothing changes when the repost cannot post (unmapped account, closed period).
+    /// </summary>
+    public async Task<GlIngestResult> RepostAsync(string tenantId, string eventId, string reason, DateTime? entryDate, string actor,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureEnabled();
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason is required to repost a GL event.");
+        var record = await _events.GetAsync(tenantId, eventId, cancellationToken)
+                     ?? throw new KeyNotFoundException($"No GL event {eventId}.");
+        if (record.Status is not (GlSourceEventStatus.Posted or GlSourceEventStatus.Parked))
+            throw new GlStateException($"GL event {eventId} is {record.Status}; only a posted or parked event is reposted.");
+        if (record.ParkReason is GlParkReason.InvalidPayload or GlParkReason.PreCutover)
+            throw new GlStateException($"GL event {eventId} is parked as {record.ParkReason}; a repost does not post it.");
+        var envelope = EnvelopeOf(record);
+        var proposal = SafeBuild(envelope)
+                       ?? throw new GlStateException($"GL event {eventId} has nothing to post.");
+        if (entryDate != null && entryDate.Value.Date < proposal.EntryDate.Date)
+            throw new ArgumentException($"An entry is moved to a later date, never an earlier one (its date is {proposal.EntryDate:yyyy-MM-dd}).");
+
+        var baseId = GlJournal.KeyFor(tenantId, proposal.Key);
+        GlJournalEntry? latest = null;
+        var n = 0;
+        for (var i = 0; ; i++)
+        {
+            var candidate = await _journal.GetAsync(tenantId, GlJournal.RepostId(baseId, i), cancellationToken);
+            if (candidate == null)
+                break;
+            latest = candidate;
+            n = i;
+        }
+        if (latest == null)
+            throw new GlStateException($"No entry of {proposal.Key} exists; retry the event instead of reposting it.");
+        if (await _journal.GetAsync(tenantId, GlJournal.ReversalId(latest.Id), cancellationToken) == null)
+            throw new GlStateException($"GL entry {latest.Id} of {proposal.Key} stands; reverse it before reposting the event.");
+
+        var attempt = Copy(record);
+        attempt.Attempts++;
+        attempt.LastAttemptAt = Now;
+        attempt.LastAttemptBy = actor;
+        await PostAsync(envelope, attempt, entryDate?.Date, $"repost of {latest.Id}: {Clean(reason)}", actor, cancellationToken,
+            new PostOptions { EntryId = GlJournal.RepostId(baseId, n + 1), RepostOf = latest.Id });
+        if (attempt.Status != GlSourceEventStatus.Posted)
+            throw new GlStateException($"GL event {eventId} cannot be reposted: {attempt.ParkReason} {attempt.ParkDetail}. Nothing was posted.");
+
+        if (!await _events.TryReplaceAsync(attempt, record.Version, cancellationToken))
+            throw new GlStateException($"GL event {eventId} changed meanwhile; its repost {attempt.EntryId} is in the journal. Check the event.");
+        _logger.LogWarning(RepostedEvent, "AUDIT GL event {EventId} of tenant {TenantId} reposted by {User} as {EntryId} (replaces reversed {Previous}): {Reason}",
+            SanitizeForLog(eventId), SanitizeForLog(tenantId), SanitizeForLog(actor), SanitizeForLog(attempt.EntryId), SanitizeForLog(latest.Id), SanitizeForLog(reason));
+        return GlIngestResult.From(attempt, duplicate: false);
     }
 
     /// <summary>
@@ -225,12 +298,10 @@ public sealed class GlPostingService
         if (date < original.EntryDate.Date)
             throw new ArgumentException($"A reversal is dated on or after the entry it reverses ({original.EntryDate:yyyy-MM-dd}).");
         var period = GlJournal.PeriodOf(date);
-        if (await _periods.IsClosedAsync(tenantId, period, cancellationToken))
-            throw new GlStateException($"Period {period} is closed; date the reversal in an open period.");
 
         var reversal = new GlJournalEntry
         {
-            Id = $"{original.Id}:reversal",
+            Id = GlJournal.ReversalId(original.Id),
             TenantId = tenantId,
             Kind = GlEntryKind.Reversal,
             SourceEventId = original.SourceEventId,
@@ -258,32 +329,138 @@ public sealed class GlPostingService
             TotalDebit = original.TotalCredit,
             TotalCredit = original.TotalDebit,
         };
-        if (!await _journal.TryInsertAsync(reversal, cancellationToken))
+        bool inserted;
+        var lease = await BeginPostAsync(tenantId, period, cancellationToken)
+                    ?? throw new GlStateException($"Period {period} is closed; date the reversal in an open period.");
+        try
+        {
+            lease.EnsureFresh();
+            inserted = await _journal.TryInsertAsync(reversal, cancellationToken);
+        }
+        finally
+        {
+            await EndPostAsync(lease);
+        }
+        if (!inserted)
             throw new GlStateException($"GL entry {entryId} has already been reversed.");
         _logger.LogWarning(ReversedEvent, "AUDIT GL entry {EntryId} of tenant {TenantId} reversed by {User} on {Date:yyyy-MM-dd}: {Reason}",
-            original.Id, Clean(tenantId), Clean(actor), date, Clean(reason));
+            SanitizeForLog(original.Id), SanitizeForLog(tenantId), SanitizeForLog(actor), date, SanitizeForLog(reason));
         return reversal;
     }
 
-    /// <summary>Closes a period (yyyy-MM, not in the future). Idempotent. Nothing posts into a closed period.</summary>
-    public async Task<GlClosedPeriod> ClosePeriodAsync(string tenantId, string period, string reason, string actor, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Closes a period (yyyy-MM, not in the future). Idempotent. Serialized with posts: refused
+    /// (nothing changes) while a post is in flight in the period; once closed nothing posts into
+    /// it. The period's extract control (SHA-256, totals) is recorded at close.
+    /// </summary>
+    public async Task<GlPeriod> ClosePeriodAsync(string tenantId, string period, string reason, string actor, CancellationToken cancellationToken = default)
     {
         EnsureEnabled();
         if (!IsPeriod(period))
             throw new ArgumentException("A period is yyyy-MM.");
         if (string.CompareOrdinal(period, GlJournal.PeriodOf(Now)) > 0)
             throw new ArgumentException($"Period {period} is in the future; it cannot be closed yet.");
-        var closed = new GlClosedPeriod { TenantId = tenantId, Period = period, ClosedAt = Now, ClosedBy = actor, Reason = Clean(reason) };
-        if (await _periods.TryCloseAsync(closed, cancellationToken))
+        var outcome = await _periods.TryCloseAsync(tenantId, period, Now, actor, Clean(reason), cancellationToken);
+        if (outcome == GlPeriodCloseOutcome.Busy)
+            throw new GlStateException($"Entries are being posted into period {period} right now; it was not closed. Close it again in a moment.");
+        if (outcome == GlPeriodCloseOutcome.Closed)
             _logger.LogWarning(PeriodClosedEvent, "AUDIT GL period {Period} of tenant {TenantId} closed by {User}: {Reason}",
-                period, Clean(tenantId), Clean(actor), Clean(reason));
-        return closed;
+                SanitizeForLog(period), SanitizeForLog(tenantId), SanitizeForLog(actor), SanitizeForLog(reason));
+        // Nothing can post into it any more: its extract is final.
+        await GetExtractAsync(tenantId, period, cancellationToken);
+        return await _periods.GetAsync(tenantId, period, cancellationToken)
+               ?? throw new GlStateException($"Period {period} disappeared after closing.");
+    }
+
+    /// <summary>
+    /// The period's extract. For a closed period the extract control recorded at close must
+    /// match (it is recorded on first use for a period closed before that); a difference is an
+    /// integrity failure and nothing is returned.
+    /// </summary>
+    public async Task<GlExtract> GetExtractAsync(string tenantId, string period, CancellationToken cancellationToken = default)
+    {
+        if (!IsPeriod(period))
+            throw new ArgumentException("A period is yyyy-MM.");
+        var state = await _periods.GetAsync(tenantId, period, cancellationToken);
+        var extract = GlExtractBuilder.Build(tenantId, period, await _journal.ListAsync(tenantId, period, cancellationToken));
+        if (state?.Status != GlPeriodStatus.Closed)
+            return extract;
+        if (state.ExtractSha256 == null)
+        {
+            if (await _periods.TrySetExtractControlAsync(tenantId, period, extract.Control, cancellationToken))
+                return extract;
+            state = await _periods.GetAsync(tenantId, period, cancellationToken);
+        }
+        if (!string.Equals(state?.ExtractSha256, extract.Control.Sha256, StringComparison.Ordinal))
+        {
+            _logger.LogCritical(IntegrityEvent,
+                "AUDIT GL closed period {Period} of tenant {TenantId}: extract sha256 {Now} differs from {AtClose} recorded at close; extract refused",
+                SanitizeForLog(period), SanitizeForLog(tenantId), extract.Control.Sha256, SanitizeForLog(state?.ExtractSha256));
+            throw new GlIntegrityException(
+                $"The journal of closed period {period} no longer matches the extract recorded at close (sha256 {state?.ExtractSha256}). " +
+                "Nothing was extracted; this needs a person.");
+        }
+        return extract;
+    }
+
+    /// <summary>How a post differs from the first post of an event.</summary>
+    private sealed class PostOptions
+    {
+        /// <summary>The entry id instead of the business key (a repost: <c>{key}:r{n}</c>).</summary>
+        public string? EntryId { get; init; }
+        public string? RepostOf { get; init; }
+        public bool IncludeBeforeCutover { get; init; }
+    }
+
+    /// <summary>A lease held in a period while one entry is written.</summary>
+    private sealed class PostLease
+    {
+        public required string TenantId { get; init; }
+        public required string Period { get; init; }
+        public required string Token { get; init; }
+        public required DateTime StartedAt { get; init; }
+        public required Func<DateTime> Clock { get; init; }
+
+        /// <summary>
+        /// Refuses to write once the post took longer than <see cref="MaxPostDuration"/>: well
+        /// before its lease expires, so a close (which ignores only expired leases) can never
+        /// overtake a write that is still running.
+        /// </summary>
+        public void EnsureFresh()
+        {
+            if (Clock() - StartedAt > MaxPostDuration)
+                throw new GlStateException($"Posting into period {Period} took too long and was abandoned (nothing was written); deliver or retry it again.");
+        }
+    }
+
+    private async Task<PostLease?> BeginPostAsync(string tenantId, string period, CancellationToken cancellationToken)
+    {
+        var token = Guid.NewGuid().ToString("N");
+        var started = Now;
+        return await _periods.TryBeginPostAsync(tenantId, period, token, started.Add(LeaseDuration), cancellationToken)
+            ? new PostLease { TenantId = tenantId, Period = period, Token = token, StartedAt = started, Clock = () => Now }
+            : null;
+    }
+
+    private async Task EndPostAsync(PostLease lease)
+    {
+        try
+        {
+            await _periods.EndPostAsync(lease.TenantId, lease.Period, lease.Token, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            // The lease expires on its own; until then the period cannot be closed.
+            _logger.LogWarning("GL period {Period} lease could not be released ({Error}); it expires within {Lease}",
+                SanitizeForLog(lease.Period), ex.GetType().Name, LeaseDuration);
+        }
     }
 
     /// <summary>Builds, resolves and inserts the entry; sets <paramref name="record"/>'s status. Never throws for a postable-later event.</summary>
     private async Task PostAsync(GlEventEnvelope envelope, GlSourceEvent record, DateTime? entryDateOverride, string? reason, string actor,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, PostOptions? options = null)
     {
+        options ??= new PostOptions();
         GlProposedEntry? proposal;
         try
         {
@@ -305,6 +482,12 @@ public sealed class GlPostingService
         record.SourceDocumentId = proposal.SourceDocumentId;
         record.SourceReference = proposal.SourceReference;
         record.ClaimedAmount = proposal.ClaimedAmount;
+
+        if (!options.IncludeBeforeCutover && await PreCutoverAsync(record, proposal, cancellationToken) is { } before)
+        {
+            Park(record, GlParkReason.PreCutover, before);
+            return;
+        }
 
         var entryDate = entryDateOverride ?? proposal.EntryDate.Date;
         var lines = new List<GlJournalLine>();
@@ -342,16 +525,16 @@ public sealed class GlPostingService
         }
 
         var period = GlJournal.PeriodOf(entryDate);
-        if (await _periods.IsClosedAsync(record.TenantId, period, cancellationToken))
-        {
-            Park(record, GlParkReason.ClosedPeriod,
-                $"its date {entryDate:yyyy-MM-dd} is in closed period {period}; retry it with a date in an open period");
-            return;
-        }
-
+        var notes = new List<string>();
+        if (entryDateOverride != null)
+            notes.Add($"dated {entryDate:yyyy-MM-dd} instead of {proposal.EntryDate:yyyy-MM-dd} by {actor}");
+        if (options.IncludeBeforeCutover)
+            notes.Add($"posted from before the GL cutover by {actor}");
+        if (options.RepostOf != null)
+            notes.Add($"reposted by {actor}");
         var entry = new GlJournalEntry
         {
-            Id = GlJournal.KeyFor(record.TenantId, proposal.Key),
+            Id = options.EntryId ?? GlJournal.KeyFor(record.TenantId, proposal.Key),
             TenantId = record.TenantId,
             Kind = proposal.Kind,
             SourceEventId = record.EventId,
@@ -361,24 +544,45 @@ public sealed class GlPostingService
             EntryDate = DateTime.SpecifyKind(entryDate, DateTimeKind.Utc),
             Period = period,
             PostedAt = Now,
-            PostedBy = string.IsNullOrEmpty(proposal.PostedBy) ? actor : proposal.PostedBy,
+            PostedBy = string.IsNullOrEmpty(proposal.PostedBy) || options.RepostOf != null ? actor : proposal.PostedBy,
             LineOfBusiness = proposal.LineOfBusiness,
             Description = proposal.Description,
-            Reason = entryDateOverride != null ? $"dated {entryDate:yyyy-MM-dd} instead of {proposal.EntryDate:yyyy-MM-dd} by {actor}: {reason}" : null,
+            Reason = notes.Count == 0 && reason == null ? null
+                : string.Join(": ", new[] { string.Join("; ", notes), reason }.Where(x => !string.IsNullOrEmpty(x))),
+            RepostOf = options.RepostOf,
             Lines = lines,
             TotalDebit = lines.Sum(l => l.Debit),
             TotalCredit = lines.Sum(l => l.Credit),
         };
         GlJournal.EnsureBalanced(entry);
 
-        if (!await _journal.TryInsertAsync(entry, cancellationToken))
+        // Serialized with the period close: the lease is held from here until the write is done.
+        var lease = await BeginPostAsync(record.TenantId, period, cancellationToken);
+        if (lease == null)
+        {
+            Park(record, GlParkReason.ClosedPeriod,
+                $"its date {entryDate:yyyy-MM-dd} is in closed period {period}; retry it with a date in an open period");
+            return;
+        }
+        bool inserted;
+        try
+        {
+            lease.EnsureFresh();
+            inserted = await _journal.TryInsertAsync(entry, cancellationToken);
+        }
+        finally
+        {
+            await EndPostAsync(lease);
+        }
+
+        if (!inserted)
         {
             var existing = await _journal.GetAsync(record.TenantId, entry.Id, cancellationToken);
             if (existing == null || !string.Equals(existing.SourceEventId, record.EventId, StringComparison.Ordinal))
             {
                 Park(record, GlParkReason.DuplicateBusinessKey,
                     $"{proposal.SourceReference} already has {proposal.Kind} entry {entry.Id} from event {existing?.SourceEventId}; " +
-                    "this event would post it twice. Review it and dismiss it, or reverse the existing entry first.");
+                    "this event would post it twice. Review it and dismiss it, or reverse the existing entry and repost this event.");
                 return;
             }
             entry = existing;
@@ -390,8 +594,42 @@ public sealed class GlPostingService
         record.EntryId = entry.Id;
         _logger.LogInformation(PostedEvent,
             "AUDIT GL entry {EntryId} ({Kind}) of tenant {TenantId} posted from event {EventId} ({Reference}) on {Date:yyyy-MM-dd}: {Total:F2}",
-            entry.Id, entry.Kind, Clean(record.TenantId), record.EventId, Clean(entry.SourceReference), entry.EntryDate, entry.TotalDebit);
+            SanitizeForLog(entry.Id), entry.Kind, SanitizeForLog(record.TenantId), SanitizeForLog(record.EventId), SanitizeForLog(entry.SourceReference),
+            entry.EntryDate, entry.TotalDebit);
     }
+
+    /// <summary>
+    /// Why the event is about a run executed before the tenant's cutover (null when it is not).
+    /// The run's execution date comes from the event, or else from the run's accrual event in
+    /// the register; when neither tells, it is held (never guessed).
+    /// </summary>
+    private async Task<string?> PreCutoverAsync(GlSourceEvent record, GlProposedEntry proposal, CancellationToken cancellationToken)
+    {
+        if (_options.CutoverFor(record.TenantId) is not { } cutover)
+            return null; // tenant not configured: it parks as NeedsMapping; while enabled the validator requires a cutover
+        if (proposal.RunExecutedAt is { } executed)
+            return executed < cutover
+                ? $"run {proposal.SourceReference} was executed {executed:yyyy-MM-dd}, before the GL cutover {cutover:yyyy-MM-dd}; its accounting is in the opening balances"
+                : null;
+        if (proposal.PaymentRunId == null)
+            return null;
+        var accrualId = GlEventTypes.EventIdFor(record.TenantId, $"payment-run:{proposal.PaymentRunId}", GlEventTypes.PaymentRunExecuted);
+        var accrual = await _events.GetAsync(record.TenantId, accrualId, cancellationToken);
+        if (accrual == null)
+            return $"the execution date of run {proposal.PaymentRunId} is not known yet (its PaymentRunExecuted event has not arrived), " +
+                   $"so it cannot be placed against the GL cutover {cutover:yyyy-MM-dd}; retry it once the accrual is in";
+        return accrual.Status == GlSourceEventStatus.Parked && accrual.ParkReason == GlParkReason.PreCutover
+            ? $"run {proposal.PaymentRunId} was executed before the GL cutover {cutover:yyyy-MM-dd} (its accrual is PreCutover)"
+            : null;
+    }
+
+    private static GlEventEnvelope EnvelopeOf(GlSourceEvent record) => new()
+    {
+        EventId = record.EventId, Type = record.Type, TenantId = record.TenantId, Source = record.Source, PayloadJson = record.PayloadJson,
+    };
+
+    private static GlSourceEvent Copy(GlSourceEvent record)
+        => System.Text.Json.JsonSerializer.Deserialize<GlSourceEvent>(System.Text.Json.JsonSerializer.Serialize(record))!;
 
     private static string? AccountProblem(GlAccount? account, string number, DateTime entryDate)
     {
@@ -413,7 +651,7 @@ public sealed class GlPostingService
         record.ParkDetail = Clean(detail);
         record.EntryId = null;
         _logger.LogWarning(ParkedEvent, "AUDIT GL event {EventId} ({Type}) of tenant {TenantId} parked ({Reason}): {Detail}",
-            record.EventId, record.Type, Clean(record.TenantId), reason, Clean(detail));
+            SanitizeForLog(record.EventId), SanitizeForLog(record.Type), SanitizeForLog(record.TenantId), reason, SanitizeForLog(detail));
     }
 
     private static GlProposedEntry? SafeBuild(GlEventEnvelope envelope)
@@ -430,6 +668,15 @@ public sealed class GlPostingService
 
     private static string Sha256(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 
+    /// <summary>Stored text: one line.</summary>
     private static string Clean(string? value)
         => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", " ");
+
+    /// <summary>Every value written to a log (the repo's log-forging guard).</summary>
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
 }

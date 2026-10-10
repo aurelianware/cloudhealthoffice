@@ -70,7 +70,7 @@ public sealed class ProviderReceivableRepositoryMongo : IProviderReceivableRepos
         var filter = Builders<ProviderReceivableRecord>.Filter.And(
             Builders<ProviderReceivableRecord>.Filter.Eq(x => x.TenantId, tenantId),
             Builders<ProviderReceivableRecord>.Filter.Eq(x => x.ProviderNpi, providerNpi),
-            Builders<ProviderReceivableRecord>.Filter.Ne(x => x.Status, ReceivableStatus.Recovered));
+            Builders<ProviderReceivableRecord>.Filter.Nin(x => x.Status, new[] { ReceivableStatus.Recovered, ReceivableStatus.Cancelled }));
         var found = await _collection.Find(filter).ToListAsync();
         return ReceivableOrdering.OldestFirst(found);
     }
@@ -140,7 +140,7 @@ public sealed class InMemoryProviderReceivableRepository : IProviderReceivableRe
     {
         lock (_lock)
             return Task.FromResult(ReceivableOrdering.OldestFirst(_records.Values
-                .Where(r => r.TenantId == tenantId && r.ProviderNpi == providerNpi && r.Status != ReceivableStatus.Recovered)
+                .Where(r => r.TenantId == tenantId && r.ProviderNpi == providerNpi && r.Status is not (ReceivableStatus.Recovered or ReceivableStatus.Cancelled))
                 .Select(Clone)));
     }
 

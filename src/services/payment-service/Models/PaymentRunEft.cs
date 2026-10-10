@@ -92,6 +92,13 @@ public class PaymentRunEftFile
     /// </summary>
     public List<RemittanceDateNotice> RemittanceDateNotices { get; set; } = new();
 
+    /// <summary>
+    /// Payments of the run reversed before any file carrying them was sent, and left out
+    /// of this file: their 835 (already issued) said they would be paid, so each provider
+    /// must be told the payment will not arrive. Carried forward on every later re-pin.
+    /// </summary>
+    public List<VoidedPaymentNotice> VoidedPayments { get; set; } = new();
+
     public DateTime FirstGeneratedAt { get; set; }
     public string? FirstGeneratedBy { get; set; }
     public DateTime? LastVerifiedAt { get; set; }
@@ -121,6 +128,29 @@ public class RemittanceDateNotice
 
     /// <summary>The date the funds actually settle (the re-dated file's effective entry date).</summary>
     public DateTime EffectiveEntryDate { get; set; }
+}
+
+/// <summary>
+/// A payment reversed before its EFT file was sent and left out of the re-pinned file.
+/// <see cref="Completed"/> is set once the payment is marked voided-before-payment and the
+/// receivable the reversal opened is cancelled (the provider was never paid, so owes nothing).
+/// </summary>
+public class VoidedPaymentNotice
+{
+    public string PaymentId { get; set; } = string.Empty;
+    public string CheckNumber { get; set; } = string.Empty;
+    public string PayeeNpi { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string? EraEnvelopeId { get; set; }
+    public string? TradingPartnerId { get; set; }
+
+    /// <summary>ISA13 of the 835 that announced the payment.</summary>
+    public string? ControlNumber { get; set; }
+
+    public string? ReversalRunId { get; set; }
+    public string? ReceivableId { get; set; }
+    public bool Completed { get; set; }
+    public DateTime? CompletedAt { get; set; }
 }
 
 /// <summary>One NACHA credit (entry detail + addenda), without full numbers.</summary>

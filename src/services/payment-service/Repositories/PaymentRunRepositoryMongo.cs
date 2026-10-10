@@ -141,7 +141,8 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         return result.MatchedCount == 1;
     }
 
-    public async Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null)
+    public async Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null)
     {
         var tenantId = GetTenantId();
         var f = Builders<PaymentRun>.Filter;
@@ -149,6 +150,8 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         var update = Builders<PaymentRun>.Update.Set(x => x.EftFile, file).Push(x => x.EftFileHistory, superseded);
         if (addWarnings is { Count: > 0 })
             update = update.PushEach(x => x.Warnings, addWarnings);
+        if (addGlEvents is { Count: > 0 })
+            update = update.PushEach(x => x.GlOutbox, addGlEvents);
         var result = await _collection.UpdateOneAsync(filter, update);
         return result.MatchedCount == 1;
     }

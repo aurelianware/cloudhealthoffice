@@ -333,7 +333,7 @@ public class GlPostingServiceTests
         await Service().IngestAsync(GlFixtures.RunExecuted(), GlFixtures.Tenant);          // 150 payable (100 ACH, 50 check)
         await Service().IngestAsync(GlFixtures.FileTransmitted(amount: 100m), GlFixtures.Tenant);
         // A transmitted file whose run never reached the GL.
-        await Service().IngestAsync(GlFixtures.FileTransmitted(runId: "run-9", fileReference: "FFS-PR-run-9", amount: 30m), GlFixtures.Tenant);
+        await Service().IngestAsync(GlFixtures.FileTransmitted(runId: "run-9", fileReference: "FFS-PR-run-9", amount: 30m, runExecutedAt: new DateTime(2026, 5, 19)), GlFixtures.Tenant);
 
         var report = GlReconciliationBuilder.Build(GlFixtures.Tenant, null, _gl.Events, _gl.Entries);
 

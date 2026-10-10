@@ -446,7 +446,7 @@ public class PaymentRunService : IPaymentRunService
                 : 0;
 
             // Payments issued before the failure still accrue.
-            GlEventOutbox.AttachPaymentRunExecuted(paymentRun, issuedForGl, DateTime.UtcNow);
+            GlEventOutbox.AttachPaymentRunExecuted(paymentRun, issuedForGl, DateTime.UtcNow, replaceUnpublished: true);
             await _paymentRunRepository.UpdateAsync(paymentRun);
             throw;
         }

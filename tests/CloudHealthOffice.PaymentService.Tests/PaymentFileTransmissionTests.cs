@@ -45,7 +45,7 @@ public class PaymentFileTransmissionTests
         INachaTransmitter? transmitter = null, INachaRemoteFileProbe? probe = null, IFfsEftFileService? eftFiles = null)
         => new(_h.Runs, _h.Payments, _h.Reservations, eftFiles ?? _h.EftFiles(), _store, transmitter ?? _bank, probe ?? _bank,
             new TestActor(user, FfsRunHarness.Tenant, isService).SeparationOfDuties(),
-            Options.Create(_options), new AchEffectiveDatePolicy(Options.Create(_options), _clock), _log, _clock);
+            Options.Create(_options), new AchEffectiveDatePolicy(Options.Create(_options), _clock), _log, _clock, _h.Ledger);
 
     /// <summary>An executed ACH run (created by maker-1) whose EFT file was generated and pinned.</summary>
     private async Task<PaymentRun> PinnedRunAsync()
@@ -810,14 +810,15 @@ public class PaymentFileTransmissionTests
             => _inner.GenerateAsync(paymentRunId, actorUserId, cancellationToken);
 
         public async Task<FfsEftFileOutcome> RepinAsync(string paymentRunId, string actorUserId, string reason,
-            string expectedFileReference, string expectedSha256, CancellationToken cancellationToken = default)
+            string expectedFileReference, string expectedSha256, IReadOnlyList<PaymentVoid>? voids = null,
+            CancellationToken cancellationToken = default)
         {
             if (_before is { } before)
             {
                 _before = null;
                 await before();
             }
-            return await _inner.RepinAsync(paymentRunId, actorUserId, reason, expectedFileReference, expectedSha256, cancellationToken);
+            return await _inner.RepinAsync(paymentRunId, actorUserId, reason, expectedFileReference, expectedSha256, voids, cancellationToken);
         }
     }
 

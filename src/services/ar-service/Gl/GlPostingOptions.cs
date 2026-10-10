@@ -11,7 +11,8 @@ namespace ArService.Gl;
 /// "GlPosting": {
 ///   "Enabled": true,
 ///   "Tenants": {
-///     "tenant-1": { "Accounts": { "ClaimsExpense": "5100", "ClaimsPayable": "2100",
+///     "tenant-1": { "CutoverDate": "2026-06-01",
+///                   "Accounts": { "ClaimsExpense": "5100", "ClaimsPayable": "2100",
 ///                                 "AchInTransit": "1015", "ProviderReceivable": "1250" } }
 ///   }
 /// }
@@ -19,6 +20,9 @@ namespace ArService.Gl;
 /// Account values are <c>GlAccount.AccountNumber</c>s of the tenant's chart in
 /// ar-service. A role a tenant does not map, or maps to an account that is missing,
 /// inactive or not effective on the entry date, parks the event (never drops it).
+/// <c>CutoverDate</c> is required for every tenant while posting is enabled: events of runs
+/// executed before it are registered but parked as PreCutover (their accounting is in the
+/// opening balances; see the runbook).
 /// </summary>
 public sealed class GlPostingOptions
 {
@@ -27,6 +31,10 @@ public sealed class GlPostingOptions
     public bool Enabled { get; set; }
 
     public Dictionary<string, GlTenantPostingOptions> Tenants { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>The tenant's GL cutover date (UTC date), or null when the tenant is not configured.</summary>
+    public DateTime? CutoverFor(string tenantId)
+        => Tenants.TryGetValue(tenantId, out var tenant) ? tenant.CutoverDate?.Date : null;
 
     /// <summary>The account number mapped to <paramref name="role"/> for <paramref name="tenantId"/>, or null.</summary>
     public string? AccountFor(string tenantId, GlPostingRole role)
@@ -38,6 +46,12 @@ public sealed class GlPostingOptions
 
 public sealed class GlTenantPostingOptions
 {
+    /// <summary>
+    /// The first day the GL posts for this tenant: runs executed before it are in the opening
+    /// balances and their events park as PreCutover. Required while GlPosting:Enabled.
+    /// </summary>
+    public DateTime? CutoverDate { get; set; }
+
     /// <summary>Role name (<see cref="GlPostingRole"/>) to account number.</summary>
     public Dictionary<string, string> Accounts { get; set; } = new(StringComparer.Ordinal);
 }
@@ -66,6 +80,11 @@ public sealed class GlPostingOptionsValidator : IValidateOptions<GlPostingOption
         {
             if (string.IsNullOrWhiteSpace(tenant))
                 failures.Add("GlPosting:Tenants has an empty tenant id.");
+            if (options.Enabled && settings.CutoverDate == null)
+                failures.Add($"GlPosting:Tenants:{tenant}:CutoverDate is required while GlPosting:Enabled is true " +
+                             "(runs executed before it are in the opening balances and are not posted).");
+            else if (settings.CutoverDate is { } cutover && cutover.TimeOfDay != TimeSpan.Zero)
+                failures.Add($"GlPosting:Tenants:{tenant}:CutoverDate must be a date (yyyy-MM-dd), not a time.");
             var mapped = new Dictionary<GlPostingRole, string>();
             foreach (var (roleName, account) in settings.Accounts)
             {

@@ -170,6 +170,46 @@ public class ProviderReceivableRecord
         Entries.Add(entry);
         return entry;
     }
+
+    /// <summary>Whether this receivable was already reduced for the unpaid payment <paramref name="paymentId"/>.</summary>
+    public bool HasCancellationFor(string paymentId)
+        => Entries.Any(e => e.Type == ReceivableEntryType.CancelledUnpaid && e.PaymentId == paymentId);
+
+    /// <summary>
+    /// The payment whose reversal opened (part of) this receivable was never paid (voided
+    /// before its NACHA file went out): nothing is owed back for it. Lowers what is
+    /// outstanding by <paramref name="amount"/>; refused when less than that is outstanding
+    /// (some of it was already recovered from the provider: that needs a person).
+    /// </summary>
+    public ReceivableLedgerEntry CancelForUnpaidPayment(string paymentId, decimal amount, string? by, DateTime at, string reason)
+    {
+        if (amount <= 0m)
+            throw new InvalidOperationException($"A receivable cancellation must be positive (was {amount:F2}).");
+        if (HasCancellationFor(paymentId))
+            throw new InvalidOperationException($"Receivable {Id} was already reduced for payment {paymentId}.");
+        if (amount > OutstandingAmount)
+            throw new InvalidOperationException(
+                $"Receivable {Id}: {amount:F2} cannot be cancelled, only {OutstandingAmount:F2} is outstanding (the rest was recovered from the provider); it needs a person.");
+
+        OutstandingAmount -= amount;
+        if (OutstandingAmount == 0m)
+        {
+            Status = RecoveredAmount > 0m ? ReceivableStatus.Recovered : ReceivableStatus.Cancelled;
+            FullyRecoveredAt ??= at;
+        }
+        var entry = new ReceivableLedgerEntry
+        {
+            Type = ReceivableEntryType.CancelledUnpaid,
+            Amount = amount,
+            OutstandingAfter = OutstandingAmount,
+            PaymentId = paymentId,
+            At = at,
+            By = by,
+            Note = reason,
+        };
+        Entries.Add(entry);
+        return entry;
+    }
 }
 
 /// <summary>One line of a receivable's history.</summary>
@@ -213,6 +253,9 @@ public enum ReceivableEntryType
     Originated = 0,
     Recovered = 1,
     RecoveryReversed = 2,
+
+    /// <summary>The reversed payment was never paid (voided before transmission): nothing is owed for it.</summary>
+    CancelledUnpaid = 3,
 }
 
 public enum ReceivableStatus
@@ -220,6 +263,9 @@ public enum ReceivableStatus
     Open = 0,
     PartiallyRecovered = 1,
     Recovered = 2,
+
+    /// <summary>Nothing is owed any more: the reversed payments were never paid.</summary>
+    Cancelled = 3,
 }
 
 public enum ReceivableAgingBucket

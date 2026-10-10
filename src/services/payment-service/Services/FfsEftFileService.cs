@@ -48,9 +48,18 @@ public interface IFfsEftFileService
     /// in the new file's <see cref="PaymentRunEftFile.RemittanceDateNotices"/> and a run
     /// warning, carrying the old BPR16.
     /// </remarks>
+    /// <param name="voids">
+    /// Payments reversed before the file was sent: left out of the new file, listed in its
+    /// <see cref="PaymentRunEftFile.VoidedPayments"/> (the provider must be told the 835's
+    /// payment will not arrive), and announced to the GL (PaymentVoidedBeforeTransmission).
+    /// </param>
     Task<FfsEftFileOutcome> RepinAsync(string paymentRunId, string actorUserId, string reason,
-        string expectedFileReference, string expectedSha256, CancellationToken cancellationToken = default);
+        string expectedFileReference, string expectedSha256, IReadOnlyList<PaymentVoid>? voids = null,
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>A payment to leave out of a re-pinned file because it was reversed before the file was sent.</summary>
+public sealed record PaymentVoid(string PaymentId, string? ReversalRunId, string? ReceivableId);
 
 public sealed class FfsEftFileOutcome
 {
@@ -201,9 +210,12 @@ public sealed class FfsEftFileService : IFfsEftFileService
     }
 
     public async Task<FfsEftFileOutcome> RepinAsync(string paymentRunId, string actorUserId, string reason,
-        string expectedFileReference, string expectedSha256, CancellationToken cancellationToken = default)
+        string expectedFileReference, string expectedSha256, IReadOnlyList<PaymentVoid>? voids = null,
+        CancellationToken cancellationToken = default)
     {
-        var (run, plan) = await LoadAndPlanAsync(paymentRunId, actorUserId, cancellationToken);
+        voids ??= Array.Empty<PaymentVoid>();
+        var excluded = voids.Select(v => v.PaymentId).ToHashSet(StringComparer.Ordinal);
+        var (run, plan) = await LoadAndPlanAsync(paymentRunId, actorUserId, cancellationToken, excluded);
         var old = run.EftFile
             ?? throw new InvalidOperationException($"Payment run {run.PaymentRunNumber} has no EFT file to re-date.");
         // Only the file the caller checked may be superseded: a concurrent re-date that
@@ -213,26 +225,33 @@ public sealed class FfsEftFileService : IFfsEftFileService
             throw new RunConflictException(
                 $"Payment run {run.PaymentRunNumber}'s pinned file is now {old.FileReference}, not {expectedFileReference}: " +
                 "it was re-dated meanwhile. Nothing was changed.");
-        if (plan.Entries.Count == 0)
+        if (plan.Entries.Count == 0 && voids.Count == 0)
             throw new InvalidOperationException($"Payment run {run.PaymentRunNumber} has no EFT credits any more; there is nothing to re-date.");
 
         var now = _time.GetUtcNow().UtcDateTime;
         var revision = old.Revision + 1;
-        // A new file: created now, dated from today, with its own modifier for today.
+        // A new file: created now, with its own modifier for today. It keeps the old
+        // file's date while that can still be sent (a re-pin only to leave out voided
+        // payments); otherwise the date is chosen afresh.
         var created = Minute(now);
-        var effective = _dates.Choose(run.PaymentDateRequested ? run.PaymentDate : null);
+        var effective = _dates.SendProblem(old.EffectiveEntryDate) == null
+            ? old.EffectiveEntryDate.Date
+            : _dates.Choose(run.PaymentDateRequested ? run.PaymentDate : null);
         var modifier = await AllocateAsync(run, created, effective, $"{run.Id}#r{revision}");
         var header = BuildHeader(run, modifier, created, effective);
-        var built = FfsNachaCreditFileBuilder.Build(header, plan.Entries.Select(e => e.Entry).ToList());
+        // Every payment voided: an empty pin (nothing to send), kept for the record.
+        var built = plan.Entries.Count == 0 ? null : FfsNachaCreditFileBuilder.Build(header, plan.Entries.Select(e => e.Entry).ToList());
         var file = NewFile(plan, built, header, modifier, now, actorUserId,
             $"FFS-{run.PaymentRunNumber}-R{revision}", $"ACH-FFS-{run.PaymentRunNumber}-R{revision}.ach", revision);
+        file.EffectiveEntryDate = DateTime.SpecifyKind(effective.Date, DateTimeKind.Utc);
 
         // The run's 835s were built at execution with BPR16 = the run's payment date.
         // payment-service does not track whether a trading partner has fetched an 835
         // (GET /api/era-envelopes/{id}/edi), so they are treated as delivered and are
         // never rewritten: each one is listed with its BPR16 and the new effective date,
         // so the providers can be told the funds settle on another day.
-        foreach (var envelope in (await _envelopes.GetByPaymentRunIdAsync(run.Id)) ?? Enumerable.Empty<EraEnvelopeRecord>())
+        var envelopes = ((await _envelopes.GetByPaymentRunIdAsync(run.Id)) ?? Enumerable.Empty<EraEnvelopeRecord>()).ToList();
+        foreach (var envelope in envelopes.Where(_ => file.EffectiveEntryDate.Date != run.PaymentDate.Date))
         {
             file.RemittanceDateNotices.Add(new RemittanceDateNotice
             {
@@ -248,21 +267,50 @@ public sealed class FfsEftFileService : IFfsEftFileService
               $"carry BPR16 {run.PaymentDate:yyyy-MM-dd} ({string.Join(", ", file.RemittanceDateNotices.Select(n => $"{n.TradingPartnerId} ISA13 {n.ControlNumber}"))}); " +
               "tell the providers the funds settle on the new date.";
 
+        // Voided payments: listed on the new file (their 835 said they would be paid; the
+        // providers must be told they will not) and announced to the GL, in the same write.
+        var warnings = new List<string>();
+        if (notice != null) warnings.Add(notice);
+        var glEvents = new List<PaymentFileOutboxMessage>();
+        // Earlier re-pins' voids stay listed: the notice and its completion are part of the file's record.
+        file.VoidedPayments.AddRange(old.VoidedPayments);
+        foreach (var v in voids.Where(v => old.VoidedPayments.All(x => x.PaymentId != v.PaymentId)))
+        {
+            var payment = await _payments.GetByIdAsync(v.PaymentId)
+                          ?? throw new InvalidOperationException($"Payment {v.PaymentId} does not exist; nothing was re-pinned.");
+            var envelope = envelopes.FirstOrDefault(e => e.Id == payment.EraEnvelopeId);
+            file.VoidedPayments.Add(new VoidedPaymentNotice
+            {
+                PaymentId = payment.Id,
+                CheckNumber = payment.CheckNumber,
+                PayeeNpi = payment.PayeeNPI ?? string.Empty,
+                Amount = payment.TotalPaymentAmount,
+                EraEnvelopeId = payment.EraEnvelopeId,
+                TradingPartnerId = envelope?.TradingPartnerId,
+                ControlNumber = envelope?.ControlNumber,
+                ReversalRunId = v.ReversalRunId,
+                ReceivableId = v.ReceivableId,
+            });
+            glEvents.Add(GlEventOutbox.PaymentVoidedBeforeTransmission(run, payment, v.ReversalRunId, old.FileReference, file.FileReference, actorUserId, now));
+            warnings.Add($"Payment {payment.CheckNumber} ({payment.TotalPaymentAmount:F2}) to NPI {payment.PayeeNPI} was reversed before its EFT file was sent " +
+                         $"and is left out of {file.FileReference}: it will not be paid. Its 835 ({envelope?.TradingPartnerId} ISA13 {envelope?.ControlNumber}) " +
+                         "said it would be; tell the provider.");
+        }
+
         old.SupersededAt = now;
         old.SupersededBy = actorUserId;
         old.SupersededReason = reason;
         old.SupersededByFileReference = file.FileReference;
-        if (!await _runs.TryRepinEftFileAsync(run.Id, file, old, notice == null ? null : new[] { notice }))
+        if (!await _runs.TryRepinEftFileAsync(run.Id, file, old, warnings, glEvents))
             throw new RunConflictException(
                 $"The EFT file of payment run {run.PaymentRunNumber} changed while it was being re-dated. Nothing was recorded.");
         run.EftFileHistory.Add(old);
         run.EftFile = file;
-        if (notice != null)
-        {
-            // Written in the same conditional re-pin above: it cannot be lost to a race.
-            run.Warnings.Add(notice);
-            _logger.LogWarning("AUDIT {Notice} (payment run {RunNumber})", notice, run.PaymentRunNumber);
-        }
+        // Written in the same conditional re-pin above: they cannot be lost to a race.
+        run.Warnings.AddRange(warnings);
+        run.GlOutbox.AddRange(glEvents);
+        foreach (var w in warnings)
+            _logger.LogWarning("AUDIT {Notice} (payment run {RunNumber})", Clean(w), Clean(run.PaymentRunNumber));
 
         _logger.LogWarning(
             "AUDIT EFT file {Old} (effective {OldDate:yyyy-MM-dd}, sha256 {OldSha}) of payment run {RunNumber} re-dated by {User} as {New} " +
@@ -272,7 +320,8 @@ public sealed class FfsEftFileService : IFfsEftFileService
         return new FfsEftFileOutcome { Run = run, File = built, Reproduced = false };
     }
 
-    private async Task<(PaymentRun Run, Plan Plan)> LoadAndPlanAsync(string paymentRunId, string actorUserId, CancellationToken cancellationToken)
+    private async Task<(PaymentRun Run, Plan Plan)> LoadAndPlanAsync(string paymentRunId, string actorUserId, CancellationToken cancellationToken,
+        IReadOnlySet<string>? excluded = null)
     {
         var run = await _runs.GetByIdAsync(paymentRunId)
                   ?? throw new KeyNotFoundException($"Payment run {paymentRunId} not found");
@@ -287,11 +336,16 @@ public sealed class FfsEftFileService : IFfsEftFileService
         // run's tenant, under the user who asked for the file.
         using var grant = RunExecutionGrant.Open(run.TenantId, run.Id, actorUserId);
 
+        // Payments a re-pin left out (voided before transmission) stay out of every rebuild,
+        // also before the void is completed on the payment itself.
+        var voided = run.EftFile?.VoidedPayments.Select(v => v.PaymentId).ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>();
         var payments = new List<Payment>();
         foreach (var id in run.PaymentIds)
         {
             var payment = await _payments.GetByIdAsync(id);
-            if (payment != null && !payment.IsReversal)
+            // Voided before transmission (now or by an earlier re-pin): never in a file again.
+            if (payment != null && !payment.IsReversal && payment.VoidedBeforePaymentAt == null && excluded?.Contains(payment.Id) != true
+                && !voided.Contains(payment.Id))
                 payments.Add(payment);
         }
 

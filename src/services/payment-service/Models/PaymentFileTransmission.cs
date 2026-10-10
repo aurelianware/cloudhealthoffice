@@ -131,6 +131,16 @@ public sealed class PaymentFileTransmission
     /// </summary>
     [JsonPropertyName("remittanceDateNotices")] public List<RemittanceDateNotice> RemittanceDateNotices { get; set; } = new();
 
+    /// <summary>
+    /// The run's payments left out of this file because they were reversed before any file
+    /// carrying them was sent: their 835 said they would be paid; the providers must be told
+    /// they will not (copied from <see cref="PaymentRunEftFile.VoidedPayments"/> at approval).
+    /// </summary>
+    /// <summary>When the run was executed (carried on the GL event: it decides the GL cutover).</summary>
+    [JsonPropertyName("runExecutedAt")] public DateTime? RunExecutedAt { get; set; }
+
+    [JsonPropertyName("voidedPayments")] public List<VoidedPaymentNotice> VoidedPayments { get; set; } = new();
+
     /// <summary>The user who approved sending this file to the bank (token subject).</summary>
     [JsonPropertyName("approvedBy")] public string ApprovedBy { get; set; } = string.Empty;
     [JsonPropertyName("approvedAt")] public DateTime ApprovedAt { get; set; }

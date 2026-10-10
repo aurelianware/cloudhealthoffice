@@ -19,6 +19,15 @@ public sealed class GlProposedEntry
 
     /// <summary>The amount the source event claims (run net total, file credit total), for reconciliation.</summary>
     public required decimal ClaimedAmount { get; init; }
+
+    /// <summary>
+    /// When the run the entry is about was executed (decides the GL cutover). Null when the
+    /// event does not say (older transmission events): the run's accrual event decides.
+    /// </summary>
+    public DateTime? RunExecutedAt { get; init; }
+
+    /// <summary>The payment run whose accrual decides the cutover when <see cref="RunExecutedAt"/> is null.</summary>
+    public string? PaymentRunId { get; init; }
     public required IReadOnlyList<(GlPostingRole Role, decimal Debit, decimal Credit, string Memo)> Lines { get; init; }
 }
 
@@ -44,6 +53,7 @@ public static class GlEntryBuilder
                 GlEventTypes.PaymentRunExecuted => Accrual(Read<PaymentRunExecutedEvent>(envelope)),
                 GlEventTypes.ReversalRunExecuted => Recoupment(Read<ReversalRunExecutedEvent>(envelope)),
                 GlEventTypes.PaymentFileTransmitted => Transmission(Read<PaymentFileTransmittedEvent>(envelope)),
+                GlEventTypes.PaymentVoidedBeforeTransmission => Void(Read<PaymentVoidedBeforeTransmissionEvent>(envelope)),
                 _ => throw new GlInvalidPayloadException($"Unknown GL event type '{envelope.Type}'."),
             };
         }
@@ -93,6 +103,8 @@ public static class GlEntryBuilder
             Description = $"Claims accrual, payment run {e.PaymentRunNumber} ({e.RunStatus})",
             PostedBy = e.ExecutedBy,
             ClaimedAmount = net,
+            RunExecutedAt = e.ExecutedAt,
+            PaymentRunId = e.PaymentRunId,
             Lines = lines,
         };
     }
@@ -116,6 +128,7 @@ public static class GlEntryBuilder
             Description = $"Claims recoupment, reversal run {e.ReversalRunNumber} ({e.RunStatus})",
             PostedBy = e.ExecutedBy,
             ClaimedAmount = total,
+            RunExecutedAt = e.ExecutedAt,
             Lines =
             [
                 (GlPostingRole.ProviderReceivable, total, 0m, $"owed back by providers, reversal run {e.ReversalRunNumber}"),
@@ -142,10 +155,43 @@ public static class GlEntryBuilder
             Description = $"ACH credits sent to the bank, payment run {e.PaymentRunNumber}, file {e.FileReference} (effective {e.EffectiveEntryDate:yyyy-MM-dd})",
             PostedBy = e.ApprovedBy,
             ClaimedAmount = e.TotalCreditAmount,
+            RunExecutedAt = e.PaymentRunExecutedAt,
+            PaymentRunId = e.PaymentRunId,
             Lines =
             [
                 (GlPostingRole.ClaimsPayable, e.TotalCreditAmount, 0m, $"payable settled by file {e.FileReference} ({e.EntryCount} credits)"),
                 (GlPostingRole.AchInTransit, 0m, e.TotalCreditAmount, $"ACH in transit, file {e.FileReference}, sha256 {e.Sha256}"),
+            ],
+        };
+    }
+
+    private static GlProposedEntry? Void(PaymentVoidedBeforeTransmissionEvent e)
+    {
+        Require(!string.IsNullOrEmpty(e.PaymentRunId), "PaymentVoidedBeforeTransmission has no paymentRunId.");
+        Require(!string.IsNullOrEmpty(e.PaymentId), "PaymentVoidedBeforeTransmission has no paymentId.");
+        Money(e.Amount, $"voided payment {e.CheckNumber} amount");
+        if (e.Amount == 0m)
+            return null;
+        // The recoupment (reversal run) already moved the expense to a provider receivable;
+        // the provider was never paid, so that receivable is cancelled against the payable
+        // that will now never be settled. Expense is reversed once, by the recoupment.
+        return new GlProposedEntry
+        {
+            Kind = GlEntryKind.PaymentVoid,
+            Key = $"void:{e.PaymentId}",
+            SourceDocumentId = e.PaymentRunId,
+            SourceReference = $"{e.PaymentRunNumber}/{e.CheckNumber}",
+            EntryDate = e.VoidedAt.Date,
+            Description = $"Payment {e.CheckNumber} of payment run {e.PaymentRunNumber} voided before transmission " +
+                          $"(left out of {e.NewFileReference}, reversed by {e.ReversalRunId})",
+            PostedBy = e.VoidedBy,
+            ClaimedAmount = e.Amount,
+            RunExecutedAt = e.PaymentRunExecutedAt,
+            PaymentRunId = e.PaymentRunId,
+            Lines =
+            [
+                (GlPostingRole.ClaimsPayable, e.Amount, 0m, $"payable relieved: payment {e.CheckNumber} is never paid (file {e.SupersededFileReference} superseded)"),
+                (GlPostingRole.ProviderReceivable, 0m, e.Amount, $"receivable of reversal run {e.ReversalRunId} cancelled: payment {e.CheckNumber} was never paid"),
             ],
         };
     }
@@ -169,6 +215,11 @@ public static class GlEntryBuilder
 public static class GlJournal
 {
     public static string KeyFor(string tenantId, string key) => $"{tenantId}:{key}";
+
+    /// <summary>The n-th entry of a business key: the key itself (n = 0), then <c>{key}:r{n}</c> for reposts.</summary>
+    public static string RepostId(string baseId, int n) => n == 0 ? baseId : $"{baseId}:r{n}";
+
+    public static string ReversalId(string entryId) => $"{entryId}:reversal";
 
     public static string PeriodOf(DateTime date) => date.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture);
 

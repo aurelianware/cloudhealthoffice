@@ -13,8 +13,11 @@ internal sealed class InMemoryGl : IGlJournalRepository, IGlSourceEventRepositor
 {
     private readonly Dictionary<string, string> _entries = new();
     private readonly Dictionary<string, string> _events = new();
-    private readonly Dictionary<string, GlClosedPeriod> _periods = new();
+    private readonly Dictionary<string, GlPeriod> _periods = new();
     public List<GlAccount> Chart { get; } = new();
+
+    /// <summary>Runs inside every journal insert (before it): a test holds a post in flight with it.</summary>
+    public Func<GlJournalEntry, Task>? BeforeInsert { get; set; }
 
     private static T Copy<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value))!;
 
@@ -25,9 +28,32 @@ internal sealed class InMemoryGl : IGlJournalRepository, IGlSourceEventRepositor
 
     public Task<bool> TryInsertAsync(GlJournalEntry entry, CancellationToken cancellationToken = default)
     {
-        GlJournal.EnsureBalanced(entry);
-        lock (_entries) return Task.FromResult(_entries.TryAdd(entry.Id, JsonSerializer.Serialize(entry)));
+        GlJournal.EnsureBalanced(entry); // thrown to the caller directly, as the Mongo store does before any I/O
+        return InsertAsync(entry);
     }
+
+    private async Task<bool> InsertAsync(GlJournalEntry entry)
+    {
+        if (BeforeInsert is { } hook)
+            await hook(entry);
+        lock (_entries) return _entries.TryAdd(entry.Id, JsonSerializer.Serialize(entry));
+    }
+
+    /// <summary>Writes an entry around the service (as a lapsed post would): for the integrity test.</summary>
+    public void ForceInsert(GlJournalEntry entry)
+    {
+        lock (_entries) _entries[entry.Id] = JsonSerializer.Serialize(entry);
+    }
+
+    public Task<IReadOnlyList<GlJournalEntry>> ListPageAsync(string tenantId, string? period, string? afterId, int limit, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<GlJournalEntry>>(Entries.Where(e => e.TenantId == tenantId && (period == null || e.Period == period)
+                && (afterId == null || string.CompareOrdinal(e.Id, afterId) > 0))
+            .OrderBy(e => e.Id, StringComparer.Ordinal).Take(limit).ToList());
+
+    public Task<IReadOnlyList<GlSourceEvent>> ListPageAsync(string tenantId, GlSourceEventStatus? status, string? afterId, int limit, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<GlSourceEvent>>(Events.Where(e => e.TenantId == tenantId && (status == null || e.Status == status)
+                && (afterId == null || string.CompareOrdinal(e.Id, afterId) > 0))
+            .OrderBy(e => e.Id, StringComparer.Ordinal).Take(limit).ToList());
 
     public Task<GlJournalEntry?> GetAsync(string tenantId, string entryId, CancellationToken cancellationToken = default)
     {
@@ -73,20 +99,78 @@ internal sealed class InMemoryGl : IGlJournalRepository, IGlSourceEventRepositor
         => Task.FromResult<IReadOnlyList<GlSourceEvent>>(Events.Where(e => e.TenantId == tenantId && (status == null || e.Status == status))
             .OrderBy(e => e.ReceivedAt).ThenBy(e => e.EventId, StringComparer.Ordinal).ToList());
 
-    public Task<bool> IsClosedAsync(string tenantId, string period, CancellationToken cancellationToken = default)
+    Task<GlPeriod?> IGlPeriodRepository.GetAsync(string tenantId, string period, CancellationToken cancellationToken)
     {
-        lock (_periods) return Task.FromResult(_periods.ContainsKey(GlClosedPeriod.KeyFor(tenantId, period)));
+        lock (_periods) return Task.FromResult(_periods.TryGetValue(GlPeriod.KeyFor(tenantId, period), out var p) ? Copy(p) : null);
     }
 
-    public Task<bool> TryCloseAsync(GlClosedPeriod period, CancellationToken cancellationToken = default)
+    public Task<bool> TryBeginPostAsync(string tenantId, string period, string token, DateTime expiresAt, CancellationToken cancellationToken = default)
     {
-        period.Id = GlClosedPeriod.KeyFor(period.TenantId, period.Period);
-        lock (_periods) return Task.FromResult(_periods.TryAdd(period.Id, Copy(period)));
+        lock (_periods)
+        {
+            var id = GlPeriod.KeyFor(tenantId, period);
+            if (!_periods.TryGetValue(id, out var p))
+                _periods[id] = p = new GlPeriod { Id = id, TenantId = tenantId, Period = period, Status = GlPeriodStatus.Open };
+            if (p.Status == GlPeriodStatus.Closed)
+                return Task.FromResult(false);
+            p.Leases.Add(new GlPostLease { Token = token, ExpiresAt = expiresAt });
+            return Task.FromResult(true);
+        }
     }
 
-    Task<IReadOnlyList<GlClosedPeriod>> IGlPeriodRepository.ListAsync(string tenantId, CancellationToken cancellationToken)
+    public Task EndPostAsync(string tenantId, string period, string token, CancellationToken cancellationToken = default)
     {
-        lock (_periods) return Task.FromResult<IReadOnlyList<GlClosedPeriod>>(_periods.Values.Where(p => p.TenantId == tenantId).ToList());
+        lock (_periods)
+        {
+            if (_periods.TryGetValue(GlPeriod.KeyFor(tenantId, period), out var p))
+                p.Leases.RemoveAll(l => l.Token == token);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task<GlPeriodCloseOutcome> TryCloseAsync(string tenantId, string period, DateTime now, string closedBy, string? reason, CancellationToken cancellationToken = default)
+    {
+        lock (_periods)
+        {
+            var id = GlPeriod.KeyFor(tenantId, period);
+            if (!_periods.TryGetValue(id, out var p))
+                _periods[id] = p = new GlPeriod { Id = id, TenantId = tenantId, Period = period };
+            if (p.Status == GlPeriodStatus.Closed)
+                return Task.FromResult(GlPeriodCloseOutcome.AlreadyClosed);
+            if (p.Leases.Any(l => l.ExpiresAt > now))
+                return Task.FromResult(GlPeriodCloseOutcome.Busy);
+            p.Status = GlPeriodStatus.Closed;
+            p.ClosedAt = now;
+            p.ClosedBy = closedBy;
+            p.Reason = reason;
+            p.Leases.Clear();
+            return Task.FromResult(GlPeriodCloseOutcome.Closed);
+        }
+    }
+
+    public Task<bool> TrySetExtractControlAsync(string tenantId, string period, GlExtractControl control, CancellationToken cancellationToken = default)
+    {
+        lock (_periods)
+        {
+            if (!_periods.TryGetValue(GlPeriod.KeyFor(tenantId, period), out var p) || p.Status != GlPeriodStatus.Closed || p.ExtractSha256 != null)
+                return Task.FromResult(false);
+            p.ExtractSha256 = control.Sha256;
+            p.ExtractEntryCount = control.EntryCount;
+            p.ExtractLineCount = control.LineCount;
+            p.ExtractTotalDebit = control.TotalDebit;
+            p.ExtractTotalCredit = control.TotalCredit;
+            return Task.FromResult(true);
+        }
+    }
+
+    public int LiveLeases(string period)
+    {
+        lock (_periods) return _periods.TryGetValue(GlPeriod.KeyFor(GlFixtures.Tenant, period), out var p) ? p.Leases.Count : 0;
+    }
+
+    Task<IReadOnlyList<GlPeriod>> IGlPeriodRepository.ListAsync(string tenantId, CancellationToken cancellationToken)
+    {
+        lock (_periods) return Task.FromResult<IReadOnlyList<GlPeriod>>(_periods.Values.Where(p => p.TenantId == tenantId).Select(Copy).OrderBy(p => p.Period).ToList());
     }
 
     public Task<GlAccount?> FindAsync(string tenantId, string accountNumber, CancellationToken cancellationToken = default)
@@ -115,6 +199,9 @@ internal static class GlFixtures
         [GlPostingRole.Cash] = "1010",
     };
 
+    /// <summary>The fixtures' GL cutover: every fixture run (May 2026) is after it.</summary>
+    public static readonly DateTime Cutover = new(2026, 5, 1);
+
     public static GlPostingOptions Options(bool enabled = true, params GlPostingRole[] unmapped)
         => new()
         {
@@ -123,6 +210,7 @@ internal static class GlFixtures
             {
                 [Tenant] = new GlTenantPostingOptions
                 {
+                    CutoverDate = Cutover,
                     Accounts = Numbers.Where(n => !unmapped.Contains(n.Key)).ToDictionary(n => n.Key.ToString(), n => n.Value),
                 },
             },
@@ -160,12 +248,14 @@ internal static class GlFixtures
 
     /// <summary>A run that paid 100.00 ACH and 50.00 by check, the check after a 20.00 receivable offset.</summary>
     public static GlEventEnvelope RunExecuted(string runId = "run-1", DateTime? executedAt = null, decimal ach = 100m, decimal check = 50m, decimal offset = 20m)
-    {
-        var payments = new List<GlPaymentLine>
+        => RunExecuted(runId, executedAt, new List<GlPaymentLine>
         {
             new() { PaymentId = $"{runId}-p1", CheckNumber = "0001000001", PayeeNpi = "1111111111", PaymentMethod = "ACH", NetAmount = ach },
             new() { PaymentId = $"{runId}-p2", CheckNumber = "0001000002", PayeeNpi = "2222222222", PaymentMethod = "CHK", NetAmount = check, ReceivableOffsetAmount = offset },
-        };
+        });
+
+    public static GlEventEnvelope RunExecuted(string runId, DateTime? executedAt, List<GlPaymentLine> payments)
+    {
         return Envelope(GlEventTypes.PaymentRunExecuted, $"payment-run:{runId}", new PaymentRunExecutedEvent
         {
             TenantId = Tenant,
@@ -181,7 +271,8 @@ internal static class GlFixtures
         });
     }
 
-    public static GlEventEnvelope FileTransmitted(string runId = "run-1", string fileReference = "FFS-PR-run-1", decimal amount = 100m, DateTime? at = null)
+    public static GlEventEnvelope FileTransmitted(string runId = "run-1", string fileReference = "FFS-PR-run-1", decimal amount = 100m, DateTime? at = null,
+        List<string>? paymentIds = null, DateTime? runExecutedAt = null)
         => Envelope(GlEventTypes.PaymentFileTransmitted, $"file:{fileReference}", new PaymentFileTransmittedEvent
         {
             TenantId = Tenant,
@@ -195,6 +286,26 @@ internal static class GlFixtures
             TransmittedAt = at ?? new DateTime(2026, 5, 20, 16, 0, 0, DateTimeKind.Utc),
             ApprovedBy = "treasury-1",
             ConfirmedBy = "Upload",
+            PaymentIds = paymentIds ?? new List<string>(),
+            PaymentRunExecutedAt = runExecutedAt,
+        });
+
+    public static GlEventEnvelope PaymentVoided(string runId, string paymentId, decimal amount, DateTime? at = null, DateTime? runExecutedAt = null)
+        => Envelope(GlEventTypes.PaymentVoidedBeforeTransmission, $"payment-void:{paymentId}", new PaymentVoidedBeforeTransmissionEvent
+        {
+            TenantId = Tenant,
+            PaymentRunId = runId,
+            PaymentRunNumber = $"PR-{runId}",
+            PaymentId = paymentId,
+            CheckNumber = "0001000003",
+            PayeeNpi = "3333333333",
+            Amount = amount,
+            ReversalRunId = "rr-1",
+            SupersededFileReference = $"FFS-PR-{runId}",
+            NewFileReference = $"FFS-PR-{runId}-R1",
+            VoidedAt = at ?? new DateTime(2026, 5, 22, 11, 0, 0, DateTimeKind.Utc),
+            VoidedBy = "treasury-2",
+            PaymentRunExecutedAt = runExecutedAt ?? new DateTime(2026, 5, 20, 14, 0, 0, DateTimeKind.Utc),
         });
 
     public static GlEventEnvelope ReversalExecuted(string reversalRunId = "rr-1", decimal amount = 100m)

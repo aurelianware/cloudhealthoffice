@@ -144,6 +144,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
     private readonly BankTransmissionOptions _options;
     private readonly AchEffectiveDatePolicy _dates;
     private readonly TimeProvider _clock;
+    private readonly IProviderReceivableLedger? _receivables;
     private readonly ILogger<PaymentFileTransmissionService> _logger;
 
     public PaymentFileTransmissionService(
@@ -158,8 +159,10 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         IOptions<BankTransmissionOptions> options,
         AchEffectiveDatePolicy effectiveDates,
         ILogger<PaymentFileTransmissionService> logger,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        IProviderReceivableLedger? receivables = null)
     {
+        _receivables = receivables;
         _dates = effectiveDates;
         _runs = runs;
         _payments = payments;
@@ -188,6 +191,9 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
 
         var run = await LoadRunAsync(paymentRunId);
         var user = _separation.EnsureMayTransmit(run.PaymentRunNumber, run.CreatedBy, run.ExecutedBy);
+        // A re-pin that left out voided payments and was interrupted before finishing
+        // them (receivable cancelled, payment marked) is finished first (idempotent).
+        run = await CompleteVoidsAsync(run, user, cancellationToken);
         var pinned = RequireTransmittableFile(run);
         // A re-dated file is approved (and retried) by someone other than its re-dater.
         if (pinned.Revision > 0 && string.Equals(pinned.FirstGeneratedBy, user, StringComparison.OrdinalIgnoreCase))
@@ -297,6 +303,8 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 RunExecutedBy = run.ExecutedBy,
                 ApprovedPaymentIds = PaymentIdsOf(pinned),
                 RemittanceDateNotices = pinned.RemittanceDateNotices,
+                VoidedPayments = pinned.VoidedPayments,
+                RunExecutedAt = run.ExecutionStartedAt,
                 ApprovedBy = user,
                 ApprovedAt = Now,
                 Status = PaymentFileTransmissionStatus.Pending,
@@ -517,9 +525,25 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         var record = await _store.GetAsync(run.TenantId, pinned.FileReference, cancellationToken);
         var resuming = record?.Status == PaymentFileTransmissionStatus.Superseded
                        && record.SupersededByFileReference == nextReference;
-        if (!resuming && _dates.SendProblem(pinned.EffectiveEntryDate) == null)
+
+        // Payments reversed before the file was sent: the new file leaves them out (and
+        // the provider is told they will not be paid). Any case the void cannot settle
+        // on its own is refused before anything changes.
+        var (voids, voidProblem) = await FindVoidsAsync(run, pinned, cancellationToken);
+        if (voidProblem != null)
+        {
+            _logger.LogWarning(RefusedEvent,
+                "AUDIT NACHA file {FileReference} of payment run {RunNumber}: re-pin by {User} refused ({Why})",
+                Clean(pinned.FileReference), Clean(run.PaymentRunNumber), Clean(user), Clean(voidProblem));
             throw new PaymentFileTransmissionStateException(
-                $"NACHA file {pinned.FileReference} (effective {pinned.EffectiveEntryDate:yyyy-MM-dd}) can still be sent; it is not re-dated.");
+                $"NACHA file {pinned.FileReference} cannot be re-pinned without its reversed payments: {voidProblem}. Nothing was changed; it needs a person.");
+        }
+        if (!resuming && voids.Count == 0 && _dates.SendProblem(pinned.EffectiveEntryDate) == null)
+            throw new PaymentFileTransmissionStateException(
+                $"NACHA file {pinned.FileReference} (effective {pinned.EffectiveEntryDate:yyyy-MM-dd}) can still be sent and none of its payments " +
+                "was reversed; it is not re-dated.");
+        if (voids.Count > 0)
+            reason = $"{reason} [leaves out {voids.Count} payment(s) reversed before transmission]";
 
         // 1. Make the old file unsendable first: its record becomes Superseded (or a
         //    Superseded record is created, so nobody can approve it meanwhile).
@@ -617,19 +641,133 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         FfsEftFileOutcome outcome;
         try
         {
-            outcome = await _eftFiles.RepinAsync(run.Id, user, reason, pinned.FileReference, pinned.Sha256, cancellationToken);
+            outcome = await _eftFiles.RepinAsync(run.Id, user, reason, pinned.FileReference, pinned.Sha256, voids, cancellationToken);
         }
         catch (RunConflictException ex)
         {
             throw new PaymentFileTransmissionStateException(ex.Message);
         }
         var file = outcome.Run.EftFile!;
+        foreach (var v in file.VoidedPayments.Where(v => voids.Any(x => x.PaymentId == v.PaymentId)))
+            _logger.LogWarning(SupersededEvent,
+                "AUDIT payment {PaymentId} ({Amount:F2}) of payment run {RunNumber} voided before transmission by {User}: left out of {New}; " +
+                "its 835 ({Partner} ISA13 {Control}) said it would be paid, the provider must be told",
+                Clean(v.PaymentId), v.Amount, Clean(run.PaymentRunNumber), Clean(user), Clean(file.FileReference),
+                Clean(v.TradingPartnerId), Clean(v.ControlNumber));
+        await CompleteVoidsAsync(outcome.Run, user, cancellationToken);
         _logger.LogWarning(SupersededEvent,
             "AUDIT NACHA file {Old} of payment run {RunNumber} superseded by {User}: re-dated as {New} effective {Effective:yyyy-MM-dd}, " +
             "sha256 {Sha256}; it needs a fresh approval ({Reason})",
             Clean(pinned.FileReference), Clean(run.PaymentRunNumber), Clean(user), Clean(file.FileReference), file.EffectiveEntryDate,
-            file.Sha256, reason);
+            file.Sha256, Clean(reason));
         return file;
+    }
+
+    /// <summary>
+    /// The pinned file's payments whose claims were reversed (by a completed reversal run)
+    /// before the file was sent, or why that cannot be settled by leaving them out: a
+    /// payment that recovered receivables, one only partly reversed or reversed across
+    /// runs or 835s, one still being reversed, or one whose receivable is missing or was
+    /// already partly recovered. Those need a person.
+    /// </summary>
+    private async Task<(List<PaymentVoid> Voids, string? Problem)> FindVoidsAsync(PaymentRun run, PaymentRunEftFile file, CancellationToken cancellationToken)
+    {
+        var voids = new List<PaymentVoid>();
+        var cancelling = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        foreach (var id in PaymentIdsOf(file))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var payment = await _payments.GetByIdAsync(id);
+            if (payment == null || payment.IsReversal || payment.VoidedBeforePaymentAt != null)
+                continue;
+            var claimIds = payment.ClaimPayments.Select(c => c.ClaimId).Distinct(StringComparer.Ordinal).ToList();
+            var reversals = new List<ClaimReservation>();
+            foreach (var claimId in claimIds)
+            {
+                if (await _reservations.GetAsync(ClaimReservationKind.Reversal, run.TenantId, claimId) is { } r)
+                    reversals.Add(r);
+            }
+            if (reversals.Count == 0)
+                continue;
+
+            var who = $"payment {payment.CheckNumber}";
+            if (reversals.Count != claimIds.Count)
+                return (voids, $"{who}: only {reversals.Count} of its {claimIds.Count} claims were reversed");
+            if (reversals.Select(r => r.RunId).Distinct(StringComparer.Ordinal).Count() != 1)
+                return (voids, $"{who}: its claims were reversed by different reversal runs");
+            if (payment.ReceivableOffsets.Count > 0)
+                return (voids, $"{who} recovered receivables; leaving it out would undo those recoveries");
+
+            var reversalRunId = reversals[0].RunId;
+            var reversalPayments = new List<Payment>();
+            foreach (var claimId in claimIds)
+            {
+                var match = ((await _payments.GetByClaimIdAsync(claimId)) ?? Enumerable.Empty<Payment>())
+                    .Where(p => p.IsReversal && string.Equals(p.RunId, reversalRunId, StringComparison.Ordinal))
+                    .ToList();
+                if (match.Count == 0)
+                    return (voids, $"{who}: the reversal of claim {claimId} (reversal run {reversals[0].RunNumber ?? reversalRunId}) has not completed");
+                reversalPayments.AddRange(match.Where(m => reversalPayments.All(x => x.Id != m.Id)));
+            }
+            var envelopes = reversalPayments.Select(p => p.EraEnvelopeId).Distinct(StringComparer.Ordinal).ToList();
+            if (envelopes.Count != 1 || string.IsNullOrEmpty(envelopes[0]))
+                return (voids, $"{who}: its reversal is not in exactly one reversal 835");
+            var reversed = -reversalPayments.Sum(p => p.TotalPaymentAmount);
+            if (reversed != payment.TotalPaymentAmount)
+                return (voids, $"{who}: {payment.TotalPaymentAmount:F2} was to be paid but {reversed:F2} was reversed");
+
+            var receivableId = ProviderReceivableRecord.IdFor(ReceivableOrigin.ReversalForwardBalance, run.TenantId, $"{envelopes[0]}|{payment.PayeeNPI}");
+            if (_receivables == null)
+                return (voids, "no receivable ledger is configured");
+            var receivable = await _receivables.GetAsync(run.TenantId, receivableId);
+            if (receivable == null)
+                return (voids, $"{who}: its reversal opened no receivable for NPI {payment.PayeeNPI}");
+            cancelling[receivableId] = cancelling.GetValueOrDefault(receivableId) + payment.TotalPaymentAmount;
+            if (!receivable.HasCancellationFor(payment.Id) && receivable.OutstandingAmount < cancelling[receivableId])
+                return (voids, $"{who}: receivable {receivableId} has only {receivable.OutstandingAmount:F2} outstanding (part was already recovered)");
+            voids.Add(new PaymentVoid(payment.Id, reversalRunId, receivableId));
+        }
+        return (voids, null);
+    }
+
+    /// <summary>
+    /// Finishes the pinned file's voided payments (idempotent, resumable): cancels what the
+    /// reversal's receivable says the provider owes for the payment (it was never paid),
+    /// marks the payment voided before payment, then the notice completed.
+    /// </summary>
+    private async Task<PaymentRun> CompleteVoidsAsync(PaymentRun run, string user, CancellationToken cancellationToken)
+    {
+        var file = run.EftFile;
+        if (file == null || file.VoidedPayments.All(v => v.Completed))
+            return run;
+        if (_receivables == null)
+            throw new InvalidOperationException(
+                $"Payment run {run.PaymentRunNumber} has payments voided before transmission to finish, but no receivable ledger is configured.");
+
+        foreach (var notice in file.VoidedPayments.Where(v => !v.Completed))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.IsNullOrEmpty(notice.ReceivableId))
+                await _receivables.CancelForUnpaidPaymentAsync(run.TenantId, notice.ReceivableId, notice.PaymentId, notice.Amount, user,
+                    $"payment {notice.CheckNumber} voided before transmission (left out of {file.FileReference})");
+            var payment = await _payments.GetByIdAsync(notice.PaymentId);
+            if (payment != null && payment.VoidedBeforePaymentAt == null)
+            {
+                payment.VoidedBeforePaymentAt = Now;
+                payment.VoidedBeforePaymentBy = user;
+                payment.VoidedBeforePaymentFileReference = file.FileReference;
+                await _payments.UpdateAsync(payment);
+            }
+            notice.Completed = true;
+            notice.CompletedAt = Now;
+        }
+
+        if (!await _runs.TrySaveEftFileAsync(run.Id, file, file.Sha256, Array.Empty<CheckFallbackPayment>(), Array.Empty<string>()))
+            return await LoadRunAsync(run.Id); // changed meanwhile: every step above is idempotent and re-checked next time
+        _logger.LogInformation(
+            "AUDIT payment run {RunNumber}: payments voided before transmission finished by {User} (receivables cancelled, payments marked)",
+            Clean(run.PaymentRunNumber), Clean(user));
+        return run;
     }
 
     private void EnsureEnabled(string paymentRunId)
@@ -700,7 +838,8 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             {
                 var reversal = await _reservations.GetAsync(ClaimReservationKind.Reversal, run.TenantId, claimId);
                 if (reversal != null)
-                    return $"a claim of payment {payment.CheckNumber} was reversed (or is being reversed) by reversal run {reversal.RunNumber ?? reversal.RunId}";
+                    return $"a claim of payment {payment.CheckNumber} was reversed (or is being reversed) by reversal run {reversal.RunNumber ?? reversal.RunId}; " +
+                           "once the reversal completes, re-pin the file without it (POST .../eft-file/redate)";
                 var paid = await _reservations.GetAsync(ClaimReservationKind.Payment, run.TenantId, claimId);
                 if (paid != null && !string.Equals(paid.RunId, run.Id, StringComparison.Ordinal))
                     return $"a claim of payment {payment.CheckNumber} is now paid by run {paid.RunNumber ?? paid.RunId} (reissued)";
@@ -879,6 +1018,8 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             TransmittedAt = at,
             ApprovedBy = record.ApprovedBy,
             ConfirmedBy = evidence.ToString(),
+            PaymentIds = record.ApprovedPaymentIds.ToList(),
+            PaymentRunExecutedAt = record.RunExecutedAt,
         };
         record.Outbox.Add(new PaymentFileOutboxMessage
         {

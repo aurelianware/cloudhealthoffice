@@ -66,8 +66,19 @@ approve + transmit (user != run creator, != run executor)   POST /api/paymentrun
   - the file must pay exactly the payments approved, each still this run's ACH
     payment, not in Exception, amounts unchanged, none of its claims reserved for a
     reversal run, none of its claims now paid by another run (reissued).
+- **Re-pinning without reversed payments** (the same `POST .../eft-file/redate`). A
+  payment whose claims a completed reversal run recouped before the file was sent is
+  left out of a new `-R{n}` file. The old date is kept while it can still be sent. The
+  same approval, separation-of-duties and record rules apply as for a re-date. The
+  payment is voided before payment, and the provider receivable its reversal opened is
+  cancelled. Each voided payment is listed in the file's `voidedPayments` (and on its
+  transmission record) with its 835 (partner, ISA13). **Tell those providers the payment
+  will not arrive.** A `PaymentVoidedBeforeTransmission` GL event is queued. Anything the
+  void cannot settle on its own is refused for a person: partial or split reversals,
+  offsets, a missing or partly recovered receivable, or a reversal still running. See
+  GL-POSTING-RUNBOOK.md, "Payments reversed before their file was sent".
 - **Re-dating** (`POST .../eft-file/redate`, reason required). Only for a file whose
-  date can no longer be sent, and only while its transmission record is absent,
+  date can no longer be sent (or that has reversed payments to leave out, above), and only while its transmission record is absent,
   `Pending` or `Failed` (which includes a `NeedsReview` resolved "not received").
   Never `Transmitting`, `Transmitted` or an unresolved `NeedsReview`.
   - **Failed files:** before a `Failed` file is superseded, the bank's drop is
