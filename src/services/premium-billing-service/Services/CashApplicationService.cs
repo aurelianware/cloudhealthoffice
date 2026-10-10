@@ -335,11 +335,19 @@ public sealed class CashApplicationService : ICashApplicationService
         // (its reference or date did not match this payment's): hold it.
         if (batch.Source != RemittanceSource.BankStatement)
         {
-            var bankPayment = open[0].Payments.FirstOrDefault(p => IsBankStatementPayment(p) && p.Amount == item.Amount
-                                                                   && (p.PaymentDate - batch.PaymentDate).Duration() <= TimeSpan.FromDays(BankDuplicateWindowDays));
-            if (bankPayment is not null)
-                return await QueueRowAsync(batch, item, RemittanceExceptionReason.PossibleDuplicate,
-                    $"Invoice {reference} already has a {bankPayment.Amount:0.00} payment from the bank statement ({bankPayment.ReferenceNumber}, {bankPayment.PaymentDate:yyyy-MM-dd}); this may be the same money");
+            // Compare with the bank line's amount as well as what reached the
+            // invoice: an overpaid bank line applied only the balance (the rest
+            // went to unapplied credit), so its payment row is smaller than the money.
+            foreach (var bankPayment in open[0].Payments.Where(p => IsBankStatementPayment(p)
+                         && (p.PaymentDate - batch.PaymentDate).Duration() <= TimeSpan.FromDays(BankDuplicateWindowDays)))
+            {
+                var lineAmount = bankPayment.RemittanceBatchId is { } bankBatchId && await _batches.GetByIdAsync(bankBatchId) is { } bankBatch
+                    ? bankBatch.PaymentAmount
+                    : bankPayment.Amount;
+                if (bankPayment.Amount == item.Amount || lineAmount == item.Amount)
+                    return await QueueRowAsync(batch, item, RemittanceExceptionReason.PossibleDuplicate,
+                        $"Invoice {reference} already has a {lineAmount:0.00} payment from the bank statement ({bankPayment.ReferenceNumber}, {bankPayment.PaymentDate:yyyy-MM-dd}); this may be the same money");
+            }
         }
 
         var line = item.LineNumber;

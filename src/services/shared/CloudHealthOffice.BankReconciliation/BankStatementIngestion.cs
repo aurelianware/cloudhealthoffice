@@ -45,6 +45,19 @@ public sealed class BankReconciliationOptions
     /// </summary>
     public InterimReportHandling InterimReports { get; set; } = InterimReportHandling.Reconcile;
 
+    /// <summary>
+    /// Bank references that do not identify a transaction ("NONREF" and the
+    /// like). Lines carrying one, an all-zero reference or one shorter than 4
+    /// characters are never treated as the same transaction as another line.
+    /// </summary>
+    public List<string> PlaceholderBankReferences { get; set; } = ["NONREF", "NONE", "N/A", "NA", "UNKNOWN"];
+
+    internal bool IsPlaceholderReference(string? reference)
+    {
+        var r = reference?.Trim() ?? string.Empty;
+        return r.Length < 4 || r.All(c => c == '0') || PlaceholderBankReferences.Contains(r, StringComparer.OrdinalIgnoreCase);
+    }
+
     internal Bai2ParseOptions ParseOptions() => new() { CreditTypeCodes = CreditTypeCodes, DebitTypeCodes = DebitTypeCodes };
 }
 
@@ -217,8 +230,10 @@ public sealed class BankStatementIngestion
 
     private async Task<BankStatementIngestResult> DuplicateAsync(BankStatementFile existing, CancellationToken ct)
     {
+        // Frozen as soon as a supersession is requested, not only once approved:
+        // nothing on the statement may be decided while it is being replaced.
         var superseded = existing.Status == BankStatementStatus.Accepted
-                         && (await _store.GetSupersessionAsync(existing.TenantId, existing.Id, ct))?.Status == SupersessionStatus.Approved;
+                         && await _store.GetSupersessionAsync(existing.TenantId, existing.Id, ct) is not null;
         return await DuplicateResultAsync(existing, superseded, ct);
     }
 

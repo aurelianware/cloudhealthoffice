@@ -329,6 +329,26 @@ public sealed class PremiumBankReconciliationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task OverpaidBankLine_ThenAn820ForTheSameMoney_IsHeldAsAPossibleDuplicate()
+    {
+        var invoice = await Invoice("INV-2026-8007", 500m);
+        var item = (await Reconcile(Line(new Tx("165", 60000, CustomerReference: "ACH8007", Text: "INV-2026-8007")))).Items.Single();
+        item.Status.Should().Be(ReconciliationStatus.Suspense);
+
+        // A person applies the 600.00 line: 500.00 pays the invoice, 100.00 becomes unapplied credit.
+        var tx = (await _store.GetTransactionsAsync(Tenant, item.StatementId)).Single();
+        (await _matcher.ApplyAsync(tx, invoice)).Status.Should().Be(ReconciliationStatus.Applied);
+
+        // The sponsor's 820 for the same 600.00 arrives under its own trace.
+        var late = await Apply820("TRN8007", 600m, AsOf, "INV-2026-8007");
+
+        late.AppliedAmount.Should().Be(0);
+        late.UnappliedCreditAmount.Should().Be(0);
+        (await _exceptions.ListAsync()).Should().Contain(e => e.Reason == RemittanceExceptionReason.PossibleDuplicate && e.TraceNumber == "TRN8007");
+        (await Reload(invoice))!.Payments.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task LineAppliedBeforeACrash_IsRecordedAsApplied_WhenTheFileIsReconciledAgain()
     {
         var invoice = await Invoice("INV-2026-8005", 600m);

@@ -74,7 +74,12 @@ The errors name the line number and show account numbers masked (`****6789`).
     1. `POST /api/v1/bank-statements/{id}/supersede` with `{ "reason": "..." }`.
     2. A **different** user calls `POST /api/v1/bank-statements/{id}/supersede/approve`.
 
-    On approval the old statement's open items are dismissed. The corrected
+    From the request on, the statement is frozen: its items cannot be
+    resolved (including `ApplyToInvoice`), and re-ingesting it decides
+    nothing. On approval the old statement's open items are dismissed, each
+    with its version checked. If a line was acted on meanwhile, the approval
+    fails and nothing is approved. A request that is never approved leaves the
+    statement frozen; there is no cancel yet. The corrected
     file, even byte-for-byte the one refused earlier, is then accepted, under
     bank key `{key}#2`.
 
@@ -120,8 +125,9 @@ check/trace number (trace `BAI-{line id}`). Two guards stop an 820 or lockbox
 payment for the same money that arrives later from posting it twice:
 - If it has the same cross-source key, cash application holds the whole payment.
 - If not, cash application holds the item as `PossibleDuplicate` when the
-  invoice already has a bank-statement payment of the same amount within 7
-  days. This is the one change to `CashApplicationService`.
+  invoice already has a bank-statement payment within 7 days whose applied
+  amount **or** bank line amount equals the item. The bank line amount
+  matters when the bank line overpaid the invoice and only the balance was applied. This is the one change to `CashApplicationService`.
 
 Only reference tokens shaped like an invoice number are looked up as one
 (`InvoiceNumberPattern`, default `^INV-[A-Z0-9][A-Z0-9-]{2,60}$`, matched in
@@ -188,6 +194,11 @@ then voids or reissues the payment through the payment workflows.
 
 ## GL posting seam
 
+GL posting (#1286) is now on main. This seam is not wired to it yet: the
+default logging sink stays registered, and journaling BAI2 settlement and
+cash confirmation is a follow-up.
+
+
 Every decision, and every resolution, raises a `BankReconciliationEvent` on
 `IBankReconciliationEventSink`. The event says which service, which item, its
 kind (PremiumCash, LockboxDeposit, NachaSettlement, AchReturn), its status, the
@@ -209,8 +220,21 @@ same-day.
 The same bank transaction often arrives twice, first in an intraday
 report and then in the final one. It is recognised by account, type code,
 bank reference, amount and as-of date. The copy is recorded as `Ignored`
-("already reconciled as ..."), not decided again, and raises no event. A line
-with no bank reference cannot be recognised this way.
+("already reconciled as ..."), not decided again, and raises no event. That
+happens **only** when both of these hold:
+- the two lines are in different statements;
+- one is from an interim report (modifier 1 or 3) and the other from a final report (2 or 4).
+
+Any other match, such as the same reference twice in one file or in two
+final reports, goes to **Suspense** (`PossibleDuplicate`) for a person to
+decide. It is never dropped.
+
+Some references do not identify a transaction:
+- the placeholders listed in `BankReconciliation:PlaceholderBankReferences` (`NONREF`, `NONE`, `N/A`, `NA`, `UNKNOWN`);
+- all-zero references;
+- references shorter than 4 characters.
+
+Lines with such a reference, or with none, are never compared this way.
 
 To reconcile only final reports, set `BankReconciliation:InterimReports=Skip`:
 lines of modifier 1 and 3 groups are then `Ignored`.

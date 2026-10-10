@@ -132,7 +132,14 @@ public sealed class BankReconciliationRunner
             decision = MatchDecision.Ignore($"Interim report (02 as-of-date modifier {tx.AsOfDateModifier}); only final reports are reconciled.");
         else if (claim.DedupeKey is not null
                  && await _store.FindDecidedByDedupeKeyAsync(tx.TenantId, _options.ServiceName, claim.DedupeKey, tx.Id, ct) is { } earlier)
-            decision = MatchDecision.Ignore($"The same bank transaction (account, type, bank reference, amount, date) was already reconciled as {earlier.Id}, from an earlier report.");
+            decision = IsInterimFinalPair(earlier, claim)
+                // The intraday report and the final report of the same day carry the same line.
+                ? MatchDecision.Ignore($"The same bank transaction (account, type, bank reference, amount, date) was already reconciled as {earlier.Id}, from the {(IsInterim(earlier.AsOfDateModifier) ? "interim" : "final")} report.")
+                // Same reference, amount and date but not an interim/final pair: may be
+                // genuine repeated cash. A person decides; never dropped.
+                : new MatchDecision("Other", ReconciliationStatus.Suspense,
+                    $"PossibleDuplicate: another line with the same account, type, bank reference, amount and date was already reconciled ({earlier.Id}); confirm whether this is the same money.",
+                    Candidates: [$"ReconciliationItem:{earlier.Id}"]);
         else
             decision = await matcher.DecideAsync(tx, ct);
 
@@ -165,6 +172,28 @@ public sealed class BankReconciliationRunner
         return claim;
     }
 
+    private static bool IsInterim(string? modifier) => modifier is "1" or "3";
+
+    private static bool IsFinal(string? modifier) => modifier is "2" or "4" or null or "";
+
+    /// <summary>One line from an interim report and one from a final report, in different statements.</summary>
+    private static bool IsInterimFinalPair(ReconciliationItem earlier, ReconciliationItem current) =>
+        earlier.StatementId != current.StatementId
+        && ((IsInterim(earlier.AsOfDateModifier) && IsFinal(current.AsOfDateModifier))
+            || (IsFinal(earlier.AsOfDateModifier) && IsInterim(current.AsOfDateModifier)));
+
+    /// <summary>
+    /// Refuses work on a statement that is being, or has been, replaced by a
+    /// corrected file: its lines will be decided from the corrected copy.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The statement has a supersession.</exception>
+    public async Task EnsureNotSupersededAsync(string tenantId, string statementId, CancellationToken ct = default)
+    {
+        if (await _store.GetSupersessionAsync(tenantId, statementId, ct) is { } s)
+            throw new InvalidOperationException(
+                $"Statement {statementId} is {(s.Status == SupersessionStatus.Approved ? "superseded" : "being superseded")} by a corrected bank file; work its lines from the corrected statement.");
+    }
+
     /// <summary>
     /// Closes an open (Suspense or Return) item: <see cref="ReconciliationStatus.Resolved"/>
     /// with what it was matched to, or <see cref="ReconciliationStatus.Dismissed"/>.
@@ -179,6 +208,7 @@ public sealed class BankReconciliationRunner
         var item = await _store.GetItemAsync(tenantId, itemId, ct);
         if (item is null || item.Service != _options.ServiceName) throw new KeyNotFoundException($"Reconciliation item {itemId} not found");
         if (!item.IsOpen) throw new InvalidOperationException($"Reconciliation item {itemId} is {item.Status}, not open");
+        await EnsureNotSupersededAsync(tenantId, item.StatementId, ct);
 
         item.Status = dismiss ? ReconciliationStatus.Dismissed : ReconciliationStatus.Resolved;
         item.ResolutionNote = note.Trim();
@@ -232,9 +262,10 @@ public sealed class BankReconciliationRunner
         MaskedAccount = tx.MaskedAccount,
         BankReference = tx.BankReference,
         CustomerReference = tx.CustomerReference,
-        DedupeKey = string.IsNullOrWhiteSpace(tx.BankReference)
+        DedupeKey = _options.IsPlaceholderReference(tx.BankReference)
             ? null
-            : $"{tx.AccountSuffix}|{tx.TypeCode}|{tx.BankReference.Trim().ToUpperInvariant()}|{tx.AmountMinor}|{tx.AsOfDate:yyyyMMdd}",
+            : $"{tx.AccountSuffix}|{tx.TypeCode}|{tx.BankReference!.Trim().ToUpperInvariant()}|{tx.AmountMinor}|{tx.AsOfDate:yyyyMMdd}",
+        AsOfDateModifier = tx.AsOfDateModifier,
         Status = ReconciliationStatus.Pending,
         Reason = "Deciding",
         CreatedAt = now,

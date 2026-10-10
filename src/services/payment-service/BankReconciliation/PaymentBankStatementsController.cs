@@ -163,6 +163,8 @@ public sealed class PaymentBankStatementsController : ControllerBase
                 return BadRequest(new { error = $"Reconciliation item {id} is {item.Status}, not open" });
             if (string.IsNullOrWhiteSpace(request.Note))
                 return BadRequest(new { error = "A note saying why is required." });
+            // Before anything is posted: a statement being replaced is worked from its corrected copy.
+            await _runner.EnsureNotSupersededAsync(_actor.TenantId, item.StatementId, ct);
 
             switch (request.Action)
             {

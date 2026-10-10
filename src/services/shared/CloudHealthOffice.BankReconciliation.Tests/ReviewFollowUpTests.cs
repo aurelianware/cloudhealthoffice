@@ -140,6 +140,104 @@ public class SupersessionAndInterimTests
         matcher.Calls.Should().Be(1);
     }
 
+    private static Bai2Builder Repeated(string bankRef, int count, string modifier = "2", string fileId = "9") => new()
+    {
+        FileId = fileId,
+        Groups =
+        [
+            new Group
+            {
+                Modifier = modifier,
+                Accounts = [new Account { Transactions = Enumerable.Range(0, count).Select(_ => new Tx("165", 5000, BankReference: bankRef, CustomerReference: "C")).ToList() }],
+            },
+        ],
+    };
+
+    [Theory]
+    [InlineData("NONREF")]
+    [InlineData("0000000")]
+    [InlineData("12")]
+    public async Task PlaceholderBankReferences_AreNeverDuplicates_EvenInOneFile(string bankRef)
+    {
+        var matcher = new CountingMatcher { Default = ReconciliationStatus.Matched };
+        var ingest = await Ingestion().IngestAsync(Tenant, Repeated(bankRef, 3).Bytes(), null, null);
+
+        var summary = await Runner().RunAsync(ingest.Transactions, matcher);
+
+        summary.Matched.Should().Be(3);
+        matcher.Calls.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task RepeatedRealReference_InOneFile_GoesToSuspense_NotIgnored()
+    {
+        var matcher = new CountingMatcher { Default = ReconciliationStatus.Matched };
+        var ingest = await Ingestion().IngestAsync(Tenant, Repeated("BNK-777", 2).Bytes(), null, null);
+
+        var summary = await Runner().RunAsync(ingest.Transactions, matcher);
+
+        summary.Matched.Should().Be(1);
+        summary.Suspense.Should().Be(1);
+        summary.Ignored.Should().Be(0);
+        summary.Items[1].Reason.Should().StartWith("PossibleDuplicate");
+    }
+
+    [Fact]
+    public async Task SameLineInTwoFinalReports_GoesToSuspense_NotIgnored()
+    {
+        var matcher = new CountingMatcher { Default = ReconciliationStatus.Matched };
+        var first = await Ingestion().IngestAsync(Tenant, Statement(1000, modifier: "2", fileId: "1").Bytes(), null, null);
+        var second = await Ingestion().IngestAsync(Tenant, Statement(1000, modifier: "2", fileId: "2").Bytes(), null, null);
+
+        await Runner().RunAsync(first.Transactions, matcher);
+        var summary = await Runner().RunAsync(second.Transactions, matcher);
+
+        summary.Suspense.Should().Be(1);
+        summary.Ignored.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task FinalFirst_ThenInterim_IsAlsoRecognised()
+    {
+        var matcher = new CountingMatcher { Default = ReconciliationStatus.Matched };
+        var final = await Ingestion().IngestAsync(Tenant, Statement(1000, modifier: "4", fileId: "1").Bytes(), null, null);
+        var interim = await Ingestion().IngestAsync(Tenant, Statement(1000, modifier: "3", fileId: "2").Bytes(), null, null);
+
+        await Runner().RunAsync(final.Transactions, matcher);
+        (await Runner().RunAsync(interim.Transactions, matcher)).Ignored.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ItemsOfAStatementUnderSupersession_CannotBeResolved()
+    {
+        var original = await Ingestion().IngestAsync(Tenant, Statement(1000).Bytes(), null, "u1");
+        var item = (await Runner().RunAsync(original.Transactions, new CountingMatcher { Default = ReconciliationStatus.Suspense })).Items.Single();
+        await Supersessions().RequestAsync(Tenant, original.Statement.Id, "corrected file coming", "alice");
+
+        await FluentActions.Invoking(() => Runner().ResolveAsync(Tenant, item.Id, false, "apply it", "carol"))
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*being superseded*");
+
+        // Re-ingesting it while frozen decides nothing.
+        (await Ingestion().IngestAsync(Tenant, Statement(1000).Bytes(), null, "u1")).Transactions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Approval_Fails_WhenALineWasActedOnMeanwhile()
+    {
+        var original = await Ingestion().IngestAsync(Tenant, Statement(1000).Bytes(), null, "u1");
+        var item = (await Runner().RunAsync(original.Transactions, new CountingMatcher { Default = ReconciliationStatus.Suspense })).Items.Single();
+        await Supersessions().RequestAsync(Tenant, original.Statement.Id, "corrected file coming", "alice");
+
+        // A concurrent writer resolved the line after the request (e.g. a stale resolve that passed its check).
+        var concurrent = (await _store.GetItemAsync(Tenant, item.Id))!;
+        concurrent.Status = ReconciliationStatus.Resolved;
+        (await _store.TryUpdateItemAsync(concurrent, concurrent.Version)).Should().BeTrue();
+
+        await FluentActions.Invoking(() => Supersessions().ApproveAsync(Tenant, original.Statement.Id, "bob"))
+            .Should().ThrowAsync<InvalidOperationException>();
+        (await Supersessions().GetAsync(Tenant, original.Statement.Id))!.Status.Should().Be(SupersessionStatus.Requested);
+    }
+
     [Fact]
     public async Task InterimReports_CanBeSkipped()
     {

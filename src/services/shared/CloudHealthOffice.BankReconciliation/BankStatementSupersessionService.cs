@@ -75,25 +75,41 @@ public sealed class BankStatementSupersessionService
             throw new InvalidOperationException("A second person must approve: the requester cannot approve their own supersession.");
 
         await SupersedableAsync(tenantId, statementId, ct);
+        var now = _clock.GetUtcNow().UtcDateTime;
+
+        // The statement's open lines are replaced by the corrected file's. Each
+        // is dismissed with its version checked; a line changed meanwhile is
+        // re-read and, if it was acted on, the approval fails (nothing is approved).
+        foreach (var open in (await _store.ListItemsByStatementAsync(tenantId, statementId, ct)).Where(i => i.IsOpen))
+            await DismissAsync(tenantId, open.Id, actor, now, supersession.Reason, ct);
 
         supersession.Status = SupersessionStatus.Approved;
         supersession.ApprovedBy = actor;
-        supersession.ApprovedAt = _clock.GetUtcNow().UtcDateTime;
+        supersession.ApprovedAt = now;
         if (!await _store.TryUpdateSupersessionAsync(supersession, SupersessionStatus.Requested, ct))
             throw new InvalidOperationException($"The supersession of {statementId} changed meanwhile; reload it.");
 
-        // The statement's open lines are replaced by the corrected file's.
-        foreach (var item in (await _store.ListItemsByStatementAsync(tenantId, statementId, ct)).Where(i => i.IsOpen))
-        {
-            item.Status = ReconciliationStatus.Dismissed;
-            item.ResolvedBy = actor;
-            item.ResolvedAt = supersession.ApprovedAt;
-            item.ResolutionNote = $"Statement superseded by a corrected bank file: {supersession.Reason}";
-            await _store.TryUpdateItemAsync(item, item.Version, ct);
-        }
-
         _logger.LogWarning("Supersession of bank statement {StatementId} approved by {Actor}", SanitizeForLog(statementId), SanitizeForLog(actor));
         return supersession;
+    }
+
+    private async Task DismissAsync(string tenantId, string itemId, string actor, DateTime now, string reason, CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var item = await _store.GetItemAsync(tenantId, itemId, ct);
+            if (item is null) return;
+            if (ActedOn.Contains(item.Status))
+                throw new InvalidOperationException($"Line {itemId} was {item.Status} while the supersession was being approved; it cannot be superseded.");
+            if (!item.IsOpen) return;
+
+            item.Status = ReconciliationStatus.Dismissed;
+            item.ResolvedBy = actor;
+            item.ResolvedAt = now;
+            item.ResolutionNote = $"Statement superseded by a corrected bank file: {reason}";
+            if (await _store.TryUpdateItemAsync(item, item.Version, ct)) return;
+        }
+        throw new InvalidOperationException($"Line {itemId} kept changing while the supersession was being approved; try again.");
     }
 
     public Task<BankStatementSupersession?> GetAsync(string tenantId, string statementId, CancellationToken ct = default) =>

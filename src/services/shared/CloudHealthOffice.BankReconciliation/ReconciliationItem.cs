@@ -64,6 +64,9 @@ public sealed class ReconciliationItem
     /// </summary>
     public string? DedupeKey { get; set; }
 
+    /// <summary>02 as-of-date modifier of the report the line came in (1/3 interim, 2/4 final).</summary>
+    public string? AsOfDateModifier { get; set; }
+
     /// <summary>What kind of line this is to the service: PremiumCash, LockboxDeposit, NachaSettlement, AchReturn, Other.</summary>
     public string Kind { get; set; } = string.Empty;
 
