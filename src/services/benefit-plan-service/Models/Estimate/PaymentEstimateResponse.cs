@@ -68,7 +68,8 @@ public record PaymentEstimateResponse
     /// <summary>
     /// Overall status: "estimated" when the estimate was produced, or
     /// "insufficient_data" when required inputs (e.g. the benefit plan)
-    /// could not be resolved.
+    /// could not be resolved, or "needs_review" when adjudication would pend
+    /// the claim for pricing review (no amounts are quoted).
     /// </summary>
     public string Status { get; init; } = "estimated";
 
@@ -116,6 +117,9 @@ public record EstimateLine
 {
     public int LineNumber { get; init; }
     public string ProcedureCode { get; init; } = default!;
+
+    /// <summary>The request line's revenue code, echoed (institutional lines).</summary>
+    public string? RevenueCode { get; init; }
 
     public decimal BilledAmount { get; init; }
     public decimal AllowedAmount { get; init; }

@@ -340,7 +340,12 @@ public record PricingRequest
 
     // ── Inpatient fields ─────────────────────────────────────────
 
-    /// <summary>Length of stay in days (required for PerDiem and DRG schedules).</summary>
+    /// <summary>
+    /// Length of stay in days. Drives an all-inclusive per diem (schedule
+    /// <see cref="FeeSchedule.PerDiemRate"/> × days, paid once per stay); line-level
+    /// daily rates use the line's units instead. Not used for DRG pricing: there is
+    /// no short-stay, transfer or outlier adjustment to a DRG case rate.
+    /// </summary>
     public int? LengthOfStay { get; init; }
 
     /// <summary>
