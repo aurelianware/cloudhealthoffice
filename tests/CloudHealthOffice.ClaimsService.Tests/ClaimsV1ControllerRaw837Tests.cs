@@ -317,6 +317,28 @@ public class ClaimsV1ControllerRaw837Tests : IClassFixture<ClaimsApiFactory>
         Assert.Equal("SUB001", Assert.Single(body!).SubmitterId);
     }
 
+    [Fact]
+    public async Task ListSnipWarningTransactions_NormalizesSubmitterFilter()
+    {
+        _transactions.ListWithSnipWarningsAsync("test-tenant", null, null, "SUB001", 100)
+            .Returns(new List<ClaimImportTransaction> { new() { TenantId = "test-tenant", ClaimNumber = "CLM-N" } });
+
+        var response = await _client.GetAsync("/api/v1/claims/import-transactions/snip-warnings?submitterId=%20sub001%20");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Single((await response.Content.ReadFromJsonAsync<List<ClaimImportTransaction>>())!);
+    }
+
+    [Fact]
+    public void Startup_MisspeltSnipOverride_FailsFast()
+    {
+        using var factory = _factory.WithWebHostBuilder(b =>
+            b.UseSetting("ClaimsImport:Snip:PartnerOverrides:SUB001:Level2", "Rejct"));
+
+        var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+        Assert.Contains("Rejct", ex.ToString());
+    }
+
     private static MultipartFormDataContent BuildFileContent(string ediContent, string fileName = "test.837")
     {
         var content = new MultipartFormDataContent();

@@ -157,12 +157,24 @@ public class SnipLevel2WarnTests
     }
 
     [Fact]
-    public void PartnerOverride_MatchesGs02WhenIsa06DoesNot()
+    public void PartnerOverride_MatchesIsa06IgnoringCase()
     {
-        var edi = ClaimLevelDtp472().Replace("*ZZ*SUB001         *", $"*ZZ*{"CLEARINGHOUSE1".PadRight(15)}*", StringComparison.Ordinal);
-        var result = Validate(edi, WithLevel2RejectFor("sub001"));
+        var result = Validate(ClaimLevelDtp472(), WithLevel2RejectFor(" sub001 "));
         Assert.Equal("R", result.AcknowledgmentCode);
         Assert.Equal("sub001", result.TransactionSets.Single().PartnerOverrideKey);
+    }
+
+    [Fact]
+    public void PartnerOverride_IsNotPickedUpThroughGs02()
+    {
+        // Another sender (ISA06) cannot borrow SUB001's override by sending GS02 = SUB001.
+        var edi = ClaimLevelDtp472().Replace("*ZZ*SUB001         *", $"*ZZ*{"CLEARINGHOUSE1".PadRight(15)}*", StringComparison.Ordinal);
+        var result = Validate(edi, new Snip837ValidationOptions
+        {
+            PartnerOverrides = { ["SUB001"] = new SnipLevelOverrides { Level2 = SnipAction.Reject, Level4 = SnipAction.Warn } },
+        });
+        Assert.Equal("E", result.AcknowledgmentCode);
+        Assert.Null(result.TransactionSets.Single().PartnerOverrideKey);
     }
 
     [Fact]
@@ -170,12 +182,12 @@ public class SnipLevel2WarnTests
     {
         // The override only touches Level 2: Level 4 still rejects, Level 3 too.
         var options = WithLevel2RejectFor("SUB001");
-        var effective = options.ForSubmitter("SUB001", null, out var key);
+        var effective = options.ForSubmitter("SUB001", out var key);
         Assert.Equal("SUB001", key);
         Assert.Equal((SnipAction.Reject, SnipAction.Reject, SnipAction.Reject, SnipAction.Reject, SnipAction.Warn),
             (effective.Level1, effective.Level2, effective.Level3, effective.Level4, effective.Level5));
 
-        var unmatched = options.ForSubmitter(OtherSubmitter, OtherSubmitter, out var none);
+        var unmatched = options.ForSubmitter(OtherSubmitter, out var none);
         Assert.Null(none);
         Assert.Same(options, unmatched);
     }
@@ -251,6 +263,7 @@ public class SnipLevel2WarnTests
             (record.Status, record.AcknowledgmentCode, record.SubmitterQualifier, record.SubmitterId,
              record.ApplicationSenderCode, record.InterchangeControlNumber, record.GroupControlNumber));
         Assert.Null(record.SnipPartnerOverride);
+        Assert.Equal(("SUB001", "SUB001"), (record.SubmitterIdNormalized, record.ApplicationSenderCodeNormalized));
         var warning = Assert.Single(record.SnipWarnings);
         Assert.Equal((2, "L2-2300-DTP472", "Warning", true, "2300", "DTP", 17, "2300 DTP*472", "0001"),
             (warning.Level, warning.RuleId, warning.Severity, warning.ClaimLevel, warning.Loop, warning.SegmentId,

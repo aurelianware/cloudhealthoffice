@@ -46,7 +46,7 @@ public sealed class InMemoryClaimImportTransactionRepository : IClaimImportTrans
         {
             IReadOnlyList<ClaimImportTransaction> result = _transactions
                 .Where(t => t.TenantId == tenantId)
-                .Where(t => submitterId is null || t.SubmitterId == submitterId || t.ApplicationSenderCode == submitterId)
+                .Where(t => submitterId is null || t.SubmitterIdNormalized == submitterId || t.ApplicationSenderCodeNormalized == submitterId)
                 .Where(t => t.SnipWarnings.Any(w =>
                     (ruleId is null || w.RuleId == ruleId) && (level is null || w.Level == level)))
                 .OrderByDescending(t => t.ReceivedAt)

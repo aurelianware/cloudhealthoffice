@@ -11,7 +11,9 @@ public interface IClaimImportTransactionRepository
 
     /// <summary>
     /// Transactions carrying a SNIP warning, newest first, optionally narrowed
-    /// to one rule id, SNIP level and/or submitter (ISA06 or GS02).
+    /// to one rule id, SNIP level and/or submitter. <paramref name="submitterId"/>
+    /// is already normalized (trimmed, upper-case) and matches the normalized
+    /// ISA06 or GS02.
     /// </summary>
     Task<IReadOnlyList<ClaimImportTransaction>> ListWithSnipWarningsAsync(
         string tenantId, string? ruleId = null, int? level = null, string? submitterId = null, int limit = 100);

@@ -73,12 +73,24 @@ public sealed class ClaimIndexInitializer : IHostedService
                 .Descending(t => t.ReceivedAt)),
             cancellationToken: cancellationToken);
         // SNIP warning lookups: "who sends rule X" (e.g. L2-2300-DTP472).
-        txnCollection.Indexes.CreateOne(new CreateIndexModel<ClaimImportTransaction>(
-            Builders<ClaimImportTransaction>.IndexKeys
-                .Ascending(t => t.TenantId)
-                .Ascending("SnipWarnings.RuleId")
-                .Descending(t => t.ReceivedAt)),
-            cancellationToken: cancellationToken);
+        // Optional: some Mongo-compatible stores (e.g. Cosmos DB for MongoDB)
+        // limit compound indexes over array paths, and a missing index only
+        // makes the ops query slower, so it must not stop start-up.
+        try
+        {
+            txnCollection.Indexes.CreateOne(new CreateIndexModel<ClaimImportTransaction>(
+                Builders<ClaimImportTransaction>.IndexKeys
+                    .Ascending(t => t.TenantId)
+                    .Ascending("SnipWarnings.RuleId")
+                    .Descending(t => t.ReceivedAt)),
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Could not create the SNIP warning index on '{Collection}'; snip-warnings queries will scan the tenant's import transactions.",
+                Repositories.ClaimImportTransactionRepositoryMongo.CollectionName);
+        }
 
         _logger.LogInformation("Claim indexes ensured on collection 'Claims'.");
         return Task.CompletedTask;

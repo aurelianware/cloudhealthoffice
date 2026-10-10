@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace ClaimsService.Models;
 
@@ -10,6 +11,7 @@ namespace ClaimsService.Models;
 /// regardless of whether submission succeeded, so a rejected claim is still
 /// visible to whoever is troubleshooting an evaluator's file drop.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class ClaimImportTransaction
 {
     [Required]
@@ -52,8 +54,14 @@ public class ClaimImportTransaction
     /// <summary>ISA06 interchange sender id — the submitter / trading partner (<c>x12Config.senderId</c>).</summary>
     public string? SubmitterId { get; set; }
 
-    /// <summary>GS02 application sender code.</summary>
+    /// <summary>GS02 application sender code (trimmed).</summary>
     public string? ApplicationSenderCode { get; set; }
+
+    /// <summary><see cref="SubmitterId"/> trimmed and upper-cased: the submitter filter matches on this.</summary>
+    public string? SubmitterIdNormalized { get; set; }
+
+    /// <summary><see cref="ApplicationSenderCode"/> trimmed and upper-cased: the submitter filter matches on this.</summary>
+    public string? ApplicationSenderCodeNormalized { get; set; }
 
     /// <summary>ISA13 interchange control number of the inbound 837.</summary>
     public string? InterchangeControlNumber { get; set; }
@@ -71,13 +79,14 @@ public class ClaimImportTransaction
     /// SNIP findings at a Warn level (accepted, reported in the 999 as IK3/IK4
     /// with IK5 E) for this claim and its transaction set. Lets ops query who
     /// sends e.g. a claim-level DTP*472 (<c>L2-2300-DTP472</c>) before moving
-    /// that submitter's Level 2 to Reject. No PHI: rule ids, positions and
-    /// code values only.
+    /// that submitter's Level 2 to Reject. Findings are attached by CLM01, so
+    /// claims sharing a CLM01 in one set share claim-level findings.
     /// </summary>
     public List<SnipFindingRecord> SnipWarnings { get; set; } = [];
 }
 
 /// <summary>One SNIP finding as stored on a <see cref="ClaimImportTransaction"/>.</summary>
+[BsonIgnoreExtraElements]
 public class SnipFindingRecord
 {
     /// <summary>SNIP level 1–5.</summary>
@@ -89,6 +98,11 @@ public class SnipFindingRecord
     /// <summary>"Warning" or "Error".</summary>
     public string Severity { get; set; } = "Warning";
 
+    /// <summary>
+    /// The finding's message, stored for Level 2 only. Messages at other
+    /// levels can carry claim values (diagnosis or procedure codes, amounts)
+    /// and are left null; use <see cref="RuleId"/> and the location.
+    /// </summary>
     public string? Message { get; set; }
 
     /// <summary>ST02 of the transaction set.</summary>

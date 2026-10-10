@@ -268,7 +268,9 @@ public class ClaimsV1Controller : ControllerBase
                     Acknowledgment999ControlNumber = acknowledgmentControl,
                     SubmitterQualifier = snipGroup?.Interchange.SenderQualifier,
                     SubmitterId = snipGroup?.Interchange.SenderId,
-                    ApplicationSenderCode = snipGroup?.ApplicationSenderCode,
+                    ApplicationSenderCode = snipGroup?.ApplicationSenderCode?.Trim(),
+                    SubmitterIdNormalized = NormalizeSubmitter(snipGroup?.Interchange.SenderId),
+                    ApplicationSenderCodeNormalized = NormalizeSubmitter(snipGroup?.ApplicationSenderCode),
                     InterchangeControlNumber = snipGroup?.Interchange.ControlNumber,
                     GroupControlNumber = snipGroup?.ControlNumber,
                     SnipPartnerOverride = snipSet?.PartnerOverrideKey,
@@ -454,7 +456,7 @@ public class ClaimsV1Controller : ControllerBase
                 Level = (int)i.Level,
                 RuleId = i.RuleId,
                 Severity = i.Severity.ToString(),
-                Message = i.Message,
+                Message = i.Level == Snip.SnipLevel.ImplementationGuide ? i.Message : null,
                 TransactionSetControlNumber = ts.ControlNumber,
                 ClaimLevel = i.ClaimId is not null,
                 Loop = i.Loop,
@@ -549,7 +551,7 @@ public class ClaimsV1Controller : ControllerBase
             tenantId,
             string.IsNullOrWhiteSpace(ruleId) ? null : ruleId.Trim(),
             level,
-            string.IsNullOrWhiteSpace(submitterId) ? null : submitterId.Trim(),
+            NormalizeSubmitter(submitterId),
             limit);
         return Ok(transactions);
     }
@@ -677,6 +679,10 @@ public class ClaimsV1Controller : ControllerBase
         }
         return Activity.Current?.Id;
     }
+
+    /// <summary>Submitter ids (ISA06, GS02) as stored for lookup: trimmed, upper-case, null when blank.</summary>
+    internal static string? NormalizeSubmitter(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
 
     private static string SanitizeForLog(string? value)
     {

@@ -212,7 +212,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
                             ControlNumber = isaControl,
                             UsageIndicator = seg.Element(14) is "P" or "T" ? seg.Element(14) : null,
                         };
-                        _interchange.EffectiveOptions = owner._options.ForSubmitter(_interchange.SenderId, null, out var isaKey);
+                        _interchange.EffectiveOptions = owner._options.ForSubmitter(_interchange.SenderId, out var isaKey);
                         _interchange.PartnerOverrideKey = isaKey;
                         result.Interchanges.Add(_interchange);
                         ValidateIsa(seg);
@@ -248,8 +248,9 @@ public sealed class X12837SnipValidator : ISnip837Validator
                             ControlNumber = seg.Element(5),
                             VersionCode = seg.Element(7),
                         };
-                        group.EffectiveOptions = owner._options.ForSubmitter(group.Interchange.SenderId, group.ApplicationSenderCode, out var gsKey);
-                        group.PartnerOverrideKey = gsKey;
+                        // Overrides are keyed on ISA06 only: GS02 is sender-chosen.
+                        group.EffectiveOptions = group.Interchange.EffectiveOptions;
+                        group.PartnerOverrideKey = group.Interchange.PartnerOverrideKey;
                         group.Interchange.FunctionalGroups.Add(group);
                         if (seg.Element(0) != "HC")
                             GroupError(group, "1", "L1-GS01", $"GS01 must be HC for an 837, found '{SafeValue(seg.Element(0))}'.", "GS");
@@ -529,9 +530,11 @@ public sealed class X12837SnipValidator : ISnip837Validator
             CheckEnvelope();
             foreach (var seg in _all) CheckSegmentSyntax(seg);
 
-            if (_options.ActionFor(SnipLevel.ImplementationGuide) != SnipAction.Off) CheckImplementationGuide();
+            // Levels 2 and 4 always run: they hold SnipIntegrityRules, which
+            // reject even when their level is Off (Report drops the rest).
+            CheckImplementationGuide();
             if (_options.ActionFor(SnipLevel.Balancing) != SnipAction.Off) CheckBalancing();
-            if (_options.ActionFor(SnipLevel.Situational) != SnipAction.Off) CheckSituational();
+            CheckSituational();
             if (_options.ActionFor(SnipLevel.ExternalCodeSets) != SnipAction.Off) CheckCodeSets();
 
             // Findings dropped by a cap still decide acceptance.
@@ -1006,7 +1009,10 @@ public sealed class X12837SnipValidator : ISnip837Validator
             var id = claim.ClaimId;
 
             var clm05 = Components(clm.E(5));
-            if (clm05.Length < 3 || clm05[0].Length == 0 || clm05[1].Length == 0 || clm05[2].Length == 0)
+            // CLM05-1 on its own rule: pinned (see SnipIntegrityRules), the mapper would default it to 11.
+            if (clm05.Length == 0 || clm05[0].Length == 0)
+                Report(L2, "L2-CLM05-1", "CLM05-1 facility type / place of service code is required.", clm, 5, 1, elemCode: "1", dataRef: "1331", claimId: id);
+            if (clm05.Length < 3 || clm05[1].Length == 0 || clm05[2].Length == 0)
             {
                 Report(L2, "L2-CLM05", "CLM05 must carry facility/place of service code, qualifier and frequency code.", clm, 5, elemCode: "1", dataRef: "C023", claimId: id);
             }
@@ -1349,6 +1355,15 @@ public sealed class X12837SnipValidator : ISnip837Validator
                         Report(L4, "L4-DTP472", $"Outpatient service line {SafeValue(line.Lx.E(1))} requires a service date (DTP*472) because the statement covers more than one day.",
                             null, segmentId: "DTP", loop: "2400", segCode: "I6", claimId: id, position: expectedAt,
                             warnOnly: setting == BillSetting.Unknown);
+                    // No date to fall back on: the line (and the claim) would map to 0001-01-01.
+                    if (_institutional && statementFrom is null)
+                        Report(L4, "L4-SERVICE-DATE", $"Service line {SafeValue(line.Lx.E(1))} has no service date: send DTP*472 on the line or the statement period (DTP*434) on the claim.",
+                            null, segmentId: "DTP", loop: "2400", segCode: "I6", claimId: id, position: expectedAt);
+                }
+                else if (Period(dtp472).From is null && (!_institutional || statementFrom is null))
+                {
+                    Report(L4, "L4-SERVICE-DATE", $"Service line {SafeValue(line.Lx.E(1))} DTP*472 does not carry a usable service date.",
+                        dtp472, 3, elemCode: "8", dataRef: "1251", claimId: id);
                 }
                 else
                 {
@@ -1531,11 +1546,13 @@ public sealed class X12837SnipValidator : ISnip837Validator
             string segCode = "8", string? elemCode = null, string? dataRef = null,
             string? badValue = null, string? claimId = null, bool warnOnly = false)
         {
-            var action = _options.ActionFor(level);
+            // Integrity rules reject whatever the level or partner override says.
+            var pinned = SnipIntegrityRules.IsPinned(rule, _institutional);
+            var action = pinned ? SnipAction.Reject : _options.ActionFor(level);
             if (action == SnipAction.Off) return;
             // warnOnly: a rule whose applicability is uncertain (e.g. an
             // unclassified type of bill) may report but never reject.
-            if (warnOnly && action == SnipAction.Reject) action = SnipAction.Warn;
+            if (warnOnly && !pinned && action == SnipAction.Reject) action = SnipAction.Warn;
             var severity = action == SnipAction.Reject ? SnipSeverity.Error : SnipSeverity.Warning;
 
             var perSet = _options.MaxFindingsPerTransactionSet;

@@ -45,7 +45,7 @@ public class ClaimImportTransactionRepositoryMongo : IClaimImportTransactionRepo
 
         var filter = f.Eq(x => x.TenantId, tenantId) & f.ElemMatch(x => x.SnipWarnings, warning);
         if (submitterId is not null)
-            filter &= f.Eq(x => x.SubmitterId, submitterId) | f.Eq(x => x.ApplicationSenderCode, submitterId);
+            filter &= f.Eq(x => x.SubmitterIdNormalized, submitterId) | f.Eq(x => x.ApplicationSenderCodeNormalized, submitterId);
 
         return await _collection.Find(filter)
             .SortByDescending(x => x.ReceivedAt)
