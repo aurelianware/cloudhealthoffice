@@ -415,18 +415,33 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ExaminerApproval>(), Arg.Any<CancellationToken>())
             .Returns(new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Pass, null) { PreparedAccumulatorCommit = commit });
 
+    /// <summary>The outbox reads back what the final write saved.</summary>
+    private void OutboxReadsTheSavedClaim()
+    {
+        Claim? saved = null;
+        _repo.UpdateHoldingResolutionLockAsync(Arg.Do<Claim>(c => saved = c), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Claim>());
+        _repo.GetForAccumulatorOutboxAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => saved);
+        _repo.CompleteAccumulatorOutboxAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<AccumulatorOutboxKind>(),
+                Arg.Any<string>(), Arg.Any<AccumulatorClampReview?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+    }
+
     /// <summary>
-    /// The approval's re-run commits nothing; the resolver commits the write
-    /// it prepared once its lock-fenced final write has landed — after it,
-    /// never before.
+    /// The approval's re-run commits nothing. The prepared write is saved on
+    /// the claim (outbox) by the lock-fenced final write itself, and driven
+    /// after it — never before.
     /// </summary>
     [Fact]
-    public async Task Approval_CommitsThePreparedAccumulators_AfterTheFinalWrite()
+    public async Task Approval_SavesTheCommitWithTheFinalWrite_ThenDrivesIt()
     {
         var commit = PreparedCommit("claim-commit");
         RerunPassesWith(commit);
+        OutboxReadsTheSavedClaim();
         _engine.CommitAccumulatorsAsync(Arg.Any<CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit>(), Arg.Any<CancellationToken>())
-            .Returns(CloudHealthOffice.BenefitEngine.Models.AccumulatorCommitOutcome.Committed);
+            .Returns(CloudHealthOffice.BenefitEngine.Models.AccumulatorCommitResult.Of(
+                CloudHealthOffice.BenefitEngine.Models.AccumulatorCommitOutcome.Committed));
 
         var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer),
             Pended("claim-commit", "NCCI", "bundled pair"), new { disposition = "Approved", reason = "x" });
@@ -434,10 +449,41 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Received.InOrder(() =>
         {
-            _repo.UpdateHoldingResolutionLockAsync(Arg.Is<Claim>(c => c.Status == ClaimStatus.Approved), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            _repo.UpdateHoldingResolutionLockAsync(
+                Arg.Is<Claim>(c => c.Status == ClaimStatus.Approved
+                    && c.PendingAccumulatorCommit != null
+                    && c.PendingAccumulatorCommit.Commit == commit
+                    && c.PendingAccumulatorReversal == null),
+                Arg.Any<string>(), Arg.Any<CancellationToken>());
             _engine.CommitAccumulatorsAsync(commit, Arg.Any<CancellationToken>());
+            _repo.CompleteAccumulatorOutboxAsync("test-tenant", "claim-commit", AccumulatorOutboxKind.Commit,
+                Arg.Any<string>(), null, Arg.Any<CancellationToken>());
         });
         await _engine.DidNotReceiveWithAnyArgs().ReverseClaimAsync(default!, default!, default, default, default!, default);
+    }
+
+    /// <summary>
+    /// The commit fails after the final write (benefit-plan-service down):
+    /// the approval stands (200), and the entry stays on the claim,
+    /// rescheduled for the dispatcher — nothing is lost.
+    /// </summary>
+    [Fact]
+    public async Task Approval_CommitFails_TheEntryIsRescheduled_NotLost()
+    {
+        RerunPassesWith(PreparedCommit("claim-commit-down"));
+        OutboxReadsTheSavedClaim();
+        _engine.CommitAccumulatorsAsync(Arg.Any<CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit>(), Arg.Any<CancellationToken>())
+            .Returns<Task<CloudHealthOffice.BenefitEngine.Models.AccumulatorCommitResult>>(
+                _ => throw new HttpRequestException("down", null, HttpStatusCode.ServiceUnavailable));
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer),
+            Pended("claim-commit-down", "NCCI", "bundled pair"), new { disposition = "Approved", reason = "x" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _repo.Received(1).RescheduleAccumulatorOutboxAsync("test-tenant", "claim-commit-down",
+            AccumulatorOutboxKind.Commit, Arg.Any<string>(), 1, Arg.Any<DateTime>(), "HttpRequestException 503",
+            Arg.Any<CancellationToken>());
+        await _repo.DidNotReceiveWithAnyArgs().CompleteAccumulatorOutboxAsync(default!, default!, default, default!, default, default);
     }
 
     /// <summary>
@@ -467,20 +513,50 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
     /// terminally: a pended claim wrote none (nothing is reversed), but the
     /// claim id is fenced so no commit of it can land later; a claim pended
     /// before deferred commits had written them, and they are backed out.
+    /// The reversal is saved on the claim with the final write and driven
+    /// after it — never before the denial is final.
     /// </summary>
     [Fact]
-    public async Task Deny_ReversesTheEngineAccumulators()
+    public async Task Deny_SavesTheReversalWithTheFinalWrite_ThenDrivesIt()
     {
         var claim = Pended("claim-deny", "NCCI", "bundled pair");
+        OutboxReadsTheSavedClaim();
 
         var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer), claim,
             new { disposition = "Denied", reason = "bundled" });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        await _engine.Received(1).ReverseClaimAsync(
-            "MEM-9", "MEM-9", Guid.Parse(claim.BenefitPlanId!), DateOnly.FromDateTime(claim.ServiceDateFrom),
-            claim.Id, Arg.Any<CancellationToken>());
+        Received.InOrder(() =>
+        {
+            _repo.UpdateHoldingResolutionLockAsync(
+                Arg.Is<Claim>(c => c.Status == ClaimStatus.Denied
+                    && c.PendingAccumulatorReversal != null
+                    && c.PendingAccumulatorReversal.Reversal!.ClaimId == "claim-deny"
+                    && c.PendingAccumulatorCommit == null),
+                Arg.Any<string>(), Arg.Any<CancellationToken>());
+            _engine.ReverseClaimAsync(
+                "MEM-9", "MEM-9", Guid.Parse(claim.BenefitPlanId!), DateOnly.FromDateTime(claim.ServiceDateFrom),
+                claim.Id, Arg.Any<CancellationToken>());
+            _repo.CompleteAccumulatorOutboxAsync("test-tenant", "claim-deny", AccumulatorOutboxKind.Reversal,
+                Arg.Any<string>(), null, Arg.Any<CancellationToken>());
+        });
         await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
+    }
+
+    /// <summary>The denial's final write is refused (lock taken over): nothing is reversed or fenced.</summary>
+    [Fact]
+    public async Task Deny_LostLockAtTheFinalWrite_ReversesNothing()
+    {
+        _repo.UpdateHoldingResolutionLockAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((Claim?)null);
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer),
+            Pended("claim-deny-final-lost", "NCCI", "bundled pair"), new { disposition = "Denied", reason = "bundled" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        await _engine.DidNotReceiveWithAnyArgs().ReverseClaimAsync(default!, default!, default, default, default!, default);
+        _repo.UpdateHoldingResolutionLockAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Claim>());
     }
 
     // ── L9 / L10 ──────────────────────────────────────────────────────

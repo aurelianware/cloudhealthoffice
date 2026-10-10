@@ -259,9 +259,42 @@ public record AccumulatorCommit
     public string? ReplacesClaimId { get; init; }
     public string MemberId { get; init; } = default!;
     public string SubscriberId { get; init; } = default!;
+
+    /// <summary>Standard UUID in Mongo: claims-service persists the commit on the claim (its outbox).</summary>
+    [MongoDB.Bson.Serialization.Attributes.BsonGuidRepresentation(MongoDB.Bson.GuidRepresentation.Standard)]
     public Guid BenefitPlanId { get; init; }
     public string PlanYear { get; init; } = default!;
     public List<Services.AccumulatorUpdate> Updates { get; init; } = [];
+}
+
+/// <summary>
+/// Result of a commit: the outcome and every update the store wrote for less
+/// than requested because a limit (deductible, OOP maximum, ACA individual
+/// cap) was reached at write time — a concurrent claim for the same member or
+/// family took the room the pricing saw. The member's priced cost share is
+/// not changed by the store; claims-service records the difference for an
+/// adjustment review.
+/// </summary>
+public record AccumulatorCommitResult
+{
+    public AccumulatorCommitOutcome Outcome { get; init; }
+    public List<AccumulatorClamp> Clamped { get; init; } = [];
+
+    public static AccumulatorCommitResult Of(AccumulatorCommitOutcome outcome) => new() { Outcome = outcome };
+}
+
+/// <summary>One update the store clamped at its limit (see <see cref="AccumulatorCommitResult"/>).</summary>
+public record AccumulatorClamp
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AccumulatorType Type { get; init; }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AccumulatorScope Scope { get; init; }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public NetworkTier NetworkTier { get; init; }
+    public decimal Requested { get; init; }
+    public decimal Applied { get; init; }
+    public decimal Limit { get; init; }
 }
 
 /// <summary>Result of <see cref="Services.IBenefitCalculationEngine.CommitAccumulatorsAsync"/>.</summary>

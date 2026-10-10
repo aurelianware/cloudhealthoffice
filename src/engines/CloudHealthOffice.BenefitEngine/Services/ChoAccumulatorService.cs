@@ -200,7 +200,7 @@ internal class ChoAccumulatorService : IAccumulatorService
     /// fence and the apply are decided by the same version-checked write, so
     /// a denial or void that lands first always wins.
     /// </summary>
-    public async Task<AccumulatorCommitOutcome> CommitAsync(AccumulatorCommit commit, CancellationToken ct = default)
+    public async Task<AccumulatorCommitResult> CommitAsync(AccumulatorCommit commit, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(commit);
         if (string.IsNullOrWhiteSpace(commit.ClaimId))
@@ -217,16 +217,20 @@ internal class ChoAccumulatorService : IAccumulatorService
             CommitDocAsync(tenantId, commit.SubscriberId, AccumulatorScope.Family, commit, replaced,
                 commit.Updates.Where(u => u.Scope == AccumulatorScope.Family).ToList(), ct));
 
-        if (outcomes.Contains(AccumulatorCommitOutcome.RefusedClaimReversed))
+        if (outcomes.Any(o => o.Outcome == AccumulatorCommitOutcome.RefusedClaimReversed))
         {
             _logger.LogWarning(
                 "Commit {CommitId} for claim {ClaimId} refused: the claim was reversed terminally (void or denial)",
                 SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId));
-            return AccumulatorCommitOutcome.RefusedClaimReversed;
+            return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedClaimReversed);
         }
-        return outcomes.All(o => o == AccumulatorCommitOutcome.AlreadyCommitted)
-            ? AccumulatorCommitOutcome.AlreadyCommitted
-            : AccumulatorCommitOutcome.Committed;
+        return new AccumulatorCommitResult
+        {
+            Outcome = outcomes.All(o => o.Outcome == AccumulatorCommitOutcome.AlreadyCommitted)
+                ? AccumulatorCommitOutcome.AlreadyCommitted
+                : AccumulatorCommitOutcome.Committed,
+            Clamped = outcomes.SelectMany(o => o.Clamped).ToList(),
+        };
     }
 
     public async Task ResetForPlanYearAsync(
@@ -401,7 +405,7 @@ internal class ChoAccumulatorService : IAccumulatorService
     /// One document's part of <see cref="CommitAsync"/>, as a single
     /// versioned write with optimistic-concurrency retry.
     /// </summary>
-    private async Task<AccumulatorCommitOutcome> CommitDocAsync(
+    private async Task<AccumulatorCommitResult> CommitDocAsync(
         string tenantId, string ownerId, AccumulatorScope scope,
         AccumulatorCommit commit, string? replacedClaimId, List<AccumulatorUpdate> updates,
         CancellationToken ct)
@@ -413,11 +417,11 @@ internal class ChoAccumulatorService : IAccumulatorService
                       ?? CreateEmptyDocument(tenantId, ownerId, scope, commit.BenefitPlanId, commit.PlanYear);
 
             if (doc.ReversedClaimIds.Contains(commit.ClaimId))
-                return AccumulatorCommitOutcome.RefusedClaimReversed;
+                return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedClaimReversed);
 
             var own = doc.Transactions.FirstOrDefault(t => t.ClaimId == commit.ClaimId && !t.IsReversed);
             if (own is not null && string.Equals(own.CommitId, commit.CommitId, StringComparison.Ordinal))
-                return AccumulatorCommitOutcome.AlreadyCommitted;
+                return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.AlreadyCommitted);
 
             var replaced = replacedClaimId is null
                 ? null
@@ -425,11 +429,12 @@ internal class ChoAccumulatorService : IAccumulatorService
 
             // Nothing to reverse and nothing to apply on this document.
             if (own is null && replaced is null && updates.Count == 0)
-                return AccumulatorCommitOutcome.AlreadyCommitted;
+                return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.AlreadyCommitted);
 
             if (own is not null) ReverseTransaction(doc, own);
             if (replaced is not null) ReverseTransaction(doc, replaced);
 
+            var clamped = new List<AccumulatorClamp>();
             if (updates.Count > 0)
             {
                 var transaction = new AccumulatorTransaction
@@ -442,10 +447,18 @@ internal class ChoAccumulatorService : IAccumulatorService
                 foreach (var update in updates)
                 {
                     var balance = GetOrCreateBalance(doc, update.Type, update.NetworkTier);
-                    // Deductible: never past the limit as it stands now.
+                    // Money caps: never past the limit as it stands now.
                     var amount = update.ClampAtLimit is decimal limit && update.Amount > 0
                         ? Math.Min(update.Amount, Math.Max(0, limit - balance.AccumulatedAmount))
                         : update.Amount;
+                    if (amount != update.Amount)
+                    {
+                        clamped.Add(new AccumulatorClamp
+                        {
+                            Type = update.Type, Scope = update.Scope, NetworkTier = update.NetworkTier,
+                            Requested = update.Amount, Applied = amount, Limit = update.ClampAtLimit ?? 0m,
+                        });
+                    }
                     balance.AccumulatedAmount += amount;
                     transaction.Entries.Add(new AccumulatorTransactionEntry
                     {
@@ -464,7 +477,7 @@ internal class ChoAccumulatorService : IAccumulatorService
                 _logger.LogDebug(
                     "Committed {Count} accumulator entries for claim {ClaimId} (commit {CommitId}) to {DocId}",
                     updates.Count, SanitizeForLog(commit.ClaimId), SanitizeForLog(commit.CommitId), SanitizeForLog(doc.Id));
-                return AccumulatorCommitOutcome.Committed;
+                return new AccumulatorCommitResult { Outcome = AccumulatorCommitOutcome.Committed, Clamped = clamped };
             }
             catch (OptimisticConcurrencyException) when (attempt < MaxConcurrencyRetries - 1)
             {

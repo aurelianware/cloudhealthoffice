@@ -21,6 +21,8 @@
   <ItemGroup>
     <!-- Cosmos DB emulator fixture; see tests/Shared/CosmosEmulator. -->
     <Compile Include="..\Shared\CosmosEmulator\*.cs" Link="Shared\CosmosEmulator\%(Filename)%(Extension)" />
+    <!-- redis-server fixture; see tests/Shared/Redis. -->
+    <Compile Include="..\Shared\Redis\*.cs" Link="Shared\Redis\%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\engines\CloudHealthOffice.BenefitEngine\CloudHealthOffice.BenefitEngine.csproj" />

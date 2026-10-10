@@ -286,18 +286,24 @@ public class RedisAccumulatorService : IAccumulatorService
     /// (cluster-safe):
     /// <list type="bullet">
     ///   <item>refused when the hash fences the claim (<c>__fence:{claimId}</c>);</item>
-    ///   <item>a no-op when this commit id already wrote it (<c>__commit:{claimId}</c>
-    ///     holds the commit id and the amounts it added);</item>
-    ///   <item>otherwise the amounts the claim's own earlier commit and the
-    ///     replaced claim's commit added are taken back, and the new amounts
-    ///     added — the deductible no further than its limit as it stands now.</item>
+    ///   <item>a no-op when this commit id already wrote it;</item>
+    ///   <item>otherwise what the claim's own earlier write and the replaced
+    ///     claim's write put in the hash is taken back, and the new amounts
+    ///     added — every money cap (deductible, OOP maximum, ACA cap) no
+    ///     further than its limit as it stands now; what was trimmed is
+    ///     returned.</item>
     /// </list>
-    /// A hash holding no amounts (evicted or invalidated) is not incremented:
-    /// the next read rebuilds it from claims-service, which counts the claim
-    /// once it is Approved. The commit is still recorded (with nothing added),
-    /// so a repeat is a no-op.
+    /// Every claim's contribution is journalled in the hash
+    /// (<c>__commit:{claimId}</c> = commit id and, per field, the amount in
+    /// the hash with its type, tier and source), written by commits and by
+    /// the rebuild alike, so a later commit can undo exactly what is there and
+    /// pricing can take a claim's own earlier write out
+    /// (<see cref="GetClaimUpdatesAsync"/>). A hash holding no amounts
+    /// (evicted or invalidated) is not incremented: the next read rebuilds it
+    /// from claims-service, which counts the claim (it is Approved before it
+    /// commits) and records its contribution.
     /// </summary>
-    public async Task<AccumulatorCommitOutcome> CommitAsync(AccumulatorCommit commit, CancellationToken ct = default)
+    public async Task<AccumulatorCommitResult> CommitAsync(AccumulatorCommit commit, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(commit);
         if (string.IsNullOrWhiteSpace(commit.ClaimId))
@@ -308,7 +314,7 @@ public class RedisAccumulatorService : IAccumulatorService
             ? string.Empty
             : commit.ReplacesClaimId!;
 
-        async Task<string> CommitKeyAsync(RedisKey key, IEnumerable<AccumulatorUpdate> updates)
+        async Task<(string Outcome, List<AccumulatorClamp> Clamped)> CommitKeyAsync(RedisKey key, List<AccumulatorUpdate> updates)
         {
             var args = new List<RedisValue>
             {
@@ -317,29 +323,53 @@ public class RedisAccumulatorService : IAccumulatorService
             foreach (var u in updates)
             {
                 args.Add(MakeField(u));
-                args.Add(u.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                args.Add(u.ClampAtLimit is decimal limit
-                    ? limit.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                    : string.Empty);
+                args.Add(Num(u.Amount));
+                args.Add(u.ClampAtLimit is decimal limit ? Num(limit) : string.Empty);
+                args.Add(u.Type.ToString());
+                args.Add(u.NetworkTier.ToString());
+                args.Add(u.Source ?? string.Empty);
             }
-            var result = await db.ScriptEvaluateAsync(CommitScript, new[] { key }, args.ToArray());
-            return result.ToString();
+            var raw = (await db.ScriptEvaluateAsync(CommitScript, new[] { key }, args.ToArray())).ToString();
+            var sep = raw.IndexOf('|');
+            var outcome = sep < 0 ? raw : raw[..sep];
+            var clamped = new List<AccumulatorClamp>();
+            if (sep >= 0 && raw.Length > sep + 1)
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(raw[(sep + 1)..]);
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var c in doc.RootElement.EnumerateArray())
+                    {
+                        var field = c.GetProperty("f").GetString();
+                        var update = updates.FirstOrDefault(u => MakeField(u) == field);
+                        if (update is null) continue;
+                        clamped.Add(new AccumulatorClamp
+                        {
+                            Type = update.Type, Scope = update.Scope, NetworkTier = update.NetworkTier,
+                            Requested = (decimal)c.GetProperty("r").GetDouble(),
+                            Applied = (decimal)c.GetProperty("a").GetDouble(),
+                            Limit = update.ClampAtLimit ?? 0m,
+                        });
+                    }
+                }
+            }
+            return (outcome, clamped);
         }
 
         var outcomes = await Task.WhenAll(
             CommitKeyAsync(MakeKey(commit.MemberId, AccumulatorScope.Individual, commit.BenefitPlanId, commit.PlanYear),
-                commit.Updates.Where(u => u.Scope == AccumulatorScope.Individual)),
+                commit.Updates.Where(u => u.Scope == AccumulatorScope.Individual).ToList()),
             CommitKeyAsync(MakeKey(commit.SubscriberId, AccumulatorScope.Family, commit.BenefitPlanId, commit.PlanYear),
-                commit.Updates.Where(u => u.Scope == AccumulatorScope.Family)));
+                commit.Updates.Where(u => u.Scope == AccumulatorScope.Family).ToList()));
 
-        if (outcomes.Contains("REFUSED"))
+        if (outcomes.Any(o => o.Outcome == "REFUSED"))
         {
             _logger.LogWarning(
                 "Commit {CommitId} for claim {ClaimId} refused: the claim was reversed terminally (void or denial)",
                 SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId));
-            return AccumulatorCommitOutcome.RefusedClaimReversed;
+            return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedClaimReversed);
         }
-        if (outcomes.All(o => o == "ALREADY")) return AccumulatorCommitOutcome.AlreadyCommitted;
+        if (outcomes.All(o => o.Outcome == "ALREADY")) return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.AlreadyCommitted);
 
         if (_auditWriter is not null && commit.Updates.Count > 0)
         {
@@ -358,8 +388,60 @@ public class RedisAccumulatorService : IAccumulatorService
                 }
             }, ct);
         }
-        return AccumulatorCommitOutcome.Committed;
+        return new AccumulatorCommitResult
+        {
+            Outcome = AccumulatorCommitOutcome.Committed,
+            Clamped = outcomes.SelectMany(o => o.Clamped).ToList(),
+        };
     }
+
+    /// <summary>
+    /// The claim's contribution as journalled in its hashes (written by its
+    /// commit, or by the rebuild that counted it): pricing a re-adjudication
+    /// or a replacement takes it out of the starting balances. Nothing for a
+    /// claim whose contribution is not in the cache.
+    /// </summary>
+    public async Task<IReadOnlyList<AccumulatorUpdate>> GetClaimUpdatesAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId,
+        CancellationToken ct = default)
+    {
+        var db = _redis.GetDatabase();
+        var updates = new List<AccumulatorUpdate>();
+        foreach (var (owner, scope) in new[] { (memberId, AccumulatorScope.Individual), (subscriberId, AccumulatorScope.Family) })
+        {
+            var record = await db.HashGetAsync(MakeKey(owner, scope, benefitPlanId, planYear), CommitFieldPrefix + claimId);
+            if (record.IsNullOrEmpty) continue;
+            updates.AddRange(ParseJournal(record.ToString(), scope));
+        }
+        return updates;
+    }
+
+    private static IEnumerable<AccumulatorUpdate> ParseJournal(string record, AccumulatorScope scope)
+    {
+        var sep = record.IndexOf('|');
+        if (sep < 0) yield break;
+        using var doc = System.Text.Json.JsonDocument.Parse(record[(sep + 1)..]);
+        if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) yield break;
+        var parsed = new List<AccumulatorUpdate>();
+        foreach (var entry in doc.RootElement.EnumerateObject())
+        {
+            if (entry.Value.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
+            var amount = (decimal)entry.Value.GetProperty("a").GetDouble();
+            if (amount <= 0) continue;
+            if (!Enum.TryParse<AccumulatorType>(entry.Value.GetProperty("t").GetString(), out var type)) continue;
+            if (!Enum.TryParse<NetworkTier>(entry.Value.GetProperty("n").GetString(), out var tier)) tier = NetworkTier.InNetwork;
+            parsed.Add(new AccumulatorUpdate
+            {
+                Type = type, Scope = scope, NetworkTier = tier, Amount = amount,
+                Source = entry.Value.TryGetProperty("s", out var s) && s.GetString() is { Length: > 0 } src ? src : entry.Name,
+            });
+        }
+        foreach (var u in parsed) yield return u;
+    }
+
+    private static string Num(decimal value) => value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Marker fields in an accumulator hash; never amounts.</summary>
     internal const string CommitFieldPrefix = "__commit:";
@@ -372,12 +454,26 @@ public class RedisAccumulatorService : IAccumulatorService
                || field.StartsWith(FenceFieldPrefix, StringComparison.Ordinal);
     }
 
+    /// <summary>Shared Lua: is the hash holding amounts; undo a claim's journalled contribution.</summary>
+    private const string JournalLua = @"
+local function populated(key)
+  for _, f in ipairs(redis.call('HKEYS', key)) do
+    if string.sub(f, 1, 9) ~= '__commit:' and string.sub(f, 1, 8) ~= '__fence:' then return true end
+  end
+  return false
+end
+local function amountOf(v)
+  if type(v) == 'table' then return tonumber(v.a) or 0 end
+  return tonumber(v) or 0
+end
+";
+
     /// <summary>
     /// KEYS[1] the hash. ARGV: claim id, commit id, replaced claim id (or
-    /// empty), TTL seconds, then (field, amount, limit-or-empty) triples.
-    /// Returns REFUSED, ALREADY or COMMITTED.
+    /// empty), TTL seconds, then (field, amount, limit-or-empty, type, tier,
+    /// source) sextuples. Returns REFUSED, ALREADY or COMMITTED|[clamps].
     /// </summary>
-    private const string CommitScript = @"
+    private const string CommitScript = JournalLua + @"
 local key = KEYS[1]
 local claim = ARGV[1]
 local commitId = ARGV[2]
@@ -387,19 +483,16 @@ if own then
   local sep = string.find(own, '|', 1, true)
   if sep and string.sub(own, 1, sep - 1) == commitId then return 'ALREADY' end
 end
-local populated = false
-for _, f in ipairs(redis.call('HKEYS', key)) do
-  if string.sub(f, 1, 9) ~= '__commit:' and string.sub(f, 1, 8) ~= '__fence:' then populated = true break end
-end
+local hot = populated(key)
 local function undo(c)
   local v = redis.call('HGET', key, '__commit:' .. c)
   if not v then return end
   local sep = string.find(v, '|', 1, true)
-  if sep and populated then
+  if sep and hot then
     local added = cjson.decode(string.sub(v, sep + 1))
-    for f, a in pairs(added) do
+    for f, e in pairs(added) do
       local cur = tonumber(redis.call('HGET', key, f) or '0') or 0
-      local nv = cur - a
+      local nv = cur - amountOf(e)
       if nv < 0 then nv = 0 end
       redis.call('HSET', key, f, tostring(nv))
     end
@@ -408,32 +501,72 @@ local function undo(c)
 end
 undo(claim)
 if ARGV[3] ~= '' then undo(ARGV[3]) end
-local added = {}
+local journal = {}
+local clamps = {}
 local any = false
 local i = 5
 while i <= #ARGV do
   local f = ARGV[i]
   local a = tonumber(ARGV[i + 1]) or 0
   local lim = ARGV[i + 2]
-  if populated then
+  if hot then
+    local requested = a
     local cur = tonumber(redis.call('HGET', key, f) or '0') or 0
     if lim ~= '' and a > 0 then
       local room = (tonumber(lim) or 0) - cur
       if room < 0 then room = 0 end
       if a > room then a = room end
     end
+    if a ~= requested then table.insert(clamps, { f = f, r = requested, a = a }) end
     redis.call('HSET', key, f, tostring(cur + a))
-    added[f] = (added[f] or 0) + a
+    local e = journal[f]
+    if e then e.a = e.a + a else journal[f] = { a = a, t = ARGV[i + 3], n = ARGV[i + 4], s = ARGV[i + 5] } end
     any = true
   end
-  i = i + 3
+  i = i + 6
 end
 if any then redis.call('HDEL', key, '__empty') end
 local encoded = '{}'
-if any then encoded = cjson.encode(added) end
+if any then encoded = cjson.encode(journal) end
 redis.call('HSET', key, '__commit:' .. claim, commitId .. '|' .. encoded)
 if redis.call('TTL', key) < 0 then redis.call('EXPIRE', key, ARGV[4]) end
+if #clamps > 0 then return 'COMMITTED|' .. cjson.encode(clamps) end
 return 'COMMITTED'
+";
+
+    /// <summary>
+    /// KEYS[1] the hash. ARGV[1] TTL seconds, ARGV[2] the totals as JSON
+    /// (field → amount; empty object = authoritatively empty), ARGV[3] the
+    /// per-claim contributions as JSON (claim id → journal). Populates a hash
+    /// holding no amounts — totals plus one journal record per counted claim
+    /// (keeping the commit id of a commit that landed while the hash was cold,
+    /// so its repeat stays a no-op) — and leaves a hash another writer already
+    /// populated alone. Fences are kept. Returns POPULATED or SKIPPED.
+    /// </summary>
+    private const string RebuildScript = JournalLua + @"
+local key = KEYS[1]
+if populated(key) then return 'SKIPPED' end
+local totals = cjson.decode(ARGV[2])
+local claims = cjson.decode(ARGV[3])
+local anyTotal = false
+for f, a in pairs(totals) do
+  redis.call('HSET', key, f, tostring(a))
+  anyTotal = true
+end
+if not anyTotal then redis.call('HSET', key, '__empty', '') end
+for c, journal in pairs(claims) do
+  if redis.call('HEXISTS', key, '__fence:' .. c) == 0 then
+    local commitId = 'rebuild'
+    local existing = redis.call('HGET', key, '__commit:' .. c)
+    if existing then
+      local sep = string.find(existing, '|', 1, true)
+      if sep then commitId = string.sub(existing, 1, sep - 1) end
+    end
+    redis.call('HSET', key, '__commit:' .. c, commitId .. '|' .. cjson.encode(journal))
+  end
+end
+redis.call('EXPIRE', key, ARGV[1])
+return 'POPULATED'
 ";
 
     /// <summary>
@@ -521,10 +654,10 @@ return #fences
         _logger.LogDebug(
             "Cache miss for {Key}. Rebuilding from claim history.", key.ToString());
 
-        var (fetchSuccess, computed) = await _claimsSource.CalculateAccumulatorsAsync(
+        var rebuild = await _claimsSource.CalculateAccumulatorsWithClaimsAsync(
             _tenantContext.TenantId, ownerId, scope, benefitPlanId, planYear, ct);
 
-        if (!fetchSuccess)
+        if (!rebuild.Success)
         {
             // Source was unavailable — do not cache; the next read will retry.
             _logger.LogWarning(
@@ -533,29 +666,52 @@ return #fences
             return [];
         }
 
-        if (computed.Count == 0)
+        // Populate Redis atomically with one journal record per counted claim,
+        // so a later commit can undo exactly what the rebuild put in for it
+        // (a replacement taking its predecessor back, a re-commit of the same
+        // claim) and pricing can exclude a claim's own contribution.
+        var totals = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var snapshot in rebuild.Snapshots)
         {
-            // Authoritatively empty: owner has no accumulator history.
-            await MarkEmptySnapshotAsync(db, key);
-            return [];
+            var field = MakeField(snapshot.Type, snapshot.NetworkTier).ToString();
+            totals[field] = (totals.TryGetValue(field, out var t) ? t : 0d) + (double)snapshot.AccumulatedAmountAfter;
+        }
+        var claims = new Dictionary<string, Dictionary<string, object>>(StringComparer.Ordinal);
+        foreach (var claim in rebuild.Claims)
+        {
+            var journal = new Dictionary<string, object>(StringComparer.Ordinal);
+            foreach (var u in claim.Updates.Where(u => u.Amount > 0))
+            {
+                var field = MakeField(u).ToString();
+                var amount = (double)u.Amount + (journal.TryGetValue(field, out var e) ? ((JournalEntry)e).a : 0d);
+                journal[field] = new JournalEntry(amount, u.Type.ToString(), u.NetworkTier.ToString(), u.Source ?? string.Empty);
+            }
+            if (journal.Count > 0) claims[claim.ClaimId] = journal;
         }
 
-        // Populate Redis
-        var hashEntries = computed.Select(s =>
-            new HashEntry(
-                MakeField(s.Type, s.NetworkTier),
-                (double)s.AccumulatedAmountAfter))
-            .ToArray();
+        var outcome = await db.ScriptEvaluateAsync(RebuildScript, new[] { key }, new RedisValue[]
+        {
+            (long)DefaultKeyTtl.TotalSeconds,
+            System.Text.Json.JsonSerializer.Serialize(totals),
+            claims.Count == 0 ? "{}" : System.Text.Json.JsonSerializer.Serialize(claims),
+        });
 
-        await db.HashSetAsync(key, hashEntries);
-        await db.KeyExpireAsync(key, DefaultKeyTtl);
+        if (outcome.ToString() == "SKIPPED")
+        {
+            // Another writer populated it meanwhile: read what is there.
+            var now = (await db.HashGetAllAsync(key)).Where(e => !IsMarkerField(e.Name)).ToArray();
+            return ParseSnapshots(now, scope);
+        }
 
         _logger.LogDebug(
-            "Rebuilt {Count} accumulators for {Key} from claim history.",
-            computed.Count, key.ToString());
+            "Rebuilt {Count} accumulators ({Claims} claim record(s)) for {Key} from claim history.",
+            rebuild.Snapshots.Count, claims.Count, key.ToString());
 
-        return computed.ToList();
+        return rebuild.Snapshots.ToList();
     }
+
+    /// <summary>One journalled field (Lua reads <c>a</c>, <c>t</c>, <c>n</c>, <c>s</c>).</summary>
+    private sealed record JournalEntry(double a, string t, string n, string s);
 
     // ═══════════════════════════════════════════════════════════════════
     // PRIVATE — ATOMIC INCREMENTS
@@ -702,7 +858,32 @@ public interface IClaimsAccumulatorSource
         string tenantId, string ownerId, AccumulatorScope scope,
         Guid benefitPlanId, string planYear,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="CalculateAccumulatorsAsync"/> plus each counted claim's own
+    /// contribution, so the rebuilt cache journals it per claim (a later
+    /// commit then undoes exactly that). The default returns no per-claim
+    /// contributions (a claims-service without them): the cache is rebuilt
+    /// without journal records.
+    /// </summary>
+    async Task<AccumulatorRebuildData> CalculateAccumulatorsWithClaimsAsync(
+        string tenantId, string ownerId, AccumulatorScope scope,
+        Guid benefitPlanId, string planYear,
+        CancellationToken ct = default)
+    {
+        var (success, snapshots) = await CalculateAccumulatorsAsync(tenantId, ownerId, scope, benefitPlanId, planYear, ct);
+        return new AccumulatorRebuildData(success, snapshots, []);
+    }
 }
+
+/// <summary>A cache rebuild: the totals and each counted claim's contribution.</summary>
+public sealed record AccumulatorRebuildData(
+    bool Success,
+    IReadOnlyList<AccumulatorSnapshot> Snapshots,
+    IReadOnlyList<ClaimAccumulatorContribution> Claims);
+
+/// <summary>What one finalized claim contributes to an owner's accumulators.</summary>
+public sealed record ClaimAccumulatorContribution(string ClaimId, IReadOnlyList<AccumulatorUpdate> Updates);
 
 /// <summary>
 /// Optional: writes accumulator audit trail to durable storage.

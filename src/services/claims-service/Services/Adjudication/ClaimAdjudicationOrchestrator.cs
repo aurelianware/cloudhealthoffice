@@ -29,6 +29,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     private readonly IClaimAdjustmentService _adjustmentService;
     private readonly AdjudicationPipelineOptions _options;
     private readonly ILogger<ClaimAdjudicationOrchestrator> _logger;
+    private readonly IAccumulatorOutboxProcessor? _outbox;
 
     public ClaimAdjudicationOrchestrator(
         ClaimAdapterFactory adapterFactory,
@@ -41,8 +42,10 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         IAdjudicationTenantContext tenantContext,
         IClaimAdjustmentService adjustmentService,
         IOptions<AdjudicationPipelineOptions> options,
-        ILogger<ClaimAdjudicationOrchestrator> logger)
+        ILogger<ClaimAdjudicationOrchestrator> logger,
+        IAccumulatorOutboxProcessor? outbox = null)
     {
+        _outbox = outbox;
         _adapterFactory = adapterFactory;
         _planResolver = planResolver;
         _memberResolver = memberResolver;
@@ -113,7 +116,31 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             message.ActorId, message.CorrelationId ?? messageContext.CorrelationId, ct).ConfigureAwait(false);
 
         await RunPipelineAsync(context, ct).ConfigureAwait(false);
+        await DriveAccumulatorOutboxAsync(context).ConfigureAwait(false);
         await EmitAdjudicatedEventAsync(context, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The claim passed and its commit was written with its Approved status
+    /// (the accumulator outbox): commit it now. Best effort — a failure (or a
+    /// crash before this) leaves the entry on the claim for the dispatcher;
+    /// the commit is idempotent on its id. If the status write did not apply,
+    /// the claim holds no entry and nothing is committed.
+    /// </summary>
+    private async Task DriveAccumulatorOutboxAsync(ClaimAdjudicationContext context)
+    {
+        if (_outbox is null || context.PendingAccumulatorCommit is not { } item) return;
+        try
+        {
+            await _outbox.ProcessAsync(context.TenantId, context.Claim.Id, AccumulatorOutboxKind.Commit, item.Id, CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Accumulator commit for claim {ClaimId} not attempted now; the outbox dispatcher retries it",
+                SanitizeForLog(context.Claim.Id));
+        }
     }
 
     private async Task<ClaimAdjudicationContext> PrepareContextAsync(
@@ -212,6 +239,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         "NCCI engine threw",
         Stages.CoordinationOfBenefitsStage.CoverageServiceUnavailablePendReason,
         "Coverage-service unavailable",
+        Stages.BenefitCalculationStage.DeferredCommitUnsupportedReason,
     ];
 
     /// <summary>See <see cref="TransientFailureMarkers"/>.</summary>

@@ -33,6 +33,7 @@ public class ClaimsController : ControllerBase
 
     private readonly IClaimApprovalReadjudicator? _approvalReadjudicator;
     private readonly CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine? _benefitEngine;
+    private readonly IAccumulatorOutboxProcessor? _accumulatorOutbox;
 
     public ClaimsController(
         IClaimRepository claimRepository,
@@ -50,8 +51,10 @@ public class ClaimsController : ControllerBase
         ICurrentActor actor,
         ILogger<ClaimsController> logger,
         IClaimApprovalReadjudicator? approvalReadjudicator = null,
-        CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine? benefitEngine = null)
+        CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine? benefitEngine = null,
+        IAccumulatorOutboxProcessor? accumulatorOutbox = null)
     {
+        _accumulatorOutbox = accumulatorOutbox;
         _approvalReadjudicator = approvalReadjudicator;
         _benefitEngine = benefitEngine;
         _claimRepository = claimRepository;
@@ -1451,6 +1454,38 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
+    /// Accumulator adjustment reviews: claims whose engine accumulator commit
+    /// was clamped at a limit (a concurrent claim for the member or family
+    /// reached the deductible / OOP maximum first). The paid amounts were not
+    /// changed; an examiner decides whether an adjustment is due.
+    /// </summary>
+    [HttpGet("work-queue/accumulator-adjustments")]
+    [ProducesResponseType(typeof(IEnumerable<AccumulatorAdjustmentItem>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<AccumulatorAdjustmentItem>>> GetAccumulatorAdjustments([FromQuery] int limit = 100)
+    {
+        var claims = await _claimRepository.GetAccumulatorClampReviewsAsync(Math.Clamp(limit, 1, 1000), HttpContext.RequestAborted);
+        return Ok(claims.Select(c => new AccumulatorAdjustmentItem
+        {
+            ClaimId = c.Id,
+            ClaimNumber = c.ClaimNumber,
+            MemberId = c.MemberId,
+            Status = c.Status.ToString(),
+            RaisedAt = c.AccumulatorClampReview!.RaisedAt,
+            Clamps = c.AccumulatorClampReview.Clamps,
+        }).ToList());
+    }
+
+    /// <summary>Marks a claim's accumulator adjustment review resolved.</summary>
+    [HttpPost("work-queue/{claimId}/accumulator-adjustment/resolve")]
+    [RequirePermission(ClaimsPermissions.WorkQueueWork)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> ResolveAccumulatorAdjustment(string claimId) =>
+        await _claimRepository.ResolveAccumulatorClampReviewAsync(claimId, ResolveActorId(), HttpContext.RequestAborted)
+            ? NoContent()
+            : NotFound();
+
+    /// <summary>
     /// Assign a pended claim to an examiner
     /// </summary>
     [HttpPost("work-queue/{claimId}/assign")]
@@ -1778,20 +1813,10 @@ public class ClaimsController : ControllerBase
                 // final write below is fenced on the lock too.
                 claim = await _claimRepository.GetByIdAsync(claimId) ?? claim;
             }
-            else
+            else if (!await HoldsResolutionLockAsync(claimId, lockToken))
             {
-                // A pended claim writes no accumulators any more (they are
-                // committed only when a claim passes), so for a claim pended
-                // since then this reverses nothing. It still matters: it is a
-                // terminal reversal, so the engine store fences the claim id —
-                // a commit still in flight from a resolver whose lock expired
-                // is refused there, and the denied claim keeps nothing. It
-                // also backs out what a claim pended before this change wrote.
-                // Only while this resolver still holds the lock (follow-up
-                // 1): a resolver that lost it must not touch accumulators
-                // under a claim another examiner is approving.
-                if (!await HoldsResolutionLockAsync(claimId, lockToken)) return LostLock(claimId);
-                await ReverseEngineAccumulatorsAsync(claim, HttpContext.RequestAborted);
+                // A resolver that lost its lock stops before deciding anything.
+                return LostLock(claimId);
             }
 
             // From here the decision is made: finish it even if the caller
@@ -1804,6 +1829,20 @@ public class ClaimsController : ControllerBase
             claim.LastUpdatedDate = actedAt;
             claim.PendingExaminerApproval = null;
             claim.ResolutionLock = null;
+            // Accumulator outbox, written by the same lock-fenced write that
+            // makes the decision final (and only if it lands): an approval
+            // owes the commit its re-run prepared; a denial owes a terminal
+            // reversal — it reverses what a claim pended before deferred
+            // commits wrote (a claim pended since wrote nothing) and fences
+            // the claim id in the store. Neither happens before the claim is
+            // final, so a denial whose final write is refused fences nothing
+            // and a later approval's commit is not refused.
+            claim.PendingAccumulatorCommit = disposition == ClaimStatus.Approved && accumulatorCommit is not null
+                ? AccumulatorOutboxItem.ForCommit(accumulatorCommit, actedAt)
+                : null;
+            claim.PendingAccumulatorReversal = disposition == ClaimStatus.Denied
+                ? AccumulatorOutboxItem.ForReversal(claim, actedAt)
+                : null;
             claim.ExaminerResolutions.Add(new ExaminerResolutionRecord
             {
                 Disposition = disposition.ToString(),
@@ -1837,11 +1876,14 @@ public class ClaimsController : ControllerBase
             var updated = await _claimRepository.UpdateHoldingResolutionLockAsync(claim, lockToken, CancellationToken.None);
             if (updated is null) return LostLock(claimId);
 
-            // The approval is final (Approved, lock cleared: no other resolver
-            // can take the claim now). Only now are its accumulators written —
-            // a resolver whose lock was taken over never gets here.
-            if (accumulatorCommit is not null)
-                await CommitApprovedAccumulatorsAsync(claimId, accumulatorCommit);
+            // The decision is final (lock cleared: no other resolver can take
+            // the claim now). Drive its accumulator outbox entry at once; a
+            // failure, or a crash before this, leaves it on the claim for the
+            // dispatcher (idempotent, with backoff).
+            if (updated.PendingAccumulatorCommit is { } pendingCommit)
+                await DriveAccumulatorOutboxAsync(updated, AccumulatorOutboxKind.Commit, pendingCommit.Id);
+            if (updated.PendingAccumulatorReversal is { } pendingReversal)
+                await DriveAccumulatorOutboxAsync(updated, AccumulatorOutboxKind.Reversal, pendingReversal.Id);
 
             var correlationId = Activity.Current?.TraceId.ToString() ?? HttpContext.TraceIdentifier;
             await _versionEventPublisher.PublishVersionResolvedAsync(
@@ -1916,77 +1958,19 @@ public class ClaimsController : ControllerBase
     private static decimal PriorPaidAmount(Claim claim) =>
         claim.OtherPayers.Sum(p => p.PaidAmount ?? p.LineAdjudications.Sum(l => l.PaidAmount));
 
-    /// <summary>
-    /// Commits an approved claim's accumulators (after its final write).
-    /// Retried a few times; a failure is logged for re-drive — the approval
-    /// itself stands. Idempotent on the commit id.
-    /// </summary>
-    private async Task CommitApprovedAccumulatorsAsync(
-        string claimId, CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit commit)
+    /// <summary>One immediate outbox attempt (best effort; the dispatcher retries).</summary>
+    private async Task DriveAccumulatorOutboxAsync(Claim claim, AccumulatorOutboxKind kind, string itemId)
     {
-        if (_benefitEngine is null)
-        {
-            _logger.LogError(
-                "Approved claim {ClaimId}: no benefit engine registered; accumulators not committed (commit {CommitId})",
-                SanitizeForLog(claimId), SanitizeForLog(commit.CommitId));
-            return;
-        }
-        for (var attempt = 1; ; attempt++)
-        {
-            try
-            {
-                var outcome = await _benefitEngine.CommitAccumulatorsAsync(commit, CancellationToken.None);
-                if (outcome == CloudHealthOffice.BenefitEngine.Models.AccumulatorCommitOutcome.RefusedClaimReversed)
-                {
-                    _logger.LogError(
-                        "Approved claim {ClaimId}: accumulator commit {CommitId} refused, the claim id is fenced " +
-                        "(reversed terminally); investigate",
-                        SanitizeForLog(claimId), SanitizeForLog(commit.CommitId));
-                }
-                return;
-            }
-            catch (Exception ex) when (attempt < 3)
-            {
-                _logger.LogWarning(ex,
-                    "Approved claim {ClaimId}: accumulator commit attempt {Attempt} failed; retrying",
-                    SanitizeForLog(claimId), attempt);
-            }
-            catch (Exception ex)
-            {
-                // The commit is idempotent on its id: an operator re-posts
-                // this body to benefit-plan-service
-                // POST /api/v1/adjudication/commit-accumulators.
-                _logger.LogError(ex,
-                    "Approved claim {ClaimId}: accumulator commit {CommitId} failed; the approval stands. " +
-                    "Re-post the commit to commit-accumulators: {Commit}",
-                    SanitizeForLog(claimId), SanitizeForLog(commit.CommitId),
-                    SanitizeForLog(System.Text.Json.JsonSerializer.Serialize(commit, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
-                    {
-                        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
-                    })));
-                return;
-            }
-        }
-    }
-
-    private async Task ReverseEngineAccumulatorsAsync(Claim claim, CancellationToken ct)
-    {
-        if (_benefitEngine is null || !Guid.TryParse(claim.BenefitPlanId, out var planId)) return;
+        if (_accumulatorOutbox is null) return;
         try
         {
-            await _benefitEngine.ReverseClaimAsync(
-                claim.MemberId,
-                string.IsNullOrWhiteSpace(claim.SubscriberId) ? claim.MemberId : claim.SubscriberId!,
-                planId,
-                DateOnly.FromDateTime(claim.ServiceDateFrom),
-                claim.Id,
-                ct);
+            await _accumulatorOutbox.ProcessAsync(claim.TenantId, claim.Id, kind, itemId, CancellationToken.None);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
-            _logger.LogError(ex,
-                "Denial of pended claim {ClaimId}: reversing engine accumulators failed; a void re-drives it",
-                SanitizeForLog(claim.Id));
+            _logger.LogWarning(ex,
+                "Claim {ClaimId}: accumulator {Kind} not driven now; the outbox dispatcher retries it",
+                SanitizeForLog(claim.Id), kind);
         }
     }
 
@@ -2037,6 +2021,17 @@ public class ClaimsController : ControllerBase
             return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
+}
+
+/// <summary>One accumulator adjustment review (<c>GET work-queue/accumulator-adjustments</c>).</summary>
+public class AccumulatorAdjustmentItem
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public string ClaimNumber { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime RaisedAt { get; set; }
+    public List<CloudHealthOffice.BenefitEngine.Models.AccumulatorClamp> Clamps { get; set; } = new();
 }
 
 public class WorkQueueSummary

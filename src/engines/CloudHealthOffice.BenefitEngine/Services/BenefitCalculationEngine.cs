@@ -73,7 +73,7 @@ public interface IBenefitCalculationEngine
     /// the claim is finally adjudicated. Idempotent on the commit id; refused
     /// for a claim reversed terminally.
     /// </summary>
-    Task<AccumulatorCommitOutcome> CommitAccumulatorsAsync(
+    Task<AccumulatorCommitResult> CommitAccumulatorsAsync(
         AccumulatorCommit commit,
         CancellationToken ct = default);
 }
@@ -324,16 +324,19 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         };
     }
 
-    public async Task<AccumulatorCommitOutcome> CommitAccumulatorsAsync(
+    public async Task<AccumulatorCommitResult> CommitAccumulatorsAsync(
         AccumulatorCommit commit,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(commit);
-        var outcome = await _accumulatorService.CommitAsync(commit, ct);
+        if (commit.Updates.Any(u => u.Amount < 0))
+            throw new ArgumentException("A commit never carries a negative amount; reversals go through ReverseClaimAsync.", nameof(commit));
+        var result = await _accumulatorService.CommitAsync(commit, ct);
         _logger.LogInformation(
-            "Accumulator commit {CommitId} for claim {ClaimId} (plan year {PlanYear}): {Outcome}",
-            SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId), SanitizeForLog(commit.PlanYear), outcome);
-        return outcome;
+            "Accumulator commit {CommitId} for claim {ClaimId} (plan year {PlanYear}): {Outcome}, {Clamped} update(s) clamped at a limit",
+            SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId), SanitizeForLog(commit.PlanYear),
+            result.Outcome, result.Clamped.Count);
+        return result;
     }
 
     /// <summary>True when this plan pays after another payer (sequence ≥ 2).</summary>

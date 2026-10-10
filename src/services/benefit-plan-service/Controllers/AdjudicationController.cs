@@ -922,14 +922,22 @@ public class AdjudicationController : ControllerBase
     // writes nothing, an examiner approval commits after its lock-fenced
     // final write. Same permission as reverse-claim (the service default
     // write permission; claims-service calls it with a service token).
+    // Only claims-service's service principal may call it: a commit adds
+    // to a member's accumulators, so no user token — whatever its
+    // permissions — and no other service can.
     // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>claims-service's service client id (its ServiceToken:ClientId).</summary>
+    public const string ClaimsServiceClientId = "claims-service";
 
     /// <summary>
     /// Commit a prepared accumulator write. Idempotent on <c>CommitId</c>.
     /// Returns the outcome; <c>RefusedClaimReversed</c> when the claim was
-    /// voided or denied (its accumulators reversed terminally) first.
+    /// voided or denied (its accumulators reversed terminally) first, and
+    /// every update the store clamped at a limit.
     /// </summary>
     [HttpPost("commit-accumulators")]
+    [RequireServiceClient(ClaimsServiceClientId)]
     [ProducesResponseType(typeof(AccumulatorCommitResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AccumulatorCommitResponse>> CommitAccumulators(
@@ -942,11 +950,19 @@ public class AdjudicationController : ControllerBase
             || string.IsNullOrWhiteSpace(commit.MemberId) || string.IsNullOrWhiteSpace(commit.PlanYear)
             || commit.BenefitPlanId == Guid.Empty)
             return BadRequest(new { error = "CommitId, ClaimId, MemberId, BenefitPlanId and PlanYear are required" });
+        if (commit.Updates.Any(u => u.Amount < 0))
+            return BadRequest(new { error = "A commit never carries a negative amount" });
 
-        var outcome = await _benefitEngine.CommitAccumulatorsAsync(
+        var caller = ChoPrincipal.ServiceClientId(User) ?? "unknown";
+        var result = await _benefitEngine.CommitAccumulatorsAsync(
             commit with { SubscriberId = string.IsNullOrWhiteSpace(commit.SubscriberId) ? commit.MemberId : commit.SubscriberId },
             ct);
-        return Ok(new AccumulatorCommitResponse { Outcome = outcome });
+        // Audit: who wrote what to whose accumulators (ids only, no amounts).
+        _logger.LogInformation(
+            "AUDIT accumulator commit {CommitId} for claim {ClaimId} by service {Caller} (tenant {TenantId}): {Outcome}, {Updates} update(s), {Clamped} clamped",
+            SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId), SanitizeForLog(caller), SanitizeForLog(TenantId),
+            result.Outcome, commit.Updates.Count, result.Clamped.Count);
+        return Ok(new AccumulatorCommitResponse { Outcome = result.Outcome, Clamped = result.Clamped });
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1532,6 +1548,9 @@ public class AccumulatorCommitResponse
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AccumulatorCommitOutcome Outcome { get; set; }
+
+    /// <summary>Updates the store wrote for less than requested (a limit was reached at write time).</summary>
+    public List<AccumulatorClamp> Clamped { get; set; } = [];
 }
 
 public class ReverseClaimRequest

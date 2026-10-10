@@ -239,17 +239,21 @@ internal sealed class GoldenPathHarness
                     memberResolver,
                     Substitute.For<IAuthorizationValidationClient>(),
                     NullLogger<BenefitCalculationStage>.Instance),
-                new AccumulatorCommitStage(engineClient, NullLogger<AccumulatorCommitStage>.Instance),
                 new PersistenceStage(claimRepository, NullLogger<PersistenceStage>.Instance),
             };
 
             stageList.AddRange(stages);
+            // The accumulator outbox: a passing claim's commit is written with
+            // its Approved status and driven right after the run.
+            var outbox = new AccumulatorOutboxProcessor(claimRepository, engineClient, tenantContext,
+                Options.Create(new AccumulatorOutboxOptions()), NullLogger<AccumulatorOutboxProcessor>.Instance);
             var orchestrator = new ClaimAdjudicationOrchestrator(
                 adapterFactory, planResolver, memberResolver, coverageResolver, stageList,
                 Substitute.For<IClaimVersionEventPublisher>(), Substitute.For<IMessageBus>(), tenantContext,
                 Substitute.For<IClaimAdjustmentService>(),
                 Options.Create(new AdjudicationPipelineOptions()),
-                NullLogger<ClaimAdjudicationOrchestrator>.Instance);
+                NullLogger<ClaimAdjudicationOrchestrator>.Instance,
+                outbox);
 
             await orchestrator.AdjudicateAsync(
                 new ClaimVersionSubmittedMessage
@@ -318,12 +322,13 @@ internal sealed class GoldenPathHarness
                 resolved.Status = Claims.ClaimStatus.Approved;
                 resolved.VersionState = ClaimRepository.MapStatusToVersionState(Claims.ClaimStatus.Approved);
                 resolved.AdjudicatedDate = DateTime.UtcNow;
-                await claimRepository.UpdateAsync(resolved);
-                // …and, the final write landed, commits the accumulators the
-                // re-run prepared (ClaimsController.CommitApprovedAccumulatorsAsync).
+                // …with the commit the re-run prepared in its accumulator
+                // outbox, written by that same final write, then driven.
                 Assert.NotNull(passed!.PreparedAccumulatorCommit);
-                Assert.Equal(AccumulatorCommitOutcome.Committed,
-                    await engineClient.CommitAccumulatorsAsync(passed.PreparedAccumulatorCommit!, ct));
+                resolved.PendingAccumulatorCommit = Claims.AccumulatorOutboxItem.ForCommit(passed.PreparedAccumulatorCommit!, DateTime.UtcNow);
+                await claimRepository.UpdateAsync(resolved);
+                Assert.Equal(AccumulatorOutboxResult.Committed, await outbox.ProcessAsync(
+                    tenant, submitted.Id, Claims.AccumulatorOutboxKind.Commit, passed.PreparedAccumulatorCommit!.CommitId, ct));
                 adjudicated = (await claimRepository.GetByIdAsync(submitted.Id))!;
             }
 
@@ -462,9 +467,10 @@ internal sealed class GoldenPathHarness
                 {
                     // AdjudicationController.CommitAccumulators.
                     var commit = (await request.Content!.ReadFromJsonAsync<AccumulatorCommit>(Wire.BenefitPlanService, ct))!;
-                    var outcome = await engine.CommitAccumulatorsAsync(commit, ct);
+                    var result = await engine.CommitAccumulatorsAsync(commit, ct);
                     return DelegatingServiceHandler.Json(
-                        new BenefitPlanService.Controllers.AccumulatorCommitResponse { Outcome = outcome }, Wire.BenefitPlanService);
+                        new BenefitPlanService.Controllers.AccumulatorCommitResponse { Outcome = result.Outcome, Clamped = result.Clamped },
+                        Wire.BenefitPlanService);
                 }
                 case "/api/v1/adjudication/reverse-claim":
                 {

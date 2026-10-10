@@ -61,6 +61,12 @@ public sealed class ClaimIndexInitializer : IHostedService
                 .Ascending(c => c.TenantId)
                 .Ascending(c => c.MemberId)
                 .Ascending(c => c.ServiceDateFrom)),
+            // Accumulator outbox: the dispatcher's due scan (sparse — only
+            // claims with an entry carry the field).
+            new CreateIndexModel<Claim>(keys.Ascending(c => c.PendingAccumulatorCommit!.DueAtMs),
+                new CreateIndexOptions { Sparse = true, Name = "accumulator_outbox_commit_due" }),
+            new CreateIndexModel<Claim>(keys.Ascending(c => c.PendingAccumulatorReversal!.DueAtMs),
+                new CreateIndexOptions { Sparse = true, Name = "accumulator_outbox_reversal_due" }),
         };
 
         collection.Indexes.CreateMany(indexes, cancellationToken);

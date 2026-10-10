@@ -326,6 +326,32 @@ public class Claim
     public ExaminerResolutionLock? ResolutionLock { get; set; }
 
     /// <summary>
+    /// Accumulator outbox: the engine commit this claim's final adjudication
+    /// owes (deductible / OOP / visit counts), written in the same conditional
+    /// write that finalizes it (the pipeline's Approved status patch, or the
+    /// examiner approval's lock-fenced replace) and cleared once the engine
+    /// store has it (<c>AccumulatorOutboxDispatcher</c>). A crash between the
+    /// finalizing write and the commit, or benefit-plan-service being down,
+    /// leaves it here to be driven again — idempotently, by commit id.
+    /// </summary>
+    public AccumulatorOutboxItem? PendingAccumulatorCommit { get; set; }
+
+    /// <summary>
+    /// Accumulator outbox: the terminal reversal (fence) an examiner's denial
+    /// owes, written with the denial's lock-fenced final write and driven the
+    /// same way.
+    /// </summary>
+    public AccumulatorOutboxItem? PendingAccumulatorReversal { get; set; }
+
+    /// <summary>
+    /// Set when the engine store clamped this claim's commit at a limit (a
+    /// concurrent claim for the member or family took the room its pricing
+    /// saw): the member's priced cost share was not changed — an examiner
+    /// reviews it (work queue <c>accumulator-adjustments</c>).
+    /// </summary>
+    public AccumulatorClampReview? AccumulatorClampReview { get; set; }
+
+    /// <summary>
     /// Prior authorization number (if required)
     /// 837: REF*G1 (2300 loop)
     /// </summary>
@@ -1402,6 +1428,92 @@ public class PendingExaminerApproval
 
     /// <summary>After this the first approval no longer counts (configurable TTL, default 72 h).</summary>
     public DateTime ExpiresAt { get; set; }
+}
+
+/// <summary>One accumulator outbox entry (see <see cref="Claim.PendingAccumulatorCommit"/>).</summary>
+[BsonIgnoreExtraElements]
+public class AccumulatorOutboxItem
+{
+    /// <summary>The commit id (commit), or a reversal id (reversal): the conditional-clear key.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    public CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit? Commit { get; set; }
+
+    public AccumulatorReversalOrder? Reversal { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+    public int Attempts { get; set; }
+    public DateTime NextAttemptAt { get; set; }
+
+    /// <summary><see cref="CreatedAt"/> / <see cref="NextAttemptAt"/> as Unix milliseconds: what the queries compare (numbers sort the same on every store).</summary>
+    public long CreatedAtMs { get; set; }
+    public long DueAtMs { get; set; }
+
+    /// <summary>The last failure's exception type and status (no claim data).</summary>
+    public string? LastError { get; set; }
+
+    public static AccumulatorOutboxItem ForCommit(CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit commit, DateTime now) => new()
+    {
+        Id = commit.CommitId,
+        Commit = commit,
+        CreatedAt = now,
+        NextAttemptAt = now,
+        CreatedAtMs = ToMs(now),
+        DueAtMs = ToMs(now),
+    };
+
+    public static long ToMs(DateTime utc) => new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+
+    /// <summary>The terminal reversal of <paramref name="claim"/>; null when its plan id is not a GUID (nothing to reverse).</summary>
+    public static AccumulatorOutboxItem? ForReversal(Claim claim, DateTime now) =>
+        Guid.TryParse(claim.BenefitPlanId, out _)
+            ? new AccumulatorOutboxItem
+            {
+                Id = $"reversal-{Guid.NewGuid():N}",
+                Reversal = new AccumulatorReversalOrder
+                {
+                    ClaimId = claim.Id,
+                    MemberId = claim.MemberId,
+                    SubscriberId = string.IsNullOrWhiteSpace(claim.SubscriberId) ? claim.MemberId : claim.SubscriberId!,
+                    BenefitPlanId = claim.BenefitPlanId!,
+                    ServiceDate = claim.ServiceDateFrom,
+                },
+                CreatedAt = now,
+                NextAttemptAt = now,
+                CreatedAtMs = ToMs(now),
+                DueAtMs = ToMs(now),
+            }
+            : null;
+}
+
+/// <summary>What a terminal accumulator reversal needs (see <see cref="Claim.PendingAccumulatorReversal"/>).</summary>
+[BsonIgnoreExtraElements]
+public class AccumulatorReversalOrder
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string SubscriberId { get; set; } = string.Empty;
+    public string BenefitPlanId { get; set; } = string.Empty;
+    public DateTime ServiceDate { get; set; }
+}
+
+/// <summary>See <see cref="Claim.AccumulatorClampReview"/>.</summary>
+[BsonIgnoreExtraElements]
+public class AccumulatorClampReview
+{
+    public string CommitId { get; set; } = string.Empty;
+    public DateTime RaisedAt { get; set; }
+    public List<CloudHealthOffice.BenefitEngine.Models.AccumulatorClamp> Clamps { get; set; } = new();
+    public bool Resolved { get; set; }
+    public string? ResolvedBy { get; set; }
+    public DateTime? ResolvedAt { get; set; }
+}
+
+/// <summary>Which outbox slot of a claim (<see cref="Claim.PendingAccumulatorCommit"/> or <see cref="Claim.PendingAccumulatorReversal"/>).</summary>
+public enum AccumulatorOutboxKind
+{
+    Commit,
+    Reversal,
 }
 
 /// <summary>See <see cref="Claim.ResolutionLock"/>.</summary>

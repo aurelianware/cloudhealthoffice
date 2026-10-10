@@ -39,14 +39,14 @@ public partial class BenefitCalculationStageTests
     {
         BenefitResolutionRequest? captured = null;
         _engine.CalculateAsync(Arg.Do<BenefitResolutionRequest>(r => captured = r), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true, CobPayerSequence = 2 });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, CobPayerSequence = 2 });
         var ctx = CobContext("S", new CobOutcome { ApplyCob = true, PayerSequence = 2, Scenario = CobScenario.ChoSecondaryDetected });
 
         await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.Equal(2, captured!.Cob!.PayerSequence);
         Assert.Single(captured.Cob.PriorPayers);
-        // Always read-only now: AccumulatorCommitStage commits a passing claim.
+        // Always read-only now: a passing claim commits through the accumulator outbox.
         Assert.Equal(AdjudicationExecutionMode.Prospective, captured.ExecutionMode);
         Assert.Equal(2, ctx.AdjudicationResult.CobPayerSequence);
     }
@@ -80,7 +80,7 @@ public partial class BenefitCalculationStageTests
     {
         BenefitResolutionRequest? captured = null;
         _engine.CalculateAsync(Arg.Do<BenefitResolutionRequest>(r => captured = r), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true });
         var ctx = CobContext("P",
             new CobOutcome { Scenario = CobScenario.ChoPrimaryNoSecondary },
             ClaimAdjudicationStageResult.Pend("DuplicateClaim", "possible duplicate"));
@@ -141,7 +141,7 @@ public partial class BenefitCalculationStageTests
         await _sut.ExecuteAsync(first, CancellationToken.None);
         var retroReason = first.PendDetails!.PendReason;
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true });
 
         var rerun = CobContext("P", new CobOutcome { ConfirmedByExaminer = true, PayerSequence = 1 });
         rerun.ResolvedMember = first.ResolvedMember;
@@ -168,13 +168,13 @@ public partial class BenefitCalculationStageTests
     {
         BenefitResolutionRequest? captured = null;
         _engine.CalculateAsync(Arg.Do<BenefitResolutionRequest>(r => captured = r), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true });
         var ctx = CobContext("S", new CobOutcome { ConfirmedByExaminer = true, PayerSequence = 1 });
 
         await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.Null(captured!.Cob);
-        // Always read-only now: AccumulatorCommitStage commits a passing claim.
+        // Always read-only now: a passing claim commits through the accumulator outbox.
         Assert.Equal(AdjudicationExecutionMode.Prospective, captured.ExecutionMode);
     }
 
@@ -206,7 +206,7 @@ public partial class BenefitCalculationStageTests
     {
         BenefitResolutionRequest? captured = null;
         _engine.CalculateAsync(Arg.Do<BenefitResolutionRequest>(r => captured = r), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true });
         var ctx = CobContext("P", new CobOutcome { Scenario = CobScenario.ChoPrimaryNoSecondary });
         ctx.Claim.PredecessorVersionId = "claim-original";
 
@@ -236,13 +236,13 @@ public partial class BenefitCalculationStageTests
     {
         BenefitResolutionRequest? captured = null;
         _engine.CalculateAsync(Arg.Do<BenefitResolutionRequest>(r => captured = r), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true });
         var ctx = CobContext("P", new CobOutcome { Scenario = CobScenario.ChoPrimaryNoSecondary });
 
         await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.Null(captured!.Cob);
-        // Always read-only now: AccumulatorCommitStage commits a passing claim.
+        // Always read-only now: a passing claim commits through the accumulator outbox.
         Assert.Equal(AdjudicationExecutionMode.Prospective, captured.ExecutionMode);
     }
 }

@@ -422,10 +422,15 @@ builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStage>();
-// Order=990: commits the accumulators a passing claim's (Prospective) benefit
-// calculation prepared; a pended or denied claim writes none.
-builder.Services.AddScoped<IClaimAdjudicationStage, AccumulatorCommitStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();
+
+// Accumulator outbox: a finally adjudicated claim's engine commit (or a
+// denial's terminal reversal) is written on the claim with the write that
+// finalizes it, attempted at once, and re-driven by this dispatcher with
+// backoff until the engine store has it (see claim-cob-pipeline.md).
+builder.Services.Configure<AccumulatorOutboxOptions>(builder.Configuration.GetSection(AccumulatorOutboxOptions.SectionName));
+builder.Services.AddScoped<IAccumulatorOutboxProcessor, AccumulatorOutboxProcessor>();
+builder.Services.AddHostedService<AccumulatorOutboxDispatcher>();
 
 builder.Services.AddScoped<ClaimAdjudicationOrchestrator>();
 builder.Services.AddScoped<IClaimAdjudicationOrchestrator>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());

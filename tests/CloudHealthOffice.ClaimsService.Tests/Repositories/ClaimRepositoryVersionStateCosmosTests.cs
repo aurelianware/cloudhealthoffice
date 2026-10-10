@@ -54,6 +54,7 @@ public sealed class ClaimRepositoryVersionStateCosmosTests
         StubIterator<Claim>();
         StubIterator<ClaimRepository.HeadIdResult>();
         StubIterator<dynamic>();
+        StubIterator<ClaimRepository.AccumulatorTotalsQueryRow>();
         StubIterator<int>();
 
         _sut = new ClaimRepository(cosmos, config, accessor, NullLogger<ClaimRepository>.Instance);

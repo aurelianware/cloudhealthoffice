@@ -185,6 +185,13 @@ public interface IClaimRepository
     /// finalized the claim) writes nothing and this returns false.
     /// </para>
     ///
+    /// <para>
+    /// <paramref name="pendingAccumulatorCommit"/> — the accumulator outbox
+    /// entry a passing claim owes: written by the same conditional status
+    /// write that sets it Approved (and only if that write applies), so the
+    /// commit exists exactly when the claim is finally adjudicated.
+    /// </para>
+    ///
     /// Returns true on success, false when no head row was found for the
     /// chain (or the resolution lock is no longer held).
     /// </summary>
@@ -198,7 +205,39 @@ public interface IClaimRepository
         bool isPend = false,
         ClaimStatus? resolvedStatus = null,
         string? resolvedBenefitPlanId = null,
-        string? requiredResolutionLockToken = null);
+        string? requiredResolutionLockToken = null,
+        AccumulatorOutboxItem? pendingAccumulatorCommit = null);
+
+    // ── accumulator outbox (see Claim.PendingAccumulatorCommit) ─────────
+
+    /// <summary>Up to <paramref name="limit"/> claims of every tenant with an outbox entry due at <paramref name="nowMs"/> (Unix ms).</summary>
+    Task<IReadOnlyList<Claim>> FindDueAccumulatorOutboxAsync(long nowMs, int limit, CancellationToken ct = default);
+
+    /// <summary>The oldest outbox entry's creation time (Unix ms), any tenant; null when the outbox is empty.</summary>
+    Task<long?> OldestAccumulatorOutboxAsync(CancellationToken ct = default);
+
+    /// <summary>The claim, read for the outbox (explicit tenant, no request context needed).</summary>
+    Task<Claim?> GetForAccumulatorOutboxAsync(string tenantId, string claimId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Clears the outbox entry only while it is still <paramref name="itemId"/>
+    /// (a newer entry is never cleared), recording <paramref name="clampReview"/>
+    /// in the same write when given. False when it no longer matches.
+    /// </summary>
+    Task<bool> CompleteAccumulatorOutboxAsync(
+        string tenantId, string claimId, AccumulatorOutboxKind kind, string itemId,
+        AccumulatorClampReview? clampReview = null, CancellationToken ct = default);
+
+    /// <summary>Records a failed attempt and the next due time, only while the entry is still <paramref name="itemId"/>.</summary>
+    Task<bool> RescheduleAccumulatorOutboxAsync(
+        string tenantId, string claimId, AccumulatorOutboxKind kind, string itemId,
+        int attempts, DateTime nextAttemptAt, string? lastError, CancellationToken ct = default);
+
+    /// <summary>Claims of the request's tenant with an unresolved accumulator clamp review (work queue).</summary>
+    Task<IReadOnlyList<Claim>> GetAccumulatorClampReviewsAsync(int limit, CancellationToken ct = default);
+
+    /// <summary>Marks the claim's accumulator clamp review resolved (request tenant); false when there is none.</summary>
+    Task<bool> ResolveAccumulatorClampReviewAsync(string claimId, string resolvedBy, CancellationToken ct = default);
 
     /// <summary>
     /// Fast claim-level adjudication projection for direct local workflow
@@ -1299,7 +1338,8 @@ public class ClaimRepository : IClaimRepository
         bool isPend = false,
         ClaimStatus? resolvedStatus = null,
         string? resolvedBenefitPlanId = null,
-        string? requiredResolutionLockToken = null)
+        string? requiredResolutionLockToken = null,
+        AccumulatorOutboxItem? pendingAccumulatorCommit = null)
     {
         // Resolve the head (non-terminal-but-adjudicatable) row by chain key.
         // PatchItemAsync is keyed on the per-row document Id, so we look up
@@ -1487,7 +1527,8 @@ public class ClaimRepository : IClaimRepository
                     ct,
                     adjudicationResult,
                     head.Status,
-                    requiredResolutionLockToken)
+                    requiredResolutionLockToken,
+                    resolvedStatus == ClaimStatus.Approved ? pendingAccumulatorCommit : null)
                 .ConfigureAwait(false);
         }
 
@@ -1591,13 +1632,18 @@ public class ClaimRepository : IClaimRepository
         CancellationToken ct,
         AdjudicationResult? incomingAdjudication = null,
         ClaimStatus? preWriteStatus = null,
-        string? requiredResolutionLockToken = null)
+        string? requiredResolutionLockToken = null,
+        AccumulatorOutboxItem? pendingAccumulatorCommit = null)
     {
         var statusOps = new List<PatchOperation>
         {
             PatchOperation.Set("/status", desiredStatus),
             PatchOperation.Set("/versionState", desiredVersionState),
         };
+        // The accumulator outbox entry lands with the status that finalizes
+        // the claim (same patch, same predicate), or not at all.
+        if (pendingAccumulatorCommit is not null)
+            statusOps.Add(PatchOperation.Set("/pendingAccumulatorCommit", pendingAccumulatorCommit));
         var options = new PatchItemRequestOptions
         {
             FilterPredicate = WithResolutionLockFence(SynchronousWritebackBlockedFilterPredicate, requiredResolutionLockToken),
@@ -1664,6 +1710,151 @@ public class ClaimRepository : IClaimRepository
                 // functionally not-found from the caller's perspective.
                 return StatusWriteResult.NotFoundResult;
             }
+        }
+    }
+
+    // ── accumulator outbox ──────────────────────────────────────────────
+
+    private static string OutboxPath(AccumulatorOutboxKind kind) =>
+        kind == AccumulatorOutboxKind.Commit ? "pendingAccumulatorCommit" : "pendingAccumulatorReversal";
+
+    /// <summary>Outbox ids are generated (hex / "reversal-" + hex); anything else is refused before it reaches a predicate.</summary>
+    private static string OutboxIdLiteral(string itemId) =>
+        itemId.Length is > 0 and <= 80 && itemId.All(ch => char.IsAsciiLetterOrDigit(ch) || ch == '-')
+            ? itemId
+            : throw new ArgumentException("Invalid accumulator outbox id.", nameof(itemId));
+
+    public async Task<IReadOnlyList<Claim>> FindDueAccumulatorOutboxAsync(long nowMs, int limit, CancellationToken ct = default)
+    {
+        // Cross-partition on purpose: the dispatcher serves every tenant.
+        var query = new QueryDefinition(@"
+            SELECT TOP @limit * FROM c
+            WHERE (IS_DEFINED(c.pendingAccumulatorCommit) AND NOT IS_NULL(c.pendingAccumulatorCommit)
+                   AND c.pendingAccumulatorCommit.dueAtMs <= @now)
+               OR (IS_DEFINED(c.pendingAccumulatorReversal) AND NOT IS_NULL(c.pendingAccumulatorReversal)
+                   AND c.pendingAccumulatorReversal.dueAtMs <= @now)")
+            .WithParameter("@limit", limit)
+            .WithParameter("@now", nowMs);
+        var claims = new List<Claim>();
+        using var iterator = _container.GetItemQueryIterator<Claim>(query);
+        while (iterator.HasMoreResults && claims.Count < limit)
+            claims.AddRange((await iterator.ReadNextAsync(ct)).Select(Hydrate));
+        return claims;
+    }
+
+    public async Task<long?> OldestAccumulatorOutboxAsync(CancellationToken ct = default)
+    {
+        long? oldest = null;
+        foreach (var path in new[] { "pendingAccumulatorCommit", "pendingAccumulatorReversal" })
+        {
+            var query = new QueryDefinition($@"
+                SELECT VALUE MIN(c.{path}.createdAtMs) FROM c
+                WHERE IS_DEFINED(c.{path}) AND NOT IS_NULL(c.{path})");
+            using var iterator = _container.GetItemQueryIterator<long?>(query);
+            while (iterator.HasMoreResults)
+            {
+                foreach (var value in await iterator.ReadNextAsync(ct))
+                {
+                    if (value is { } v && (oldest is null || v < oldest)) oldest = v;
+                }
+            }
+        }
+        return oldest;
+    }
+
+    public async Task<Claim?> GetForAccumulatorOutboxAsync(string tenantId, string claimId, CancellationToken ct = default)
+    {
+        try
+        {
+            var read = await _container.ReadItemAsync<Claim>(claimId, new PartitionKey(tenantId), cancellationToken: ct);
+            return Hydrate(read.Resource);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> CompleteAccumulatorOutboxAsync(
+        string tenantId, string claimId, AccumulatorOutboxKind kind, string itemId,
+        AccumulatorClampReview? clampReview = null, CancellationToken ct = default)
+    {
+        var path = OutboxPath(kind);
+        var ops = new List<PatchOperation> { PatchOperation.Set<AccumulatorOutboxItem?>("/" + path, null) };
+        if (clampReview is not null) ops.Add(PatchOperation.Set("/accumulatorClampReview", clampReview));
+        return await PatchOutboxAsync(tenantId, claimId, path, itemId, ops, ct);
+    }
+
+    public async Task<bool> RescheduleAccumulatorOutboxAsync(
+        string tenantId, string claimId, AccumulatorOutboxKind kind, string itemId,
+        int attempts, DateTime nextAttemptAt, string? lastError, CancellationToken ct = default)
+    {
+        var path = OutboxPath(kind);
+        var ops = new List<PatchOperation>
+        {
+            PatchOperation.Set($"/{path}/attempts", attempts),
+            PatchOperation.Set($"/{path}/nextAttemptAt", nextAttemptAt),
+            PatchOperation.Set($"/{path}/dueAtMs", AccumulatorOutboxItem.ToMs(nextAttemptAt)),
+            PatchOperation.Set($"/{path}/lastError", lastError),
+        };
+        return await PatchOutboxAsync(tenantId, claimId, path, itemId, ops, ct);
+    }
+
+    /// <summary>Patches the claim only while its outbox slot still holds <paramref name="itemId"/> (evaluated at commit).</summary>
+    private async Task<bool> PatchOutboxAsync(
+        string tenantId, string claimId, string path, string itemId, List<PatchOperation> ops, CancellationToken ct)
+    {
+        try
+        {
+            await _container.PatchItemAsync<Claim>(claimId, new PartitionKey(tenantId), ops,
+                new PatchItemRequestOptions { FilterPredicate = $"FROM c WHERE c.{path}.id = '{OutboxIdLiteral(itemId)}'" }, ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed
+                                             or System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
+    public async Task<IReadOnlyList<Claim>> GetAccumulatorClampReviewsAsync(int limit, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        var query = new QueryDefinition(@"
+            SELECT TOP @limit * FROM c
+            WHERE c.tenantId = @tenantId
+              AND IS_DEFINED(c.accumulatorClampReview) AND NOT IS_NULL(c.accumulatorClampReview)
+              AND c.accumulatorClampReview.resolved = false")
+            .WithParameter("@limit", limit)
+            .WithParameter("@tenantId", tenantId);
+        var claims = new List<Claim>();
+        using var iterator = _container.GetItemQueryIterator<Claim>(query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        while (iterator.HasMoreResults)
+            claims.AddRange((await iterator.ReadNextAsync(ct)).Select(Hydrate));
+        return claims;
+    }
+
+    public async Task<bool> ResolveAccumulatorClampReviewAsync(string claimId, string resolvedBy, CancellationToken ct = default)
+    {
+        try
+        {
+            await _container.PatchItemAsync<Claim>(claimId, new PartitionKey(GetTenantId()),
+                [
+                    PatchOperation.Set("/accumulatorClampReview/resolved", true),
+                    PatchOperation.Set("/accumulatorClampReview/resolvedBy", resolvedBy),
+                    PatchOperation.Set("/accumulatorClampReview/resolvedAt", DateTime.UtcNow),
+                ],
+                new PatchItemRequestOptions
+                {
+                    FilterPredicate = "FROM c WHERE IS_DEFINED(c.accumulatorClampReview) AND NOT IS_NULL(c.accumulatorClampReview)",
+                }, ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed
+                                             or System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
         }
     }
 
@@ -1797,8 +1988,12 @@ public class ClaimRepository : IClaimRepository
             ClaimStatus.Approved, ClaimStatus.PartiallyPaid, ClaimStatus.Paid);
         var versionStateClause = EnumInClause("c.versionState", "countedVersionState", enumParams,
             ClaimVersionState.Adjudicated, ClaimVersionState.Paid);
+        // Superseded versions (Adjusted, or SupersededAt set) no longer count.
+        var adjustedClause = EnumInClause("c.versionState", "supersededState", enumParams,
+            ClaimVersionState.Adjusted);
         var queryText = $@"
-            SELECT c.adjudicationResult.deductibleAmount,
+            SELECT c.id,
+                   c.adjudicationResult.deductibleAmount,
                    c.adjudicationResult.coinsuranceAmount,
                    c.adjudicationResult.copayAmount,
                    c.adjudicationResult.patientResponsibility,
@@ -1816,7 +2011,9 @@ public class ClaimRepository : IClaimRepository
                     {statusClause}
                     OR {versionStateClause}
                   )
-              AND IS_DEFINED(c.adjudicationResult)";
+              AND IS_DEFINED(c.adjudicationResult)
+              AND (NOT IS_DEFINED(c.versionState) OR NOT ({adjustedClause}))
+              AND (NOT IS_DEFINED(c.supersededAt) OR IS_NULL(c.supersededAt))";
 
         var queryDef = new QueryDefinition(queryText)
             .WithParameter("@tenantId",      tenantId)
@@ -1826,57 +2023,56 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@yearEnd",       yearEnd);
         foreach (var (name, value) in enumParams) queryDef = queryDef.WithParameter(name, value);
 
-        var iterator = _container.GetItemQueryIterator<dynamic>(
+        // Typed rows: the claims container's serializer is System.Text.Json,
+        // under which a dynamic row is a JsonElement (member access on it
+        // throws), so the projection binds to explicit property names.
+        var iterator = _container.GetItemQueryIterator<AccumulatorTotalsQueryRow>(
             queryDef,
             requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
 
-        // Accumulate by network tier
-        var deductible   = new Dictionary<string, decimal>();
-        var oop          = new Dictionary<string, decimal>();
-        var coinsurance  = new Dictionary<string, decimal>();
-        var copay        = new Dictionary<string, decimal>();
-
+        var rows = new List<AccumulatorTotalsRow>();
         while (iterator.HasMoreResults)
         {
             var page = await iterator.ReadNextAsync(ct);
             foreach (var row in page)
             {
-                var tier = (string?)row.networkTier ?? "InNetwork";
-
-                deductible[tier]  = (deductible.GetValueOrDefault(tier))  + (decimal)(row.deductibleAmount  ?? 0.0);
                 // OOP-eligible amount when the engine recorded it (cost share
                 // excluded from the OOP max doesn't count); legacy rows fall
                 // back to full patient responsibility.
-                oop[tier]         = (oop.GetValueOrDefault(tier))         + (decimal)(row.oopAmount ?? 0.0);
-                coinsurance[tier] = (coinsurance.GetValueOrDefault(tier)) + (decimal)(row.coinsuranceAmount ?? 0.0);
-                copay[tier]       = (copay.GetValueOrDefault(tier))       + (decimal)(row.copayAmount       ?? 0.0);
+                rows.Add(new AccumulatorTotalsRow(
+                    row.Id ?? string.Empty,
+                    row.NetworkTier,
+                    row.DeductibleAmount ?? 0m,
+                    row.CoinsuranceAmount ?? 0m,
+                    row.CopayAmount ?? 0m,
+                    row.OopAmount ?? 0m));
             }
         }
 
-        // Map to accumulator type names the benefit engine understands.
-        // Individual scope → IndividualDeductible / IndividualOutOfPocketMax
-        // Family scope     → FamilyDeductible     / FamilyOutOfPocketMax
-        var deductibleType = scope == "Family" ? "FamilyDeductible"    : "IndividualDeductible";
-        var oopType        = scope == "Family" ? "FamilyOutOfPocketMax" : "IndividualOutOfPocketMax";
+        return AccumulatorTotalsRow.Build(rows, scope);
+    }
 
-        var totals = new List<AccumulatorTotalEntry>();
-
-        foreach (var (tier, amount) in deductible)
-            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = deductibleType,  NetworkTier = tier, AccumulatedAmount = amount });
-
-        foreach (var (tier, amount) in oop)
-            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = oopType,         NetworkTier = tier, AccumulatedAmount = amount });
-
-        // Coinsurance and copay also count toward OOP — they are already included in
-        // patientResponsibility above, so we don't double-count here.  They are surfaced
-        // as separate entries so the portal can display the breakdown by type.
-        foreach (var (tier, amount) in coinsurance)
-            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Coinsurance", NetworkTier = tier, AccumulatedAmount = amount });
-
-        foreach (var (tier, amount) in copay)
-            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Copay",       NetworkTier = tier, AccumulatedAmount = amount });
-
-        return new AccumulatorTotalsResponse { Totals = totals };
+    /// <summary>One row of the accumulator-totals projection.</summary>
+    internal sealed class AccumulatorTotalsQueryRow
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        [Newtonsoft.Json.JsonProperty("id")]
+        public string? Id { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("networkTier")]
+        [Newtonsoft.Json.JsonProperty("networkTier")]
+        public string? NetworkTier { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("deductibleAmount")]
+        [Newtonsoft.Json.JsonProperty("deductibleAmount")]
+        public decimal? DeductibleAmount { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("coinsuranceAmount")]
+        [Newtonsoft.Json.JsonProperty("coinsuranceAmount")]
+        public decimal? CoinsuranceAmount { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("copayAmount")]
+        [Newtonsoft.Json.JsonProperty("copayAmount")]
+        public decimal? CopayAmount { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("oopAmount")]
+        [Newtonsoft.Json.JsonProperty("oopAmount")]
+        public decimal? OopAmount { get; set; }
     }
 
     public async Task<bool> MarkSupersededProjectionAsync(

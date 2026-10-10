@@ -94,6 +94,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Messaging:Backend"] = "Null",
+                // No background accumulator outbox dispatch against the substitute repository.
+                ["Claims:AccumulatorOutbox:Enabled"] = "false",
             });
         });
 

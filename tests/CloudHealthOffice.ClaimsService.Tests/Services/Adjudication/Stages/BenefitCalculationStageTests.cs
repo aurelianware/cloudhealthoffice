@@ -20,6 +20,13 @@ public partial class BenefitCalculationStageTests
     private readonly IAuthorizationValidationClient _authorizationValidationClient = Substitute.For<IAuthorizationValidationClient>();
     private readonly BenefitCalculationStage _sut;
 
+    /// <summary>What a current benefit-plan-service returns with a Prospective pricing.</summary>
+    private static readonly AccumulatorCommit Prepared = new()
+    {
+        CommitId = "commit-test", ClaimId = "claim", MemberId = "MEM-1", SubscriberId = "MEM-1",
+        BenefitPlanId = Guid.Empty, PlanYear = "2026",
+    };
+
     public BenefitCalculationStageTests()
     {
         _sut = new BenefitCalculationStage(
@@ -27,6 +34,37 @@ public partial class BenefitCalculationStageTests
             _memberResolver,
             _authorizationValidationClient,
             NullLogger<BenefitCalculationStage>.Instance);
+    }
+
+    /// <summary>
+    /// Rolling deploy: a benefit-plan-service that prepares no deferred
+    /// commit. The claim is never passed without its accumulators, nor
+    /// dead-lettered: it pends with a transient reason.
+    /// </summary>
+    [Fact]
+    public async Task Execute_NoPreparedCommit_PendsTransient_NeverPasses()
+    {
+        var planGuid = Guid.NewGuid();
+        var claim = BuildClaim(planGuid.ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+        };
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals { TotalAllowed = 72m } });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(BenefitCalculationStage.DeferredCommitUnsupportedPendCode, ctx.PendDetails!.PendCode);
+        Assert.Equal(BenefitCalculationStage.DeferredCommitUnsupportedReason, ctx.PendDetails.PendReason);
+        await _engine.Received(1).CalculateAsync(
+            Arg.Is<BenefitResolutionRequest>(r => r.ExecutionMode == AdjudicationExecutionMode.Prospective),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -45,7 +83,7 @@ public partial class BenefitCalculationStageTests
 
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
             .Returns(new BenefitResolutionResult
-            {
+            { PreparedAccumulatorCommit = Prepared,
                 Success = true,
                 Totals = new ClaimTotals
                 {
@@ -99,7 +137,7 @@ public partial class BenefitCalculationStageTests
 
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
             .Returns(new BenefitResolutionResult
-            {
+            { PreparedAccumulatorCommit = Prepared,
                 Success = true,
                 Totals = new ClaimTotals
                 {
@@ -187,7 +225,7 @@ public partial class BenefitCalculationStageTests
             .Returns(ci =>
             {
                 capturedRequest = ci.Arg<BenefitResolutionRequest>();
-                return new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() };
+                return new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() };
             });
 
         await _sut.ExecuteAsync(ctx, CancellationToken.None);
@@ -233,7 +271,7 @@ public partial class BenefitCalculationStageTests
 
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
             .Returns(new BenefitResolutionResult
-            {
+            { PreparedAccumulatorCommit = Prepared,
                 Success = false,
                 DenialReasonCode = "96",
                 DenialReasonDescription = "Non-covered service",
@@ -324,7 +362,7 @@ public partial class BenefitCalculationStageTests
         };
 
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals(), Lines = new List<LineBenefitResult>() });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals(), Lines = new List<LineBenefitResult>() });
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
@@ -384,7 +422,7 @@ public partial class BenefitCalculationStageTests
         await _sut.ExecuteAsync(first, CancellationToken.None);
         var persisted = first.PendDetails!;
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true });
 
         var rerun = Context(new ExaminerApproval
         {
@@ -424,7 +462,7 @@ public partial class BenefitCalculationStageTests
         };
 
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals(), Lines = new List<LineBenefitResult>() });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals(), Lines = new List<LineBenefitResult>() });
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
@@ -482,7 +520,7 @@ public partial class BenefitCalculationStageTests
         };
 
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals(), Lines = new List<LineBenefitResult>() });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals(), Lines = new List<LineBenefitResult>() });
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
@@ -539,7 +577,7 @@ public partial class BenefitCalculationStageTests
         };
 
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() });
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
@@ -567,7 +605,7 @@ public partial class BenefitCalculationStageTests
         };
 
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() });
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
@@ -653,7 +691,7 @@ public partial class BenefitCalculationStageTests
                 Arg.Any<CancellationToken>())
             .Returns((AuthorizationValidationResult?)null);
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() });
+            .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() });
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
@@ -681,7 +719,7 @@ public partial class BenefitCalculationStageTests
             .Returns(ci =>
             {
                 captured = ci.Arg<BenefitResolutionRequest>();
-                return new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() };
+                return new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() };
             });
 
         await _sut.ExecuteAsync(ctx, CancellationToken.None);
@@ -706,7 +744,7 @@ public partial class BenefitCalculationStageTests
             .Returns(ci =>
             {
                 captured = ci.Arg<BenefitResolutionRequest>();
-                return new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() };
+                return new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() };
             });
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
@@ -737,7 +775,7 @@ public partial class BenefitCalculationStageTests
             .Returns(ci =>
             {
                 captured = ci.Arg<BenefitResolutionRequest>();
-                return new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() };
+                return new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() };
             });
 
         await _sut.ExecuteAsync(ctx, CancellationToken.None);
@@ -813,7 +851,7 @@ public partial class BenefitCalculationStageTests
             .Returns(ci =>
             {
                 captured = ci.Arg<BenefitResolutionRequest>();
-                return new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() };
+                return new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() };
             });
 
         await _sut.ExecuteAsync(ctx, CancellationToken.None);
@@ -843,7 +881,7 @@ public partial class BenefitCalculationStageTests
             .Returns(ci =>
             {
                 captured = ci.Arg<BenefitResolutionRequest>();
-                return new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() };
+                return new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() };
             });
 
         await _sut.ExecuteAsync(ctx, CancellationToken.None);
@@ -946,7 +984,7 @@ public partial class BenefitCalculationStageTests
         Assert.Equal(30500m, Cas("CO", "45"));
 
         // Priced read-only: the stage writes nothing; the write is prepared
-        // once (deductible once) for AccumulatorCommitStage to commit.
+        // once (deductible once), committed later through the accumulator outbox.
         await accumulators.DidNotReceiveWithAnyArgs().ApplyUpdatesAsync(
             default!, default!, default, default!, default!, default!, default);
         var commit = ctx.BenefitResolutionResult!.PreparedAccumulatorCommit!;
@@ -1260,7 +1298,7 @@ public partial class BenefitCalculationStageTests
         var ctx = ContextFor(claim);
 
         BenefitCalculationStage.ApplyToContext(ctx, new BenefitResolutionResult
-        {
+        { PreparedAccumulatorCommit = Prepared,
             Success = true,
             Lines =
             [

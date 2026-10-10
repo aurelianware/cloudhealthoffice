@@ -1849,14 +1849,17 @@ public class AdjudicationControllerCommitAccumulatorsTests : IClassFixture<Adjud
 
     public AdjudicationControllerCommitAccumulatorsTests(AdjudicationControllerTests.Factory factory) => _factory = factory;
 
-    private HttpClient CreateClient()
+    /// <summary>claims-service's own service token (the only caller the endpoint accepts).</summary>
+    private HttpClient CreateClient(string serviceClientId = "claims-service")
     {
-        var c = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
+        var c = _factory.CreateDefaultClient();
+        c.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer", ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken(serviceClientId, "test-tenant-001"));
         c.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant-001");
         return c;
     }
 
-    private static object Body(string commitId = "c-1") => new
+    private static object Body(string commitId = "c-1", decimal amount = 60m) => new
     {
         commitId,
         claimId = "claim-7",
@@ -1866,7 +1869,7 @@ public class AdjudicationControllerCommitAccumulatorsTests : IClassFixture<Adjud
         planYear = "2026",
         updates = new[]
         {
-            new { type = "IndividualDeductible", scope = "Individual", networkTier = "InNetwork", amount = 60m, source = "Deductible", clampAtLimit = 500m },
+            new { type = "IndividualDeductible", scope = "Individual", networkTier = "InNetwork", amount, source = "Deductible", clampAtLimit = 500m },
         },
     };
 
@@ -1874,12 +1877,20 @@ public class AdjudicationControllerCommitAccumulatorsTests : IClassFixture<Adjud
     public async Task Commit_ForwardsToTheEngine_AndReturnsTheOutcome()
     {
         _factory.BenefitEngine.CommitAccumulatorsAsync(Arg.Any<AccumulatorCommit>(), Arg.Any<CancellationToken>())
-            .Returns(AccumulatorCommitOutcome.RefusedClaimReversed);
+            .Returns(new AccumulatorCommitResult
+            {
+                Outcome = AccumulatorCommitOutcome.Committed,
+                Clamped = [new AccumulatorClamp { Type = AccumulatorType.IndividualDeductible, Scope = AccumulatorScope.Individual,
+                    NetworkTier = NetworkTier.InNetwork, Requested = 60m, Applied = 20m, Limit = 500m }],
+            });
 
         var response = await CreateClient().PostAsJsonAsync("/api/v1/adjudication/commit-accumulators", Body());
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("\"RefusedClaimReversed\"", await response.Content.ReadAsStringAsync());
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.Contains("\"Committed\"", json);
+        Assert.Contains("\"IndividualDeductible\"", json);
+        Assert.Contains("\"applied\":20", json);
         await _factory.BenefitEngine.Received(1).CommitAccumulatorsAsync(
             Arg.Is<AccumulatorCommit>(c => c.CommitId == "c-1" && c.ClaimId == "claim-7"
                                            && c.SubscriberId == "m1" // defaults to the member
@@ -1887,6 +1898,53 @@ public class AdjudicationControllerCommitAccumulatorsTests : IClassFixture<Adjud
                                            && c.Updates.Single().ClampAtLimit == 500m
                                            && c.Updates.Single().Type == AccumulatorType.IndividualDeductible),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A user — even an administrator — or another service cannot write accumulators directly.</summary>
+    [Theory]
+    [InlineData("user")]
+    [InlineData("payment-service")]
+    public async Task Commit_FromAnyoneButClaimsService_Is403_EngineNotCalled(string caller)
+    {
+        _factory.BenefitEngine.ClearReceivedCalls();
+        HttpClient client;
+        if (caller == "user")
+        {
+            client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
+            client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant-001");
+        }
+        else
+        {
+            client = CreateClient(caller);
+        }
+
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/commit-accumulators", Body());
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await _factory.BenefitEngine.DidNotReceiveWithAnyArgs().CommitAccumulatorsAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task Commit_Unauthenticated_Is401()
+    {
+        var client = _factory.CreateDefaultClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant-001");
+
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/commit-accumulators", Body());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    /// <summary>A commit only adds; a negative amount (a reversal in disguise) is refused.</summary>
+    [Fact]
+    public async Task Commit_WithANegativeAmount_Is400_EngineNotCalled()
+    {
+        _factory.BenefitEngine.ClearReceivedCalls();
+
+        var response = await CreateClient().PostAsJsonAsync("/api/v1/adjudication/commit-accumulators", Body(amount: -60m));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _factory.BenefitEngine.DidNotReceiveWithAnyArgs().CommitAccumulatorsAsync(default!, default);
     }
 
     [Fact]

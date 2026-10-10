@@ -76,8 +76,8 @@ public sealed class ChoAccumulatorCommitCosmosTests(CosmosEmulatorFixture cosmos
     {
         var commit = Commit("C1", 100m);
 
-        Assert.Equal(AccumulatorCommitOutcome.Committed, await _store.CommitAsync(commit));
-        Assert.Equal(AccumulatorCommitOutcome.AlreadyCommitted, await _store.CommitAsync(commit));
+        Assert.Equal(AccumulatorCommitOutcome.Committed, (await _store.CommitAsync(commit)).Outcome);
+        Assert.Equal(AccumulatorCommitOutcome.AlreadyCommitted, (await _store.CommitAsync(commit)).Outcome);
 
         Assert.Equal(100m, await Read(AccumulatorType.IndividualDeductible));
         Assert.Equal(100m, await Read(AccumulatorType.FamilyDeductible));
@@ -93,8 +93,9 @@ public sealed class ChoAccumulatorCommitCosmosTests(CosmosEmulatorFixture cosmos
         await _store.CommitAsync(Commit("C2", 300m, replaces: "C1"));
         Assert.Equal(300m, await Read(AccumulatorType.IndividualDeductible));
 
-        await _store.CommitAsync(Commit("C3", 400m));         // only 200 left under the 500 limit
+        var c3 = await _store.CommitAsync(Commit("C3", 400m));         // only 200 left under the 500 limit
         Assert.Equal(500m, await Read(AccumulatorType.IndividualDeductible));
+        Assert.Contains(c3.Clamped, c => c.Type == AccumulatorType.IndividualDeductible && c.Requested == 400m && c.Applied == 200m);
     }
 
     [SkippableTheory]
@@ -104,14 +105,14 @@ public sealed class ChoAccumulatorCommitCosmosTests(CosmosEmulatorFixture cosmos
     {
         var commit = Commit("C1", 100m);
 
-        if (commitFirst) Assert.Equal(AccumulatorCommitOutcome.Committed, await _store.CommitAsync(commit));
+        if (commitFirst) Assert.Equal(AccumulatorCommitOutcome.Committed, (await _store.CommitAsync(commit)).Outcome);
         await _store.ReverseTerminallyAsync("M1", "S1", Plan, Year, "C1");
         if (!commitFirst)
-            Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, await _store.CommitAsync(commit));
+            Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, (await _store.CommitAsync(commit)).Outcome);
 
         Assert.Equal(0m, await Read(AccumulatorType.IndividualDeductible));
         Assert.Equal(0m, await Read(AccumulatorType.FamilyDeductible));
-        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, await _store.CommitAsync(Commit("C1", 100m)));
+        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, (await _store.CommitAsync(Commit("C1", 100m))).Outcome);
     }
 
     private sealed class Tenant(string id) : IBenefitEngineTenantContext

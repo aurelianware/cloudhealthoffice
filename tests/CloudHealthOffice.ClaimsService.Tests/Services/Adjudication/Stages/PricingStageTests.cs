@@ -216,7 +216,7 @@ public class PricingStageTests
             .Returns(ci =>
             {
                 captured = ci.Arg<CloudHealthOffice.BenefitEngine.Models.BenefitResolutionRequest>();
-                return new CloudHealthOffice.BenefitEngine.Models.BenefitResolutionResult { Success = true };
+                return new CloudHealthOffice.BenefitEngine.Models.BenefitResolutionResult { Success = true, PreparedAccumulatorCommit = new() { CommitId = "c", ClaimId = "claim", MemberId = "m", SubscriberId = "m", PlanYear = "2026" } };
             });
         var benefits = new BenefitCalculationStage(
             benefitEngine,

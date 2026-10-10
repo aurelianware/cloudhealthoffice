@@ -74,7 +74,7 @@ public interface IAccumulatorService
     /// journal). <c>ChoAccumulatorService</c> does it in one versioned write
     /// per document, with the fence.</para>
     /// </summary>
-    async Task<AccumulatorCommitOutcome> CommitAsync(AccumulatorCommit commit, CancellationToken ct = default)
+    async Task<AccumulatorCommitResult> CommitAsync(AccumulatorCommit commit, CancellationToken ct = default)
     {
         var own = await GetClaimUpdatesAsync(
             commit.MemberId, commit.SubscriberId, commit.BenefitPlanId, commit.PlanYear, commit.ClaimId, ct);
@@ -90,7 +90,7 @@ public interface IAccumulatorService
         }
         await ApplyUpdatesAsync(
             commit.MemberId, commit.SubscriberId, commit.BenefitPlanId, commit.PlanYear, commit.ClaimId, commit.Updates, ct);
-        return AccumulatorCommitOutcome.Committed;
+        return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.Committed);
     }
 
     /// <summary>

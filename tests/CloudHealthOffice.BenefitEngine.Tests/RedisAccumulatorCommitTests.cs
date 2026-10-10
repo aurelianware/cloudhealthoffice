@@ -4,82 +4,12 @@ using System.Net.Sockets;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
+using CloudHealthOffice.Testing.Redis;
 using Microsoft.Extensions.Logging.Abstractions;
 using StackExchange.Redis;
 using Xunit;
 
 namespace CloudHealthOffice.BenefitEngine.Tests;
-
-/// <summary>
-/// A real redis-server for <see cref="RedisAccumulatorCommitTests"/>:
-/// <c>CHO_TEST_REDIS</c> (a connection string, as CI provides) or, when that is
-/// unset, a <c>redis-server</c> on the PATH started on a free port, without
-/// persistence. Neither available: the tests are skipped, never faked.
-/// </summary>
-public sealed class RedisServerFixture : IDisposable
-{
-    private readonly Process? _process;
-
-    public ConnectionMultiplexer? Connection { get; }
-    public string? Unavailable { get; }
-
-    public RedisServerFixture()
-    {
-        var configured = Environment.GetEnvironmentVariable("CHO_TEST_REDIS");
-        try
-        {
-            if (string.IsNullOrWhiteSpace(configured))
-            {
-                var port = FreePort();
-                _process = Process.Start(new ProcessStartInfo("redis-server",
-                    $"--port {port} --bind 127.0.0.1 --save \"\" --appendonly no")
-                {
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                });
-                configured = $"127.0.0.1:{port}";
-            }
-            var deadline = DateTime.UtcNow.AddSeconds(10);
-            while (true)
-            {
-                try
-                {
-                    Connection = ConnectionMultiplexer.Connect(configured + ",allowAdmin=true,connectTimeout=1000");
-                    break;
-                }
-                catch (RedisConnectionException) when (DateTime.UtcNow < deadline)
-                {
-                    Thread.Sleep(100);
-                }
-            }
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or RedisConnectionException)
-        {
-            Unavailable = $"No Redis for the accumulator store tests (set CHO_TEST_REDIS or install redis-server): {ex.Message}";
-        }
-    }
-
-    private static int FreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
-
-    public void Dispose()
-    {
-        Connection?.Dispose();
-        if (_process is { HasExited: false })
-        {
-            _process.Kill();
-            _process.WaitForExit(5000);
-        }
-        _process?.Dispose();
-    }
-}
 
 /// <summary>
 /// <see cref="RedisAccumulatorService"/> — the store benefit-plan-service
@@ -145,8 +75,8 @@ public sealed class RedisAccumulatorCommitTests : IClassFixture<RedisServerFixtu
         var store = await WarmStore(priorDeductible: 40m);
         var commit = Commit("C1", 100m);
 
-        Assert.Equal(AccumulatorCommitOutcome.Committed, await store.CommitAsync(commit));
-        Assert.Equal(AccumulatorCommitOutcome.AlreadyCommitted, await store.CommitAsync(commit));
+        Assert.Equal(AccumulatorCommitOutcome.Committed, (await store.CommitAsync(commit)).Outcome);
+        Assert.Equal(AccumulatorCommitOutcome.AlreadyCommitted, (await store.CommitAsync(commit)).Outcome);
 
         Assert.Equal(140m, await Read(store, AccumulatorType.IndividualDeductible));
         Assert.Equal(100m, await Read(store, AccumulatorType.IndividualOutOfPocketMax));
@@ -181,8 +111,12 @@ public sealed class RedisAccumulatorCommitTests : IClassFixture<RedisServerFixtu
     {
         var store = await WarmStore(priorDeductible: 450m);
 
-        await store.CommitAsync(Commit("C1", 100m, limit: 500m));
+        var result = await store.CommitAsync(Commit("C1", 100m, limit: 500m));
 
+        var clamp = Assert.Single(result.Clamped);
+        Assert.Equal(AccumulatorType.IndividualDeductible, clamp.Type);
+        Assert.Equal(100m, clamp.Requested);
+        Assert.Equal(50m, clamp.Applied);
         Assert.Equal(500m, await Read(store, AccumulatorType.IndividualDeductible));
         Assert.Equal(100m, await Read(store, AccumulatorType.IndividualOutOfPocketMax));
     }
@@ -201,7 +135,7 @@ public sealed class RedisAccumulatorCommitTests : IClassFixture<RedisServerFixtu
         // The next read rebuilds from claims-service (which does not count the denied claim).
         Assert.Equal(40m, await Read(store, AccumulatorType.IndividualDeductible));
 
-        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, await store.CommitAsync(late));
+        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, (await store.CommitAsync(late)).Outcome);
         Assert.Equal(40m, await Read(store, AccumulatorType.IndividualDeductible));
         Assert.Equal(0m, await Read(store, AccumulatorType.FamilyDeductible));
     }
@@ -230,7 +164,7 @@ public sealed class RedisAccumulatorCommitTests : IClassFixture<RedisServerFixtu
         var store = Store();
         _source.Individual = 70m;
 
-        Assert.Equal(AccumulatorCommitOutcome.Committed, await store.CommitAsync(Commit("C1", 100m)));
+        Assert.Equal(AccumulatorCommitOutcome.Committed, (await store.CommitAsync(Commit("C1", 100m))).Outcome);
 
         Assert.Equal(70m, await Read(store, AccumulatorType.IndividualDeductible));
     }

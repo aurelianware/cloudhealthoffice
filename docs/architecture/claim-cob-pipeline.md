@@ -18,10 +18,12 @@
 >
 > *Accumulator integrity — October 2026 (`feat/accumulator-integrity`).*
 > Engine accumulators are written only when a claim's adjudication is final:
-> every claim is priced read-only and the write is committed by
-> `AccumulatorCommitStage` (a passing claim) or by the examiner resolution
-> after its lock-fenced final write (an approval). A void or denial fences the
-> claim id in the store. accumulator-service fences a stalled original append
+> every claim is priced read-only, and the prepared write is saved on the
+> claim (an outbox entry) by the conditional write that makes the claim
+> Approved — the pipeline's status patch or the examiner's lock-fenced final
+> write — then committed by the request and, on failure, by a background
+> dispatcher with backoff. A void or denial fences the claim id in the store;
+> an examiner's denial reverses only after its final write. accumulator-service fences a stalled original append
 > on the original's own snapshot. See "Accumulator writes: commit on final
 > adjudication" below; it replaces the H4, tombstone-snapshot and lock-scope
 > limitations.
@@ -798,75 +800,140 @@ against the old code).
    calls the engine with `ExecutionMode = Prospective`. The engine returns
    the write it would have made as `BenefitResolutionResult.PreparedAccumulatorCommit`
    (`AccumulatorCommit`: claim id, replaced claim id, member / subscriber,
-   plan, plan year, the updates with their deductible clamp, and a fresh
-   `CommitId`). Pricing reads are unchanged — a pended claim's would-be
-   amounts are simply not in the store, so estimates and later claims are
-   priced without them.
-2. **A passing claim commits once, before persistence.**
-   `AccumulatorCommitStage` (Order 990, required) commits the prepared write
-   only when every stage so far passed (`ResolveOutcome == Pass`). Pend, Deny
-   or Reject → nothing is written. It is required, so a failed commit throws
-   and the Service Bus message is redelivered; the projection has not been
-   written yet, so the redelivery re-adjudicates and its commit replaces the
-   earlier one. A passing claim whose pricing prepared no commit (an older
-   benefit-plan-service) fails the run rather than passing without
-   accumulators. A commit the store refuses (the claim id is fenced) rejects
-   the run.
-3. **An approval commits after its fenced final write.** On an approval
-   re-run the stage defers; the resolver
-   (`ClaimsController.ResolvePendedClaim`) commits
-   `PreparedAccumulatorCommit` only after `UpdateHoldingResolutionLockAsync`
-   — the token-fenced replace that sets the claim Approved and clears the
-   lock — has landed. That write is the guarantee: it is a conditional write
-   on the claim document (Mongo filter on the token; Cosmos ETag replace),
-   and once it has landed the claim is no longer Pended, so
-   `TryAcquireResolutionLockAsync` (which requires Pended) can never give the
-   claim to another resolver, and nobody can deny it. A resolver whose lock
-   was taken over gets its final write refused and never reaches the commit.
-   Not a read-check: the decision "may this resolver write accumulators?" is
-   the outcome of the same atomic write that makes its approval final.
-4. **The store fences voided and denied claims** (defence in depth, for a
-   commit already in flight when the claim was voided or denied).
-   `ReverseClaimAsync` is terminal: `IAccumulatorService.ReverseTerminallyAsync`
-   reverses the claim and records its id as fenced in the same versioned
-   write, even when nothing was applied (the document is created to hold the
-   fence). `CommitAsync` checks the fence inside its own versioned write, so
-   whichever lands first, a commit and a denial leave nothing (both orders
-   tested on Mongo, Cosmos and Redis). Both stores implement it:
+   plan, plan year, the updates with their write-time limit, and a fresh
+   `CommitId`). A pended claim's would-be amounts are simply not in the
+   store, so estimates and later claims are priced without them. Pricing
+   takes the claim's own earlier commit, and the replaced claim's, out of
+   the starting balances (`GetClaimUpdatesAsync`; both stores).
+2. **The commit is an outbox entry on the claim, written by the write that
+   finalizes it.** No accumulator write happens before the claim is final,
+   and a final claim never loses its write:
+   - *Pipeline pass* (`PersistenceStage`): the entry
+     (`Claim.PendingAccumulatorCommit`, an `AccumulatorOutboxItem` holding
+     the prepared commit) is set by the same conditional status patch that
+     sets the claim Approved (Mongo filter / Cosmos `FilterPredicate`: not
+     Pended or final, the resolution-lock fence when there is one). A
+     refused status write — the claim was voided, denied or pended
+     meanwhile — saves no entry.
+   - *Examiner approval*: the entry is set on the claim the resolver writes
+     with `UpdateHoldingResolutionLockAsync`, the token-fenced replace that
+     sets the claim Approved and clears the lock. A resolver whose lock was
+     taken over has its final write refused, and with it the entry. Once
+     the write has landed the claim is no longer Pended, so
+     `TryAcquireResolutionLockAsync` (which requires Pended) can never give
+     it to another resolver.
+   - *Examiner denial*: `Claim.PendingAccumulatorReversal` (the terminal
+     reversal, see 4) is set by the same fenced final write. The reversal
+     never runs before the denial is final; a denial that lost its lock
+     reverses nothing.
+3. **Driving the outbox.** The request (or the pipeline run) drives its
+   entry right after the final write (`IAccumulatorOutboxProcessor`); the
+   `AccumulatorOutboxDispatcher` (claims-service hosted service, every
+   `Claims:AccumulatorOutbox:PollInterval`, default 15 s) drives every
+   due entry of every tenant. A failure keeps the entry and reschedules it
+   with exponential backoff (`BaseBackoff` 30 s doubling to `MaxBackoff` 30
+   min; `Attempts`, `NextAttemptAt`, `LastError` = exception type and HTTP
+   status, no claim data). An entry is cleared only when the store
+   answered (`Committed`, `AlreadyCommitted`, `RefusedClaimReversed`, or the
+   reversal returned), and only while the slot still holds that entry
+   (conditional on its id), so replicas may run the dispatcher side by side.
+   A commit whose claim is Denied / Voided by the time it is driven is
+   dropped. Metrics (meter `CloudHealthOffice`):
+   `cho.claims.accumulator_outbox.attempts.total` (by kind and result) and
+   `cho.claims.accumulator_outbox.oldest_age` (seconds); an entry older than
+   `AgeAlert` (15 min) is logged at error on every poll — alert on either.
+4. **The store fences voided and denied claims.** `ReverseClaimAsync` is
+   terminal: `IAccumulatorService.ReverseTerminallyAsync` reverses the claim
+   and records its id as fenced in the same write, even when nothing was
+   applied. `CommitAsync` checks the fence inside its own write, so whichever
+   lands first, a commit and a denial leave nothing (both orders tested on
+   Mongo, Cosmos and Redis).
    - `ChoAccumulatorService` (Mongo / Cosmos): per document (individual,
      family), one version-checked write that refuses a fenced claim, is a
      no-op for the same `CommitId`, reverses the claim's own and the
-     replaced claim's active transactions, then applies the updates with the
-     deductible clamped at write time. `AccumulatorDocument.ReversedClaimIds`,
-     `AccumulatorTransaction.CommitId`.
+     replaced claim's active transactions, then applies the updates.
+     `AccumulatorDocument.ReversedClaimIds`, `AccumulatorTransaction.CommitId`.
    - `RedisAccumulatorService` (what benefit-plan-service runs): one Lua
-     script per hash (single key, cluster-safe) with the same checks; the
-     claim's commit is recorded in the hash (`__commit:{claimId}` = commit
-     id and the amounts it added) and the fence as `__fence:{claimId}`. A
-     terminal reversal invalidates the hash as before (the rebuild from
-     claims-service counts only Approved / Paid claims) but keeps the
-     fences. A commit on a hash with no amounts (evicted / invalidated) adds
-     nothing — the next read rebuilds from claims-service.
-   The direct Production apply (`ApplyUpdatesAsync`, other callers of the
-   engine) is not fenced and keeps its earlier semantics.
-5. **Exactly once.** The commit is idempotent on `CommitId`; a new commit of
+     script per hash (single key, cluster-safe). Every claim's contribution
+     is journalled in the hash: `__commit:{claimId}` = commit id and, per
+     field, the amount in the hash with its type, tier and source. The
+     commit writes it; so does the **cache rebuild**, from claims-service's
+     per-claim contributions (`accumulator-totals` `claims[]`), so after an
+     invalidation a replacement still takes its predecessor back and a
+     re-commit still replaces the claim's own amounts. `GetClaimUpdatesAsync`
+     reads the journal. Fences are `__fence:{claimId}`; an invalidation
+     keeps them. A commit on a hash with no amounts adds nothing (the next
+     read rebuilds from claims-service, which counts the Approved claim).
+   The direct Production apply (`ApplyUpdatesAsync`) is not fenced and keeps
+   its earlier semantics.
+5. **Money caps are clamped at write time and reported.** Deductible,
+   OOP maximum and ACA cap updates carry their limit; the store applies no
+   more than the room left at write time and returns what it trimmed
+   (`AccumulatorCommitResult.Clamped`: requested, applied, limit). That
+   happens when another claim of the member or family reached the limit
+   between this claim's pricing and its commit. Paid amounts are **not**
+   changed automatically: the trim is recorded on the claim
+   (`Claim.AccumulatorClampReview`, in the same write that clears the
+   entry) and listed in the work queue for an adjustment
+   (`GET /api/claims/work-queue/accumulator-adjustments`,
+   `POST /api/claims/work-queue/{claimId}/accumulator-adjustment/resolve`,
+   `workqueue:work`).
+6. **claims-service's rebuild source counts each claim once.**
+   `accumulator-totals` excludes superseded versions (`VersionState =
+   Adjusted`, or `SupersededAt` set) and returns each counted claim's
+   deductible / OOP contribution next to the totals.
+7. **Exactly once.** The commit is idempotent on `CommitId`; a new commit of
    the same claim replaces its earlier one; a replacement's commit takes the
    replaced claim's write back (same member and plan year — otherwise the
    predecessor's void does it on its own snapshot).
 
-Endpoint: benefit-plan-service `POST /api/v1/adjudication/commit-accumulators`
-(same permission as `reverse-claim`), returns
-`{ outcome: Committed | AlreadyCommitted | RefusedClaimReversed }`.
+**Endpoint.** benefit-plan-service `POST /api/v1/adjudication/commit-accumulators`
+accepts only claims-service's service principal
+(`[RequireServiceClient("claims-service")]`: a user or another service gets
+403), refuses negative amounts (400), and logs an audit line per call (caller
+client id, tenant, claim and commit ids — no member data). claims-service
+sends it with its own service token even inside an examiner's request.
+Returns `{ outcome, clamped[] }`.
 
-Tests (real databases): GoldenPath `AccumulatorIntegrityMongoTests` /
-`AccumulatorIntegrityCosmosTests` (NCCI-pended claim writes nothing until
-approved, then once; denied → nothing and a late commit refused; a claim
-pended before the change replaced or reversed; lock expiry mid-run then a
-denial by the new holder → zero), `RedisAccumulatorCommitTests` (real
-redis-server), `ChoAccumulatorCommitCosmosTests`, `AccumulatorCommitStageTests`,
-`ExaminerResolutionTests` (commit after the final write; none on a lost
-lock). Mutation-checked: with the old Production pricing and the store fence
-disabled, the lock-expiry test leaves deductible 100.
+**Capability check (mixed versions).** A benefit-plan-service that prepares
+no commit (older than claims-service) would leave a passing claim without
+accumulators. Such a claim pends (`ACCUMCOMMIT`, a transient reason: an
+examiner approval re-runs it instead of overriding it, and the claim is not
+dead-lettered); re-adjudicate the pends once benefit-plan-service is
+upgraded.
+
+**Redis must not evict.** The journal and the fences live in the
+accumulator hashes, which carry a TTL, so any evicting policy (`allkeys-*`
+or `volatile-*`) can drop them: a fence lost lets a late commit of a denied
+claim land. Run the accumulator Redis with `maxmemory-policy noeviction`.
+benefit-plan-service checks it (`INFO memory`) at startup and in its
+readiness check (`redis-accumulator-eviction-policy`, tags `ready`,
+`cache`): another policy is Unhealthy (readiness fails), or Degraded when
+`BenefitEngine:Redis:AllowEvictingPolicy=true`; an unreadable policy is
+Degraded. Each non-healthy result is logged at error.
+
+Tests (real databases): GoldenPath `AccumulatorIntegrity{Mongo,Cosmos,Redis}Tests`
+(the Redis variant is the production combination: Mongo claims with
+`RedisAccumulatorService` on a real redis-server, rebuilding through
+claims-service's real `accumulator-totals`) — NCCI-pended claim writes
+nothing until approved, then once; denied → nothing and a late commit
+refused; lock expiry mid-run then a denial by the new holder → zero; a
+crash after the final write → the dispatcher commits once;
+benefit-plan-service down → retried at 30 s / 60 s, then lands once; a
+failed denial reversal re-driven; two claims racing to the deductible / OOP
+limit → balances stop at the limit and the later claim gets a clamp review.
+`RedisAccumulatorEngineTests` (engine + Redis: re-pricing a committed claim
+gives the same cost share; replacement; invalidate → rebuild → replacement
+and → re-commit), `RedisAccumulatorCommitTests`, `ChoAccumulatorCommitCosmosTests`,
+`ClaimRepositoryAccumulatorOutbox{Mongo,Cosmos}Tests` (the entry lands with
+the Approved status write or not at all; reschedule / clear only while it is
+the same entry; totals exclude superseded versions and list each claim),
+`ExaminerResolutionTests`, `AdjudicationControllerCommitAccumulatorsTests`,
+`RedisAccumulatorEvictionHealthCheckTests`. Mutation-checked: with the old
+Production pricing and the store fence disabled, the lock-expiry test leaves
+deductible 100; without the rebuild's journal records, the invalidate →
+rebuild tests count the original twice; without the commit journal read,
+re-pricing counts the claim against itself.
 
 ### Exactly-once in accumulator-service (re-review N5)
 
@@ -991,22 +1058,36 @@ disabled, the lock-expiry test leaves deductible 100.
   claim adjudicated while it waits is priced first (it may meet the
   deductible the pended claim would have met). Inherent to not counting
   pended claims.
-- **Approval commit after the final write.** If the commit fails after the
-  approval's final write (benefit-plan-service down), the approval stands
-  and the engine store lacks the claim until someone re-posts the commit
-  (logged at error with the commit body; idempotent on its id). There is no
-  automatic re-drive. With Redis, the next cache rebuild counts the
-  approved claim anyway.
-- **First-pass commit before persistence.** A passing claim commits at Order
-  990, then persists. If persistence then refuses the write (the version was
-  superseded or voided meanwhile), the commit stays until that version's
-  void reverses it terminally.
+- **Outbox scope.** The dispatcher scans the claims database
+  claims-service is configured with; a tenant served from its own database
+  (tenant-scoped storage) has its entries driven only by the request or
+  run that wrote them. If that attempt fails, the entry stays on the claim
+  but nothing retries it, and the age metric (base database only) does not
+  show it. Until the dispatcher iterates tenant stores, re-drive those
+  entries per tenant (query `pendingAccumulatorCommit` /
+  `pendingAccumulatorReversal`).
+- **Void reversal is not in the outbox.** A void (Paid / Adjusted → Voided,
+  `ClaimFinalizationService`) reverses the engine accumulators after its
+  write and logs a failure at error; the reversal run's repeat void re-drives
+  it (pre-existing). A commit still pending on a voided claim is dropped by
+  the outbox.
+- **Rolling deploy of claims-service.** An old claims-service pod that
+  replaces a whole claim document (examiner resolve, adjustments) drops the
+  outbox fields it does not know. Drain or finish the rollout quickly; the
+  age metric shows nothing for a dropped entry, so compare Approved claims
+  of the rollout window with the store if in doubt.
 - **Redis cache vs rebuild.** A commit on a cold hash adds nothing and relies
-  on the rebuild; a rebuild that runs between a first-pass commit and its
-  persistence misses the claim until the next invalidation (as before, for
-  the Production write). Redis keeps no per-claim journal for pricing
-  (`GetClaimUpdatesAsync`), so a re-adjudication is not priced without its
-  own earlier commit (pre-existing).
+  on the rebuild; a rebuild that reads claims-service just before a claim is
+  approved and populates the hash just after that claim's (cold) commit
+  misses it until the next invalidation of that member.
+- **Redis money is a float** (`HINCRBYFLOAT`, JSON numbers in the journal;
+  pre-existing). Amounts are read back as `double` → `decimal` without
+  rounding, so long sums can drift by sub-cent amounts.
+- **Fence / journal growth.** Each claim adds one `__commit:` (and, if
+  voided or denied, one `__fence:`) field to its member's and family's hash,
+  and Mongo / Cosmos documents keep their transactions and
+  `ReversedClaimIds`: bounded by the claims per member (or family) and plan
+  year; the Redis hashes expire with the plan year.
 - **Engine Cosmos store serializer.** `AccumulatorRepositoryCosmos` was tested
   with a camelCase client; benefit-plan-service registers a default
   `CosmosClient` (PascalCase, no `id`), which would not work — moot today,
@@ -1016,8 +1097,8 @@ disabled, the lock-expiry test leaves deductible 100.
   log, can make it inexact (never more than the row recorded).
 - **Cosmos reversal uniqueness** relies on the versioned write and lease (no
   unique key policy is created from code); Mongo also has the unique index.
-- **Store clamp.** `ChoAccumulatorService` and the Redis commit clamp the
-  deductible at write time; the Redis direct Production apply does not.
+- **Store clamp.** The commit (both stores) clamps deductible, OOP maximum
+  and ACA cap at write time; the Redis direct Production apply does not.
 - **Legacy reversal kinds.** Rows and tombstones written before
   `ReversalKind` keep the old rule until backfilled
   (`tools/AccumulatorReversalKindBackfill`,
@@ -1033,32 +1114,48 @@ disabled, the lock-expiry test leaves deductible 100.
 
 ## Deploy notes (accumulator integrity)
 
-1. **Order: benefit-plan-service first, then claims-service.** A new
+1. **Redis first: `maxmemory-policy noeviction`.** Check the accumulator
+   Redis before deploying benefit-plan-service: its readiness check fails on
+   any other policy (set `BenefitEngine:Redis:AllowEvictingPolicy=true` only
+   to deploy while the policy change is pending; it then reports Degraded).
+2. **Order: benefit-plan-service, then claims-service.** A new
    claims-service against an old benefit-plan-service gets no prepared
-   commit: every passing claim fails its run (by design — never pass without
-   accumulators) and Service Bus retries it. The new benefit-plan-service is
-   compatible with the old claims-service (Production pricing unchanged;
-   `reverse-claim` now also fences, which the old claims-service only calls
-   for voids and denials). accumulator-service is independent.
-2. **Claims pended before the deploy** wrote their accumulators at Order 300.
-   Approving one replaces that write (not doubled — Mongo / Cosmos store; the
-   Redis store has no record of the old Production write, so its cache counts
-   it twice until the next invalidation of that member, as an approval re-run
+   commit: passing claims pend `ACCUMCOMMIT` (transient; re-adjudicate them
+   after the upgrade). The new benefit-plan-service works with the old
+   claims-service (Production pricing unchanged; `reverse-claim` now also
+   fences). `commit-accumulators` requires the `claims-service` service
+   principal: claims-service must run with its service token configured
+   (`ChoAuth:ServiceToken`). accumulator-service is independent.
+3. **claims-service rollout**: keep it short (old pods drop outbox fields
+   when they replace a claim document, see Limitations). New config:
+   `Claims:AccumulatorOutbox` (`Enabled`, `PollInterval`, `BatchSize`,
+   `BaseBackoff`, `MaxBackoff`, `AgeAlert`); indexes
+   `accumulator_outbox_commit_due` / `accumulator_outbox_reversal_due`
+   (sparse) are created at startup. Add alerts on
+   `cho.claims.accumulator_outbox.oldest_age` (> 900 s) and on the error
+   log "Accumulator outbox: the oldest entry is … old".
+4. **Claims pended before the deploy** wrote their accumulators at Order 300.
+   Approving one replaces that write on the Mongo / Cosmos store; the Redis
+   store has no record of the old Production write, so its cache counts it
+   twice until the next invalidation of that member (as an approval re-run
    did before); denying one backs it out.
-3. **Rollback of benefit-plan-service** (Redis store): older builds treat a
-   hash holding only fence / commit fields as populated and empty. Flush the
-   accumulator cache on rollback (`SCAN … MATCH accum:*` + `DEL`; it rebuilds
-   from claims-service). The Mongo / Cosmos engine documents now carry
+5. **Redis cache after the deploy**: hashes built by the old build have no
+   journal. Flush the accumulator cache once after the deploy
+   (`SCAN … MATCH accum:*` + `DEL`, outside peak; it rebuilds from
+   claims-service with per-claim records) so replacements and re-commits
+   undo exactly what is there. Do the same on a rollback of
+   benefit-plan-service (older builds treat a hash holding only fence /
+   commit fields as populated). The Mongo / Cosmos engine documents carry
    `ReversedClaimIds` / `CommitId` and `[BsonIgnoreExtraElements]`; a build
    from before this change cannot read them back (no production data: the
    Mongo store could not write before this change — Guid representation).
-4. **accumulator-service** markers gain `TargetSnapshotId` /
+6. **accumulator-service** markers gain `TargetSnapshotId` /
    `TargetMember` / plan-year fields; older builds ignore them
    (`[BsonIgnoreExtraElements]`, Cosmos JSON). During a rolling deploy an
    apply on an old pod records no target, and a takeover by a new pod falls
    back to the earlier behaviour for that claim.
-5. **Backfill** of legacy reversal kinds: after the deploy, per the runbook.
-6. CI runs the Redis store tests against a `redis:7-alpine` service
+7. **Backfill** of legacy reversal kinds: after the deploy, per the runbook.
+8. CI runs the Redis store tests against a `redis:7-alpine` service
    (`CHO_TEST_REDIS`); locally they start `redis-server` from the PATH or are
    skipped.
 
