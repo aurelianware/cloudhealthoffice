@@ -513,7 +513,7 @@ public class ReversalRunService : IReversalRunService
             {
                 // A reversed payment whose NACHA file has not been sent may never be paid: its
                 // receivable is held (PendingVoid, never recovered) until it is voided or paid.
-                var pending = await UnsentOriginalsAsync(eraInputs, env.TradingPartnerId, npi, run.Id);
+                var pending = await UnsentOriginalsAsync(eraInputs, env.TradingPartnerId, npi, run.Id, run.TenantId);
                 var ledger = await _receivables.RecordForwardBalanceAsync(
                     run.TenantId, npi, env.TradingPartnerId, run, envelopeId, trace, owed, approver, pending);
                 if (pending.Count > 0)
@@ -539,10 +539,13 @@ public class ReversalRunService : IReversalRunService
     }
 
     /// <summary>The original (reversed) payments of <paramref name="npi"/> in this 835 whose money may not have left.</summary>
-    private async Task<List<string>> UnsentOriginalsAsync(List<EraPaymentInput> eraInputs, string tradingPartnerId, string npi, string reversalRunId)
+    private async Task<List<string>> UnsentOriginalsAsync(List<EraPaymentInput> eraInputs, string tradingPartnerId, string npi, string reversalRunId,
+        string tenantId)
     {
         var pending = new List<string>();
-        if (_unsentPayments == null)
+        // Only where this service sends the files (bank transmission on for it and the tenant):
+        // a tenant sending files by hand has nothing that would ever release a hold.
+        if (_unsentPayments == null || !await _unsentPayments.HoldsReceivablesAsync(tenantId))
             return pending;
         var claimIds = eraInputs
             .Where(i => i.TradingPartnerId == tradingPartnerId && i.IsReversal && string.Equals(i.Payment.PayeeNPI, npi, StringComparison.Ordinal))

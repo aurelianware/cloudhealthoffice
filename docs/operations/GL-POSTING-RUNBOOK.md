@@ -106,9 +106,18 @@ expense is reversed once, there is no receivable for a payment never made, and t
 payable nets to zero. It is not Dr ClaimsPayable / Cr ClaimsExpense, because that would
 reverse the expense a second time.
 
-**Receivables are held until the void.** When a reversal run recoups a payment whose NACHA
-file has not been recorded as Transmitted (never generated, Pending, Failed, Transmitting or
-NeedsReview), the receivable it opens is `PendingVoid`. Its `pendingPaymentIds` lists those
+**Receivables are held until the void, where this service sends the files.** The hold
+applies only while bank transmission is on for the service (`BankTransmission:Enabled`) and
+for the tenant (`paymentControls.nachaTransmission.enabled`). If the tenant's switch cannot
+be read, the receivable is held. With transmission off (the default: files are downloaded
+and sent by hand), nothing would ever release a hold, so receivables open as before (Open,
+recovered by later runs). Re-pinning a hand-sent file without a reversed payment still
+works, and the void cancels the receivable if nothing was recovered yet. If something was
+already recovered, it is handled as described below (recovery reversed, refund owed).
+
+In hold mode, when a reversal run recoups a payment whose NACHA file has not been recorded
+as Transmitted (never generated, Pending, Failed, Transmitting or NeedsReview), the
+receivable it opens is `PendingVoid`. Its `pendingPaymentIds` lists those
 payments. A held receivable is never offset against later payments to the provider.
 - The void cancels its part. Once no payment is pending, the remainder opens.
 - If the file is later recorded as Transmitted (upload, reconcile, or a resolve saying the
@@ -119,9 +128,18 @@ payments. A held receivable is never offset against later payments to the provid
 
 A receivable opened before this existed may already have been partly recovered when the
 void completes. The completion then reverses the newest recoveries until the cancellation
-fits, records each in the notice's `refundsOwed` and a run warning, and logs it at critical
-level. **The provider is owed those amounts back: refund them, and post the refund in the GL
-by hand** (Dr ProviderReceivable / Cr ClaimsPayable or cash).
+fits. Each reversed recovery is recorded in four places:
+- the notice's `refundsOwed`;
+- a run warning;
+- a critical audit log;
+- a `ProviderRefundOwed` GL event.
+
+ar-service never posts that event. It parks it as `ManualPostingRequired`, and the
+reconciliation lists it under `openItems` (with `openItemsTotal`). The report is not
+`balanced` while any open item remains. **The provider is owed those amounts back: refund
+them, post the refund in the GL by hand** (for example Dr ProviderReceivable / Cr
+ClaimsPayable or cash), then dismiss the event with a reason naming the posting. That
+closes the open item.
 
 Completing a void never blocks the file. An outage is retried on the next transmit. If the
 ledger refuses (for example the receivable keeps changing), the notice is marked
@@ -303,6 +321,8 @@ work. Service tokens cannot make GL corrections.
 | `FileDiffersFromAchPayments` | the file's credit total is not the sum of the run's payments that the file names (`paymentIds` on PaymentFileTransmitted), or the file names a payment the run did not accrue. Escalate. A payee paid by check after execution (check fallback) is **not** a difference: it is not in the file's ids, and its amount stays payable (`PayableOutstanding`). For older events without ids, the comparison is with the run's ACH payments. |
 | `EntryReversed` | an operator reversed one of the run's entries and nothing replaces it. A repost (`{key}:r{n}`) clears it; reconciliation counts every entry of a key with its reversals and reposts. |
 | `VoidParked` | a PaymentVoidedBeforeTransmission event is parked: the payable of a payment that will never be paid is not relieved. Fix and retry. |
+
+**Open items** (`openItems`, report level): refunds owed to providers (`ProviderRefundOwed`, parked `ManualPostingRequired`). Post each by hand, then dismiss its event naming the posting. The report is not balanced while any is open.
 | `PreCutover` | informational: the run is before the GL cutover and is in the opening balances (section 3a). |
 
 `glClaimsPayableBalance` is credits minus debits on every ClaimsPayable line.

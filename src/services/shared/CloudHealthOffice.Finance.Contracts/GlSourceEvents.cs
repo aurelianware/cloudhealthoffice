@@ -26,12 +26,19 @@ public static class GlEventTypes
     /// </summary>
     public const string PaymentVoidedBeforeTransmission = "PaymentVoidedBeforeTransmission";
 
+    /// <summary>
+    /// A provider is owed a refund: an amount was withheld from one of its payments against a
+    /// receivable for a payment that was never made. Not posted automatically: an open item
+    /// until finance posts the refund by hand and dismisses it.
+    /// </summary>
+    public const string ProviderRefundOwed = "ProviderRefundOwed";
+
     // Seams, not produced yet:
     //   PaymentFileSettled   - bank acknowledgement / settlement: ACH in transit -> cash.
     //   PaymentFileReturned  - an ACH return: cash/in transit -> payable again.
     //   CapitationDisbursed, PremiumCashReceived - capitation-service / premium-billing-service.
 
-    public static readonly IReadOnlyList<string> All = [PaymentRunExecuted, ReversalRunExecuted, PaymentFileTransmitted, PaymentVoidedBeforeTransmission];
+    public static readonly IReadOnlyList<string> All = [PaymentRunExecuted, ReversalRunExecuted, PaymentFileTransmitted, PaymentVoidedBeforeTransmission, ProviderRefundOwed];
 
     /// <summary>The JSON options every GL payload is written and read with (camelCase).</summary>
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -193,4 +200,28 @@ public sealed record PaymentVoidedBeforeTransmissionEvent
 
     /// <summary>When the payment's run was executed (its accrual's date): decides the GL cutover.</summary>
     public DateTime? PaymentRunExecutedAt { get; init; }
+}
+
+/// <summary>
+/// A recovery was reversed because its receivable reverses a payment that was never made
+/// (voided before transmission): the provider is owed <see cref="Amount"/> back. An open item
+/// in the GL reconciliation until finance posts the refund by hand and dismisses the event.
+/// </summary>
+public sealed record ProviderRefundOwedEvent
+{
+    public string EventId { get; init; } = string.Empty;
+    public string TenantId { get; init; } = string.Empty;
+    public string PaymentRunId { get; init; } = string.Empty;
+    public string PaymentRunNumber { get; init; } = string.Empty;
+    public string VoidedPaymentId { get; init; } = string.Empty;
+    public string VoidedCheckNumber { get; init; } = string.Empty;
+    public string? ProviderNpi { get; init; }
+    public string ReceivableId { get; init; } = string.Empty;
+
+    /// <summary>The later payment the amount was withheld from (a PLB offset), and its run.</summary>
+    public string RecoveringPaymentId { get; init; } = string.Empty;
+    public string? RecoveringRunNumber { get; init; }
+    public decimal Amount { get; init; }
+    public DateTime RecordedAt { get; init; }
+    public string RecordedBy { get; init; } = string.Empty;
 }

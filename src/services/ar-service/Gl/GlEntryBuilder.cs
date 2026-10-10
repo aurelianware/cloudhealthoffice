@@ -60,6 +60,8 @@ public static class GlEntryBuilder
                 GlEventTypes.ReversalRunExecuted => Recoupment(Read<ReversalRunExecutedEvent>(envelope)),
                 GlEventTypes.PaymentFileTransmitted => Transmission(Read<PaymentFileTransmittedEvent>(envelope)),
                 GlEventTypes.PaymentVoidedBeforeTransmission => Void(Read<PaymentVoidedBeforeTransmissionEvent>(envelope)),
+                // Posted by hand (see GlPostingService): an open item, never an automatic entry.
+                GlEventTypes.ProviderRefundOwed => null,
                 _ => throw new GlInvalidPayloadException($"Unknown GL event type '{envelope.Type}'."),
             };
         }

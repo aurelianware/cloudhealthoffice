@@ -293,6 +293,10 @@ public class PaymentVoidBeforeTransmissionTests
         Assert.Equal((ReceivableStatus.Cancelled, 0m, 0m), (settled.Status, settled.OutstandingAmount, settled.RecoveredAmount));
         Assert.Contains(settled.Entries, e => e.Type == ReceivableEntryType.RecoveryReversed && e.PaymentId == later.Id);
         Assert.Contains((await _h.Runs.GetByIdAsync(run.Id))!.Warnings, w => w.Contains("owed that amount back"));
+        // ...and an open item for the GL reconciliation, so the manual posting cannot be missed.
+        var refundEvent = Assert.Single((await _h.Runs.GetByIdAsync(run.Id))!.GlOutbox, m => m.Type == GlEventTypes.ProviderRefundOwed);
+        var refund = JsonSerializer.Deserialize<ProviderRefundOwedEvent>(refundEvent.PayloadJson, GlEventTypes.Json)!;
+        Assert.Equal((30m, later.Id, receivable.Id, OtherNpi), (refund.Amount, refund.RecoveringPaymentId, refund.ReceivableId, refund.ProviderNpi));
         Assert.Equal(200m, repinned.TotalCreditAmount);
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").TransmitAsync(run.Id)).Status);
     }

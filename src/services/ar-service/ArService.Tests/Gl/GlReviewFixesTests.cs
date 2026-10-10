@@ -73,6 +73,37 @@ public class GlReviewFixesTests
         GlReconciliationBuilder.Build(GlFixtures.Tenant, null, _gl.Events, _gl.Entries).Runs.Single().Flags.Should().Contain(GlReconciliationFlag.VoidParked);
     }
 
+    [Fact]
+    public async Task A_refund_owed_to_a_provider_is_an_open_item_until_finance_posts_it_and_dismisses_it()
+    {
+        await Service().IngestAsync(GlFixtures.RunExecuted("run-1", null, AchPayments("run-1", 100m)), GlFixtures.Tenant);
+        await Service().IngestAsync(GlFixtures.FileTransmitted("run-1", "FFS-PR-run-1", 100m, paymentIds: ["run-1-p1"]), GlFixtures.Tenant);
+        var refund = GlFixtures.Envelope(GlEventTypes.ProviderRefundOwed, "refund:rcv-1:later-1:run-0-p3", new ProviderRefundOwedEvent
+        {
+            TenantId = GlFixtures.Tenant, PaymentRunId = "run-0", PaymentRunNumber = "PR-run-0", VoidedPaymentId = "run-0-p3",
+            VoidedCheckNumber = "0001000003", ProviderNpi = "3333333333", ReceivableId = "rcv-1", RecoveringPaymentId = "later-1",
+            RecoveringRunNumber = "PR-LATER", Amount = 30m, RecordedAt = new DateTime(2026, 5, 22, 11, 0, 0, DateTimeKind.Utc), RecordedBy = "treasury-3",
+        });
+
+        var held = await Service().IngestAsync(refund, GlFixtures.Tenant);
+
+        held.ParkReason.Should().Be(GlParkReason.ManualPostingRequired);
+        _gl.Entries.Should().HaveCount(2); // nothing posted automatically
+        var report = GlReconciliationBuilder.Build(GlFixtures.Tenant, null, _gl.Events, _gl.Entries);
+        var item = report.OpenItems.Should().ContainSingle().Subject;
+        (item.EventId, item.Amount, item.Type).Should().Be((held.EventId, 30m, GlEventTypes.ProviderRefundOwed));
+        item.Detail.Should().Contain("3333333333").And.Contain("by hand");
+        report.OpenItemsTotal.Should().Be(30m);
+        report.Balanced.Should().BeFalse("a refund owed is waiting for a manual posting");
+
+        // Retrying never posts it; dismissing it (naming the manual posting) closes the item.
+        (await Service().RetryAsync(GlFixtures.Tenant, held.EventId, null, null, "controller-1")).ParkReason.Should().Be(GlParkReason.ManualPostingRequired);
+        await Service().DismissAsync(GlFixtures.Tenant, held.EventId, "refunded by check 55012; ERP journal JE-2026-0522-7", "controller-1");
+        var after = GlReconciliationBuilder.Build(GlFixtures.Tenant, null, _gl.Events, _gl.Entries);
+        after.OpenItems.Should().BeEmpty();
+        after.Balanced.Should().BeTrue();
+    }
+
     // ── 2. Cutover ──────────────────────────────────────────────────────────────
 
     [Fact]

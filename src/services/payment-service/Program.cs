@@ -178,7 +178,9 @@ if (builder.Configuration.GetValue<bool>($"{GlEventOptions.SectionName}:Dispatch
 // Services
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();
 builder.Services.AddScoped<IUnsentAchPayments>(sp => new UnsentAchPayments(
-    sp.GetRequiredService<IPaymentRunRepository>(), sp.GetService<IPaymentFileTransmissionRepository>()));
+    sp.GetRequiredService<IPaymentRunRepository>(), sp.GetService<IPaymentFileTransmissionRepository>(),
+    sp.GetService<Microsoft.Extensions.Options.IOptions<BankTransmissionOptions>>(),
+    sp.GetService<CloudHealthOffice.NachaTransmission.INachaTransmissionSettingsSource>()));
 builder.Services.AddScoped<IReversalRunService, ReversalRunService>();
 builder.Services.AddScoped<IEraGeneratorService, EraGeneratorService>();
 

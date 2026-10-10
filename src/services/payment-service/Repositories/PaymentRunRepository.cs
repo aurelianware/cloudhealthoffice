@@ -34,7 +34,8 @@ public interface IPaymentRunRepository
     /// <paramref name="expectedSha256"/>. False when the condition did not hold or the run is gone.
     /// </summary>
     Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
-        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings);
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null);
 
     /// <summary>
     /// Replaces the pinned EFT file with a re-dated one and appends the old one
@@ -237,7 +238,8 @@ public class PaymentRunRepository : IPaymentRunRepository
     }
 
     public async Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
-        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings)
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null)
     {
         var tenantId = GetTenantId();
         for (var attempt = 0; attempt < 5; attempt++)
@@ -262,6 +264,8 @@ public class PaymentRunRepository : IPaymentRunRepository
             run.EftFile = file;
             run.CheckFallbacks.AddRange(addFallbacks.Where(f => run.CheckFallbacks.All(x => x.PaymentId != f.PaymentId)));
             run.Warnings.AddRange(addWarnings);
+            if (addGlEvents != null)
+                run.GlOutbox.AddRange(addGlEvents.Where(e => run.GlOutbox.All(x => x.EventId != e.EventId)));
             try
             {
                 // Only the version just read: anything written since is re-read and kept.

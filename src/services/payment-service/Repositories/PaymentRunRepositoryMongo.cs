@@ -122,7 +122,8 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
     }
 
     public async Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
-        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings)
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null)
     {
         var tenantId = GetTenantId();
         var f = Builders<PaymentRun>.Filter;
@@ -137,6 +138,8 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
             updates.Add(Builders<PaymentRun>.Update.PushEach(x => x.CheckFallbacks, addFallbacks));
         if (addWarnings.Count > 0)
             updates.Add(Builders<PaymentRun>.Update.PushEach(x => x.Warnings, addWarnings));
+        if (addGlEvents is { Count: > 0 })
+            updates.Add(Builders<PaymentRun>.Update.PushEach(x => x.GlOutbox, addGlEvents));
         var result = await _collection.UpdateOneAsync(filter, Builders<PaymentRun>.Update.Combine(updates));
         return result.MatchedCount == 1;
     }

@@ -77,8 +77,10 @@ approve + transmit (user != run creator, != run executor)   POST /api/paymentrun
   automatic re-pin cannot settle (partial or split reversals, offsets, a missing
   receivable) is refused. A finance user then excludes the payment with
   `POST .../eft-file/exclude-payments`, under the same rules. A reversal still running is
-  always refused. Receivables opened by reversals of unsent payments are held
-  (`PendingVoid`) and never recovered before the void. See GL-POSTING-RUNBOOK.md,
+  always refused. While bank transmission is on for the service and the tenant,
+  receivables opened by reversals of unsent payments are held (`PendingVoid`) and never
+  recovered before the void. With transmission off (files sent by hand), they open as
+  before. See GL-POSTING-RUNBOOK.md,
   "Payments reversed before their file was sent".
 - **Re-dating** (`POST .../eft-file/redate`, reason required). Only for a file whose
   date can no longer be sent (or that has reversed payments to leave out, above), and only while its transmission record is absent,

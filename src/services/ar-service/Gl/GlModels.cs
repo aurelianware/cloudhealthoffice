@@ -161,6 +161,12 @@ public enum GlParkReason
     /// unless a finance user retries it with includeBeforeCutover and a reason.
     /// </summary>
     PreCutover,
+
+    /// <summary>
+    /// Not posted automatically (ProviderRefundOwed): an open item in the reconciliation until
+    /// finance posts it by hand and dismisses the event with a reason naming the posting.
+    /// </summary>
+    ManualPostingRequired,
 }
 
 /// <summary>

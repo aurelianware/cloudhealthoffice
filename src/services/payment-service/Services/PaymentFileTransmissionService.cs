@@ -820,6 +820,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 $"Payment run {run.PaymentRunNumber} has payments voided before transmission to finish, but no receivable ledger is configured.");
 
         var warnings = new List<string>();
+        var glEvents = new List<PaymentFileOutboxMessage>();
         foreach (var notice in file.VoidedPayments.Where(v => !v.Completed))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -830,7 +831,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 if (notice.OffsetsReversed && payment != null && payment.ReceivableOffsets.Count > 0)
                     await _receivables.ReverseRecoveriesAsync(run.TenantId, payment, user, reason);
                 foreach (var c in notice.Cancellations)
-                    await CancelToleratingRecoveriesAsync(run, notice, c, user, reason, warnings);
+                    await CancelToleratingRecoveriesAsync(run, notice, c, user, reason, warnings, glEvents);
             }
             catch (InvalidOperationException ex)
             {
@@ -852,9 +853,27 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             notice.CompletedAt = Now;
         }
 
-        if (!await _runs.TrySaveEftFileAsync(run.Id, file, file.Sha256, Array.Empty<CheckFallbackPayment>(), warnings))
-            return await LoadRunAsync(run.Id); // changed meanwhile: every step above is idempotent and re-checked next time
+        // The outcome (notices, warnings, refund events) is saved even if the run changed meanwhile:
+        // the ledger steps above are done and would not be detected again.
+        var completed = file.VoidedPayments.Where(v => v.Completed).ToDictionary(v => v.PaymentId, StringComparer.Ordinal);
+        for (var attempt = 0; ; attempt++)
+        {
+            if (await _runs.TrySaveEftFileAsync(run.Id, file, file.Sha256, Array.Empty<CheckFallbackPayment>(), warnings, glEvents))
+                break;
+            if (attempt >= 4)
+            {
+                _logger.LogCritical("AUDIT payment run {RunNumber}: the completed voids could not be recorded ({Warnings}); they need a person",
+                    Clean(run.PaymentRunNumber), Clean(string.Join(" | ", warnings)));
+                return await LoadRunAsync(run.Id);
+            }
+            run = await LoadRunAsync(run.Id);
+            file = run.EftFile ?? throw new InvalidOperationException($"Payment run {run.PaymentRunNumber} lost its EFT file.");
+            for (var i = 0; i < file.VoidedPayments.Count; i++)
+                if (completed.TryGetValue(file.VoidedPayments[i].PaymentId, out var done))
+                    file.VoidedPayments[i] = done;
+        }
         run.Warnings.AddRange(warnings);
+        run.GlOutbox.AddRange(glEvents);
         _logger.LogInformation(
             "AUDIT payment run {RunNumber}: payments voided before transmission finished by {User} (receivables cancelled, payments marked)",
             Clean(run.PaymentRunNumber), Clean(user));
@@ -862,7 +881,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
     }
 
     private async Task CancelToleratingRecoveriesAsync(PaymentRun run, VoidedPaymentNotice notice, VoidedReceivableCancellation c, string user,
-        string reason, List<string> warnings)
+        string reason, List<string> warnings, List<PaymentFileOutboxMessage> glEvents)
     {
         var receivable = await _receivables!.GetAsync(run.TenantId, c.ReceivableId)
                          ?? throw new InvalidOperationException($"receivable {c.ReceivableId} does not exist");
@@ -886,6 +905,9 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                              "and the provider is owed that amount back (refund it and post it in the GL by hand).";
                 notice.RefundsOwed.Add(refund);
                 warnings.Add(refund);
+                // An open item in the GL reconciliation until finance posts the refund.
+                glEvents.Add(GlEventOutbox.ProviderRefundOwed(run, notice, c.ReceivableId, recovery.PaymentId!, recovery.RunNumber,
+                    recovery.Amount, user, Now));
                 _logger.LogCritical("AUDIT {Refund}", Clean(refund));
             }
         }

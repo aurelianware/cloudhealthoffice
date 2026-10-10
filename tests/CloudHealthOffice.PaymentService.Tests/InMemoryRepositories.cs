@@ -147,7 +147,8 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
     public int EftFileWrites;
 
     public Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
-        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings)
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null)
     {
         lock (_items)
         {
@@ -160,6 +161,8 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
             run.EftFile = JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(file));
             run.CheckFallbacks.AddRange(addFallbacks);
             run.Warnings.AddRange(addWarnings);
+            if (addGlEvents != null)
+                run.GlOutbox.AddRange(addGlEvents);
             EftFileWrites++;
             return Task.FromResult(true);
         }

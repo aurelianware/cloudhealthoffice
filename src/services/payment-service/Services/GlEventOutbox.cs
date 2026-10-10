@@ -125,6 +125,30 @@ public static class GlEventOutbox
         return Message(eventId, GlEventTypes.PaymentVoidedBeforeTransmission, JsonSerializer.Serialize(payload, GlEventTypes.Json), at);
     }
 
+    /// <summary>The ProviderRefundOwed event of one reversed recovery (deterministic per receivable, recovering and voided payment).</summary>
+    public static PaymentFileOutboxMessage ProviderRefundOwed(PaymentRun run, VoidedPaymentNotice notice, string receivableId,
+        string recoveringPaymentId, string? recoveringRunNumber, decimal amount, string by, DateTime at)
+    {
+        var eventId = GlEventTypes.EventIdFor(run.TenantId, $"refund:{receivableId}:{recoveringPaymentId}:{notice.PaymentId}", GlEventTypes.ProviderRefundOwed);
+        var payload = new ProviderRefundOwedEvent
+        {
+            EventId = eventId,
+            TenantId = run.TenantId,
+            PaymentRunId = run.Id,
+            PaymentRunNumber = run.PaymentRunNumber,
+            VoidedPaymentId = notice.PaymentId,
+            VoidedCheckNumber = notice.CheckNumber,
+            ProviderNpi = notice.PayeeNpi,
+            ReceivableId = receivableId,
+            RecoveringPaymentId = recoveringPaymentId,
+            RecoveringRunNumber = recoveringRunNumber,
+            Amount = amount,
+            RecordedAt = at,
+            RecordedBy = by,
+        };
+        return Message(eventId, GlEventTypes.ProviderRefundOwed, JsonSerializer.Serialize(payload, GlEventTypes.Json), at);
+    }
+
     private static PaymentFileOutboxMessage Message(string eventId, string type, string payload, DateTime at) => new()
     {
         EventId = eventId,

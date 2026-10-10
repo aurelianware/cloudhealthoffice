@@ -23,6 +23,31 @@ public class UnsentAchPaymentsTests
         FileReference = "FFS-PR-U", Sha256 = new string('a', 64), Entries = { new PaymentRunEftEntry { PaymentIds = paymentIds.ToList(), Amount = 10m } },
     };
 
+    private sealed class TenantSwitch : CloudHealthOffice.NachaTransmission.INachaTransmissionSettingsSource
+    {
+        public bool? Enabled { get; set; }
+        public bool Fails { get; set; }
+        public Task<CloudHealthOffice.NachaTransmission.NachaTransmissionSettings?> GetAsync(string tenantId, CancellationToken cancellationToken = default)
+            => Fails
+                ? throw new CloudHealthOffice.NachaTransmission.NachaTransmissionException("tenant-service answered 503")
+                : Task.FromResult(Enabled is { } e ? new CloudHealthOffice.NachaTransmission.NachaTransmissionSettings { Enabled = e } : null);
+    }
+
+    private UnsentAchPayments With(bool serviceOn, CloudHealthOffice.NachaTransmission.INachaTransmissionSettingsSource? tenant)
+        => new(_runs, _store, Microsoft.Extensions.Options.Options.Create(new BankTransmissionOptions { Enabled = serviceOn }), tenant);
+
+    [Fact]
+    public async Task Receivables_are_held_only_where_this_service_sends_the_files()
+    {
+        Assert.False(await With(false, new TenantSwitch { Enabled = true }).HoldsReceivablesAsync(FfsRunHarness.Tenant)); // the default: files by hand
+        Assert.False(await new UnsentAchPayments(_runs, _store).HoldsReceivablesAsync(FfsRunHarness.Tenant));
+        Assert.False(await With(true, new TenantSwitch { Enabled = false }).HoldsReceivablesAsync(FfsRunHarness.Tenant));
+        Assert.False(await With(true, new TenantSwitch { Enabled = null }).HoldsReceivablesAsync(FfsRunHarness.Tenant));
+        Assert.True(await With(true, new TenantSwitch { Enabled = true }).HoldsReceivablesAsync(FfsRunHarness.Tenant));
+        Assert.True(await With(true, new TenantSwitch { Fails = true }).HoldsReceivablesAsync(FfsRunHarness.Tenant)); // unknown: hold
+        Assert.True(await With(true, null).HoldsReceivablesAsync(FfsRunHarness.Tenant)); // local-folder transmitter
+    }
+
     [Fact]
     public async Task A_payment_in_a_file_not_yet_transmitted_or_with_no_file_is_unsent()
     {

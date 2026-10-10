@@ -72,8 +72,27 @@ public sealed class GlRunReconciliation
     public List<GlReconciliationFlag> Flags { get; init; } = new();
 }
 
+/// <summary>Something finance must post by hand: open until its event is dismissed with the posting named.</summary>
+public sealed class GlOpenItem
+{
+    public string EventId { get; init; } = string.Empty;
+    public string Type { get; init; } = string.Empty;
+    public string PaymentRunId { get; init; } = string.Empty;
+    public string Reference { get; init; } = string.Empty;
+    public decimal Amount { get; init; }
+    public string? Detail { get; init; }
+    public DateTime ReceivedAt { get; init; }
+}
+
 public sealed class GlReconciliationReport
 {
+    /// <summary>
+    /// Refunds owed to providers (ProviderRefundOwed) and anything else posted by hand: each is
+    /// open until finance posts it and dismisses its event. Any open item keeps the report unbalanced.
+    /// </summary>
+    public List<GlOpenItem> OpenItems { get; init; } = new();
+    public decimal OpenItemsTotal { get; init; }
+
     public string TenantId { get; init; } = string.Empty;
     public string? Period { get; init; }
 
@@ -94,7 +113,7 @@ public sealed class GlReconciliationReport
 
     /// <summary>Runs (all pages) with a flag that needs a person.</summary>
     public int RunsNeedingAttention { get; init; }
-    public bool Balanced => Difference == 0m && RunsNeedingAttention == 0;
+    public bool Balanced => Difference == 0m && RunsNeedingAttention == 0 && OpenItems.Count == 0;
 
     internal static bool Informational(GlReconciliationFlag flag) => flag is GlReconciliationFlag.PayableOutstanding or GlReconciliationFlag.PreCutover;
 }
@@ -116,8 +135,19 @@ public static class GlReconciliationBuilder
         var glPayable = journal.SelectMany(e => e.Lines).Where(l => l.Role == GlPostingRole.ClaimsPayable).Sum(l => l.Credit - l.Debit);
         var outstanding = all.Sum(r => r.Run.OutstandingPayable);
         offset = Math.Max(0, offset);
+        var openItems = events
+            .Where(e => e.Status == GlSourceEventStatus.Parked && e.ParkReason == GlParkReason.ManualPostingRequired)
+            .OrderBy(e => e.ReceivedAt).ThenBy(e => e.EventId, StringComparer.Ordinal)
+            .Select(e => new GlOpenItem
+            {
+                EventId = e.EventId, Type = e.Type, PaymentRunId = e.SourceDocumentId, Reference = e.SourceReference,
+                Amount = e.ClaimedAmount, Detail = e.ParkDetail, ReceivedAt = e.ReceivedAt,
+            })
+            .ToList();
         return new GlReconciliationReport
         {
+            OpenItems = openItems,
+            OpenItemsTotal = openItems.Sum(i => i.Amount),
             TenantId = tenantId,
             Period = period,
             Runs = inPeriod.Skip(offset).Take(Math.Max(0, limit)).Select(r => r.Run).ToList(),

@@ -463,6 +463,11 @@ public sealed class GlPostingService
         CancellationToken cancellationToken, PostOptions? options = null)
     {
         options ??= new PostOptions();
+        if (envelope.Type == GlEventTypes.ProviderRefundOwed)
+        {
+            HoldForManualPosting(envelope, record);
+            return;
+        }
         GlProposedEntry? proposal;
         try
         {
@@ -636,6 +641,26 @@ public sealed class GlPostingService
         return accrual.Status == GlSourceEventStatus.Parked && accrual.ParkReason == GlParkReason.PreCutover
             ? $"run {proposal.PaymentRunId} was executed before the GL cutover {cutover:yyyy-MM-dd} (its accrual is PreCutover)"
             : null;
+    }
+
+    /// <summary>A refund owed to a provider: registered and parked as an open item; finance posts it by hand.</summary>
+    private void HoldForManualPosting(GlEventEnvelope envelope, GlSourceEvent record)
+    {
+        ProviderRefundOwedEvent? refund = null;
+        try { refund = System.Text.Json.JsonSerializer.Deserialize<ProviderRefundOwedEvent>(envelope.PayloadJson, GlEventTypes.Json); }
+        catch (System.Text.Json.JsonException) { }
+        if (refund == null || refund.Amount <= 0m || decimal.Round(refund.Amount, 2) != refund.Amount)
+        {
+            Park(record, GlParkReason.InvalidPayload, "The ProviderRefundOwed payload has no money amount.");
+            return;
+        }
+        record.SourceDocumentId = refund.PaymentRunId;
+        record.SourceReference = $"{refund.PaymentRunNumber}/{refund.VoidedCheckNumber}";
+        record.ClaimedAmount = refund.Amount;
+        Park(record, GlParkReason.ManualPostingRequired,
+            $"refund of {refund.Amount:F2} owed to provider {refund.ProviderNpi}: withheld from payment {refund.RecoveringPaymentId} " +
+            $"(run {refund.RecoveringRunNumber}) against receivable {refund.ReceivableId}, which reverses payment {refund.VoidedCheckNumber} that was never made. " +
+            "Post the refund by hand (e.g. Dr ProviderReceivable / Cr ClaimsPayable), then dismiss this event naming the posting.");
     }
 
     private static GlEventEnvelope EnvelopeOf(GlSourceEvent record) => new()
