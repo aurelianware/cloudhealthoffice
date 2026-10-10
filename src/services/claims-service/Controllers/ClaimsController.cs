@@ -1247,7 +1247,9 @@ public class ClaimsController : ControllerBase
     [HttpGet("{id}/277ca")]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetClaimAcknowledgment(string id)
+    public async Task<IActionResult> GetClaimAcknowledgment(
+        string id,
+        [FromServices] CloudHealthOffice.Infrastructure.Edi.Interchange.IOutboundInterchangeTracker? outboundTracker = null)
     {
         var claim = await _claimRepository.GetByIdAsync(id);
 
@@ -1272,6 +1274,10 @@ public class ClaimsController : ControllerBase
             SanitizeForLog(id), SanitizeForLog(claim.ClaimNumber), claim.Status);
 
         var edi = _ackService.Generate277CA(claim, cfg);
+
+        // Remember the 277CA's envelope so the submitter's TA1 for it can be matched.
+        if (outboundTracker is not null)
+            await outboundTracker.RecordSentAsync(TryGetTenantId(), edi, "277CA", claim.Id, HttpContext?.RequestAborted ?? CancellationToken.None);
 
         var filename = $"277CA_{claim.ClaimNumber}.edi";
         Response.Headers["Content-Disposition"] = $"attachment; filename=\"{filename}\"";

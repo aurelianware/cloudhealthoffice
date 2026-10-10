@@ -6,6 +6,7 @@ using ClaimsService.Fhir;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using Snip = ClaimsService.EDI.Validation;
@@ -53,6 +54,7 @@ public class ClaimsV1Controller : ControllerBase
     private readonly int _raw837MaxConcurrency;
     private readonly Snip.ISnip837Validator _snipValidator;
     private readonly Snip.Snip837ValidationOptions _snipOptions;
+    private readonly IX12InterchangeIntake? _interchangeIntake;
 
     public ClaimsV1Controller(
         ClaimAdapterFactory adapterFactory,
@@ -63,8 +65,11 @@ public class ClaimsV1Controller : ControllerBase
         ICurrentActor actor,
         ILogger<ClaimsV1Controller> logger,
         Snip.ISnip837Validator? snipValidator = null,
-        Microsoft.Extensions.Options.IOptions<Snip.Snip837ValidationOptions>? snipOptions = null)
+        Microsoft.Extensions.Options.IOptions<Snip.Snip837ValidationOptions>? snipOptions = null,
+        IX12InterchangeIntake? interchangeIntake = null,
+        Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null)
     {
+        _interchangeIntake = interchangeOptions?.Value.Enabled == false ? null : interchangeIntake;
         _snipOptions = snipOptions?.Value ?? new Snip.Snip837ValidationOptions();
         _snipValidator = snipValidator ?? new Snip.X12837SnipValidator(_snipOptions);
         _adapterFactory = adapterFactory;
@@ -155,6 +160,29 @@ public class ClaimsV1Controller : ControllerBase
             ediContent = await reader.ReadToEndAsync(ct);
         }
 
+        // Interchange envelope (ISA/IEA) first. A rejected interchange gets a
+        // TA1 and nothing else: it never reaches SNIP, so no 999 is built for
+        // its contents. Accepted interchanges continue on their own.
+        InterchangeIntakeResult? envelope = null;
+        if (_interchangeIntake is not null)
+        {
+            envelope = await _interchangeIntake.ReceiveAsync(new InterchangeIntakeRequest
+            {
+                TenantId = GetTenantId(),
+                Content = ediContent,
+                TransactionType = "837",
+                FileName = file.FileName,
+            }, ct);
+
+            if (envelope.IsRejected)
+            {
+                _logger.LogWarning("Uploaded 837 file {FileName} rejected at the interchange envelope", SanitizeForLog(file.FileName));
+                return BadRequest(EnvelopeFailure(file.FileName, envelope));
+            }
+            ediContent = envelope.AcceptedContent!;
+        }
+        var ta1ControlNumber = envelope?.Interchanges.FirstOrDefault(i => i.Ta1ControlNumber is not null)?.Ta1ControlNumber;
+
         // WEDI SNIP 1–5 runs before anything is parsed or mapped. Claims in a
         // transaction set the validation rejects are reported (and logged as
         // rejected imports) but never submitted.
@@ -177,7 +205,7 @@ public class ClaimsV1Controller : ControllerBase
                 if (snip.Document is null || !snip.FunctionalGroups.Any())
                 {
                     _logger.LogWarning("Uploaded 837 file {FileName} is not readable X12", SanitizeForLog(file.FileName));
-                    return BadRequest(SnipFailure(file.FileName, "Could not parse 837 file: the file is not a readable X12 interchange.", snip, acknowledgment));
+                    return BadRequest(WithTa1(SnipFailure(file.FileName, "Could not parse 837 file: the file is not a readable X12 interchange.", snip, acknowledgment), envelope));
                 }
 
                 parsedClaims = ClaimsBySnipOutcome(snip);
@@ -201,7 +229,7 @@ public class ClaimsV1Controller : ControllerBase
             const string noClaims = "No CLM (claim) segments found in the uploaded file.";
             return snip is null
                 ? BadRequest(new { error = noClaims })
-                : BadRequest(SnipFailure(file.FileName, noClaims, snip, acknowledgment));
+                : BadRequest(WithTa1(SnipFailure(file.FileName, noClaims, snip, acknowledgment), envelope));
         }
 
         var tenantId = GetTenantId();
@@ -266,6 +294,7 @@ public class ClaimsV1Controller : ControllerBase
                     TransactionSetControlNumber = snipSet?.ControlNumber,
                     AcknowledgmentCode = snipSet?.AcknowledgmentCode,
                     Acknowledgment999ControlNumber = acknowledgmentControl,
+                    Ta1ControlNumber = ta1ControlNumber,
                     SubmitterQualifier = snipGroup?.Interchange.SenderQualifier,
                     SubmitterId = snipGroup?.Interchange.SenderId,
                     ApplicationSenderCode = snipGroup?.ApplicationSenderCode?.Trim(),
@@ -290,7 +319,7 @@ public class ClaimsV1Controller : ControllerBase
             }
         });
 
-        return Ok(new Raw837ImportResult
+        return Ok(WithTa1(new Raw837ImportResult
         {
             FileName = file.FileName,
             TotalClaims = parsedClaims.Count,
@@ -299,7 +328,7 @@ public class ClaimsV1Controller : ControllerBase
             AcknowledgmentCode = snip?.AcknowledgmentCode,
             Acknowledgment999 = acknowledgment,
             SnipIssues = snip?.AllIssues.ToList() ?? [],
-        });
+        }, envelope));
     }
 
     /// <summary>
@@ -326,19 +355,30 @@ public class ClaimsV1Controller : ControllerBase
             ediContent = await reader.ReadToEndAsync(ct);
         }
 
+        // Envelope check without claiming the control number or storing a TA1:
+        // validating a file must not make its real upload a duplicate.
+        InterchangeIntakeResult? envelope = null;
+        if (_interchangeIntake is not null)
+        {
+            envelope = _interchangeIntake.Preview(ediContent);
+            if (envelope.IsRejected)
+                return Ok(EnvelopeFailure(file.FileName, envelope));
+            ediContent = envelope.AcceptedContent!;
+        }
+
         var snip = _snipValidator.Validate(ediContent);
         var acknowledgment = Snip.X12999AcknowledgmentBuilder.Build(snip, new Snip.X12999AcknowledgmentBuilder.Options
         {
             ControlNumber = Random.Shared.NextInt64(1, 1_000_000_000),
         });
 
-        return Ok(new Raw837ImportResult
+        return Ok(WithTa1(new Raw837ImportResult
         {
             FileName = file.FileName,
             AcknowledgmentCode = snip.AcknowledgmentCode,
             Acknowledgment999 = acknowledgment,
             SnipIssues = snip.AllIssues.ToList(),
-        });
+        }, envelope));
     }
 
     /// <summary>
@@ -500,6 +540,31 @@ public class ClaimsV1Controller : ControllerBase
         }
 
         return string.IsNullOrEmpty(issue.Loop) ? location : $"{issue.Loop} {location}";
+    }
+
+    /// <summary>
+    /// The response for a file whose interchange envelope was rejected: the
+    /// TA1, and no 999 (X12 acknowledges a rejected envelope at the
+    /// interchange level only).
+    /// </summary>
+    private static Raw837ImportResult EnvelopeFailure(string fileName, InterchangeIntakeResult envelope) => WithTa1(new Raw837ImportResult
+    {
+        FileName = fileName,
+        Error = "The interchange envelope (ISA/IEA) was rejected: " + string.Join("; ", envelope.RejectionReasons),
+    }, envelope);
+
+    private static Raw837ImportResult WithTa1(Raw837ImportResult result, InterchangeIntakeResult? envelope)
+    {
+        if (envelope is null) return result;
+        result.InterchangeAcknowledgmentCode = envelope.UnreadableReason is not null
+            ? Ta1AckCodes.Rejected
+            : envelope.Interchanges.Any(i => i.IsRejected) ? Ta1AckCodes.Rejected
+            : envelope.Interchanges.Any(i => i.Decision.AckCode == Ta1AckCodes.AcceptedWithErrors) ? Ta1AckCodes.AcceptedWithErrors
+            : Ta1AckCodes.Accepted;
+        result.AcknowledgmentTa1 = envelope.Ta1;
+        result.Ta1AcknowledgmentIds = envelope.AcknowledgmentIds.ToList();
+        result.InterchangeNoteCodes = envelope.Interchanges.Select(i => i.Decision.NoteCode).ToList();
+        return result;
     }
 
     private static Raw837ImportResult SnipFailure(
@@ -724,6 +789,25 @@ public class Raw837ImportResult
 
     /// <summary>The X12 999 acknowledgment (005010X231A1) for the file.</summary>
     public string? Acknowledgment999 { get; set; }
+
+    /// <summary>
+    /// Interchange envelope outcome, as in TA104: A, E or R (R when any
+    /// interchange in the file was rejected). Null when envelope checks are off.
+    /// </summary>
+    public string? InterchangeAcknowledgmentCode { get; set; }
+
+    /// <summary>TA105 note code per interchange in the file, in order.</summary>
+    public List<string> InterchangeNoteCodes { get; set; } = [];
+
+    /// <summary>
+    /// The TA1 interchange acknowledgment(s), when due: the sender asked
+    /// (ISA14 = 1) or the envelope had findings. Retrievable later at
+    /// <c>GET api/v1/claims/interchange/ta1/{id}</c>.
+    /// </summary>
+    public string? AcknowledgmentTa1 { get; set; }
+
+    /// <summary>Ids of the stored TA1s.</summary>
+    public List<string> Ta1AcknowledgmentIds { get; set; } = [];
 
     /// <summary>Every SNIP finding, with level, loop/segment/element position and message.</summary>
     public List<ClaimsService.EDI.Validation.SnipIssue> SnipIssues { get; set; } = [];

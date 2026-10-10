@@ -48,6 +48,12 @@ public class ClaimImportTransaction
     /// </summary>
     public string? Acknowledgment999ControlNumber { get; set; }
 
+    /// <summary>
+    /// ISA13 of the TA1 returned for the upload, when one was (the sender
+    /// asked with ISA14 = 1, or the envelope had findings it accepted with).
+    /// </summary>
+    public string? Ta1ControlNumber { get; set; }
+
     /// <summary>ISA05 interchange sender id qualifier of the submitter.</summary>
     public string? SubmitterQualifier { get; set; }
 

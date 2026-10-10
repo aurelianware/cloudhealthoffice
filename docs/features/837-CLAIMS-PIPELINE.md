@@ -62,6 +62,11 @@ Evaluator / integration                POST /api/v1/claims/import/raw837
 
 ## SNIP validation and the 999
 
+The interchange envelope is checked first (see
+[X12 TA1 Interchange Acknowledgment](X12-TA1-INTERCHANGE-ACKNOWLEDGMENT.md)). An
+interchange whose ISA/IEA is rejected gets a TA1 and never reaches SNIP, so there is no
+999 for it. A file that asks for a TA1 (ISA14 = 1) gets both the TA1 and the 999.
+
 Before a raw 837 is parsed or mapped, `X12837SnipValidator`
 (`claims-service/EDI/Validation`) checks it against WEDI SNIP levels 1–5 for 837P
 (005010X222A1) and 837I (005010X223A2/A3). It reports every finding as a `SnipIssue`
