@@ -913,6 +913,43 @@ public class AdjudicationController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // POST /api/v1/adjudication/commit-accumulators
+    //
+    // Writes the accumulator updates a Prospective calculate-benefits call
+    // prepared (BenefitResolutionResult.PreparedAccumulatorCommit), once the
+    // claim is finally adjudicated. claims-service prices every claim
+    // Prospective and commits only a claim that passes: a pended claim
+    // writes nothing, an examiner approval commits after its lock-fenced
+    // final write. Same permission as reverse-claim (the service default
+    // write permission; claims-service calls it with a service token).
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Commit a prepared accumulator write. Idempotent on <c>CommitId</c>.
+    /// Returns the outcome; <c>RefusedClaimReversed</c> when the claim was
+    /// voided or denied (its accumulators reversed terminally) first.
+    /// </summary>
+    [HttpPost("commit-accumulators")]
+    [ProducesResponseType(typeof(AccumulatorCommitResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AccumulatorCommitResponse>> CommitAccumulators(
+        [FromBody] AccumulatorCommit commit,
+        CancellationToken ct)
+    {
+        if (commit is null)
+            return BadRequest(new { error = "Request body is required" });
+        if (string.IsNullOrWhiteSpace(commit.CommitId) || string.IsNullOrWhiteSpace(commit.ClaimId)
+            || string.IsNullOrWhiteSpace(commit.MemberId) || string.IsNullOrWhiteSpace(commit.PlanYear)
+            || commit.BenefitPlanId == Guid.Empty)
+            return BadRequest(new { error = "CommitId, ClaimId, MemberId, BenefitPlanId and PlanYear are required" });
+
+        var outcome = await _benefitEngine.CommitAccumulatorsAsync(
+            commit with { SubscriberId = string.IsNullOrWhiteSpace(commit.SubscriberId) ? commit.MemberId : commit.SubscriberId },
+            ct);
+        return Ok(new AccumulatorCommitResponse { Outcome = outcome });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // POST /api/v1/adjudication/resolve-rates
     //
     // Standalone rate resolution (replaces Argo step 7).
@@ -1522,6 +1559,13 @@ public record AdjudicationLineResponse
 /// <see cref="IBenefitCalculationEngine.ReverseClaimAsync"/> signature
 /// directly so the controller is a thin adapter over the engine call.
 /// </summary>
+/// <summary>Response of <c>POST /api/v1/adjudication/commit-accumulators</c>.</summary>
+public class AccumulatorCommitResponse
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AccumulatorCommitOutcome Outcome { get; set; }
+}
+
 public class ReverseClaimRequest
 {
     public string MemberId { get; set; } = string.Empty;

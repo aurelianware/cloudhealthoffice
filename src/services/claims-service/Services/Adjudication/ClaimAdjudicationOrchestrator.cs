@@ -232,12 +232,15 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     };
 
     /// <summary>
-    /// Examiner approval of a pended claim: re-runs the whole pipeline in
-    /// Production with the examiner's decision applied (review pends cleared,
-    /// a COB pend resolved by the payer order the examiner confirmed), so the
-    /// final payment and the accumulator writes come from a real Production
-    /// pass — never from a pended (read-only) pricing. Persistence writes the
-    /// result; the caller finalizes only on <see cref="ClaimAdjudicationOutcome.Pass"/>.
+    /// Examiner approval of a pended claim: re-runs the whole pipeline with
+    /// the examiner's decision applied (review pends cleared, a COB pend
+    /// resolved by the payer order the examiner confirmed), so the final
+    /// payment and accumulators come from a fresh pricing — never from the
+    /// pended one. Persistence writes the result (fenced on the resolution
+    /// lock); nothing is written to the accumulators here: on
+    /// <see cref="ClaimAdjudicationOutcome.Pass"/> the result carries the
+    /// prepared commit, which the caller makes after its own fenced final
+    /// write.
     /// </summary>
     public async Task<ApprovalReadjudicationResult> ReadjudicateForApprovalAsync(
         string tenantId, string claimId, ExaminerApproval approval, CancellationToken ct)
@@ -287,6 +290,9 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         return new ApprovalReadjudicationResult(outcome, reasons.FirstOrDefault(), reasons)
         {
             OverriddenPends = context.ExaminerOverrides.ToList(),
+            PreparedAccumulatorCommit = outcome == ClaimAdjudicationOutcome.Pass
+                ? context.BenefitResolutionResult?.PreparedAccumulatorCommit
+                : null,
         };
     }
 

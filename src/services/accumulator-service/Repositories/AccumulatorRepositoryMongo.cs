@@ -231,6 +231,24 @@ public class ProcessedClaimStoreMongo : IProcessedClaimStore
         return result.MatchedCount == 1;
     }
 
+    public async Task<bool> RecordLeaseTargetAsync(
+        string tenantId, string claimId, string leaseToken, LeaseTarget target, CancellationToken ct = default)
+    {
+        // Same fence as CompleteLeaseAsync: still Pending, still this lease.
+        var filter = Builders<ProcessedClaim>.Filter.And(
+            Builders<ProcessedClaim>.Filter.Eq(p => p.TenantId, tenantId),
+            Builders<ProcessedClaim>.Filter.Eq(p => p.Id, ProcessedClaim.BuildId(tenantId, claimId)),
+            Builders<ProcessedClaim>.Filter.Eq(p => p.Outcome, "Pending"),
+            Builders<ProcessedClaim>.Filter.Eq(p => p.LeaseToken, leaseToken));
+        var update = Builders<ProcessedClaim>.Update
+            .Set(p => p.TargetSnapshotId, target.SnapshotId)
+            .Set(p => p.TargetMemberId, target.MemberId)
+            .Set(p => p.TargetPlanYearStart, target.PlanYearStart)
+            .Set(p => p.TargetPlanYearEnd, target.PlanYearEnd);
+        var result = await _col.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.MatchedCount == 1;
+    }
+
     public async Task CompleteAsync(string tenantId, string claimId, string resultingEventId, string outcome, CancellationToken ct = default)
     {
         var id = ProcessedClaim.BuildId(tenantId, claimId);

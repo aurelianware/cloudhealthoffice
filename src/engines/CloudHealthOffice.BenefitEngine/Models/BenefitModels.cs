@@ -226,6 +226,58 @@ public record BenefitResolutionResult
     /// null when it adjudicated as the first payer. Drives the 835 CLP02.
     /// </summary>
     public int? CobPayerSequence { get; init; }
+
+    /// <summary>
+    /// The accumulator write this pricing would make, prepared but not
+    /// applied: set on a <see cref="Domain.AdjudicationExecutionMode.Prospective"/>
+    /// pricing of a claim (a claim id is present). claims-service prices
+    /// every claim this way and commits it
+    /// (<see cref="Services.IBenefitCalculationEngine.CommitAccumulatorsAsync"/>)
+    /// only once the claim's final disposition is a pass — never while it is
+    /// pended — so a pended or denied claim never holds accumulator amounts.
+    /// Null on a Production pricing (it already wrote them).
+    /// </summary>
+    public AccumulatorCommit? PreparedAccumulatorCommit { get; init; }
+}
+
+/// <summary>
+/// A claim's accumulator write prepared by a Prospective pricing, applied
+/// later with <see cref="Services.IBenefitCalculationEngine.CommitAccumulatorsAsync"/>.
+/// The commit replaces the claim's own still-active updates (re-adjudication)
+/// and reverses those of the claim it replaces, in one versioned write per
+/// accumulator document, then applies <see cref="Updates"/> (deductible
+/// clamped at the limit as it stands at write time). Idempotent on
+/// <see cref="CommitId"/>. Refused for a claim whose accumulators were
+/// reversed terminally (a void or a denial): a commit that arrives after
+/// the claim was denied or voided never lands.
+/// </summary>
+public record AccumulatorCommit
+{
+    /// <summary>Unique per pricing; a repeated commit of the same pricing is a no-op.</summary>
+    public string CommitId { get; init; } = default!;
+    public string ClaimId { get; init; } = default!;
+    public string? ReplacesClaimId { get; init; }
+    public string MemberId { get; init; } = default!;
+    public string SubscriberId { get; init; } = default!;
+    public Guid BenefitPlanId { get; init; }
+    public string PlanYear { get; init; } = default!;
+    public List<Services.AccumulatorUpdate> Updates { get; init; } = [];
+}
+
+/// <summary>Result of <see cref="Services.IBenefitCalculationEngine.CommitAccumulatorsAsync"/>.</summary>
+public enum AccumulatorCommitOutcome
+{
+    /// <summary>The updates were written.</summary>
+    Committed,
+
+    /// <summary>This commit (same <see cref="AccumulatorCommit.CommitId"/>) was already written; nothing changed.</summary>
+    AlreadyCommitted,
+
+    /// <summary>
+    /// The claim's accumulators were reversed terminally (void or denial)
+    /// before this commit arrived; nothing was written.
+    /// </summary>
+    RefusedClaimReversed,
 }
 
 /// <summary>

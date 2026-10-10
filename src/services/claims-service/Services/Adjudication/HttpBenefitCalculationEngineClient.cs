@@ -40,6 +40,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
     public const string HttpClientName = "BenefitPlanService";
     private const string CalculatePath = "/api/v1/adjudication/calculate-benefits";
     private const string ReversePath = "/api/v1/adjudication/reverse-claim";
+    private const string CommitPath = "/api/v1/adjudication/commit-accumulators";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -176,6 +177,50 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
         _logger.LogInformation(
             "Reversed accumulator impact for original claim {OriginalClaimId} (member {MemberId}, plan {PlanId})",
             SanitizeForLog(originalClaimId), SanitizeForLog(memberId), benefitPlanId);
+    }
+
+    /// <summary>
+    /// BP <c>POST /api/v1/adjudication/commit-accumulators</c>: writes the
+    /// accumulator updates a Prospective pricing prepared. Throws on a
+    /// non-success status (the caller decides whether that fails the run).
+    /// </summary>
+    public async Task<AccumulatorCommitOutcome> CommitAccumulatorsAsync(
+        AccumulatorCommit commit,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(commit);
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, CommitPath)
+        {
+            Content = JsonContent.Create(commit, options: JsonOptions),
+        };
+        var tenantId = ResolveTenantId();
+        if (!string.IsNullOrEmpty(tenantId))
+        {
+            httpRequest.Headers.Add("X-Tenant-ID", tenantId);
+        }
+
+        using var response = await client.SendAsync(httpRequest, ct).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            _logger.LogError(
+                "Benefit-plan-service commit-accumulators returned {StatusCode} for claim {ClaimId}: {Body}",
+                response.StatusCode, SanitizeForLog(commit.ClaimId), SanitizeForLog(body));
+            throw new HttpRequestException(
+                $"Benefit calculation engine accumulator commit returned HTTP {(int)response.StatusCode} for claim {commit.ClaimId}");
+        }
+
+        var result = await response.Content
+            .ReadFromJsonAsync<CommitResponse>(JsonOptions, ct)
+            .ConfigureAwait(false);
+        return result?.Outcome
+            ?? throw new HttpRequestException($"Benefit calculation engine accumulator commit for claim {commit.ClaimId} returned no outcome");
+    }
+
+    private sealed class CommitResponse
+    {
+        public AccumulatorCommitOutcome? Outcome { get; set; }
     }
 
     /// <summary>Wire payload for BP <c>POST /api/v1/adjudication/reverse-claim</c>.</summary>

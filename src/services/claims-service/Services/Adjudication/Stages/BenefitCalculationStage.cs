@@ -519,12 +519,13 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             // A corrected version is priced without the accumulators of the
             // version it replaces (claims-service adjustment workflow).
             ReplacesClaimId = string.IsNullOrWhiteSpace(claim.PredecessorVersionId) ? null : claim.PredecessorVersionId,
-            // A claim an earlier stage already pended (COB, duplicate, …) is
-            // priced read-only: no accumulator is written for a claim that
-            // will not finalize now. It is priced again when it is released.
-            ExecutionMode = context.StageResults.Any(r => r.Outcome == ClaimAdjudicationOutcome.Pend)
-                ? AdjudicationExecutionMode.Prospective
-                : AdjudicationExecutionMode.Production,
+            // Always priced read-only. The engine returns the write it would
+            // make (PreparedAccumulatorCommit); AccumulatorCommitStage commits
+            // it only when the whole pipeline passes, so a claim a later stage
+            // pends (NCCI at 400, AI at 600) or denies writes nothing. An
+            // examiner approval commits it only after its lock-fenced final
+            // write (ClaimsController.ResolvePendedClaim).
+            ExecutionMode = AdjudicationExecutionMode.Prospective,
         };
     }
 

@@ -190,6 +190,21 @@ public class InMemoryProcessedClaimStore : IProcessedClaimStore
         return Task.FromResult(true);
     }
 
+    public Task<bool> RecordLeaseTargetAsync(
+        string tenantId, string claimId, string leaseToken, LeaseTarget target, CancellationToken ct = default)
+    {
+        var key = $"{tenantId}:{claimId}";
+        if (!_map.TryGetValue(key, out var p)
+            || !string.Equals(p.Outcome, "Pending", StringComparison.Ordinal)
+            || !string.Equals(p.LeaseToken, leaseToken, StringComparison.Ordinal))
+            return Task.FromResult(false);
+        p.TargetSnapshotId = target.SnapshotId;
+        p.TargetMemberId = target.MemberId;
+        p.TargetPlanYearStart = target.PlanYearStart;
+        p.TargetPlanYearEnd = target.PlanYearEnd;
+        return Task.FromResult(true);
+    }
+
     public Task ReleaseAsync(string tenantId, string claimId, CancellationToken ct = default)
     {
         var key = $"{tenantId}:{claimId}";

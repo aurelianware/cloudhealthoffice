@@ -225,16 +225,7 @@ public class RedisAccumulatorService : IAccumulatorService
         // the cache exists. The next GetAccumulatorsAsync call will rebuild
         // from the claims store, which won't include the reversed claim.
 
-        var db = _redis.GetDatabase();
-
-        var individualKey = MakeKey(memberId, AccumulatorScope.Individual, benefitPlanId, planYear);
-        var familyKey = MakeKey(subscriberId, AccumulatorScope.Family, benefitPlanId, planYear);
-
-        await db.KeyDeleteAsync(new RedisKey[] { individualKey, familyKey });
-
-        _logger.LogInformation(
-            "Invalidated accumulator cache for claim reversal {ClaimId} (member {MemberId})",
-            claimId, memberId);
+        await InvalidateAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, fence: false);
 
         // Write reversal to audit trail
         if (_auditWriter is not null)
@@ -254,6 +245,231 @@ public class RedisAccumulatorService : IAccumulatorService
                 }
             }, ct);
         }
+    }
+
+    /// <summary>
+    /// <see cref="ReverseAsync"/> for a voided or denied claim: the cache is
+    /// invalidated the same way (the rebuild from claims-service counts only
+    /// Approved / Paid claims, so it no longer includes this one), and the
+    /// claim id is fenced in each hash (<c>__fence:{claimId}</c>), in the same
+    /// script — a <see cref="CommitAsync"/> of it that arrives later is refused.
+    /// </summary>
+    public async Task ReverseTerminallyAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId,
+        CancellationToken ct = default)
+    {
+        await InvalidateAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, fence: true);
+        if (_auditWriter is not null)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _auditWriter.WriteReversalAuditAsync(
+                        _tenantContext.TenantId, memberId, subscriberId,
+                        benefitPlanId, planYear, claimId, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Failed to write reversal audit for claim {ClaimId}", SanitizeForLog(claimId));
+                }
+            }, ct);
+        }
+    }
+
+    /// <summary>
+    /// Writes a prepared commit, one Lua script per hash (individual, family),
+    /// so the checks and the increments are one atomic step on a single key
+    /// (cluster-safe):
+    /// <list type="bullet">
+    ///   <item>refused when the hash fences the claim (<c>__fence:{claimId}</c>);</item>
+    ///   <item>a no-op when this commit id already wrote it (<c>__commit:{claimId}</c>
+    ///     holds the commit id and the amounts it added);</item>
+    ///   <item>otherwise the amounts the claim's own earlier commit and the
+    ///     replaced claim's commit added are taken back, and the new amounts
+    ///     added — the deductible no further than its limit as it stands now.</item>
+    /// </list>
+    /// A hash holding no amounts (evicted or invalidated) is not incremented:
+    /// the next read rebuilds it from claims-service, which counts the claim
+    /// once it is Approved. The commit is still recorded (with nothing added),
+    /// so a repeat is a no-op.
+    /// </summary>
+    public async Task<AccumulatorCommitOutcome> CommitAsync(AccumulatorCommit commit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(commit);
+        if (string.IsNullOrWhiteSpace(commit.ClaimId))
+            throw new ArgumentException("The commit names no claim.", nameof(commit));
+        var db = _redis.GetDatabase();
+        var replaced = string.IsNullOrWhiteSpace(commit.ReplacesClaimId)
+                       || string.Equals(commit.ReplacesClaimId, commit.ClaimId, StringComparison.Ordinal)
+            ? string.Empty
+            : commit.ReplacesClaimId!;
+
+        async Task<string> CommitKeyAsync(RedisKey key, IEnumerable<AccumulatorUpdate> updates)
+        {
+            var args = new List<RedisValue>
+            {
+                commit.ClaimId, commit.CommitId, replaced, (long)DefaultKeyTtl.TotalSeconds,
+            };
+            foreach (var u in updates)
+            {
+                args.Add(MakeField(u));
+                args.Add(u.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                args.Add(u.ClampAtLimit is decimal limit
+                    ? limit.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : string.Empty);
+            }
+            var result = await db.ScriptEvaluateAsync(CommitScript, new[] { key }, args.ToArray());
+            return result.ToString();
+        }
+
+        var outcomes = await Task.WhenAll(
+            CommitKeyAsync(MakeKey(commit.MemberId, AccumulatorScope.Individual, commit.BenefitPlanId, commit.PlanYear),
+                commit.Updates.Where(u => u.Scope == AccumulatorScope.Individual)),
+            CommitKeyAsync(MakeKey(commit.SubscriberId, AccumulatorScope.Family, commit.BenefitPlanId, commit.PlanYear),
+                commit.Updates.Where(u => u.Scope == AccumulatorScope.Family)));
+
+        if (outcomes.Contains("REFUSED"))
+        {
+            _logger.LogWarning(
+                "Commit {CommitId} for claim {ClaimId} refused: the claim was reversed terminally (void or denial)",
+                SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId));
+            return AccumulatorCommitOutcome.RefusedClaimReversed;
+        }
+        if (outcomes.All(o => o == "ALREADY")) return AccumulatorCommitOutcome.AlreadyCommitted;
+
+        if (_auditWriter is not null && commit.Updates.Count > 0)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _auditWriter.WriteAuditAsync(
+                        _tenantContext.TenantId, commit.MemberId, commit.SubscriberId,
+                        commit.BenefitPlanId, commit.PlanYear, commit.ClaimId, commit.Updates, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Failed to write accumulator audit for claim {ClaimId}", SanitizeForLog(commit.ClaimId));
+                }
+            }, ct);
+        }
+        return AccumulatorCommitOutcome.Committed;
+    }
+
+    /// <summary>Marker fields in an accumulator hash; never amounts.</summary>
+    internal const string CommitFieldPrefix = "__commit:";
+    internal const string FenceFieldPrefix = "__fence:";
+
+    private static bool IsMarkerField(RedisValue name)
+    {
+        var field = name.ToString();
+        return field.StartsWith(CommitFieldPrefix, StringComparison.Ordinal)
+               || field.StartsWith(FenceFieldPrefix, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// KEYS[1] the hash. ARGV: claim id, commit id, replaced claim id (or
+    /// empty), TTL seconds, then (field, amount, limit-or-empty) triples.
+    /// Returns REFUSED, ALREADY or COMMITTED.
+    /// </summary>
+    private const string CommitScript = @"
+local key = KEYS[1]
+local claim = ARGV[1]
+local commitId = ARGV[2]
+if redis.call('HEXISTS', key, '__fence:' .. claim) == 1 then return 'REFUSED' end
+local own = redis.call('HGET', key, '__commit:' .. claim)
+if own then
+  local sep = string.find(own, '|', 1, true)
+  if sep and string.sub(own, 1, sep - 1) == commitId then return 'ALREADY' end
+end
+local populated = false
+for _, f in ipairs(redis.call('HKEYS', key)) do
+  if string.sub(f, 1, 9) ~= '__commit:' and string.sub(f, 1, 8) ~= '__fence:' then populated = true break end
+end
+local function undo(c)
+  local v = redis.call('HGET', key, '__commit:' .. c)
+  if not v then return end
+  local sep = string.find(v, '|', 1, true)
+  if sep and populated then
+    local added = cjson.decode(string.sub(v, sep + 1))
+    for f, a in pairs(added) do
+      local cur = tonumber(redis.call('HGET', key, f) or '0') or 0
+      local nv = cur - a
+      if nv < 0 then nv = 0 end
+      redis.call('HSET', key, f, tostring(nv))
+    end
+  end
+  redis.call('HDEL', key, '__commit:' .. c)
+end
+undo(claim)
+if ARGV[3] ~= '' then undo(ARGV[3]) end
+local added = {}
+local any = false
+local i = 5
+while i <= #ARGV do
+  local f = ARGV[i]
+  local a = tonumber(ARGV[i + 1]) or 0
+  local lim = ARGV[i + 2]
+  if populated then
+    local cur = tonumber(redis.call('HGET', key, f) or '0') or 0
+    if lim ~= '' and a > 0 then
+      local room = (tonumber(lim) or 0) - cur
+      if room < 0 then room = 0 end
+      if a > room then a = room end
+    end
+    redis.call('HSET', key, f, tostring(cur + a))
+    added[f] = (added[f] or 0) + a
+    any = true
+  end
+  i = i + 3
+end
+if any then redis.call('HDEL', key, '__empty') end
+local encoded = '{}'
+if any then encoded = cjson.encode(added) end
+redis.call('HSET', key, '__commit:' .. claim, commitId .. '|' .. encoded)
+if redis.call('TTL', key) < 0 then redis.call('EXPIRE', key, ARGV[4]) end
+return 'COMMITTED'
+";
+
+    /// <summary>
+    /// KEYS[1] the hash. ARGV: claim id, '1' to fence it. Drops every amount
+    /// and commit record (the next read rebuilds from claims-service) and
+    /// keeps the fences, adding this claim's when asked.
+    /// </summary>
+    private const string InvalidateScript = @"
+local key = KEYS[1]
+local fences = {}
+for _, f in ipairs(redis.call('HKEYS', key)) do
+  if string.sub(f, 1, 8) == '__fence:' then table.insert(fences, f) end
+end
+if ARGV[2] == '1' then table.insert(fences, '__fence:' .. ARGV[1]) end
+redis.call('DEL', key)
+if #fences > 0 then
+  for _, f in ipairs(fences) do redis.call('HSET', key, f, '1') end
+  redis.call('EXPIRE', key, ARGV[3])
+end
+return #fences
+";
+
+    private async Task InvalidateAsync(
+        string memberId, string subscriberId, Guid benefitPlanId, string planYear, string claimId, bool fence)
+    {
+        var db = _redis.GetDatabase();
+        var args = new RedisValue[] { claimId, fence ? "1" : "0", (long)DefaultKeyTtl.TotalSeconds };
+        await Task.WhenAll(
+            db.ScriptEvaluateAsync(InvalidateScript,
+                new RedisKey[] { MakeKey(memberId, AccumulatorScope.Individual, benefitPlanId, planYear) }, args),
+            db.ScriptEvaluateAsync(InvalidateScript,
+                new RedisKey[] { MakeKey(subscriberId, AccumulatorScope.Family, benefitPlanId, planYear) }, args));
+
+        _logger.LogInformation(
+            "Invalidated accumulator cache for claim reversal {ClaimId} (member {MemberId}, fenced: {Fenced})",
+            SanitizeForLog(claimId), SanitizeForLog(memberId), fence);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -292,8 +508,9 @@ public class RedisAccumulatorService : IAccumulatorService
     {
         var key = MakeKey(ownerId, scope, benefitPlanId, planYear);
 
-        // Try Redis first
-        var entries = await db.HashGetAllAsync(key);
+        // Try Redis first. Marker fields (commit records, fences) are not
+        // amounts: a hash holding only those is a miss.
+        var entries = (await db.HashGetAllAsync(key)).Where(e => !IsMarkerField(e.Name)).ToArray();
 
         if (entries.Length > 0)
         {

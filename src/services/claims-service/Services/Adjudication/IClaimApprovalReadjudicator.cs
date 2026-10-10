@@ -138,6 +138,15 @@ public sealed record ApprovalReadjudicationResult(
     /// lost-lock 409.
     /// </summary>
     public bool ResolutionLockLost { get; init; }
+
+    /// <summary>
+    /// On <see cref="ClaimAdjudicationOutcome.Pass"/>: the accumulator write
+    /// the re-run's (read-only) benefit calculation prepared. The re-run
+    /// commits nothing; the resolver commits this once its lock-fenced final
+    /// write has landed, so a resolver that lost its lock never writes
+    /// accumulators. Null when benefit calculation did not run.
+    /// </summary>
+    public CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit? PreparedAccumulatorCommit { get; init; }
 }
 
 /// <summary>

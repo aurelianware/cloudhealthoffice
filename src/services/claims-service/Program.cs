@@ -417,6 +417,9 @@ builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStage>();
+// Order=990: commits the accumulators a passing claim's (Prospective) benefit
+// calculation prepared; a pended or denied claim writes none.
+builder.Services.AddScoped<IClaimAdjudicationStage, AccumulatorCommitStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();
 
 builder.Services.AddScoped<ClaimAdjudicationOrchestrator>();
