@@ -234,44 +234,32 @@ public sealed class PaymentFileTransmissionAttempt
     [JsonPropertyName("detail")] public string? Detail { get; set; }
 }
 
-/// <summary>One event in a transmission's outbox.</summary>
+/// <summary>
+/// One event in an outbox: a transmission record's <c>Outbox</c>, or a payment or
+/// reversal run's <c>GlOutbox</c>. Written in the same document write as the state
+/// change it describes; <c>GlEventDispatcher</c> delivers it and sets
+/// <see cref="PublishedAt"/>. Delivery is at least once: the consumer de-duplicates
+/// on <see cref="EventId"/>.
+/// </summary>
 public sealed class PaymentFileOutboxMessage
 {
-    public const string TransmittedType = "PaymentFileTransmitted";
+    public const string TransmittedType = CloudHealthOffice.Finance.Contracts.GlEventTypes.PaymentFileTransmitted;
 
-    /// <summary>Deterministic per (tenant, file reference, sha256, type): consumers de-duplicate on it.</summary>
+    /// <summary>Deterministic per (tenant, source, type): consumers de-duplicate on it.</summary>
     [JsonPropertyName("eventId")] public string EventId { get; set; } = string.Empty;
     [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
 
-    /// <summary>camelCase JSON of <see cref="PaymentFileTransmittedEvent"/>.</summary>
+    /// <summary>camelCase JSON of the CloudHealthOffice.Finance.Contracts payload for <see cref="Type"/>.</summary>
     [JsonPropertyName("payloadJson")] public string PayloadJson { get; set; } = string.Empty;
     [JsonPropertyName("createdAt")] public DateTime CreatedAt { get; set; }
 
-    /// <summary>Null until a dispatcher (the GL-posting follow-up) publishes it.</summary>
+    /// <summary>Null until the dispatcher delivered it (the consumer acknowledged).</summary>
     [JsonPropertyName("publishedAt")] public DateTime? PublishedAt { get; set; }
-}
 
-/// <summary>
-/// The NACHA file of a payment run is at the bank. The GL-posting seam: cash
-/// leaves the operating account on <see cref="EffectiveEntryDate"/> for
-/// <see cref="TotalCreditAmount"/>. Totals and identifiers only, no bank numbers.
-/// Settlement (acknowledged / returned) is a later event, not emitted yet.
-/// </summary>
-public sealed record PaymentFileTransmittedEvent
-{
-    public string EventId { get; init; } = string.Empty;
-    public string TenantId { get; init; } = string.Empty;
-    public string PaymentRunId { get; init; } = string.Empty;
-    public string PaymentRunNumber { get; init; } = string.Empty;
-    public string FileReference { get; init; } = string.Empty;
-    public string Sha256 { get; init; } = string.Empty;
-    public int EntryCount { get; init; }
-    public decimal TotalCreditAmount { get; init; }
-    public decimal TotalDebitAmount { get; init; }
-    public DateTime EffectiveEntryDate { get; init; }
-    public DateTime TransmittedAt { get; init; }
-    public string ApprovedBy { get; init; } = string.Empty;
-    public string ConfirmedBy { get; init; } = string.Empty;
+    /// <summary>Failed delivery attempts; the dispatcher backs off on them, never drops the event.</summary>
+    [JsonPropertyName("publishAttempts")] public int PublishAttempts { get; set; }
+    [JsonPropertyName("lastError")] public string? LastError { get; set; }
+    [JsonPropertyName("nextAttemptAt")] public DateTime? NextAttemptAt { get; set; }
 }
 
 /// <summary>Body recording what the bank said about a NeedsReview file.</summary>

@@ -85,7 +85,7 @@ public class PaymentFileTransmissionTests
         var message = Assert.Single(record.Outbox);
         Assert.Equal(PaymentFileOutboxMessage.TransmittedType, message.Type);
         Assert.Null(message.PublishedAt);
-        var payload = JsonSerializer.Deserialize<PaymentFileTransmittedEvent>(message.PayloadJson, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        var payload = JsonSerializer.Deserialize<CloudHealthOffice.Finance.Contracts.PaymentFileTransmittedEvent>(message.PayloadJson, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
         Assert.Equal((run.Id, 200m, 1, record.ApprovedSha256, "Upload"),
             (payload.PaymentRunId, payload.TotalCreditAmount, payload.EntryCount, payload.Sha256, payload.ConfirmedBy));
         Assert.Equal(message.EventId, payload.EventId);

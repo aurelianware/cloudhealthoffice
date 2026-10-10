@@ -150,6 +150,10 @@ public class PaymentRunService : IPaymentRunService
         // attempted keeps its reservation (it may have been paid).
         var reservedNotAttempted = new HashSet<string>(StringComparer.Ordinal);
 
+        // Every payment this execution creates, for the GL accrual event: also on a
+        // run that fails after issuing some (they are liabilities all the same).
+        var issuedForGl = new List<Payment>();
+
         try
         {
             // Persist the fixed date before anything is issued. Inside the try: if this
@@ -321,6 +325,7 @@ public class PaymentRunService : IPaymentRunService
                 }
 
                 issuedPayments.Add(payment);
+                issuedForGl.Add(payment);
                 paymentRun.PaymentIds.Add(payment.Id);
                 paymentRun.ClaimIds.AddRange(group.Value.Select(c => c.Id));
                 paymentRun.TotalPaymentAmount += payment.TotalPaymentAmount;
@@ -412,6 +417,8 @@ public class PaymentRunService : IPaymentRunService
                 paymentRun.PaymentRunNumber, paymentRun.TotalClaims, paymentRun.PaymentIds.Count,
                 paymentRun.RemittedDeniedClaimIds.Count, paymentRun.EraEnvelopeIds.Count, paymentRun.TotalPaymentAmount);
 
+            // GL accrual (claims expense / claims payable), in the same write as Completed.
+            GlEventOutbox.AttachPaymentRunExecuted(paymentRun, issuedForGl, DateTime.UtcNow);
             return await _paymentRunRepository.UpdateAsync(paymentRun);
         }
         catch (Exception ex)
@@ -438,6 +445,8 @@ public class PaymentRunService : IPaymentRunService
                 ? (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds
                 : 0;
 
+            // Payments issued before the failure still accrue.
+            GlEventOutbox.AttachPaymentRunExecuted(paymentRun, issuedForGl, DateTime.UtcNow);
             await _paymentRunRepository.UpdateAsync(paymentRun);
             throw;
         }
