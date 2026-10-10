@@ -463,6 +463,27 @@ or product policy.
 | Q-9 | Fail-closed behaviour in claims when the auth lookup is down (D-04) | Changes claim outcomes; no posted money is affected. | Pend the claim (retry) rather than deny. |
 | Q-10 | CMS-0062-P model fields (G-59) | **Schema change** (additive, nullable). | Approve the design ADR now; add the fields with the PAS fix so PAS stops dropping the code system. |
 
+### 7.1 Owner decisions (2026-10-10)
+
+| # | Decision |
+|---|---|
+| Q-1 | **Approved.** Pause CI's auto-publish of the CMS-0057-F evidence now. Change the generator so statuses come from this matrix. Corrected public wording goes in a separate PR that the owner approves. |
+| Q-2 | **Approved.** Replace the mock FHIR data adapters with adapters that read the existing services. |
+| Q-3 | **Approved in principle.** A standard FHIR validator; the specific validator is named to the owner before it is added. |
+| Q-4 / Q-5 | **Use existing persistence only** for subscriptions and the CRD/DTR stores. If a new persistence path seems necessary, stop and ask. |
+| Q-6 | **Approved.** No CHO DTR app; serve conformant questionnaire packages for external and EHR DTR apps. |
+| Q-7 | **Approved.** In-house X12 278 parser and encoder, following the 837/835 pattern. |
+| Q-8 | **Approved.** The auto-approve threshold becomes per-tenant and is off by default. |
+| Q-9 | **Approved.** Pend the claim when the auth lookup is unavailable. Never pay or deny on a failed lookup. |
+| Q-10 | Add nullable drug fields (benefit type, days supply, refills, code system) **only if small**; otherwise design-only in this matrix. |
+
+**Owner's sequencing:**
+1. Step 0: overclaims PR, plus pausing the evidence auto-publish.
+2. Owner's "wave 1": safety and isolation, covering G-02 (D-13), G-10 (D-12, D-16), G-11 (D-14, D-15) and G-05 (D-21). Each starts with a failing test.
+3. Stop and report, then wait for go-ahead.
+
+G-12, G-22 and G-23 from §8 Wave 0 follow in later waves.
+
 ---
 
 ## 8. Gap register and recommended fix order
