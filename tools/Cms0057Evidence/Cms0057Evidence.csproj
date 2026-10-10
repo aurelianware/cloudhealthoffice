@@ -2,7 +2,8 @@
 
   <!--
     CMS-0057-F acceptance evidence generator.
-    Reads the scenario manifest (source of truth), the acceptance-suite TRX
+    Reads the scenario manifest, the Replace status table in
+    docs/epa-gap-matrix.md §11 (source of truth for status), the acceptance-suite TRX
     results, and the suite's [Trait] metadata, and emits versioned, deterministic
     evidence (JSON + Markdown, optional HTML) tying scenario status to the tested
     commit. See docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.

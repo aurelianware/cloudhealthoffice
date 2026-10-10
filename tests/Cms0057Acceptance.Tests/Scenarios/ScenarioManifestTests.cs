@@ -6,10 +6,11 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 
 /// <summary>
 /// Drift guards for the CMS-0057-F scenario manifest (<c>scenarios.json</c>).
-/// These keep the machine-readable source of truth, the acceptance tests'
-/// <c>[Trait("Scenario",…)]</c>, and (transitively) the generated evidence from
-/// diverging. If a scenario is added/removed/retagged without updating the
-/// manifest, one of these fails.
+/// These keep the manifest, the acceptance tests' <c>[Trait("Scenario",…)]</c>,
+/// and (transitively) the generated evidence from diverging. Replace statuses
+/// live in <c>docs/epa-gap-matrix.md</c> §11 and are reconciled against test
+/// outcomes by <c>tools/Cms0057Evidence</c>. If a scenario is
+/// added/removed/retagged without updating the manifest, one of these fails.
 /// </summary>
 public class ScenarioManifestTests
 {
@@ -40,8 +41,6 @@ public class ScenarioManifestTests
     {
         foreach (var s in Manifest.Scenarios)
         {
-            ScenarioManifest.AllowedStatuses.Should().Contain(s.Replace.Status,
-                $"scenario {s.Id} replace.status must be a known status");
             foreach (var (key, backend) in s.Augment)
             {
                 AllowedAugmentKeys.Should().Contain(key, $"scenario {s.Id} augment key '{key}' must be a known backend");
@@ -83,18 +82,14 @@ public class ScenarioManifestTests
     }
 
     [Fact]
-    public void PassableReplaceScenarios_HaveANonGapReplaceTest()
+    public void Manifest_DoesNotDeclareReplaceStatus()
     {
-        // Rule 6: a scenario declared PASSABLE for a backend must not be backed
-        // only by GAP-assertion tests — otherwise "PASSABLE" is unproven.
-        foreach (var s in Manifest.Scenarios.Where(s => s.Replace.Status == "PASSABLE"))
-        {
-            var replaceTests = Traits
-                .Where(t => t.ScenarioId == s.Id && t.Backend == ScenarioManifest.ReplaceBackend)
-                .ToList();
-            replaceTests.Should().Contain(t => !t.IsGap,
-                $"scenario {s.Id} is PASSABLE in Replace mode and needs a non-GAP Replace test proving it");
-        }
+        // The Cloud Health Office (Replace) status comes from docs/epa-gap-matrix.md
+        // §11 (owner decision Q-1). The evidence generator rejects a manifest that
+        // declares it and checks that a PASSABLE row has a passing, non-GAP Replace
+        // test; this guard catches a reintroduced field earlier.
+        var declaring = Manifest.Scenarios.Where(s => s.Replace is not null).Select(s => s.Id).ToList();
+        declaring.Should().BeEmpty("the Replace status lives in docs/epa-gap-matrix.md §11, not in scenarios.json");
     }
 
     [Fact]
