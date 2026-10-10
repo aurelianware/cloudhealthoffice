@@ -183,6 +183,12 @@ public class ReversalRun
     /// releases them with POST /api/reversalruns/{id}/reservations/{claimId}/release.
     /// </summary>
     public List<ReservationAttention> ReservationsNeedingAttention { get; set; } = new();
+
+    /// <summary>
+    /// GL source events (ReversalRunExecuted), written in the same write that
+    /// records the run's outcome, delivered by <c>GlEventDispatcher</c>.
+    /// </summary>
+    public List<PaymentFileOutboxMessage> GlOutbox { get; set; } = new();
 }
 
 /// <summary>

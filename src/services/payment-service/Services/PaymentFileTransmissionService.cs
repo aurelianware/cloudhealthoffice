@@ -864,7 +864,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         if (record.Outbox.Any(m => m.Type == PaymentFileOutboxMessage.TransmittedType))
             return;
         var eventId = EventIdFor(record, PaymentFileOutboxMessage.TransmittedType);
-        var payload = new PaymentFileTransmittedEvent
+        var payload = new CloudHealthOffice.Finance.Contracts.PaymentFileTransmittedEvent
         {
             EventId = eventId,
             TenantId = record.TenantId,

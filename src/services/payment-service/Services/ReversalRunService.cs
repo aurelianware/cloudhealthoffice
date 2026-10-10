@@ -133,6 +133,9 @@ public class ReversalRunService : IReversalRunService
         run.ExecutedBy = approver;
         run.ExecutionStartedAt = startedAt;
 
+        // Every reversal payment this execution creates, for the GL event (also on failure).
+        var issuedForGl = new List<Payment>();
+
         try
         {
             // Step 0 — the reversal 835 BPR's bank and originating-company
@@ -337,6 +340,7 @@ public class ReversalRunService : IReversalRunService
                 var payment = await BuildReversalPaymentAsync(pred, reversalClaim, originalPayeeAddress, run, tradingPartnerId, checkNumber, approver);
 
                 issuedPayments.Add(payment);
+                issuedForGl.Add(payment);
                 run.PaymentIds.Add(payment.Id);
                 run.TotalReversalAmount += payment.TotalPaymentAmount;
 
@@ -426,6 +430,8 @@ public class ReversalRunService : IReversalRunService
                 "Reversal run {ReversalRunNumber} completed: {Adjustments} adjustments, {Envelopes} envelopes, ${Amount:N2}",
                 run.ReversalRunNumber, run.TotalAdjustments, run.EraEnvelopeIds.Count, run.TotalReversalAmount);
 
+            // GL: the recouped expense becomes a provider receivable, in the same write as Completed.
+            GlEventOutbox.AttachReversalRunExecuted(run, issuedForGl, DateTime.UtcNow);
             return await _reversalRunRepository.UpdateAsync(run);
         }
         catch (Exception ex)
@@ -438,6 +444,7 @@ public class ReversalRunService : IReversalRunService
             run.ExecutionDurationSeconds = run.ExecutionStartedAt.HasValue
                 ? (run.ExecutionCompletedAt.Value - run.ExecutionStartedAt.Value).TotalSeconds
                 : 0;
+            GlEventOutbox.AttachReversalRunExecuted(run, issuedForGl, DateTime.UtcNow);
             await _reversalRunRepository.UpdateAsync(run);
             throw;
         }

@@ -277,12 +277,11 @@ approval, which needs the flag on, does).
 
 ## 9. Not built yet (follow-ups)
 
-- **GL posting.** The seam: on `Transmitted`, a `PaymentFileTransmitted` event is
-  written to the record's `outbox` in the same conditional write (payload: tenant,
-  run id/number, file reference, SHA-256, entry count, total credits/debits,
-  effective entry date, transmitted at, approver, evidence; deterministic
-  `eventId` for de-duplication). No dispatcher publishes it yet; the GL PR adds
-  the dispatcher (as in appeals-service `AppealOutboxDispatcher`) and the posting.
+- **GL posting** is built: the `PaymentFileTransmitted` outbox event (and the run
+  accrual and reversal events) are delivered by payment-service's `GlEventDispatcher`
+  to ar-service, which posts Dr claims payable / Cr ACH in transit once per payment
+  run. See [GL-POSTING-RUNBOOK.md](GL-POSTING-RUNBOOK.md). Settlement (in transit to
+  cash) waits for acknowledgement ingestion below.
 - **Bank acknowledgements and returns.** The record models `acknowledgement`
   (`Awaiting` after transmission, `Accepted`, `Rejected`) but nothing ingests the
   bank's ack/return files yet (an inbound SFTP pull plus parsing of the bank's

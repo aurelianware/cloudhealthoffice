@@ -149,6 +149,32 @@ else
 }
 builder.Services.AddScoped<IPaymentFileTransmissionService, PaymentFileTransmissionService>();
 
+// GL source events: payment and reversal runs (and transmission records) carry their
+// events in an outbox written with the state change; the dispatcher delivers them to
+// ar-service's GL posting. Off unless GlEvents:DispatchEnabled. Mongo only: the
+// dispatcher reads the outboxes across tenants. See docs/operations/GL-POSTING-RUNBOOK.md.
+builder.Services.Configure<GlEventOptions>(builder.Configuration.GetSection(GlEventOptions.SectionName));
+// The outboxes are read across tenants from one database: not with per-tenant databases.
+var glOutboxReadable = databaseProvider == ChoDatabaseProvider.MongoDb
+                       && !builder.Configuration.GetValue<bool>("MongoDb:UseTenantScoping", false);
+if (glOutboxReadable)
+    builder.Services.AddSingleton<IGlOutboxStore>(sp => new MongoGlOutboxStore(sp.GetRequiredService<IMongoDatabase>()));
+if (builder.Configuration.GetValue<bool>($"{GlEventOptions.SectionName}:DispatchEnabled"))
+{
+    if (!glOutboxReadable)
+        throw new InvalidOperationException(
+            "GlEvents:DispatchEnabled needs MongoDB (MongoDb:ConnectionString) without MongoDb:UseTenantScoping: " +
+            "the GL event dispatcher reads the run outboxes of every tenant from one database.");
+    builder.Services.AddHttpClient(HttpGlEventSink.HttpClientName, client =>
+    {
+        client.BaseAddress = new Uri(builder.Configuration[$"{GlEventOptions.SectionName}:ArServiceBaseUrl"] ?? "http://ar-service");
+        client.Timeout = TimeSpan.FromSeconds(15);
+    });
+    builder.Services.AddSingleton<IGlEventSink, HttpGlEventSink>();
+    builder.Services.AddSingleton<GlEventDispatcher>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<GlEventDispatcher>());
+}
+
 // Services
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();
 builder.Services.AddScoped<IReversalRunService, ReversalRunService>();

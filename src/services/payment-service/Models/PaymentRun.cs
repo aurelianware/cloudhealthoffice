@@ -273,6 +273,12 @@ public class PaymentRun
     public List<PaymentRunEftFile> EftFileHistory { get; set; } = new();
 
     /// <summary>
+    /// GL source events (PaymentRunExecuted), written in the same write that
+    /// records the run's outcome, delivered by <c>GlEventDispatcher</c>.
+    /// </summary>
+    public List<PaymentFileOutboxMessage> GlOutbox { get; set; } = new();
+
+    /// <summary>
     /// Scheduled run (vs manual)
     /// </summary>
     public bool IsScheduled { get; set; } = false;

@@ -110,4 +110,53 @@ public class ArPipelineAuthTests : IClassFixture<ArPipelineAuthTests.Factory>
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
+
+    private HttpClient Bearer(string token)
+    {
+        var client = _factory.CreateDefaultClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+        return client;
+    }
+
+    private static StringContent GlEvent() => new(
+        System.Text.Json.JsonSerializer.Serialize(new { eventId = "ev-1", type = "PaymentRunExecuted", tenantId = "tenant-1", source = "payment-service", payloadJson = "{}" }),
+        System.Text.Encoding.UTF8, "application/json");
+
+    [Fact]
+    public async Task GlEvents_FromAUser_EvenATenantAdmin_IsForbidden()
+    {
+        var response = await Bearer(ChoDevelopmentAuth.UserToken("tenant-1", ChoRolePermissions.TenantAdmin)).PostAsync("/api/gl/events", GlEvent());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GlEvents_FromAnotherService_IsForbidden()
+    {
+        var token = ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("claims-service", "tenant-1");
+
+        var response = await Bearer(token).PostAsync("/api/gl/events", GlEvent());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task GlEvents_FromPaymentService_WhilePostingIsOff_Is409_AndNothingIsStored()
+    {
+        var token = ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("payment-service", "tenant-1");
+
+        var response = await Bearer(token).PostAsync("/api/gl/events", GlEvent());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("GlPostingDisabled");
+    }
+
+    [Fact]
+    public async Task GlWrites_NeedFinanceWrite()
+    {
+        var response = await Bearer(ChoDevelopmentAuth.UserToken("tenant-1", ChoRolePermissions.FinanceApprover))
+            .PostAsync("/api/gl/periods/2026-04/close", new StringContent("{\"reason\":\"x\"}", System.Text.Encoding.UTF8, "application/json"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
 }
