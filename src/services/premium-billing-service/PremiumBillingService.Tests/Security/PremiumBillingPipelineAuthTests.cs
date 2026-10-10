@@ -35,6 +35,7 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
         public Mock<ICoverageServiceClient> Coverage { get; } = new();
         public Mock<IStripeAchService> Stripe { get; } = new();
         public Mock<ISponsorAccountRepository> Accounts { get; } = new();
+        public Mock<IRateTableRepository> RateTables { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -54,6 +55,8 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
                 services.RemoveAll<ICoverageServiceClient>();
                 services.RemoveAll<IStripeAchService>();
                 services.RemoveAll<ISponsorAccountRepository>();
+                services.RemoveAll<IRateTableRepository>();
+                services.AddSingleton(RateTables.Object);
                 services.AddSingleton(Accounts.Object);
                 services.AddSingleton(Runs.Object);
                 services.AddSingleton(Invoices.Object);
@@ -94,6 +97,10 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
         _factory.Coverage.Reset();
         _factory.Stripe.Reset();
         _factory.Accounts.Reset();
+        _factory.RateTables.Reset();
+        _factory.RateTables.Setup(r => r.ListVersionsAsync()).ReturnsAsync(new List<RateTableRecord>());
+        _factory.RateTables.Setup(r => r.ListVersionsAsync(It.IsAny<string>())).ReturnsAsync(new List<RateTableRecord>());
+        _factory.RateTables.Setup(r => r.CreateVersionAsync(It.IsAny<RateTableRecord>())).ReturnsAsync((RateTableRecord r) => r);
         _factory.Accounts.Setup(a => a.UpdateAsync(It.IsAny<string>(), It.IsAny<Action<SponsorAccount>>()))
             .ReturnsAsync((string group, Action<SponsorAccount> change) =>
             {
@@ -335,6 +342,54 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
         _factory.Runs.Verify(r => r.CreateAsync(It.IsAny<BillingRun>()), Times.Never);
         _factory.Invoices.Verify(r => r.UpdateAsync(It.IsAny<PremiumInvoice>()), Times.Never);
         _factory.Sponsors.VerifyNoOtherCalls();
+    }
+
+    private static object RateTableBody() => new
+    {
+        table = new
+        {
+            id = "rt-gold-2026", planId = "PPO-GOLD", effectiveFrom = "2026-01-01", effectiveTo = "2026-12-31", method = "Tier",
+            tierRates = new { employeeOnly = 500m, employeeSpouse = 1000m, employeeChildren = 900m, family = 1400m }
+        },
+        changeReason = "2026 filing"
+    };
+
+    [Fact]
+    public async Task RateTables_ReadWithBillingRead_ChangeOnlyWithFinanceWrite()
+    {
+        (await Client(Tenant, ChoRolePermissions.FinanceApprover).GetAsync("/api/v1/rate-tables")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // billing:run (run billing, regenerate drafts) is not enough to change what every invoice charges.
+        (await PermissionClient("billing:read", "billing:run").PostAsJsonAsync("/api/v1/rate-tables", RateTableBody()))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await Client(Tenant, ChoRolePermissions.FinanceApprover).PostAsJsonAsync("/api/v1/rate-tables", RateTableBody()))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await Client(Tenant, ChoRolePermissions.MemberServices).GetAsync("/api/v1/rate-tables"))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        _factory.RateTables.Verify(r => r.CreateVersionAsync(It.IsAny<RateTableRecord>()), Times.Never);
+
+        var created = await Client(Tenant, ChoRolePermissions.Finance).PostAsJsonAsync("/api/v1/rate-tables", RateTableBody());
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+        _factory.RateTables.Verify(r => r.CreateVersionAsync(It.Is<RateTableRecord>(x =>
+            x.RateTableId == "rt-gold-2026" && x.Version == 1 && x.CreatedBy == User && x.ContentHash.Length == 64)));
+    }
+
+    [Fact]
+    public async Task RegeneratingOrIssuingADraft_NeedsBillingRun()
+    {
+        var approver = ClientAs(Approver, Tenant, ChoRolePermissions.FinanceApprover);
+
+        (await approver.PostAsync("/api/v1/premium-invoices/inv-1/regenerate", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await approver.PostAsync("/api/v1/premium-invoices/inv-1/issue", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        _factory.Invoices.Setup(r => r.GetByIdAsync("inv-1")).ReturnsAsync(new PremiumInvoice
+        {
+            TenantId = Tenant, Id = "inv-1", InvoiceNumber = "INV-GRP001-2026-03", GroupNumber = "GRP001", Status = InvoiceStatus.Sent
+        });
+        // An issued (unrated) invoice is never regenerated.
+        (await Client(Tenant, ChoRolePermissions.Finance).PostAsync("/api/v1/premium-invoices/inv-1/regenerate", null))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        _factory.Invoices.Verify(r => r.UpdateAsync(It.IsAny<PremiumInvoice>()), Times.Never);
     }
 
     [Fact]

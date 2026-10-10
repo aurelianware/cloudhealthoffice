@@ -66,6 +66,8 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<IRemittanceBatchRepository, RemittanceBatchRepositoryMongo>();
     builder.Services.AddScoped<IRemittanceExceptionRepository, RemittanceExceptionRepositoryMongo>();
     builder.Services.AddScoped<ISponsorAccountRepository, SponsorAccountRepositoryMongo>();
+    builder.Services.AddScoped<IRateTableRepository, RateTableRepositoryMongo>();
+    builder.Services.AddScoped<IBillingLeaseRepository, BillingLeaseRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -92,6 +94,10 @@ else
     builder.Services.AddScoped<IRemittanceBatchRepository, RemittanceBatchRepositoryCosmos>();
     builder.Services.AddScoped<IRemittanceExceptionRepository, RemittanceExceptionRepositoryCosmos>();
     builder.Services.AddScoped<ISponsorAccountRepository, SponsorAccountRepositoryCosmos>();
+    // Container RateTables, partition key /tenantId: immutable rate table versions.
+    builder.Services.AddScoped<IRateTableRepository, RateTableRepositoryCosmos>();
+    // Rated-billing group leases live in PremiumInvoices (docType billingLease) so invoice writes are fenced in one batch.
+    builder.Services.AddScoped<IBillingLeaseRepository, BillingLeaseRepositoryCosmos>();
     Console.WriteLine("Using Cosmos DB repository");
 }
 
@@ -104,6 +110,18 @@ builder.Services.AddScoped<IEftDraftService, EftDraftService>();
 builder.Services.AddScoped<ICashApplicationService, CashApplicationService>();
 builder.Services.AddScoped<ISponsorServiceClient, SponsorServiceClient>();
 builder.Services.AddScoped<ICoverageServiceClient, CoverageServiceClient>();
+
+// Rated billing (premium rating engine → invoice lines), off for every tenant
+// unless PremiumBilling:RatedBilling:Tenants:{tenant}:Enabled is true. See
+// docs/architecture/premium-rated-billing.md.
+builder.Services.AddOptions<RatedBillingOptions>()
+    .Bind(builder.Configuration.GetSection(RatedBillingOptions.SectionName))
+    .Validate(o => !o.Problems().Any(), "PremiumBilling:RatedBilling is invalid")
+    .ValidateOnStart();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<IMemberServiceClient, MemberServiceClient>();
+builder.Services.AddScoped<IRateTableService, RateTableService>();
+builder.Services.AddScoped<IRatedInvoiceGenerator, RatedInvoiceGenerator>();
 // Sponsor bank details come from sponsor-service's service-only full read of
 // the active approved account (dual control there), fetched with this
 // service's own token after the releasing user passed payments:approve and
@@ -127,6 +145,14 @@ builder.Services.AddHttpClient(CoverageServiceClient.HttpClientName, client =>
 {
     var coverageServiceUrl = builder.Configuration["CoverageService:BaseUrl"] ?? "http://coverage-service:8080";
     client.BaseAddress = new Uri(coverageServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// member-service's rating census (date of birth, relationship, tobacco) for rated billing.
+builder.Services.AddHttpClient(MemberServiceClient.HttpClientName, client =>
+{
+    var memberServiceUrl = builder.Configuration["MemberService:BaseUrl"] ?? "http://member-service:8080";
+    client.BaseAddress = new Uri(memberServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 

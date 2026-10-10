@@ -22,6 +22,16 @@ public class PremiumInvoicesControllerTests
             _billingService.Object, _invoiceRepository.Object, logger.Object);
     }
 
+    [Fact]
+    public async Task VoidWhileTheGroupsBillingLeaseIsHeld_Is409()
+    {
+        _billingService.Setup(s => s.VoidInvoiceAsync("inv-1", "dup")).ThrowsAsync(new GroupBillingBusyException("GRP001"));
+        (await _controller.VoidInvoice("inv-1", new VoidInvoiceRequest { Reason = "dup" })).Result.Should().BeOfType<ConflictObjectResult>();
+
+        _billingService.Setup(s => s.VoidInvoiceAsync("inv-2", "dup")).ThrowsAsync(new BillingLeaseLostException("GRP001"));
+        (await _controller.VoidInvoice("inv-2", new VoidInvoiceRequest { Reason = "dup" })).Result.Should().BeOfType<ConflictObjectResult>();
+    }
+
     #region SearchInvoices
 
     [Fact]
