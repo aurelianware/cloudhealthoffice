@@ -70,6 +70,19 @@ public sealed class CashApplicationService : ICashApplicationService
 
     private const int MaxConcurrencyAttempts = 10;
 
+    /// <summary>Trace prefix of a payment applied from a BAI2 bank statement line.</summary>
+    public const string BankStatementTracePrefix = "BAI-";
+
+    /// <summary>
+    /// Days either side within which a bank-statement payment and an 820 or
+    /// lockbox payment of the same amount on the same invoice may be the same money.
+    /// </summary>
+    public const int BankDuplicateWindowDays = 7;
+
+    /// <summary>Whether an invoice payment was applied from a bank statement line.</summary>
+    public static bool IsBankStatementPayment(InvoicePayment payment) =>
+        payment.ReferenceNumber?.StartsWith(BankStatementTracePrefix, StringComparison.Ordinal) == true;
+
     private readonly IRemittanceBatchRepository _batches;
     private readonly IRemittanceExceptionRepository _exceptions;
     private readonly IPremiumInvoiceRepository _invoices;
@@ -317,6 +330,25 @@ public sealed class CashApplicationService : ICashApplicationService
             && !string.Equals(open[0].GroupNumber, batch.GroupReference.Trim(), StringComparison.OrdinalIgnoreCase))
             return await QueueRowAsync(batch, item, RemittanceExceptionReason.GroupMismatch,
                 $"Invoice {reference} is group {open[0].GroupNumber}; the payer named group {batch.GroupReference}");
+
+        // The bank statement may already have applied this money to the invoice
+        // (its reference or date did not match this payment's): hold it.
+        if (batch.Source != RemittanceSource.BankStatement)
+        {
+            // Compare with the bank line's amount as well as what reached the
+            // invoice: an overpaid bank line applied only the balance (the rest
+            // went to unapplied credit), so its payment row is smaller than the money.
+            foreach (var bankPayment in open[0].Payments.Where(p => IsBankStatementPayment(p)
+                         && (p.PaymentDate - batch.PaymentDate).Duration() <= TimeSpan.FromDays(BankDuplicateWindowDays)))
+            {
+                var lineAmount = bankPayment.RemittanceBatchId is { } bankBatchId && await _batches.GetByIdAsync(bankBatchId) is { } bankBatch
+                    ? bankBatch.PaymentAmount
+                    : bankPayment.Amount;
+                if (bankPayment.Amount == item.Amount || lineAmount == item.Amount)
+                    return await QueueRowAsync(batch, item, RemittanceExceptionReason.PossibleDuplicate,
+                        $"Invoice {reference} already has a {lineAmount:0.00} payment from the bank statement ({bankPayment.ReferenceNumber}, {bankPayment.PaymentDate:yyyy-MM-dd}); this may be the same money");
+            }
+        }
 
         var line = item.LineNumber;
         var posting = await PostToInvoiceAsync(open[0].Id, item.Amount, batch.PaymentDate, batch.TraceNumber,

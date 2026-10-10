@@ -7,6 +7,11 @@ saves the invoice balances and the sponsor account balances as it posts.
 Code: `Edi/Edi820Parser.cs`, `Edi/LockboxCsvParser.cs`, `Services/CashApplicationService.cs`,
 `Controllers/RemittancesController.cs`.
 
+The bank's BAI2 statement confirms this cash, and can apply a credit that
+names exactly one open invoice for its exact balance (source `BankStatement`).
+Everything else waits in a suspense queue. See
+[BAI2 bank reconciliation](../operations/BAI2-BANK-RECONCILIATION-RUNBOOK.md).
+
 ## Table of contents
 
 - [Endpoints](#endpoints)
@@ -106,6 +111,9 @@ reports its completed payments as duplicates and posts nothing.
      - only voided or written-off invoices (`InvoiceClosed`);
      - several open invoices with the number (`AmbiguousReference`);
      - an invoice of another group than REF*38 or `group_number` names (`GroupMismatch`).
+     - an invoice that already has a payment of the same amount, within 7 days,
+       applied from a BAI2 bank statement line (`PossibleDuplicate`): the bank
+       may have reported this money first, under another reference.
    - Zero-amount items are skipped with a warning.
 3. Money left over after the items is queued as `UnallocatedRemainder`.
 

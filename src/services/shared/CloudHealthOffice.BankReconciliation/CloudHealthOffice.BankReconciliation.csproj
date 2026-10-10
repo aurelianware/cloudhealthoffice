@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    BAI2 bank statement ingestion and reconciliation primitives: the parser,
+    idempotent append-only statement storage, the reconciliation work items
+    (suspense queue) and the event seam for GL posting. premium-billing-service
+    (premium cash) and payment-service (NACHA settlement, ACH returns) opt in
+    with a ProjectReference and AddChoBankReconciliation. Raw statement files
+    carry account numbers, so they are stored through FieldProtection.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CloudHealthOffice.BankReconciliation</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+    <ProjectReference Include="..\CloudHealthOffice.FieldProtection\CloudHealthOffice.FieldProtection.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MongoDB.Driver" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CloudHealthOffice.BankReconciliation.Tests" />
+  </ItemGroup>
+
+</Project>

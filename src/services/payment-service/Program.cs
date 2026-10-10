@@ -256,6 +256,10 @@ builder.Services.AddChoHealthChecks(options =>
 // No CORS: this service is called server-to-server only (the portal is
 // Blazor Server), so browsers on other origins get no CORS grant.
 
+// BAI2 bank statements: NACHA file settlement and ACH return flags (BankReconciliation/).
+PaymentService.BankReconciliation.PaymentBankReconciliationRegistration.AddPaymentBankReconciliation(
+    builder.Services, builder.Configuration, builder.Environment, databaseProvider);
+
 builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();

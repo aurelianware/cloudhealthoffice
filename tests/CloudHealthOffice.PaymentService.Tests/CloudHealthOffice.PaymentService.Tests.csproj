@@ -19,6 +19,8 @@
   <ItemGroup>
     <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
     <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
+    <!-- Synthetic BAI2 files (shared with the bank reconciliation library's tests). -->
+    <Compile Include="..\..\src\services\shared\CloudHealthOffice.BankReconciliation.Tests\Bai2Builder.cs" Link="Shared\Bai2Builder.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\payment-service\payment-service.csproj" />
