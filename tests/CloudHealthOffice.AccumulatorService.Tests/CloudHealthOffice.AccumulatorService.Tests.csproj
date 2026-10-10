@@ -16,6 +16,8 @@
     <PackageReference Include="coverlet.collector" />
     <!-- Real mongod for the Mongo store tests (round 3: tombstones, leases, index initializer). -->
     <PackageReference Include="EphemeralMongo" />
+    <!-- Cosmos emulator tests (Category=Cosmos) skip cleanly when no emulator is reachable. -->
+    <PackageReference Include="Xunit.SkippableFact" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\accumulator-service\accumulator-service.csproj" />
@@ -28,5 +30,7 @@
   <ItemGroup>
     <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
     <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
+    <!-- Cosmos DB emulator fixture; see tests/Shared/CosmosEmulator. -->
+    <Compile Include="..\Shared\CosmosEmulator\*.cs" Link="Shared\CosmosEmulator\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
