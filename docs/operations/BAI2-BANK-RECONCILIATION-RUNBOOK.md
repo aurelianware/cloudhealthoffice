@@ -99,7 +99,7 @@ The errors name the line number and show account numbers masked (`****6789`).
 Logs carry ids, type codes, amounts and masked accounts. They never carry
 account numbers or 16 text, which may name payers. Every value that came from
 a file or a request is cleaned of control characters before it is logged
-(`LogText.Clean`).
+(`SanitizeForLog` at each log site).
 
 ## Premium cash rules (premium-billing-service)
 

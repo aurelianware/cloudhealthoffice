@@ -91,6 +91,12 @@ public sealed class BankStatementIngestResult
 /// </summary>
 public sealed class BankStatementIngestion
 {
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
+
     private readonly IBankReconciliationStore _store;
     private readonly IFieldProtector _protector;
     private readonly BankReconciliationOptions _options;
@@ -199,7 +205,7 @@ public sealed class BankStatementIngestion
 
         _logger.Log(record.Status == BankStatementStatus.Accepted ? LogLevel.Information : LogLevel.Warning,
             "BAI2 file {StatementId} for tenant {TenantId}: {Status}, {Groups} group(s), {Accounts} account(s), {Transactions} transaction(s), {ErrorCount} error(s)",
-            Sanitize(id), Sanitize(tenantId), record.Status, record.GroupCount, record.AccountCount, record.TransactionCount, record.Errors.Count);
+            SanitizeForLog(id), SanitizeForLog(tenantId), record.Status, record.GroupCount, record.AccountCount, record.TransactionCount, record.Errors.Count);
 
         return new BankStatementIngestResult
         {

@@ -75,6 +75,12 @@ public interface IBankReconciliationEventSink
 
 public sealed class LoggingBankReconciliationEventSink : IBankReconciliationEventSink
 {
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
+
     private readonly ILogger<LoggingBankReconciliationEventSink> _logger;
 
     public LoggingBankReconciliationEventSink(ILogger<LoggingBankReconciliationEventSink> logger) => _logger = logger;
@@ -83,8 +89,8 @@ public sealed class LoggingBankReconciliationEventSink : IBankReconciliationEven
     {
         _logger.LogInformation(
             "Bank reconciliation {Type}: {Service} item {ItemId} {Kind} {Status} type {TypeCode} {Direction} {Amount} {Currency}",
-            LogText.Clean(evt.Type), LogText.Clean(evt.Service), LogText.Clean(evt.ItemId), LogText.Clean(evt.Kind), evt.Status,
-            LogText.Clean(evt.TypeCode), evt.Direction, evt.Amount, LogText.Clean(evt.Currency));
+            SanitizeForLog(evt.Type), SanitizeForLog(evt.Service), SanitizeForLog(evt.ItemId), SanitizeForLog(evt.Kind), evt.Status,
+            SanitizeForLog(evt.TypeCode), evt.Direction, evt.Amount, SanitizeForLog(evt.Currency));
         return Task.CompletedTask;
     }
 }

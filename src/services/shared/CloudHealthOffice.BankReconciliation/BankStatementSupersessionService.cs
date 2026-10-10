@@ -12,6 +12,12 @@ namespace CloudHealthOffice.BankReconciliation;
 /// </summary>
 public sealed class BankStatementSupersessionService
 {
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
+
     private static readonly ReconciliationStatus[] ActedOn =
         [ReconciliationStatus.Applied, ReconciliationStatus.Matched, ReconciliationStatus.Resolved, ReconciliationStatus.Pending];
 
@@ -53,7 +59,7 @@ public sealed class BankStatementSupersessionService
         if (!await _store.TryCreateSupersessionAsync(supersession, ct))
             throw new InvalidOperationException($"Statement {statementId} already has a supersession request.");
 
-        _logger.LogWarning("Supersession of bank statement {StatementId} requested by {Actor}", LogText.Clean(statementId), LogText.Clean(actor));
+        _logger.LogWarning("Supersession of bank statement {StatementId} requested by {Actor}", SanitizeForLog(statementId), SanitizeForLog(actor));
         return supersession;
     }
 
@@ -86,7 +92,7 @@ public sealed class BankStatementSupersessionService
             await _store.TryUpdateItemAsync(item, item.Version, ct);
         }
 
-        _logger.LogWarning("Supersession of bank statement {StatementId} approved by {Actor}", LogText.Clean(statementId), LogText.Clean(actor));
+        _logger.LogWarning("Supersession of bank statement {StatementId} approved by {Actor}", SanitizeForLog(statementId), SanitizeForLog(actor));
         return supersession;
     }
 
