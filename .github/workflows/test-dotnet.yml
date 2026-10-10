@@ -10,6 +10,7 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'tools/ArLegacyPostingReconciliation/**'
+      - 'tools/AccumulatorReversalKindBackfill/**'
       - '.github/workflows/test-dotnet.yml'
   pull_request:
     branches: ["main"]
@@ -17,6 +18,7 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'tools/ArLegacyPostingReconciliation/**'
+      - 'tools/AccumulatorReversalKindBackfill/**'
       - '.github/workflows/test-dotnet.yml'
   workflow_dispatch:
 
