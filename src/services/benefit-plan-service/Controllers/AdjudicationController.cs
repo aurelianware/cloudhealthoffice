@@ -603,7 +603,7 @@ public class AdjudicationController : ControllerBase
                 };
             }).ToList();
 
-            var perStay = ResolvePerStayPricing(claimTypeCode, request, pricingResults);
+            var perStay = PerStayPricing.Resolve(claimTypeCode, request.DrgCode, request.LengthOfStay, pricingResults);
             var benefitRequest = new BenefitResolutionRequest
             {
                 MemberId = request.MemberId,
@@ -1104,38 +1104,6 @@ public class AdjudicationController : ControllerBase
     // ═══════════════════════════════════════════════════════════════════
     // Helper: Normalize claim type string → X12 transaction code
     // ═══════════════════════════════════════════════════════════════════
-
-    private sealed record PerStayPricing(
-        InpatientPricingMethod Method, decimal ClaimAllowed, string? DrgCode, int? LengthOfStay);
-
-    /// <summary>
-    /// When the fee schedule engine priced an institutional claim as one
-    /// claim-level amount (a DRG case rate or an all-inclusive per diem,
-    /// allocated across the lines — <c>PricingResult.IsPerStayRate</c>), the
-    /// benefit engine must take its claim-level inpatient path: one inpatient
-    /// copay, deductible and coinsurance once, on the claim's total allowed.
-    /// Null for per-line pricing.
-    /// </summary>
-    private static PerStayPricing? ResolvePerStayPricing(
-        string claimTypeCode, AdjudicationRequest request, PricingResultSet pricingResults)
-    {
-        if (claimTypeCode != "837I")
-            return null;
-
-        var perStayLines = pricingResults.LineResults.Where(r => r.IsPerStayRate).ToList();
-        if (perStayLines.Count == 0)
-            return null;
-
-        var method = perStayLines.Any(r => r.FeeScheduleType == CloudHealthOffice.FeeScheduleEngine.Domain.FeeScheduleType.Drg)
-            ? InpatientPricingMethod.DrgCaseRate
-            : InpatientPricingMethod.PerDiem;
-
-        return new PerStayPricing(
-            method,
-            pricingResults.LineResults.Sum(r => r.AllowedAmount),
-            string.IsNullOrWhiteSpace(request.DrgCode) ? null : request.DrgCode.Trim(),
-            request.LengthOfStay);
-    }
 
     private static string NormalizeClaimType(string? claimType)
     {

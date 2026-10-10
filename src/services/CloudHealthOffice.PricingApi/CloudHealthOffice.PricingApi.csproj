@@ -13,6 +13,9 @@
     <Company>Aurelianware, Inc.</Company>
     <Product>CloudHealthOffice Claims Pricing API</Product>
     <Description>Vendor-neutral claims repricing API supporting Medicare RBRVS, OPPS, and MS-DRG fee schedules.</Description>
+    <!-- XML docs feed the OpenAPI document (request/response field descriptions). -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

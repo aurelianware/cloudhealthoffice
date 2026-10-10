@@ -119,6 +119,57 @@ CHO caller with a pricing permission.
 
 Upload your own contracted rates via CSV or the management API. The pricing engine applies your custom rates with the same modifier, MPPR, and geographic adjustment logic.
 
+## Claim Type and Type of Bill
+
+`claimType` and `billType` are optional. They select the claim's setting the same
+way claims adjudication does (ADR 016), so the Pricing API and adjudication return
+the same allowed amount for the same claim:
+
+| `claimType` | Setting | Notes |
+|-------------|---------|-------|
+| `professional` | Facility rate only for a facility `placeOfService` (21, 22, 23, ...) | 837P |
+| `dental` | Same as professional | 837D |
+| `institutional` | Always the facility rate | 837I; priced by DRG against an MS-DRG schedule only with a hospital inpatient Part A type of bill (11x), otherwise line by line (12x inpatient Part B is paid outside the DRG) |
+| `outpatient` | Always the facility rate | 837I |
+| `inpatient` | Always the facility rate; priced by `drgCode` | 837I |
+| *(absent)* | `institutional` when `billType` is valid, otherwise `professional` | Unchanged for requests without `billType` |
+
+`billType` is the NUBC type of bill (837I CLM05-1 facility type + CLM05-3
+frequency): three digits (`"131"`) or four with a leading zero (`"0131"`). It is
+echoed in the response normalized to three digits. A malformed `billType`
+(`"0"`, `"N/A"`, `"13"`), or a `billType` on a `professional` or `dental` claim,
+is rejected with `400 INVALID_BILL_TYPE`. A blank or whitespace `billType` is
+treated as absent (it was ignored before the field was validated). A claim type
+that contradicts its type of bill (`outpatient` with 11x, `inpatient` with any
+other) is priced by its claim type and the response carries a warning. On an institutional claim
+`placeOfService` is not read for the facility decision (it may hold the CLM05-1
+facility type code).
+
+> Behaviour change: an `outpatient` claim priced against a professional
+> (RBRVS/commercial) schedule now takes the facility rate whatever its
+> `placeOfService`, matching adjudication (before, a non-facility POS such as the
+> default `11` gave the non-facility rate). OPPS and MS-DRG pricing are unaffected.
+>
+> 837I → facility rate is the parity rule with adjudication (ADR 016 §5). Known CMS
+> exceptions are not yet modelled: hospital outpatient therapy (TOB 13x, revenue
+> codes 042x–044x, paid at the MPFS non-facility rate) and CAH Method II
+> professional services (revenue codes 096x–098x).
+
+```bash
+# Reprice a hospital outpatient claim (type of bill 131)
+curl -X POST http://localhost:8080/api/v1/reprice \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "feeScheduleId": "MEDICARE_RBRVS_2025",
+    "claimType": "institutional",
+    "billType": "0131",
+    "lines": [
+      { "procedureCode": "99213", "revenueCode": "0510", "units": 1, "billedAmount": 210.00 }
+    ]
+  }' | jq
+```
+
 ## Example: Reprice an Inpatient Claim (DRG)
 
 ```bash

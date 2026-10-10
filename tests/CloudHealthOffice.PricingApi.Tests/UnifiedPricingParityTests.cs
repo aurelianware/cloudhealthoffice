@@ -102,6 +102,30 @@ public class UnifiedPricingParityTests
         repriced.Lines[0].AllowedAmount.Should().Be(adjudicated.LineResults[0].AllowedAmount);
     }
 
+    /// <summary>
+    /// An institutional claim (837I) takes the facility rate at both entry points,
+    /// whatever its place of service field holds ("13" is the CLM05-1 facility type
+    /// code, "11" a caller default): adjudication sets IsInstitutional from the claim
+    /// type, the Pricing API from claimType / billType.
+    /// </summary>
+    [Theory]
+    [InlineData("13", "131")]
+    [InlineData("11", "131")]
+    [InlineData("11", null)]
+    public async Task Rbrvs_InstitutionalClaim_PricingApiAndAdjudicationAgree_AtFacilityRate(string pos, string? billType)
+    {
+        var claim = new[] { Line("99213", units: 1, billed: 150m), Line("71046", units: 1, billed: 90m) };
+
+        var (adjudicated, repriced) = await PriceBothWays(
+            claim, pos, ApiClaimType.Institutional, drgCode: null,
+            canonical: CanonicalRbrvs(), legacy: LegacyRbrvs(), billType: billType);
+
+        AssertParity(adjudicated, repriced);
+        // 99213 facility: (1.30 + 0.83 + 0.09) × CF
+        repriced.Lines[0].AllowedAmount.Should().Be(Math.Round(2.22m * Cf, 2));
+        repriced.Lines.Should().OnlyContain(l => l.Breakdown.FacilityIndicator == "Facility");
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // FACILITY / NON-FACILITY (CMS Pub. 100-04 Ch. 12 §20.4.2)
     // ═══════════════════════════════════════════════════════════════════
@@ -408,9 +432,11 @@ public class UnifiedPricingParityTests
     /// <summary>Adjudication on the canonical store; the Pricing API on its legacy rows.</summary>
     private static async Task<(PricingResultSet, RepricingResponse)> PriceBothWays(
         ClaimLine[] claim, string pos, ApiClaimType claimType, string? drgCode,
-        FeeSchedule canonical, LegacySchedule legacy)
+        FeeSchedule canonical, LegacySchedule legacy, string? billType = null)
     {
-        var adjudicated = await Adjudicate(claim, pos, drgCode, null, canonical.Id, canonical);
+        // Adjudication marks an 837I claim institutional (PricingStage, resolve-rates).
+        var isInstitutional = claimType is ApiClaimType.Institutional or ApiClaimType.Outpatient or ApiClaimType.Inpatient;
+        var adjudicated = await AdjudicateClaim(claim, pos, drgCode, null, isInstitutional, billType, canonical.Id, [canonical]);
 
         var repo = new Mock<ApiRepository>();
         repo.Setup(r => r.GetScheduleInfoAsync(legacy.Info.Id)).ReturnsAsync(legacy.Info);
@@ -421,7 +447,8 @@ public class UnifiedPricingParityTests
             .ReturnsAsync((string _, string drg) => legacy.Entries.FirstOrDefault(e => e.ProcedureCode == drg));
 
         var service = new RepricingService(repo.Object, NullLogger<RepricingService>.Instance);
-        var repriced = await service.RepriceClaimAsync(RepricingRequestFor(claim, pos, claimType, drgCode, legacy.Info.Id));
+        var repriced = await service.RepriceClaimAsync(
+            RepricingRequestFor(claim, pos, claimType, drgCode, legacy.Info.Id) with { BillType = billType });
         return (adjudicated, repriced);
     }
 
@@ -460,6 +487,11 @@ public class UnifiedPricingParityTests
     private static Task<PricingResultSet> Adjudicate(
         ClaimLine[] claim, string pos, string? drgCode, int? lengthOfStay,
         string contractScheduleId, params FeeSchedule[] schedules)
+        => AdjudicateClaim(claim, pos, drgCode, lengthOfStay, isInstitutional: false, billType: null, contractScheduleId, schedules);
+
+    private static Task<PricingResultSet> AdjudicateClaim(
+        ClaimLine[] claim, string pos, string? drgCode, int? lengthOfStay, bool isInstitutional, string? billType,
+        string contractScheduleId, FeeSchedule[] schedules)
     {
         var store = new CanonicalStore(schedules, contractScheduleId);
         var engine = new RateResolutionService(store, store, NullLogger<RateResolutionService>.Instance);
@@ -480,6 +512,8 @@ public class UnifiedPricingParityTests
             DrgCode = drgCode,
             LengthOfStay = lengthOfStay,
             RevenueCode = line.RevenueCode,
+            BillType = billType,
+            IsInstitutional = isInstitutional,
         }).ToList();
 
         return engine.ResolveBatchAsync(requests);
