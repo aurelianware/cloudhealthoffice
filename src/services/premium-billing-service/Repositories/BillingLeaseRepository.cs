@@ -39,9 +39,23 @@ public class BillingLease
     [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
     public string? ETag { get; set; }
 
+    /// <summary>Element name of <see cref="DocType"/> in MongoDB (no naming convention there).</summary>
+    public const string MongoDocTypeElement = nameof(DocType);
+
+    public const string IdPrefix = "lease-";
+
+    public static bool IsLeaseId(string? id) => id != null && id.StartsWith(IdPrefix, StringComparison.Ordinal);
+
+    /// <summary>Invoice reads and writes never touch a lease document (they share a container/collection).</summary>
+    public static void RefuseLeaseId(string? id)
+    {
+        if (IsLeaseId(id))
+            throw new InvalidOperationException($"{id} is not an invoice");
+    }
+
     /// <summary>One lease per tenant and group; safe as a Cosmos id and a Mongo _id.</summary>
     public static string IdFor(string tenantId, string groupNumber) =>
-        "lease-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{tenantId}\n{groupNumber}")))[..32].ToLowerInvariant();
+        IdPrefix + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{tenantId}\n{groupNumber}")))[..32].ToLowerInvariant();
 }
 
 /// <summary>A held lease: who holds it, and (Cosmos) the version of the lease document it holds.</summary>
@@ -78,10 +92,14 @@ public interface IBillingLeaseRepository
     Task ReleaseAsync(BillingLeaseHandle lease);
 }
 
-/// <summary>MongoDB: collection <c>BillingLeases</c>; the unique _id makes the first insert win.</summary>
+/// <summary>
+/// MongoDB: lease documents live in the <c>PremiumInvoices</c> collection (<c>DocType =
+/// billingLease</c>), so a fenced invoice write is a single-collection transaction (the
+/// only kind Azure Cosmos DB for MongoDB supports). The unique _id makes the first insert win.
+/// </summary>
 public sealed class BillingLeaseRepositoryMongo : IBillingLeaseRepository
 {
-    public const string CollectionName = "BillingLeases";
+    public const string CollectionName = "PremiumInvoices";
 
     private readonly IMongoCollection<BillingLease> _collection;
     private readonly IHttpContextAccessor _http;

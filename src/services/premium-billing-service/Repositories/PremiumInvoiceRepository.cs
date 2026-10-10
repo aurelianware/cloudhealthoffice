@@ -120,6 +120,9 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
 
     public async Task<PremiumInvoice?> GetByIdAsync(string id)
     {
+        // Billing leases share this container: a lease id is never an invoice.
+        if (BillingLease.IsLeaseId(id))
+            return null;
         var tenantId = GetTenantId();
         try
         {
@@ -260,6 +263,7 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
 
     public async Task<PremiumInvoice> CreateAsync(PremiumInvoice invoice)
     {
+        BillingLease.RefuseLeaseId(invoice.Id);
         invoice.TenantId = GetTenantId();
         invoice.CreatedAt = DateTime.UtcNow;
         invoice.LastUpdatedAt = DateTime.UtcNow;
@@ -280,6 +284,7 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
 
     public async Task<PremiumInvoice> UpdateAsync(PremiumInvoice invoice)
     {
+        BillingLease.RefuseLeaseId(invoice.Id);
         invoice.LastUpdatedAt = DateTime.UtcNow;
         invoice.Version++;
         try
@@ -311,6 +316,7 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
     private async Task<PremiumInvoice> WriteFencedAsync(PremiumInvoice invoice, bool create, IBillingLeaseRepository leases,
         BillingLeaseHandle lease, DateTime now, TimeSpan duration)
     {
+        BillingLease.RefuseLeaseId(invoice.Id);
         if (leases is not BillingLeaseRepositoryCosmos || lease.ETag == null)
         {
             if (!await leases.RenewAsync(lease, now, duration))
@@ -363,6 +369,7 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
 
     public async Task DeleteAsync(string id)
     {
+        BillingLease.RefuseLeaseId(id);
         var tenantId = GetTenantId();
         await _container.DeleteItemAsync<PremiumInvoice>(id, new PartitionKey(tenantId));
         _logger.LogInformation("Deleted premium invoice {Id}", SanitizeForLog(id));

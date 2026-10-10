@@ -20,8 +20,9 @@ as before. Design: [premium-rated-billing.md](../architecture/premium-rated-bill
 2. **Cosmos DB only:** create container `RateTables` with partition key `/tenantId` in
    the service's database (group billing leases are kept in the existing
    `PremiumInvoices` container). **MongoDB:** run it as a replica set so lease-fenced
-   invoice writes are transactional; Mongo creates the `RateTables` and `BillingLeases`
-   collections on first write.
+   invoice writes are transactional (leases are kept in the `PremiumInvoices` collection,
+   so this works on Azure Cosmos DB for MongoDB too); Mongo creates the `RateTables`
+   collection on first write.
 3. **Load rate tables** for every plan the tenant's groups are enrolled in, covering
    at least the retro window (default 3 months) before the first rated period:
    `POST /api/v1/rate-tables` (finance:write) with `{ "table": { ... }, "changeReason": "..." }`.
@@ -154,7 +155,8 @@ equals the line's `rateTableHash`).
   `rated-credit-{invoiceId}`, type `RatedInvoiceCredit`); the invoice shows a
   `SponsorAccountCredit` payment and a zero balance. The invoice is saved before the
   account is credited; if a run dies in between, the next run for the period posts the
-  missing entry. Voiding a rated invoice waits for its group's billing lease.
+  missing entry. Voiding a rated invoice waits for its group's billing lease (409 if a
+  run keeps holding it: retry shortly).
 - **Terminated groups.** Billing runs bill Active sponsors only, so a retro term reported
   after the whole group terminated is not credited automatically. Compute the credit
   from the coverage-month shown on the last rated invoices and post it to the sponsor

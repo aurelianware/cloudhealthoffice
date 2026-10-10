@@ -520,6 +520,32 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
     }
 
     [SkippableFact]
+    public async Task LeaseDocuments_AreNeverReadOrWrittenAsInvoices()
+    {
+        // Leases share the invoices' container/collection; their id is computable from tenant and group.
+        await SaveTierTable();
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        await Generate(D(2026, 2, 1));
+        var held = await Leases.TryAcquireAsync(Group, "holder", Clock.Now, TimeSpan.FromMinutes(5));
+        var leaseId = BillingLease.IdFor(Tenant, Group);
+
+        (await Invoices.GetByIdAsync(leaseId)).Should().BeNull();
+        (await Invoices.SearchAsync()).Should().OnlyContain(i => i.GroupNumber == Group && i.InvoiceNumber.StartsWith("INV-"));
+        (await Invoices.GetByGroupNumberAsync(Group)).Should().ContainSingle();
+        (await Invoices.GetOverdueAsync()).Should().NotContain(i => i.Id == leaseId);
+
+        var overwrite = () => Invoices.UpdateAsync(new PremiumInvoice { Id = leaseId, TenantId = Tenant, InvoiceNumber = "X", GroupNumber = Group });
+        await overwrite.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not an invoice*");
+        var create = () => Invoices.CreateAsync(new PremiumInvoice { Id = leaseId, InvoiceNumber = "X", GroupNumber = Group });
+        await create.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not an invoice*");
+        var delete = () => Invoices.DeleteAsync(leaseId);
+        await delete.Should().ThrowAsync<InvalidOperationException>();
+
+        // The lease itself is untouched and still renewable by its holder.
+        (await Leases.RenewAsync(held!, Clock.Now, TimeSpan.FromMinutes(5))).Should().BeTrue();
+    }
+
+    [SkippableFact]
     public async Task GroupLease_IsExclusiveUntilReleasedOrExpired()
     {
         var now = D(2026, 3, 1);
@@ -930,4 +956,15 @@ public sealed class RatedBillingMongoReplicaSetTests(MongoReplicaSetFixture mong
     }
 
     public override Task DisposeAsync() => mongo.Client.DropDatabaseAsync(_database.DatabaseNamespace.DatabaseName);
+
+    [Fact]
+    public async Task LeasesLiveInTheInvoiceCollection_SoTheFencedWriteIsASingleCollectionTransaction()
+    {
+        // Azure Cosmos DB for MongoDB (RU) supports multi-document transactions only within one collection.
+        (await Leases.TryAcquireAsync(Group, "holder", Clock.Now, TimeSpan.FromMinutes(5))).Should().NotBeNull();
+
+        var raw = _database.GetCollection<MongoDB.Bson.BsonDocument>("PremiumInvoices");
+        (await raw.CountDocumentsAsync(new MongoDB.Bson.BsonDocument("DocType", BillingLease.DocumentType))).Should().Be(1);
+        _database.ListCollectionNames().ToList().Should().NotContain("BillingLeases");
+    }
 }

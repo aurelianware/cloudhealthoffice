@@ -194,6 +194,11 @@ public class PremiumInvoicesController : ControllerBase
             // Kept changing under us after retries: the caller may retry.
             return Conflict(new { error = ex.Message });
         }
+        catch (Exception ex) when (ex is GroupBillingBusyException or BillingLeaseLostException)
+        {
+            // A rated invoice is voided under its group's billing lease; a run holds it: retry shortly.
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });

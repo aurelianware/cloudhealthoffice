@@ -75,11 +75,16 @@ computed from the older ledger, so the lease **fences** the writes:
   `PremiumInvoices` container (`docType = billingLease`, same `/tenantId` partition),
   and each invoice create or replace goes in one transactional batch with a replace of
   the lease document conditioned on the ETag this holder last wrote. A taken-over
-  lease has another ETag, so the batch writes nothing. MongoDB on a replica set: the
-  lease renewal (owner must match) and the invoice write run in one multi-document
-  transaction. MongoDB standalone (no transactions): the lease is renewed immediately
-  before the write (owner and unexpired); the milliseconds between the two are not
-  fenced.
+  lease has another ETag, so the batch writes nothing. MongoDB: lease documents also
+  live in the `PremiumInvoices` collection (`DocType = billingLease`), so on a replica
+  set the lease renewal (owner must match) and the invoice write are one
+  single-collection transaction, the only kind Azure Cosmos DB for MongoDB (RU)
+  supports. A server that reports a replica set but refuses the transaction, and a
+  standalone mongod, fall back (with a warning) to renewing the lease immediately before
+  the write (owner and unexpired); the milliseconds between the two are not fenced.
+- **Lease documents are never invoices.** Every invoice read and write refuses a lease
+  id (`lease-…`) and every invoice query excludes `docType`/`DocType` documents, so
+  `GET /premium-invoices/{leaseId}` is 404 and a payment or void cannot overwrite a lease.
 - **Account credits** are idempotent by invoice id (below), so they need no fence.
 
 Two periods of one group are therefore never reconciled from the same ledger, and a
@@ -275,7 +280,7 @@ Review reasons (`reviewReasons`; they do not block an explicit issue): `HELD_FOR
 |---|---|---|
 | Rate table versions | collection `RateTables`, `_id` = hash of tenant + table id, plus version | container `RateTables`, partition `/tenantId` |
 | Invoices | `PremiumInvoices` (unchanged; new optional fields) | `PremiumInvoices` (unchanged; new optional fields) |
-| Group billing leases | collection `BillingLeases` | in container `PremiumInvoices` (`docType = billingLease`), partition `/tenantId` |
+| Group billing leases | in collection `PremiumInvoices` (`DocType = billingLease`) | in container `PremiumInvoices` (`docType = billingLease`), partition `/tenantId` |
 | Net credits | `SponsorAccounts` (existing) | `SponsorAccounts` (existing) |
 
 The Cosmos invoice repository's status filters (`GetOverdueAsync`, `GetByStatusAsync`,
@@ -289,9 +294,11 @@ they previously compared with the enum's number and never matched a stored statu
 - Billing runs list only Active sponsors, so retro terms reported after a group itself
   terminated are not credited automatically. The runbook gives the manual procedure;
   an automatic final adjustment invoice for terminated groups is a follow-up.
-- On a standalone MongoDB (no replica set) the lease fence is renew-then-write, not
-  atomic; production MongoDB should run as a replica set (Cosmos DB is always fenced
-  atomically).
+- On a standalone MongoDB, or a MongoDB API that refuses the transaction, the lease
+  fence is renew-then-write, not atomic; run MongoDB as a replica set (Cosmos DB is
+  always fenced atomically).
+- Released leases are deleted; a lease left behind by a crashed run stays until it is
+  taken over after it expires (no TTL index).
 - Heartbeats run between the coverage-service and member-service calls, not between
   their pages; a single very slow listing can still outlive the lease, in which case
   the run is stopped at its next heartbeat or write and writes nothing.

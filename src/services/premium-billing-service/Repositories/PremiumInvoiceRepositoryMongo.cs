@@ -27,12 +27,22 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
         return tenantId;
     }
 
+    /// <summary>
+    /// The tenant's invoices, never its billing leases: lease documents share this
+    /// collection (so a lease-fenced write is a single-collection transaction) and
+    /// carry a DocType element that invoices do not.
+    /// </summary>
+    private static FilterDefinition<PremiumInvoice> InvoicesOf(string tenantId) =>
+        Builders<PremiumInvoice>.Filter.And(
+            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId),
+            Builders<PremiumInvoice>.Filter.Exists(BillingLease.MongoDocTypeElement, false));
+
     public async Task<PremiumInvoice?> GetByIdAsync(string id)
     {
         var tenantId = GetTenantId();
         var filter = Builders<PremiumInvoice>.Filter.And(
             Builders<PremiumInvoice>.Filter.Eq(x => x.Id, id),
-            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId));
+            InvoicesOf(tenantId));
         return await _collection.Find(filter).FirstOrDefaultAsync();
     }
 
@@ -40,7 +50,7 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
     {
         var tenantId = GetTenantId();
         var filter = Builders<PremiumInvoice>.Filter.And(
-            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId),
+            InvoicesOf(tenantId),
             Builders<PremiumInvoice>.Filter.Eq(x => x.GroupNumber, groupNumber));
         return await _collection.Find(filter).SortByDescending(x => x.BillingPeriodStart).ToListAsync();
     }
@@ -49,7 +59,7 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
     {
         var tenantId = GetTenantId();
         var filter = Builders<PremiumInvoice>.Filter.And(
-            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId),
+            InvoicesOf(tenantId),
             Builders<PremiumInvoice>.Filter.Eq(x => x.InvoiceNumber, invoiceNumber));
         return await _collection.Find(filter).ToListAsync();
     }
@@ -58,7 +68,7 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
     {
         var tenantId = GetTenantId();
         var filter = Builders<PremiumInvoice>.Filter.And(
-            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId),
+            InvoicesOf(tenantId),
             Builders<PremiumInvoice>.Filter.Eq(x => x.BillingPeriodStart, billingPeriodStart));
         return await _collection.Find(filter).SortBy(x => x.GroupNumber).ToListAsync();
     }
@@ -67,7 +77,7 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
     {
         var tenantId = GetTenantId();
         var filter = Builders<PremiumInvoice>.Filter.And(
-            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId),
+            InvoicesOf(tenantId),
             Builders<PremiumInvoice>.Filter.Eq(x => x.Status, status));
         return await _collection.Find(filter).SortBy(x => x.DueDate).ToListAsync();
     }
@@ -83,7 +93,7 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
         var tenantId = GetTenantId();
         var filters = new List<FilterDefinition<PremiumInvoice>>
         {
-            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId)
+            InvoicesOf(tenantId)
         };
 
         if (!string.IsNullOrEmpty(groupNumber))
@@ -108,7 +118,7 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
         var tenantId = GetTenantId();
         var now = DateTime.UtcNow;
         var filter = Builders<PremiumInvoice>.Filter.And(
-            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId),
+            InvoicesOf(tenantId),
             Builders<PremiumInvoice>.Filter.Gt(x => x.BalanceDue, 0m),
             Builders<PremiumInvoice>.Filter.Lt(x => x.DueDate, now),
             Builders<PremiumInvoice>.Filter.Ne(x => x.Status, InvoiceStatus.Voided),
@@ -122,7 +132,7 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
     {
         var tenantId = GetTenantId();
         var filter = Builders<PremiumInvoice>.Filter.And(
-            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId),
+            InvoicesOf(tenantId),
             // A draft is not a bill: leave it out before the last-N cut.
             Builders<PremiumInvoice>.Filter.Ne(x => x.Status, InvoiceStatus.Draft),
             Builders<PremiumInvoice>.Filter.ElemMatch(
@@ -136,6 +146,7 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
 
     public async Task<PremiumInvoice> CreateAsync(PremiumInvoice invoice)
     {
+        BillingLease.RefuseLeaseId(invoice.Id);
         invoice.TenantId = GetTenantId();
         invoice.CreatedAt = DateTime.UtcNow;
         invoice.LastUpdatedAt = DateTime.UtcNow;
@@ -160,7 +171,9 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
         var versionFilter = expected == 0
             ? f.Or(f.Eq(x => x.Version, 0L), f.Exists(x => x.Version, false))
             : f.Eq(x => x.Version, expected);
-        var filter = f.And(f.Eq(x => x.Id, invoice.Id), f.Eq(x => x.TenantId, invoice.TenantId), versionFilter);
+        BillingLease.RefuseLeaseId(invoice.Id);
+        var filter = f.And(f.Eq(x => x.Id, invoice.Id), f.Eq(x => x.TenantId, invoice.TenantId),
+            f.Exists(BillingLease.MongoDocTypeElement, false), versionFilter);
 
         invoice.LastUpdatedAt = DateTime.UtcNow;
         invoice.Version = expected + 1;
@@ -188,6 +201,18 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
         return supported;
     }
 
+    /// <summary>Errors meaning "no transaction here", as opposed to a write that failed inside one.</summary>
+    private static bool TransactionsUnsupported(Exception ex) => ex switch
+    {
+        NotSupportedException => true,
+        // IllegalOperation, CommandNotSupported, OperationNotSupportedInTransaction, NoSuchTransaction-less servers.
+        MongoCommandException command when command.Code is 20 or 115 or 263 => true,
+        MongoException mongo when mongo is not MongoWriteException
+                                  && mongo.Message.Contains("transaction", StringComparison.OrdinalIgnoreCase)
+                                  && mongo.Message.Contains("not supported", StringComparison.OrdinalIgnoreCase) => true,
+        _ => false
+    };
+
     public Task<PremiumInvoice> CreateFencedAsync(PremiumInvoice invoice, IBillingLeaseRepository leases, BillingLeaseHandle lease,
         DateTime now, TimeSpan duration) => WriteFencedAsync(invoice, create: true, leases, lease, now, duration);
 
@@ -211,6 +236,8 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
         }
 
         var tenantId = GetTenantId();
+        // Same collection as the invoices: Azure Cosmos DB for MongoDB (RU) runs multi-document
+        // transactions only within one unsharded collection.
         var leaseCollection = _collection.Database.GetCollection<BillingLease>(BillingLeaseRepositoryMongo.CollectionName);
         var leaseId = BillingLease.IdFor(tenantId, lease.GroupNumber);
         var f = Builders<PremiumInvoice>.Filter;
@@ -243,7 +270,8 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
                     : f.Eq(x => x.Version, expected);
                 invoice.Version = expected + 1;
                 var replaced = await _collection.ReplaceOneAsync(s,
-                    f.And(f.Eq(x => x.Id, invoice.Id), f.Eq(x => x.TenantId, invoice.TenantId), versionFilter), invoice, cancellationToken: ct);
+                    f.And(f.Eq(x => x.Id, invoice.Id), f.Eq(x => x.TenantId, invoice.TenantId),
+                        f.Exists(BillingLease.MongoDocTypeElement, false), versionFilter), invoice, cancellationToken: ct);
                 if (replaced.MatchedCount == 0)
                     throw new ConcurrencyConflictException($"Invoice {invoice.InvoiceNumber} was changed by someone else; re-read it and retry");
                 return true;
@@ -252,6 +280,17 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
         catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
         {
             throw new InvoiceAlreadyExistsException(invoice.Id);
+        }
+        catch (Exception ex) when (TransactionsUnsupported(ex))
+        {
+            // The server reports a replica set but refuses this transaction (e.g. an API that
+            // only partly supports them): nothing was written. Fall back to renew-then-write.
+            invoice.Version = expected;
+            ReplicaSets[_collection.Database.Client] = false;
+            _logger.LogWarning(ex, "MongoDB refused a multi-document transaction; rated billing falls back to renew-then-write lease fencing");
+            if (!await leases.RenewAsync(lease, now, duration))
+                throw new BillingLeaseLostException(lease.GroupNumber);
+            return create ? await CreateAsync(invoice) : await UpdateAsync(invoice);
         }
         catch (Exception) when (!create)
         {
@@ -265,10 +304,11 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
 
     public async Task DeleteAsync(string id)
     {
+        BillingLease.RefuseLeaseId(id);
         var tenantId = GetTenantId();
         var filter = Builders<PremiumInvoice>.Filter.And(
             Builders<PremiumInvoice>.Filter.Eq(x => x.Id, id),
-            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId));
+            InvoicesOf(tenantId));
         await _collection.DeleteOneAsync(filter);
         _logger.LogInformation("Deleted premium invoice {Id}", id);
     }
