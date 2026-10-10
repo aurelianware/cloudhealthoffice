@@ -99,6 +99,39 @@ public abstract class FhirControllerBase : ControllerBase
     protected IReadOnlySet<string> SmartScopes
         => HttpContext.Items["SmartScopes"] as HashSet<string> ?? new HashSet<string>();
 
+    /// <summary>
+    /// True only for a SMART backend (client-credentials) caller: every granted
+    /// scope is <c>system/</c>-context and the token is bound to no patient.
+    /// A token carrying any patient/ or user/ scope, or any patient binding
+    /// (middleware-injected, issuer-mapped, or the raw <c>patient</c> claim),
+    /// is not a backend caller, however else it is scoped.
+    /// </summary>
+    protected bool IsBackendSystemCaller
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(SmartPatientId)) return false;
+            if (HttpContext.Items[FhirService.Services.Identity.AuthenticatedCaller.HttpContextItemKey]
+                    is FhirService.Services.Identity.AuthenticatedCaller { PatientId: { Length: > 0 } })
+                return false;
+            if (!string.IsNullOrEmpty(User?.FindFirst("patient")?.Value)) return false;
+
+            return FhirService.Services.Identity.CallerIdentityResolver.ClassifyCaller(SmartScopes)
+                   == FhirService.Services.Identity.SmartCallerType.System;
+        }
+    }
+
+    /// <summary>
+    /// 403 with a FHIR <c>OperationOutcome</c>. Callers pass a FIXED message,
+    /// never one built from the request, so a refusal reveals nothing about
+    /// the member or resource the request named.
+    /// </summary>
+    protected IActionResult FhirForbidden(string diagnostics)
+        => StatusCode(403, BuildOutcome(
+            OperationOutcome.IssueSeverity.Error,
+            OperationOutcome.IssueType.Forbidden,
+            diagnostics));
+
     // ── OperationOutcome helpers ──────────────────────────────────────────────
 
     protected IActionResult FhirNotFound(string resourceType, string id)

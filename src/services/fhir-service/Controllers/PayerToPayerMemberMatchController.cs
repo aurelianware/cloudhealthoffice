@@ -38,11 +38,18 @@ public sealed class PayerToPayerMemberMatchController : FhirControllerBase
     public async Task<IActionResult> MemberMatch(
         [FromBody] MemberMatchRequestDto? body, CancellationToken ct)
     {
+        // D-13: member-match is payer-to-payer (backend) only. Refused before
+        // the body is read, so the answer does not depend on the member named.
+        if (!IsBackendSystemCaller)
+            return FhirForbidden(PayerToPayerController.BackendOnlyMessage);
+
         if (body is null)
             return FhirBadRequest("A member-match request body is required.");
 
         // The receiving payer must identify itself so the match is auditable
         // ("which receiving payer asked"); normalize it so audit/log values are stable.
+        // Still self-declared: there is no client -> payer registration to bind
+        // it to yet (D-13 remainder). InitiatedBy is the authenticated client.
         var receivingPayerId = body.ReceivingPayerId?.Trim();
         if (string.IsNullOrEmpty(receivingPayerId))
             return FhirBadRequest("receivingPayerId is required to identify the requesting payer for audit.");
@@ -51,7 +58,7 @@ public sealed class PayerToPayerMemberMatchController : FhirControllerBase
         {
             TenantId = TenantId,                 // from the authenticated context, not the body
             ReceivingPayerId = receivingPayerId,
-            InitiatedBy = SmartPatientId is null ? receivingPayerId : $"patient:{SmartPatientId}",
+            InitiatedBy = $"client:{AuthenticatedActorId ?? "unknown"}",
             FamilyName = body.FamilyName,
             GivenName = body.GivenName,
             BirthDate = body.BirthDate,

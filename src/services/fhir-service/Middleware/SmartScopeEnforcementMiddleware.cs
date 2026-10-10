@@ -249,6 +249,13 @@ public class SmartScopeEnforcementMiddleware
     private static readonly string[] BackendContexts = ["user", "system"];
 
     /// <summary>
+    /// System context only: a payer-to-payer operation is invoked by another
+    /// payer's backend (client-credentials), never by a member's patient app
+    /// or a provider's user app. See <see cref="ResourceOperationContexts"/>.
+    /// </summary>
+    private static readonly string[] SystemContexts = ["system"];
+
+    /// <summary>
     /// What one request is, for authorization purposes: the resource whose scope
     /// governs it, the instance it names (for patient binding), whether it reads
     /// or writes, and which scope contexts may invoke it.
@@ -316,6 +323,26 @@ public class SmartScopeEnforcementMiddleware
         };
 
     /// <summary>
+    /// Named operations on a resource that only some scope contexts may invoke.
+    /// An operation not listed here may be invoked in every context.
+    ///
+    /// The two inbound Payer-to-Payer operations (CMS-0057-F; Da Vinci PDex
+    /// payer-to-payer exchange) are backend-to-backend: the new payer's system
+    /// asks the prior payer for a member's data. The member's part in the flow
+    /// is the opt-in, which CHO checks server-side; the member never calls
+    /// these operations. Both name their target member in the request BODY, so
+    /// admitting a patient-context token let member A name member B and pull
+    /// B's data (D-13). They are therefore system-context only, and the
+    /// controllers refuse any patient-bound caller again as defence in depth.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string[]> ResourceOperationContexts =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Patient/$member-match"] = SystemContexts,
+            ["PayerToPayer/$member-data-export"] = SystemContexts,
+        };
+
+    /// <summary>
     /// Resolves a request under <c>/fhir/r4</c> into the interaction that governs
     /// it. Null only when the path is too short to name anything.
     ///
@@ -347,7 +374,10 @@ public class SmartScopeEnforcementMiddleware
 
         // /fhir/r4/{Resource}/$operation
         if (segments.Length >= 4 && segments[3].StartsWith('$'))
-            return new FhirInteraction(resource, null, OperationAccess(resource, segments[3], methodAccess), AllContexts);
+            return new FhirInteraction(resource, null, OperationAccess(resource, segments[3], methodAccess),
+                ResourceOperationContexts.TryGetValue($"{resource}/{segments[3]}", out var opContexts)
+                    ? opContexts
+                    : AllContexts);
 
         // /fhir/r4/{Resource}/{id}/$operation
         if (segments.Length >= 5 && segments[4].StartsWith('$'))

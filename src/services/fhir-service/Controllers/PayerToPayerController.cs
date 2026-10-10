@@ -36,11 +36,24 @@ public sealed class PayerToPayerController : FhirControllerBase
     public async Task<IActionResult> Export(
         [FromBody] PayerToPayerExportRequestDto? body, CancellationToken ct)
     {
+        // D-13: a payer-to-payer export is a backend-to-backend operation. The
+        // middleware already admits system-context tokens only; this repeats
+        // the check here, BEFORE the body is looked at, so a patient-bound or
+        // user-context token is refused identically whatever member it names.
+        if (!IsBackendSystemCaller)
+            return FhirForbidden(BackendOnlyMessage);
+
         if (body is null)
             return FhirBadRequest("A Payer-to-Payer export request body is required.");
 
         // The receiving payer must identify itself so the exchange is auditable
         // ("which receiving payer"); normalize it so audit/log values are stable.
+        //
+        // NOT YET BOUND to the authenticated client: CHO has no client -> payer
+        // registration today, so this value is still self-declared by the
+        // caller. What the caller cannot do any more is be a member or a
+        // provider app, and the audit's InitiatedBy is now the authenticated
+        // client, not this body value. (D-13 remainder; see the gap matrix.)
         var receivingPayerId = body.ReceivingPayerId?.Trim();
         if (string.IsNullOrEmpty(receivingPayerId))
             return FhirBadRequest("receivingPayerId is required to identify the requesting payer for audit.");
@@ -49,7 +62,7 @@ public sealed class PayerToPayerController : FhirControllerBase
         {
             TenantId = TenantId,                 // from the authenticated context, not the body
             ReceivingPayerId = receivingPayerId,
-            InitiatedBy = SmartPatientId is null ? receivingPayerId : $"patient:{SmartPatientId}",
+            InitiatedBy = $"client:{AuthenticatedActorId ?? "unknown"}",
             MemberId = body.MemberId,
             LastName = body.LastName,
             Dob = body.Dob,
@@ -71,6 +84,9 @@ public sealed class PayerToPayerController : FhirControllerBase
             _ => FhirNotFound("Member", SanitizeForLog(body.MemberId) ?? "unknown"),
         };
     }
+
+    internal const string BackendOnlyMessage =
+        "Payer-to-Payer operations are restricted to payer backend (system) clients.";
 
     private IActionResult Forbidden(string diagnostics)
         => StatusCode(403, new OperationOutcome
