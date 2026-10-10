@@ -1,0 +1,146 @@
+name: Deploy CDO-facing services (Container Apps)
+
+# CHO services that CloudDentalOffice calls run as Container Apps inside CDO's
+# Container Apps environment (cdo-env in cdo-prod-rg), not on AKS, so
+# deploy-azure-aks.yml never deploys them. This workflow runs their deploy
+# scripts on demand:
+#   provider-eligibility  scripts/deploy-provider-eligibility-container-app.sh
+#   estimate              scripts/deploy-estimate-container-app.sh
+#
+# Always runs an ARM what-if preview first. "deploy" then deploys, and waits
+# until the new revision is ready (for provider-eligibility that includes the
+# payer directory having loaded). Deploys are allowed from main only.
+#
+# Uses the same OIDC login as deploy-azure-aks.yml (secrets AZURE_CLIENT_ID,
+# AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID). That identity needs, besides
+# Contributor on the target resource group: AcrPush on the registry, Key Vault
+# Secrets Officer on cho-kv, permission to create role assignments on the
+# registry and Key Vault secrets, and Microsoft.App/managedEnvironments/join
+# on cdo-env.
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Which service to deploy
+        type: choice
+        options:
+          - provider-eligibility
+          - estimate
+          - both
+        default: provider-eligibility
+      mode:
+        description: preview = what-if only; deploy = what-if, then deploy
+        type: choice
+        options:
+          - preview
+          - deploy
+        default: preview
+      stedi_environment:
+        description: "provider-eligibility only: Stedi key mode; must match the key in cho-kv"
+        type: choice
+        options:
+          - production
+          - test
+        default: production
+      tenant_ids:
+        description: "provider-eligibility only: comma-separated CDO tenant ids the CDO credential may act for"
+        type: string
+        default: third-set-smiles
+
+permissions:
+  contents: read
+
+# One deploy at a time into the shared environment; never cancel one mid-flight.
+concurrency:
+  group: deploy-cdo-services
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: ${{ inputs.mode }} ${{ inputs.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RESOURCE_GROUP: ${{ vars.CHO_CDO_SERVICES_RESOURCE_GROUP || 'cho' }}
+      DEPLOY_ELIGIBILITY: ${{ inputs.service == 'provider-eligibility' || inputs.service == 'both' }}
+      DEPLOY_ESTIMATE: ${{ inputs.service == 'estimate' || inputs.service == 'both' }}
+      CHO_ESTIMATE_RESOURCE_GROUP: ${{ vars.CHO_CDO_SERVICES_RESOURCE_GROUP || 'cho' }}
+      CHO_PROVIDER_ELIGIBILITY_RESOURCE_GROUP: ${{ vars.CHO_CDO_SERVICES_RESOURCE_GROUP || 'cho' }}
+      CHO_PROVIDER_ELIGIBILITY_STEDI_ENV: ${{ inputs.stedi_environment }}
+      # Free text: passed through the environment, never interpolated into a
+      # command; the script validates each id.
+      CHO_PROVIDER_ELIGIBILITY_TENANT_IDS: ${{ inputs.tenant_ids }}
+    steps:
+      - name: Allow deploys from main only
+        if: inputs.mode == 'deploy' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Deploys run from main only (this run is on ${GITHUB_REF}). Use mode=preview to check another branch."
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Preview provider-eligibility (what-if)
+        if: env.DEPLOY_ELIGIBILITY == 'true'
+        run: scripts/deploy-provider-eligibility-container-app.sh preview
+
+      - name: Preview estimate (what-if)
+        if: env.DEPLOY_ESTIMATE == 'true'
+        run: scripts/deploy-estimate-container-app.sh preview
+
+      - name: Deploy provider-eligibility
+        if: inputs.mode == 'deploy' && env.DEPLOY_ELIGIBILITY == 'true'
+        run: scripts/deploy-provider-eligibility-container-app.sh deploy
+
+      - name: Deploy estimate
+        if: inputs.mode == 'deploy' && env.DEPLOY_ESTIMATE == 'true'
+        run: scripts/deploy-estimate-container-app.sh deploy
+
+      - name: Wait for healthy revisions
+        if: inputs.mode == 'deploy'
+        run: |
+          set -euo pipefail
+
+          # Waits until the app's latest revision is also its latest *ready*
+          # revision (replicas passed the readiness probe) and the app runs.
+          wait_ready() {
+            local app="$1"
+            for attempt in $(seq 1 40); do
+              read -r provisioning running latest ready fqdn < <(az resource show \
+                --resource-group "$RESOURCE_GROUP" \
+                --resource-type Microsoft.App/containerApps \
+                --name "$app" \
+                --query "[properties.provisioningState, properties.runningStatus, properties.latestRevisionName, properties.latestReadyRevisionName, properties.configuration.ingress.fqdn]" \
+                -o tsv | tr '\t' ' ')
+              echo "$app: provisioning=$provisioning running=$running latest=$latest ready=$ready (attempt $attempt)"
+              if [[ "$provisioning" == "Failed" ]]; then
+                echo "::error::$app provisioning failed."
+                return 1
+              fi
+              if [[ "$provisioning" == "Succeeded" && "$running" == "Running" && -n "$latest" && "$latest" == "$ready" ]]; then
+                echo "::notice::$app revision $latest is ready ($fqdn)."
+                return 0
+              fi
+              sleep 15
+            done
+            echo "::error::$app revision $latest did not become ready within 10 minutes. Check its revision and replica logs."
+            return 1
+          }
+
+          if [[ "$DEPLOY_ELIGIBILITY" == "true" ]]; then
+            wait_ready provider-eligibility
+          fi
+          if [[ "$DEPLOY_ESTIMATE" == "true" ]]; then
+            wait_ready benefit-plan-estimate
+          fi
