@@ -183,6 +183,115 @@ jobs:
             **/TestResults/**/*.trx
             **/TestResults/**/coverage.cobertura.xml
 
+  # Cosmos DB repository paths (conditional patch FilterPredicate, ETag-pinned
+  # replace/delete, create-conflict de-dup, cross-partition sweep queries)
+  # against the Linux "vnext" emulator. The tests are [Trait("Category",
+  # "Cosmos")] in the regular test projects and skip when no emulator is
+  # reachable; COSMOS_EMULATOR_REQUIRED=true turns that skip into a failure
+  # here so this job can never pass by skipping. See tests/Shared/CosmosEmulator.
+  test-dotnet-cosmos:
+    name: .NET Cosmos DB Emulator Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      cosmos:
+        # Pinned build of the vnext emulator (same tag as the local how-to in
+        # tests/Shared/CosmosEmulator/CosmosEmulatorFixture.cs). Gateway/HTTP
+        # only on 8081; readiness probe on 8080 inside the container.
+        image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-EN20261008
+        env:
+          ENABLE_EXPLORER: 'false'
+          ENABLE_TELEMETRY: 'false'
+        ports:
+          - 8081:8081
+        options: >-
+          --health-cmd "curl -fsS http://localhost:8080/ready"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 36
+    env:
+      COSMOS_EMULATOR_ENDPOINT: http://localhost:8081/
+      COSMOS_EMULATOR_REQUIRED: 'true'
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Run Category=Cosmos tests
+        run: |
+          set -euo pipefail
+
+          # Every test project that links the shared emulator fixture.
+          mapfile -t COSMOS_PROJECTS < <(
+            grep -rlE --include='*.Tests.csproj' 'Shared\\CosmosEmulator|Shared/CosmosEmulator' src tests | sort
+          )
+          if [ "${#COSMOS_PROJECTS[@]}" -eq 0 ]; then
+            echo "::error::No test project links tests/Shared/CosmosEmulator; nothing exercises the Cosmos paths."
+            exit 1
+          fi
+          printf 'Cosmos test projects:\n'; printf '  %s\n' "${COSMOS_PROJECTS[@]}"
+
+          FAILED=0
+          for PROJECT in "${COSMOS_PROJECTS[@]}"; do
+            PROJECT_NAME=$(basename "$PROJECT" .csproj)
+            echo "=========================================="
+            echo "Cosmos: $PROJECT_NAME"
+            echo "=========================================="
+            if ! dotnet test "$PROJECT" --filter "Category=Cosmos" --verbosity normal \
+                --logger "trx;LogFileName=${PROJECT_NAME}-cosmos-results.trx" \
+                --collect:"XPlat Code Coverage" 2>&1; then
+              echo "::error::Cosmos tests failed in $PROJECT_NAME"
+              FAILED=$((FAILED + 1))
+            fi
+          done
+
+          if [ "$FAILED" -gt 0 ]; then
+            exit 1
+          fi
+
+      # Belt and braces for "never pass by skipping": every project must have
+      # run Cosmos tests, and each skip (a documented emulator gap) is surfaced.
+      - name: Check Cosmos tests actually ran
+        if: success()
+        run: |
+          python3 - <<'PY'
+          import glob, sys, xml.etree.ElementTree as ET
+          ns = '{http://microsoft.com/schemas/VisualStudio/TeamTest/2010}'
+          files = glob.glob('**/TestResults/**/*-cosmos-results.trx', recursive=True) + glob.glob('**/TestResults/*-cosmos-results.trx', recursive=True)
+          files = sorted(set(files))
+          if not files:
+              print('::error::No Cosmos test results were produced.')
+              sys.exit(1)
+          bad = False
+          for trx in files:
+              root = ET.parse(trx).getroot()
+              counters = root.find(f'.//{ns}Counters')
+              passed = int(counters.get('passed', '0'))
+              skipped = 0
+              for res in root.iter(f'{ns}UnitTestResult'):
+                  if res.get('outcome') == 'NotExecuted':
+                      skipped += 1
+                      print(f"::warning title=Cosmos test skipped::{res.get('testName')}")
+              print(f'{trx}: {passed} passed, {skipped} skipped')
+              if passed == 0:
+                  print(f'::error::{trx}: no Cosmos test passed')
+                  bad = True
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: Upload Cosmos test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dotnet-cosmos-test-results
+          path: |
+            **/TestResults/**/*.trx
+            **/TestResults/**/coverage.cobertura.xml
+
   test-typescript:
     name: TypeScript/Jest Tests
     runs-on: ubuntu-latest

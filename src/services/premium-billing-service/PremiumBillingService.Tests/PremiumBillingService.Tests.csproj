@@ -16,6 +16,8 @@
     <PackageReference Include="EphemeralMongo" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- Cosmos emulator tests (Category=Cosmos) skip cleanly when no emulator is reachable. -->
+    <PackageReference Include="Xunit.SkippableFact" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +33,8 @@
   <ItemGroup>
     <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
     <Compile Include="..\..\..\..\tests\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
+    <!-- Cosmos DB emulator fixture; see tests/Shared/CosmosEmulator. -->
+    <Compile Include="..\..\..\..\tests\Shared\CosmosEmulator\*.cs" Link="Shared\CosmosEmulator\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

@@ -328,8 +328,13 @@ builder.Services.AddClaimsScrubEngine();
 // Raw 837 intake: WEDI SNIP 1–5 validation before parse/map, with a 999.
 // Per-level Reject/Warn/Off under ClaimsImport:Snip (see Snip837ValidationOptions).
 // An ISnipCodeSetReference, when registered, adds code-set membership checks.
-builder.Services.Configure<ClaimsService.EDI.Validation.Snip837ValidationOptions>(
-    builder.Configuration.GetSection(ClaimsService.EDI.Validation.Snip837ValidationOptions.SectionName));
+// Validated at start-up: an undefined or misspelt level (global or partner
+// override) fails fast instead of being silently dropped by the binder.
+builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<ClaimsService.EDI.Validation.Snip837ValidationOptions>>(
+    sp => new ClaimsService.EDI.Validation.Snip837ValidationOptionsValidator(sp.GetRequiredService<IConfiguration>()));
+builder.Services.AddOptions<ClaimsService.EDI.Validation.Snip837ValidationOptions>()
+    .Bind(builder.Configuration.GetSection(ClaimsService.EDI.Validation.Snip837ValidationOptions.SectionName))
+    .ValidateOnStart();
 builder.Services.AddSingleton<ClaimsService.EDI.Validation.ISnip837Validator>(sp =>
     new ClaimsService.EDI.Validation.X12837SnipValidator(
         sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ClaimsService.EDI.Validation.Snip837ValidationOptions>>(),

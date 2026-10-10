@@ -24,6 +24,32 @@ merged into one score:
   `BR-DTR-001` (DTR `$questionnaire-package`, chained from the payer's own CRD
   determination).
 
+## Cosmos DB Emulator Tests
+
+Repositories with a Cosmos DB implementation are also tested against a real
+Cosmos DB — the Linux "vnext" emulator — with the shared fixture in
+[Shared/CosmosEmulator](Shared/CosmosEmulator/CosmosEmulatorFixture.cs). The
+tests carry `[Trait("Category", "Cosmos")]` and live beside the Mongo
+(EphemeralMongo) tests for the same behaviour: claims-service resolution-lock
+fence and status guards, accumulator-service processed-claim leases, snapshots
+and reversal/tombstone rows, the appeals outbox and premium-billing cash
+application. Without an emulator they are skipped; CI's
+`.NET Cosmos DB Emulator Tests` job sets `COSMOS_EMULATOR_REQUIRED=true`, which
+turns an unreachable emulator into a failure.
+
+```bash
+docker run -d -p 8081:8081 \
+  mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-EN20261008
+dotnet test tests/CloudHealthOffice.ClaimsService.Tests --filter Category=Cosmos
+```
+
+`COSMOS_EMULATOR_ENDPOINT` (default `http://localhost:8081/`) and
+`COSMOS_EMULATOR_KEY` (default: the emulator's published key) point the tests
+elsewhere. Known emulator gap: `ARRAY_LENGTH` is not evaluated inside a patch
+`FilterPredicate` (HTTP 400), so the claims "contradictory approval" repair
+test skips itself on the emulator; it runs unchanged once the emulator
+supports it.
+
 ## Supporting Artifacts
 - [E2E-TEST-RESULTS.md](E2E-TEST-RESULTS.md)
 - [fixtures](fixtures)

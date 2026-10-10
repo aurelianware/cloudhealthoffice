@@ -212,6 +212,21 @@ public class ClaimSubmissionServiceTests
     }
 
     [Fact]
+    public async Task Submit_MissingServiceDateFrom_ReturnsValidationFailure()
+    {
+        // An 837 line with no date maps to default(DateTime); it must not
+        // reach adjudication as 0001-01-01.
+        var inbound = BuildClaim();
+        inbound.ServiceDateFrom = default;
+
+        var result = await _sut.SubmitAsync(inbound, "tenant-1", "actor", null);
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, e =>
+            e.Field == "ServiceDateFrom" && e.Code == "Required");
+    }
+
+    [Fact]
     public async Task Submit_ServiceDateFromAfterServiceDateTo_ReturnsValidationFailure()
     {
         var inbound = BuildClaim();

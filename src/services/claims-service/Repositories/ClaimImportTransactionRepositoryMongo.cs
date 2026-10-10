@@ -34,4 +34,22 @@ public class ClaimImportTransactionRepositoryMongo : IClaimImportTransactionRepo
             .Limit(limit)
             .ToListAsync();
     }
+
+    public async Task<IReadOnlyList<ClaimImportTransaction>> ListWithSnipWarningsAsync(
+        string tenantId, string? ruleId = null, int? level = null, string? submitterId = null, int limit = 100)
+    {
+        var f = Builders<ClaimImportTransaction>.Filter;
+        var warning = Builders<SnipFindingRecord>.Filter.Empty;
+        if (ruleId is not null) warning &= Builders<SnipFindingRecord>.Filter.Eq(w => w.RuleId, ruleId);
+        if (level is not null) warning &= Builders<SnipFindingRecord>.Filter.Eq(w => w.Level, level.Value);
+
+        var filter = f.Eq(x => x.TenantId, tenantId) & f.ElemMatch(x => x.SnipWarnings, warning);
+        if (submitterId is not null)
+            filter &= f.Eq(x => x.SubmitterIdNormalized, submitterId) | f.Eq(x => x.ApplicationSenderCodeNormalized, submitterId);
+
+        return await _collection.Find(filter)
+            .SortByDescending(x => x.ReceivedAt)
+            .Limit(limit)
+            .ToListAsync();
+    }
 }
