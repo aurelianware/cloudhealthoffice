@@ -1668,4 +1668,13 @@ public class ImportResult
     public int CoverageRecordsTerminated { get; set; }
     public int CoverageMappingsUnresolved { get; set; }
     public List<string> Errors { get; set; } = new();
+
+    /// <summary>Interchange envelope outcome (TA104: A, E or R) for a raw 834 upload; null otherwise.</summary>
+    public string? InterchangeAcknowledgmentCode { get; set; }
+
+    /// <summary>The TA1 for a raw 834 upload, when due (ISA14 = 1 or envelope findings).</summary>
+    public string? AcknowledgmentTa1 { get; set; }
+
+    /// <summary>Ids of the stored TA1s (GET api/v1/enrollment/interchange/ta1/{id}).</summary>
+    public List<string> Ta1AcknowledgmentIds { get; set; } = new();
 }

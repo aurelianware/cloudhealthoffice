@@ -1,6 +1,7 @@
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Services;
 using EnrollmentImportService.Services.Edi;
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,7 @@ public class EnrollmentController : ControllerBase
     private readonly IEnrollmentImportRunRepository _importRuns;
     private readonly ICurrentActor _actor;
     private readonly ILogger<EnrollmentController> _logger;
+    private readonly IX12InterchangeIntake? _interchangeIntake;
 
     public EnrollmentController(
         IEnrollmentImportService importService,
@@ -24,8 +26,11 @@ public class EnrollmentController : ControllerBase
         IPlanCodeGapReportService gapReportService,
         IEnrollmentImportRunRepository importRuns,
         ICurrentActor actor,
-        ILogger<EnrollmentController> logger)
+        ILogger<EnrollmentController> logger,
+        IX12InterchangeIntake? interchangeIntake = null,
+        Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null)
     {
+        _interchangeIntake = interchangeOptions?.Value.Enabled == false ? null : interchangeIntake;
         _importService = importService;
         _ediParser = ediParser;
         _gapReportService = gapReportService;
@@ -77,6 +82,34 @@ public class EnrollmentController : ControllerBase
             ediContent = await reader.ReadToEndAsync();
         }
 
+        // Interchange envelope first: a rejected ISA/IEA gets a TA1 and its
+        // contents are never parsed or imported (and no 999 is produced).
+        InterchangeIntakeResult? envelope = null;
+        if (_interchangeIntake is not null)
+        {
+            envelope = await _interchangeIntake.ReceiveAsync(new InterchangeIntakeRequest
+            {
+                TenantId = tenantId,
+                Content = ediContent,
+                TransactionType = "834",
+                FileName = file.FileName,
+            }, HttpContext?.RequestAborted ?? CancellationToken.None);
+
+            if (envelope.IsRejected)
+            {
+                _logger.LogWarning("Uploaded 834 file {FileName} for tenant {TenantId} rejected at the interchange envelope",
+                    SanitizeForLog(file.FileName), SanitizeForLog(tenantId));
+                return BadRequest(new
+                {
+                    error = "The interchange envelope (ISA/IEA) was rejected: " + string.Join("; ", envelope.RejectionReasons),
+                    interchangeAcknowledgmentCode = Ta1AckCodes.Rejected,
+                    acknowledgmentTa1 = envelope.Ta1,
+                    ta1AcknowledgmentIds = envelope.AcknowledgmentIds,
+                });
+            }
+            ediContent = envelope.AcceptedContent!;
+        }
+
         Enrollment834 enrollment;
         try
         {
@@ -95,6 +128,15 @@ public class EnrollmentController : ControllerBase
         // The importing user is the token subject; nothing in the body can claim it.
         enrollment.ActorId = _actor.UserId;
         var result = await _importService.ImportEnrollmentAsync(enrollment, tenantId);
+
+        if (envelope is not null)
+        {
+            result.InterchangeAcknowledgmentCode = envelope.Interchanges.Any(i => i.IsRejected) ? Ta1AckCodes.Rejected
+                : envelope.Interchanges.Any(i => i.Decision.AckCode == Ta1AckCodes.AcceptedWithErrors) ? Ta1AckCodes.AcceptedWithErrors
+                : Ta1AckCodes.Accepted;
+            result.AcknowledgmentTa1 = envelope.Ta1;
+            result.Ta1AcknowledgmentIds = envelope.AcknowledgmentIds.ToList();
+        }
 
         return Ok(result);
     }

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using CloudHealthOffice.Infrastructure.Extensions;
@@ -92,6 +93,11 @@ else
     builder.Services.AddSingleton<IProviderReceivableRepository, InMemoryProviderReceivableRepository>();
     Console.WriteLine("Using Cosmos DB repository");
 }
+
+// X12 interchange control: every persisted 835 envelope is tracked as an
+// outbound interchange so the payee's TA1 can be matched to it.
+builder.Services.AddChoX12Interchange(builder.Configuration);
+TrackingEraEnvelopeRepository.Decorate(builder.Services);
 
 // Provider receivables: opened by reversal runs whose 835 nets below zero
 // (PLB FB), recovered by later payment runs as a positive PLB (FB, or WO with
@@ -245,6 +251,7 @@ app.UseHttpsRedirection();
 app.UseChoAuthentication();
 
 app.MapControllers();
+app.MapChoX12InterchangeEndpoints("api/v1/payments/interchange");
 app.MapChoHealthChecks();
 
 app.Run();

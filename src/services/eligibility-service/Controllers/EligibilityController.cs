@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using EligibilityService.Models;
@@ -16,6 +17,8 @@ public class EligibilityController : ControllerBase
     private readonly IEdi270Parser _edi270Parser;
     private readonly IEdi271Generator _edi271Generator;
     private readonly ILogger<EligibilityController> _logger;
+    private readonly IX12InterchangeIntake? _interchangeIntake;
+    private readonly IOutboundInterchangeTracker? _outboundTracker;
 
     /// <summary>The tenant from the caller's validated token.</summary>
     private string TenantId => HttpContext.GetTenantId();
@@ -25,8 +28,13 @@ public class EligibilityController : ControllerBase
         IEligibilityRepository repository,
         IEdi270Parser edi270Parser,
         IEdi271Generator edi271Generator,
-        ILogger<EligibilityController> logger)
+        ILogger<EligibilityController> logger,
+        IX12InterchangeIntake? interchangeIntake = null,
+        IOutboundInterchangeTracker? outboundTracker = null,
+        Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null)
     {
+        _interchangeIntake = interchangeOptions?.Value.Enabled == false ? null : interchangeIntake;
+        _outboundTracker = outboundTracker;
         _eligibilityService = eligibilityService;
         _repository = repository;
         _edi270Parser = edi270Parser;
@@ -201,6 +209,30 @@ public class EligibilityController : ControllerBase
         if (string.IsNullOrWhiteSpace(edi270))
             return BadRequest("Request body must contain the raw X12 270 EDI string.");
 
+        // Interchange envelope first. A rejected ISA/IEA is answered with the
+        // TA1 alone (400, text/plain): no 271 and no 999 for its contents.
+        if (_interchangeIntake is not null)
+        {
+            var envelope = await _interchangeIntake.ReceiveAsync(new InterchangeIntakeRequest
+            {
+                TenantId = TenantId,
+                Content = edi270,
+                TransactionType = "270",
+            }, HttpContext.RequestAborted);
+
+            if (envelope.AcknowledgmentIds.Count > 0)
+                Response.Headers["X-TA1-Acknowledgment-Id"] = string.Join(",", envelope.AcknowledgmentIds);
+
+            if (envelope.IsRejected)
+            {
+                _logger.LogWarning("EDI 270 rejected at the interchange envelope");
+                if (envelope.Ta1 is null)
+                    return BadRequest("Invalid 270 EDI: " + string.Join("; ", envelope.RejectionReasons));
+                return new ContentResult { StatusCode = StatusCodes.Status400BadRequest, Content = envelope.Ta1, ContentType = "text/plain" };
+            }
+            edi270 = envelope.AcceptedContent!;
+        }
+
         Edi270ParseResult parsed;
         try
         {
@@ -238,6 +270,10 @@ public class EligibilityController : ControllerBase
             inquiry, response,
             isaSenderId:   parsed.InterchangeReceiverId, // 270's receiver = 271's sender (payer)
             isaReceiverId: parsed.InterchangeSenderId);  // 270's sender  = 271's receiver (provider)
+
+        // Remember the 271's envelope so the submitter's TA1 for it can be matched.
+        if (_outboundTracker is not null)
+            await _outboundTracker.RecordSentAsync(TenantId, edi271, "271", response.Id, HttpContext.RequestAborted);
 
         Response.Headers["Content-Disposition"] =
             $"inline; filename=\"271_{inquiry.SubscriberId}_{DateTime.UtcNow:yyyyMMdd}.edi\"";

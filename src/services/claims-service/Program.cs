@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.Messaging;
@@ -117,6 +118,10 @@ builder.Services.AddSingleton<IExplanationOfBenefitProjector, ExplanationOfBenef
 
 // 277CA acknowledgment generator
 builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentService>();
+
+// X12 interchange control: ISA/IEA validation, TA1 generation/storage,
+// duplicate ISA13 detection and outbound TA1 tracking (shared library).
+builder.Services.AddChoX12Interchange(builder.Configuration);
 builder.Services.AddScoped<IDiagnosisDescriptionLookup, DiagnosisDescriptionLookup>();
 builder.Services.AddScoped<IClaimDiagnosisMetadataEnricher, ClaimDiagnosisMetadataEnricher>();
 
@@ -469,6 +474,7 @@ app.UseChoInfrastructure(builder.Configuration);
 
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.MapControllers();
+app.MapChoX12InterchangeEndpoints("api/v1/claims/interchange");
 
 app.Run();
 

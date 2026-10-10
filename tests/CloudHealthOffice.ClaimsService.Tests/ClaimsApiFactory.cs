@@ -94,6 +94,10 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Messaging:Backend"] = "Null",
+                // The same sample interchanges (same ISA13) are uploaded by
+                // many tests against this one host; the duplicate-ISA13
+                // check has its own tests (X12InterchangeIntakeTests, Ta1ImportTests).
+                ["X12Interchange:DuplicateWindowDays"] = "0",
             });
         });
 
