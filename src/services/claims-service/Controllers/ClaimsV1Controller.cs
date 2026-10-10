@@ -181,11 +181,12 @@ public class ClaimsV1Controller : ControllerBase
                 }
 
                 parsedClaims = ClaimsBySnipOutcome(snip);
+                LogSnipLevel2Warnings(snip, GetTenantId());
             }
             else
             {
                 parsedClaims = ClaimsService.EDI.Inbound.X12837Parser.Parse(ediContent)
-                    .Select(c => new ParsedClaim(c, null, null))
+                    .Select(c => new ParsedClaim(c, null, null, null))
                     .ToList();
             }
         }
@@ -222,7 +223,7 @@ public class ClaimsV1Controller : ControllerBase
             },
             async (index, cancellationToken) =>
         {
-            var (parsed, snipErrors, snipSet) = parsedClaims[index];
+            var (parsed, snipErrors, snipSet, snipGroup) = parsedClaims[index];
             var adapterClaim = ClaimsService.EDI.Inbound.X12837ClaimMapper.Map(parsed, tenantId);
             ClaimSubmissionResult? result = null;
             if (snipErrors is null)
@@ -265,6 +266,17 @@ public class ClaimsV1Controller : ControllerBase
                     TransactionSetControlNumber = snipSet?.ControlNumber,
                     AcknowledgmentCode = snipSet?.AcknowledgmentCode,
                     Acknowledgment999ControlNumber = acknowledgmentControl,
+                    SubmitterQualifier = snipGroup?.Interchange.SenderQualifier,
+                    SubmitterId = snipGroup?.Interchange.SenderId,
+                    ApplicationSenderCode = snipGroup?.ApplicationSenderCode?.Trim(),
+                    SubmitterIdNormalized = NormalizeSubmitter(snipGroup?.Interchange.SenderId),
+                    ApplicationSenderCodeNormalized = NormalizeSubmitter(snipGroup?.ApplicationSenderCode),
+                    InterchangeControlNumber = snipGroup?.Interchange.ControlNumber,
+                    GroupControlNumber = snipGroup?.ControlNumber,
+                    SnipPartnerOverride = snipSet?.PartnerOverrideKey,
+                    SnipWarnings = snipSet is null || snip?.Document is null
+                        ? []
+                        : SnipWarningsFor(snip.Document, snipSet, parsed.ClaimId),
                 });
             }
             catch (Exception ex)
@@ -344,7 +356,7 @@ public class ClaimsV1Controller : ControllerBase
             .ToList();
         var claims = new List<ParsedClaim>();
 
-        foreach (var ts in snip.TransactionSets)
+        foreach (var (ts, group) in snip.FunctionalGroups.SelectMany(g => g.TransactionSets.Select(t => (t, g))))
         {
             var segments = new List<ClaimsService.EDI.Inbound.X12Segment>();
             if (doc.Segments[ts.InterchangeSegmentIndex].Id == "ISA")
@@ -367,7 +379,7 @@ public class ClaimsV1Controller : ControllerBase
             {
                 if (accepted.Contains(ts))
                 {
-                    claims.Add(new ParsedClaim(claim, null, ts));
+                    claims.Add(new ParsedClaim(claim, null, ts, group));
                     continue;
                 }
 
@@ -381,18 +393,114 @@ public class ClaimsV1Controller : ControllerBase
                     .ToList();
                 if (errors.Count == 0)
                     errors.Add("SNIP: the transaction set containing this claim was rejected.");
-                claims.Add(new ParsedClaim(claim, errors, ts));
+                claims.Add(new ParsedClaim(claim, errors, ts, group));
             }
         }
 
         return claims;
     }
 
-    /// <summary>A parsed claim, the SNIP errors that keep it from being submitted (null = submit), and its transaction set.</summary>
+    /// <summary>A parsed claim, the SNIP errors that keep it from being submitted (null = submit), its transaction set and functional group.</summary>
     private sealed record ParsedClaim(
         CloudHealthOffice.ClaimsScrubEngine.Models.X12837Claim Claim,
         List<string>? SnipErrors,
-        Snip.SnipTransactionSetOutcome? Set);
+        Snip.SnipTransactionSetOutcome? Set,
+        Snip.SnipFunctionalGroupOutcome? Group);
+
+    internal static readonly EventId SnipLevel2WarningEvent = new(8372, "SnipLevel2Warning");
+
+    /// <summary>
+    /// One structured log entry per SNIP Level 2 finding reported at Warn:
+    /// submitter (ISA05/ISA06, GS02), control numbers (ISA13, GS06, ST02,
+    /// CLM01), location (loop, segment and qualifier, element) and rule id.
+    /// No message text and no member data; the durable counterpart is
+    /// <see cref="ClaimImportTransaction.SnipWarnings"/>.
+    /// </summary>
+    private void LogSnipLevel2Warnings(Snip.SnipValidationResult snip, string tenantId)
+    {
+        var doc = snip.Document;
+        if (doc is null) return;
+        foreach (var group in snip.FunctionalGroups)
+        {
+            foreach (var ts in group.TransactionSets)
+            {
+                foreach (var issue in ts.Issues)
+                {
+                    if (issue.Level != Snip.SnipLevel.ImplementationGuide || issue.Severity != Snip.SnipSeverity.Warning)
+                        continue;
+                    _logger.LogWarning(SnipLevel2WarningEvent,
+                        "SNIP Level 2 warning {RuleId} at {Location}; transaction set accepted: {SetAccepted}; " +
+                        "submitter ISA05/ISA06 {SubmitterQualifier}/{SubmitterId}, GS02 {ApplicationSenderCode}; " +
+                        "ISA13 {InterchangeControlNumber}, GS06 {GroupControlNumber}, ST02 {TransactionSetControlNumber}, CLM01 {ClaimNumber}; " +
+                        "tenant {TenantId}; SNIP policy {SnipPolicy}",
+                        issue.RuleId, SnipLocation(doc, ts, issue), ts.Accepted,
+                        SanitizeForLog(group.Interchange.SenderQualifier), SanitizeForLog(group.Interchange.SenderId),
+                        SanitizeForLog(group.ApplicationSenderCode),
+                        SanitizeForLog(group.Interchange.ControlNumber), SanitizeForLog(group.ControlNumber),
+                        SanitizeForLog(ts.ControlNumber), SanitizeForLog(issue.ClaimId),
+                        SanitizeForLog(tenantId),
+                        ts.PartnerOverrideKey is null ? "default" : "partner:" + SanitizeForLog(ts.PartnerOverrideKey));
+                }
+            }
+        }
+    }
+
+    /// <summary>Warn-level findings of a set that concern the given claim (its own and set-level ones).</summary>
+    private static List<SnipFindingRecord> SnipWarningsFor(
+        ClaimsService.EDI.Inbound.X12Document doc, Snip.SnipTransactionSetOutcome ts, string? claimId) =>
+        ts.Issues
+            .Where(i => i.Severity == Snip.SnipSeverity.Warning && i.RuleId != "L1-TOO-MANY-FINDINGS")
+            .Where(i => i.ClaimId is null || i.ClaimId == claimId)
+            .Select(i => new SnipFindingRecord
+            {
+                Level = (int)i.Level,
+                RuleId = i.RuleId,
+                Severity = i.Severity.ToString(),
+                Message = i.Level == Snip.SnipLevel.ImplementationGuide ? i.Message : null,
+                TransactionSetControlNumber = ts.ControlNumber,
+                ClaimLevel = i.ClaimId is not null,
+                Loop = i.Loop,
+                SegmentId = i.SegmentId,
+                SegmentPosition = i.SegmentPosition,
+                ElementPosition = i.ElementPosition,
+                ComponentPosition = i.ComponentPosition,
+                DataElementReference = i.DataElementReference,
+                Location = SnipLocation(doc, ts, i),
+            })
+            .ToList();
+
+    // Segments whose first element is a qualifier code worth echoing in a location (DTP*472, REF*F8, NM1*85 ...).
+    private static readonly HashSet<string> QualifiedSegments = ["DTP", "REF", "NM1", "AMT", "QTY", "PRV", "PWK"];
+
+    /// <summary>
+    /// Finding location: loop, segment (with its qualifier code for
+    /// qualified segments) and element, e.g. "2300 DTP*472", "2300 CLM05-2",
+    /// "2400 DTP*472 DTP03". Only a 1-3 character alphanumeric qualifier
+    /// code is read from the file; never names, ids or dates.
+    /// </summary>
+    internal static string SnipLocation(ClaimsService.EDI.Inbound.X12Document doc, Snip.SnipTransactionSetOutcome ts, Snip.SnipIssue issue)
+    {
+        var segmentId = issue.SegmentId ?? "???";
+        var location = segmentId;
+        if (issue.SegmentPosition is { } pos && QualifiedSegments.Contains(segmentId))
+        {
+            var index = ts.StartSegmentIndex + pos - 1;
+            if (index >= 0 && index < doc.Segments.Count && doc.Segments[index].Id == segmentId
+                && doc.Segments[index].Element(0) is { Length: >= 1 and <= 3 } qualifier
+                && qualifier.All(char.IsAsciiLetterOrDigit))
+                location = $"{segmentId}*{qualifier}";
+        }
+
+        if (issue.ElementPosition is { } element)
+        {
+            var reference = issue.ComponentPosition is { } component
+                ? $"{segmentId}{element:00}-{component}"
+                : $"{segmentId}{element:00}";
+            location = location == segmentId ? reference : $"{location} {reference}";
+        }
+
+        return string.IsNullOrEmpty(issue.Loop) ? location : $"{issue.Loop} {location}";
+    }
 
     private static Raw837ImportResult SnipFailure(
         string fileName, string error, Snip.SnipValidationResult snip, string? acknowledgment) => new()
@@ -418,6 +526,33 @@ public class ClaimsV1Controller : ControllerBase
         if (limit < 1 || limit > 500) limit = 100;
 
         var transactions = await _importTransactions.ListRecentAsync(tenantId, limit);
+        return Ok(transactions);
+    }
+
+    /// <summary>
+    /// 837 import transactions that carried a SNIP warning (accepted with
+    /// errors), newest first, optionally narrowed to a rule id (e.g.
+    /// <c>L2-2300-DTP472</c>), a SNIP level and/or a submitter (ISA06 or
+    /// GS02). The ops view for deciding which partner can be moved from Warn
+    /// to Reject (<c>ClaimsImport:Snip:PartnerOverrides</c>).
+    /// </summary>
+    [HttpGet("import-transactions/snip-warnings")]
+    [ProducesResponseType(typeof(List<ClaimImportTransaction>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListSnipWarningTransactions(
+        [FromQuery] string? ruleId = null,
+        [FromQuery] int? level = null,
+        [FromQuery] string? submitterId = null,
+        [FromQuery] int limit = 100)
+    {
+        var tenantId = GetTenantId();
+        if (limit < 1 || limit > 500) limit = 100;
+
+        var transactions = await _importTransactions.ListWithSnipWarningsAsync(
+            tenantId,
+            string.IsNullOrWhiteSpace(ruleId) ? null : ruleId.Trim(),
+            level,
+            NormalizeSubmitter(submitterId),
+            limit);
         return Ok(transactions);
     }
 
@@ -544,6 +679,10 @@ public class ClaimsV1Controller : ControllerBase
         }
         return Activity.Current?.Id;
     }
+
+    /// <summary>Submitter ids (ISA06, GS02) as stored for lookup: trimmed, upper-case, null when blank.</summary>
+    internal static string? NormalizeSubmitter(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
 
     private static string SanitizeForLog(string? value)
     {

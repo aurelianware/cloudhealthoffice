@@ -327,6 +327,19 @@ public class ClaimSubmissionService : IClaimSubmissionService
             });
         }
 
+        // A claim with no service date would price at 0001-01-01, fall into
+        // plan year 1 and deny as "before coverage effective" (an 835
+        // denial for what is really a missing-data rejection).
+        if (claim.ServiceDateFrom == default)
+        {
+            errors.Add(new ValidationError
+            {
+                Field = nameof(AdapterClaim.ServiceDateFrom),
+                Code = "Required",
+                Message = "ServiceDateFrom is required"
+            });
+        }
+
         if (claim.ServiceDateFrom != default &&
             claim.ServiceDateTo != default &&
             claim.ServiceDateFrom > claim.ServiceDateTo)

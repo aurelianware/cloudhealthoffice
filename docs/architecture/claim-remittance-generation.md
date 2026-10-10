@@ -196,7 +196,7 @@ Limitations:
   ordinary claim and pays the billing provider. These claims can't be
   identified from stored data. claims-service does not keep the raw 837
   or BHT06: the claim document has neither, and
-  `ClaimImportTransaction` keeps only the file name, ST02 and the SNIP
+  `ClaimImportTransaction` keeps only the file name, ST02, submitter and envelope control numbers and the SNIP
   outcome. The only way to find them is to search the original 837 files
   (where the submitter or the intake pipeline still has them) for
   a BHT segment with BHT06 = `31` or an `NM1*PE` segment, and use `ClaimImportTransaction.FileName`
