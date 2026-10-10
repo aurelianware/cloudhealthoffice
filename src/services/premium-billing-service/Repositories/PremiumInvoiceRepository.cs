@@ -32,6 +32,12 @@ public interface IPremiumInvoiceRepository
     /// </summary>
     Task<IEnumerable<PremiumInvoice>> ListByMemberAsync(string memberId, int take = 12);
 
+    /// <summary>
+    /// Inserts the invoice. Throws <see cref="InvoiceAlreadyExistsException"/>
+    /// when an invoice with the same id exists (rated invoices have a
+    /// deterministic id per group and period, so a second generation of the
+    /// same invoice cannot create a duplicate).
+    /// </summary>
     Task<PremiumInvoice> CreateAsync(PremiumInvoice invoice);
 
     /// <summary>
@@ -43,8 +49,27 @@ public interface IPremiumInvoiceRepository
     Task DeleteAsync(string id);
 }
 
+/// <summary>An invoice with this id already exists.</summary>
+public sealed class InvoiceAlreadyExistsException : Exception
+{
+    public InvoiceAlreadyExistsException(string invoiceId)
+        : base($"Invoice {invoiceId} already exists")
+    {
+        InvoiceId = invoiceId;
+    }
+
+    public string InvoiceId { get; }
+}
+
 public class PremiumInvoiceRepository : IPremiumInvoiceRepository
 {
+    /// <summary>
+    /// Status as stored: <see cref="Middleware.CosmosSystemTextJsonSerializer"/> writes enums as
+    /// camelCase strings, so queries must compare with the same string (an int never matches).
+    /// </summary>
+    internal static string StoredStatus(InvoiceStatus status) =>
+        System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(status.ToString());
+
     private readonly Container _container;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<PremiumInvoiceRepository> _logger;
@@ -122,7 +147,7 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         var query = new QueryDefinition(
             "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.status = @status ORDER BY c.dueDate")
             .WithParameter("@tenantId", tenantId)
-            .WithParameter("@status", (int)status);
+            .WithParameter("@status", StoredStatus(status));
 
         return await ExecuteQueryAsync(query);
     }
@@ -157,7 +182,7 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         if (status.HasValue)
         {
             queryText += " AND c.status = @status";
-            parameters.Add(("@status", (int)status.Value));
+            parameters.Add(("@status", StoredStatus(status.Value)));
         }
 
         queryText += " ORDER BY c.billingPeriodStart DESC";
@@ -176,12 +201,14 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         var now = DateTime.UtcNow;
 
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.balanceDue > 0 AND c.dueDate < @now AND c.status != @voided AND c.status != @writeOff AND c.status != @paid ORDER BY c.dueDate")
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.balanceDue > 0 AND c.dueDate < @now " +
+            "AND c.status != @voided AND c.status != @writeOff AND c.status != @paid AND c.status != @draft ORDER BY c.dueDate")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@now", now)
-            .WithParameter("@voided", (int)InvoiceStatus.Voided)
-            .WithParameter("@writeOff", (int)InvoiceStatus.WriteOff)
-            .WithParameter("@paid", (int)InvoiceStatus.Paid);
+            .WithParameter("@voided", StoredStatus(InvoiceStatus.Voided))
+            .WithParameter("@writeOff", StoredStatus(InvoiceStatus.WriteOff))
+            .WithParameter("@paid", StoredStatus(InvoiceStatus.Paid))
+            .WithParameter("@draft", StoredStatus(InvoiceStatus.Draft));
 
         return await ExecuteQueryAsync(query);
     }
@@ -210,7 +237,16 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         invoice.TenantId = GetTenantId();
         invoice.CreatedAt = DateTime.UtcNow;
         invoice.LastUpdatedAt = DateTime.UtcNow;
-        var response = await _container.CreateItemAsync(invoice, new PartitionKey(invoice.TenantId));
+        ItemResponse<PremiumInvoice> response;
+        try
+        {
+            response = await _container.CreateItemAsync(invoice, new PartitionKey(invoice.TenantId));
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            throw new InvoiceAlreadyExistsException(invoice.Id);
+        }
+        response.Resource.ETag = response.ETag;
         _logger.LogInformation("Created premium invoice {InvoiceNumber} for group {GroupNumber}",
             invoice.InvoiceNumber, invoice.GroupNumber);
         return response.Resource;

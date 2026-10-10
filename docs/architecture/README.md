@@ -29,6 +29,7 @@ deployment guarantee.
 | Sentinel and rules | [declarative-benefit-model.md](declarative-benefit-model.md), [claim-ai-examination.md](claim-ai-examination.md), [claim-scrubbing-pipeline.md](claim-scrubbing-pipeline.md) |
 | Benefit administration | [declarative-benefit-model.md](declarative-benefit-model.md), [benefit-plan-adapter-pattern.md](benefit-plan-adapter-pattern.md), [plan-versioning.md](plan-versioning.md) |
 | Accumulators | [accumulator-service.md](accumulator-service.md), [family-accumulator-models.md](family-accumulator-models.md) |
+| Premium billing | [premium-rated-billing.md](premium-rated-billing.md), [rating engine](../engines/PREMIUM-RATING-ENGINE.md), [cash application](../engines/PREMIUM-CASH-APPLICATION.md), [runbook](../operations/PREMIUM-RATED-BILLING-RUNBOOK.md) |
 | Multi-tenant model | [network-as-organization.md](network-as-organization.md), [SFTP multi-tenant architecture](SFTP-MULTI-TENANT-ARCHITECTURE.md), [multi-tenant SaaS architecture](../features/MULTI-TENANT-SAAS-ARCHITECTURE.md) |
 | Deployment architecture | [deployment guide](../deployment/DEPLOYMENT.md), [Kubernetes microservices architecture](../features/KUBERNETES-MICROSERVICES-ARCHITECTURE.md) |
 | Observability | [observability.md](observability.md), [monitoring guide](../features/MONITORING-AND-OBSERVABILITY.md) |

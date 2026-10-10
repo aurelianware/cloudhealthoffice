@@ -157,7 +157,7 @@ public class EftDraftService : IEftDraftService
         var invoice = await _invoiceRepository.GetByIdAsync(request.InvoiceId)
             ?? throw new InvalidOperationException($"Invoice {request.InvoiceId} not found");
 
-        if (invoice.Status == InvoiceStatus.Paid || invoice.Status == InvoiceStatus.Voided)
+        if (invoice.Status is InvoiceStatus.Paid or InvoiceStatus.Voided or InvoiceStatus.Draft)
             throw new InvalidOperationException($"Cannot draft against {invoice.Status} invoice");
 
         if (invoice.BalanceDue <= 0)
@@ -297,7 +297,7 @@ public class EftDraftService : IEftDraftService
             {
                 var invoice = invoices[invoiceId];
                 if (invoice == null || invoice.BalanceDue <= 0 ||
-                    invoice.Status == InvoiceStatus.Paid || invoice.Status == InvoiceStatus.Voided)
+                    invoice.Status is InvoiceStatus.Paid or InvoiceStatus.Voided or InvoiceStatus.Draft)
                 {
                     result.Skipped++;
                     continue;
