@@ -23,6 +23,10 @@ public sealed class SftpConnectParameters
 public interface ISftpSession : IDisposable
 {
     bool Exists(string path);
+
+    /// <summary>The size of the file at <paramref name="path"/> in bytes, or null when the server does not say.</summary>
+    long? Size(string path);
+
     void Upload(Stream content, string path);
     void Rename(string from, string to);
     void Delete(string path);
@@ -44,7 +48,7 @@ public interface ISftpSessionFactory
 /// picks up a partial file. Never overwrites an existing file. Never logs a
 /// credential or the file.
 /// </summary>
-public sealed class SftpNachaTransmitter : INachaTransmitter
+public sealed class SftpNachaTransmitter : INachaTransmitter, INachaRemoteFileProbe
 {
     private readonly INachaTransmissionSettingsSource _settings;
     private readonly INachaSecretReader _secrets;
@@ -66,16 +70,20 @@ public sealed class SftpNachaTransmitter : INachaTransmitter
         _clock = clock ?? TimeProvider.System;
     }
 
-    public async Task<NachaTransmissionReceipt> TransmitAsync(NachaTransmissionRequest request, CancellationToken cancellationToken = default)
+    /// <summary>The tenant's drop, ready to connect to. Holds the credentials only for the call.</summary>
+    private sealed record Drop(SftpConnectParameters Parameters, string Directory, string Destination);
+
+    /// <summary>
+    /// Settings, then strict host-key pinning (and every other required field)
+    /// before any secret is read or any connection is opened, then the secrets.
+    /// </summary>
+    private async Task<Drop> PrepareAsync(string tenantId, CancellationToken cancellationToken)
     {
-        var fileName = NachaFileNames.Require(request.FileName);
-        var settings = await _settings.GetAsync(request.TenantId, cancellationToken)
+        var settings = await _settings.GetAsync(tenantId, cancellationToken)
             ?? throw new NachaTransmissionException(
                 "NACHA transmission is not configured for this tenant (paymentControls.nachaTransmission).", notConfigured: true);
 
-        // Strict host-key pinning (and every other required field) before any
-        // secret is read or any connection is opened.
-        if (settings.Problem(request.TenantId) is { } problem)
+        if (settings.Problem(tenantId) is { } problem)
             throw new NachaTransmissionException(problem, notConfigured: true);
 
         string? privateKey = null, password = null;
@@ -84,15 +92,11 @@ public sealed class SftpNachaTransmitter : INachaTransmitter
         if (!string.IsNullOrEmpty(settings.PasswordSecretRef))
             password = await ReadSecretAsync(settings.PasswordSecretRef, "password", cancellationToken);
 
-        var bytes = NachaFileFacts.Encode(request.Content);
-        var facts = NachaFileFacts.From(bytes);
         var directory = settings.RemoteDirectory!.TrimEnd('/');
         if (directory.Length == 0) directory = "/";
-        var finalPath = Combine(directory, fileName);
-        var tempPath = Combine(directory, NachaFileNames.Temporary(fileName));
         var destination = $"sftp://{settings.Host}:{settings.Port}{(directory.StartsWith('/') ? "" : "/")}{directory}";
 
-        var parameters = new SftpConnectParameters
+        return new Drop(new SftpConnectParameters
         {
             Host = settings.Host!,
             Port = settings.Port,
@@ -100,7 +104,55 @@ public sealed class SftpNachaTransmitter : INachaTransmitter
             HostKeyFingerprint = settings.HostKeyFingerprint!,
             PrivateKey = privateKey,
             Password = password,
-        };
+        }, directory, destination);
+    }
+
+    /// <summary>
+    /// Read-only look for <paramref name="fileName"/> in the tenant's drop
+    /// (exists, and its size). Nothing is uploaded, renamed or deleted.
+    /// </summary>
+    public async Task<NachaRemoteFileCheck> CheckAsync(string tenantId, string fileName, long expectedByteSize, CancellationToken cancellationToken = default)
+    {
+        var name = NachaFileNames.Require(fileName);
+        var drop = await PrepareAsync(tenantId, cancellationToken);
+        var path = Combine(drop.Directory, name);
+        try
+        {
+            using var session = _sessions.Connect(drop.Parameters);
+            if (!session.Exists(path))
+                return new NachaRemoteFileCheck { Presence = NachaRemoteFilePresence.Absent, Destination = drop.Destination };
+            var size = session.Size(path);
+            return new NachaRemoteFileCheck
+            {
+                Presence = size == expectedByteSize ? NachaRemoteFilePresence.Present : NachaRemoteFilePresence.DifferentSize,
+                Destination = drop.Destination,
+                RemoteByteSize = size,
+            };
+        }
+        catch (NachaTransmissionException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("The bank's SFTP drop {Destination} for tenant {TenantId} could not be checked: {Error}",
+                drop.Destination, tenantId, ex.GetType().Name);
+            throw new NachaTransmissionException($"The bank's SFTP drop could not be checked ({ex.GetType().Name}).");
+        }
+    }
+
+    public async Task<NachaTransmissionReceipt> TransmitAsync(NachaTransmissionRequest request, CancellationToken cancellationToken = default)
+    {
+        var fileName = NachaFileNames.Require(request.FileName);
+        var drop = await PrepareAsync(request.TenantId, cancellationToken);
+
+        var bytes = NachaFileFacts.Encode(request.Content);
+        var facts = NachaFileFacts.From(bytes);
+        var directory = drop.Directory;
+        var finalPath = Combine(directory, fileName);
+        var tempPath = Combine(directory, NachaFileNames.Temporary(fileName));
+        var destination = drop.Destination;
+        var parameters = drop.Parameters;
 
         try
         {
@@ -268,24 +320,17 @@ public sealed class SshNetSftpSessionFactory : ISftpSessionFactory
             Timeout = Timeout
         };
         var client = new SftpClient(connection) { OperationTimeout = Timeout };
-        string? presented = null;
-        var trusted = false;
-        client.HostKeyReceived += (_, e) =>
-        {
-            presented = HostKeyPin.Of(e.HostKey);
-            trusted = HostKeyPin.Matches(parameters.HostKeyFingerprint, e.HostKey);
-            e.CanTrust = trusted;
-        };
+        var hostKey = new PinnedHostKeyCheck(parameters.HostKeyFingerprint);
+        client.HostKeyReceived += hostKey.OnHostKeyReceived;
 
         try
         {
             client.Connect();
         }
-        catch (SshConnectionException) when (presented != null && !trusted)
+        catch (Exception) when (hostKey.Rejected)
         {
             client.Dispose();
-            throw new NachaTransmissionException(
-                $"Refusing to send: the bank's SFTP server presented host key {presented}, which is not the pinned key.");
+            throw hostKey.RejectionException();
         }
         catch
         {
@@ -295,6 +340,15 @@ public sealed class SshNetSftpSessionFactory : ISftpSessionFactory
         finally
         {
             keyFile?.Dispose();
+        }
+
+        // Never trust a session whose host key was not seen and matched (should
+        // the library ever connect without raising HostKeyReceived).
+        if (!hostKey.Trusted)
+        {
+            try { client.Disconnect(); } catch { /* closing an untrusted session */ }
+            client.Dispose();
+            throw hostKey.RejectionException();
         }
 
         return new Session(client);
@@ -308,6 +362,8 @@ public sealed class SshNetSftpSessionFactory : ISftpSessionFactory
 
         public bool Exists(string path) => _client.Exists(path);
 
+        public long? Size(string path) => _client.GetAttributes(path).Size;
+
         public void Upload(Stream content, string path) => _client.UploadFile(content, path, canOverride: false);
 
         public void Rename(string from, string to) => _client.RenameFile(from, to);
@@ -320,4 +376,43 @@ public sealed class SshNetSftpSessionFactory : ISftpSessionFactory
             finally { _client.Dispose(); }
         }
     }
+}
+
+/// <summary>
+/// The host-key decision of one SSH connection: trusted only when every key
+/// the server presents is the pinned one (no trust on first use, no fallback).
+/// Wired to SSH.NET's <c>HostKeyReceived</c>; kept apart so the decision is
+/// tested with real SSH.NET event arguments, without a server.
+/// </summary>
+public sealed class PinnedHostKeyCheck
+{
+    private readonly string? _pinned;
+    private bool _mismatchSeen;
+
+    public PinnedHostKeyCheck(string? pinnedFingerprint) => _pinned = pinnedFingerprint;
+
+    /// <summary>The fingerprint the server presented last (SHA256:base64), or null before any.</summary>
+    public string? Presented { get; private set; }
+
+    /// <summary>At least one key was presented and every one matched the pin.</summary>
+    public bool Trusted => Presented != null && !_mismatchSeen;
+
+    /// <summary>A key was presented that did not match the pin.</summary>
+    public bool Rejected => _mismatchSeen;
+
+    public void OnHostKeyReceived(object? sender, HostKeyEventArgs e)
+    {
+        var matches = HostKeyPin.Matches(_pinned, e.HostKey);
+        Presented = HostKeyPin.Of(e.HostKey);
+        if (!matches) _mismatchSeen = true;
+        e.CanTrust = matches && !_mismatchSeen;
+    }
+
+    /// <summary>Safe to show and log: host key fingerprints are public.</summary>
+    public NachaTransmissionException RejectionException()
+        => new(Presented == null
+                ? "Refusing to send: the bank's SFTP server's host key was not verified against the pinned key."
+                : $"Refusing to send: the bank's SFTP server presented host key {Presented}, which is not the pinned key. " +
+                  "Nothing was sent. Confirm the bank's key out of band before changing hostKeyFingerprint.",
+            hostKeyRejected: true);
 }

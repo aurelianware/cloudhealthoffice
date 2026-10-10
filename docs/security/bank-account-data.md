@@ -133,7 +133,10 @@ from the service to the tenant's bank by SFTP. premium-billing-service (debits:
 `POST eft/nacha/generate`, the NACHA part of `POST eft/drafts/batch`) and
 capitation-service (credits: `POST disbursements/nacha-file`, the NACHA part of
 `POST disbursements/batch`) use it after the existing checks (payments:approve,
-user token, maker-checker).
+user token, maker-checker). payment-service (FFS payment-run credits) uses the
+transmitter directly, behind its own exactly-once transmission record, off by
+default (`BankTransmission:Enabled`): see
+[NACHA-BANK-TRANSMISSION-RUNBOOK.md](../operations/NACHA-BANK-TRANSMISSION-RUNBOOK.md).
 
 - **What the approver gets:** counts, debit and credit totals, one line per
   entry (sponsor group or provider NPI, name, last 4, amount, trace number),

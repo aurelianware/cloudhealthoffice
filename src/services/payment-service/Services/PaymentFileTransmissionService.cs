@@ -1,0 +1,630 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using CloudHealthOffice.NachaTransmission;
+using Microsoft.Extensions.Options;
+using PaymentService.Models;
+using PaymentService.Repositories;
+
+namespace PaymentService.Services;
+
+/// <summary>
+/// Configuration section <c>BankTransmission</c>. Off by default: with
+/// <see cref="Enabled"/> false nothing is ever sent, no transmission record is
+/// written, the file is not regenerated and no bank or Key Vault is contacted.
+/// The tenant's own switch (tenant-service
+/// <c>paymentControls.nachaTransmission.enabled</c>) must also be on.
+/// </summary>
+public sealed class BankTransmissionOptions
+{
+    public const string SectionName = "BankTransmission";
+
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// How long an attempt may hold a record in Transmitting. An attempt older
+    /// than this (the process died mid-send) is presumed of unknown outcome and
+    /// parked as NeedsReview, never re-sent. Far above the SFTP timeouts (30 s per operation).
+    /// </summary>
+    public TimeSpan TransmittingLease { get; set; } = TimeSpan.FromMinutes(15);
+}
+
+/// <summary>Bank transmission is switched off (<c>BankTransmission:Enabled</c>). Nothing was done.</summary>
+public sealed class BankTransmissionDisabledException : Exception
+{
+    public BankTransmissionDisabledException()
+        : base("Bank transmission of NACHA files is disabled (BankTransmission:Enabled is false). Nothing was sent or recorded.") { }
+}
+
+/// <summary>The file's bytes no longer hash to the approved SHA-256. Nothing was sent.</summary>
+public sealed class PaymentFileHashMismatchException : Exception
+{
+    public PaymentFileHashMismatchException(string message) : base(message) { }
+}
+
+/// <summary>The transmission is not in a state that allows the request (in progress, needs review, already final).</summary>
+public sealed class PaymentFileTransmissionStateException : Exception
+{
+    public PaymentFileTransmissionStateException(string message) : base(message) { }
+}
+
+/// <summary>
+/// Sends a completed ACH payment run's NACHA file to the tenant's bank,
+/// exactly once. See <see cref="PaymentFileTransmissionStatus"/> for the state
+/// machine. Dual control reuses the payment-run maker-checker
+/// (<see cref="IRunSeparationOfDuties.EnsureMayRelease"/>): the run's creator
+/// cannot approve or retry its transmission, and a service token never can.
+/// A NeedsReview file is settled by a user who neither approved nor attempted it.
+/// </summary>
+public interface IPaymentFileTransmissionService
+{
+    /// <summary>The run's transmission record, or null when its file was never approved for transmission.</summary>
+    Task<PaymentFileTransmission?> GetAsync(string paymentRunId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Approves (first call) and transmits the run's pinned NACHA file, or retries
+    /// a Failed one. Idempotent: a Transmitted file is returned as is, never re-sent.
+    /// </summary>
+    Task<PaymentFileTransmission> TransmitAsync(string paymentRunId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// For a NeedsReview file: lists the bank's drop (read-only). The file there
+    /// with the expected size settles it as Transmitted; otherwise it stays NeedsReview.
+    /// </summary>
+    Task<PaymentFileTransmission> ReconcileAsync(string paymentRunId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// For a NeedsReview file: records what the bank said. Received: Transmitted.
+    /// Not received: Failed, so it may be retried.
+    /// </summary>
+    Task<PaymentFileTransmission> ResolveAsync(string paymentRunId, bool bankReceived, string reason, CancellationToken cancellationToken = default);
+}
+
+public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionService
+{
+    public static readonly EventId ApprovedEvent = new(4931, "PaymentFileTransmissionApproved");
+    public static readonly EventId TransmittedEvent = new(4932, "PaymentFileTransmitted");
+    public static readonly EventId FailedEvent = new(4933, "PaymentFileTransmissionFailed");
+    public static readonly EventId NeedsReviewEvent = new(4934, "PaymentFileTransmissionNeedsReview");
+    public static readonly EventId RefusedEvent = new(4935, "PaymentFileTransmissionRefused");
+    public static readonly EventId ReconciledEvent = new(4936, "PaymentFileTransmissionReconciled");
+    public static readonly EventId ResolvedEvent = new(4937, "PaymentFileTransmissionResolved");
+    public static readonly EventId UnrecordedEvent = new(4938, "PaymentFileTransmissionOutcomeNotRecorded");
+    public static readonly EventId DisabledEvent = new(4939, "PaymentFileTransmissionDisabled");
+
+    private const string SystemActor = "payment-service";
+
+    private static readonly JsonSerializerOptions EventJson = new(JsonSerializerDefaults.Web);
+
+    private readonly IPaymentRunRepository _runs;
+    private readonly IFfsEftFileService _eftFiles;
+    private readonly IPaymentFileTransmissionRepository _store;
+    private readonly INachaTransmitter _transmitter;
+    private readonly INachaRemoteFileProbe _probe;
+    private readonly IRunSeparationOfDuties _separation;
+    private readonly BankTransmissionOptions _options;
+    private readonly TimeProvider _clock;
+    private readonly ILogger<PaymentFileTransmissionService> _logger;
+
+    public PaymentFileTransmissionService(
+        IPaymentRunRepository runs,
+        IFfsEftFileService eftFiles,
+        IPaymentFileTransmissionRepository store,
+        INachaTransmitter transmitter,
+        INachaRemoteFileProbe probe,
+        IRunSeparationOfDuties separation,
+        IOptions<BankTransmissionOptions> options,
+        ILogger<PaymentFileTransmissionService> logger,
+        TimeProvider? clock = null)
+    {
+        _runs = runs;
+        _eftFiles = eftFiles;
+        _store = store;
+        _transmitter = transmitter;
+        _probe = probe;
+        _separation = separation;
+        _options = options.Value;
+        _logger = logger;
+        _clock = clock ?? TimeProvider.System;
+    }
+
+    private DateTime Now => _clock.GetUtcNow().UtcDateTime;
+
+    public async Task<PaymentFileTransmission?> GetAsync(string paymentRunId, CancellationToken cancellationToken = default)
+    {
+        var run = await LoadRunAsync(paymentRunId);
+        return await _store.GetAsync(run.TenantId, FileReferenceOf(run), cancellationToken);
+    }
+
+    public async Task<PaymentFileTransmission> TransmitAsync(string paymentRunId, CancellationToken cancellationToken = default)
+    {
+        EnsureEnabled(paymentRunId);
+
+        var run = await LoadRunAsync(paymentRunId);
+        var user = _separation.EnsureMayRelease("payment run's bank transmission", run.PaymentRunNumber, run.CreatedBy);
+        var pinned = RequireTransmittableFile(run);
+
+        var record = await _store.GetAsync(run.TenantId, pinned.FileReference, cancellationToken);
+        if (record != null)
+        {
+            if (!HashEquals(record.ApprovedSha256, pinned.Sha256))
+            {
+                await RefuseAsync(record, user, pinned.Sha256, "the run's pinned EFT file no longer has the approved SHA-256");
+                throw new PaymentFileHashMismatchException(
+                    $"The EFT file of payment run {run.PaymentRunNumber} is not the file approved for transmission " +
+                    $"(approved sha256 {record.ApprovedSha256}, now {pinned.Sha256}). Nothing was sent.");
+            }
+
+            switch (record.Status)
+            {
+                case PaymentFileTransmissionStatus.Transmitted:
+                    _logger.LogInformation(
+                        "AUDIT NACHA file {FileReference} of payment run {RunNumber}: transmit requested by {User}, already transmitted at {At:o}; not sent again",
+                        Clean(record.FileReference), Clean(run.PaymentRunNumber), Clean(user), record.TransmittedAt);
+                    return record;
+                case PaymentFileTransmissionStatus.NeedsReview:
+                    throw new PaymentFileTransmissionStateException(NeedsReviewMessage(record));
+                case PaymentFileTransmissionStatus.Transmitting:
+                    if (record.LeaseUntil > Now)
+                        throw new PaymentFileTransmissionStateException(
+                            $"NACHA file {record.FileReference} is being transmitted (attempt {record.AttemptCount}). Check its status.");
+                    record = await ExpireLeaseAsync(record, user, cancellationToken);
+                    throw new PaymentFileTransmissionStateException(NeedsReviewMessage(record));
+            }
+        }
+
+        // Regenerate the approved bytes. The EFT-file service itself refuses when
+        // they no longer reproduce the run's pinned SHA-256.
+        FfsEftFileOutcome outcome;
+        try
+        {
+            outcome = await _eftFiles.GenerateAsync(run.Id, user, cancellationToken);
+        }
+        catch (RunConflictException ex)
+        {
+            if (record != null)
+                await RefuseAsync(record, user, string.Empty, "the regenerated EFT file differs from the approved file");
+            _logger.LogWarning(RefusedEvent,
+                "AUDIT NACHA file {FileReference} of payment run {RunNumber}: transmit by {User} refused, the regenerated file differs from the approved sha256 {Sha256}",
+                Clean(pinned.FileReference), Clean(run.PaymentRunNumber), Clean(user), pinned.Sha256);
+            throw new PaymentFileHashMismatchException(ex.Message);
+        }
+
+        var file = outcome.File
+            ?? throw new InvalidOperationException($"Payment run {run.PaymentRunNumber} has no EFT credits to transmit.");
+        var facts = NachaFileFacts.From(file.Content);
+        var approved = record?.ApprovedSha256 ?? pinned.Sha256;
+        if (!HashEquals(facts.Sha256, approved) || !HashEquals(file.Sha256, approved) || !HashEquals(outcome.Run.EftFile?.Sha256, approved))
+        {
+            if (record != null)
+                await RefuseAsync(record, user, facts.Sha256, "the bytes to send do not hash to the approved SHA-256");
+            _logger.LogWarning(RefusedEvent,
+                "AUDIT NACHA file {FileReference} of payment run {RunNumber}: transmit by {User} refused, bytes hash {Actual} but {Approved} was approved",
+                Clean(pinned.FileReference), Clean(run.PaymentRunNumber), Clean(user), facts.Sha256, approved);
+            throw new PaymentFileHashMismatchException(
+                $"The NACHA file of payment run {run.PaymentRunNumber} hashes to {facts.Sha256}, not the approved {approved}. Nothing was sent.");
+        }
+
+        if (record == null)
+        {
+            record = new PaymentFileTransmission
+            {
+                TenantId = run.TenantId,
+                PaymentRunId = run.Id,
+                PaymentRunNumber = run.PaymentRunNumber,
+                FileReference = pinned.FileReference,
+                FileName = pinned.FileName,
+                ApprovedSha256 = approved,
+                ByteSize = facts.ByteSize,
+                EntryCount = facts.EntryCount,
+                TotalCreditAmount = facts.TotalCreditAmount,
+                TotalDebitAmount = facts.TotalDebitAmount,
+                EffectiveEntryDate = pinned.EffectiveEntryDate,
+                RunCreatedBy = run.CreatedBy,
+                ApprovedBy = user,
+                ApprovedAt = Now,
+                Status = PaymentFileTransmissionStatus.Pending,
+                CreatedAt = Now,
+                UpdatedAt = Now,
+            };
+            if (!await _store.TryInsertAsync(record, cancellationToken))
+                throw new PaymentFileTransmissionStateException(
+                    $"Another approver just approved NACHA file {pinned.FileReference} for transmission. Check its status.");
+            _logger.LogInformation(ApprovedEvent,
+                "AUDIT NACHA file {FileReference} of payment run {RunNumber} (created by {Maker}) approved for bank transmission by {User}: " +
+                "{Entries} credits, {Total:F2}, sha256 {Sha256}",
+                Clean(record.FileReference), Clean(run.PaymentRunNumber), Clean(run.CreatedBy), Clean(user),
+                record.EntryCount, record.TotalCreditAmount, record.ApprovedSha256);
+        }
+
+        // Claim: Pending/Failed -> Transmitting, conditional on the version read.
+        // Two concurrent requests both get here; only one claim succeeds.
+        var readVersion = record.Version;
+        var started = Now;
+        record.Status = PaymentFileTransmissionStatus.Transmitting;
+        record.AttemptCount++;
+        record.LeaseUntil = started.Add(_options.TransmittingLease);
+        record.Reason = null;
+        record.UpdatedAt = started;
+        Append(record, PaymentFileTransmissionAction.Transmit, user, facts.Sha256, PaymentFileTransmissionStatus.Transmitting,
+            $"attempt {record.AttemptCount} started");
+        // Not cancellable: a claim written but not acknowledged would park the file
+        // as Transmitting (then NeedsReview) although nothing was sent.
+        if (!await _store.TryReplaceAsync(record, readVersion, CancellationToken.None))
+            throw new PaymentFileTransmissionStateException(
+                $"NACHA file {record.FileReference} changed while this request prepared it (another attempt is under way). Check its status.");
+        var heldVersion = record.Version;
+
+        // Send. The caller's cancellation is not passed on: an attempt abandoned
+        // half-way would be an unknown outcome.
+        PaymentFileTransmissionStatus result;
+        string detail;
+        NachaTransmissionReceipt? receipt = null;
+        try
+        {
+            receipt = await _transmitter.TransmitAsync(new NachaTransmissionRequest
+            {
+                TenantId = record.TenantId,
+                FileReference = record.FileReference,
+                FileName = record.FileName,
+                Content = file.Content,
+                RunId = record.PaymentRunId,
+                BatchId = record.FileReference,
+                TransmittedBy = user,
+            }, CancellationToken.None);
+
+            if (HashEquals(receipt.Sha256, approved))
+            {
+                result = PaymentFileTransmissionStatus.Transmitted;
+                detail = $"delivered to {receipt.Destination} as {receipt.RemoteFileName}";
+            }
+            else
+            {
+                result = PaymentFileTransmissionStatus.NeedsReview;
+                detail = $"the transmitter reported sending bytes with sha256 {receipt.Sha256}, not the approved file; verify with the bank";
+            }
+        }
+        catch (NachaTransmissionException ex) when (ex.DeliveryUnknown)
+        {
+            result = PaymentFileTransmissionStatus.NeedsReview;
+            detail = ex.Message;
+        }
+        catch (NachaTransmissionException ex)
+        {
+            // Definitely not in the bank's drop: not configured, host key refused,
+            // or the upload failed before the rename into place.
+            result = PaymentFileTransmissionStatus.Failed;
+            detail = ex.HostKeyRejected ? "host key refused: " + ex.Message : ex.Message;
+        }
+        catch (Exception ex)
+        {
+            result = PaymentFileTransmissionStatus.NeedsReview;
+            detail = $"the attempt ended with an unexpected {ex.GetType().Name}; whether the file reached the bank is unknown";
+        }
+
+        var finished = Now;
+        record.Status = result;
+        record.LeaseUntil = null;
+        record.UpdatedAt = finished;
+        record.Reason = result == PaymentFileTransmissionStatus.Transmitted ? null : Clean(detail);
+        if (result == PaymentFileTransmissionStatus.Transmitted)
+            MarkTransmitted(record, receipt!.RemoteFileName, receipt.Destination, receipt.TransmittedAt, user, PaymentFileDeliveryEvidence.Upload);
+        Append(record, PaymentFileTransmissionAction.Transmit, user, facts.Sha256, result, detail);
+
+        await SaveOutcomeAsync(record, heldVersion, result);
+        LogOutcome(record, user, result, detail);
+        return record;
+    }
+
+    public async Task<PaymentFileTransmission> ReconcileAsync(string paymentRunId, CancellationToken cancellationToken = default)
+    {
+        EnsureEnabled(paymentRunId);
+
+        var run = await LoadRunAsync(paymentRunId);
+        var user = _separation.EnsureMayRelease("payment run's bank transmission", run.PaymentRunNumber, run.CreatedBy);
+        var record = await RequireNeedsReviewAsync(run, user, cancellationToken);
+
+        PaymentFileTransmissionStatus result = PaymentFileTransmissionStatus.NeedsReview;
+        string detail;
+        NachaRemoteFileCheck? check = null;
+        try
+        {
+            check = await _probe.CheckAsync(record.TenantId, record.FileName, record.ByteSize, cancellationToken);
+            switch (check.Presence)
+            {
+                case NachaRemoteFilePresence.Present:
+                    result = PaymentFileTransmissionStatus.Transmitted;
+                    detail = $"{record.FileName} ({record.ByteSize} bytes) found in {check.Destination}";
+                    break;
+                case NachaRemoteFilePresence.DifferentSize:
+                    detail = $"{record.FileName} is in {check.Destination} but is {check.RemoteByteSize?.ToString() ?? "of unknown size"} bytes, " +
+                             $"not {record.ByteSize}; confirm with the bank";
+                    break;
+                default:
+                    detail = $"{record.FileName} is not in {check.Destination}: it may never have arrived, or the bank may already have " +
+                             "collected it. Confirm with the bank and record its answer";
+                    break;
+            }
+        }
+        catch (NachaTransmissionException ex)
+        {
+            detail = "the bank's drop could not be checked: " + ex.Message;
+        }
+
+        var readVersion = record.Version;
+        record.UpdatedAt = Now;
+        if (result == PaymentFileTransmissionStatus.Transmitted)
+        {
+            record.Status = PaymentFileTransmissionStatus.Transmitted;
+            record.Reason = null;
+            MarkTransmitted(record, record.FileName, check!.Destination, Now, LastTransmitter(record) ?? user, PaymentFileDeliveryEvidence.RemoteListing);
+        }
+        Append(record, PaymentFileTransmissionAction.Reconcile, user, record.ApprovedSha256, record.Status, detail);
+        if (!await _store.TryReplaceAsync(record, readVersion, cancellationToken))
+            throw new PaymentFileTransmissionStateException($"NACHA file {record.FileReference} changed meanwhile. Check its status.");
+
+        _logger.Log(result == PaymentFileTransmissionStatus.Transmitted ? LogLevel.Information : LogLevel.Warning, ReconciledEvent,
+            "AUDIT NACHA file {FileReference} of payment run {RunNumber} reconciled by {User}: {Status} ({Detail}); sha256 {Sha256}",
+            Clean(record.FileReference), Clean(record.PaymentRunNumber), Clean(user), record.Status, Clean(detail), record.ApprovedSha256);
+        return record;
+    }
+
+    public async Task<PaymentFileTransmission> ResolveAsync(string paymentRunId, bool bankReceived, string reason, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason (what the bank said, who, their reference) is required.");
+        reason = Clean(reason.Trim());
+        if (reason.Length > 500) reason = reason[..500];
+
+        var run = await LoadRunAsync(paymentRunId);
+        var user = _separation.EnsureMayRelease("payment run's bank transmission", run.PaymentRunNumber, run.CreatedBy);
+        var record = await RequireNeedsReviewAsync(run, user, cancellationToken);
+
+        var involved = record.Attempts
+            .Where(a => a.Action == PaymentFileTransmissionAction.Transmit)
+            .Select(a => a.By)
+            .Append(record.ApprovedBy);
+        if (involved.Any(u => string.Equals(u, user, StringComparison.OrdinalIgnoreCase)))
+        {
+            _logger.LogWarning(RefusedEvent,
+                "AUDIT NACHA file {FileReference} of payment run {RunNumber}: {User} may not record the bank's answer (approved or attempted it)",
+                Clean(record.FileReference), Clean(record.PaymentRunNumber), Clean(user));
+            throw new SeparationOfDutiesException(
+                "Separation of duties: you approved or attempted this NACHA file's transmission, so you cannot record whether the bank " +
+                "received it. Another user with payments:approve must.");
+        }
+
+        var readVersion = record.Version;
+        record.UpdatedAt = Now;
+        if (bankReceived)
+        {
+            record.Status = PaymentFileTransmissionStatus.Transmitted;
+            record.Reason = null;
+            MarkTransmitted(record, record.FileName, record.Destination, Now, LastTransmitter(record) ?? user, PaymentFileDeliveryEvidence.BankConfirmation);
+        }
+        else
+        {
+            record.Status = PaymentFileTransmissionStatus.Failed;
+            record.Reason = "the bank confirmed it did not receive the file: " + reason;
+        }
+        Append(record, PaymentFileTransmissionAction.Resolve, user, record.ApprovedSha256, record.Status,
+            (bankReceived ? "bank received: " : "bank did not receive: ") + reason);
+        if (!await _store.TryReplaceAsync(record, readVersion, cancellationToken))
+            throw new PaymentFileTransmissionStateException($"NACHA file {record.FileReference} changed meanwhile. Check its status.");
+
+        _logger.LogWarning(ResolvedEvent,
+            "AUDIT NACHA file {FileReference} of payment run {RunNumber}: {User} recorded that the bank {Answer} it ({Reason}); now {Status}; sha256 {Sha256}",
+            Clean(record.FileReference), Clean(record.PaymentRunNumber), Clean(user), bankReceived ? "received" : "did not receive",
+            reason, record.Status, record.ApprovedSha256);
+        return record;
+    }
+
+    private void EnsureEnabled(string paymentRunId)
+    {
+        if (_options.Enabled)
+            return;
+        _logger.LogInformation(DisabledEvent,
+            "NACHA bank transmission requested for payment run {RunId} but BankTransmission:Enabled is false; nothing done", Clean(paymentRunId));
+        throw new BankTransmissionDisabledException();
+    }
+
+    private async Task<PaymentRun> LoadRunAsync(string paymentRunId)
+        => await _runs.GetByIdAsync(paymentRunId) ?? throw new KeyNotFoundException($"Payment run {paymentRunId} not found");
+
+    private static string FileReferenceOf(PaymentRun run) => run.EftFile?.FileReference ?? $"FFS-{run.PaymentRunNumber}";
+
+    private static PaymentRunEftFile RequireTransmittableFile(PaymentRun run)
+    {
+        if (run.Status != PaymentRunStatus.Completed)
+            throw new InvalidOperationException($"Payment run {run.PaymentRunNumber} is {run.Status}; only a completed run's file goes to the bank.");
+        if (!string.Equals(run.PaymentMethod, "ACH", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Payment run {run.PaymentRunNumber} pays by {run.PaymentMethod}; it has no NACHA file.");
+        var file = run.EftFile
+            ?? throw new InvalidOperationException(
+                $"Payment run {run.PaymentRunNumber} has no EFT file yet. Generate it (POST /api/paymentruns/{{id}}/eft-file) and check it before approving transmission.");
+        if (file.EntryCount == 0 || string.IsNullOrEmpty(file.Sha256))
+            throw new InvalidOperationException($"Payment run {run.PaymentRunNumber}'s EFT file has no credits; there is nothing to transmit.");
+        return file;
+    }
+
+    private async Task<PaymentFileTransmission> RequireNeedsReviewAsync(PaymentRun run, string user, CancellationToken cancellationToken)
+    {
+        var record = await _store.GetAsync(run.TenantId, FileReferenceOf(run), cancellationToken)
+            ?? throw new KeyNotFoundException($"Payment run {run.PaymentRunNumber}'s NACHA file was never approved for transmission.");
+        if (record.Status == PaymentFileTransmissionStatus.Transmitting && !(record.LeaseUntil > Now))
+            record = await ExpireLeaseAsync(record, user, cancellationToken);
+        if (record.Status != PaymentFileTransmissionStatus.NeedsReview)
+            throw new PaymentFileTransmissionStateException(
+                $"NACHA file {record.FileReference} is {record.Status}, not awaiting review.");
+        return record;
+    }
+
+    /// <summary>A Transmitting record past its lease: the attempt's outcome is unknown, so NeedsReview (never re-sent).</summary>
+    private async Task<PaymentFileTransmission> ExpireLeaseAsync(PaymentFileTransmission record, string observedBy, CancellationToken cancellationToken)
+    {
+        var readVersion = record.Version;
+        record.Status = PaymentFileTransmissionStatus.NeedsReview;
+        record.Reason = $"attempt {record.AttemptCount} did not finish within its lease (until {record.LeaseUntil:o}); " +
+                        "whether the file reached the bank is unknown";
+        record.LeaseUntil = null;
+        record.UpdatedAt = Now;
+        Append(record, PaymentFileTransmissionAction.LeaseExpired, observedBy, record.ApprovedSha256, record.Status, record.Reason);
+        if (!await _store.TryReplaceAsync(record, readVersion, cancellationToken))
+            throw new PaymentFileTransmissionStateException($"NACHA file {record.FileReference} changed meanwhile. Check its status.");
+        _logger.LogError(NeedsReviewEvent,
+            "AUDIT NACHA file {FileReference} of payment run {RunNumber}: attempt {Attempt} outlived its lease; NeedsReview (noticed by {User}); sha256 {Sha256}",
+            Clean(record.FileReference), Clean(record.PaymentRunNumber), record.AttemptCount, Clean(observedBy), record.ApprovedSha256);
+        return record;
+    }
+
+    /// <summary>Records a refusal on an existing record (best effort: the refusal itself stands either way).</summary>
+    private async Task RefuseAsync(PaymentFileTransmission record, string user, string sha256, string why)
+    {
+        var readVersion = record.Version;
+        Append(record, PaymentFileTransmissionAction.Refused, user, sha256, record.Status, why);
+        record.UpdatedAt = Now;
+        try
+        {
+            await _store.TryReplaceAsync(record, readVersion, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("The refusal of NACHA file {FileReference} could not be added to its record: {Error}",
+                Clean(record.FileReference), ex.GetType().Name);
+        }
+        _logger.LogWarning(RefusedEvent,
+            "AUDIT NACHA file {FileReference} of payment run {RunNumber}: transmit by {User} refused ({Why}); approved sha256 {Approved}, seen {Seen}",
+            Clean(record.FileReference), Clean(record.PaymentRunNumber), Clean(user), why, record.ApprovedSha256, sha256);
+    }
+
+    private async Task SaveOutcomeAsync(PaymentFileTransmission record, string heldVersion, PaymentFileTransmissionStatus result)
+    {
+        bool saved;
+        try
+        {
+            saved = await _store.TryReplaceAsync(record, heldVersion, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(UnrecordedEvent,
+                "AUDIT NACHA file {FileReference} of payment run {RunNumber}: attempt {Attempt} ended {Result} but could not be recorded ({Error}). " +
+                "The record stays Transmitting and becomes NeedsReview when its lease expires; it will not be re-sent",
+                Clean(record.FileReference), Clean(record.PaymentRunNumber), record.AttemptCount, result, ex.GetType().Name);
+            throw;
+        }
+
+        if (!saved)
+        {
+            _logger.LogCritical(UnrecordedEvent,
+                "AUDIT NACHA file {FileReference} of payment run {RunNumber}: attempt {Attempt} ended {Result} but its record changed meanwhile " +
+                "(its lease was expired by another request). It is NeedsReview; reconcile it",
+                Clean(record.FileReference), Clean(record.PaymentRunNumber), record.AttemptCount, result);
+            throw new PaymentFileTransmissionStateException(
+                $"NACHA file {record.FileReference}: the attempt ended {result}, but the record had changed meanwhile and was not updated. " +
+                "It is awaiting review; reconcile it before anything else.");
+        }
+    }
+
+    private void LogOutcome(PaymentFileTransmission record, string user, PaymentFileTransmissionStatus result, string detail)
+    {
+        var (level, eventId) = result switch
+        {
+            PaymentFileTransmissionStatus.Transmitted => (LogLevel.Information, TransmittedEvent),
+            PaymentFileTransmissionStatus.Failed => (LogLevel.Warning, FailedEvent),
+            _ => (LogLevel.Error, NeedsReviewEvent),
+        };
+        _logger.Log(level, eventId,
+            "AUDIT NACHA file {FileReference} of payment run {RunNumber}, attempt {Attempt} by {User}: {Result} ({Detail}); " +
+            "{Entries} credits, {Total:F2}, sha256 {Sha256}",
+            Clean(record.FileReference), Clean(record.PaymentRunNumber), record.AttemptCount, Clean(user), result, Clean(detail),
+            record.EntryCount, record.TotalCreditAmount, record.ApprovedSha256);
+    }
+
+    /// <summary>Final: sets the receipt fields and writes PaymentFileTransmitted to the outbox (once).</summary>
+    private static void MarkTransmitted(PaymentFileTransmission record, string? remoteFileName, string? destination, DateTime at, string by,
+        PaymentFileDeliveryEvidence evidence)
+    {
+        record.RemoteFileName = remoteFileName;
+        record.Destination = destination;
+        record.TransmittedAt = at;
+        record.TransmittedBy = by;
+        record.ConfirmedBy = evidence;
+        record.Acknowledgement = PaymentFileAcknowledgementStatus.Awaiting;
+
+        if (record.Outbox.Any(m => m.Type == PaymentFileOutboxMessage.TransmittedType))
+            return;
+        var eventId = EventIdFor(record, PaymentFileOutboxMessage.TransmittedType);
+        var payload = new PaymentFileTransmittedEvent
+        {
+            EventId = eventId,
+            TenantId = record.TenantId,
+            PaymentRunId = record.PaymentRunId,
+            PaymentRunNumber = record.PaymentRunNumber,
+            FileReference = record.FileReference,
+            Sha256 = record.ApprovedSha256,
+            EntryCount = record.EntryCount,
+            TotalCreditAmount = record.TotalCreditAmount,
+            TotalDebitAmount = record.TotalDebitAmount,
+            EffectiveEntryDate = record.EffectiveEntryDate,
+            TransmittedAt = at,
+            ApprovedBy = record.ApprovedBy,
+            ConfirmedBy = evidence.ToString(),
+        };
+        record.Outbox.Add(new PaymentFileOutboxMessage
+        {
+            EventId = eventId,
+            Type = PaymentFileOutboxMessage.TransmittedType,
+            PayloadJson = JsonSerializer.Serialize(payload, EventJson),
+            CreatedAt = at,
+        });
+    }
+
+    /// <summary>A stable id per (tenant, file, hash, type), so a replayed event de-duplicates downstream.</summary>
+    internal static string EventIdFor(PaymentFileTransmission record, string type)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{record.TenantId}\n{record.FileReference}\n{record.ApprovedSha256}\n{type}"));
+        return new Guid(hash.AsSpan(0, 16)).ToString();
+    }
+
+    private static string? LastTransmitter(PaymentFileTransmission record)
+        => record.Attempts.LastOrDefault(a => a.Action == PaymentFileTransmissionAction.Transmit)?.By;
+
+    private void Append(PaymentFileTransmission record, PaymentFileTransmissionAction action, string by, string sha256,
+        PaymentFileTransmissionStatus result, string? detail)
+        => record.Attempts.Add(new PaymentFileTransmissionAttempt
+        {
+            Sequence = record.Attempts.Count + 1,
+            Action = action,
+            By = string.IsNullOrEmpty(by) ? SystemActor : by,
+            At = Now,
+            Sha256 = sha256,
+            Result = result,
+            Detail = detail == null ? null : Clean(detail),
+        });
+
+    private static string NeedsReviewMessage(PaymentFileTransmission record)
+        => $"NACHA file {record.FileReference} may already be at the bank ({record.Reason}). It will not be sent again: reconcile it " +
+           "(POST .../eft-file/transmission/reconcile) or have a second user record what the bank says (POST .../eft-file/transmission/resolve).";
+
+    private static bool HashEquals(string? a, string? b)
+        => !string.IsNullOrEmpty(a) && !string.IsNullOrEmpty(b) && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    private static string Clean(string? value)
+        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", " ");
+}
+
+/// <summary>
+/// Registered while <c>BankTransmission:Enabled</c> is false: the service
+/// refuses before reaching it, and this refuses again, connecting nowhere.
+/// </summary>
+public sealed class DisabledNachaTransmitter : INachaTransmitter, INachaRemoteFileProbe
+{
+    private static NachaTransmissionException Disabled()
+        => new("Bank transmission is disabled (BankTransmission:Enabled is false).", notConfigured: true);
+
+    public Task<NachaTransmissionReceipt> TransmitAsync(NachaTransmissionRequest request, CancellationToken cancellationToken = default)
+        => throw Disabled();
+
+    public Task<NachaRemoteFileCheck> CheckAsync(string tenantId, string fileName, long expectedByteSize, CancellationToken cancellationToken = default)
+        => throw Disabled();
+}

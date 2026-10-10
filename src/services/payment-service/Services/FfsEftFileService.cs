@@ -24,9 +24,9 @@ namespace PaymentService.Services;
 /// (an approved account changed since, or a payee lost its EFT account).</item>
 /// </list>
 ///
-/// Transmission to the bank is not done here: the shared
-/// CloudHealthOffice.NachaTransmission dispatcher (as capitation-service uses)
-/// is the next step and takes <see cref="FfsEftFileOutcome.File"/> as is.
+/// Transmission to the bank is not done here: <see cref="IPaymentFileTransmissionService"/>
+/// regenerates the file through this service, checks it against the pinned and
+/// approved SHA-256, and sends it exactly once (off unless BankTransmission:Enabled).
 /// </summary>
 public interface IFfsEftFileService
 {

@@ -111,6 +111,12 @@ internal sealed class FakeSftp : ISftpSessionFactory
             return _server.Files.ContainsKey(path);
         }
 
+        public long? Size(string path)
+        {
+            _server.Operations.Add($"size {path}");
+            return _server.Files.TryGetValue(path, out var bytes) ? bytes.LongLength : throw new IOException("no such file");
+        }
+
         public void Upload(Stream content, string path)
         {
             _server.Operations.Add($"upload {path}");
