@@ -66,8 +66,27 @@ approve + transmit (user != run creator, != run executor)   POST /api/paymentrun
   - the file must pay exactly the payments approved, each still this run's ACH
     payment, not in Exception, amounts unchanged, none of its claims reserved for a
     reversal run, none of its claims now paid by another run (reissued).
+- **Re-pinning without reversed payments** (the same `POST .../eft-file/redate`). A
+  payment whose claims a completed reversal run recouped before the file was sent is
+  left out of a new `-R{n}` file. The old date is kept while it can still be sent. The
+  same approval, separation-of-duties and record rules apply as for a re-date. The
+  payment is voided before payment, and the provider receivable its reversal opened is
+  cancelled. Each voided payment is listed in the file's `voidedPayments` (and on its
+  transmission record) with its 835 (partner, ISA13). **Tell those providers the payment
+  will not arrive.** A `PaymentVoidedBeforeTransmission` GL event is queued. Anything the
+  automatic re-pin cannot settle (partial or split reversals, offsets, a missing
+  receivable) is refused. A finance user then excludes the payment with
+  `POST .../eft-file/exclude-payments`, under the same rules. A reversal still running is
+  always refused. While bank transmission is on for the service and the tenant,
+  receivables opened by reversals of unsent payments are held (`PendingVoid`) and never
+  recovered before the void. With transmission off (files sent by hand), they open as
+  before. With transmission on but a file sent outside payment-service anyway, release
+  its held receivables by hand (`POST /api/receivables/{id}/release`). The unreversed
+  remainder of an excluded payment is recorded once paid with
+  `POST .../eft-file/voided-payments/{paymentId}/reissue-remainder`. See GL-POSTING-RUNBOOK.md,
+  "Payments reversed before their file was sent".
 - **Re-dating** (`POST .../eft-file/redate`, reason required). Only for a file whose
-  date can no longer be sent, and only while its transmission record is absent,
+  date can no longer be sent (or that has reversed payments to leave out, above), and only while its transmission record is absent,
   `Pending` or `Failed` (which includes a `NeedsReview` resolved "not received").
   Never `Transmitting`, `Transmitted` or an unresolved `NeedsReview`.
   - **Failed files:** before a `Failed` file is superseded, the bank's drop is
@@ -277,12 +296,11 @@ approval, which needs the flag on, does).
 
 ## 9. Not built yet (follow-ups)
 
-- **GL posting.** The seam: on `Transmitted`, a `PaymentFileTransmitted` event is
-  written to the record's `outbox` in the same conditional write (payload: tenant,
-  run id/number, file reference, SHA-256, entry count, total credits/debits,
-  effective entry date, transmitted at, approver, evidence; deterministic
-  `eventId` for de-duplication). No dispatcher publishes it yet; the GL PR adds
-  the dispatcher (as in appeals-service `AppealOutboxDispatcher`) and the posting.
+- **GL posting** is built: the `PaymentFileTransmitted` outbox event (and the run
+  accrual and reversal events) are delivered by payment-service's `GlEventDispatcher`
+  to ar-service, which posts Dr claims payable / Cr ACH in transit once per payment
+  run. See [GL-POSTING-RUNBOOK.md](GL-POSTING-RUNBOOK.md). Settlement (in transit to
+  cash) waits for acknowledgement ingestion below.
 - **Bank acknowledgements and returns.** The record models `acknowledgement`
   (`Awaiting` after transmission, `Accepted`, `Rejected`) but nothing ingests the
   bank's ack/return files yet (an inbound SFTP pull plus parsing of the bank's

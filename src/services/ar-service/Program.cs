@@ -1,4 +1,5 @@
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using CloudHealthOffice.Infrastructure.Extensions;
 using MongoDB.Driver;
 using ArService.Repositories;
@@ -51,6 +52,21 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     // Tells the legacy reconciliation tool this database is served by a build that
     // credits on apply and refuses unreconciled legacy postings (see ArServiceCapabilities).
     builder.Services.AddHostedService<ArService.Ledger.ArServiceCapabilitiesWriter>();
+
+    // General ledger: double-entry journal posted from GL source events (payment-service),
+    // per-tenant account mapping validated at startup, parking instead of dropping, ERP
+    // extract and claims payable reconciliation. Off unless GlPosting:Enabled.
+    // See docs/operations/GL-POSTING-RUNBOOK.md.
+    builder.Services.AddOptions<ArService.Gl.GlPostingOptions>()
+        .Bind(builder.Configuration.GetSection(ArService.Gl.GlPostingOptions.SectionName))
+        .ValidateOnStart();
+    builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<ArService.Gl.GlPostingOptions>, ArService.Gl.GlPostingOptionsValidator>();
+    builder.Services.AddScoped<ArService.Gl.IGlJournalRepository>(sp => new ArService.Gl.MongoGlJournalRepository(sp.GetRequiredService<IMongoDatabase>()));
+    builder.Services.AddScoped<ArService.Gl.IGlSourceEventRepository>(sp => new ArService.Gl.MongoGlSourceEventRepository(sp.GetRequiredService<IMongoDatabase>()));
+    builder.Services.AddScoped<ArService.Gl.IGlPeriodRepository>(sp => new ArService.Gl.MongoGlPeriodRepository(sp.GetRequiredService<IMongoDatabase>()));
+    builder.Services.AddScoped<ArService.Gl.IGlChartLookup>(sp => new ArService.Gl.MongoGlChartLookup(sp.GetRequiredService<IMongoDatabase>()));
+    builder.Services.TryAddSingleton(TimeProvider.System);
+    builder.Services.AddScoped<ArService.Gl.GlPostingService>();
     Console.WriteLine("Using MongoDB repository");
 }
 else

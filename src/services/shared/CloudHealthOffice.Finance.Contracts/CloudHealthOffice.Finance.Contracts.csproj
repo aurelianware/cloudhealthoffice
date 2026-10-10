@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Cross-service contract for general-ledger source events: what payment-service
+    (and later capitation-service and premium-billing-service) publish and what
+    ar-service's GL posting consumes. Plain records, no persistence attributes,
+    no dependencies, so both sides share one definition of the wire payload.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CloudHealthOffice.Finance.Contracts</RootNamespace>
+  </PropertyGroup>
+
+</Project>
