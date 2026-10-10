@@ -169,6 +169,14 @@ public class ClaimAdjudicationContext
     public bool ResolutionLockLost { get; set; }
 
     /// <summary>
+    /// The accumulator outbox entry <see cref="Stages.PersistenceStage"/>
+    /// asked to write with the claim's Approved status (null when none). The
+    /// orchestrator drives it right after the run; if the status write did
+    /// not apply, the claim holds no entry and nothing is committed.
+    /// </summary>
+    public AccumulatorOutboxItem? PendingAccumulatorCommit { get; set; }
+
+    /// <summary>
     /// The pends an approval re-run overrode ("{stage}: {code}: {reason}"),
     /// for the persisted audit record. Empty outside an approval re-run.
     /// </summary>

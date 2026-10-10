@@ -54,13 +54,27 @@ public interface IBenefitCalculationEngine
         CancellationToken ct = default);
 
     /// <summary>
-    /// Reverse the accumulator impact of a previously adjudicated claim.
-    /// Used for void (CLM05-3=8) and replacement (CLM05-3=7) claims.
+    /// Reverse the accumulator impact of a previously adjudicated claim that
+    /// will never apply again: a void (including the superseded version of a
+    /// replacement) or an examiner's denial. Terminal: the store also fences
+    /// the claim id, so a commit of it still in flight is refused
+    /// (<see cref="IAccumulatorService.ReverseTerminallyAsync"/>). Idempotent;
+    /// a claim that never applied reverses nothing (the fence is still set).
     /// </summary>
     Task ReverseClaimAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, DateOnly serviceDate,
         string originalClaimId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Writes the accumulator updates a Prospective pricing prepared
+    /// (<see cref="BenefitResolutionResult.PreparedAccumulatorCommit"/>), once
+    /// the claim is finally adjudicated. Idempotent on the commit id; refused
+    /// for a claim reversed terminally.
+    /// </summary>
+    Task<AccumulatorCommitResult> CommitAccumulatorsAsync(
+        AccumulatorCommit commit,
         CancellationToken ct = default);
 }
 
@@ -263,6 +277,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 () => WriteAccumulatorsAsync(
                     request, planYear, workingAccumulators, priorUpdates, ct));
         }
+        var preparedCommit = PrepareCommit(request, planYear, workingAccumulators);
 
         // ── Step 7: Determine overall claim outcome ──
         var allDenied = MeasureStage(
@@ -278,8 +293,50 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             Totals = totals,
             AccumulatorSnapshot = accumulatorSnapshot,
             CobPayerSequence = laterPayer ? request.Cob!.PayerSequence : null,
+            PreparedAccumulatorCommit = preparedCommit,
             Timings = timings
         };
+    }
+
+    /// <summary>
+    /// The write a Prospective pricing of a claim would have made, for
+    /// <see cref="CommitAccumulatorsAsync"/> (null for a Production pricing,
+    /// which wrote it, or when there is no claim id).
+    /// </summary>
+    private static AccumulatorCommit? PrepareCommit(
+        BenefitResolutionRequest request, string planYear, AccumulatorWorkingSet working)
+    {
+        if (request.ExecutionMode != AdjudicationExecutionMode.Prospective
+            || string.IsNullOrWhiteSpace(request.ClaimId))
+            return null;
+        return new AccumulatorCommit
+        {
+            CommitId = Guid.NewGuid().ToString("N"),
+            ClaimId = request.ClaimId,
+            ReplacesClaimId = string.Equals(request.ReplacesClaimId, request.ClaimId, StringComparison.Ordinal)
+                ? null
+                : request.ReplacesClaimId,
+            MemberId = request.MemberId,
+            SubscriberId = request.SubscriberId,
+            BenefitPlanId = request.BenefitPlanId,
+            PlanYear = planYear,
+            Updates = working.GetPendingUpdates().ToList(),
+        };
+    }
+
+    public async Task<AccumulatorCommitResult> CommitAccumulatorsAsync(
+        AccumulatorCommit commit,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(commit);
+        if (commit.Updates.Any(u => u.Amount < 0))
+            throw new ArgumentException("A commit never carries a negative amount; reversals go through ReverseClaimAsync.", nameof(commit));
+        var result = await _accumulatorService.CommitAsync(commit, ct);
+        _logger.LogInformation(
+            "Accumulator commit {CommitId} for claim {ClaimId} (plan year {PlanYear}): {Outcome}, {Clamped} update(s) clamped at a limit",
+            SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId), SanitizeForLog(commit.PlanYear),
+            result.Outcome, result.Clamped.Count);
+        return result;
     }
 
     /// <summary>True when this plan pays after another payer (sequence ≥ 2).</summary>
@@ -455,7 +512,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             "Reversing accumulators for claim {ClaimId}, member {MemberId}, plan year {PlanYear}",
             originalClaimId, memberId, planYear);
 
-        await _accumulatorService.ReverseAsync(
+        await _accumulatorService.ReverseTerminallyAsync(
             memberId, subscriberId, benefitPlanId, planYear, originalClaimId, ct);
     }
 
@@ -680,6 +737,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         return new BenefitResolutionResult
         {
             Success = true,
+            PreparedAccumulatorCommit = PrepareCommit(request, planYear, workingAccumulators),
             CobPayerSequence = IsLaterPayer(request) ? request.Cob!.PayerSequence : null,
             Lines = lineResults,
             Totals = totals,

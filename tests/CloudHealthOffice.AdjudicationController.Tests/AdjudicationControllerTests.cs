@@ -65,6 +65,8 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         public IPriorAuthRuleEngine PriorAuthEngine { get; } = Substitute.For<IPriorAuthRuleEngine>();
         public IPaymentEstimateService EstimateService { get; } = Substitute.For<IPaymentEstimateService>();
         public IBenefitPlanService PlanService { get; } = Substitute.For<IBenefitPlanService>();
+        public CloudHealthOffice.BenefitEngine.Services.IAccumulatorService Accumulators { get; } =
+            Substitute.For<CloudHealthOffice.BenefitEngine.Services.IAccumulatorService>();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -122,6 +124,8 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
                 services.AddSingleton(EstimateService);
                 services.RemoveAll<IBenefitPlanService>();
                 services.AddSingleton(PlanService);
+                services.RemoveAll<CloudHealthOffice.BenefitEngine.Services.IAccumulatorService>();
+                services.AddSingleton(Accumulators);
 
                 // Stub out Redis connection with a no-op
                 services.AddSingleton(Substitute.For<IConnectionMultiplexer>());
@@ -1833,4 +1837,155 @@ internal record NcciErrorResponse
     public string Error { get; init; } = default!;
     public string Message { get; init; } = default!;
     public List<NcciEditFailure> EditFailures { get; init; } = [];
+}
+
+/// <summary>
+/// <c>POST /api/v1/adjudication/commit-accumulators</c>: claims-service
+/// commits a claim's prepared accumulator write once it is finally
+/// adjudicated. The controller forwards to
+/// <see cref="IBenefitCalculationEngine.CommitAccumulatorsAsync"/> and returns
+/// the outcome (string enum on the wire).
+/// </summary>
+public class AdjudicationControllerCommitAccumulatorsTests : IClassFixture<AdjudicationControllerTests.Factory>
+{
+    private static readonly Guid PlanId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    private readonly AdjudicationControllerTests.Factory _factory;
+
+    public AdjudicationControllerCommitAccumulatorsTests(AdjudicationControllerTests.Factory factory) => _factory = factory;
+
+    /// <summary>claims-service's own service token (the only caller the endpoint accepts).</summary>
+    private HttpClient CreateClient(string serviceClientId = "claims-service")
+    {
+        var c = _factory.CreateDefaultClient();
+        c.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer", ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken(serviceClientId, "test-tenant-001"));
+        c.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant-001");
+        return c;
+    }
+
+    private static object Body(string commitId = "c-1", decimal amount = 60m) => new
+    {
+        commitId,
+        claimId = "claim-7",
+        memberId = "m1",
+        subscriberId = "",
+        benefitPlanId = PlanId,
+        planYear = "2026",
+        updates = new[]
+        {
+            new { type = "IndividualDeductible", scope = "Individual", networkTier = "InNetwork", amount, source = "Deductible", clampAtLimit = 500m },
+        },
+    };
+
+    [Fact]
+    public async Task Commit_ForwardsToTheEngine_AndReturnsTheOutcome()
+    {
+        _factory.BenefitEngine.CommitAccumulatorsAsync(Arg.Any<AccumulatorCommit>(), Arg.Any<CancellationToken>())
+            .Returns(new AccumulatorCommitResult
+            {
+                Outcome = AccumulatorCommitOutcome.Committed,
+                Clamped = [new AccumulatorClamp { Type = AccumulatorType.IndividualDeductible, Scope = AccumulatorScope.Individual,
+                    NetworkTier = NetworkTier.InNetwork, Requested = 60m, Applied = 20m, Limit = 500m }],
+            });
+
+        var response = await CreateClient().PostAsJsonAsync("/api/v1/adjudication/commit-accumulators", Body());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.Contains("\"Committed\"", json);
+        Assert.Contains("\"IndividualDeductible\"", json);
+        Assert.Contains("\"applied\":20", json);
+        await _factory.BenefitEngine.Received(1).CommitAccumulatorsAsync(
+            Arg.Is<AccumulatorCommit>(c => c.CommitId == "c-1" && c.ClaimId == "claim-7"
+                                           && c.SubscriberId == "m1" // defaults to the member
+                                           && c.Updates.Single().Amount == 60m
+                                           && c.Updates.Single().ClampAtLimit == 500m
+                                           && c.Updates.Single().Type == AccumulatorType.IndividualDeductible),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A user — even an administrator — or another service cannot write accumulators directly.</summary>
+    [Theory]
+    [InlineData("user")]
+    [InlineData("payment-service")]
+    public async Task Commit_FromAnyoneButClaimsService_Is403_EngineNotCalled(string caller)
+    {
+        _factory.BenefitEngine.ClearReceivedCalls();
+        HttpClient client;
+        if (caller == "user")
+        {
+            client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
+            client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant-001");
+        }
+        else
+        {
+            client = CreateClient(caller);
+        }
+
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/commit-accumulators", Body());
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await _factory.BenefitEngine.DidNotReceiveWithAnyArgs().CommitAccumulatorsAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task Commit_Unauthenticated_Is401()
+    {
+        var client = _factory.CreateDefaultClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant-001");
+
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/commit-accumulators", Body());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    /// <summary>A commit only adds; a negative amount (a reversal in disguise) is refused.</summary>
+    [Fact]
+    public async Task Commit_WithANegativeAmount_Is400_EngineNotCalled()
+    {
+        _factory.BenefitEngine.ClearReceivedCalls();
+
+        var response = await CreateClient().PostAsJsonAsync("/api/v1/adjudication/commit-accumulators", Body(amount: -60m));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _factory.BenefitEngine.DidNotReceiveWithAnyArgs().CommitAccumulatorsAsync(default!, default);
+    }
+
+    /// <summary>The post-rollout sweep's lookup: claims-service only, read-only, per-claim answer.</summary>
+    [Fact]
+    public async Task CommitLookup_AnswersPerClaim_ForClaimsServiceOnly()
+    {
+        var lookup = new[]
+        {
+            new { claimId = "claim-1", memberId = "m1", subscriberId = "", benefitPlanId = PlanId, planYear = "2026" },
+            new { claimId = "claim-2", memberId = "m1", subscriberId = "s1", benefitPlanId = PlanId, planYear = "2026" },
+        };
+        _factory.Accumulators.HasClaimRecordAsync("m1", "m1", PlanId, "2026", "claim-1", Arg.Any<CancellationToken>()).Returns(true);
+        _factory.Accumulators.HasClaimRecordAsync("m1", "s1", PlanId, "2026", "claim-2", Arg.Any<CancellationToken>()).Returns(false);
+
+        var response = await CreateClient().PostAsJsonAsync("/api/v1/adjudication/accumulator-commits/lookup", lookup);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var rows = await response.Content.ReadFromJsonAsync<List<BenefitPlanService.Controllers.AccumulatorCommitLookupResult>>();
+        Assert.True(rows!.Single(r => r.ClaimId == "claim-1").Recorded);
+        Assert.False(rows!.Single(r => r.ClaimId == "claim-2").Recorded);
+
+        var user = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
+        user.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant-001");
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await user.PostAsJsonAsync("/api/v1/adjudication/accumulator-commits/lookup", lookup)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await CreateClient().PostAsJsonAsync("/api/v1/adjudication/accumulator-commits/lookup", Array.Empty<object>())).StatusCode);
+    }
+
+    [Fact]
+    public async Task Commit_WithoutACommitId_Is400_EngineNotCalled()
+    {
+        _factory.BenefitEngine.ClearReceivedCalls();
+
+        var response = await CreateClient().PostAsJsonAsync("/api/v1/adjudication/commit-accumulators", Body(commitId: ""));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _factory.BenefitEngine.DidNotReceiveWithAnyArgs().CommitAccumulatorsAsync(default!, default);
+    }
 }

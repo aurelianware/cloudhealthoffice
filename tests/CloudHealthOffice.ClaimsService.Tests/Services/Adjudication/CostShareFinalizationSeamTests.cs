@@ -524,5 +524,9 @@ public class CostShareFinalizationSeamTests
             string memberId, string subscriberId, Guid benefitPlanId, DateOnly serviceDate,
             string originalClaimId, CancellationToken ct = default)
             => inner.ReverseClaimAsync(memberId, subscriberId, benefitPlanId, serviceDate, originalClaimId, ct);
+
+        public Task<CloudHealthOffice.BenefitEngine.Models.AccumulatorCommitResult> CommitAccumulatorsAsync(
+            CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit commit, CancellationToken ct = default)
+            => inner.CommitAccumulatorsAsync(commit, ct);
     }
 }
