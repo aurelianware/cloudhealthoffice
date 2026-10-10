@@ -60,7 +60,7 @@ public sealed class Bai2Transaction
 
     public string TypeCode { get; init; } = string.Empty;
 
-    public Bai2Direction Direction { get; init; }
+    public Bai2Direction Direction { get; internal set; }
 
     /// <summary>In minor units (cents for USD). Never negative: the type code carries the direction.</summary>
     public long Amount { get; init; }

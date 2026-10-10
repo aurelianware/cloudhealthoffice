@@ -50,6 +50,7 @@ public sealed class PaymentBankStatementsController : ControllerBase
     private readonly IPaymentFileTransmissionRepository _transmissions;
     private readonly ICurrentActor _actor;
     private readonly BankReconciliationOptions _options;
+    private readonly BankStatementSupersessionService _supersessions;
 
     public PaymentBankStatementsController(
         BankStatementIngestion ingestion,
@@ -59,8 +60,10 @@ public sealed class PaymentBankStatementsController : ControllerBase
         INachaSettlementStore settlements,
         IPaymentFileTransmissionRepository transmissions,
         ICurrentActor actor,
-        IOptions<BankReconciliationOptions> options)
+        IOptions<BankReconciliationOptions> options,
+        BankStatementSupersessionService supersessions)
     {
+        _supersessions = supersessions;
         _ingestion = ingestion;
         _runner = runner;
         _store = store;
@@ -88,6 +91,7 @@ public sealed class PaymentBankStatementsController : ControllerBase
         if (!ingest.IsAccepted)
             return BadRequest(BankStatementUploadResult.From(ingest, null));
 
+        // A superseded statement carries no transactions: nothing is reconciled from it again.
         var summary = await _runner.RunAsync(ingest.Transactions, _matcher, ct);
         return Ok(BankStatementUploadResult.From(ingest, summary));
     }
@@ -101,6 +105,43 @@ public sealed class PaymentBankStatementsController : ControllerBase
         await _store.GetFileAsync(_actor.TenantId, id, ct) is { } f ? Ok(f.WithoutContent()) : NotFound(new { error = $"Bank statement {id} not found" });
 
     /// <summary>Decisions; <c>status=Suspense</c> and <c>status=Return</c> are the work queue.</summary>
+    public sealed class SupersedeRequest
+    {
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Step 1 of replacing this statement with a corrected file that reuses the
+    /// bank's file id: ask, with a reason. Refused once any line was applied,
+    /// matched or settled.
+    /// </summary>
+    [HttpPost("{id}/supersede")]
+    public async Task<ActionResult<BankStatementSupersession>> RequestSupersession(string id, [FromBody] SupersedeRequest request, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _supersessions.RequestAsync(_actor.TenantId, id, request.Reason, _actor.UserId, ct));
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    /// <summary>Step 2: a second person approves; the corrected file is then accepted and this statement's open lines are dismissed.</summary>
+    [HttpPost("{id}/supersede/approve")]
+    public async Task<ActionResult<BankStatementSupersession>> ApproveSupersession(string id, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _supersessions.ApproveAsync(_actor.TenantId, id, _actor.UserId, ct));
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpGet("{id}/supersession")]
+    public async Task<ActionResult<BankStatementSupersession>> GetSupersession(string id, CancellationToken ct) =>
+        await _supersessions.GetAsync(_actor.TenantId, id, ct) is { } s ? Ok(s) : NotFound(new { error = $"No supersession for statement {id}" });
+
     [HttpGet("items")]
     public async Task<ActionResult<IReadOnlyList<ReconciliationItem>>> Items(
         [FromQuery] ReconciliationStatus? status, [FromQuery] string? statementId, [FromQuery] int limit = 100, CancellationToken ct = default) =>

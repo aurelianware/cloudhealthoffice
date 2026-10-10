@@ -30,6 +30,10 @@ public sealed class Bai2Builder
     {
         public string AsOfDate { get; init; } = "261009";
         public string Status { get; init; } = "1";
+
+        /// <summary>02 as-of-date modifier: 1/3 interim, 2/4 final.</summary>
+        public string Modifier { get; init; } = "2";
+
         public List<Account> Accounts { get; init; } = [];
     }
 
@@ -58,7 +62,7 @@ public sealed class Bai2Builder
         long fileTotal = 0;
         foreach (var g in Groups)
         {
-            var groupLines = new List<string> { $"02,{ReceiverId},{SenderId},{g.Status},{g.AsOfDate},2400,USD,2/" };
+            var groupLines = new List<string> { $"02,{ReceiverId},{SenderId},{g.Status},{g.AsOfDate},2400,USD,{g.Modifier}/" };
             long groupTotal = 0;
             foreach (var a in g.Accounts)
             {

@@ -7,6 +7,21 @@ namespace CloudHealthOffice.BankReconciliation.Bai2;
 /// </summary>
 public static class Bai2TypeCodes
 {
+    /// <summary>
+    /// The direction of <paramref name="typeCode"/>: the bank-specific lists
+    /// in <paramref name="options"/> first (so 9xx custom codes can be
+    /// credits or debits), then the standard ranges.
+    /// </summary>
+    public static Bai2Direction DirectionOf(string typeCode, Bai2ParseOptions? options)
+    {
+        if (options is not null)
+        {
+            if (options.CreditTypeCodes.Contains(typeCode)) return Bai2Direction.Credit;
+            if (options.DebitTypeCodes.Contains(typeCode)) return Bai2Direction.Debit;
+        }
+        return DirectionOf(typeCode);
+    }
+
     public static Bai2Direction DirectionOf(string typeCode) =>
         int.TryParse(typeCode, out var n)
             ? n switch
@@ -46,4 +61,11 @@ public static class Bai2TypeCodes
     /// Item debit (a returned debit). Always flagged for a person; never applied.
     /// </summary>
     public static readonly IReadOnlyList<string> DefaultAchReturns = ["257", "258", "266", "555", "564"];
+}
+
+/// <summary>Bank-specific type codes, consulted before the standard ranges.</summary>
+public sealed class Bai2ParseOptions
+{
+    public IReadOnlyCollection<string> CreditTypeCodes { get; init; } = [];
+    public IReadOnlyCollection<string> DebitTypeCodes { get; init; } = [];
 }

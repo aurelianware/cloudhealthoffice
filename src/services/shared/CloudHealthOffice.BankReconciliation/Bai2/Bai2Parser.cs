@@ -37,7 +37,10 @@ public static class Bai2Parser
         public int Line => First.Line;
     }
 
-    public static Bai2File Parse(string content)
+    public static Bai2File Parse(string content) => Parse(content, null);
+
+    /// <param name="options">Bank-specific type codes (e.g. 9xx custom codes) that are credits or debits.</param>
+    public static Bai2File Parse(string content, Bai2ParseOptions? options)
     {
         if (string.IsNullOrWhiteSpace(content))
             throw new Bai2FormatException(["The file is empty."]);
@@ -49,6 +52,9 @@ public static class Bai2Parser
 
         var file = Build(records, errors);
         if (errors.Count > 0 || file is null) throw new Bai2FormatException(errors.Count > 0 ? errors : ["The file is not BAI2."]);
+        if (options is not null)
+            foreach (var t in file.AllTransactions)
+                t.Direction = Bai2TypeCodes.DirectionOf(t.TypeCode, options);
         return file;
     }
 
@@ -63,11 +69,12 @@ public static class Bai2Parser
         }
         else
         {
-            // No line breaks: fixed-length physical records (01 field 7), else one record per '/'.
+            // No line breaks: fixed-length physical records (01 field 7), else
+            // one record per '/' that is followed by the next record's code.
             var length = FixedRecordLength(content);
             lines = length > 0
                 ? Enumerable.Range(0, (content.Length + length - 1) / length).Select(i => content.Substring(i * length, Math.Min(length, content.Length - i * length)))
-                : [content];
+                : SplitOnRecordDelimiter(content);
         }
 
         var result = new List<Physical>();
@@ -83,6 +90,25 @@ public static class Bai2Parser
             result.Add(new Physical(lineNumber, code.Trim(), body));
         }
         return result;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex RecordStart =
+        new(@"/(?=(01|02|03|16|88|49|98|99),)", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Splits a file with neither line breaks nor a record length at each '/'
+    /// that ends a record: one followed by a record code and a comma. A 16
+    /// text may contain '/', but not that sequence.
+    /// </summary>
+    private static IEnumerable<string> SplitOnRecordDelimiter(string content)
+    {
+        var start = 0;
+        foreach (System.Text.RegularExpressions.Match m in RecordStart.Matches(content))
+        {
+            yield return content[start..(m.Index + 1)];
+            start = m.Index + 1;
+        }
+        yield return content[start..];
     }
 
     private static int FixedRecordLength(string content)
@@ -346,14 +372,16 @@ public static class Bai2Parser
     {
         var pos = 0;
         var ended = false;
+        var exhausted = false;
 
         string Next()
         {
-            if (ended || pos > body.Length) return string.Empty;
+            if (ended || pos > body.Length) { exhausted = true; return string.Empty; }
             var start = pos;
             while (pos < body.Length && body[pos] != ',' && body[pos] != '/') pos++;
             var value = body[start..pos];
             if (pos < body.Length && body[pos] == '/') ended = true;
+            if (pos >= body.Length) exhausted = true;
             pos++;
             return value.Trim();
         }
@@ -375,7 +403,10 @@ public static class Bai2Parser
         }
         var bankRef = Next();
         var customerRef = Next();
-        reachedText = !ended;
+        // The text starts only after a comma that ends the customer reference
+        // inside this record; a record that ran out earlier continues its
+        // fields (not its text) in the next 88.
+        reachedText = !ended && !exhausted;
         var text = !ended && pos <= body.Length ? TrimTextEnd(body[Math.Min(pos, body.Length)..]) : null;
         return new TransactionFields(typeCode, amount, fundsType, availability.ToArray(), bankRef, customerRef, text);
     }

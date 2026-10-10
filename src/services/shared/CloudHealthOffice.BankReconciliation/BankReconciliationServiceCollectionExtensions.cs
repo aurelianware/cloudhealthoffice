@@ -51,6 +51,7 @@ public static class BankReconciliationServiceCollectionExtensions
         services.TryAddSingleton<IBankReconciliationEventSink, LoggingBankReconciliationEventSink>();
         services.TryAddScoped<BankStatementIngestion>();
         services.TryAddScoped<BankReconciliationRunner>();
+        services.TryAddScoped<BankStatementSupersessionService>();
         return services;
     }
 }

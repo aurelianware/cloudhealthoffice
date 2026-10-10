@@ -122,6 +122,11 @@ public sealed class BankReconciliationRunner
         else if (tx.GroupStatus is "2" or "3")
             decision = new MatchDecision("Other", ReconciliationStatus.Suspense,
                 $"The bank sent this line as a {(tx.GroupStatus == "2" ? "deletion" : "correction")} (02 group status {tx.GroupStatus}); a person must review it.");
+        else if (_options.InterimReports == InterimReportHandling.Skip && tx.AsOfDateModifier is "1" or "3")
+            decision = MatchDecision.Ignore($"Interim report (02 as-of-date modifier {tx.AsOfDateModifier}); only final reports are reconciled.");
+        else if (claim.DedupeKey is not null
+                 && await _store.FindDecidedByDedupeKeyAsync(tx.TenantId, _options.ServiceName, claim.DedupeKey, tx.Id, ct) is { } earlier)
+            decision = MatchDecision.Ignore($"The same bank transaction (account, type, bank reference, amount, date) was already reconciled as {earlier.Id}, from an earlier report.");
         else
             decision = await matcher.DecideAsync(tx, ct);
 
@@ -133,7 +138,7 @@ public sealed class BankReconciliationRunner
         claim.Candidates = [.. decision.Candidates ?? []];
         if (!await _store.TryUpdateItemAsync(claim, claim.Version, ct))
         {
-            _logger.LogWarning("Reconciliation item {ItemId} changed while it was being decided", id);
+            _logger.LogWarning("Reconciliation item {ItemId} changed while it was being decided", LogText.Clean(id));
             return null;
         }
 
@@ -148,7 +153,7 @@ public sealed class BankReconciliationRunner
 
         if (claim.IsOpen)
             _logger.LogWarning("Bank line {ItemId} ({Kind}, type {TypeCode}, {Amount} {Currency}) is waiting for review: {Status}",
-                claim.Id, claim.Kind, claim.TypeCode, claim.Amount, claim.Currency, claim.Status);
+                LogText.Clean(claim.Id), LogText.Clean(claim.Kind), LogText.Clean(claim.TypeCode), claim.Amount, LogText.Clean(claim.Currency), claim.Status);
 
         await PublishAsync(claim, BankReconciliationEvent.Decided, ct);
         return claim;
@@ -196,13 +201,13 @@ public sealed class BankReconciliationRunner
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "Bank reconciliation event for {ItemId} was not delivered; it is retried on the next run", item.Id);
+            _logger.LogError(ex, "Bank reconciliation event for {ItemId} was not delivered; it is retried on the next run", LogText.Clean(item.Id));
             return;
         }
         if (type != BankReconciliationEvent.Decided) return;
         item.EventPublishedAt = _clock.GetUtcNow().UtcDateTime;
         if (!await _store.TryUpdateItemAsync(item, item.Version, ct))
-            _logger.LogInformation("Reconciliation item {ItemId} changed before its event was marked delivered", item.Id);
+            _logger.LogInformation("Reconciliation item {ItemId} changed before its event was marked delivered", LogText.Clean(item.Id));
     }
 
     private ReconciliationItem NewItem(BankTransaction tx, string id, DateTime now) => new()
@@ -221,6 +226,9 @@ public sealed class BankReconciliationRunner
         MaskedAccount = tx.MaskedAccount,
         BankReference = tx.BankReference,
         CustomerReference = tx.CustomerReference,
+        DedupeKey = string.IsNullOrWhiteSpace(tx.BankReference)
+            ? null
+            : $"{tx.AccountSuffix}|{tx.TypeCode}|{tx.BankReference.Trim().ToUpperInvariant()}|{tx.AmountMinor}|{tx.AsOfDate:yyyyMMdd}",
         Status = ReconciliationStatus.Pending,
         Reason = "Deciding",
         CreatedAt = now,

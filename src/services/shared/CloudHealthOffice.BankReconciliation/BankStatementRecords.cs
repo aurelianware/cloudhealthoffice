@@ -32,8 +32,15 @@ public sealed class BankStatementFile
     /// <summary>Lower-case hex SHA-256 of the bytes received.</summary>
     public string Sha256 { get; set; } = string.Empty;
 
-    /// <summary>Set on accepted files only: <c>sender|receiver|yyyyMMdd|fileId</c>.</summary>
+    /// <summary>
+    /// Set on accepted files only, unique per tenant: <see cref="BankFileKeyBase"/>
+    /// for the first file with that bank id, <c>{base}#2</c>, <c>#3</c>... for
+    /// corrected files accepted after an approved supersession.
+    /// </summary>
     public string? BankFileKey { get; set; }
+
+    /// <summary>The bank's identity of the file: <c>sender|receiver|yyyyMMdd|fileId</c> (accepted files).</summary>
+    public string? BankFileKeyBase { get; set; }
 
     public string? FileName { get; set; }
     public long ByteSize { get; set; }
@@ -97,6 +104,9 @@ public sealed class BankTransaction
     /// <summary>02 as-of date (the bank's posting date for the transaction).</summary>
     public DateTime AsOfDate { get; set; }
 
+    /// <summary>02 as-of-date modifier: 1 interim previous-day, 2 final previous-day, 3 interim same-day, 4 final same-day.</summary>
+    public string? AsOfDateModifier { get; set; }
+
     public string Currency { get; set; } = "USD";
     public string MaskedAccount { get; set; } = string.Empty;
 
@@ -122,4 +132,43 @@ public sealed class BankTransaction
 
     /// <summary>16 text with its 88 continuations. May name payers: never logged.</summary>
     public string? Text { get; set; }
+}
+
+public enum SupersessionStatus
+{
+    /// <summary>One person asked; a second must approve.</summary>
+    Requested,
+
+    /// <summary>Approved by a second person: a corrected file with the same bank file id is accepted.</summary>
+    Approved,
+}
+
+/// <summary>
+/// An audited, two-person replacement of an accepted statement by a corrected
+/// file that reuses the bank's file id. Refused once any line of the
+/// statement was applied, matched or settled. On approval, the statement's
+/// open items are dismissed.
+/// </summary>
+[BsonIgnoreExtraElements]
+public sealed class BankStatementSupersession
+{
+    [BsonId]
+    public string Id { get; set; } = string.Empty;
+
+    public string TenantId { get; set; } = string.Empty;
+    public string StatementId { get; set; } = string.Empty;
+    public string BankFileKeyBase { get; set; } = string.Empty;
+    public SupersessionStatus Status { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string RequestedBy { get; set; } = string.Empty;
+    public DateTime RequestedAt { get; set; }
+    public string? ApprovedBy { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+
+    /// <summary>The corrected file accepted in its place, once received.</summary>
+    public string? ReplacedByStatementId { get; set; }
+
+    public static string IdFor(string tenantId, string statementId) => $"{tenantId}|{statementId}";
+
+    public BankStatementSupersession Copy() => (BankStatementSupersession)MemberwiseClone();
 }

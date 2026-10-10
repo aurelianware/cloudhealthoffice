@@ -26,6 +26,32 @@ public sealed class BankReconciliationOptions
 
     /// <summary>How long a Pending item stays claimed before another run may decide it again.</summary>
     public int PendingLeaseMinutes { get; set; } = 10;
+
+    /// <summary>
+    /// Bank-specific credit type codes (e.g. 9xx custom codes), consulted
+    /// before the standard ranges (100–399 credit, 400–699 debit).
+    /// </summary>
+    public List<string> CreditTypeCodes { get; set; } = [];
+
+    /// <summary>Bank-specific debit type codes, consulted before the standard ranges.</summary>
+    public List<string> DebitTypeCodes { get; set; } = [];
+
+    /// <summary>
+    /// Interim reports (02 as-of-date modifier 1 or 3). Reconcile (default):
+    /// their lines are decided, and the final report's copy of a line (same
+    /// account, type, bank reference, amount and date) is then recorded as
+    /// Ignored instead of being decided again. Skip: interim lines are Ignored
+    /// and only final reports are reconciled.
+    /// </summary>
+    public InterimReportHandling InterimReports { get; set; } = InterimReportHandling.Reconcile;
+
+    internal Bai2ParseOptions ParseOptions() => new() { CreditTypeCodes = CreditTypeCodes, DebitTypeCodes = DebitTypeCodes };
+}
+
+public enum InterimReportHandling
+{
+    Reconcile,
+    Skip,
 }
 
 public enum BankStatementIngestStatus
@@ -53,6 +79,9 @@ public sealed class BankStatementIngestResult
 
     /// <summary>True when the file's transactions can be reconciled (accepted now or earlier).</summary>
     public bool IsAccepted => Statement.Status == BankStatementStatus.Accepted;
+
+    /// <summary>The file was replaced by a corrected one (approved supersession): nothing in it is reconciled any more.</summary>
+    public bool IsSuperseded { get; init; }
 }
 
 /// <summary>
@@ -112,7 +141,7 @@ public sealed class BankStatementIngestion
         Bai2File? parsed = null;
         try
         {
-            parsed = Bai2Parser.Parse(content);
+            parsed = Bai2Parser.Parse(content, _options.ParseOptions());
         }
         catch (Bai2FormatException ex)
         {
@@ -124,17 +153,30 @@ public sealed class BankStatementIngestion
         if (parsed is not null)
         {
             Describe(record, parsed);
-            var conflicting = await _store.FindAcceptedByBankFileKeyAsync(tenantId, parsed.BankFileKey, ct);
-            if (conflicting is not null)
+            var earlier = await _store.ListAcceptedByBankFileKeyAsync(tenantId, parsed.BankFileKey, ct);
+            var latest = earlier.LastOrDefault();
+            var supersession = latest is null ? null : await _store.GetSupersessionAsync(tenantId, latest.Id, ct);
+            if (latest is not null && supersession?.Status != SupersessionStatus.Approved)
             {
+                // Kept for audit under its own id, not the file's hash id: once a
+                // supersession is approved, the same corrected bytes can be sent again.
+                record.Id = $"{id}-conflict-{record.ReceivedAt.Ticks}";
+                record.ProtectedContent = _protector.Protect(content, new FieldProtectionContext(tenantId, record.Id, ContentField)) ?? string.Empty;
                 record.Status = BankStatementStatus.Rejected;
-                record.Errors = [$"The bank file id {Sanitize(parsed.FileId)} (sender {Sanitize(parsed.SenderId)}, created {parsed.CreationDate:yyyy-MM-dd}) was already used by a different file ({conflicting.Id}); a corrected file must carry a new file id."];
+                record.Errors = [$"The bank file id {Sanitize(parsed.FileId)} (sender {Sanitize(parsed.SenderId)}, created {parsed.CreationDate:yyyy-MM-dd}) was already used by a different file ({latest.Id}). Ask the bank for a new file id, or have two people supersede {latest.Id} (POST bank-statements/{latest.Id}/supersede, then /approve) before sending the corrected file."];
             }
             else
             {
                 record.Status = BankStatementStatus.Accepted;
-                record.BankFileKey = parsed.BankFileKey;
+                record.BankFileKeyBase = parsed.BankFileKey;
+                // The first file with a bank id keeps it; a corrected one after an approved supersession is #2, #3...
+                record.BankFileKey = earlier.Count == 0 ? parsed.BankFileKey : $"{parsed.BankFileKey}#{earlier.Count + 1}";
                 transactions = ToTransactions(tenantId, id, parsed);
+                if (supersession is not null)
+                {
+                    supersession.ReplacedByStatementId = id;
+                    await _store.TryUpdateSupersessionAsync(supersession, SupersessionStatus.Approved, ct);
+                }
             }
         }
 
@@ -145,6 +187,7 @@ public sealed class BankStatementIngestion
                 return await DuplicateAsync(raced, ct);
             record.Status = BankStatementStatus.Rejected;
             record.BankFileKey = null;
+            record.BankFileKeyBase = null;
             record.Errors = ["A different file with the same bank file id was received at the same time."];
             transactions = [];
             if (!await _store.TryInsertFileAsync(record, ct) && await _store.GetFileAsync(tenantId, id, ct) is { } again)
@@ -156,7 +199,7 @@ public sealed class BankStatementIngestion
 
         _logger.Log(record.Status == BankStatementStatus.Accepted ? LogLevel.Information : LogLevel.Warning,
             "BAI2 file {StatementId} for tenant {TenantId}: {Status}, {Groups} group(s), {Accounts} account(s), {Transactions} transaction(s), {ErrorCount} error(s)",
-            id, Sanitize(tenantId), record.Status, record.GroupCount, record.AccountCount, record.TransactionCount, record.Errors.Count);
+            Sanitize(id), Sanitize(tenantId), record.Status, record.GroupCount, record.AccountCount, record.TransactionCount, record.Errors.Count);
 
         return new BankStatementIngestResult
         {
@@ -166,11 +209,19 @@ public sealed class BankStatementIngestion
         };
     }
 
-    private async Task<BankStatementIngestResult> DuplicateAsync(BankStatementFile existing, CancellationToken ct) => new()
+    private async Task<BankStatementIngestResult> DuplicateAsync(BankStatementFile existing, CancellationToken ct)
+    {
+        var superseded = existing.Status == BankStatementStatus.Accepted
+                         && (await _store.GetSupersessionAsync(existing.TenantId, existing.Id, ct))?.Status == SupersessionStatus.Approved;
+        return await DuplicateResultAsync(existing, superseded, ct);
+    }
+
+    private async Task<BankStatementIngestResult> DuplicateResultAsync(BankStatementFile existing, bool superseded, CancellationToken ct) => new()
     {
         Status = BankStatementIngestStatus.Duplicate,
         Statement = WithoutContent(existing),
-        Transactions = existing.Status == BankStatementStatus.Accepted
+        IsSuperseded = superseded,
+        Transactions = existing.Status == BankStatementStatus.Accepted && !superseded
             ? await _store.GetTransactionsAsync(existing.TenantId, existing.Id, ct)
             : [],
     };
@@ -208,6 +259,7 @@ public sealed class BankStatementIngestion
                         LineNumber = t.LineNumber,
                         GroupStatus = group.GroupStatus,
                         AsOfDate = group.AsOfDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                        AsOfDateModifier = group.AsOfDateModifier,
                         Currency = account.Currency,
                         MaskedAccount = account.MaskedAccountNumber,
                         AccountSuffix = suffix,
@@ -229,6 +281,16 @@ public sealed class BankStatementIngestion
 
     private static BankStatementFile WithoutContent(BankStatementFile f) => f.WithoutContent();
 
-    internal static string Sanitize(string? value) =>
+    internal static string Sanitize(string? value) => LogText.Clean(value);
+}
+
+/// <summary>
+/// Values from a bank file or a request, made safe for a log line: control
+/// characters (CR, LF, ...) removed, length capped. Same rule as the services'
+/// SanitizeForLog.
+/// </summary>
+public static class LogText
+{
+    public static string Clean(string? value) =>
         value is null ? string.Empty : new string(value.Where(c => !char.IsControl(c)).Take(128).ToArray());
 }

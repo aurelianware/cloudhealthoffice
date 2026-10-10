@@ -56,6 +56,14 @@ public sealed class ReconciliationItem
     public string? BankReference { get; set; }
     public string? CustomerReference { get; set; }
 
+    /// <summary>
+    /// <c>{account suffix}|{type}|{bank reference}|{amount}|{as-of date}</c>
+    /// when the line has a bank reference: the same bank transaction reported
+    /// again (an intraday report, then the final one) has the same key and is
+    /// not decided twice.
+    /// </summary>
+    public string? DedupeKey { get; set; }
+
     /// <summary>What kind of line this is to the service: PremiumCash, LockboxDeposit, NachaSettlement, AchReturn, Other.</summary>
     public string Kind { get; set; } = string.Empty;
 

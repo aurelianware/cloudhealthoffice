@@ -50,6 +50,7 @@ public sealed class PremiumBankStatementsController : ControllerBase
     private readonly IRemittanceBatchRepository _batches;
     private readonly ICurrentActor _actor;
     private readonly BankReconciliationOptions _options;
+    private readonly BankStatementSupersessionService _supersessions;
 
     public PremiumBankStatementsController(
         BankStatementIngestion ingestion,
@@ -59,8 +60,10 @@ public sealed class PremiumBankStatementsController : ControllerBase
         IPremiumInvoiceRepository invoices,
         IRemittanceBatchRepository batches,
         ICurrentActor actor,
-        IOptions<BankReconciliationOptions> options)
+        IOptions<BankReconciliationOptions> options,
+        BankStatementSupersessionService supersessions)
     {
+        _supersessions = supersessions;
         _ingestion = ingestion;
         _runner = runner;
         _store = store;
@@ -90,6 +93,7 @@ public sealed class PremiumBankStatementsController : ControllerBase
         if (!ingest.IsAccepted)
             return BadRequest(BankStatementUploadResult.From(ingest, null));
 
+        // A superseded statement carries no transactions: nothing is reconciled from it again.
         var summary = await _runner.RunAsync(ingest.Transactions, _matcher, ct);
         return Ok(BankStatementUploadResult.From(ingest, summary));
     }
@@ -103,6 +107,45 @@ public sealed class PremiumBankStatementsController : ControllerBase
         await _store.GetFileAsync(_actor.TenantId, id, ct) is { } f ? Ok(f.WithoutContent()) : NotFound(new { error = $"Bank statement {id} not found" });
 
     /// <summary>Reconciliation decisions; <c>status=Suspense</c> (and <c>Return</c>) is the work queue.</summary>
+    public sealed class SupersedeRequest
+    {
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Step 1 of replacing this statement with a corrected file that reuses the
+    /// bank's file id: ask, with a reason. Refused once any line was applied,
+    /// matched or settled.
+    /// </summary>
+    [HttpPost("{id}/supersede")]
+    [RequirePermission("finance:write")]
+    public async Task<ActionResult<BankStatementSupersession>> RequestSupersession(string id, [FromBody] SupersedeRequest request, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _supersessions.RequestAsync(_actor.TenantId, id, request.Reason, _actor.UserId, ct));
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    /// <summary>Step 2: a second person approves; the corrected file is then accepted and this statement's open lines are dismissed.</summary>
+    [HttpPost("{id}/supersede/approve")]
+    [RequirePermission("finance:write")]
+    public async Task<ActionResult<BankStatementSupersession>> ApproveSupersession(string id, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _supersessions.ApproveAsync(_actor.TenantId, id, _actor.UserId, ct));
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpGet("{id}/supersession")]
+    public async Task<ActionResult<BankStatementSupersession>> GetSupersession(string id, CancellationToken ct) =>
+        await _supersessions.GetAsync(_actor.TenantId, id, ct) is { } s ? Ok(s) : NotFound(new { error = $"No supersession for statement {id}" });
+
     [HttpGet("items")]
     public async Task<ActionResult<IReadOnlyList<ReconciliationItem>>> Items(
         [FromQuery] ReconciliationStatus? status, [FromQuery] string? statementId, [FromQuery] int limit = 100, CancellationToken ct = default) =>
@@ -128,6 +171,10 @@ public sealed class PremiumBankStatementsController : ControllerBase
                 {
                     if (item.Status == ReconciliationStatus.Return || item.Direction != CloudHealthOffice.BankReconciliation.Bai2.Bai2Direction.Credit)
                         return BadRequest(new { error = "Only a bank credit can be applied to an invoice." });
+                    // A lockbox deposit total is the day's checks: they are applied
+                    // from the lockbox file. Applying the total too would post them twice.
+                    if (item.Kind == "LockboxDeposit")
+                        return BadRequest(new { error = "A lockbox deposit is applied from its lockbox file, not to an invoice: load the lockbox file, then MarkMatched." });
                     var invoice = string.IsNullOrWhiteSpace(request.InvoiceId) ? null : await _invoices.GetByIdAsync(request.InvoiceId);
                     if (invoice is null) return BadRequest(new { error = "invoiceId must name an existing invoice." });
                     var tx = (await _store.GetTransactionsAsync(_actor.TenantId, item.StatementId, ct)).FirstOrDefault(t => t.Id == item.TransactionId)

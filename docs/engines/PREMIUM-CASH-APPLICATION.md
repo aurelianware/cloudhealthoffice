@@ -111,6 +111,9 @@ reports its completed payments as duplicates and posts nothing.
      - only voided or written-off invoices (`InvoiceClosed`);
      - several open invoices with the number (`AmbiguousReference`);
      - an invoice of another group than REF*38 or `group_number` names (`GroupMismatch`).
+     - an invoice that already has a payment of the same amount, within 7 days,
+       applied from a BAI2 bank statement line (`PossibleDuplicate`): the bank
+       may have reported this money first, under another reference.
    - Zero-amount items are skipped with a warning.
 3. Money left over after the items is queued as `UnallocatedRemainder`.
 

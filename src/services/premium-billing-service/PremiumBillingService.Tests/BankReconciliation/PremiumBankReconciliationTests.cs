@@ -12,6 +12,7 @@ using PremiumBillingService.BankReconciliation;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
 using PremiumBillingService.Services;
+using Microsoft.AspNetCore.Mvc;
 using static CloudHealthOffice.BankReconciliation.Testing.Bai2Builder;
 
 namespace PremiumBillingService.Tests.BankReconciliation;
@@ -35,6 +36,8 @@ public sealed class PremiumBankReconciliationTests : IAsyncLifetime
     private readonly InMemoryBankReconciliationStore _store = new();
     private BankStatementIngestion _ingestion = null!;
     private BankReconciliationRunner _runner = null!;
+    private readonly Mock<ICurrentActor> _actor = new();
+    private BankReconciliationOptions _reconOptions = null!;
 
     public PremiumBankReconciliationTests(MongoRunnerFixture mongo) => _mongo = mongo;
 
@@ -48,7 +51,7 @@ public sealed class PremiumBankReconciliationTests : IAsyncLifetime
         _exceptions = new RemittanceExceptionRepositoryMongo(_db, http);
         var accounts = new SponsorAccountRepositoryMongo(_db, http);
 
-        var actor = new Mock<ICurrentActor>();
+        var actor = _actor;
         actor.SetupGet(a => a.UserId).Returns("finance-user-1");
         actor.SetupGet(a => a.TenantId).Returns(Tenant);
         actor.SetupGet(a => a.IsAuthenticated).Returns(true);
@@ -56,7 +59,8 @@ public sealed class PremiumBankReconciliationTests : IAsyncLifetime
         _matcher = new PremiumBankTransactionMatcher(_cash, _batches, _invoices,
             Options.Create(new PremiumBankReconciliationOptions()), NullLogger<PremiumBankTransactionMatcher>.Instance);
 
-        var options = Options.Create(new BankReconciliationOptions { ServiceName = "premium-billing-service" });
+        _reconOptions = new BankReconciliationOptions { ServiceName = "premium-billing-service" };
+        var options = Options.Create(_reconOptions);
         _ingestion = new BankStatementIngestion(_store, new DataProtectionFieldProtector(new EphemeralDataProtectionProvider(), "t"),
             options, NullLogger<BankStatementIngestion>.Instance);
         _runner = new BankReconciliationRunner(_store, new LoggingBankReconciliationEventSink(NullLogger<LoggingBankReconciliationEventSink>.Instance),
@@ -249,5 +253,124 @@ public sealed class PremiumBankReconciliationTests : IAsyncLifetime
         // Applying the same line again does not post twice.
         (await _matcher.ApplyAsync(tx, invoice)).Status.Should().Be(ReconciliationStatus.Applied);
         (await Reload(invoice))!.Payments.Should().ContainSingle();
+    }
+
+    // ── review follow-ups: the same money by 820 and bank ─────────────
+
+    private Task<RemittanceBatch> Apply820(string trace, decimal amount, DateTime date, string invoice) =>
+        _cash.ApplyAsync(new RemittanceAdvice
+        {
+            Source = RemittanceSource.X12820, TransactionHandlingCode = "C", CreditDebitFlag = "C", PaymentMethod = "ACH",
+            TraceNumber = trace, PayerId = "SPONSOR9", PaymentAmount = amount, PaymentDate = date,
+            Items = [new RemittanceItem { LineNumber = 1, ReferenceQualifier = "IK", Reference = invoice, Amount = amount }],
+        });
+
+    private static Bai2Builder Line(Tx tx, string asOf = "261009") => new()
+    {
+        Groups = [new Group { AsOfDate = asOf, Accounts = [new Account { Transactions = [tx] }] }],
+    };
+
+    [Fact]
+    public async Task Partial820First_BankLineWithAnotherReferenceFormat_IsAPossibleDuplicate_NotApplied()
+    {
+        var invoice = await Invoice("INV-2026-8001", 1000m);
+        await Apply820("TRN8001", 500m, AsOf, "INV-2026-8001");
+
+        // The bank reports the ACH trace as a 15-digit number: the recorded-payment key misses.
+        var item = (await Reconcile(Line(new Tx("165", 50000, CustomerReference: "000000000008001", Text: "PREMIUM INV-2026-8001")))).Items.Single();
+
+        item.Status.Should().Be(ReconciliationStatus.Suspense);
+        item.Reason.Should().StartWith("PossibleDuplicate");
+        var reloaded = (await Reload(invoice))!;
+        reloaded.Payments.Should().ContainSingle();
+        reloaded.BalanceDue.Should().Be(500m);
+    }
+
+    [Fact]
+    public async Task Partial820OnFriday_BankLineOnMonday_IsAPossibleDuplicate_NotApplied()
+    {
+        var invoice = await Invoice("INV-2026-8002", 1000m);
+        await Apply820("TRN8002", 500m, AsOf, "INV-2026-8002"); // Friday 2026-10-09
+
+        var item = (await Reconcile(Line(new Tx("165", 50000, CustomerReference: "TRN8002", Text: "INV-2026-8002"), asOf: "261012"))).Items.Single();
+
+        item.Status.Should().Be(ReconciliationStatus.Suspense);
+        item.Reason.Should().StartWith("PossibleDuplicate");
+        (await Reload(invoice))!.Payments.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task BankFirst_820WithAnotherReferenceFormat_IsHeldAsAPossibleDuplicate()
+    {
+        var invoice = await Invoice("INV-2026-8003", 500m);
+        (await Reconcile(Line(new Tx("165", 50000, CustomerReference: "000000000008003", Text: "INV-2026-8003")))).Items.Single()
+            .Status.Should().Be(ReconciliationStatus.Applied);
+
+        var late = await Apply820("TRN8003", 500m, AsOf, "INV-2026-8003");
+
+        late.AppliedAmount.Should().Be(0);
+        (await _exceptions.ListAsync()).Should().Contain(e => e.Reason == RemittanceExceptionReason.PossibleDuplicate && e.TraceNumber == "TRN8003");
+        var reloaded = (await Reload(invoice))!;
+        reloaded.Payments.Should().ContainSingle();
+        reloaded.Status.Should().Be(InvoiceStatus.Paid);
+    }
+
+    [Fact]
+    public async Task BankFirstOnMonday_820DatedFriday_IsHeldAsAPossibleDuplicate()
+    {
+        var invoice = await Invoice("INV-2026-8004", 500m);
+        (await Reconcile(Line(new Tx("165", 50000, CustomerReference: "BANKREF8004", Text: "INV-2026-8004"), asOf: "261012"))).Items.Single()
+            .Status.Should().Be(ReconciliationStatus.Applied);
+
+        var late = await Apply820("TRN8004", 500m, AsOf, "INV-2026-8004");
+
+        late.AppliedAmount.Should().Be(0);
+        (await Reload(invoice))!.Payments.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task LineAppliedBeforeACrash_IsRecordedAsApplied_WhenTheFileIsReconciledAgain()
+    {
+        var invoice = await Invoice("INV-2026-8005", 600m);
+        var file = Line(new Tx("165", 60000, CustomerReference: "ACH8005", Text: "INV-2026-8005"));
+        var ingest = await _ingestion.IngestAsync(Tenant, file.Bytes(), null, null);
+        // The run applied the line and stopped before recording its decision.
+        await _matcher.ApplyAsync(ingest.Transactions.Single(), invoice);
+
+        var item = (await _runner.RunAsync(ingest.Transactions, _matcher)).Items.Single();
+
+        item.Status.Should().Be(ReconciliationStatus.Applied);
+        (await Reload(invoice))!.Payments.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task OnlyInvoiceShapedTokens_AreLookedUp()
+    {
+        var invoice = await Invoice("ABC12345", 80m);
+
+        var item = (await Reconcile(Line(new Tx("165", 8000, CustomerReference: "ABC12345")))).Items.Single();
+
+        item.Status.Should().Be(ReconciliationStatus.Suspense);
+        (await Reload(invoice))!.Payments.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task LockboxDepositSuspense_CannotBeAppliedToAnInvoice()
+    {
+        var invoice = await Invoice("INV-2026-8006", 500m);
+        var item = (await Reconcile(Line(new Tx("115", 50000, CustomerReference: "7788")))).Items.Single();
+        item.Kind.Should().Be("LockboxDeposit");
+        item.Status.Should().Be(ReconciliationStatus.Suspense);
+
+        var controller = new PremiumBankStatementsController(_ingestion, _runner, _store, _matcher, _invoices, _batches, _actor.Object,
+            Options.Create(_reconOptions), new BankStatementSupersessionService(_store, Options.Create(_reconOptions), NullLogger<BankStatementSupersessionService>.Instance));
+
+        var result = await controller.Resolve(item.Id, new ResolvePremiumSuspenseRequest
+        {
+            Action = PremiumSuspenseAction.ApplyToInvoice, InvoiceId = invoice.Id, Note = "try",
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        (await Reload(invoice))!.Payments.Should().BeEmpty();
     }
 }

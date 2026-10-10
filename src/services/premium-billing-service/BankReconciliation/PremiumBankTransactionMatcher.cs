@@ -30,6 +30,22 @@ public sealed class PremiumBankReconciliationOptions
 
     /// <summary>Days either side of the bank date that a recorded payment's date may fall on.</summary>
     public int DateToleranceDays { get; set; } = 1;
+
+    /// <summary>
+    /// Days either side of the bank date within which a payment already on
+    /// the invoice for the same amount (from an 820 or lockbox) makes an exact
+    /// match a possible duplicate (suspense) instead of being applied. Default
+    /// 7 calendar days, about 5 banking days, so a weekend or a reference the
+    /// bank formats differently does not post the same money twice.
+    /// </summary>
+    public int PossibleDuplicateWindowDays { get; set; } = CashApplicationService.BankDuplicateWindowDays;
+
+    /// <summary>
+    /// What an invoice number looks like. Only reference tokens matching it in
+    /// full are looked up as invoice numbers (case-insensitive). Default:
+    /// <c>INV-</c> followed by letters, digits and hyphens (INV-{group}-{yyyy-MM}).
+    /// </summary>
+    public string InvoiceNumberPattern { get; set; } = "^INV-[A-Z0-9][A-Z0-9-]{2,60}$";
 }
 
 /// <summary>
@@ -88,6 +104,12 @@ public sealed class PremiumBankTransactionMatcher : IBankTransactionMatcher
         if (_options.LockboxDepositTypeCodes.Contains(tx.TypeCode))
             return await LockboxDepositAsync(tx, tokens);
 
+        // An earlier run may have applied this line and stopped before recording
+        // the decision: its batch id is derived from the line, so look it up first.
+        var batchId = RemittanceBatch.IdFor(tx.TenantId, RemittanceSource.BankStatement, BankPayerId, TraceFor(tx));
+        if (await _batches.GetByIdAsync(batchId) is { } alreadyPosted)
+            return Recorded(alreadyPosted);
+
         // 1. Money already recorded from an 820 or lockbox file.
         var recorded = await RecordedRemittancesAsync(tx, tokens);
         if (recorded.Count == 1)
@@ -114,7 +136,35 @@ public sealed class PremiumBankTransactionMatcher : IBankTransactionMatcher
         if (!_options.AutoApplyExactInvoiceMatch)
             return Suspense($"Exact match to invoice {invoice.InvoiceNumber}; automatic application is off.", candidates);
 
+        // The 820 or lockbox payment for this money may already be on the invoice
+        // under a reference or date the bank reports differently: then the
+        // remaining balance equals the bank amount by coincidence of the split.
+        var window = TimeSpan.FromDays(_options.PossibleDuplicateWindowDays);
+        var sameMoney = invoice.Payments.FirstOrDefault(p =>
+            p.Amount == tx.Amount && !CashApplicationService.IsBankStatementPayment(p) && (p.PaymentDate - tx.AsOfDate).Duration() <= window);
+        if (sameMoney is not null)
+            return new MatchDecision("PremiumCash", ReconciliationStatus.Suspense,
+                $"PossibleDuplicate: invoice {invoice.InvoiceNumber} already has a {sameMoney.Amount:0.00} payment dated {sameMoney.PaymentDate:yyyy-MM-dd} " +
+                $"(reference {sameMoney.ReferenceNumber}) within {_options.PossibleDuplicateWindowDays} days of this bank line; it may be the same money. Not applied.",
+                Candidates: [$"PremiumInvoice:{invoice.Id}:{invoice.InvoiceNumber}:{invoice.BalanceDue:0.00}", $"InvoicePayment:{sameMoney.PaymentId}:{sameMoney.ReferenceNumber}"]);
+
         return await ApplyAsync(tx, invoice);
+    }
+
+    internal static string TraceFor(BankTransaction tx) => $"{CashApplicationService.BankStatementTracePrefix}{tx.Id}";
+
+    private MatchDecision Recorded(RemittanceBatch batch)
+    {
+        var application = batch.Applications.FirstOrDefault();
+        if (application?.Outcome is CashApplicationOutcome.ExactMatch or CashApplicationOutcome.PartialPayment or CashApplicationOutcome.Overpayment)
+            return new MatchDecision("PremiumCash", ReconciliationStatus.Applied,
+                $"Applied to invoice {application.InvoiceNumber} ({application.Outcome}).", "RemittanceBatch", [batch.Id]);
+
+        // Cash application held it (e.g. a possible duplicate of an 820): it is in that exceptions queue now.
+        _logger.LogWarning("Bank line batch {BatchId} was recorded but cash application queued it as an exception", LogText.Clean(batch.Id));
+        return new MatchDecision("PremiumCash", ReconciliationStatus.Matched,
+            $"Recorded through cash application, which put it in the remittance exceptions queue ({string.Join(", ", batch.Exceptions.Select(e => e.Id))}).",
+            "RemittanceBatch", [batch.Id]);
     }
 
     /// <summary>Applies the bank line to <paramref name="invoice"/> through cash application (also used to resolve a suspense item).</summary>
@@ -129,20 +179,12 @@ public sealed class PremiumBankTransactionMatcher : IBankTransactionMatcher
         catch (DuplicateRemittanceException ex)
         {
             // An earlier run applied it and stopped before recording the decision.
-            return new MatchDecision("PremiumCash", ReconciliationStatus.Applied,
-                $"Applied to invoice {invoice.InvoiceNumber} (recorded earlier).", "RemittanceBatch", [ex.BatchId]);
+            return await _batches.GetByIdAsync(ex.BatchId) is { } earlier
+                ? Recorded(earlier)
+                : new MatchDecision("PremiumCash", ReconciliationStatus.Applied,
+                    $"Applied to invoice {invoice.InvoiceNumber} (recorded earlier).", "RemittanceBatch", [ex.BatchId]);
         }
-
-        var application = batch.Applications.FirstOrDefault();
-        if (application?.Outcome is CashApplicationOutcome.ExactMatch or CashApplicationOutcome.PartialPayment or CashApplicationOutcome.Overpayment)
-            return new MatchDecision("PremiumCash", ReconciliationStatus.Applied,
-                $"Applied to invoice {invoice.InvoiceNumber} ({application.Outcome}).", "RemittanceBatch", [batch.Id]);
-
-        // Cash application held it (e.g. a possible duplicate of an 820): it is in that exceptions queue now.
-        _logger.LogWarning("Bank line {TransactionId} was recorded but cash application queued it as an exception (batch {BatchId})", tx.Id, batch.Id);
-        return new MatchDecision("PremiumCash", ReconciliationStatus.Matched,
-            $"Recorded through cash application, which put it in the remittance exceptions queue ({string.Join(", ", batch.Exceptions.Select(e => e.Id))}).",
-            "RemittanceBatch", [batch.Id]);
+        return Recorded(batch);
     }
 
     internal static RemittanceAdvice ToAdvice(BankTransaction tx, string invoiceNumber, decimal amount) => new()
@@ -150,7 +192,7 @@ public sealed class PremiumBankTransactionMatcher : IBankTransactionMatcher
         Source = RemittanceSource.BankStatement,
         SourceFileName = $"bai2:{tx.StatementId}",
         // The batch id derives from this: one bank line is one payment, posted once.
-        TraceNumber = $"BAI-{tx.Id}",
+        TraceNumber = TraceFor(tx),
         PayerId = BankPayerId,
         PaymentMethod = tx.TypeCode switch
         {
@@ -223,8 +265,12 @@ public sealed class PremiumBankTransactionMatcher : IBankTransactionMatcher
 
     private async Task<List<PremiumInvoice>> OpenInvoicesNamedAsync(IReadOnlyList<string> tokens)
     {
+        var pattern = new System.Text.RegularExpressions.Regex(_options.InvoiceNumberPattern,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+            TimeSpan.FromMilliseconds(100));
         var found = new Dictionary<string, PremiumInvoice>();
-        foreach (var token in tokens)
+        // Only tokens shaped like an invoice number, matched in full, are looked up.
+        foreach (var token in tokens.Where(t => pattern.IsMatch(t)))
         foreach (var invoice in await _invoices.GetByInvoiceNumberAsync(token))
         {
             if (invoice.BalanceDue > 0 && invoice.Status is not (InvoiceStatus.Paid or InvoiceStatus.Voided or InvoiceStatus.WriteOff))

@@ -31,9 +31,14 @@ internal sealed class CountingMatcher : IBankTransactionMatcher
 {
     public int Calls { get; private set; }
 
+    /// <summary>When set, every line gets this status.</summary>
+    public ReconciliationStatus? Default { get; init; }
+
     public Task<MatchDecision> DecideAsync(BankTransaction tx, CancellationToken ct = default)
     {
         Calls++;
+        if (Default is { } status)
+            return Task.FromResult(new MatchDecision("PremiumCash", status, "fixed"));
         return Task.FromResult(tx.TypeCode switch
         {
             "165" => new MatchDecision("PremiumCash", ReconciliationStatus.Matched, "matched", "Thing", ["thing-1"]),

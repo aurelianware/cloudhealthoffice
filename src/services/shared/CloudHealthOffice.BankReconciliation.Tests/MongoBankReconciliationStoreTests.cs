@@ -23,7 +23,7 @@ public sealed class MongoBankReconciliationStoreTests : IAsyncLifetime
 
     private static BankStatementFile File(string tenant, string sha, string? key, BankStatementStatus status = BankStatementStatus.Accepted) => new()
     {
-        Id = BankStatementFile.IdFor(tenant, sha), TenantId = tenant, Sha256 = sha, BankFileKey = key, Status = status,
+        Id = BankStatementFile.IdFor(tenant, sha), TenantId = tenant, Sha256 = sha, BankFileKey = key, BankFileKeyBase = key, Status = status,
         ProtectedContent = "enc:v2:x", ReceivedAt = DateTime.UtcNow,
     };
 
@@ -39,7 +39,7 @@ public sealed class MongoBankReconciliationStoreTests : IAsyncLifetime
         (await _store.TryInsertFileAsync(File("t1", "cc", null, BankStatementStatus.Rejected))).Should().BeTrue();
         (await _store.TryInsertFileAsync(File("t1", "dd", null, BankStatementStatus.Rejected))).Should().BeTrue();
 
-        (await _store.FindAcceptedByBankFileKeyAsync("t1", "B|R|20261010|1"))!.Sha256.Should().Be("aa");
+        (await _store.ListAcceptedByBankFileKeyAsync("t1", "B|R|20261010|1")).Single().Sha256.Should().Be("aa");
         (await _store.GetFileAsync("t2", BankStatementFile.IdFor("t1", "aa"))).Should().BeNull();
         (await _store.ListFilesAsync("t1", 10)).Should().HaveCount(3).And.OnlyContain(f => f.ProtectedContent == string.Empty);
     }

@@ -83,7 +83,8 @@ public sealed class LoggingBankReconciliationEventSink : IBankReconciliationEven
     {
         _logger.LogInformation(
             "Bank reconciliation {Type}: {Service} item {ItemId} {Kind} {Status} type {TypeCode} {Direction} {Amount} {Currency}",
-            evt.Type, evt.Service, evt.ItemId, evt.Kind, evt.Status, evt.TypeCode, evt.Direction, evt.Amount, evt.Currency);
+            LogText.Clean(evt.Type), LogText.Clean(evt.Service), LogText.Clean(evt.ItemId), LogText.Clean(evt.Kind), evt.Status,
+            LogText.Clean(evt.TypeCode), evt.Direction, evt.Amount, LogText.Clean(evt.Currency));
         return Task.CompletedTask;
     }
 }
