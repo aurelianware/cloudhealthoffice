@@ -189,6 +189,11 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         var run = await LoadRunAsync(paymentRunId);
         var user = _separation.EnsureMayTransmit(run.PaymentRunNumber, run.CreatedBy, run.ExecutedBy);
         var pinned = RequireTransmittableFile(run);
+        // A re-dated file is approved (and retried) by someone other than its re-dater.
+        if (pinned.Revision > 0 && string.Equals(pinned.FirstGeneratedBy, user, StringComparison.OrdinalIgnoreCase))
+            throw new SeparationOfDutiesException(
+                $"Separation of duties: you re-dated NACHA file {pinned.FileReference}, so you cannot approve or send it. " +
+                "Another user with payments:approve must.");
 
         var record = await _store.GetAsync(run.TenantId, pinned.FileReference, cancellationToken);
         if (record != null)
@@ -291,6 +296,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 RunCreatedBy = run.CreatedBy,
                 RunExecutedBy = run.ExecutedBy,
                 ApprovedPaymentIds = PaymentIdsOf(pinned),
+                RemittanceDateNotices = pinned.RemittanceDateNotices,
                 ApprovedBy = user,
                 ApprovedAt = Now,
                 Status = PaymentFileTransmissionStatus.Pending,
@@ -557,6 +563,43 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                         ? " until the bank's answer is recorded (it may already be at the bank)."
                         : record.Status == PaymentFileTransmissionStatus.Transmitted ? " (it is at the bank)." : "."));
             }
+            // A Failed file had an upload attempt (or the bank said it did not get it):
+            // before it is superseded, look in the drop (read-only) for its name. If it is
+            // there, re-dating would pay twice.
+            if (record.Status == PaymentFileTransmissionStatus.Failed)
+            {
+                string? present = null;
+                string probeDetail;
+                try
+                {
+                    var check = await _probe.CheckAsync(record.TenantId, record.FileName, record.ByteSize, cancellationToken);
+                    probeDetail = $"re-date probe: {record.FileName} {check.Presence} in {check.Destination}" +
+                                  (check.RemoteByteSize is { } size ? $" ({size} bytes)" : string.Empty);
+                    if (check.Presence != NachaRemoteFilePresence.Absent)
+                        present = probeDetail;
+                }
+                catch (NachaTransmissionException ex)
+                {
+                    probeDetail = "re-date probe: the bank's drop could not be checked: " + ex.Message;
+                    present = probeDetail;
+                }
+
+                var probeVersion = record.Version;
+                Append(record, PaymentFileTransmissionAction.Reconcile, user, record.ApprovedSha256, record.Status, probeDetail);
+                record.UpdatedAt = Now;
+                if (!await _store.TryReplaceAsync(record, probeVersion, CancellationToken.None))
+                    throw new PaymentFileTransmissionStateException($"NACHA file {record.FileReference} changed meanwhile. Check its status.");
+                if (present != null)
+                {
+                    _logger.LogWarning(RefusedEvent,
+                        "AUDIT NACHA file {FileReference} of payment run {RunNumber}: re-date by {User} refused ({Detail})",
+                        Clean(record.FileReference), Clean(run.PaymentRunNumber), Clean(user), Clean(present));
+                    throw new PaymentFileTransmissionStateException(
+                        $"NACHA file {record.FileReference} cannot be re-dated: {present}. It may be at the bank; confirm with the bank " +
+                        "before anything else (re-dating would send a second file).");
+                }
+            }
+
             var readVersion = record.Version;
             var previous = record.Status;
             record.Status = PaymentFileTransmissionStatus.Superseded;
@@ -574,7 +617,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         FfsEftFileOutcome outcome;
         try
         {
-            outcome = await _eftFiles.RepinAsync(run.Id, user, reason, cancellationToken);
+            outcome = await _eftFiles.RepinAsync(run.Id, user, reason, pinned.FileReference, pinned.Sha256, cancellationToken);
         }
         catch (RunConflictException ex)
         {

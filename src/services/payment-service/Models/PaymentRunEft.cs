@@ -85,6 +85,13 @@ public class PaymentRunEftFile
     public string? SupersededReason { get; set; }
     public string? SupersededByFileReference { get; set; }
 
+    /// <summary>
+    /// For a re-dated file: the run's 835s already issued with a BPR16 (payment date)
+    /// other than this file's effective entry date. They are not rewritten; the
+    /// providers must be told the funds settle on <see cref="EffectiveEntryDate"/>.
+    /// </summary>
+    public List<RemittanceDateNotice> RemittanceDateNotices { get; set; } = new();
+
     public DateTime FirstGeneratedAt { get; set; }
     public string? FirstGeneratedBy { get; set; }
     public DateTime? LastVerifiedAt { get; set; }
@@ -98,6 +105,22 @@ public class PaymentRunEftFile
 
     /// <summary>Payments not in the file because offsets brought them to zero (nothing to credit).</summary>
     public List<string> ZeroAmountPaymentIds { get; set; } = new();
+}
+
+/// <summary>An issued 835 whose BPR16 differs from its EFT's effective entry date (after a re-date).</summary>
+public class RemittanceDateNotice
+{
+    public string EraEnvelopeId { get; set; } = string.Empty;
+    public string TradingPartnerId { get; set; } = string.Empty;
+
+    /// <summary>ISA13 of the 835.</summary>
+    public string ControlNumber { get; set; } = string.Empty;
+
+    /// <summary>The date the 835 carries in BPR16.</summary>
+    public DateTime Bpr16Date { get; set; }
+
+    /// <summary>The date the funds actually settle (the re-dated file's effective entry date).</summary>
+    public DateTime EffectiveEntryDate { get; set; }
 }
 
 /// <summary>One NACHA credit (entry detail + addenda), without full numbers.</summary>

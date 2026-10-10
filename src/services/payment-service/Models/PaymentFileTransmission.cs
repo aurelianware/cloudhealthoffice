@@ -125,6 +125,12 @@ public sealed class PaymentFileTransmission
     /// </summary>
     [JsonPropertyName("approvedPaymentIds")] public List<string> ApprovedPaymentIds { get; set; } = new();
 
+    /// <summary>
+    /// For a re-dated file: the run's issued 835s whose BPR16 is not this file's
+    /// effective entry date (their providers must be told). Copied from the pinned file.
+    /// </summary>
+    [JsonPropertyName("remittanceDateNotices")] public List<RemittanceDateNotice> RemittanceDateNotices { get; set; } = new();
+
     /// <summary>The user who approved sending this file to the bank (token subject).</summary>
     [JsonPropertyName("approvedBy")] public string ApprovedBy { get; set; } = string.Empty;
     [JsonPropertyName("approvedAt")] public DateTime ApprovedAt { get; set; }

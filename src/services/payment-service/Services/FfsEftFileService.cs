@@ -41,7 +41,15 @@ public interface IFfsEftFileService
     /// <see cref="IPaymentFileTransmissionService.RedateAsync"/>, which checks the
     /// old file may be superseded.
     /// </summary>
-    Task<FfsEftFileOutcome> RepinAsync(string paymentRunId, string actorUserId, string reason, CancellationToken cancellationToken = default);
+    /// <remarks>
+    /// Refused (<see cref="RunConflictException"/>) unless the pinned file is still
+    /// <paramref name="expectedFileReference"/> with <paramref name="expectedSha256"/>.
+    /// The run's 835s are not rewritten (their delivery is not tracked): each is listed
+    /// in the new file's <see cref="PaymentRunEftFile.RemittanceDateNotices"/> and a run
+    /// warning, carrying the old BPR16.
+    /// </remarks>
+    Task<FfsEftFileOutcome> RepinAsync(string paymentRunId, string actorUserId, string reason,
+        string expectedFileReference, string expectedSha256, CancellationToken cancellationToken = default);
 }
 
 public sealed class FfsEftFileOutcome
@@ -63,6 +71,7 @@ public sealed class FfsEftFileService : IFfsEftFileService
     private readonly IConfiguration _configuration;
     private readonly INachaFileIdModifierAllocator _modifiers;
     private readonly AchEffectiveDatePolicy _dates;
+    private readonly IEraEnvelopeRepository _envelopes;
     private readonly TimeProvider _time;
     private readonly ILogger<FfsEftFileService> _logger;
 
@@ -73,10 +82,12 @@ public sealed class FfsEftFileService : IFfsEftFileService
         IConfiguration configuration,
         INachaFileIdModifierAllocator modifiers,
         AchEffectiveDatePolicy effectiveDates,
+        IEraEnvelopeRepository envelopes,
         ILogger<FfsEftFileService> logger,
         TimeProvider? time = null)
     {
         _dates = effectiveDates;
+        _envelopes = envelopes;
         _runs = runs;
         _payments = payments;
         _accounts = accounts;
@@ -92,10 +103,9 @@ public sealed class FfsEftFileService : IFfsEftFileService
 
         // A pinned file is rebuilt from its own pinned header values (creation time,
         // effective date, modifier). A first file takes its creation time from the
-        // run's execution, chooses its effective date now (the first banking day on or
-        // after the later of an explicitly requested payment date and the earliest
-        // acceptable date: never a stale model default), and claims a free modifier
-        // for its creation day so no two same-day files collide at the bank.
+        // run's execution, its effective date from the run's payment date (fixed at
+        // execution, = the 835s' BPR16), and claims a free modifier for its creation
+        // day so no two same-day files collide at the bank.
         DateTime created, effective;
         string modifier;
         if (run.EftFile != null)
@@ -107,7 +117,11 @@ public sealed class FfsEftFileService : IFfsEftFileService
         else
         {
             created = Minute(run.ExecutionCompletedAt ?? run.ExecutionStartedAt ?? run.CreatedAt);
-            effective = _dates.Choose(run.PaymentDateRequested ? run.PaymentDate : null);
+            // The run's payment date, fixed at execution: the same date its 835s carry
+            // in BPR16. If it can no longer be sent by the time the file is pinned, the
+            // send is refused and the file is re-dated (audited, with a notice that the
+            // 835s carry the old date), never silently given another date here.
+            effective = run.PaymentDate.Date;
             modifier = plan.Entries.Count == 0 ? "A" : await AllocateAsync(run, created, effective, run.Id);
         }
         var header = BuildHeader(run, modifier, created, effective);
@@ -186,11 +200,19 @@ public sealed class FfsEftFileService : IFfsEftFileService
         return new FfsEftFileOutcome { Run = run, File = built, Reproduced = false };
     }
 
-    public async Task<FfsEftFileOutcome> RepinAsync(string paymentRunId, string actorUserId, string reason, CancellationToken cancellationToken = default)
+    public async Task<FfsEftFileOutcome> RepinAsync(string paymentRunId, string actorUserId, string reason,
+        string expectedFileReference, string expectedSha256, CancellationToken cancellationToken = default)
     {
         var (run, plan) = await LoadAndPlanAsync(paymentRunId, actorUserId, cancellationToken);
         var old = run.EftFile
             ?? throw new InvalidOperationException($"Payment run {run.PaymentRunNumber} has no EFT file to re-date.");
+        // Only the file the caller checked may be superseded: a concurrent re-date that
+        // already replaced it (and whose file may already be approved and sent) wins.
+        if (!string.Equals(old.FileReference, expectedFileReference, StringComparison.Ordinal)
+            || !string.Equals(old.Sha256, expectedSha256, StringComparison.Ordinal))
+            throw new RunConflictException(
+                $"Payment run {run.PaymentRunNumber}'s pinned file is now {old.FileReference}, not {expectedFileReference}: " +
+                "it was re-dated meanwhile. Nothing was changed.");
         if (plan.Entries.Count == 0)
             throw new InvalidOperationException($"Payment run {run.PaymentRunNumber} has no EFT credits any more; there is nothing to re-date.");
 
@@ -205,6 +227,27 @@ public sealed class FfsEftFileService : IFfsEftFileService
         var file = NewFile(plan, built, header, modifier, now, actorUserId,
             $"FFS-{run.PaymentRunNumber}-R{revision}", $"ACH-FFS-{run.PaymentRunNumber}-R{revision}.ach", revision);
 
+        // The run's 835s were built at execution with BPR16 = the run's payment date.
+        // payment-service does not track whether a trading partner has fetched an 835
+        // (GET /api/era-envelopes/{id}/edi), so they are treated as delivered and are
+        // never rewritten: each one is listed with its BPR16 and the new effective date,
+        // so the providers can be told the funds settle on another day.
+        foreach (var envelope in (await _envelopes.GetByPaymentRunIdAsync(run.Id)) ?? Enumerable.Empty<EraEnvelopeRecord>())
+        {
+            file.RemittanceDateNotices.Add(new RemittanceDateNotice
+            {
+                EraEnvelopeId = envelope.Id,
+                TradingPartnerId = envelope.TradingPartnerId,
+                ControlNumber = envelope.ControlNumber,
+                Bpr16Date = run.PaymentDate.Date,
+                EffectiveEntryDate = file.EffectiveEntryDate,
+            });
+        }
+        var notice = file.RemittanceDateNotices.Count == 0 ? null
+            : $"EFT file re-dated to {file.EffectiveEntryDate:yyyy-MM-dd}: {file.RemittanceDateNotices.Count} 835(s) already issued for this run " +
+              $"carry BPR16 {run.PaymentDate:yyyy-MM-dd} ({string.Join(", ", file.RemittanceDateNotices.Select(n => $"{n.TradingPartnerId} ISA13 {n.ControlNumber}"))}); " +
+              "tell the providers the funds settle on the new date.";
+
         old.SupersededAt = now;
         old.SupersededBy = actorUserId;
         old.SupersededReason = reason;
@@ -214,6 +257,13 @@ public sealed class FfsEftFileService : IFfsEftFileService
                 $"The EFT file of payment run {run.PaymentRunNumber} changed while it was being re-dated. Nothing was recorded.");
         run.EftFileHistory.Add(old);
         run.EftFile = file;
+        if (notice != null)
+        {
+            // Surfaced on the run (GET /api/paymentruns/{id}) as well as on the file.
+            await _runs.TrySaveEftFileAsync(run.Id, file, file.Sha256, Array.Empty<CheckFallbackPayment>(), new[] { notice });
+            run.Warnings.Add(notice);
+            _logger.LogWarning("AUDIT {Notice} (payment run {RunNumber})", notice, run.PaymentRunNumber);
+        }
 
         _logger.LogWarning(
             "AUDIT EFT file {Old} (effective {OldDate:yyyy-MM-dd}, sha256 {OldSha}) of payment run {RunNumber} re-dated by {User} as {New} " +

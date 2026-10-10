@@ -47,16 +47,19 @@ approve + transmit (user != run creator, != run executor)   POST /api/paymentrun
   (default America/New_York) on the Federal Reserve calendar (weekends and Fed
   holidays are not banking days).
   - **At run create:** `paymentDate` in the request is optional. A requested date
-    may not be in the past or more than a year ahead (400). Without one, the run's
-    payment date (the 835's) is the next banking day.
-  - **When the file is first pinned** (`POST .../eft-file`): its effective entry
-    date is the first banking day on or after the later of the requested payment
-    date (only if one was requested) and the earliest acceptable date (the next
-    banking day after today, or today with `AllowSameDayEffectiveDate`). A weekend
-    or holiday is rolled forward; a run executed days after it was created still
-    gets a future date. The date is part of the pinned bytes.
+    may not be in the past or more than a year ahead (400); a weekend or holiday is
+    rolled forward to the next banking day. Without one, the date is provisionally
+    the next banking day.
+  - **At execution**, before any payment or 835 is built, the run's payment date is
+    fixed: the requested date if still acceptable, otherwise the earliest acceptable
+    banking day (the next banking day after today, or today with
+    `AllowSameDayEffectiveDate`). The 835s carry it in **BPR16**.
+  - **When the file is first pinned** (`POST .../eft-file`), its effective entry
+    date is that same date, so **BPR16 = the NACHA effective entry date**. The date
+    is part of the pinned bytes.
   - **At send time** only a date that is past (or today, without same-day) is
-    refused. Such a file is re-dated (below), never edited.
+    refused. That happens when the file was generated, approved or retried too
+    late. Such a file is re-dated (below), never edited.
 - **Never stale money.** Before every attempt, first or retry (409 "Approval no
   longer valid", audited, nothing sent):
   - the pinned effective entry date must still be acceptable (above);
@@ -66,7 +69,21 @@ approve + transmit (user != run creator, != run executor)   POST /api/paymentrun
 - **Re-dating** (`POST .../eft-file/redate`, reason required). Only for a file whose
   date can no longer be sent, and only while its transmission record is absent,
   `Pending` or `Failed` (which includes a `NeedsReview` resolved "not received").
-  Never `Transmitting`, `Transmitted` or an unresolved `NeedsReview`. It works in
+  Never `Transmitting`, `Transmitted` or an unresolved `NeedsReview`.
+  - **Failed files:** before a `Failed` file is superseded, the bank's drop is
+    listed (read-only) for its name. The result is recorded on the record. If the
+    file is there, or the drop cannot be checked, the re-date is refused: confirm
+    with the bank first.
+  - **Concurrent re-dates:** a re-pin applies only to the exact file (reference and
+    SHA-256) the request checked. If another re-date already replaced it, the
+    request gets 409 and nothing changes.
+  - **The re-dater may not approve or send the new file.**
+  - **835 dates (BPR16):** the run's 835s are **not** rewritten. payment-service
+    does not track whether a trading partner has already fetched an 835, so they
+    are treated as delivered. Each one is listed in the new file's
+    `remittanceDateNotices` (envelope, partner, ISA13, BPR16, new effective date),
+    and the same list appears on the new file's transmission record. A run warning
+    is added too. Tell those providers the funds settle on the new date. It works in
   two steps, so the old file is unsendable before the new one exists:
   1. The old record becomes `Superseded`, linked to the new file reference. If the
      file was never approved, a `Superseded` record is created for it.
@@ -284,6 +301,9 @@ approval, which needs the flag on, does).
   an allocator like payment-service's: give each sending service its own **immediate
   origin** (or its own bank drop) with the bank, and keep to one file per service
   per day.
+- **835 delivery tracking.** With it, a re-date could regenerate the run's 835s with
+  the new BPR16 whenever no trading partner has fetched them yet. Without it, the
+  service only issues the notices described in section 1.
 - **GenerationCount** on a pinned file can miss an increment when two
   reproductions race (it is informational only).
 - **Cosmos repository tests.** The Mongo stores are tested against a real mongod

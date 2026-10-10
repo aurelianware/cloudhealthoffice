@@ -78,6 +78,7 @@ internal sealed class FfsRunHarness
             return rec;
         });
         _envelopes.GetClaimIdsWithEnvelopeAsync(default!, default).ReturnsForAnyArgs(Array.Empty<string>());
+        _envelopes.GetByPaymentRunIdAsync(Arg.Any<string>()).Returns(ci => Envelopes.Where(e => e.PaymentRunId == ci.Arg<string>()).ToList());
     }
 
     /// <summary>Routes a billing NPI to a trading partner.</summary>
@@ -107,7 +108,7 @@ internal sealed class FfsRunHarness
         Approver, Approver.SeparationOfDuties(), Reservations, Ledger, accounts ?? Accounts, Dates);
 
     public FfsEftFileService EftFiles(IProviderPayeeAccountSource? accounts = null)
-        => new(Runs, Payments, accounts ?? Accounts, Configuration, Modifiers, Dates, NullLogger<FfsEftFileService>.Instance, Clock);
+        => new(Runs, Payments, accounts ?? Accounts, Configuration, Modifiers, Dates, _envelopes, NullLogger<FfsEftFileService>.Instance, Clock);
 
     /// <summary>Creates and executes one ACH payment run paying <paramref name="claims"/>.</summary>
     public async Task<PaymentRun> ExecuteRunAsync(params ClaimDto[] claims)
@@ -145,6 +146,13 @@ internal sealed class FfsRunHarness
     /// </summary>
     public async Task<PaymentRun> CreateAndExecuteRunAsync(DateTime? paymentDate, params ClaimDto[] claims)
     {
+        var created = await Service().CreatePaymentRunAsync(new PaymentRunCriteria { GroupByProvider = true }, "maker-1", paymentDate);
+        return await ExecuteCreatedRunAsync(created.Id, claims);
+    }
+
+    /// <summary>Executes an existing run (as the approver) paying <paramref name="claims"/>.</summary>
+    public Task<PaymentRun> ExecuteCreatedRunAsync(string runId, params ClaimDto[] claims)
+    {
         Claims.NextResponse = req =>
             req.Method == HttpMethod.Get && req.RequestUri!.AbsolutePath.StartsWith("/api/claims/search")
                 ? new HttpResponseMessage(HttpStatusCode.OK)
@@ -152,9 +160,7 @@ internal sealed class FfsRunHarness
                     Content = JsonContent.Create(req.RequestUri.Query.Contains("status=5") ? claims.ToList() : new List<ClaimDto>()),
                 }
                 : new HttpResponseMessage(HttpStatusCode.OK);
-
-        var created = await Service().CreatePaymentRunAsync(new PaymentRunCriteria { GroupByProvider = true }, "maker-1", paymentDate);
-        return await Service().ExecutePaymentRunAsync(created.Id);
+        return Service().ExecutePaymentRunAsync(runId);
     }
 
     public static List<string[]> Segments(EraEnvelopeRecord envelope)

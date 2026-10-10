@@ -42,8 +42,8 @@ public class PaymentFileTransmissionTests
     }
 
     private PaymentFileTransmissionService Service(string user = "treasury-1", bool isService = false,
-        INachaTransmitter? transmitter = null, INachaRemoteFileProbe? probe = null)
-        => new(_h.Runs, _h.Payments, _h.Reservations, _h.EftFiles(), _store, transmitter ?? _bank, probe ?? _bank,
+        INachaTransmitter? transmitter = null, INachaRemoteFileProbe? probe = null, IFfsEftFileService? eftFiles = null)
+        => new(_h.Runs, _h.Payments, _h.Reservations, eftFiles ?? _h.EftFiles(), _store, transmitter ?? _bank, probe ?? _bank,
             new TestActor(user, FfsRunHarness.Tenant, isService).SeparationOfDuties(),
             Options.Create(_options), new AchEffectiveDatePolicy(Options.Create(_options), _clock), _log, _clock);
 
@@ -600,18 +600,187 @@ public class PaymentFileTransmissionTests
         Assert.Single(_bank.Sent);
     }
 
+    private string Bpr16(PaymentRun run)
+        => _h.Envelopes.Where(e => e.PaymentRunId == run.Id)
+            .Select(e => FfsRunHarness.Segments(e).Single(s => s[0] == "BPR")[16])
+            .Distinct().Single();
+
     [Fact]
-    public async Task A_run_executed_days_after_creation_gets_its_file_dated_at_pinning_not_at_creation()
+    public async Task Bpr16_equals_the_file_date_for_a_default_run()
+    {
+        At(2026, 5, 6); // Wednesday
+        var run = await RealRunAsync();
+
+        Assert.Equal("20260507", Bpr16(run));
+        Assert.Equal(run.EftFile!.EffectiveEntryDate.ToString("yyyyMMdd"), Bpr16(run));
+    }
+
+    [Fact]
+    public async Task Bpr16_equals_the_file_date_for_a_requested_weekend_date()
+    {
+        At(2026, 5, 4);
+        var created = await _h.Service().CreatePaymentRunAsync(new PaymentRunCriteria { GroupByProvider = true }, "maker-1",
+            new DateTime(2026, 5, 16)); // a Saturday: rolled at create
+        Assert.Equal(new DateTime(2026, 5, 18), created.PaymentDate.Date);
+
+        var run = await _h.ExecuteCreatedRunAsync(created.Id, FfsRunHarness.Claim("c1", Npi, 125m));
+        var pinned = (await _h.EftFiles().GenerateAsync(run.Id, "approver-2")).Run;
+
+        Assert.Equal(("20260518", "20260518"), (Bpr16(run), pinned.EftFile!.EffectiveEntryDate.ToString("yyyyMMdd")));
+    }
+
+    [Fact]
+    public async Task Bpr16_equals_the_file_date_when_the_run_is_executed_days_after_creation()
+    {
+        At(2026, 5, 4);
+        var created = await _h.Service().CreatePaymentRunAsync(new PaymentRunCriteria { GroupByProvider = true }, "maker-1");
+        Assert.Equal(new DateTime(2026, 5, 5), created.PaymentDate.Date);
+
+        At(2026, 5, 12); // executed a week later: the date is fixed at execution
+        var run = await _h.ExecuteCreatedRunAsync(created.Id, FfsRunHarness.Claim("c1", Npi, 125m));
+        var pinned = (await _h.EftFiles().GenerateAsync(run.Id, "approver-2")).Run;
+
+        Assert.Equal(new DateTime(2026, 5, 13), run.PaymentDate.Date);
+        Assert.Equal(("20260513", "20260513"), (Bpr16(run), pinned.EftFile!.EffectiveEntryDate.ToString("yyyyMMdd")));
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service().TransmitAsync(run.Id)).Status);
+    }
+
+    [Fact]
+    public async Task A_file_pinned_after_its_date_passed_is_refused_and_re_dating_records_the_835_date_notice()
     {
         At(2026, 5, 4);
         var run = await _h.CreateAndExecuteRunAsync(null, FfsRunHarness.Claim("c1", Npi, 125m));
-        Assert.Equal(new DateTime(2026, 5, 5), run.PaymentDate.Date);
-
-        At(2026, 5, 12); // the run's default date is long past when its file is generated and pinned
+        At(2026, 5, 12); // the file is generated (and pinned) only now, with the run's (835) date
         var pinned = (await _h.EftFiles().GenerateAsync(run.Id, "approver-2")).Run;
+        Assert.Equal(("20260505", "20260505"), (Bpr16(run), pinned.EftFile!.EffectiveEntryDate.ToString("yyyyMMdd")));
+        await Assert.ThrowsAsync<PaymentFileApprovalStaleException>(() => Service().TransmitAsync(run.Id));
 
-        Assert.Equal(new DateTime(2026, 5, 13), pinned.EftFile!.EffectiveEntryDate.Date);
-        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service().TransmitAsync(run.Id)).Status);
+        var redated = await Service("treasury-2").RedateAsync(run.Id, "pinned after its date");
+
+        // The 835s are not rewritten: each is listed with its BPR16 and the new date.
+        Assert.Equal(new DateTime(2026, 5, 13), redated.EffectiveEntryDate.Date);
+        var notice = Assert.Single(redated.RemittanceDateNotices);
+        Assert.Equal((new DateTime(2026, 5, 5), new DateTime(2026, 5, 13), "TP-A"), (notice.Bpr16Date.Date, notice.EffectiveEntryDate.Date, notice.TradingPartnerId));
+        Assert.Equal("20260505", Bpr16(run));
+        Assert.Contains((await _h.Runs.GetByIdAsync(run.Id))!.Warnings, w => w.Contains("carry BPR16 2026-05-05") && w.Contains("2026-05-13"));
+
+        // ...and surfaced on the new file's transmission record.
+        var sent = await Service().TransmitAsync(run.Id);
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, sent.Status);
+        Assert.Single(sent.RemittanceDateNotices);
+        Assert.Single((await Service().GetAsync(run.Id))!.RemittanceDateNotices);
+    }
+
+    [Fact]
+    public async Task The_re_dater_may_not_approve_the_new_file()
+    {
+        At(2026, 5, 4);
+        var run = await RealRunAsync();
+        At(2026, 5, 7);
+        await Service("treasury-2").RedateAsync(run.Id, "late");
+
+        await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("treasury-2").TransmitAsync(run.Id));
+
+        Assert.Empty(_bank.Sent);
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").TransmitAsync(run.Id)).Status);
+    }
+
+    [Fact]
+    public async Task A_concurrent_re_date_never_supersedes_the_file_another_re_date_pinned()
+    {
+        At(2026, 5, 4);
+        var run = await RealRunAsync();
+        var original = run.EftFile!;
+        At(2026, 5, 7);
+
+        // B checks the original file, then A re-dates it, R1 is approved and sent,
+        // and only then does B's re-pin run.
+        var b = new InterleavedEftFiles(_h.EftFiles(), async () =>
+        {
+            await Service("treasury-2").RedateAsync(run.Id, "A");
+            Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").TransmitAsync(run.Id)).Status);
+        });
+
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-4", eftFiles: b).RedateAsync(run.Id, "B"));
+
+        var stored = (await _h.Runs.GetByIdAsync(run.Id))!;
+        Assert.Equal((original.FileReference + "-R1", 1), (stored.EftFile!.FileReference, stored.EftFileHistory.Count));
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await _store.GetAsync(FfsRunHarness.Tenant, original.FileReference + "-R1"))!.Status);
+        Assert.Single(_bank.Sent);
+
+        // And directly: a re-pin naming a file that is no longer pinned is refused.
+        await Assert.ThrowsAsync<RunConflictException>(() =>
+            _h.EftFiles().RepinAsync(run.Id, "treasury-4", "stale", original.FileReference, original.Sha256));
+    }
+
+    [Fact]
+    public async Task Re_dating_a_failed_file_found_in_the_drop_is_refused_and_audited()
+    {
+        At(2026, 5, 4);
+        var run = await RealRunAsync();
+        // The upload "failed", but the file did land (e.g. a server that reported an error after writing it).
+        _bank.Script.Enqueue(r =>
+        {
+            _bank.Drop[r.FileName] = NachaFileFacts.Encode(r.Content);
+            return InMemoryBank.UploadFails(r);
+        });
+        await Service().TransmitAsync(run.Id);
+        At(2026, 5, 7);
+
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").RedateAsync(run.Id, "late"));
+
+        var record = (await _store.GetAsync(FfsRunHarness.Tenant, run.EftFile!.FileReference))!;
+        Assert.Equal(PaymentFileTransmissionStatus.Failed, record.Status);
+        Assert.Contains("Present", record.Attempts.Last(a => a.Action == PaymentFileTransmissionAction.Reconcile).Detail);
+        Assert.Empty((await _h.Runs.GetByIdAsync(run.Id))!.EftFileHistory);
+    }
+
+    [Fact]
+    public async Task Re_dating_a_failed_file_records_the_drop_check_and_refuses_when_the_drop_cannot_be_checked()
+    {
+        At(2026, 5, 4);
+        var run = await RealRunAsync();
+        _bank.Script.Enqueue(InMemoryBank.UploadFails);
+        await Service().TransmitAsync(run.Id);
+        At(2026, 5, 7);
+
+        var unreachable = new UnreachableProbe();
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3", probe: unreachable).RedateAsync(run.Id, "late"));
+        Assert.Empty((await _h.Runs.GetByIdAsync(run.Id))!.EftFileHistory);
+
+        await Service("treasury-3").RedateAsync(run.Id, "late");
+        var old = (await _store.GetAsync(FfsRunHarness.Tenant, run.EftFile!.FileReference))!;
+        Assert.Equal(PaymentFileTransmissionStatus.Superseded, old.Status);
+        Assert.Contains(old.Attempts, a => a.Action == PaymentFileTransmissionAction.Reconcile && a.Detail!.Contains("Absent"));
+    }
+
+    private sealed class UnreachableProbe : INachaRemoteFileProbe
+    {
+        public Task<NachaRemoteFileCheck> CheckAsync(string tenantId, string fileName, long expectedByteSize, CancellationToken cancellationToken = default)
+            => throw new NachaTransmissionException("The bank's SFTP drop could not be checked (SocketException).");
+    }
+
+    /// <summary>Runs <paramref name="before"/> right before the first re-pin it forwards.</summary>
+    private sealed class InterleavedEftFiles : IFfsEftFileService
+    {
+        private readonly IFfsEftFileService _inner;
+        private Func<Task>? _before;
+
+        public InterleavedEftFiles(IFfsEftFileService inner, Func<Task> before) { _inner = inner; _before = before; }
+
+        public Task<FfsEftFileOutcome> GenerateAsync(string paymentRunId, string actorUserId, CancellationToken cancellationToken = default)
+            => _inner.GenerateAsync(paymentRunId, actorUserId, cancellationToken);
+
+        public async Task<FfsEftFileOutcome> RepinAsync(string paymentRunId, string actorUserId, string reason,
+            string expectedFileReference, string expectedSha256, CancellationToken cancellationToken = default)
+        {
+            if (_before is { } before)
+            {
+                _before = null;
+                await before();
+            }
+            return await _inner.RepinAsync(paymentRunId, actorUserId, reason, expectedFileReference, expectedSha256, cancellationToken);
+        }
     }
 
     [Fact]
@@ -763,7 +932,7 @@ public class PaymentFileTransmissionTests
         var redated = await Service().RedateAsync(run.Id, "finish the re-date");
 
         Assert.Equal(1, redated.Revision);
-        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service().TransmitAsync(run.Id)).Status);
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").TransmitAsync(run.Id)).Status);
     }
 
     [Fact]

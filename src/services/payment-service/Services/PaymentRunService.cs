@@ -94,10 +94,12 @@ public class PaymentRunService : IPaymentRunService
             CreatedBy = createdBy,
             Status = PaymentRunStatus.Pending,
             NextCheckNumber = await GetNextCheckNumberAsync(),
-            // Set deliberately, never the model default: the requested date, or the
-            // next banking day. The NACHA file re-chooses a default date when it is
-            // pinned (the run may execute days later).
-            PaymentDate = DateTime.SpecifyKind(paymentDate?.Date ?? _effectiveDates.Choose(null), DateTimeKind.Utc),
+            // Set deliberately, never the model default: the requested date rolled to
+            // a banking day, or the next banking day. Execution fixes the final date
+            // (835 BPR16 = NACHA effective entry date) before anything is built.
+            PaymentDate = DateTime.SpecifyKind(
+                paymentDate.HasValue ? AchEffectiveDatePolicy.NextBankingDayOnOrAfter(paymentDate.Value) : _effectiveDates.Choose(null),
+                DateTimeKind.Utc),
             PaymentDateRequested = paymentDate.HasValue,
         };
 
@@ -135,6 +137,14 @@ public class PaymentRunService : IPaymentRunService
         paymentRun.Status = PaymentRunStatus.Running;
         paymentRun.ExecutedBy = approver;
         paymentRun.ExecutionStartedAt = startedAt;
+
+        // The payment date is fixed now, before any payment or 835 is built: the
+        // 835s' BPR16 and the NACHA file's effective entry date are both this date
+        // (the file is pinned with it). A requested date that is still ahead is kept;
+        // otherwise the earliest acceptable banking day (the run may execute days
+        // after it was created).
+        paymentRun.PaymentDate = _effectiveDates.Choose(paymentRun.PaymentDateRequested ? paymentRun.PaymentDate : null);
+        await _paymentRunRepository.UpdateAsync(paymentRun);
 
         // Claims this run reserved but has not yet tried to pay; released if the
         // run fails before it gets to them. A claim whose payment insert was

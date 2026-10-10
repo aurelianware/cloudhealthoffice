@@ -314,7 +314,11 @@ public class PaymentRunsController : ControllerBase
     /// transmission record becomes Superseded (kept, linked, never sendable). Allowed
     /// only when the old file was never approved, or its record is Pending or Failed
     /// (including "bank did not receive it"); never when Transmitting, Transmitted or
-    /// NeedsReview. The new file needs a fresh approval (POST .../transmission).
+    /// NeedsReview; a Failed file is first looked for in the bank's drop (read-only,
+    /// audited) and refused if it is there or the drop cannot be checked. The new file
+    /// needs a fresh approval (POST .../transmission) by someone other than the
+    /// re-dater. The run's 835s keep their BPR16; each is listed in the new file's
+    /// remittanceDateNotices and a run warning. 409 if another re-date got there first.
     /// payments:approve, a user who neither created nor executed the run; reason required.
     /// </summary>
     [HttpPost("{id}/eft-file/redate")]
