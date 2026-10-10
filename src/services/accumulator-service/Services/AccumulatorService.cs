@@ -142,6 +142,7 @@ public class AccumulatorService : IAccumulatorService
         if (begin == BeginClaimOutcome.InProgress)
             return new ApplyResult(ApplyOutcome.InProgress, null, null, "ApplyInProgress");
         var leaseToken = lease.Token!;
+        string? recordedTarget = null;
 
         for (var attempt = 0; attempt < MaxWriteAttempts; attempt++)
         {
@@ -169,6 +170,22 @@ public class AccumulatorService : IAccumulatorService
             // bumps the snapshot version, so an append computed before it
             // conflicts, and the re-read lands here.
             if (await LostToReversalAsync(evt, leaseToken, ct) is { } lost) return lost;
+
+            // Record, under the lease, the snapshot this apply appends to —
+            // before the append. A replacement (or void) that takes the lease
+            // over then fences this snapshot, the claim's own, even when the
+            // replacement is for another member or plan year; and once the
+            // lease is gone this apply cannot record, so cannot append.
+            if (!string.Equals(recordedTarget, snapshot.Id, StringComparison.Ordinal))
+            {
+                var target = new LeaseTarget(snapshot.Id, snapshot.MemberId, snapshot.PlanYearStart, snapshot.PlanYearEnd);
+                if (!await _processed.RecordLeaseTargetAsync(evt.TenantId, evt.ClaimId, leaseToken, target, ct))
+                {
+                    if (await LostToReversalAsync(evt, leaseToken, ct) is { } lostOnRecord) return lostOnRecord;
+                    continue;
+                }
+                recordedTarget = snapshot.Id;
+            }
 
             var (requestedDeductible, requestedOop, serviceDeltas) = ComputeDeltas(evt);
             var requestedFamilyDeductible = evt.IsFamilyAggregate ? requestedDeductible : 0m;
@@ -655,6 +672,7 @@ public class AccumulatorService : IAccumulatorService
         // (it was never seen, or its apply crashed): fences that apply.
         string? originalToken = null;
         var tookOverStaleApply = false;
+        LeaseTarget? staleTarget = null;
         var appliedWithoutRow = false;
         for (var attempt = 0; attempt < MaxWriteAttempts; attempt++)
         {
@@ -710,6 +728,12 @@ public class AccumulatorService : IAccumulatorService
                         if (taken.Outcome != BeginClaimOutcome.Proceed) continue;
                         originalToken = taken.Token!;
                         tookOverStaleApply = original is not null;
+                        // Read after the takeover: from now on the stalled
+                        // apply cannot record another target (it needs the
+                        // lease), so this is the snapshot its append could
+                        // land on — the original's own member and plan year.
+                        if (tookOverStaleApply)
+                            staleTarget = LeaseTarget.From(await _processed.GetAsync(tenantId, claimId, ct));
                     }
 
                     // Follow-up 2: a "crashed" apply may only be stalled. Its
@@ -719,7 +743,7 @@ public class AccumulatorService : IAccumulatorService
                     // its re-read sees it lost the lease. If its row landed
                     // first, reverse that row instead.
                     if (tookOverStaleApply
-                        && !await AppendTombstoneRowAsync(tenantId, claimId, sourceReference, kind, context, ct))
+                        && !await AppendTombstoneRowAsync(tenantId, claimId, sourceReference, kind, staleTarget, context, ct))
                         continue;
 
                     // The tombstone names the replacement that made it
@@ -848,20 +872,36 @@ public class AccumulatorService : IAccumulatorService
     /// Fences a stalled apply of <paramref name="claimId"/> whose lease a
     /// reversal took over (follow-up 2): appends a zero-delta
     /// <see cref="ClaimTombstonedEventType"/> row at the next version of the
-    /// snapshot the claim would apply to (resolved from
-    /// <paramref name="context"/>, the reversing claim). Event rows are one
-    /// per (snapshot, version), so this and the stalled apply's append are
-    /// ordered: if the apply's row lands first this returns false (reverse
-    /// that row); otherwise the apply's append conflicts and its re-read sees
-    /// the lost lease. True when nothing resolves a snapshot (nothing to fence).
+    /// snapshot the claim's apply targets — <paramref name="target"/>, the
+    /// snapshot the apply recorded on its marker before appending: the
+    /// original's own member and plan year, whatever the reversing claim's
+    /// are. Event rows are one per (snapshot, version), so this and the
+    /// stalled apply's append are ordered: if the apply's row lands first
+    /// this returns false (reverse that row); otherwise the apply's append
+    /// conflicts and its re-read sees the lost lease.
+    /// <para>No recorded target means the stalled apply never reached its
+    /// append (recording comes first and needs the lease it no longer has),
+    /// or it ran on a build that did not record one: then the snapshot is
+    /// resolved from <paramref name="context"/> (the reversing claim), the
+    /// earlier behaviour. True when nothing resolves a snapshot.</para>
     /// </summary>
     private async Task<bool> AppendTombstoneRowAsync(
-        string tenantId, string claimId, string sourceReference, string kind, ClaimFinalizedEvent context,
-        CancellationToken ct)
+        string tenantId, string claimId, string sourceReference, string kind, LeaseTarget? target,
+        ClaimFinalizedEvent context, CancellationToken ct)
     {
         for (var attempt = 0; attempt < MaxWriteAttempts; attempt++)
         {
-            var snapshot = await ResolveSnapshotAsync(context, ct);
+            var snapshot = target is null
+                ? await ResolveSnapshotAsync(context, ct)
+                : await _repo.GetSnapshotAsync(tenantId, target.MemberId, target.PlanYearStart, ct)
+                  ?? new AccumulatorSnapshot
+                  {
+                      Id = target.SnapshotId,
+                      TenantId = tenantId,
+                      MemberId = target.MemberId,
+                      PlanYearStart = target.PlanYearStart,
+                      PlanYearEnd = target.PlanYearEnd,
+                  };
             if (snapshot is null) return true;
             if (await CatchUpAsync(snapshot, ct)) continue;
             if (await _repo.GetClaimAppliedEventAsync(tenantId, claimId, ct) is not null) return false;

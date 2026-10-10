@@ -28,5 +28,8 @@
     <!-- ChoAccumulatorService (internal) — re-adjudication and write-time
          deductible clamp tests. -->
     <InternalsVisibleTo Include="CloudHealthOffice.BenefitEngine.Tests" />
+    <!-- ChoAccumulatorService over a real mongod in the accumulator-integrity
+         (pend / lock / commit) end-to-end tests. -->
+    <InternalsVisibleTo Include="CloudHealthOffice.GoldenPath.Tests" />
   </ItemGroup>
 </Project>

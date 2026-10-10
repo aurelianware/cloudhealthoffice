@@ -98,6 +98,8 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                 // many tests against this one host; the duplicate-ISA13
                 // check has its own tests (X12InterchangeIntakeTests, Ta1ImportTests).
                 ["X12Interchange:DuplicateWindowDays"] = "0",
+                // No background accumulator outbox dispatch against the substitute repository.
+                ["Claims:AccumulatorOutbox:Enabled"] = "false",
             });
         });
 

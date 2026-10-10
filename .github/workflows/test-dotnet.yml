@@ -10,6 +10,7 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'tools/ArLegacyPostingReconciliation/**'
+      - 'tools/AccumulatorReversalKindBackfill/**'
       - '.github/workflows/test-dotnet.yml'
   pull_request:
     branches: ["main"]
@@ -17,6 +18,7 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'tools/ArLegacyPostingReconciliation/**'
+      - 'tools/AccumulatorReversalKindBackfill/**'
       - '.github/workflows/test-dotnet.yml'
   workflow_dispatch:
 
@@ -38,8 +40,20 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # RedisAccumulatorService (benefit-plan-service's accumulator store)
+      # commit / fence tests: tests/CloudHealthOffice.BenefitEngine.Tests.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       REFERENCE_DATA_TEST_POSTGRES: Host=localhost;Port=5432;Database=referencedata_tests;Username=postgres;Password=postgres
+      CHO_TEST_REDIS: localhost:6379
 
     steps:
       - uses: actions/checkout@v7
