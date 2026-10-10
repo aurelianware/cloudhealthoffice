@@ -122,7 +122,19 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
         }
     }
 
-    public Task<PaymentRun> UpdateAsync(PaymentRun run) { lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); } return Task.FromResult(run); }
+    /// <summary>When set, the next UpdateAsync throws it (a transient database error).</summary>
+    public Exception? FailNextUpdate { get; set; }
+
+    public Task<PaymentRun> UpdateAsync(PaymentRun run)
+    {
+        if (FailNextUpdate is { } failure)
+        {
+            FailNextUpdate = null;
+            throw failure;
+        }
+        lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); }
+        return Task.FromResult(run);
+    }
 
     public int EftFileWrites;
 
@@ -145,7 +157,7 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
         }
     }
 
-    public Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded)
+    public Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null)
     {
         lock (_items)
         {
@@ -154,6 +166,8 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
                 return Task.FromResult(false);
             run.EftFile = JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(file));
             run.EftFileHistory.Add(JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(superseded))!);
+            if (addWarnings != null)
+                run.Warnings.AddRange(addWarnings);
             return Task.FromResult(true);
         }
     }

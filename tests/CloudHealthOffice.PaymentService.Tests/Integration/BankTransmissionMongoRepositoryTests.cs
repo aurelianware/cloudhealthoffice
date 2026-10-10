@@ -137,13 +137,14 @@ public sealed class BankTransmissionMongoRepositoryTests : IAsyncLifetime
 
         first.SupersededByFileReference = "FFS-PR-R-R1";
         var second = new PaymentRunEftFile { FileReference = "FFS-PR-R-R1", Sha256 = new string('e', 64), Revision = 1 };
-        Assert.True(await runs.TryRepinEftFileAsync("run-r", second, first));
+        Assert.True(await runs.TryRepinEftFileAsync("run-r", second, first, new[] { "835 date notice" }));
         // A second re-pin against the old file (a concurrent re-date) is refused.
         Assert.False(await runs.TryRepinEftFileAsync("run-r", new PaymentRunEftFile { Sha256 = new string('f', 64) }, first));
 
         var stored = (await runs.GetByIdAsync("run-r"))!;
         Assert.Equal(("FFS-PR-R-R1", 1), (stored.EftFile!.FileReference, stored.EftFile.Revision));
         Assert.Equal("FFS-PR-R-R1", Assert.Single(stored.EftFileHistory).SupersededByFileReference);
+        Assert.Equal(new[] { "835 date notice" }, stored.Warnings);
     }
 
     [Fact]

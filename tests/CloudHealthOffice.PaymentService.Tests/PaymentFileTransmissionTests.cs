@@ -672,6 +672,44 @@ public class PaymentFileTransmissionTests
     }
 
     [Fact]
+    public async Task A_failed_write_of_the_fixed_payment_date_fails_the_run_instead_of_leaving_it_Running()
+    {
+        At(2026, 5, 4);
+        var created = await _h.Service().CreatePaymentRunAsync(new PaymentRunCriteria { GroupByProvider = true }, "maker-1");
+        _h.Runs.FailNextUpdate = new TimeoutException("database");
+
+        await Assert.ThrowsAsync<TimeoutException>(() => _h.ExecuteCreatedRunAsync(created.Id, FfsRunHarness.Claim("c1", Npi, 125m)));
+
+        var stored = (await _h.Runs.GetByIdAsync(created.Id))!;
+        Assert.Equal(PaymentRunStatus.Failed, stored.Status);
+        Assert.Contains(stored.Errors, e => e.Contains("database"));
+        Assert.Empty(_h.Payments.All);
+        Assert.Empty(_h.Envelopes);
+    }
+
+    [Fact]
+    public async Task The_835_date_warning_of_a_re_date_survives_a_concurrent_write_to_the_run()
+    {
+        At(2026, 5, 4);
+        var run = await _h.CreateAndExecuteRunAsync(null, FfsRunHarness.Claim("c1", Npi, 125m));
+        At(2026, 5, 12);
+        await _h.EftFiles().GenerateAsync(run.Id, "approver-2");
+        // Between the re-pin's read of the run and its write, someone else writes the run.
+        _h.Runs.AfterGet = () =>
+        {
+            _h.Runs.AfterGet = null;
+            _h.Runs.Mutate(run.Id, r => r.Warnings.Add("concurrent finalize retry"));
+            return Task.CompletedTask;
+        };
+
+        await Service("treasury-2").RedateAsync(run.Id, "pinned after its date");
+
+        var warnings = (await _h.Runs.GetByIdAsync(run.Id))!.Warnings;
+        Assert.Contains("concurrent finalize retry", warnings);
+        Assert.Single(warnings, w => w.Contains("carry BPR16 2026-05-05"));
+    }
+
+    [Fact]
     public async Task The_re_dater_may_not_approve_the_new_file()
     {
         At(2026, 5, 4);

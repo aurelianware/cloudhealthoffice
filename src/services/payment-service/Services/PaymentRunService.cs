@@ -144,7 +144,6 @@ public class PaymentRunService : IPaymentRunService
         // otherwise the earliest acceptable banking day (the run may execute days
         // after it was created).
         paymentRun.PaymentDate = _effectiveDates.Choose(paymentRun.PaymentDateRequested ? paymentRun.PaymentDate : null);
-        await _paymentRunRepository.UpdateAsync(paymentRun);
 
         // Claims this run reserved but has not yet tried to pay; released if the
         // run fails before it gets to them. A claim whose payment insert was
@@ -153,6 +152,10 @@ public class PaymentRunService : IPaymentRunService
 
         try
         {
+            // Persist the fixed date before anything is issued. Inside the try: if this
+            // write fails the run is marked Failed (nothing was issued), not left Running.
+            await _paymentRunRepository.UpdateAsync(paymentRun);
+
             // Step 0: The 835 BPR's bank and originating-company details are
             //         payment-service configuration, the same for every
             //         partner. Check them before any claim is reserved or paid,

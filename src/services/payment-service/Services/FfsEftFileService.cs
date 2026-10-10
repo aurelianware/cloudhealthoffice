@@ -252,15 +252,14 @@ public sealed class FfsEftFileService : IFfsEftFileService
         old.SupersededBy = actorUserId;
         old.SupersededReason = reason;
         old.SupersededByFileReference = file.FileReference;
-        if (!await _runs.TryRepinEftFileAsync(run.Id, file, old))
+        if (!await _runs.TryRepinEftFileAsync(run.Id, file, old, notice == null ? null : new[] { notice }))
             throw new RunConflictException(
                 $"The EFT file of payment run {run.PaymentRunNumber} changed while it was being re-dated. Nothing was recorded.");
         run.EftFileHistory.Add(old);
         run.EftFile = file;
         if (notice != null)
         {
-            // Surfaced on the run (GET /api/paymentruns/{id}) as well as on the file.
-            await _runs.TrySaveEftFileAsync(run.Id, file, file.Sha256, Array.Empty<CheckFallbackPayment>(), new[] { notice });
+            // Written in the same conditional re-pin above: it cannot be lost to a race.
             run.Warnings.Add(notice);
             _logger.LogWarning("AUDIT {Notice} (payment run {RunNumber})", notice, run.PaymentRunNumber);
         }

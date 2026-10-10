@@ -40,9 +40,10 @@ public interface IPaymentRunRepository
     /// Replaces the pinned EFT file with a re-dated one and appends the old one
     /// (<paramref name="superseded"/>, with its Superseded* fields set) to
     /// <see cref="PaymentRun.EftFileHistory"/>, only while the pinned file's SHA-256
-    /// is still <c>superseded.Sha256</c>. Touches nothing else on the run.
+    /// is still <c>superseded.Sha256</c>, appending <paramref name="addWarnings"/> in the
+    /// same write. Touches nothing else on the run.
     /// </summary>
-    Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded);
+    Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null);
 
     Task DeleteAsync(string id);
 }
@@ -275,7 +276,7 @@ public class PaymentRunRepository : IPaymentRunRepository
         throw new InvalidOperationException($"Payment run {id} kept changing; its EFT file was not recorded");
     }
 
-    public async Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded)
+    public async Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null)
     {
         var tenantId = GetTenantId();
         for (var attempt = 0; attempt < 5; attempt++)
@@ -295,6 +296,8 @@ public class PaymentRunRepository : IPaymentRunRepository
                 return false;
             run.EftFile = file;
             run.EftFileHistory.Add(superseded);
+            if (addWarnings != null)
+                run.Warnings.AddRange(addWarnings);
             try
             {
                 await _container.ReplaceItemAsync(run, id, new PartitionKey(tenantId),

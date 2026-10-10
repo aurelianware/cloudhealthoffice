@@ -141,12 +141,14 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         return result.MatchedCount == 1;
     }
 
-    public async Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded)
+    public async Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null)
     {
         var tenantId = GetTenantId();
         var f = Builders<PaymentRun>.Filter;
         var filter = f.And(f.Eq(x => x.Id, id), f.Eq(x => x.TenantId, tenantId), f.Eq(x => x.EftFile!.Sha256, superseded.Sha256));
         var update = Builders<PaymentRun>.Update.Set(x => x.EftFile, file).Push(x => x.EftFileHistory, superseded);
+        if (addWarnings is { Count: > 0 })
+            update = update.PushEach(x => x.Warnings, addWarnings);
         var result = await _collection.UpdateOneAsync(filter, update);
         return result.MatchedCount == 1;
     }
