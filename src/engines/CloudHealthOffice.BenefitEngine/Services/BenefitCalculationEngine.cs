@@ -57,7 +57,7 @@ public interface IBenefitCalculationEngine
     /// Reverse the accumulator impact of a previously adjudicated claim that
     /// will never apply again: a void (including the superseded version of a
     /// replacement) or an examiner's denial. Terminal: the store also fences
-    /// the claim id, so a commit or apply of it still in flight is refused
+    /// the claim id, so a commit of it still in flight is refused
     /// (<see cref="IAccumulatorService.ReverseTerminallyAsync"/>). Idempotent;
     /// a claim that never applied reverses nothing (the fence is still set).
     /// </summary>

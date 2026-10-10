@@ -95,10 +95,12 @@ public interface IAccumulatorService
 
     /// <summary>
     /// <see cref="ReverseAsync"/> for a claim that will never apply again (a
-    /// void, or an examiner's denial): also fences the claim id, so a commit
-    /// or apply of it that arrives later (a resolver whose lock expired, a
-    /// stalled pipeline run) is refused inside the same versioned write. The
-    /// default (stores without a per-claim journal) only reverses.
+    /// void, or an examiner's denial): also fences the claim id, so a
+    /// <see cref="CommitAsync"/> of it that arrives later (a resolver whose
+    /// lock expired, a stalled pipeline run) is refused inside the same
+    /// versioned write. The direct <see cref="ApplyUpdatesAsync"/> (a
+    /// Production pricing) is not fenced. The default (stores without a
+    /// per-claim journal) only reverses.
     /// </summary>
     Task ReverseTerminallyAsync(
         string memberId, string subscriberId,

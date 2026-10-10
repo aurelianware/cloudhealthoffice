@@ -262,14 +262,10 @@ internal class ChoAccumulatorService : IAccumulatorService
                           tenantId, ownerId, scope, benefitPlanId, planYear, ct)
                       ?? CreateEmptyDocument(tenantId, ownerId, scope, benefitPlanId, planYear);
 
-            // ── Terminal fence: a voided / denied claim never applies again ──
-            if (doc.ReversedClaimIds.Contains(claimId))
-            {
-                _logger.LogWarning(
-                    "Claim {ClaimId} was reversed terminally on {Scope} accumulator {DocId}; apply refused.",
-                    SanitizeForLog(claimId), scope, SanitizeForLog(doc.Id));
-                return;
-            }
+            // The terminal fence (ReversedClaimIds) governs CommitAsync, the
+            // claims pipeline's write. This direct Production write keeps its
+            // earlier semantics for other callers (a void then a
+            // re-adjudication of the same claim id applies again).
 
             // ── Idempotency check ──
             if (doc.Transactions.Any(t => t.ClaimId == claimId && !t.IsReversed))

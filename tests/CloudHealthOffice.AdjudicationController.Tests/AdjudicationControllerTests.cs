@@ -1717,3 +1717,69 @@ internal record NcciErrorResponse
     public string Message { get; init; } = default!;
     public List<NcciEditFailure> EditFailures { get; init; } = [];
 }
+
+/// <summary>
+/// <c>POST /api/v1/adjudication/commit-accumulators</c>: claims-service
+/// commits a claim's prepared accumulator write once it is finally
+/// adjudicated. The controller forwards to
+/// <see cref="IBenefitCalculationEngine.CommitAccumulatorsAsync"/> and returns
+/// the outcome (string enum on the wire).
+/// </summary>
+public class AdjudicationControllerCommitAccumulatorsTests : IClassFixture<AdjudicationControllerTests.Factory>
+{
+    private static readonly Guid PlanId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    private readonly AdjudicationControllerTests.Factory _factory;
+
+    public AdjudicationControllerCommitAccumulatorsTests(AdjudicationControllerTests.Factory factory) => _factory = factory;
+
+    private HttpClient CreateClient()
+    {
+        var c = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
+        c.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant-001");
+        return c;
+    }
+
+    private static object Body(string commitId = "c-1") => new
+    {
+        commitId,
+        claimId = "claim-7",
+        memberId = "m1",
+        subscriberId = "",
+        benefitPlanId = PlanId,
+        planYear = "2026",
+        updates = new[]
+        {
+            new { type = "IndividualDeductible", scope = "Individual", networkTier = "InNetwork", amount = 60m, source = "Deductible", clampAtLimit = 500m },
+        },
+    };
+
+    [Fact]
+    public async Task Commit_ForwardsToTheEngine_AndReturnsTheOutcome()
+    {
+        _factory.BenefitEngine.CommitAccumulatorsAsync(Arg.Any<AccumulatorCommit>(), Arg.Any<CancellationToken>())
+            .Returns(AccumulatorCommitOutcome.RefusedClaimReversed);
+
+        var response = await CreateClient().PostAsJsonAsync("/api/v1/adjudication/commit-accumulators", Body());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("\"RefusedClaimReversed\"", await response.Content.ReadAsStringAsync());
+        await _factory.BenefitEngine.Received(1).CommitAccumulatorsAsync(
+            Arg.Is<AccumulatorCommit>(c => c.CommitId == "c-1" && c.ClaimId == "claim-7"
+                                           && c.SubscriberId == "m1" // defaults to the member
+                                           && c.Updates.Single().Amount == 60m
+                                           && c.Updates.Single().ClampAtLimit == 500m
+                                           && c.Updates.Single().Type == AccumulatorType.IndividualDeductible),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Commit_WithoutACommitId_Is400_EngineNotCalled()
+    {
+        _factory.BenefitEngine.ClearReceivedCalls();
+
+        var response = await CreateClient().PostAsJsonAsync("/api/v1/adjudication/commit-accumulators", Body(commitId: ""));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _factory.BenefitEngine.DidNotReceiveWithAnyArgs().CommitAccumulatorsAsync(default!, default);
+    }
+}

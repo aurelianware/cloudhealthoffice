@@ -402,11 +402,71 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
         await _repo.DidNotReceiveWithAnyArgs().TryAcquireResolutionLockAsync(default!, default!, default!, default, default, default, default);
     }
 
+    // ── accumulators: committed only after the fenced final write ───────
+
+    private static CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit PreparedCommit(string claimId) => new()
+    {
+        CommitId = "commit-1", ClaimId = claimId, MemberId = "MEM-9", SubscriberId = "MEM-9",
+        BenefitPlanId = Guid.Parse("8b9f1a2e-1111-4c4c-9a9a-000000000001"), PlanYear = "2026",
+    };
+
+    private void RerunPassesWith(CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit commit) =>
+        _readjudicator.ReadjudicateForApprovalAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ExaminerApproval>(), Arg.Any<CancellationToken>())
+            .Returns(new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Pass, null) { PreparedAccumulatorCommit = commit });
+
+    /// <summary>
+    /// The approval's re-run commits nothing; the resolver commits the write
+    /// it prepared once its lock-fenced final write has landed — after it,
+    /// never before.
+    /// </summary>
+    [Fact]
+    public async Task Approval_CommitsThePreparedAccumulators_AfterTheFinalWrite()
+    {
+        var commit = PreparedCommit("claim-commit");
+        RerunPassesWith(commit);
+        _engine.CommitAccumulatorsAsync(Arg.Any<CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit>(), Arg.Any<CancellationToken>())
+            .Returns(CloudHealthOffice.BenefitEngine.Models.AccumulatorCommitOutcome.Committed);
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer),
+            Pended("claim-commit", "NCCI", "bundled pair"), new { disposition = "Approved", reason = "x" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Received.InOrder(() =>
+        {
+            _repo.UpdateHoldingResolutionLockAsync(Arg.Is<Claim>(c => c.Status == ClaimStatus.Approved), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            _engine.CommitAccumulatorsAsync(commit, Arg.Any<CancellationToken>());
+        });
+        await _engine.DidNotReceiveWithAnyArgs().ReverseClaimAsync(default!, default!, default, default, default!, default);
+    }
+
+    /// <summary>
+    /// The final write is refused (another examiner took the lock over): the
+    /// prepared write is never committed.
+    /// </summary>
+    [Fact]
+    public async Task Approval_LostLockAtTheFinalWrite_CommitsNoAccumulators()
+    {
+        RerunPassesWith(PreparedCommit("claim-commit-lost"));
+        _repo.UpdateHoldingResolutionLockAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((Claim?)null);
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer),
+            Pended("claim-commit-lost", "NCCI", "bundled pair"), new { disposition = "Approved", reason = "x" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        await _engine.DidNotReceiveWithAnyArgs().CommitAccumulatorsAsync(default!, default);
+        _repo.UpdateHoldingResolutionLockAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Claim>());
+    }
+
     // ── H4 ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// A claim pended by NCCI (Order 400) priced in Production at 300 and
-    /// wrote engine accumulators; the examiner's denial reverses them.
+    /// The examiner's denial reverses the claim's engine accumulators
+    /// terminally: a pended claim wrote none (nothing is reversed), but the
+    /// claim id is fenced so no commit of it can land later; a claim pended
+    /// before deferred commits had written them, and they are backed out.
     /// </summary>
     [Fact]
     public async Task Deny_ReversesTheEngineAccumulators()

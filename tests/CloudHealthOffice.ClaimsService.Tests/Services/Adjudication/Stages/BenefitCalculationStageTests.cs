@@ -945,8 +945,14 @@ public partial class BenefitCalculationStageTests
         Assert.Equal(250m, Cas("PR", "3"));
         Assert.Equal(30500m, Cas("CO", "45"));
 
-        await accumulators.ReceivedWithAnyArgs(1).ApplyUpdatesAsync(
+        // Priced read-only: the stage writes nothing; the write is prepared
+        // once (deductible once) for AccumulatorCommitStage to commit.
+        await accumulators.DidNotReceiveWithAnyArgs().ApplyUpdatesAsync(
             default!, default!, default, default!, default!, default!, default);
+        var commit = ctx.BenefitResolutionResult!.PreparedAccumulatorCommit!;
+        Assert.Equal(500m, commit.Updates
+            .Where(u => u.Type == CloudHealthOffice.BenefitEngine.Domain.AccumulatorType.IndividualDeductible)
+            .Sum(u => u.Amount));
     }
 
     /// <summary>

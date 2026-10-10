@@ -35,7 +35,7 @@ public partial class BenefitCalculationStageTests
     }
 
     [Fact]
-    public async Task CobCleared_PricesAsLaterPayer_InProduction()
+    public async Task CobCleared_PricesAsLaterPayer_ReadOnly_CommittedLater()
     {
         BenefitResolutionRequest? captured = null;
         _engine.CalculateAsync(Arg.Do<BenefitResolutionRequest>(r => captured = r), Arg.Any<CancellationToken>())
@@ -46,7 +46,8 @@ public partial class BenefitCalculationStageTests
 
         Assert.Equal(2, captured!.Cob!.PayerSequence);
         Assert.Single(captured.Cob.PriorPayers);
-        Assert.Equal(AdjudicationExecutionMode.Production, captured.ExecutionMode);
+        // Always read-only now: AccumulatorCommitStage commits a passing claim.
+        Assert.Equal(AdjudicationExecutionMode.Prospective, captured.ExecutionMode);
         Assert.Equal(2, ctx.AdjudicationResult.CobPayerSequence);
     }
 
@@ -71,8 +72,8 @@ public partial class BenefitCalculationStageTests
 
     /// <summary>
     /// Another stage pended a primary claim (a possible duplicate): the
-    /// claim is priced read-only — no accumulator write until an examiner's
-    /// approval re-adjudicates it in Production.
+    /// claim is priced read-only — as every claim is; nothing is committed
+    /// until an examiner's approval re-adjudicates it and finalizes.
     /// </summary>
     [Fact]
     public async Task OtherStagePended_PrimaryClaim_PricesReadOnly()
@@ -173,7 +174,8 @@ public partial class BenefitCalculationStageTests
         await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.Null(captured!.Cob);
-        Assert.Equal(AdjudicationExecutionMode.Production, captured.ExecutionMode);
+        // Always read-only now: AccumulatorCommitStage commits a passing claim.
+        Assert.Equal(AdjudicationExecutionMode.Prospective, captured.ExecutionMode);
     }
 
     /// <summary>
@@ -240,6 +242,7 @@ public partial class BenefitCalculationStageTests
         await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.Null(captured!.Cob);
-        Assert.Equal(AdjudicationExecutionMode.Production, captured.ExecutionMode);
+        // Always read-only now: AccumulatorCommitStage commits a passing claim.
+        Assert.Equal(AdjudicationExecutionMode.Prospective, captured.ExecutionMode);
     }
 }

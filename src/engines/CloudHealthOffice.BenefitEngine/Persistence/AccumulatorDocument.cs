@@ -92,8 +92,9 @@ public class AccumulatorDocument
     /// <summary>
     /// Claims reversed terminally on this document — voided, or denied by an
     /// examiner (<c>IAccumulatorService.ReverseTerminallyAsync</c>). A later
-    /// apply or commit of one of these claim ids is refused inside the same
-    /// versioned write that would have applied it, so a write that was
+    /// commit (<c>IAccumulatorService.CommitAsync</c>, the claims pipeline's
+    /// write) of one of these claim ids is refused inside the same versioned
+    /// write that would have applied it, so a write that was
     /// already in flight when the claim was denied (an approval re-run whose
     /// resolution lock expired) can never leave the denied claim's amounts
     /// behind. A void or denial is final for a claim id: a corrected claim is
