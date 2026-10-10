@@ -129,7 +129,7 @@ the same allowed amount for the same claim:
 |-------------|---------|-------|
 | `professional` | Facility rate only for a facility `placeOfService` (21, 22, 23, ...) | 837P |
 | `dental` | Same as professional | 837D |
-| `institutional` | Always the facility rate | 837I; priced by DRG against an MS-DRG schedule only with an inpatient type of bill (11x/12x), otherwise line by line |
+| `institutional` | Always the facility rate | 837I; priced by DRG against an MS-DRG schedule only with a hospital inpatient Part A type of bill (11x), otherwise line by line (12x inpatient Part B is paid outside the DRG) |
 | `outpatient` | Always the facility rate | 837I |
 | `inpatient` | Always the facility rate; priced by `drgCode` | 837I |
 | *(absent)* | `institutional` when `billType` is valid, otherwise `professional` | Unchanged for requests without `billType` |
@@ -140,7 +140,7 @@ echoed in the response normalized to three digits. A malformed `billType`
 (`"0"`, `"N/A"`, `"13"`), or a `billType` on a `professional` or `dental` claim,
 is rejected with `400 INVALID_BILL_TYPE`. A blank or whitespace `billType` is
 treated as absent (it was ignored before the field was validated). A claim type
-that contradicts its type of bill (`outpatient` with 11x/12x, `inpatient` with any
+that contradicts its type of bill (`outpatient` with 11x, `inpatient` with any
 other) is priced by its claim type and the response carries a warning. On an institutional claim
 `placeOfService` is not read for the facility decision (it may hold the CLM05-1
 facility type code).

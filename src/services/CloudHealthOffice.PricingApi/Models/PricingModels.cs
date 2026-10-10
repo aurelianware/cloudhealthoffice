@@ -23,7 +23,7 @@ public record RepricingRequest
     /// Institutional, outpatient and inpatient claims (837I) always take the facility rate,
     /// as in claims adjudication; professional and dental claims take the facility rate only
     /// for a facility <see cref="PlaceOfService"/>. Inpatient claims (and institutional claims with an
-    /// inpatient 11x/12x type of bill against an MS-DRG schedule) are priced by <see cref="DrgCode"/>.
+    /// inpatient Part A 11x type of bill against an MS-DRG schedule) are priced by <see cref="DrgCode"/>.
     /// </summary>
     public ClaimType? ClaimType { get; init; }
 

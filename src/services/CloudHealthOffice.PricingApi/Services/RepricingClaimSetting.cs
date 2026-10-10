@@ -26,28 +26,29 @@ public static class RepricingClaimSetting
         => claimType is ClaimType.Institutional or ClaimType.Outpatient or ClaimType.Inpatient;
 
     /// <summary>
-    /// True for a hospital inpatient type of bill: facility type 1 (hospital) with bill
-    /// classification 1 (inpatient, Part A) or 2 (inpatient, Part B) — 11x / 12x.
+    /// True for a type of bill paid by DRG: hospital inpatient, Part A — 11x (facility type 1,
+    /// bill classification 1). 12x (hospital inpatient, Part B: benefits exhausted or not
+    /// entitled to Part A) is paid outside the DRG, line by line like outpatient, so it is not.
     /// </summary>
-    public static bool IsInpatientBillType(string? billType)
-        => NubcTypeOfBill.Normalize(billType) is { } tob && tob[0] == '1' && tob[1] is '1' or '2';
+    public static bool IsDrgEligibleBillType(string? billType)
+        => NubcTypeOfBill.Normalize(billType) is { } tob && tob[0] == '1' && tob[1] == '1';
 
     /// <summary>
     /// A warning for a claim type that contradicts its type of bill (an outpatient claim
-    /// with an inpatient 11x/12x type of bill, or an inpatient claim with any other); null
+    /// with a DRG inpatient 11x type of bill, or an inpatient claim with any other); null
     /// otherwise. The claim is still priced by its claim type.
     /// </summary>
     public static string? ContradictionWarning(RepricingRequest request)
     {
         if (NubcTypeOfBill.Normalize(request.BillType) is not { } tob)
             return null;
-        var inpatientTob = IsInpatientBillType(tob);
+        var drgTob = IsDrgEligibleBillType(tob);
         return request.ClaimType switch
         {
-            ClaimType.Outpatient when inpatientTob =>
-                $"claimType outpatient contradicts inpatient type of bill {tob}; priced as outpatient (line by line).",
-            ClaimType.Inpatient when !inpatientTob =>
-                $"claimType inpatient contradicts non-inpatient type of bill {tob}; priced as inpatient (by DRG).",
+            ClaimType.Outpatient when drgTob =>
+                $"claimType outpatient contradicts DRG inpatient type of bill {tob}; priced as outpatient (line by line).",
+            ClaimType.Inpatient when !drgTob =>
+                $"claimType inpatient contradicts non-DRG type of bill {tob}; priced as inpatient (by DRG).",
             _ => null,
         };
     }

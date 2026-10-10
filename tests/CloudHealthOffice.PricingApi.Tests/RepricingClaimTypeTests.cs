@@ -169,6 +169,8 @@ public class RepricingClaimTypeTests
     [Theory]
     [InlineData(ClaimType.Institutional, "131")]
     [InlineData(null, "0131")]
+    [InlineData(ClaimType.Institutional, "121")]   // inpatient Part B: outside the DRG
+    [InlineData(null, "0121")]
     [InlineData(ClaimType.Institutional, null)]
     public async Task InstitutionalOutpatientOrUnstatedBillType_AgainstDrgSchedule_PricedPerLine(ClaimType? claimType, string? billType)
     {
@@ -189,19 +191,43 @@ public class RepricingClaimTypeTests
     }
 
     [Theory]
+    [InlineData(null)]
+    [InlineData("111")]
     [InlineData("121")]
-    [InlineData("0111")]
-    public void InpatientBillTypes(string billType)
-        => RepricingClaimSetting.IsInpatientBillType(billType).Should().BeTrue();
+    public async Task ExplicitInpatient_AgainstDrgSchedule_KeepsDrgPath(string? billType)
+    {
+        // An explicit inpatient claim is priced by DRG whatever its type of bill
+        // (a contradictory one only adds a warning).
+        var result = await _sut.RepriceClaimAsync(new RepricingRequest
+        {
+            FeeScheduleId = Drg,
+            ClaimType = ClaimType.Inpatient,
+            BillType = billType,
+            DrgCode = "470",
+            Lines = [new ClaimLineRequest { ProcedureCode = "27447", Units = 1, BilledAmount = 40_000m }],
+        });
+
+        result.TotalAllowed.Should().Be(13_300.00m);
+        result.Lines[0].Breakdown.DrgRelativeWeight.Should().Be(1.9m);
+    }
 
     [Theory]
+    [InlineData("111")]
+    [InlineData("0111")]
+    [InlineData("117")]
+    public void DrgEligibleBillTypes(string billType)
+        => RepricingClaimSetting.IsDrgEligibleBillType(billType).Should().BeTrue();
+
+    [Theory]
+    [InlineData("121")]   // hospital inpatient Part B: paid outside the DRG
+    [InlineData("0121")]
     [InlineData("131")]
     [InlineData("211")]
     [InlineData("831")]
     [InlineData(null)]
     [InlineData("N/A")]
-    public void NonInpatientBillTypes(string? billType)
-        => RepricingClaimSetting.IsInpatientBillType(billType).Should().BeFalse();
+    public void NonDrgBillTypes(string? billType)
+        => RepricingClaimSetting.IsDrgEligibleBillType(billType).Should().BeFalse();
 
     [Fact]
     public async Task FacilitySetting_EntryWithOnlyNonFacilityRate_PricesAtThatRate_NotZero()
@@ -216,9 +242,9 @@ public class RepricingClaimTypeTests
     }
 
     [Theory]
-    [InlineData(ClaimType.Outpatient, "111", "contradicts inpatient type of bill 111")]
-    [InlineData(ClaimType.Outpatient, "0121", "contradicts inpatient type of bill 121")]
-    [InlineData(ClaimType.Inpatient, "131", "contradicts non-inpatient type of bill 131")]
+    [InlineData(ClaimType.Outpatient, "111", "contradicts DRG inpatient type of bill 111")]
+    [InlineData(ClaimType.Inpatient, "131", "contradicts non-DRG type of bill 131")]
+    [InlineData(ClaimType.Inpatient, "0121", "contradicts non-DRG type of bill 121")]
     public async Task ContradictoryClaimTypeAndBillType_PricedWithWarning(ClaimType claimType, string billType, string warning)
     {
         var result = await _sut.RepriceClaimAsync(Request(claimType, billType, pos: "13") with { DrgCode = "470" });
@@ -229,6 +255,7 @@ public class RepricingClaimTypeTests
 
     [Theory]
     [InlineData(ClaimType.Outpatient, "131")]
+    [InlineData(ClaimType.Outpatient, "121")]
     [InlineData(ClaimType.Inpatient, "111")]
     [InlineData(ClaimType.Institutional, "111")]
     public async Task ConsistentClaimTypeAndBillType_NoWarning(ClaimType claimType, string billType)

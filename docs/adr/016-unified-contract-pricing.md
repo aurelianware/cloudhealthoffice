@@ -314,6 +314,11 @@ BenefitEngine and claims-service have no facility-rate POS list
   **non-facility** rate, and critical access hospital Method II professional
   services (TOB 85x, revenue codes 096x–098x) are paid under the MPFS like a
   professional claim. Until they are, such lines take the facility rate.
+- **DRG path (Pricing API).** An explicit `inpatient` claim is priced by its DRG.
+  An `institutional` claim against an MS-DRG schedule is priced by DRG only with
+  a hospital inpatient Part A type of bill (11x). TOB 12x (hospital inpatient
+  Part B: benefits exhausted or not entitled to Part A) is paid outside the DRG
+  and, like 13x outpatient, prices line by line.
 
 ## Consequences
 
