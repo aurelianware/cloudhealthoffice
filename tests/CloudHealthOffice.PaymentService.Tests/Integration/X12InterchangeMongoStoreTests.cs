@@ -54,6 +54,57 @@ public sealed class X12InterchangeMongoStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Release_RemovesOnlyTheReceiptItClaimed()
+    {
+        var window = TimeSpan.FromDays(30);
+        Assert.True(await _store.TryRegisterReceiptAsync("t1", "ZZ:SUB|ZZ:CHO", "000000201", T0, window));
+        await _store.ReleaseReceiptAsync("t1", "ZZ:SUB|ZZ:CHO", "000000201", T0.AddMinutes(-1));
+        Assert.False(await _store.TryRegisterReceiptAsync("t1", "ZZ:SUB|ZZ:CHO", "000000201", T0.AddMinutes(1), window));
+
+        await _store.ReleaseReceiptAsync("t1", "ZZ:SUB|ZZ:CHO", "000000201", T0);
+        Assert.True(await _store.TryRegisterReceiptAsync("t1", "ZZ:SUB|ZZ:CHO", "000000201", T0.AddMinutes(2), window));
+    }
+
+    [Fact]
+    public async Task ControlSequence_IsMonotonicPerKey_AndWraps()
+    {
+        Assert.Equal(1, await _store.NextControlNumberAsync("t1", "ZZ:CHO>ZZ:SUB"));
+        Assert.Equal(2, await _store.NextControlNumberAsync("t1", "ZZ:CHO>ZZ:SUB"));
+        Assert.Equal(1, await _store.NextControlNumberAsync("t1", "ZZ:CHO>ZZ:OTHER"));
+        Assert.Equal(1, await _store.NextControlNumberAsync("t2", "ZZ:CHO>ZZ:SUB"));
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => _store.NextControlNumberAsync("t1", "ZZ:CHO>ZZ:PAR")));
+        Assert.Equal(Enumerable.Range(1, 20).Select(i => (long)i), results.OrderBy(r => r));
+
+        await _db.GetCollection<MongoX12InterchangeStore.ControlSequenceDocument>(MongoX12InterchangeStore.SequencesCollection)
+            .InsertOneAsync(new MongoX12InterchangeStore.ControlSequenceDocument { Id = "t1|WRAP", TenantId = "t1", Value = 999_999_999 });
+        Assert.Equal(1, await _store.NextControlNumberAsync("t1", "WRAP"));
+    }
+
+    [Fact]
+    public async Task Receipts_HaveATtlIndexMatchingTheWindow()
+    {
+        await _store.TryRegisterReceiptAsync("t1", "ZZ:SUB|ZZ:CHO", "000000301", T0, TimeSpan.FromDays(30));
+        var indexes = await (await _db.GetCollection<MongoDB.Bson.BsonDocument>(MongoX12InterchangeStore.ReceiptsCollection).Indexes.ListAsync()).ToListAsync();
+        var ttl = Assert.Single(indexes, i => i["name"] == MongoX12InterchangeStore.ReceiptTtlIndexName);
+        Assert.Equal(TimeSpan.FromDays(366).TotalSeconds, ttl["expireAfterSeconds"].ToDouble());
+
+        // A different window replaces the index instead of failing.
+        await new MongoX12InterchangeStore(_db, TimeSpan.FromDays(31)).EnsureIndexesAsync();
+        indexes = await (await _db.GetCollection<MongoDB.Bson.BsonDocument>(MongoX12InterchangeStore.ReceiptsCollection).Indexes.ListAsync()).ToListAsync();
+        Assert.Equal(TimeSpan.FromDays(31).TotalSeconds, indexes.Single(i => i["name"] == MongoX12InterchangeStore.ReceiptTtlIndexName)["expireAfterSeconds"].ToDouble());
+    }
+
+    [Fact]
+    public async Task OutboundBySource_FindsTheRecordedInterchange()
+    {
+        await _store.SaveOutboundAsync(new OutboundInterchangeRecord { TenantId = "t1", TransactionType = "277CA", ControlNumber = "000000777", SourceReference = "c1:Paid", SentAt = T0 });
+        Assert.Equal("000000777", (await _store.FindOutboundBySourceAsync("t1", "277CA", "c1:Paid"))!.ControlNumber);
+        Assert.Null(await _store.FindOutboundBySourceAsync("t2", "277CA", "c1:Paid"));
+        Assert.Null(await _store.FindOutboundBySourceAsync("t1", "277CA", "c1:Approved"));
+    }
+
+    [Fact]
     public async Task ConcurrentReceipts_OnlyOneWins()
     {
         var window = TimeSpan.FromDays(30);

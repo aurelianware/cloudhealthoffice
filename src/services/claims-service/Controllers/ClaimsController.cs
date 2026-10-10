@@ -1278,9 +1278,12 @@ public class ClaimsController : ControllerBase
 
         var edi = _ackService.Generate277CA(claim, cfg);
 
-        // Remember the 277CA's envelope so the submitter's TA1 for it can be matched.
+        // Remember the 277CA's envelope so the submitter's TA1 for it can be
+        // matched. One interchange per claim status: a repeat download reuses
+        // the ISA13 already recorded instead of minting a new one.
         if (outboundTracker is not null)
-            await outboundTracker.RecordSentAsync(TryGetTenantId(), edi, "277CA", claim.Id, HttpContext?.RequestAborted ?? CancellationToken.None);
+            edi = await outboundTracker.GetOrRecordSentAsync(TryGetTenantId(), edi, "277CA", $"{claim.Id}:{claim.Status}",
+                HttpContext?.RequestAborted ?? CancellationToken.None);
 
         var filename = $"277CA_{claim.ClaimNumber}.edi";
         Response.Headers["Content-Disposition"] = $"attachment; filename=\"{filename}\"";

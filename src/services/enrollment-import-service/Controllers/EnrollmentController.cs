@@ -85,15 +85,17 @@ public class EnrollmentController : ControllerBase
         // Interchange envelope first: a rejected ISA/IEA gets a TA1 and its
         // contents are never parsed or imported (and no 999 is produced).
         InterchangeIntakeResult? envelope = null;
+        InterchangeIntakeRequest? intakeRequest = null;
         if (_interchangeIntake is not null)
         {
-            envelope = await _interchangeIntake.ReceiveAsync(new InterchangeIntakeRequest
+            intakeRequest = new InterchangeIntakeRequest
             {
                 TenantId = tenantId,
                 Content = ediContent,
                 TransactionType = "834",
                 FileName = file.FileName,
-            }, HttpContext?.RequestAborted ?? CancellationToken.None);
+            };
+            envelope = await _interchangeIntake.ReceiveAsync(intakeRequest, HttpContext?.RequestAborted ?? CancellationToken.None);
 
             if (envelope.IsRejected)
             {
@@ -110,6 +112,25 @@ public class EnrollmentController : ControllerBase
             ediContent = envelope.AcceptedContent!;
         }
 
+        // The envelope claimed its ISA13: a failure after it gives the number
+        // back, so the partner's resend is not refused as a duplicate.
+        try
+        {
+            var imported = await ImportAcceptedRaw834Async(file, tenantId, ediContent, envelope);
+            if (imported.Result is ObjectResult { StatusCode: >= 400 } && envelope is not null)
+                await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
+            return imported;
+        }
+        catch when (envelope is not null)
+        {
+            await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task<ActionResult<ImportResult>> ImportAcceptedRaw834Async(
+        IFormFile file, string tenantId, string ediContent, InterchangeIntakeResult? envelope)
+    {
         Enrollment834 enrollment;
         try
         {

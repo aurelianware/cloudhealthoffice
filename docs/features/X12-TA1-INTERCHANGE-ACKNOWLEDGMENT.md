@@ -47,12 +47,12 @@ interchanges; each one is judged on its own.
 | 017 | ISA12 is not 5 digits |
 | 018 | ISA13 is not 9 digits |
 | 019 | ISA14 is not 0 or 1 |
-| 020 | ISA15 is not P or T |
+| 020 | ISA15 is not P or T; or ISA15 = T where `X12Interchange:TestInterchangeHandling` is `Reject` (the default in Production) |
 | 021 | IEA01 is missing, not numeric, or not the number of GS segments |
 | 022 | GS/GE out of balance, a segment outside a functional group, a TA1 inside one, or content after the IEA |
 | 023 | No IEA, a file ending inside a group, a new ISA before the IEA, or an ISA cut short |
 | 024 | A GS missing GS01–GS08, or an interchange with no functional groups (and no TA1) |
-| 025 | Duplicate: the same sender (ISA05:ISA06) already used this ISA13 for this tenant within `X12Interchange:DuplicateWindowDays` (default 365) |
+| 025 | Duplicate: the same sender **and receiver** (ISA05:ISA06 and ISA07:ISA08) already used this ISA13 for this tenant within `X12Interchange:DuplicateWindowDays` (default 365), on a path where the check is on (see below) |
 | 026 | Element separator is alphanumeric or whitespace |
 | 027 | ISA16 is alphanumeric, or the same as the element separator or segment terminator |
 
@@ -72,16 +72,41 @@ TA104 is:
 The duplicate check runs only on an interchange that passed every other check,
 so a rejected interchange does not use up its control number and the
 corrected file can be resent with the same ISA13. The check is atomic in
-MongoDB: an upsert keyed on `{tenant}|{sender}|{ISA13}`, so two concurrent
-receipts of the same interchange cannot both get through. Setting
-`DuplicateWindowDays` to 0 turns the check off. That is for sandboxes where the
-same sample file is uploaded again and again; leave it on in production.
+MongoDB: an upsert keyed on `{tenant}|{ISA05:ISA06}|{ISA07:ISA08}|{ISA13}`, so
+two concurrent receipts of the same interchange cannot both get through.
+
+- **Per path.** `X12Interchange:DuplicateCheck` maps an intake path to on/off:
+  - The key is the transaction type (`837`, `834`, `270`), or `{type}-realtime` for a real-time call.
+  - Paths not listed are checked.
+  - `270-realtime` is **off** by default: a timeout retry, or a submitter that uses one ISA13 on every real-time call, still gets its 271, and no receipt is written.
+  - Batch paths keep the check.
+- **Release on failure.** If processing fails *after* the envelope was accepted, the
+  control number is released, so the partner's resend is processed instead of
+  being refused with 025. Failures here mean:
+  - an unreadable 837/834/270;
+  - a file with no claims;
+  - any 4xx/5xx from the parser or the import;
+  - an exception.
+
+  A receipt claimed later by another request is never released.
+- `DuplicateWindowDays` 0 turns the check off everywhere. That is for
+  sandboxes where the same sample file is uploaded again and again; leave it on
+  in production.
+
+**Test interchanges.** `X12Interchange:TestInterchangeHandling`:
+- `Reject` answers ISA15 = T with TA1 R / 020, so test data is never imported as production.
+- `Accept` processes it.
+- When unset: `Reject` in Production, `Accept` everywhere else.
 
 **When a TA1 is produced.** When ISA14 = 1, or whenever TA104 is not `A`. With
 ISA14 = 0 and a clean envelope there is no TA1. The TA1 goes back the way the
 interchange came: ISA05/06 and ISA07/08 are swapped, the received delimiters
 and version are reused when they are valid, ISA14 = 0, and IEA01 = 0, because a
-TA1 is not inside a functional group. If the received ISA09/ISA10 are invalid,
+TA1 is not inside a functional group. The TA1's own ISA13 comes from an atomic
+sequence per tenant and sender/receiver pair (our ISA06 to the partner): a
+Mongo `$inc` in `x12-control-sequences`, running from 1 to 999999999 and then
+wrapping to 1. It is never random. A preview (`/validate`) does not take a
+number; its TA1 carries `000000000`. If the received ISA09/ISA10 are invalid,
 TA102/TA103 carry the time the TA1 was made.
 
 **Responses.**
@@ -93,7 +118,11 @@ TA102/TA103 carry the time the TA1 was made.
   `ta1AcknowledgmentIds`. `ClaimImportTransaction.Ta1ControlNumber` links each
   claim row to its TA1, the same way `Acknowledgment999ControlNumber` links it
   to its 999.
-- 270 rejected: `400 text/plain` whose body is the TA1. No 271.
+- 270 rejected: `400 text/plain` whose body is the TA1. No 271. This keeps
+  the endpoint consistent with how it already answers a 270 it cannot read
+  (`400` with a plain-text error; it never returns 999s). A CORE-style caller
+  that expects acknowledgments as an HTTP 200 payload would need a separate
+  envelope mode; that is not built.
 - 270 accepted: the 271 as before. The stored TA1's id is in the
   `X-TA1-Acknowledgment-Id` header.
 
@@ -102,6 +131,11 @@ into 16 elements, gets no TA1, because there is no ISA13 to acknowledge. It is
 refused with a plain error.
 
 ## Outbound: partner TA1s
+
+A 277CA is produced on demand (`GET /api/claims/{id}/277ca`). The first
+download per claim status is recorded; later downloads reuse that ISA13
+(`GetOrRecordSentAsync`), so one claim status is one interchange and one
+outbound record.
 
 `IOutboundInterchangeTracker.RecordSentAsync` stores the envelope of each
 interchange CHO sends: ISA13, sender, receiver, ISA14, transaction type, and
@@ -143,9 +177,14 @@ default write permission (POST).
 
 MongoDB, in the service's own database (tenant-scoped databases work too):
 
-- `x12-interchange-receipts`: `_id = tenant|sender|ISA13`, `ReceivedAt`.
+- `x12-interchange-receipts`: `_id = tenant|sender|receiver|ISA13`, `ReceivedAt`, with a TTL index of the duplicate window + 1 day.
+- `x12-control-sequences`: TA1 ISA13 sequences.
 - `x12-interchange-acknowledgments`: generated and received TA1s.
 - `x12-outbound-interchanges`: envelope identifiers and TA1 status.
+
+Indexes, the TTL included, are created at startup for the default database. With
+`MongoDb:UseTenantScoping`, each tenant database gets them the first time the
+store writes to it. If the window changes, the TTL index is replaced.
 
 When no `IMongoDatabase` is registered (Cosmos-only and test hosts), a
 process-local store is used, and the duplicate window then covers only that
@@ -157,6 +196,8 @@ pod. TA1s hold envelope identifiers only, never transaction content.
 |---|---|---|
 | `Enabled` | `true` | `false` skips the envelope gate (and so the TA1) |
 | `DuplicateWindowDays` | `365` | 0 turns off the duplicate check |
+| `DuplicateCheck:{path}` | `270-realtime: false` | Per path; `{type}` or `{type}-realtime` |
+| `TestInterchangeHandling` | Reject in Production, else Accept | ISA15 = T |
 | `NotedNoteCodes` | `[]` | Codes that give E instead of R |
 | `KnownReceiverIds` | `[]` | When set, any other ISA08 gets 009 |
 | `SupportedVersions` | `["00401","00501"]` | Others get 003 |

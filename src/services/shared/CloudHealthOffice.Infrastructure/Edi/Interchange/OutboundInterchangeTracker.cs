@@ -44,6 +44,16 @@ public interface IOutboundInterchangeTracker
     Task<OutboundInterchangeRecord?> RecordSentAsync(string tenantId, string ediContent, string? transactionType, string? sourceReference, CancellationToken ct = default);
 
     /// <summary>
+    /// For an interchange that can be produced again on demand (a 277CA
+    /// download): the first time, records it as <see cref="RecordSentAsync"/>
+    /// does; after that, returns <paramref name="ediContent"/> with the ISA13
+    /// (and IEA02) already recorded for this <paramref name="sourceReference"/>,
+    /// so repeat downloads are one interchange and one outbound record.
+    /// Never throws.
+    /// </summary>
+    Task<string> GetOrRecordSentAsync(string tenantId, string ediContent, string transactionType, string sourceReference, CancellationToken ct = default);
+
+    /// <summary>
     /// Applies a partner's TA1 file: stores each TA1 and marks the matching
     /// outbound interchange Accepted, AcceptedWithErrors or Rejected.
     /// </summary>
@@ -62,6 +72,22 @@ public sealed class OutboundInterchangeTracker : IOutboundInterchangeTracker
         _store = store;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
+    }
+
+    public async Task<string> GetOrRecordSentAsync(string tenantId, string ediContent, string transactionType, string sourceReference, CancellationToken ct = default)
+    {
+        try
+        {
+            var existing = await _store.FindOutboundBySourceAsync(tenantId, transactionType, sourceReference, ct);
+            if (existing is not null)
+                return X12InterchangeRewriter.WithControlNumber(ediContent, existing.ControlNumber) ?? ediContent;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Outbound {TransactionType} lookup failed; recording it as new", X12InterchangeIntake.Sanitize(transactionType));
+        }
+        await RecordSentAsync(tenantId, ediContent, transactionType, sourceReference, ct);
+        return ediContent;
     }
 
     public async Task<OutboundInterchangeRecord?> RecordSentAsync(string tenantId, string ediContent, string? transactionType, string? sourceReference, CancellationToken ct = default)
@@ -185,5 +211,40 @@ public sealed class OutboundInterchangeTracker : IOutboundInterchangeTracker
         }
 
         return result;
+    }
+}
+
+/// <summary>Rewrites an interchange's control number.</summary>
+public static class X12InterchangeRewriter
+{
+    /// <summary>
+    /// <paramref name="edi"/> (one interchange) with ISA13 and IEA02 set to
+    /// <paramref name="controlNumber"/>, or null when it has no readable envelope.
+    /// </summary>
+    public static string? WithControlNumber(string edi, string controlNumber)
+    {
+        var read = X12EnvelopeReader.Read(edi);
+        var h = read.Interchanges.FirstOrDefault()?.Header;
+        if (!read.IsReadable || h is null || read.Interchanges.Count != 1 || controlNumber.Length != 9) return null;
+
+        var segments = edi.Split(h.SegmentTerminator);
+        for (var i = 0; i < segments.Length; i++)
+        {
+            var trimmed = segments[i].TrimStart();
+            var lead = segments[i][..(segments[i].Length - trimmed.Length)];
+            if (trimmed.StartsWith("ISA" + h.ElementSeparator, StringComparison.Ordinal))
+            {
+                var e = trimmed.Split(h.ElementSeparator);
+                if (e.Length > 13) e[13] = controlNumber;
+                segments[i] = lead + string.Join(h.ElementSeparator, e);
+            }
+            else if (trimmed.StartsWith("IEA" + h.ElementSeparator, StringComparison.Ordinal))
+            {
+                var e = trimmed.Split(h.ElementSeparator);
+                if (e.Length > 2) e[2] = controlNumber;
+                segments[i] = lead + string.Join(h.ElementSeparator, e);
+            }
+        }
+        return string.Join(h.SegmentTerminator, segments);
     }
 }

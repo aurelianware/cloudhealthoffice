@@ -69,6 +69,17 @@ public class EnrollmentRaw834Ta1Tests
     }
 
     [Fact]
+    public async Task ParseFailureAfterTheEnvelope_ReleasesTheControlNumber()
+    {
+        var ctl = Controller();
+        _parser.Setup(p => p.Parse(It.IsAny<string>(), It.IsAny<string>())).Throws(new X12FormatException("bad INS loop"));
+        Assert.IsType<BadRequestObjectResult>((await ctl.ImportRaw834(File(Edi834()))).Result);
+
+        _parser.Setup(p => p.Parse(It.IsAny<string>(), It.IsAny<string>())).Returns(new Enrollment834 { FileName = "f.834" });
+        Assert.IsType<OkObjectResult>((await ctl.ImportRaw834(File(Edi834()))).Result);
+    }
+
+    [Fact]
     public async Task NoAckRequested_ImportsWithoutTa1_AndASecondUploadIsADuplicate()
     {
         var ctl = Controller();

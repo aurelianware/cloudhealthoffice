@@ -211,14 +211,21 @@ public class EligibilityController : ControllerBase
 
         // Interchange envelope first. A rejected ISA/IEA is answered with the
         // TA1 alone (400, text/plain): no 271 and no 999 for its contents.
+        InterchangeIntakeResult? envelope = null;
+        InterchangeIntakeRequest? intakeRequest = null;
         if (_interchangeIntake is not null)
         {
-            var envelope = await _interchangeIntake.ReceiveAsync(new InterchangeIntakeRequest
+            // Real time: the duplicate-ISA13 check is off by default for this
+            // path (X12Interchange:DuplicateCheck:270-realtime), so a retry
+            // after a timeout still gets its 271.
+            intakeRequest = new InterchangeIntakeRequest
             {
                 TenantId = TenantId,
                 Content = edi270,
                 TransactionType = "270",
-            }, HttpContext.RequestAborted);
+                RealTime = true,
+            };
+            envelope = await _interchangeIntake.ReceiveAsync(intakeRequest, HttpContext.RequestAborted);
 
             if (envelope.AcknowledgmentIds.Count > 0)
                 Response.Headers["X-TA1-Acknowledgment-Id"] = string.Join(",", envelope.AcknowledgmentIds);
@@ -232,6 +239,23 @@ public class EligibilityController : ControllerBase
             }
             edi270 = envelope.AcceptedContent!;
         }
+
+        try
+        {
+            var answered = await AnswerAccepted270Async(edi270);
+            if (answered is ObjectResult { StatusCode: >= 400 } or StatusCodeResult { StatusCode: >= 400 } && envelope is not null)
+                await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope!, CancellationToken.None);
+            return answered;
+        }
+        catch when (envelope is not null)
+        {
+            await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task<IActionResult> AnswerAccepted270Async(string edi270)
+    {
 
         Edi270ParseResult parsed;
         try

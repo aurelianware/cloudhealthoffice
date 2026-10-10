@@ -23,6 +23,10 @@ public static class X12InterchangeServiceCollectionExtensions
     public static IServiceCollection AddChoX12Interchange(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<X12InterchangeOptions>(configuration.GetSection(X12InterchangeOptions.SectionName));
+        services.AddOptions<X12InterchangeOptions>().PostConfigure<IServiceProvider>((o, sp) =>
+            o.TestInterchangeHandling ??= sp.GetService<IHostEnvironment>()?.IsProduction() == true
+                ? TestInterchangeHandling.Reject
+                : TestInterchangeHandling.Accept);
 
         // MongoDB whenever the service has registered an IMongoDatabase (resolved
         // per scope, so tenant-scoped databases work); otherwise one in-memory
@@ -30,7 +34,8 @@ public static class X12InterchangeServiceCollectionExtensions
         services.TryAddSingleton<InMemoryX12InterchangeStore>();
         services.TryAddScoped<IX12InterchangeStore>(sp =>
             sp.GetService<IMongoDatabase>() is { } database
-                ? new MongoX12InterchangeStore(database)
+                ? new MongoX12InterchangeStore(database,
+                    TimeSpan.FromDays(Math.Max(1, sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>>().Value.DuplicateWindowDays) + 1))
                 : sp.GetRequiredService<InMemoryX12InterchangeStore>());
         if (!string.IsNullOrEmpty(configuration["MongoDb:ConnectionString"]))
             services.AddHostedService<X12InterchangeIndexInitializer>();
@@ -141,6 +146,7 @@ public sealed class X12InterchangeIndexInitializer : IHostedService
         try
         {
             using var scope = _services.CreateScope();
+            // Tenant-scoped databases (MongoDb:UseTenantScoping) get theirs on first write.
             if (scope.ServiceProvider.GetService<IX12InterchangeStore>() is MongoX12InterchangeStore store)
                 await store.EnsureIndexesAsync(cancellationToken);
         }

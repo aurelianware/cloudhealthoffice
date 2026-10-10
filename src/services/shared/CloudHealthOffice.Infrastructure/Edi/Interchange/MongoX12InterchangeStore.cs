@@ -1,33 +1,61 @@
+using System.Collections.Concurrent;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 
 namespace CloudHealthOffice.Infrastructure.Edi.Interchange;
 
 /// <summary>
-/// MongoDB store for interchange control. Three collections:
+/// MongoDB store for interchange control. Four collections:
 /// <list type="bullet">
-/// <item><c>x12-interchange-receipts</c>: one document per (tenant, sender, ISA13), the duplicate check.</item>
+/// <item><c>x12-interchange-receipts</c>: one document per (tenant, sender + receiver, ISA13), the duplicate check; TTL on <c>ReceivedAt</c>.</item>
+/// <item><c>x12-control-sequences</c>: TA1 ISA13 sequences, one per (tenant, our id, partner).</item>
 /// <item><c>x12-interchange-acknowledgments</c>: generated and received TA1s.</item>
-/// <item><c>x12-outbound-interchanges</c>: interchanges CHO sent, with their TA1 outcome.</item>
+/// <item><c>x12-outbound-interchanges</c>: interchanges CHO sent, with their TA1 status.</item>
 /// </list>
-/// Indexes are created by <see cref="EnsureIndexesAsync"/> (run once at
-/// startup by <see cref="X12InterchangeIndexInitializer"/>).
+/// Indexes are created once per database the first time the store writes to
+/// it (so tenant-scoped databases, <c>MongoDb:UseTenantScoping</c>, get them
+/// too), and at startup for the default database
+/// (<see cref="X12InterchangeIndexInitializer"/>).
 /// </summary>
 public sealed class MongoX12InterchangeStore : IX12InterchangeStore
 {
     public const string ReceiptsCollection = "x12-interchange-receipts";
+    public const string SequencesCollection = "x12-control-sequences";
     public const string AcknowledgmentsCollection = "x12-interchange-acknowledgments";
     public const string OutboundCollection = "x12-outbound-interchanges";
+    public const string ReceiptTtlIndexName = "receivedAt_ttl";
 
+    private static readonly ConcurrentDictionary<string, Lazy<Task>> IndexedDatabases = new();
+
+    private readonly IMongoDatabase _database;
+    private readonly TimeSpan _receiptTtl;
     private readonly IMongoCollection<InterchangeReceiptDocument> _receipts;
+    private readonly IMongoCollection<ControlSequenceDocument> _sequences;
     private readonly IMongoCollection<InterchangeAcknowledgmentRecord> _acks;
     private readonly IMongoCollection<OutboundInterchangeRecord> _outbound;
 
-    public MongoX12InterchangeStore(IMongoDatabase database)
+    /// <param name="receiptTtl">How long receipts are kept (the duplicate window plus a day). Default 366 days.</param>
+    public MongoX12InterchangeStore(IMongoDatabase database, TimeSpan? receiptTtl = null)
     {
+        _database = database;
+        _receiptTtl = receiptTtl is { } ttl && ttl > TimeSpan.Zero ? ttl : TimeSpan.FromDays(366);
         _receipts = database.GetCollection<InterchangeReceiptDocument>(ReceiptsCollection);
+        _sequences = database.GetCollection<ControlSequenceDocument>(SequencesCollection);
         _acks = database.GetCollection<InterchangeAcknowledgmentRecord>(AcknowledgmentsCollection);
         _outbound = database.GetCollection<OutboundInterchangeRecord>(OutboundCollection);
+    }
+
+    private Task EnsureIndexesOnceAsync(CancellationToken ct)
+    {
+        var key = $"{_database.Client.Settings.Server}|{_database.DatabaseNamespace.DatabaseName}";
+        var lazy = IndexedDatabases.GetOrAdd(key, _ => new Lazy<Task>(() => EnsureIndexesAsync(CancellationToken.None)));
+        return lazy.Value.IsFaulted ? RetryIndexes(key) : lazy.Value;
+
+        Task RetryIndexes(string k)
+        {
+            IndexedDatabases.TryRemove(k, out _);
+            return EnsureIndexesAsync(ct);
+        }
     }
 
     public async Task EnsureIndexesAsync(CancellationToken ct = default)
@@ -45,12 +73,30 @@ public sealed class MongoX12InterchangeStore : IX12InterchangeStore
                 Builders<OutboundInterchangeRecord>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.ControlNumber)),
             new CreateIndexModel<OutboundInterchangeRecord>(
                 Builders<OutboundInterchangeRecord>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.AckStatus).Descending(x => x.SentAt)),
+            new CreateIndexModel<OutboundInterchangeRecord>(
+                Builders<OutboundInterchangeRecord>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.TransactionType).Ascending(x => x.SourceReference)),
         ], ct);
+
+        // Receipts older than the window no longer block anything: let Mongo delete them.
+        var ttl = new CreateIndexModel<InterchangeReceiptDocument>(
+            Builders<InterchangeReceiptDocument>.IndexKeys.Ascending(x => x.ReceivedAt),
+            new CreateIndexOptions { Name = ReceiptTtlIndexName, ExpireAfter = _receiptTtl });
+        try
+        {
+            await _receipts.Indexes.CreateOneAsync(ttl, cancellationToken: ct);
+        }
+        catch (MongoCommandException ex) when (ex.Code is 85 or 86)
+        {
+            // The window changed since the index was made: replace it with the new expiry.
+            await _receipts.Indexes.DropOneAsync(ReceiptTtlIndexName, ct);
+            await _receipts.Indexes.CreateOneAsync(ttl, cancellationToken: ct);
+        }
     }
 
-    public async Task<bool> TryRegisterReceiptAsync(string tenantId, string senderKey, string controlNumber, DateTime receivedAt, TimeSpan window, CancellationToken ct = default)
+    public async Task<bool> TryRegisterReceiptAsync(string tenantId, string partyKey, string controlNumber, DateTime receivedAt, TimeSpan window, CancellationToken ct = default)
     {
-        var id = $"{tenantId}|{senderKey}|{controlNumber}";
+        await EnsureIndexesOnceAsync(ct);
+        var id = ReceiptId(tenantId, partyKey, controlNumber);
         var cutoff = receivedAt - window;
         var f = Builders<InterchangeReceiptDocument>.Filter;
 
@@ -62,7 +108,7 @@ public sealed class MongoX12InterchangeStore : IX12InterchangeStore
         var update = Builders<InterchangeReceiptDocument>.Update
             .Set(x => x.ReceivedAt, receivedAt)
             .SetOnInsert(x => x.TenantId, tenantId)
-            .SetOnInsert(x => x.SenderKey, senderKey)
+            .SetOnInsert(x => x.PartyKey, partyKey)
             .SetOnInsert(x => x.ControlNumber, controlNumber);
         try
         {
@@ -75,8 +121,28 @@ public sealed class MongoX12InterchangeStore : IX12InterchangeStore
         }
     }
 
-    public Task SaveAcknowledgmentAsync(InterchangeAcknowledgmentRecord record, CancellationToken ct = default) =>
-        _acks.ReplaceOneAsync(x => x.Id == record.Id, record, new ReplaceOptions { IsUpsert = true }, ct);
+    public Task ReleaseReceiptAsync(string tenantId, string partyKey, string controlNumber, DateTime receivedAt, CancellationToken ct = default)
+    {
+        var id = ReceiptId(tenantId, partyKey, controlNumber);
+        return _receipts.DeleteOneAsync(x => x.Id == id && x.TenantId == tenantId && x.ReceivedAt == receivedAt, ct);
+    }
+
+    public async Task<long> NextControlNumberAsync(string tenantId, string sequenceKey, CancellationToken ct = default)
+    {
+        var id = $"{tenantId}|{sequenceKey}";
+        var doc = await _sequences.FindOneAndUpdateAsync(
+            Builders<ControlSequenceDocument>.Filter.Eq(x => x.Id, id),
+            Builders<ControlSequenceDocument>.Update.Inc(x => x.Value, 1L).SetOnInsert(x => x.TenantId, tenantId),
+            new FindOneAndUpdateOptions<ControlSequenceDocument> { IsUpsert = true, ReturnDocument = ReturnDocument.After },
+            ct);
+        return X12ControlNumberRange.Wrap(doc.Value);
+    }
+
+    public async Task SaveAcknowledgmentAsync(InterchangeAcknowledgmentRecord record, CancellationToken ct = default)
+    {
+        await EnsureIndexesOnceAsync(ct);
+        await _acks.ReplaceOneAsync(x => x.Id == record.Id, record, new ReplaceOptions { IsUpsert = true }, ct);
+    }
 
     public async Task<InterchangeAcknowledgmentRecord?> GetAcknowledgmentAsync(string tenantId, string id, CancellationToken ct = default) =>
         await _acks.Find(x => x.TenantId == tenantId && x.Id == id).FirstOrDefaultAsync(ct);
@@ -96,14 +162,22 @@ public sealed class MongoX12InterchangeStore : IX12InterchangeStore
             .ToListAsync(ct);
     }
 
-    public Task SaveOutboundAsync(OutboundInterchangeRecord record, CancellationToken ct = default) =>
-        _outbound.ReplaceOneAsync(x => x.Id == record.Id, record, new ReplaceOptions { IsUpsert = true }, ct);
+    public async Task SaveOutboundAsync(OutboundInterchangeRecord record, CancellationToken ct = default)
+    {
+        await EnsureIndexesOnceAsync(ct);
+        await _outbound.ReplaceOneAsync(x => x.Id == record.Id, record, new ReplaceOptions { IsUpsert = true }, ct);
+    }
 
     public async Task<IReadOnlyList<OutboundInterchangeRecord>> FindOutboundAsync(string tenantId, string controlNumber, CancellationToken ct = default) =>
         await _outbound.Find(x => x.TenantId == tenantId && x.ControlNumber == controlNumber)
             .SortByDescending(x => x.SentAt)
             .Limit(50)
             .ToListAsync(ct);
+
+    public async Task<OutboundInterchangeRecord?> FindOutboundBySourceAsync(string tenantId, string transactionType, string sourceReference, CancellationToken ct = default) =>
+        await _outbound.Find(x => x.TenantId == tenantId && x.TransactionType == transactionType && x.SourceReference == sourceReference)
+            .SortByDescending(x => x.SentAt)
+            .FirstOrDefaultAsync(ct);
 
     public async Task<IReadOnlyList<OutboundInterchangeRecord>> ListOutboundAsync(string tenantId, string? ackStatus, int limit, CancellationToken ct = default)
     {
@@ -116,14 +190,29 @@ public sealed class MongoX12InterchangeStore : IX12InterchangeStore
             .ToListAsync(ct);
     }
 
-    /// <summary>One received (tenant, sender, ISA13).</summary>
+    private static string ReceiptId(string tenantId, string partyKey, string controlNumber) => $"{tenantId}|{partyKey}|{controlNumber}";
+
+    /// <summary>One received (tenant, sender + receiver, ISA13).</summary>
+    [BsonIgnoreExtraElements]
     public sealed class InterchangeReceiptDocument
     {
         [BsonId]
         public string Id { get; set; } = string.Empty;
         public string TenantId { get; set; } = string.Empty;
-        public string SenderKey { get; set; } = string.Empty;
+
+        /// <summary><c>ISA05:ISA06|ISA07:ISA08</c>.</summary>
+        public string PartyKey { get; set; } = string.Empty;
+
         public string ControlNumber { get; set; } = string.Empty;
         public DateTime ReceivedAt { get; set; }
+    }
+
+    /// <summary>A TA1 ISA13 sequence.</summary>
+    public sealed class ControlSequenceDocument
+    {
+        [BsonId]
+        public string Id { get; set; } = string.Empty;
+        public string TenantId { get; set; } = string.Empty;
+        public long Value { get; set; }
     }
 }

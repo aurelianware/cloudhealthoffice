@@ -33,6 +33,16 @@ public sealed class X12InterchangeHeader
 
     /// <summary>The submitter, as the duplicate-control-number check keys it: <c>ISA05:ISA06</c>, trimmed.</summary>
     public string SenderKey => $"{SenderQualifier}:{SenderId}";
+
+    /// <summary>The receiver: <c>ISA07:ISA08</c>, trimmed.</summary>
+    public string ReceiverKey => $"{ReceiverQualifier}:{ReceiverId}";
+
+    /// <summary>
+    /// The interchange path the duplicate check keys on: <c>ISA05:ISA06|ISA07:ISA08</c>.
+    /// ISA13 is unique per sender and receiver, so the same number sent to
+    /// two receivers is not a duplicate.
+    /// </summary>
+    public string PartyKey => $"{SenderKey}|{ReceiverKey}";
 }
 
 /// <summary>One envelope-level finding, carrying the TA105 note code it maps to.</summary>

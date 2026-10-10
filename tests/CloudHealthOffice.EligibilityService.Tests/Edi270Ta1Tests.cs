@@ -83,6 +83,20 @@ public class Edi270Ta1Tests : IClassFixture<EligibilityApiFactory>
     }
 
     [Fact]
+    public async Task RealTimeRetryWithTheSameIsa13_StillGetsA271()
+    {
+        _factory.EligibilityService.ProcessInquiryAsync(Arg.Any<EligibilityInquiry>())
+            .Returns(new EligibilityResponse { Id = "resp-retry", TenantId = "ta1-tenant", ResponseCode = "AAA", IsCovered = true, CreatedDate = DateTime.UtcNow });
+
+        var first = await _client.PostAsync("/api/eligibility/270", Text(Edi270("000000403")));
+        var retry = await _client.PostAsync("/api/eligibility/270", Text(Edi270("000000403")));
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+        Assert.Contains("ST*271", await retry.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task InboundEndpoint_RefusesWhatIsNotATa1()
     {
         var posted = await _client.PostAsync("/api/eligibility/interchange/ta1/inbound", Text("not x12"));

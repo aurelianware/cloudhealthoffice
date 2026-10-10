@@ -37,9 +37,11 @@ public class Raw837Ta1Tests : IClassFixture<Ta1ClaimsApiFactory>
 {
     private readonly HttpClient _client;
     private readonly IClaimSubmissionService _service;
+    private readonly Ta1ClaimsApiFactory _factory;
 
     public Raw837Ta1Tests(Ta1ClaimsApiFactory factory)
     {
+        _factory = factory;
         _service = factory.SubmissionService;
         _service.ClearSubstitute();
         _service
@@ -145,6 +147,51 @@ public class Raw837Ta1Tests : IClassFixture<Ta1ClaimsApiFactory>
 
         var imported = await _client.PostAsync("/api/v1/claims/import/raw837", File(edi));
         Assert.Equal(HttpStatusCode.OK, imported.StatusCode);
+    }
+
+    [Fact]
+    public async Task ImportFailingAfterTheEnvelope_ReleasesTheControlNumber_SoTheResendIsProcessed()
+    {
+        var edi = Sample(NextControl());
+        _service.ClearSubstitute();
+        _service
+            .SubmitAsync(Arg.Any<AdapterClaim>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns<Task<ClaimSubmissionResult>>(_ => throw new InvalidOperationException("database unavailable"));
+
+        var failed = await _client.PostAsync("/api/v1/claims/import/raw837", File(edi));
+        Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
+
+        _service.ClearSubstitute();
+        _service
+            .SubmitAsync(Arg.Any<AdapterClaim>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ClaimSubmissionResult.Ok(ci.Arg<AdapterClaim>()));
+        var resent = await _client.PostAsync("/api/v1/claims/import/raw837", File(edi));
+        Assert.Equal(HttpStatusCode.OK, resent.StatusCode);
+        Assert.Equal(1, (await resent.Content.ReadFromJsonAsync<Raw837ImportResult>())!.SucceededCount);
+
+        // Processed once: now it is a duplicate.
+        var third = await _client.PostAsync("/api/v1/claims/import/raw837", File(edi));
+        Assert.Equal(HttpStatusCode.BadRequest, third.StatusCode);
+    }
+
+    [Fact]
+    public async Task Repeated277caDownload_IsOneInterchange()
+    {
+        var claim = new Claim { Id = "claim-277-ta1", ClaimNumber = "CLM-277", MemberId = "M1", Status = ClaimStatus.Approved };
+        _factory.ClaimRepository.GetByIdAsync("claim-277-ta1").Returns(claim);
+        string Ca(string control) =>
+            $"ISA*00*          *00*          *ZZ*CHO            *ZZ*RECEIVER       *261010*0900*^*00501*{control}*0*P*:~" +
+            $"GS*HN*CHO*RECEIVER*20261010*0900*1*X*005010X214~ST*277*0001~SE*2*0001~GE*1*1~IEA*1*{control}~";
+        _factory.AcknowledgmentService.Generate277CA(Arg.Any<Claim>(), Arg.Any<ClaimAcknowledgmentConfig>())
+            .Returns(Ca("111111111"), Ca("222222222"));
+
+        var first = await _client.GetStringAsync("/api/claims/claim-277-ta1/277ca");
+        var second = await _client.GetStringAsync("/api/claims/claim-277-ta1/277ca");
+
+        Assert.Equal(first, second);
+        Assert.Contains("*111111111*", second);
+        var outbound = await _client.GetFromJsonAsync<List<OutboundInterchangeRecord>>("/api/v1/claims/interchange/outbound");
+        Assert.Single(outbound!, o => o.SourceReference == "claim-277-ta1:Approved");
     }
 
     private static MultipartFormDataContent File(string edi)

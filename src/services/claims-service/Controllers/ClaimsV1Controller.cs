@@ -164,15 +164,17 @@ public class ClaimsV1Controller : ControllerBase
         // TA1 and nothing else: it never reaches SNIP, so no 999 is built for
         // its contents. Accepted interchanges continue on their own.
         InterchangeIntakeResult? envelope = null;
+        InterchangeIntakeRequest? intakeRequest = null;
         if (_interchangeIntake is not null)
         {
-            envelope = await _interchangeIntake.ReceiveAsync(new InterchangeIntakeRequest
+            intakeRequest = new InterchangeIntakeRequest
             {
                 TenantId = GetTenantId(),
                 Content = ediContent,
                 TransactionType = "837",
                 FileName = file.FileName,
-            }, ct);
+            };
+            envelope = await _interchangeIntake.ReceiveAsync(intakeRequest, ct);
 
             if (envelope.IsRejected)
             {
@@ -181,6 +183,28 @@ public class ClaimsV1Controller : ControllerBase
             }
             ediContent = envelope.AcceptedContent!;
         }
+
+        // The envelope claimed its ISA13. If the file then cannot be imported
+        // (unreadable, no claims, an error), give it back so the partner's
+        // resend is processed rather than refused as a duplicate (TA105 025).
+        try
+        {
+            var imported = await ImportAcceptedRaw837Async(file, ediContent, envelope, ct);
+            if (imported.Result is ObjectResult { StatusCode: >= 400 } && envelope is not null)
+                await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
+            return imported;
+        }
+        catch when (envelope is not null)
+        {
+            await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
+            throw;
+        }
+    }
+
+    /// <summary>SNIP, parse and submit for the interchanges whose envelope was accepted.</summary>
+    private async Task<ActionResult<Raw837ImportResult>> ImportAcceptedRaw837Async(
+        IFormFile file, string ediContent, InterchangeIntakeResult? envelope, CancellationToken ct)
+    {
         var ta1ControlNumber = envelope?.Interchanges.FirstOrDefault(i => i.Ta1ControlNumber is not null)?.Ta1ControlNumber;
 
         // WEDI SNIP 1–5 runs before anything is parsed or mapped. Claims in a
