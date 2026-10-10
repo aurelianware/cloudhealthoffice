@@ -412,7 +412,10 @@ public enum SponsorAccountEntryType
     OverpaymentCredit,
 
     /// <summary>Exception-queue cash a person put on the account.</summary>
-    ExceptionCredit
+    ExceptionCredit,
+
+    /// <summary>The net credit of a rated invoice (retro credits above the month's charges) moved to the account.</summary>
+    RatedInvoiceCredit
 }
 
 public class SponsorAccountEntry
