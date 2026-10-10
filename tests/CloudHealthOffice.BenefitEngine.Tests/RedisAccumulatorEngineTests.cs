@@ -198,6 +198,44 @@ public sealed class RedisAccumulatorEngineTests : IClassFixture<RedisServerFixtu
         Assert.Contains(c2, u => u.Type == AccumulatorType.FamilyDeductible && u.Amount == 50m);
     }
 
+    /// <summary>
+    /// S4: a rebuild reads claims-service just before claim C2 is approved; C2's commit then
+    /// lands on the still-cold hash (adding nothing, relying on the rebuild), and only then
+    /// does the rebuild populate the hash. Without the generation check the hash would hold
+    /// the stale answer (C2 missing) until the next invalidation; with it the rebuild asks
+    /// again and counts C2.
+    /// </summary>
+    [SkippableFact]
+    public async Task AColdCommitRacingARebuild_IsNotLost()
+    {
+        var (_, store) = Create();
+        _history.Approved("C1", deductible: 100m, oop: 100m);
+        _history.DuringNextRead = async () =>
+        {
+            // C2 is approved (claims-service now counts it) and commits — on the cold hash.
+            _history.Approved("C2", deductible: 150m, oop: 150m);
+            var cold = await store.CommitAsync(new AccumulatorCommit
+            {
+                CommitId = Guid.NewGuid().ToString("N"), ClaimId = "C2", MemberId = Member, SubscriberId = Subscriber,
+                BenefitPlanId = _plan.Id, PlanYear = "2026",
+                Updates =
+                [
+                    new AccumulatorUpdate { Type = AccumulatorType.IndividualDeductible, Scope = AccumulatorScope.Individual,
+                        NetworkTier = NetworkTier.InNetwork, Amount = 150m, Source = "Deductible", ClampAtLimit = 500m },
+                    new AccumulatorUpdate { Type = AccumulatorType.FamilyDeductible, Scope = AccumulatorScope.Family,
+                        NetworkTier = NetworkTier.InNetwork, Amount = 150m, Source = "Deductible", ClampAtLimit = 1500m },
+                ],
+            });
+            Assert.Equal(AccumulatorCommitOutcome.Committed, cold.Outcome);
+        };
+
+        Assert.Equal(250m, await Balance(store, AccumulatorType.IndividualDeductible));
+        // And it stays so: the cached hash holds C2.
+        Assert.Equal(250m, await Balance(store, AccumulatorType.IndividualDeductible));
+        Assert.Equal(250m, await Balance(store, AccumulatorType.FamilyDeductible));
+        Assert.NotEmpty(await store.GetClaimUpdatesAsync(Member, Subscriber, _plan.Id, "2026", "C2"));
+    }
+
     private sealed class Tenant(string id) : IBenefitEngineTenantContext
     {
         public string TenantId { get; } = id;
@@ -210,6 +248,9 @@ public sealed class RedisAccumulatorEngineTests : IClassFixture<RedisServerFixtu
 
         public void Approved(string claim, decimal deductible, decimal oop) => _claims.Add((claim, deductible, oop));
 
+        /// <summary>Runs once, after the next read took its answer and before it returns it.</summary>
+        public Func<Task>? DuringNextRead { get; set; }
+
         public async Task<(bool Success, IReadOnlyList<AccumulatorSnapshot> Snapshots)> CalculateAccumulatorsAsync(
             string tenantId, string ownerId, AccumulatorScope scope, Guid benefitPlanId, string planYear,
             CancellationToken ct = default)
@@ -218,7 +259,7 @@ public sealed class RedisAccumulatorEngineTests : IClassFixture<RedisServerFixtu
             return (data.Success, data.Snapshots);
         }
 
-        public Task<AccumulatorRebuildData> CalculateAccumulatorsWithClaimsAsync(
+        public async Task<AccumulatorRebuildData> CalculateAccumulatorsWithClaimsAsync(
             string tenantId, string ownerId, AccumulatorScope scope, Guid benefitPlanId, string planYear,
             CancellationToken ct = default)
         {
@@ -230,15 +271,21 @@ public sealed class RedisAccumulatorEngineTests : IClassFixture<RedisServerFixtu
                 Type = t, Scope = scope, NetworkTier = NetworkTier.InNetwork, Amount = a,
                 Source = t == ded ? "Deductible" : "OOP",
             };
-            var contributions = _claims
+            var answer = _claims.ToList();
+            var contributions = answer
                 .Select(c => new ClaimAccumulatorContribution(c.Claim, [U(ded, c.Deductible), U(oop, c.Oop)]))
                 .ToList();
-            IReadOnlyList<AccumulatorSnapshot> totals = _claims.Count == 0 ? [] :
+            IReadOnlyList<AccumulatorSnapshot> totals = answer.Count == 0 ? [] :
             [
-                new AccumulatorSnapshot { Type = ded, Scope = scope, NetworkTier = NetworkTier.InNetwork, AccumulatedAmountAfter = _claims.Sum(c => c.Deductible) },
-                new AccumulatorSnapshot { Type = oop, Scope = scope, NetworkTier = NetworkTier.InNetwork, AccumulatedAmountAfter = _claims.Sum(c => c.Oop) },
+                new AccumulatorSnapshot { Type = ded, Scope = scope, NetworkTier = NetworkTier.InNetwork, AccumulatedAmountAfter = answer.Sum(c => c.Deductible) },
+                new AccumulatorSnapshot { Type = oop, Scope = scope, NetworkTier = NetworkTier.InNetwork, AccumulatedAmountAfter = answer.Sum(c => c.Oop) },
             ];
-            return Task.FromResult(new AccumulatorRebuildData(true, totals, contributions));
+            if (DuringNextRead is { } hook)
+            {
+                DuringNextRead = null;
+                await hook();
+            }
+            return new AccumulatorRebuildData(true, totals, contributions);
         }
     }
 }

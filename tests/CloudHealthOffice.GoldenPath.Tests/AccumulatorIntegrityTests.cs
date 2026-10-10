@@ -89,6 +89,15 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     /// <summary>benefit-plan-service answers 503 to commit-accumulators and reverse-claim.</summary>
     private bool _accumulatorWritesDown;
 
+    /// <summary>benefit-plan-service is older than claims-service: its pricing prepares no commit.</summary>
+    private bool _noPreparedCommit;
+
+    /// <summary>Runs once, right after the next commit-accumulators answer and before the caller sees it.</summary>
+    private Func<Task>? _afterCommitAnswer;
+
+    private ClaimFinalizationService _finalization = null!;
+    private AccumulatorOperationsService _operations = null!;
+
     /// <summary>The backend: the claim repository and the engine's accumulator store.</summary>
     protected abstract Task<(IClaimRepository Claims, IAccumulatorService Accumulators)> CreateStoresAsync(
         AdjudicationTenantContext tenantContext);
@@ -131,7 +140,24 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
                 var path = request.RequestUri!.AbsolutePath;
                 if (_accumulatorWritesDown && path is "/api/v1/adjudication/commit-accumulators" or "/api/v1/adjudication/reverse-claim")
                     return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
-                return await benefitPlanService.SendAsync(request, ct);
+                var response = await benefitPlanService.SendAsync(request, ct);
+                if (_noPreparedCommit && path == "/api/v1/adjudication/calculate-benefits")
+                {
+                    var json = System.Text.Json.Nodes.JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!.AsObject();
+                    foreach (var key in json.Select(kv => kv.Key).Where(k => k.Equals("preparedAccumulatorCommit", StringComparison.OrdinalIgnoreCase)).ToList())
+                        json.Remove(key);
+                    response = new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(json.ToJsonString(), System.Text.Encoding.UTF8, "application/json"),
+                    };
+                }
+                if (path == "/api/v1/adjudication/commit-accumulators" && _afterCommitAnswer is { } hook)
+                {
+                    _afterCommitAnswer = null;
+                    await response.Content.LoadIntoBufferAsync();
+                    await hook();
+                }
+                return response;
             }));
         _engine = new HttpBenefitCalculationEngineClient(http, new HttpContextAccessor(), tenantContext,
             NullLogger<HttpBenefitCalculationEngineClient>.Instance);
@@ -192,6 +218,12 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
             Substitute.For<IClaimAdjustmentService>(), Options.Create(new AdjudicationPipelineOptions()),
             NullLogger<ClaimAdjudicationOrchestrator>.Instance, _outbox);
         _submit = adapterFactory;
+        _finalization = new ClaimFinalizationService(_claims, Substitute.For<IClaimVersionEventPublisher>(),
+            Substitute.For<IClaimEventPublisher>(), Substitute.For<IClaimAdjustmentService>(),
+            NullLogger<ClaimFinalizationService>.Instance, _engine, _outbox);
+        _operations = new AccumulatorOperationsService(_claims, Substitute.For<IClaimVersionEventPublisher>(),
+            Substitute.For<IClaimEventPublisher>(), NullLogger<AccumulatorOperationsService>.Instance,
+            _orchestrator, _outbox, _engine);
     }
 
     private ClaimAdapterFactory _submit = null!;
@@ -468,6 +500,9 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         Assert.Equal(Claims.ClaimStatus.Approved, waiting.Status);
         Assert.NotNull(waiting.PendingAccumulatorCommit);
         await AssertBalances(0m, 0m);
+        // A new entry is left to its writer for the inline grace (2 min).
+        Assert.Equal(0, await _dispatcher.RunOnceAsync(CancellationToken.None));
+        _clock.Advance(Claims.AccumulatorOutboxItem.InlineGrace + TimeSpan.FromSeconds(1));
 
         Assert.Equal(1, await _dispatcher.RunOnceAsync(CancellationToken.None));
         Assert.Null((await Claim(pended.Id))!.PendingAccumulatorCommit);
@@ -590,6 +625,206 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         Assert.Equal(pended.Id, item.ClaimId);
         Assert.IsType<NoContentResult>(await Controller("examiner-2").ResolveAccumulatorAdjustment(pended.Id));
         Assert.True((await Claim(pended.Id))!.AccumulatorClampReview!.Resolved);
+    }
+
+    /// <summary>
+    /// S1: the dispatcher drives the same commit while the inline attempt waits for its answer
+    /// (a slow request outliving the inline grace). The dispatcher's attempt gets
+    /// AlreadyCommitted — carrying the first attempt's clamps — saves the review and clears
+    /// the entry; the inline attempt's clear then finds nothing. The review is saved once,
+    /// whichever attempt finishes first.
+    /// </summary>
+    [SkippableFact]
+    public async Task ClampReview_IsSaved_WhenTheDispatcherFinishesTheCommitFirst()
+    {
+        var pended = await SubmitAndAdjudicateAsync();
+        _afterPricing = async () => Assert.Equal(AccumulatorCommitOutcome.Committed, (await _accumulators.CommitAsync(new AccumulatorCommit
+        {
+            CommitId = Guid.NewGuid().ToString("N"), ClaimId = "CONCURRENT", MemberId = Member, SubscriberId = Member,
+            BenefitPlanId = PlanGuid, PlanYear = PlanYear,
+            Updates =
+            [
+                new AccumulatorUpdate { Type = AccumulatorType.IndividualDeductible, Scope = AccumulatorScope.Individual,
+                    NetworkTier = NetworkTier.InNetwork, Amount = 450m, Source = "Deductible", ClampAtLimit = 500m },
+            ],
+        })).Outcome);
+        AccumulatorOutboxResult? dispatcherSaw = null;
+        _afterCommitAnswer = async () =>
+        {
+            _clock.Advance(Claims.AccumulatorOutboxItem.InlineGrace + TimeSpan.FromSeconds(1));
+            var due = (await Claim(pended.Id))!.PendingAccumulatorCommit!;
+            dispatcherSaw = await _outbox.ProcessAsync(Tenant, pended.Id, Claims.AccumulatorOutboxKind.Commit, due.Id, CancellationToken.None);
+        };
+
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-1", pended.Id, "Approved")));
+
+        Assert.Equal(AccumulatorOutboxResult.AlreadyCommitted, dispatcherSaw);
+        var claim = (await Claim(pended.Id))!;
+        Assert.Null(claim.PendingAccumulatorCommit);
+        var review = claim.AccumulatorClampReview!;
+        Assert.Equal(Claims.AccumulatorClampReview.Clamped, review.Kind);
+        Assert.Contains(review.Clamps, c => c.Type == AccumulatorType.IndividualDeductible && c.Requested == 100m && c.Applied == 50m);
+        await AssertBalances(500m, 100m);
+    }
+
+    /// <summary>
+    /// S2: a version whose commit is still pending (benefit-plan-service down) is superseded by
+    /// a replacement before the commit runs. The commit is dropped, never written — the
+    /// replacement's own commit counts the claim.
+    /// </summary>
+    [SkippableFact]
+    public async Task ASupersededVersionsPendingCommit_IsDropped()
+    {
+        _ncciPends = false;
+        _accumulatorWritesDown = true;
+        var approved = await SubmitAndAdjudicateAsync();
+        Assert.NotNull(approved.PendingAccumulatorCommit);
+
+        Assert.True(await _claims.MarkSupersededProjectionAsync(Tenant, approved.Id, "V2", DateTime.UtcNow, "adjuster"));
+        _accumulatorWritesDown = false;
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        Assert.Equal(1, await _dispatcher.RunOnceAsync(CancellationToken.None));
+
+        Assert.Null((await Claim(approved.Id))!.PendingAccumulatorCommit);
+        await AssertBalances(0m, 0m);
+        await AssertNoWriteForAsync(approved.Id);
+    }
+
+    /// <summary>
+    /// S2 (in flight): the replacement's commit fences the claim it replaces, so the
+    /// original's commit arriving after it — driven before the version was marked superseded —
+    /// is refused instead of counting the claim twice.
+    /// </summary>
+    [SkippableFact]
+    public async Task TheOriginalsCommit_AfterItsReplacementCommitted_IsRefused()
+    {
+        _ncciPends = false;
+        _accumulatorWritesDown = true;
+        var original = await SubmitAndAdjudicateAsync();
+        var originalCommit = original.PendingAccumulatorCommit!.Commit!;
+        _accumulatorWritesDown = false;
+
+        var replacement = originalCommit with { CommitId = Guid.NewGuid().ToString("N"), ClaimId = "V2", ReplacesClaimId = original.Id };
+        Assert.Equal(AccumulatorCommitOutcome.Committed, (await _engine.CommitAccumulatorsAsync(replacement)).Outcome);
+        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, (await _engine.CommitAccumulatorsAsync(originalCommit)).Outcome);
+
+        await AssertBalances(100m, 100m);
+    }
+
+    /// <summary>
+    /// S3: a void saves its terminal reversal with the void write (outbox). benefit-plan-service
+    /// is down at the void: the void stands, the entry stays on the claim, and the dispatcher
+    /// reverses and fences it once the service is back — the voided claim is not left counted.
+    /// </summary>
+    [SkippableFact]
+    public async Task Void_ReversalFailing_IsSavedWithTheVoid_AndRedriven()
+    {
+        _ncciPends = false;
+        var approved = await SubmitAndAdjudicateAsync();
+        await AssertBalances(100m, 100m);
+        Assert.Equal(ClaimFinalizationOutcome.Finalized, (await _finalization.FinalizeAsync(approved.Id,
+            new ClaimFinalizationRequest { CheckNumber = "CHK-1", PayerPayment = 50m }, Tenant, "payment-service", null)).Outcome);
+        _accumulatorWritesDown = true;
+
+        var voided = await _finalization.VoidAsync(approved.Id, new ClaimVoidRequest { Reason = "duplicate" }, Tenant, "operator", null);
+
+        Assert.Equal(Claims.ClaimStatus.Voided, voided.Claim!.Status);
+        var stored = (await Claim(approved.Id))!;
+        Assert.Equal(Claims.ClaimStatus.Voided, stored.Status);
+        var entry = stored.PendingAccumulatorReversal!;
+        Assert.Equal(1, entry.Attempts);
+        await AssertBalances(100m, 100m);
+
+        _accumulatorWritesDown = false;
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(1, await _dispatcher.RunOnceAsync(CancellationToken.None));
+        Assert.Null((await Claim(approved.Id))!.PendingAccumulatorReversal);
+        await AssertBalances(0m, 0m);
+        await AssertFencedAsync(approved.Id);
+    }
+
+    /// <summary>
+    /// The store refuses the commit of a claim that is still Approved (its id was fenced): the
+    /// claim's paid amounts were priced with a cost share the member's accumulators do not hold,
+    /// so a review is raised in the work queue (not only a log line).
+    /// </summary>
+    [SkippableFact]
+    public async Task ARefusedCommit_OfAnApprovedClaim_RaisesAWorkQueueItem()
+    {
+        _ncciPends = false;
+        _accumulatorWritesDown = true;
+        var approved = await SubmitAndAdjudicateAsync();
+        var commit = approved.PendingAccumulatorCommit!.Commit!;
+        await _accumulators.ReverseTerminallyAsync(commit.MemberId, commit.SubscriberId, commit.BenefitPlanId, commit.PlanYear, approved.Id);
+        _accumulatorWritesDown = false;
+        _clock.Advance(TimeSpan.FromMinutes(5));
+
+        Assert.Equal(1, await _dispatcher.RunOnceAsync(CancellationToken.None));
+
+        var claim = (await Claim(approved.Id))!;
+        Assert.Null(claim.PendingAccumulatorCommit);
+        Assert.Equal(Claims.AccumulatorClampReview.Refused, claim.AccumulatorClampReview!.Kind);
+        var queue = await Controller("examiner-2").GetAccumulatorAdjustments();
+        var item = Assert.Single(Assert.IsAssignableFrom<IEnumerable<AccumulatorAdjustmentItem>>(((OkObjectResult)queue.Result!).Value));
+        Assert.Equal(Claims.AccumulatorClampReview.Refused, item.Kind);
+        // (Balances: the journalled store holds nothing; the Redis cache rebuilds from
+        // claims-service, which counts the Approved claim — the inconsistency the review is for.)
+    }
+
+    /// <summary>
+    /// A misordered deploy (claims-service before benefit-plan-service) pends passing claims
+    /// ACCUMCOMMIT. After the upgrade the bulk re-run approves them — a clean re-adjudication,
+    /// nothing overridden — and commits each once; a second run finds nothing to do.
+    /// </summary>
+    [SkippableFact]
+    public async Task AccumCommitPends_AreApprovedByTheBulkRerun_AfterTheUpgrade()
+    {
+        _ncciPends = false;
+        _noPreparedCommit = true;
+        var pended = await SubmitAndAdjudicateAsync();
+        Assert.Equal(Claims.ClaimStatus.Pended, pended.Status);
+        Assert.Equal(BenefitCalculationStage.DeferredCommitUnsupportedPendCode, pended.PendDetails!.PendCode);
+
+        // Still old: the re-run leaves it pended.
+        var early = await _operations.RerunAccumulatorCommitPendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+        Assert.Equal(1, early.StillPended);
+        Assert.Equal(Claims.ClaimStatus.Pended, (await Claim(pended.Id))!.Status);
+        await AssertBalances(0m, 0m);
+
+        _noPreparedCommit = false;
+        var run = await _operations.RerunAccumulatorCommitPendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+
+        Assert.Equal(1, run.Approved);
+        var approved = (await Claim(pended.Id))!;
+        Assert.Equal(Claims.ClaimStatus.Approved, approved.Status);
+        Assert.Null(approved.PendingAccumulatorCommit);
+        Assert.Contains(approved.ExaminerResolutions, r => r.ApproverIds.Single().StartsWith(AccumulatorOperationsService.RerunActorPrefix));
+        await AssertBalances(100m, 100m);
+        await AssertCommittedOnceAsync(pended.Id);
+        Assert.Equal(0, (await _operations.RerunAccumulatorCommitPendsAsync(Tenant, "ops-1", 10, CancellationToken.None)).Examined);
+    }
+
+    /// <summary>
+    /// The post-rollout sweep lists finalized claims with no pending entry and no write record
+    /// in the store (an old pod dropped the entry), and nothing for a committed claim.
+    /// </summary>
+    [SkippableFact]
+    public async Task Sweep_ListsAFinalizedClaimWhoseEntryWasDropped()
+    {
+        _ncciPends = false;
+        var committed = await SubmitAndAdjudicateAsync();
+        _accumulatorWritesDown = true;
+        var dropped = await SubmitAndAdjudicateAsync();
+        // An old claims-service pod rewrote the claim without the outbox field.
+        Assert.True(await _claims.CompleteAccumulatorOutboxAsync(Tenant, dropped.Id, Claims.AccumulatorOutboxKind.Commit, dropped.PendingAccumulatorCommit!.Id));
+        _accumulatorWritesDown = false;
+
+        var sweep = await _operations.FindMissingCommitsAsync(DateTime.UtcNow.AddHours(-1), DateTime.UtcNow.AddHours(1), 100, CancellationToken.None);
+
+        Assert.Equal(2, sweep.Examined);
+        var missing = Assert.Single(sweep.Missing);
+        Assert.Equal(dropped.Id, missing.ClaimId);
+        Assert.DoesNotContain(sweep.Missing, m => m.ClaimId == committed.Id);
     }
 
     // ── stages standing in for NCCI and for a stall ───────────────────────

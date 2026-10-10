@@ -1452,14 +1452,24 @@ public class AccumulatorOutboxItem
     /// <summary>The last failure's exception type and status (no claim data).</summary>
     public string? LastError { get; set; }
 
+    /// <summary>
+    /// How long a new entry is left to the request (or pipeline run) that
+    /// wrote it before the dispatcher may drive it too. The writer drives it
+    /// at once; the dispatcher is the fallback. Without the grace, a
+    /// dispatcher poll racing the inline attempt would answer
+    /// AlreadyCommitted and clear the entry while the inline attempt still
+    /// holds the result.
+    /// </summary>
+    public static readonly TimeSpan InlineGrace = TimeSpan.FromMinutes(2);
+
     public static AccumulatorOutboxItem ForCommit(CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit commit, DateTime now) => new()
     {
         Id = commit.CommitId,
         Commit = commit,
         CreatedAt = now,
-        NextAttemptAt = now,
+        NextAttemptAt = now + InlineGrace,
         CreatedAtMs = ToMs(now),
-        DueAtMs = ToMs(now),
+        DueAtMs = ToMs(now + InlineGrace),
     };
 
     public static long ToMs(DateTime utc) => new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
@@ -1479,9 +1489,9 @@ public class AccumulatorOutboxItem
                     ServiceDate = claim.ServiceDateFrom,
                 },
                 CreatedAt = now,
-                NextAttemptAt = now,
+                NextAttemptAt = now + InlineGrace,
                 CreatedAtMs = ToMs(now),
-                DueAtMs = ToMs(now),
+                DueAtMs = ToMs(now + InlineGrace),
             }
             : null;
 }
@@ -1501,7 +1511,17 @@ public class AccumulatorReversalOrder
 [BsonIgnoreExtraElements]
 public class AccumulatorClampReview
 {
+    /// <summary><see cref="Clamped"/> (the store trimmed updates at a limit).</summary>
+    public const string Clamped = "Clamped";
+
+    /// <summary><see cref="Refused"/>: the store refused the commit of a claim that is still Approved (its id is fenced).</summary>
+    public const string Refused = "Refused";
+
     public string CommitId { get; set; } = string.Empty;
+
+    /// <summary><see cref="Clamped"/> or <see cref="Refused"/>; null on reviews written before it existed (clamped).</summary>
+    public string? Kind { get; set; }
+
     public DateTime RaisedAt { get; set; }
     public List<CloudHealthOffice.BenefitEngine.Models.AccumulatorClamp> Clamps { get; set; } = new();
     public bool Resolved { get; set; }

@@ -37,7 +37,10 @@ public enum AccumulatorOutboxResult
     /// <summary>The store refused the commit: the claim id is fenced (voided / denied).</summary>
     Refused,
     Reversed,
-    /// <summary>The claim is Denied or Voided: the commit is dropped, never written.</summary>
+    /// <summary>
+    /// The claim is Denied or Voided, or the version was superseded by a
+    /// replacement: the commit is dropped, never written.
+    /// </summary>
     Dropped,
     /// <summary>The engine call failed; rescheduled with backoff.</summary>
     Rescheduled,
@@ -148,14 +151,24 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
 
     private async Task<AccumulatorOutboxResult> CommitAsync(Claim claim, AccumulatorOutboxItem item, CancellationToken ct)
     {
-        if (claim.Status is ClaimStatus.Denied or ClaimStatus.Voided)
-        {
+        var dropReason = claim.Status is ClaimStatus.Denied or ClaimStatus.Voided
             // Finalized as approved, then denied or voided before the commit
             // ran: it must never land (the void / denial reversal fences it
             // in the store as well).
+            ? $"the claim is {claim.Status}"
+            : claim.VersionState == ClaimVersionState.Adjusted || claim.SupersededAt is not null
+                // A replacement superseded this version before its commit ran
+                // (e.g. benefit-plan-service was down): the replacement's own
+                // commit counts the claim; this one would count it twice. (The
+                // replacement's commit also fences this claim id in the store,
+                // for a commit of it already in flight.)
+                ? $"the version was superseded by {claim.SupersededByVersionId ?? "a replacement"}"
+                : null;
+        if (dropReason is not null)
+        {
             _logger.LogWarning(
-                "Accumulator commit {ItemId} for claim {ClaimId} dropped: the claim is {Status}",
-                SanitizeForLog(item.Id), SanitizeForLog(claim.Id), claim.Status);
+                "AUDIT accumulator commit {ItemId} for claim {ClaimId} dropped, never written: {Reason}",
+                SanitizeForLog(item.Id), SanitizeForLog(claim.Id), SanitizeForLog(dropReason));
             await _claims.CompleteAccumulatorOutboxAsync(claim.TenantId, claim.Id, AccumulatorOutboxKind.Commit, item.Id, ct: CancellationToken.None);
             return AccumulatorOutboxResult.Dropped;
         }
@@ -163,6 +176,10 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
         var commit = item.Commit ?? throw new InvalidOperationException($"Outbox entry {item.Id} holds no commit.");
         var result = await _engine.CommitAccumulatorsAsync(commit, ct);
 
+        // A review is saved in its own write keyed on the commit id — before
+        // the slot is cleared and whatever happens to the slot — so the
+        // attempt that learns the store's answer always records it (a repeat
+        // answers AlreadyCommitted with the first attempt's clamps).
         AccumulatorClampReview? review = null;
         if (result.Clamped.Count > 0)
         {
@@ -172,6 +189,7 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
             review = new AccumulatorClampReview
             {
                 CommitId = commit.CommitId,
+                Kind = AccumulatorClampReview.Clamped,
                 RaisedAt = _clock.GetUtcNow().UtcDateTime,
                 Clamps = result.Clamped,
             };
@@ -179,14 +197,25 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
                 "Accumulator commit {ItemId} for claim {ClaimId}: {Count} update(s) clamped at a limit; adjustment review raised",
                 SanitizeForLog(item.Id), SanitizeForLog(claim.Id), result.Clamped.Count);
         }
-        if (result.Outcome == AccumulatorCommitOutcome.RefusedClaimReversed)
+        else if (result.Outcome == AccumulatorCommitOutcome.RefusedClaimReversed)
         {
+            // The store fences this claim id (voided, denied, or replaced) but
+            // the claim reads as finalized here: its paid amounts were priced
+            // with a cost share the member's accumulators do not hold.
+            review = new AccumulatorClampReview
+            {
+                CommitId = commit.CommitId,
+                Kind = AccumulatorClampReview.Refused,
+                RaisedAt = _clock.GetUtcNow().UtcDateTime,
+            };
             _logger.LogError(
-                "Accumulator commit {ItemId} for claim {ClaimId} refused: the claim id is fenced (voided or denied) in the store",
-                SanitizeForLog(item.Id), SanitizeForLog(claim.Id));
+                "Accumulator commit {ItemId} for claim {ClaimId} refused: the claim id is fenced in the store while the claim is {Status}; review raised",
+                SanitizeForLog(item.Id), SanitizeForLog(claim.Id), claim.Status);
         }
+        if (review is not null)
+            await _claims.RecordAccumulatorReviewAsync(claim.TenantId, claim.Id, review, CancellationToken.None);
 
-        await _claims.CompleteAccumulatorOutboxAsync(claim.TenantId, claim.Id, AccumulatorOutboxKind.Commit, item.Id, review, CancellationToken.None);
+        await _claims.CompleteAccumulatorOutboxAsync(claim.TenantId, claim.Id, AccumulatorOutboxKind.Commit, item.Id, ct: CancellationToken.None);
         return result.Outcome switch
         {
             AccumulatorCommitOutcome.Committed => AccumulatorOutboxResult.Committed,
@@ -225,19 +254,26 @@ public sealed class AccumulatorOutboxDispatcher : BackgroundService
     private readonly TimeProvider _clock;
     private readonly ILogger<AccumulatorOutboxDispatcher> _logger;
 
+    private readonly IConfiguration? _configuration;
+
     public AccumulatorOutboxDispatcher(
         IServiceScopeFactory scopes, IOptions<AccumulatorOutboxOptions> options,
-        ILogger<AccumulatorOutboxDispatcher> logger, TimeProvider? clock = null)
+        ILogger<AccumulatorOutboxDispatcher> logger, TimeProvider? clock = null, IConfiguration? configuration = null)
     {
         _scopes = scopes;
         _options = options.Value;
         _clock = clock ?? TimeProvider.System;
         _logger = logger;
+        _configuration = configuration;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled) return;
+        var scope = AccumulatorOutboxScopeHealthCheck.Evaluate(
+            _configuration?.GetValue(AccumulatorOutboxScopeHealthCheck.TenantScopingSetting, false) == true, _options.Enabled);
+        if (scope.Status != Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy)
+            _logger.LogCritical("Accumulator outbox: {Problem}", scope.Description);
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -297,4 +333,41 @@ public sealed class AccumulatorOutboxDispatcher : BackgroundService
         }
         return attempted;
     }
+}
+
+/// <summary>
+/// The dispatcher scans the claims database claims-service is configured
+/// with. With tenant-scoped Mongo databases (<c>MongoDb:UseTenantScoping</c>)
+/// a tenant's entries live in its own database, which it never scans: an
+/// entry whose inline attempt failed would never be retried. Reported as
+/// Degraded (readiness tag) and logged at critical on start-up.
+/// </summary>
+public sealed class AccumulatorOutboxScopeHealthCheck : Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck
+{
+    public const string Name = "accumulator-outbox-scope";
+    public const string TenantScopingSetting = "MongoDb:UseTenantScoping";
+
+    private readonly IConfiguration _configuration;
+    private readonly AccumulatorOutboxOptions _options;
+
+    public AccumulatorOutboxScopeHealthCheck(IConfiguration configuration, IOptions<AccumulatorOutboxOptions> options)
+    {
+        _configuration = configuration;
+        _options = options.Value;
+    }
+
+    /// <summary>Healthy unless the dispatcher is enabled over tenant-scoped databases it cannot scan.</summary>
+    public static Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult Evaluate(bool tenantScoping, bool dispatcherEnabled) =>
+        tenantScoping && dispatcherEnabled
+            ? Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Degraded(
+                "MongoDb:UseTenantScoping is on: the accumulator outbox dispatcher scans only the base claims database, " +
+                "so a tenant database's failed accumulator commits and reversals are never retried.")
+            : Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy();
+
+    public Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult Evaluate() =>
+        Evaluate(_configuration.GetValue(TenantScopingSetting, false), _options.Enabled);
+
+    public Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult> CheckHealthAsync(
+        Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext context, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Evaluate());
 }

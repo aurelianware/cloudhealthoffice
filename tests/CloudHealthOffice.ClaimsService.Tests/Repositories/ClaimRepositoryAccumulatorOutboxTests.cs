@@ -81,7 +81,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
         stored.PendingAccumulatorCommit.Commit.BenefitPlanId.Should().Be(Guid.Parse(PlanId));
         stored.PendingAccumulatorCommit.Commit.Updates.Should().ContainSingle(u =>
             u.Type == AccumulatorType.IndividualDeductible && u.Amount == 100m && u.ClampAtLimit == 500m);
-        stored.PendingAccumulatorCommit.DueAtMs.Should().Be(AccumulatorOutboxItem.ToMs(Now));
+        stored.PendingAccumulatorCommit.DueAtMs.Should().Be(AccumulatorOutboxItem.ToMs(Now + AccumulatorOutboxItem.InlineGrace));
     }
 
     [SkippableFact]
@@ -124,7 +124,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
         await SeedAsync("C1");
         var item = Item("C1");
         await FinalizeAsync("C1", ClaimStatus.Approved, item);
-        var nowMs = AccumulatorOutboxItem.ToMs(Now);
+        var nowMs = AccumulatorOutboxItem.ToMs(Now + AccumulatorOutboxItem.InlineGrace); // a new entry is left to its writer for the inline grace
 
         (await Repo.FindDueAccumulatorOutboxAsync(nowMs - 1, 10)).Should().NotContain(c => c.Id == "C1");
         (await Repo.FindDueAccumulatorOutboxAsync(nowMs, 10)).Should().Contain(c => c.Id == "C1" && c.TenantId == Tenant);
@@ -140,8 +140,8 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
         rescheduled.Attempts.Should().Be(1);
         rescheduled.LastError.Should().Be("HttpRequestException 503");
         rescheduled.DueAtMs.Should().Be(AccumulatorOutboxItem.ToMs(Now.AddSeconds(30)));
-        (await Repo.FindDueAccumulatorOutboxAsync(nowMs, 10)).Should().NotContain(c => c.Id == "C1");
-        (await Repo.FindDueAccumulatorOutboxAsync(nowMs + 30_000, 10)).Should().Contain(c => c.Id == "C1");
+        (await Repo.FindDueAccumulatorOutboxAsync(AccumulatorOutboxItem.ToMs(Now.AddSeconds(29)), 10)).Should().NotContain(c => c.Id == "C1");
+        (await Repo.FindDueAccumulatorOutboxAsync(AccumulatorOutboxItem.ToMs(Now.AddSeconds(30)), 10)).Should().Contain(c => c.Id == "C1");
 
         var review = new AccumulatorClampReview
         {
@@ -161,6 +161,83 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
         (await Repo.ResolveAccumulatorClampReviewAsync("C1", "examiner-1")).Should().BeTrue();
         (await Repo.GetAccumulatorClampReviewsAsync(10)).Should().BeEmpty();
         (await StoredAsync("C1")).AccumulatorClampReview!.ResolvedBy.Should().Be("examiner-1");
+    }
+
+    /// <summary>
+    /// The review is its own write keyed on the commit id: saved after the slot was cleared by
+    /// another attempt, a no-op for the same commit, replaced by a later commit's review.
+    /// </summary>
+    [SkippableFact]
+    public async Task TheReview_IsKeyedOnTheCommit_NotOnTheSlot()
+    {
+        await SeedAsync("C1");
+        var item = Item("C1");
+        await FinalizeAsync("C1", ClaimStatus.Approved, item);
+        (await Repo.CompleteAccumulatorOutboxAsync(Tenant, "C1", AccumulatorOutboxKind.Commit, item.Id)).Should().BeTrue();
+
+        AccumulatorClampReview Review(string commit, decimal applied) => new()
+        {
+            CommitId = commit, Kind = AccumulatorClampReview.Clamped, RaisedAt = Now,
+            Clamps = [new AccumulatorClamp { Type = AccumulatorType.IndividualDeductible, Scope = AccumulatorScope.Individual,
+                NetworkTier = NetworkTier.InNetwork, Requested = 100m, Applied = applied, Limit = 500m }],
+        };
+        (await Repo.RecordAccumulatorReviewAsync(Tenant, "C1", Review("commit-C1", 50m))).Should().BeTrue();
+        (await Repo.RecordAccumulatorReviewAsync(Tenant, "C1", Review("commit-C1", 7m))).Should().BeTrue(); // same commit: kept
+        (await StoredAsync("C1")).AccumulatorClampReview!.Clamps.Single().Applied.Should().Be(50m);
+
+        (await Repo.RecordAccumulatorReviewAsync(Tenant, "C1", Review("commit-C1-again", 20m))).Should().BeTrue();
+        var stored = (await StoredAsync("C1")).AccumulatorClampReview!;
+        stored.CommitId.Should().Be("commit-C1-again");
+        stored.Kind.Should().Be(AccumulatorClampReview.Clamped);
+        (await Repo.RecordAccumulatorReviewAsync(Tenant, "missing", Review("x", 1m))).Should().BeFalse();
+    }
+
+    /// <summary>S3: the void write carries the terminal reversal (same write).</summary>
+    [SkippableFact]
+    public async Task TheVoidWrite_CarriesTheReversal()
+    {
+        var claim = await SeedAsync("C1", ClaimStatus.Paid);
+        var reversal = AccumulatorOutboxItem.ForReversal(claim, Now)!;
+
+        (await Repo.MarkVoidedProjectionAsync(Tenant, "C1", Now, "operator", default, reversal)).Should().BeTrue();
+
+        var stored = await StoredAsync("C1");
+        stored.Status.Should().Be(ClaimStatus.Voided);
+        stored.PendingAccumulatorReversal!.Id.Should().Be(reversal.Id);
+        stored.PendingAccumulatorReversal.Reversal!.ClaimId.Should().Be("C1");
+        stored.PendingAccumulatorReversal.Reversal.BenefitPlanId.Should().Be(PlanId);
+    }
+
+    [SkippableFact]
+    public async Task ThePendCodeQuery_FindsOnlyThatPend()
+    {
+        await SeedAsync("P1", ClaimStatus.Pended);
+        await SeedAsync("P2", ClaimStatus.Pended);
+        await SeedAsync("A1", ClaimStatus.Approved);
+        var p1 = await StoredAsync("P1");
+        p1.PendDetails = new PendDetails { PendCode = "ACCUMCOMMIT", PendReason = "x" };
+        await Repo.UpdateAdjudicationProjectionAsync(Tenant, "P1", new AdjudicationResult(), [], pendDetails: p1.PendDetails, isPend: true);
+        await Repo.UpdateAdjudicationProjectionAsync(Tenant, "P2", new AdjudicationResult(), [],
+            pendDetails: new PendDetails { PendCode = "NCCI", PendReason = "y" }, isPend: true);
+
+        (await Repo.FindPendedByPendCodeAsync("ACCUMCOMMIT", 10)).Select(c => c.Id).Should().BeEquivalentTo(["P1"]);
+    }
+
+    [SkippableFact]
+    public async Task TheSweepQuery_ReturnsFinalizedClaimsWithNoPendingCommit_InTheWindow()
+    {
+        await SeedAsync("A1", ClaimStatus.Approved, deductible: 10m, oop: 10m);
+        await SeedAsync("PAID", ClaimStatus.Paid, deductible: 10m, oop: 10m);
+        await SeedAsync("ADJ", ClaimStatus.Approved, ClaimVersionState.Adjusted, deductible: 10m, oop: 10m);
+        await SeedAsync("PEND", ClaimStatus.Pended, deductible: 10m, oop: 10m);
+        await SeedAsync("WAITING");
+        await FinalizeAsync("WAITING", ClaimStatus.Approved, Item("WAITING"));
+
+        var now = DateTime.UtcNow;
+        var found = await Repo.FindFinalizedForAccumulatorSweepAsync(now.AddHours(-1), now.AddHours(1), 100);
+
+        found.Select(c => c.Id).Should().BeEquivalentTo(["A1", "PAID"]);
+        (await Repo.FindFinalizedForAccumulatorSweepAsync(now.AddHours(1), now.AddHours(2), 100)).Should().BeEmpty();
     }
 
     // ── accumulator totals (Redis rebuild source) ───────────────────────

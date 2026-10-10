@@ -36,12 +36,13 @@ namespace ClaimsService.Services.Adjudication;
 /// deferred to Phase 2.
 /// </para>
 /// </summary>
-public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngine
+public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngine, IAccumulatorCommitLookup
 {
     public const string HttpClientName = "BenefitPlanService";
     private const string CalculatePath = "/api/v1/adjudication/calculate-benefits";
     private const string ReversePath = "/api/v1/adjudication/reverse-claim";
     private const string CommitPath = "/api/v1/adjudication/commit-accumulators";
+    private const string CommitLookupPath = "/api/v1/adjudication/accumulator-commits/lookup";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -160,6 +161,11 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
         if (!string.IsNullOrEmpty(tenantId))
         {
             httpRequest.Headers.Add("X-Tenant-ID", tenantId);
+            // reverse-claim needs the service's write permission: an examiner's
+            // or operator's forwarded token lacks it (403). A reversal is the
+            // consequence of a decision claims-service already persisted, so
+            // it is made as claims-service.
+            await AttachServiceTokenAsync(httpRequest, tenantId, ct).ConfigureAwait(false);
         }
 
         using var response = await client.SendAsync(httpRequest, ct).ConfigureAwait(false);
@@ -188,6 +194,57 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
     /// accumulator updates a Prospective pricing prepared. Throws on a
     /// non-success status (the caller decides whether that fails the run).
     /// </summary>
+    /// <summary>
+    /// Sends <paramref name="request"/> with this service's own token (when
+    /// one is configured) instead of whatever the outbound handler would
+    /// attach — inside a request, the caller's forwarded token.
+    /// </summary>
+    private async Task AttachServiceTokenAsync(HttpRequestMessage request, string tenantId, CancellationToken ct)
+    {
+        var tokens = _services is null ? null : ChoServiceTokens.Resolve(_services);
+        if (tokens is not null)
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", await tokens.GetTokenAsync(tenantId, ct).ConfigureAwait(false));
+        }
+    }
+
+    /// <summary>BP <c>POST accumulator-commits/lookup</c> (read-only; claims-service's service token).</summary>
+    public async Task<IReadOnlyDictionary<string, bool>> LookupCommitRecordsAsync(
+        IReadOnlyList<AccumulatorCommitLookupItem> claims, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(claims);
+        var result = new Dictionary<string, bool>(StringComparer.Ordinal);
+        if (claims.Count == 0) return result;
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, CommitLookupPath)
+        {
+            Content = JsonContent.Create(claims, options: JsonOptions),
+        };
+        var tenantId = ResolveTenantId();
+        if (!string.IsNullOrEmpty(tenantId))
+        {
+            httpRequest.Headers.Add("X-Tenant-ID", tenantId);
+            await AttachServiceTokenAsync(httpRequest, tenantId, ct).ConfigureAwait(false);
+        }
+        using var response = await client.SendAsync(httpRequest, ct).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"Benefit calculation engine accumulator commit lookup returned HTTP {(int)response.StatusCode}",
+                null, response.StatusCode);
+        }
+        var rows = await response.Content.ReadFromJsonAsync<List<CommitLookupRow>>(JsonOptions, ct).ConfigureAwait(false) ?? [];
+        foreach (var row in rows) result[row.ClaimId] = row.Recorded;
+        return result;
+    }
+
+    private sealed class CommitLookupRow
+    {
+        public string ClaimId { get; set; } = string.Empty;
+        public bool Recorded { get; set; }
+    }
+
     public async Task<AccumulatorCommitResult> CommitAccumulatorsAsync(
         AccumulatorCommit commit,
         CancellationToken ct = default)
@@ -206,12 +263,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
             // principal. Inside a request (an examiner's resolve) the outbound
             // handler would forward the user's token, so the commit carries
             // this service's token explicitly, wherever it is driven from.
-            var tokens = _services is null ? null : ChoServiceTokens.Resolve(_services);
-            if (tokens is not null)
-            {
-                httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-                    "Bearer", await tokens.GetTokenAsync(tenantId, ct).ConfigureAwait(false));
-            }
+            await AttachServiceTokenAsync(httpRequest, tenantId, ct).ConfigureAwait(false);
         }
 
         using var response = await client.SendAsync(httpRequest, ct).ConfigureAwait(false);

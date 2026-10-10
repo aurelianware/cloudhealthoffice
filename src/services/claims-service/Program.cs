@@ -431,6 +431,13 @@ builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();
 builder.Services.Configure<AccumulatorOutboxOptions>(builder.Configuration.GetSection(AccumulatorOutboxOptions.SectionName));
 builder.Services.AddScoped<IAccumulatorOutboxProcessor, AccumulatorOutboxProcessor>();
 builder.Services.AddHostedService<AccumulatorOutboxDispatcher>();
+// The dispatcher scans the base claims database only: Degraded (and a
+// critical log at start-up) when tenant-scoped databases are configured.
+builder.Services.AddHealthChecks().AddCheck<AccumulatorOutboxScopeHealthCheck>(
+    AccumulatorOutboxScopeHealthCheck.Name, tags: ["ready"]);
+// Operator tools: the post-rollout sweep and the ACCUMCOMMIT bulk re-run.
+builder.Services.AddScoped<IAccumulatorCommitLookup, HttpBenefitCalculationEngineClient>();
+builder.Services.AddScoped<AccumulatorOperationsService>();
 
 builder.Services.AddScoped<ClaimAdjudicationOrchestrator>();
 builder.Services.AddScoped<IClaimAdjudicationOrchestrator>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());

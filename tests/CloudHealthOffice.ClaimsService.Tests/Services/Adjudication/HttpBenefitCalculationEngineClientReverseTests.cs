@@ -238,6 +238,34 @@ public class HttpBenefitCalculationEngineClientReverseTests
         Assert.DoesNotContain("M-123", ex.Message);
     }
 
+    /// <summary>
+    /// S5: a reversal (an examiner's denial, a void) is sent with claims-service's service
+    /// token, not the caller's forwarded token — reverse-claim needs the service's write
+    /// permission, which an examiner's token lacks (403).
+    /// </summary>
+    [Fact]
+    public async Task ReverseClaimAsync_CarriesTheServiceToken()
+    {
+        _tenantContext.TenantId.Returns("tenant-x");
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<CloudHealthOffice.Infrastructure.Security.IChoServiceTokenSource>(
+            services,
+            new CloudHealthOffice.Infrastructure.Security.LocalKeyChoServiceTokenSource(
+                CloudHealthOffice.Infrastructure.Security.ChoDevelopmentAuth.ServiceTokenIssuer(), "claims-service"));
+        var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+        _handler.RespondWith(new HttpResponseMessage(HttpStatusCode.NoContent));
+        var sut = new HttpBenefitCalculationEngineClient(
+            _factory, _httpContext, _tenantContext, NullLogger<HttpBenefitCalculationEngineClient>.Instance, provider);
+
+        await sut.ReverseClaimAsync("member-1", "member-1", Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            new DateOnly(2026, 6, 1), "claim-1");
+
+        var auth = _handler.LastRequest!.Headers.Authorization!;
+        Assert.Equal("Bearer", auth.Scheme);
+        var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(auth.Parameter);
+        Assert.Contains(jwt.Claims, c => c.Value == "claims-service");
+    }
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private HttpResponseMessage _response = new(HttpStatusCode.NoContent);

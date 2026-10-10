@@ -65,6 +65,8 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         public IPriorAuthRuleEngine PriorAuthEngine { get; } = Substitute.For<IPriorAuthRuleEngine>();
         public IPaymentEstimateService EstimateService { get; } = Substitute.For<IPaymentEstimateService>();
         public IBenefitPlanService PlanService { get; } = Substitute.For<IBenefitPlanService>();
+        public CloudHealthOffice.BenefitEngine.Services.IAccumulatorService Accumulators { get; } =
+            Substitute.For<CloudHealthOffice.BenefitEngine.Services.IAccumulatorService>();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -122,6 +124,8 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
                 services.AddSingleton(EstimateService);
                 services.RemoveAll<IBenefitPlanService>();
                 services.AddSingleton(PlanService);
+                services.RemoveAll<CloudHealthOffice.BenefitEngine.Services.IAccumulatorService>();
+                services.AddSingleton(Accumulators);
 
                 // Stub out Redis connection with a no-op
                 services.AddSingleton(Substitute.For<IConnectionMultiplexer>());
@@ -1945,6 +1949,33 @@ public class AdjudicationControllerCommitAccumulatorsTests : IClassFixture<Adjud
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         await _factory.BenefitEngine.DidNotReceiveWithAnyArgs().CommitAccumulatorsAsync(default!, default);
+    }
+
+    /// <summary>The post-rollout sweep's lookup: claims-service only, read-only, per-claim answer.</summary>
+    [Fact]
+    public async Task CommitLookup_AnswersPerClaim_ForClaimsServiceOnly()
+    {
+        var lookup = new[]
+        {
+            new { claimId = "claim-1", memberId = "m1", subscriberId = "", benefitPlanId = PlanId, planYear = "2026" },
+            new { claimId = "claim-2", memberId = "m1", subscriberId = "s1", benefitPlanId = PlanId, planYear = "2026" },
+        };
+        _factory.Accumulators.HasClaimRecordAsync("m1", "m1", PlanId, "2026", "claim-1", Arg.Any<CancellationToken>()).Returns(true);
+        _factory.Accumulators.HasClaimRecordAsync("m1", "s1", PlanId, "2026", "claim-2", Arg.Any<CancellationToken>()).Returns(false);
+
+        var response = await CreateClient().PostAsJsonAsync("/api/v1/adjudication/accumulator-commits/lookup", lookup);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var rows = await response.Content.ReadFromJsonAsync<List<BenefitPlanService.Controllers.AccumulatorCommitLookupResult>>();
+        Assert.True(rows!.Single(r => r.ClaimId == "claim-1").Recorded);
+        Assert.False(rows!.Single(r => r.ClaimId == "claim-2").Recorded);
+
+        var user = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
+        user.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant-001");
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await user.PostAsJsonAsync("/api/v1/adjudication/accumulator-commits/lookup", lookup)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await CreateClient().PostAsJsonAsync("/api/v1/adjudication/accumulator-commits/lookup", Array.Empty<object>())).StatusCode);
     }
 
     [Fact]

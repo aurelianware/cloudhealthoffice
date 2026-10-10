@@ -240,6 +240,28 @@ public interface IClaimRepository
     Task<bool> ResolveAccumulatorClampReviewAsync(string claimId, string resolvedBy, CancellationToken ct = default);
 
     /// <summary>
+    /// Records an accumulator review (clamped or refused commit) on the claim
+    /// in its own write, keyed on the commit id — not on the outbox slot, so
+    /// whichever attempt learns the store's answer saves it, even after
+    /// another attempt cleared the slot. A no-op when the claim already holds
+    /// a review of this commit. False when the claim does not exist.
+    /// </summary>
+    Task<bool> RecordAccumulatorReviewAsync(
+        string tenantId, string claimId, AccumulatorClampReview review, CancellationToken ct = default);
+
+    /// <summary>Pended claims of the request tenant whose routing pend code is <paramref name="pendCode"/> (oldest first).</summary>
+    Task<IReadOnlyList<Claim>> FindPendedByPendCodeAsync(string pendCode, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Finalized claims of the request tenant (Approved / PartiallyPaid /
+    /// Paid; not superseded) last updated in [<paramref name="from"/>,
+    /// <paramref name="to"/>] with no pending accumulator commit: the
+    /// candidates of the post-rollout accumulator sweep.
+    /// </summary>
+    Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
+        DateTime from, DateTime to, int limit, CancellationToken ct = default);
+
+    /// <summary>
     /// Fast claim-level adjudication projection for direct local workflow
     /// validation. Patches summary adjudication fields on a known claim row and
     /// intentionally skips full-claim hydration, line projection, and event
@@ -334,12 +356,18 @@ public interface IClaimRepository
     ///
     /// Returns true on success, false when no row matched the filter.
     /// </summary>
+    /// <param name="pendingAccumulatorReversal">
+    /// The terminal engine-accumulator reversal the void owes
+    /// (<see cref="Claim.PendingAccumulatorReversal"/>), saved by the same
+    /// write: a void never persists without it.
+    /// </param>
     Task<bool> MarkVoidedProjectionAsync(
         string tenantId,
         string claimId,
         DateTime voidedAt,
         string? actorId,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        AccumulatorOutboxItem? pendingAccumulatorReversal = null);
 
     /// <summary>
     /// Takes the examiner-resolution lock on a Pended claim (PR #1278 round
@@ -1835,6 +1863,80 @@ public class ClaimRepository : IClaimRepository
         return claims;
     }
 
+    public async Task<IReadOnlyList<Claim>> FindPendedByPendCodeAsync(string pendCode, int limit, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        var parameters = new Dictionary<string, object>();
+        var pended = EnumInClause("c.status", "pendedStatus", parameters, ClaimStatus.Pended);
+        var query = new QueryDefinition($@"
+            SELECT TOP @limit * FROM c
+            WHERE c.tenantId = @tenantId AND {pended} AND c.pendDetails.pendCode = @pendCode
+            ORDER BY c.submittedDate")
+            .WithParameter("@limit", limit)
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@pendCode", pendCode);
+        foreach (var (name, value) in parameters) query = query.WithParameter(name, value);
+        return await QueryTenantAsync(query, tenantId, limit, ct);
+    }
+
+    public async Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
+        DateTime from, DateTime to, int limit, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        var parameters = new Dictionary<string, object>();
+        var finalized = EnumInClause("c.status", "finalStatus", parameters,
+            ClaimStatus.Approved, ClaimStatus.PartiallyPaid, ClaimStatus.Paid);
+        var adjusted = EnumInClause("c.versionState", "adjustedState", parameters, ClaimVersionState.Adjusted);
+        var query = new QueryDefinition($@"
+            SELECT TOP @limit * FROM c
+            WHERE c.tenantId = @tenantId AND {finalized}
+              AND c.lastUpdatedDate >= @from AND c.lastUpdatedDate <= @to
+              AND (NOT IS_DEFINED(c.versionState) OR NOT ({adjusted}))
+              AND (NOT IS_DEFINED(c.supersededAt) OR IS_NULL(c.supersededAt))
+              AND (NOT IS_DEFINED(c.pendingAccumulatorCommit) OR IS_NULL(c.pendingAccumulatorCommit))")
+            .WithParameter("@limit", limit)
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@from", from)
+            .WithParameter("@to", to);
+        foreach (var (name, value) in parameters) query = query.WithParameter(name, value);
+        return await QueryTenantAsync(query, tenantId, limit, ct);
+    }
+
+    private async Task<IReadOnlyList<Claim>> QueryTenantAsync(QueryDefinition query, string tenantId, int limit, CancellationToken ct)
+    {
+        var claims = new List<Claim>();
+        using var iterator = _container.GetItemQueryIterator<Claim>(query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        while (iterator.HasMoreResults && claims.Count < limit)
+            claims.AddRange((await iterator.ReadNextAsync(ct)).Select(Hydrate));
+        return claims;
+    }
+
+    public async Task<bool> RecordAccumulatorReviewAsync(
+        string tenantId, string claimId, AccumulatorClampReview review, CancellationToken ct = default)
+    {
+        var commitLiteral = OutboxIdLiteral(review.CommitId);
+        try
+        {
+            await _container.PatchItemAsync<Claim>(claimId, new PartitionKey(tenantId),
+                [PatchOperation.Set("/accumulatorClampReview", review)],
+                new PatchItemRequestOptions
+                {
+                    FilterPredicate = "FROM c WHERE NOT IS_DEFINED(c.accumulatorClampReview) OR IS_NULL(c.accumulatorClampReview) " +
+                                      $"OR c.accumulatorClampReview.commitId != '{commitLiteral}'",
+                }, ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            return true; // already holds this commit's review
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
     public async Task<bool> ResolveAccumulatorClampReviewAsync(string claimId, string resolvedBy, CancellationToken ct = default)
     {
         try
@@ -2235,7 +2337,8 @@ public class ClaimRepository : IClaimRepository
         string claimId,
         DateTime voidedAt,
         string? actorId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        AccumulatorOutboxItem? pendingAccumulatorReversal = null)
     {
         Claim? existing;
         try
@@ -2257,6 +2360,9 @@ public class ClaimRepository : IClaimRepository
             PatchOperation.Set("/lastUpdatedDate", voidedAt),
             PatchOperation.Set("/lastUpdatedBy", actorId),
         };
+        // The void's accumulator reversal lands with the void, or not at all.
+        if (pendingAccumulatorReversal is not null)
+            ops.Add(PatchOperation.Set("/pendingAccumulatorReversal", pendingAccumulatorReversal));
 
         try
         {

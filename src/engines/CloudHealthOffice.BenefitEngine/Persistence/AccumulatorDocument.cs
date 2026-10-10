@@ -178,6 +178,14 @@ public class AccumulatorTransactionEntry
     public decimal AmountApplied { get; set; }
 
     /// <summary>
+    /// Set only when a commit clamped this entry at its limit: what the
+    /// pricing asked for, and the limit. A repeated commit (same commit id)
+    /// reports the clamp again from these.
+    /// </summary>
+    public decimal? AmountRequested { get; set; }
+    public decimal? Limit { get; set; }
+
+    /// <summary>
     /// Human-readable source label (e.g., "Deductible", "OOP", "VisitCount:98").
     /// For audit and debugging.
     /// </summary>

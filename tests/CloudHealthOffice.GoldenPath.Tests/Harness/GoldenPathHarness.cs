@@ -480,6 +480,21 @@ internal sealed class GoldenPathHarness
                         reverse.BenefitPlanId, reverse.ServiceDate, reverse.OriginalClaimId, ct);
                     return new HttpResponseMessage(HttpStatusCode.NoContent);
                 }
+                case "/api/v1/adjudication/accumulator-commits/lookup":
+                {
+                    // AdjudicationController.LookupAccumulatorCommits.
+                    var lookups = (await request.Content!.ReadFromJsonAsync<List<BenefitPlanService.Controllers.AccumulatorCommitLookup>>(Wire.BenefitPlanService, ct))!;
+                    var rows = new List<BenefitPlanService.Controllers.AccumulatorCommitLookupResult>();
+                    foreach (var l in lookups)
+                        rows.Add(new BenefitPlanService.Controllers.AccumulatorCommitLookupResult
+                        {
+                            ClaimId = l.ClaimId,
+                            Recorded = await accumulators.HasClaimRecordAsync(
+                                l.MemberId, string.IsNullOrWhiteSpace(l.SubscriberId) ? l.MemberId : l.SubscriberId!,
+                                l.BenefitPlanId, l.PlanYear, l.ClaimId, ct),
+                        });
+                    return DelegatingServiceHandler.Json(rows, Wire.BenefitPlanService);
+                }
                 default:
                     return new HttpResponseMessage(HttpStatusCode.NotFound);
             }

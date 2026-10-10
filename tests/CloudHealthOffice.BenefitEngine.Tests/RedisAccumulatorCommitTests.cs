@@ -169,6 +169,36 @@ public sealed class RedisAccumulatorCommitTests : IClassFixture<RedisServerFixtu
         Assert.Equal(70m, await Read(store, AccumulatorType.IndividualDeductible));
     }
 
+    /// <summary>A repeat of a clamped commit reports the first attempt's clamps.</summary>
+    [SkippableFact]
+    public async Task ARepeatOfAClampedCommit_ReportsTheClampsAgain()
+    {
+        var store = await WarmStore(priorDeductible: 450m);
+        var commit = Commit("C1", 100m, limit: 500m);
+
+        await store.CommitAsync(commit);
+        var repeat = await store.CommitAsync(commit);
+
+        Assert.Equal(AccumulatorCommitOutcome.AlreadyCommitted, repeat.Outcome);
+        var clamp = Assert.Single(repeat.Clamped);
+        Assert.Equal(AccumulatorType.IndividualDeductible, clamp.Type);
+        Assert.Equal((100m, 50m, 500m), (clamp.Requested, clamp.Applied, clamp.Limit));
+        Assert.Equal(500m, await Read(store, AccumulatorType.IndividualDeductible));
+    }
+
+    /// <summary>The replacement fences the claim it replaces: the original's late commit is refused.</summary>
+    [SkippableFact]
+    public async Task AReplacementsCommit_FencesTheReplacedClaim()
+    {
+        var store = await WarmStore();
+        var original = Commit("C1", 200m);
+
+        await store.CommitAsync(Commit("C2", 300m, replaces: "C1"));
+
+        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, (await store.CommitAsync(original)).Outcome);
+        Assert.Equal(300m, await Read(store, AccumulatorType.IndividualDeductible));
+    }
+
     private sealed class Tenant(string id) : IBenefitEngineTenantContext
     {
         public string TenantId { get; } = id;

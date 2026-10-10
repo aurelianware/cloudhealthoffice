@@ -1456,8 +1456,9 @@ public class ClaimsController : ControllerBase
     /// <summary>
     /// Accumulator adjustment reviews: claims whose engine accumulator commit
     /// was clamped at a limit (a concurrent claim for the member or family
-    /// reached the deductible / OOP maximum first). The paid amounts were not
-    /// changed; an examiner decides whether an adjustment is due.
+    /// reached the deductible / OOP maximum first), or refused by the store
+    /// although the claim is finalized (its id is fenced). The paid amounts
+    /// were not changed; an examiner decides whether an adjustment is due.
     /// </summary>
     [HttpGet("work-queue/accumulator-adjustments")]
     [ProducesResponseType(typeof(IEnumerable<AccumulatorAdjustmentItem>), StatusCodes.Status200OK)]
@@ -1471,6 +1472,8 @@ public class ClaimsController : ControllerBase
             MemberId = c.MemberId,
             Status = c.Status.ToString(),
             RaisedAt = c.AccumulatorClampReview!.RaisedAt,
+            Kind = c.AccumulatorClampReview.Kind ?? AccumulatorClampReview.Clamped,
+            CommitId = c.AccumulatorClampReview.CommitId,
             Clamps = c.AccumulatorClampReview.Clamps,
         }).ToList());
     }
@@ -2031,6 +2034,10 @@ public class AccumulatorAdjustmentItem
     public string MemberId { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public DateTime RaisedAt { get; set; }
+
+    /// <summary>Clamped (the store trimmed updates at a limit) or Refused (the store refused the commit of a finalized claim).</summary>
+    public string Kind { get; set; } = AccumulatorClampReview.Clamped;
+    public string CommitId { get; set; } = string.Empty;
     public List<CloudHealthOffice.BenefitEngine.Models.AccumulatorClamp> Clamps { get; set; } = new();
 }
 

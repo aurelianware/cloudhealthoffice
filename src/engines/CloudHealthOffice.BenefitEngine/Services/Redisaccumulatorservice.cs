@@ -318,7 +318,7 @@ public class RedisAccumulatorService : IAccumulatorService
         {
             var args = new List<RedisValue>
             {
-                commit.ClaimId, commit.CommitId, replaced, (long)DefaultKeyTtl.TotalSeconds,
+                commit.ClaimId, commit.CommitId, replaced, (long)DefaultKeyTtl.TotalSeconds, NewGeneration(),
             };
             foreach (var u in updates)
             {
@@ -369,7 +369,15 @@ public class RedisAccumulatorService : IAccumulatorService
                 SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId));
             return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedClaimReversed);
         }
-        if (outcomes.All(o => o.Outcome == "ALREADY")) return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.AlreadyCommitted);
+        if (outcomes.All(o => o.Outcome == "ALREADY"))
+        {
+            // A repeat: the clamps the first attempt recorded come back too.
+            return new AccumulatorCommitResult
+            {
+                Outcome = AccumulatorCommitOutcome.AlreadyCommitted,
+                Clamped = outcomes.SelectMany(o => o.Clamped).ToList(),
+            };
+        }
 
         if (_auditWriter is not null && commit.Updates.Count > 0)
         {
@@ -418,6 +426,23 @@ public class RedisAccumulatorService : IAccumulatorService
         return updates;
     }
 
+    /// <summary>
+    /// A commit record (its own commit, or the rebuild that counted it) in
+    /// either hash. A hash rebuilt or evicted since holds a record only for
+    /// claims claims-service counts with non-zero amounts.
+    /// </summary>
+    public async Task<bool> HasClaimRecordAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId,
+        CancellationToken ct = default)
+    {
+        var db = _redis.GetDatabase();
+        var field = CommitFieldPrefix + claimId;
+        return await db.HashExistsAsync(MakeKey(memberId, AccumulatorScope.Individual, benefitPlanId, planYear), field)
+               || await db.HashExistsAsync(MakeKey(subscriberId, AccumulatorScope.Family, benefitPlanId, planYear), field);
+    }
+
     private static IEnumerable<AccumulatorUpdate> ParseJournal(string record, AccumulatorScope scope)
     {
         var sep = record.IndexOf('|');
@@ -447,20 +472,39 @@ public class RedisAccumulatorService : IAccumulatorService
     internal const string CommitFieldPrefix = "__commit:";
     internal const string FenceFieldPrefix = "__fence:";
 
+    /// <summary>
+    /// The hash's generation: a fresh token written by every change a
+    /// rebuild in flight must not miss — a commit that lands on a cold hash
+    /// (it adds nothing and relies on the rebuild) and an invalidation. A
+    /// rebuild reads it before it asks claims-service and populates only if
+    /// it is unchanged; otherwise it asks again (<see cref="GetOrRebuildAsync"/>).
+    /// </summary>
+    internal const string GenerationField = "__gen";
+
+    private static string NewGeneration() => Guid.NewGuid().ToString("N");
+
     private static bool IsMarkerField(RedisValue name)
     {
         var field = name.ToString();
         return field.StartsWith(CommitFieldPrefix, StringComparison.Ordinal)
-               || field.StartsWith(FenceFieldPrefix, StringComparison.Ordinal);
+               || field.StartsWith(FenceFieldPrefix, StringComparison.Ordinal)
+               || field == GenerationField;
     }
 
     /// <summary>Shared Lua: is the hash holding amounts; undo a claim's journalled contribution.</summary>
     private const string JournalLua = @"
 local function populated(key)
   for _, f in ipairs(redis.call('HKEYS', key)) do
-    if string.sub(f, 1, 9) ~= '__commit:' and string.sub(f, 1, 8) ~= '__fence:' then return true end
+    if string.sub(f, 1, 9) ~= '__commit:' and string.sub(f, 1, 8) ~= '__fence:' and f ~= '__gen' then return true end
   end
   return false
+end
+local function clampsOf(journal)
+  local clamps = {}
+  for f, e in pairs(journal) do
+    if type(e) == 'table' and e.r then table.insert(clamps, { f = f, r = e.r, a = e.a }) end
+  end
+  return clamps
 end
 local function amountOf(v)
   if type(v) == 'table' then return tonumber(v.a) or 0 end
@@ -470,8 +514,13 @@ end
 
     /// <summary>
     /// KEYS[1] the hash. ARGV: claim id, commit id, replaced claim id (or
-    /// empty), TTL seconds, then (field, amount, limit-or-empty, type, tier,
-    /// source) sextuples. Returns REFUSED, ALREADY or COMMITTED|[clamps].
+    /// empty), TTL seconds, a fresh generation token, then (field, amount,
+    /// limit-or-empty, type, tier, source) sextuples. Returns REFUSED,
+    /// ALREADY|[clamps] (what the first attempt clamped) or COMMITTED|[clamps].
+    /// A replacement fences the claim it replaces (superseded for good: a
+    /// late commit of it is refused). On a cold hash nothing is added and
+    /// the generation changes, so a rebuild in flight asks claims-service
+    /// again (it counts this claim: it is Approved before it commits).
     /// </summary>
     private const string CommitScript = JournalLua + @"
 local key = KEYS[1]
@@ -481,9 +530,17 @@ if redis.call('HEXISTS', key, '__fence:' .. claim) == 1 then return 'REFUSED' en
 local own = redis.call('HGET', key, '__commit:' .. claim)
 if own then
   local sep = string.find(own, '|', 1, true)
-  if sep and string.sub(own, 1, sep - 1) == commitId then return 'ALREADY' end
+  if sep and string.sub(own, 1, sep - 1) == commitId then
+    local ok, j = pcall(cjson.decode, string.sub(own, sep + 1))
+    if ok and type(j) == 'table' then
+      local c = clampsOf(j)
+      if #c > 0 then return 'ALREADY|' .. cjson.encode(c) end
+    end
+    return 'ALREADY'
+  end
 end
 local hot = populated(key)
+if not hot then redis.call('HSET', key, '__gen', ARGV[5]) end
 local function undo(c)
   local v = redis.call('HGET', key, '__commit:' .. c)
   if not v then return end
@@ -500,11 +557,14 @@ local function undo(c)
   redis.call('HDEL', key, '__commit:' .. c)
 end
 undo(claim)
-if ARGV[3] ~= '' then undo(ARGV[3]) end
+if ARGV[3] ~= '' then
+  undo(ARGV[3])
+  redis.call('HSET', key, '__fence:' .. ARGV[3], '1')
+end
 local journal = {}
 local clamps = {}
 local any = false
-local i = 5
+local i = 6
 while i <= #ARGV do
   local f = ARGV[i]
   local a = tonumber(ARGV[i + 1]) or 0
@@ -521,6 +581,7 @@ while i <= #ARGV do
     redis.call('HSET', key, f, tostring(cur + a))
     local e = journal[f]
     if e then e.a = e.a + a else journal[f] = { a = a, t = ARGV[i + 3], n = ARGV[i + 4], s = ARGV[i + 5] } end
+    if a ~= requested then journal[f].r = (journal[f].r or 0) + requested end
     any = true
   end
   i = i + 6
@@ -541,11 +602,17 @@ return 'COMMITTED'
     /// holding no amounts — totals plus one journal record per counted claim
     /// (keeping the commit id of a commit that landed while the hash was cold,
     /// so its repeat stays a no-op) — and leaves a hash another writer already
-    /// populated alone. Fences are kept. Returns POPULATED or SKIPPED.
+    /// populated alone. Fences are kept. ARGV[4] is the generation the
+    /// rebuild read before asking claims-service ('' for none): if a cold
+    /// commit or an invalidation changed it meanwhile, nothing is written and
+    /// STALE is returned (the caller asks again). Returns POPULATED, SKIPPED
+    /// or STALE.
     /// </summary>
     private const string RebuildScript = JournalLua + @"
 local key = KEYS[1]
 if populated(key) then return 'SKIPPED' end
+local gen = redis.call('HGET', key, '__gen') or ''
+if gen ~= ARGV[4] then return 'STALE' end
 local totals = cjson.decode(ARGV[2])
 local claims = cjson.decode(ARGV[3])
 local anyTotal = false
@@ -570,9 +637,11 @@ return 'POPULATED'
 ";
 
     /// <summary>
-    /// KEYS[1] the hash. ARGV: claim id, '1' to fence it. Drops every amount
-    /// and commit record (the next read rebuilds from claims-service) and
-    /// keeps the fences, adding this claim's when asked.
+    /// KEYS[1] the hash. ARGV: claim id, '1' to fence it, TTL seconds, a
+    /// fresh generation token. Drops every amount and commit record (the
+    /// next read rebuilds from claims-service), keeps the fences, adding
+    /// this claim's when asked, and changes the generation so a rebuild that
+    /// read claims-service before the change does not populate the hash.
     /// </summary>
     private const string InvalidateScript = @"
 local key = KEYS[1]
@@ -582,10 +651,9 @@ for _, f in ipairs(redis.call('HKEYS', key)) do
 end
 if ARGV[2] == '1' then table.insert(fences, '__fence:' .. ARGV[1]) end
 redis.call('DEL', key)
-if #fences > 0 then
-  for _, f in ipairs(fences) do redis.call('HSET', key, f, '1') end
-  redis.call('EXPIRE', key, ARGV[3])
-end
+for _, f in ipairs(fences) do redis.call('HSET', key, f, '1') end
+redis.call('HSET', key, '__gen', ARGV[4])
+redis.call('EXPIRE', key, ARGV[3])
 return #fences
 ";
 
@@ -593,7 +661,7 @@ return #fences
         string memberId, string subscriberId, Guid benefitPlanId, string planYear, string claimId, bool fence)
     {
         var db = _redis.GetDatabase();
-        var args = new RedisValue[] { claimId, fence ? "1" : "0", (long)DefaultKeyTtl.TotalSeconds };
+        var args = new RedisValue[] { claimId, fence ? "1" : "0", (long)DefaultKeyTtl.TotalSeconds, NewGeneration() };
         await Task.WhenAll(
             db.ScriptEvaluateAsync(InvalidateScript,
                 new RedisKey[] { MakeKey(memberId, AccumulatorScope.Individual, benefitPlanId, planYear) }, args),
@@ -654,6 +722,30 @@ return #fences
         _logger.LogDebug(
             "Cache miss for {Key}. Rebuilding from claim history.", key.ToString());
 
+        for (var attempt = 1; ; attempt++)
+        {
+            // The generation before claims-service is asked: a commit landing
+            // on the cold hash (or an invalidation) while it answers changes
+            // it, and the populate below refuses to write a stale answer.
+            var generation = (string?)await db.HashGetAsync(key, GenerationField) ?? string.Empty;
+            var (outcome, snapshots) = await RebuildOnceAsync(db, key, ownerId, scope, benefitPlanId, planYear, generation, ct);
+            if (outcome != "STALE") return snapshots;
+            if (attempt >= MaxRebuildAttempts)
+            {
+                // Still racing: serve this answer, cache nothing; the next read rebuilds.
+                _logger.LogWarning(
+                    "Accumulator rebuild for {Key} raced {Attempts} concurrent changes; serving uncached", key.ToString(), attempt);
+                return snapshots;
+            }
+        }
+    }
+
+    private const int MaxRebuildAttempts = 3;
+
+    private async Task<(string Outcome, List<AccumulatorSnapshot> Snapshots)> RebuildOnceAsync(
+        IDatabase db, RedisKey key, string ownerId, AccumulatorScope scope,
+        Guid benefitPlanId, string planYear, string generation, CancellationToken ct)
+    {
         var rebuild = await _claimsSource.CalculateAccumulatorsWithClaimsAsync(
             _tenantContext.TenantId, ownerId, scope, benefitPlanId, planYear, ct);
 
@@ -663,7 +755,7 @@ return #fences
             _logger.LogWarning(
                 "Accumulator source unavailable for {Key}. Skipping Redis cache population.",
                 key.ToString());
-            return [];
+            return ("UNAVAILABLE", []);
         }
 
         // Populate Redis atomically with one journal record per counted claim,
@@ -689,25 +781,31 @@ return #fences
             if (journal.Count > 0) claims[claim.ClaimId] = journal;
         }
 
-        var outcome = await db.ScriptEvaluateAsync(RebuildScript, new[] { key }, new RedisValue[]
+        var outcome = (await db.ScriptEvaluateAsync(RebuildScript, new[] { key }, new RedisValue[]
         {
             (long)DefaultKeyTtl.TotalSeconds,
             System.Text.Json.JsonSerializer.Serialize(totals),
             claims.Count == 0 ? "{}" : System.Text.Json.JsonSerializer.Serialize(claims),
-        });
+            generation,
+        })).ToString();
 
-        if (outcome.ToString() == "SKIPPED")
+        if (outcome == "SKIPPED")
         {
             // Another writer populated it meanwhile: read what is there.
             var now = (await db.HashGetAllAsync(key)).Where(e => !IsMarkerField(e.Name)).ToArray();
-            return ParseSnapshots(now, scope);
+            return (outcome, ParseSnapshots(now, scope));
+        }
+        if (outcome == "STALE")
+        {
+            _logger.LogDebug("Accumulator rebuild for {Key} is stale (the hash changed while claims-service answered); asking again", key.ToString());
+            return (outcome, rebuild.Snapshots.ToList());
         }
 
         _logger.LogDebug(
             "Rebuilt {Count} accumulators ({Claims} claim record(s)) for {Key} from claim history.",
             rebuild.Snapshots.Count, claims.Count, key.ToString());
 
-        return rebuild.Snapshots.ToList();
+        return (outcome, rebuild.Snapshots.ToList());
     }
 
     /// <summary>One journalled field (Lua reads <c>a</c>, <c>t</c>, <c>n</c>, <c>s</c>).</summary>

@@ -115,6 +115,36 @@ public sealed class ChoAccumulatorCommitCosmosTests(CosmosEmulatorFixture cosmos
         Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, (await _store.CommitAsync(Commit("C1", 100m))).Outcome);
     }
 
+    /// <summary>A repeat of a clamped commit reports the first attempt's clamps (whichever attempt claims-service hears first records the review).</summary>
+    [SkippableFact]
+    public async Task ARepeatOfAClampedCommit_ReportsTheClampsAgain()
+    {
+        await _store.CommitAsync(Commit("C0", 450m));
+        var commit = Commit("C1", 100m);
+
+        var first = await _store.CommitAsync(commit);
+        var repeat = await _store.CommitAsync(commit);
+
+        Assert.Equal(AccumulatorCommitOutcome.AlreadyCommitted, repeat.Outcome);
+        var clamp = Assert.Single(first.Clamped);
+        var again = Assert.Single(repeat.Clamped);
+        Assert.Equal((clamp.Type, clamp.Requested, clamp.Applied, clamp.Limit), (again.Type, again.Requested, again.Applied, again.Limit));
+        Assert.Equal((100m, 50m, 500m), (again.Requested, again.Applied, again.Limit));
+    }
+
+    /// <summary>The replacement fences the claim it replaces: the original's late commit is refused, not counted twice.</summary>
+    [SkippableFact]
+    public async Task AReplacementsCommit_FencesTheReplacedClaim()
+    {
+        var original = Commit("C1", 200m);
+
+        await _store.CommitAsync(Commit("C2", 300m, replaces: "C1"));
+
+        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, (await _store.CommitAsync(original)).Outcome);
+        Assert.Equal(300m, await Read(AccumulatorType.IndividualDeductible));
+        Assert.Equal(300m, await Read(AccumulatorType.FamilyDeductible));
+    }
+
     private sealed class Tenant(string id) : IBenefitEngineTenantContext
     {
         public string TenantId { get; } = id;

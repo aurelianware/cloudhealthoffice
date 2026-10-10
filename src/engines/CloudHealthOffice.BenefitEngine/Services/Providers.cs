@@ -65,6 +65,19 @@ public interface IAccumulatorService
         => Task.FromResult<IReadOnlyList<AccumulatorUpdate>>([]);
 
     /// <summary>
+    /// True when the store holds a record of <paramref name="claimId"/>'s
+    /// accumulator write (read-only; post-rollout verification). The default
+    /// asks <see cref="GetClaimUpdatesAsync"/> (a claim that wrote only
+    /// zero amounts reads as not recorded).
+    /// </summary>
+    async Task<bool> HasClaimRecordAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId,
+        CancellationToken ct = default)
+        => (await GetClaimUpdatesAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, ct)).Count > 0;
+
+    /// <summary>
     /// Writes a prepared commit (<see cref="AccumulatorCommit"/>): reverses
     /// the claim's own still-active updates and those of the claim it
     /// replaces, then applies the commit's updates. Refused (nothing written)

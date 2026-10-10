@@ -421,18 +421,31 @@ internal class ChoAccumulatorService : IAccumulatorService
 
             var own = doc.Transactions.FirstOrDefault(t => t.ClaimId == commit.ClaimId && !t.IsReversed);
             if (own is not null && string.Equals(own.CommitId, commit.CommitId, StringComparison.Ordinal))
-                return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.AlreadyCommitted);
+            {
+                // A repeat: report what the first attempt clamped, so whichever
+                // attempt reaches claims-service first records the review.
+                return new AccumulatorCommitResult
+                {
+                    Outcome = AccumulatorCommitOutcome.AlreadyCommitted,
+                    Clamped = ClampsOf(own, scope),
+                };
+            }
 
             var replaced = replacedClaimId is null
                 ? null
                 : doc.Transactions.FirstOrDefault(t => t.ClaimId == replacedClaimId && !t.IsReversed);
+            // The replaced version is superseded for good: fence it here, in
+            // the same write, so a commit of it still in flight (its outbox
+            // entry driven late) can never land after this one took it back.
+            var fenceReplaced = replacedClaimId is not null && !doc.ReversedClaimIds.Contains(replacedClaimId);
 
-            // Nothing to reverse and nothing to apply on this document.
-            if (own is null && replaced is null && updates.Count == 0)
+            // Nothing to reverse, fence or apply on this document.
+            if (own is null && replaced is null && updates.Count == 0 && !fenceReplaced)
                 return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.AlreadyCommitted);
 
             if (own is not null) ReverseTransaction(doc, own);
             if (replaced is not null) ReverseTransaction(doc, replaced);
+            if (fenceReplaced) doc.ReversedClaimIds.Add(replacedClaimId!);
 
             var clamped = new List<AccumulatorClamp>();
             if (updates.Count > 0)
@@ -465,6 +478,8 @@ internal class ChoAccumulatorService : IAccumulatorService
                         Type = update.Type.ToString(),
                         NetworkTier = update.NetworkTier.ToString(),
                         AmountApplied = amount,
+                        AmountRequested = amount != update.Amount ? update.Amount : null,
+                        Limit = amount != update.Amount ? update.ClampAtLimit : null,
                         Source = update.Source
                     });
                 }
@@ -487,6 +502,21 @@ internal class ChoAccumulatorService : IAccumulatorService
             }
         }
     }
+
+    /// <summary>The clamps a commit's transaction recorded (see <see cref="AccumulatorTransactionEntry.AmountRequested"/>).</summary>
+    private static List<AccumulatorClamp> ClampsOf(AccumulatorTransaction tx, AccumulatorScope scope) =>
+        tx.Entries
+            .Where(e => e.AmountRequested is not null)
+            .Select(e => new AccumulatorClamp
+            {
+                Type = Enum.TryParse<AccumulatorType>(e.Type, out var t) ? t : default,
+                Scope = scope,
+                NetworkTier = Enum.TryParse<NetworkTier>(e.NetworkTier, out var n) ? n : NetworkTier.InNetwork,
+                Requested = e.AmountRequested!.Value,
+                Applied = e.AmountApplied,
+                Limit = e.Limit ?? 0m,
+            })
+            .ToList();
 
     /// <summary>Negates a transaction's entries (never below zero) and marks it reversed.</summary>
     private static void ReverseTransaction(AccumulatorDocument doc, AccumulatorTransaction tx)

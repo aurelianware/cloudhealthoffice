@@ -962,6 +962,44 @@ public class ClaimRepositoryMongo : IClaimRepository
         return (await _collection.Find(filter).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
     }
 
+    public async Task<IReadOnlyList<Claim>> FindPendedByPendCodeAsync(string pendCode, int limit, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.TenantId, GetTenantId()),
+            b.Eq(c => c.Status, ClaimStatus.Pended),
+            b.Eq(c => c.PendDetails!.PendCode, pendCode));
+        return (await _collection.Find(filter).SortBy(c => c.SubmittedDate).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
+    }
+
+    public async Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
+        DateTime from, DateTime to, int limit, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.TenantId, GetTenantId()),
+            b.In(c => c.Status, new[] { ClaimStatus.Approved, ClaimStatus.PartiallyPaid, ClaimStatus.Paid }),
+            b.Gte(c => c.LastUpdatedDate, from),
+            b.Lte(c => c.LastUpdatedDate, to),
+            b.Ne(c => c.VersionState, ClaimVersionState.Adjusted),
+            b.Eq(c => c.SupersededAt, null),
+            b.Eq(c => c.PendingAccumulatorCommit, null));
+        return (await _collection.Find(filter).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
+    }
+
+    public async Task<bool> RecordAccumulatorReviewAsync(
+        string tenantId, string claimId, AccumulatorClampReview review, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var row = b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, claimId));
+        var result = await _collection.UpdateOneAsync(
+            b.And(row, b.Or(b.Eq(c => c.AccumulatorClampReview, null), b.Ne(c => c.AccumulatorClampReview!.CommitId, review.CommitId))),
+            Builders<Claim>.Update.Set(c => c.AccumulatorClampReview, review),
+            cancellationToken: ct);
+        if (result.MatchedCount == 1) return true;
+        return await _collection.Find(row).AnyAsync(ct); // already holds this commit's review
+    }
+
     public async Task<bool> ResolveAccumulatorClampReviewAsync(string claimId, string resolvedBy, CancellationToken ct = default)
     {
         var b = Builders<Claim>.Filter;
@@ -1060,7 +1098,8 @@ public class ClaimRepositoryMongo : IClaimRepository
         string claimId,
         DateTime voidedAt,
         string? actorId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        AccumulatorOutboxItem? pendingAccumulatorReversal = null)
     {
         var b = Builders<Claim>.Filter;
         var filter = b.And(
@@ -1072,6 +1111,9 @@ public class ClaimRepositoryMongo : IClaimRepository
             .Set(c => c.VersionState, ClaimVersionState.Voided)
             .Set(c => c.LastUpdatedDate, voidedAt)
             .Set(c => c.LastUpdatedBy, actorId);
+        // The void's accumulator reversal lands with the void, or not at all.
+        if (pendingAccumulatorReversal is not null)
+            update = update.Set(c => c.PendingAccumulatorReversal, pendingAccumulatorReversal);
 
         var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
         return result.MatchedCount > 0;

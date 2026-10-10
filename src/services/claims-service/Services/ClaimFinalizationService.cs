@@ -182,7 +182,8 @@ public class ClaimFinalizationService : IClaimFinalizationService
         IClaimEventPublisher kafkaEventPublisher,
         IClaimAdjustmentService adjustmentService,
         ILogger<ClaimFinalizationService> logger,
-        CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine? benefitEngine = null)
+        CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine? benefitEngine = null,
+        Adjudication.IAccumulatorOutboxProcessor? accumulatorOutbox = null)
     {
         _claimRepository = claimRepository;
         _versionEventPublisher = versionEventPublisher;
@@ -190,7 +191,10 @@ public class ClaimFinalizationService : IClaimFinalizationService
         _adjustmentService = adjustmentService;
         _logger = logger;
         _benefitEngine = benefitEngine;
+        _accumulatorOutbox = accumulatorOutbox;
     }
+
+    private readonly Adjudication.IAccumulatorOutboxProcessor? _accumulatorOutbox;
 
     public async Task<ClaimFinalizationResult> FinalizeAsync(
         string claimId,
@@ -335,7 +339,9 @@ public class ClaimFinalizationService : IClaimFinalizationService
             // only acts on a PendingReversal row, so repeating it is safe.
             _logger.LogInformation(
                 "Claim {ClaimId} already Voided; idempotent no-op apart from the adjustment transition", Sanitize(claim.Id));
-            await ReverseEngineAccumulatorsAsync(claim, ct);
+            // The reversal the void saved (outbox) is driven again; a claim
+            // voided before the outbox existed is reversed directly.
+            await ReverseEngineAccumulatorsAsync(claim, claim.PendingAccumulatorReversal, ct);
             await CompleteAdjustmentOnReversalAsync(tenantId, claim.Id, request.ReversalRunId, ct);
             return ClaimVoidResult.AlreadyVoided(claim);
         }
@@ -367,8 +373,12 @@ public class ClaimFinalizationService : IClaimFinalizationService
         // (Paid is terminal). The projection-bypass exists precisely
         // for this lifecycle write.
         var voidedAt = DateTime.UtcNow;
+        // The terminal engine-accumulator reversal the void owes is saved by
+        // the void write itself (outbox), then driven — with claims-service's
+        // own service token — and retried by the dispatcher on failure.
+        var reversal = _accumulatorOutbox is null ? null : AccumulatorOutboxItem.ForReversal(claim, voidedAt);
         var ok = await _claimRepository.MarkVoidedProjectionAsync(
-            tenantId, claim.Id, voidedAt, actorId, ct);
+            tenantId, claim.Id, voidedAt, actorId, ct, reversal);
         if (!ok)
         {
             // Should not happen — we just read the row above. Surface as
@@ -424,8 +434,8 @@ public class ClaimFinalizationService : IClaimFinalizationService
         // credit. Voids from the reversal run cover replacements too: the
         // superseded version is voided here. Idempotent in the engine
         // (keyed on the claim id). Non-blocking: the void has persisted; a
-        // repeat void re-drives it.
-        await ReverseEngineAccumulatorsAsync(updated, ct);
+        // repeat void re-drives it; with the outbox the dispatcher does.
+        await ReverseEngineAccumulatorsAsync(updated, reversal, ct);
 
         // 5.12b Premise E — adjustment lifecycle callback. When the void
         // carries a ReversalRunId correlation, the in-flight adjustment
@@ -444,8 +454,25 @@ public class ClaimFinalizationService : IClaimFinalizationService
         return ClaimVoidResult.Voided(updated);
     }
 
-    private async Task ReverseEngineAccumulatorsAsync(Claim claim, CancellationToken ct)
+    private async Task ReverseEngineAccumulatorsAsync(Claim claim, AccumulatorOutboxItem? reversal, CancellationToken ct)
     {
+        if (reversal is not null && _accumulatorOutbox is not null)
+        {
+            try
+            {
+                // Never cancellable: the void has persisted. A failure is
+                // rescheduled on the claim and the dispatcher retries it.
+                await _accumulatorOutbox.ProcessAsync(
+                    claim.TenantId, claim.Id, AccumulatorOutboxKind.Reversal, reversal.Id, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Void of claim {ClaimId}: the accumulator reversal attempt failed; the outbox dispatcher retries it",
+                    Sanitize(claim.Id));
+            }
+            return;
+        }
         if (_benefitEngine is null) return;
         if (!Guid.TryParse(claim.BenefitPlanId, out var planId))
         {

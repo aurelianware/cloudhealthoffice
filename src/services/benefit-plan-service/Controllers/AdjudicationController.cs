@@ -966,6 +966,48 @@ public class AdjudicationController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // POST /api/v1/adjudication/accumulator-commits/lookup
+    //
+    // Read-only: which of the given claims the accumulator store holds a
+    // write record for. claims-service's post-rollout sweep lists finalized
+    // claims with no record (and no outbox entry). claims-service only.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>Most claims one lookup accepts.</summary>
+    public const int MaxCommitLookups = 500;
+
+    /// <summary>Which claims have an accumulator write record in the store.</summary>
+    [HttpPost("accumulator-commits/lookup")]
+    [RequireServiceClient(ClaimsServiceClientId)]
+    [ProducesResponseType(typeof(List<AccumulatorCommitLookupResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<List<AccumulatorCommitLookupResult>>> LookupAccumulatorCommits(
+        [FromBody] List<AccumulatorCommitLookup> claims,
+        [FromServices] IAccumulatorService accumulators,
+        CancellationToken ct)
+    {
+        if (claims is null || claims.Count == 0)
+            return BadRequest(new { error = "At least one claim is required" });
+        if (claims.Count > MaxCommitLookups)
+            return BadRequest(new { error = $"At most {MaxCommitLookups} claims per lookup" });
+        if (claims.Any(c => string.IsNullOrWhiteSpace(c.ClaimId) || string.IsNullOrWhiteSpace(c.MemberId)
+                            || c.BenefitPlanId == Guid.Empty || string.IsNullOrWhiteSpace(c.PlanYear)))
+            return BadRequest(new { error = "ClaimId, MemberId, BenefitPlanId and PlanYear are required" });
+
+        var results = new List<AccumulatorCommitLookupResult>(claims.Count);
+        foreach (var c in claims)
+        {
+            var subscriber = string.IsNullOrWhiteSpace(c.SubscriberId) ? c.MemberId : c.SubscriberId!;
+            results.Add(new AccumulatorCommitLookupResult
+            {
+                ClaimId = c.ClaimId,
+                Recorded = await accumulators.HasClaimRecordAsync(c.MemberId, subscriber, c.BenefitPlanId, c.PlanYear, c.ClaimId, ct),
+            });
+        }
+        return Ok(results);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // POST /api/v1/adjudication/resolve-rates
     //
     // Standalone rate resolution (replaces Argo step 7).
@@ -1551,6 +1593,22 @@ public class AccumulatorCommitResponse
 
     /// <summary>Updates the store wrote for less than requested (a limit was reached at write time).</summary>
     public List<AccumulatorClamp> Clamped { get; set; } = [];
+}
+
+/// <summary>One claim of <c>POST /api/v1/adjudication/accumulator-commits/lookup</c>.</summary>
+public class AccumulatorCommitLookup
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public string? SubscriberId { get; set; }
+    public Guid BenefitPlanId { get; set; }
+    public string PlanYear { get; set; } = string.Empty;
+}
+
+public class AccumulatorCommitLookupResult
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public bool Recorded { get; set; }
 }
 
 public class ReverseClaimRequest
