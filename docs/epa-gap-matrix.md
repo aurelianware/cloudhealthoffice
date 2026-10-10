@@ -129,7 +129,7 @@ test first.
 | Portal PA submit | `src/portal/.../ServiceImplementations.cs:1005-1023` | S (broken) | Request has no requested services → 400 (D-24). |
 | Denial notices / correspondence | `src/portal/.../Pages/Correspondence.razor:283-305` | S | Hard-coded template row; the backend `/correspondence/*` does not exist. |
 | Da Vinci interop harness | `tests/DaVinciInterop.Tests` | I+T (CHO as **client**) | CHO is never the payer server under test. |
-| CMS-0057-F evidence generator | `tools/Cms0057Evidence`, `tests/Cms0057Acceptance.Tests/scenarios.json` | P | Statuses hand-declared. See §6.1. |
+| CMS-0057-F evidence generator | `tools/Cms0057Evidence`, `tests/Cms0057Acceptance.Tests/scenarios.json` | P | Replace statuses come from §11 of this matrix (Q-1); auto-publish paused. Backing tests are still partly tautological (§6.1). |
 
 ### 2.2 End-to-end trace — one PAS request
 
@@ -623,3 +623,66 @@ that will be confirmed at the start of Phase 3.
 | Date | Change |
 |---|---|
 | 2026-10-10 | Initial audit and gap matrix (Phase 1–2), baseline `31a462ff`. |
+| 2026-10-10 | Added §11, the per-scenario evidence status table read by `tools/Cms0057Evidence` (Q-1). Evidence auto-publish paused in CI. |
+
+---
+
+## 11. Evidence scenario status (generator input)
+
+This section is **machine-read**. `tools/Cms0057Evidence` takes the Cloud Health
+Office (Replace) status of every CMS-0057-F acceptance scenario from the table
+below, not from `tests/Cms0057Acceptance.Tests/scenarios.json`. The manifest
+still holds each scenario's name, capability and external-core (Augment)
+statuses; it no longer holds a Replace status.
+
+**How a status is chosen.** Each scenario takes the class of the requirement
+that defines it in §4 (or §2.1 when §4 has no row):
+
+| Matrix class | Evidence status |
+|---|---|
+| I+T, and the backing acceptance tests exercise the behaviour (not tautological, §6.1) | `PASSABLE` |
+| P or I-U, or I+T backed only by tautological tests | `PARTIAL` |
+| S or M, or a defect that inverts the required behaviour | `GAP` |
+| No dependency on CHO product code | `N/A` |
+
+`PASSABLE` here means the scenario as this repository defines it is supported by
+the tested code. It is not CMS certification and not a conformance claim for any
+Da Vinci IG.
+
+**Rules the generator enforces** (the build fails otherwise):
+- exactly one row per scenario in `scenarios.json`, and no row for anything else;
+- no duplicate rows;
+- status is exactly one of `PASSABLE`, `PARTIAL`, `GAP`, `N/A`;
+- matrix refs and justification are not empty;
+- a `PASSABLE` row still needs at least one passing, non-GAP acceptance test
+  tagged with that scenario.
+
+**Editing.** Keep the table between the two marker comments. Keep the four
+columns in this order. Write a literal pipe in a cell as `\|`. When a fix lands,
+change the row here in the same PR as the code and its test.
+
+<!-- cms0057-evidence-status:begin -->
+| Scenario | Status | Matrix refs | Justification |
+|---|---|---|---|
+| PAS-01 | PARTIAL | §4.2, D-21, G-05, G-44, G-46 | CRD order-select/order-sign answer with free-text cards only; no coverage-information extension; context is hard-coded TX/Medicaid/STAR and an unknown code fails open. |
+| PAS-02 | PARTIAL | §4.3, D-14, D-22, G-53, G-54, G-55 | Questionnaires are served from a largely in-memory store; `$questionnaire-package` returns the Questionnaire only (no CQL Library or ValueSets); search crosses tenants. |
+| PAS-03 | GAP | §2.2, §4.1, D-01, D-02, D-03, G-01 | `$submit` adjudicates and answers, but no durable authorization record is created: the hand-off fails validation and the error is swallowed. |
+| PAS-04 | PARTIAL | §4.1, D-01, G-01 | `$inquire` logic is implemented and tested, but it cannot find authorization numbers issued by PAS `$submit`. |
+| PAS-05 | PARTIAL | §4.4, D-02, D-10, G-08, G-17 | A denial reason is stored when supplied via REST but is not required, is lost for PAS, and is not carried in `reviewAction`. |
+| PAS-06 | GAP | §4.4, §6.1, D-07, D-08, G-03, G-04, G-18 | The SLA watchdog throws on every run, PAS drops urgency, and no due date is persisted. The backing test asserts label strings only. |
+| PAS-07 | PASSABLE | §2.1, §4.1, G-16 | CDex additional-information exchange is implemented and tested (I+T). Limitation: raised only from reviewer decisions, never from PAS pends. |
+| PAS-08 | PASSABLE | §2.1, §4.4 | Drug and benefit exclusion from CMS-0057-F medical PA scope is implemented and tested (`DrugExclusionEvaluator`, I+T). |
+| PROV-01 | PARTIAL | §4.5, §6.1, G-30, G-33 | The Provider Access pull path exists, but it reads the mock data adapter registered in every environment and carries no PA data. The backing test runs on mock data. |
+| PROV-02 | PARTIAL | §4.5, §6.1, G-33 | Attribution is enforced and fails closed, but only from static configured panels. The backing test's "not attributed" case is a nonexistent member id. |
+| PROV-03 | GAP | §4.5, §6.1, D-11, G-09 | Provider Access requires an opt-in consent; CMS-0057-F requires sharing unless the patient opts out. The backing test asserts `Revoked != Active`. |
+| P2P-01 | PARTIAL | §4.5, D-13, G-02, G-30, G-35 | The inbound export path exists, but it uses mock data, excludes PA data, and accepts patient-context tokens for another member's export (D-13). |
+| P2P-02 | PARTIAL | §4.5, §4.6, G-35, G-42 | Outbound initiation is built behind a transport seam; outbound payer credentials are unconfigured by design and PA data is not exchanged. |
+| P2P-03 | PASSABLE | §4.5 | Opt-in consent for Payer-to-Payer is implemented and tested (17 tests, tenant-scoped consent-service). |
+| P2P-04 | PARTIAL | §4.5, G-35 | `$member-match` logic is tested, but it runs over mock data for a single configured tenant and is not declared in the CapabilityStatement. |
+| PAT-01 | PARTIAL | §4.5, §5 T-4, G-30 | The Patient Access claims surface exists, but the data source behind it is a mock adapter registered in every environment that ignores tenant. |
+| PAT-02 | PARTIAL | §4.5, G-14, G-30 | Clinical resources are served only from Payer-to-Payer imports; no US Core profile is claimed or validated. |
+| PAT-03 | GAP | §4.5, §6.1, G-31 | No API exposes PA data to patients. The backing test asserts that a supported-types list contains "ClaimResponse". |
+| SEC-01 | PARTIAL | §4.6, D-25, G-40, G-41, G-42 | Auth code + PKCE, refresh, scope enforcement and tenant binding are I+T. Launch context in the token response, SMART v2 scopes, `private_key_jwt` and `aud` validation are missing. |
+| CONSENT-01 | PARTIAL | §4.5, §6.1, D-11, G-09 | One consent registry serves both purposes, but Provider Access uses opt-in semantics. The backing test is reflection on constructor parameter types. |
+| METRICS-01 | GAP | §4.4, §6.1, D-27, G-20 | No CMS metric set is computed: only a counts/averages summary exists, with no median, split or annual extract. The backing test checks date arithmetic. |
+<!-- cms0057-evidence-status:end -->
