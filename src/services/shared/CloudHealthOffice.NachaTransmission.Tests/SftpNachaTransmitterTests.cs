@@ -124,16 +124,55 @@ public class SftpNachaTransmitterTests
     }
 
     [Fact]
-    public async Task FailedRename_RemovesThePartialUpload()
+    public async Task FailedRename_WithTheTemporaryFileStillThere_IsUnknown_AndTheFileIsLeftAlone()
     {
         _sftp.FailRename = true;
 
         var act = () => Transmitter().TransmitAsync(Nacha.Request(Nacha.File()));
 
-        // The temporary name is still there and the final one is not: certainly not delivered.
-        (await act.Should().ThrowAsync<NachaTransmissionException>()).Which.DeliveryUnknown.Should().BeFalse();
-        _sftp.Files.Should().BeEmpty("the temporary file is deleted");
-        _sftp.Operations.Should().Contain(o => o.StartsWith("delete "));
+        // Temporary there, final absent is not proof of non-delivery (a server that
+        // renames by copy-then-delete may be mid-copy): unknown, nothing deleted.
+        (await act.Should().ThrowAsync<NachaTransmissionException>()).Which.DeliveryUnknown.Should().BeTrue();
+        _sftp.Files.Should().ContainSingle().Which.Key.Should().EndWith(".part");
+        _sftp.Operations.Should().NotContain(o => o.StartsWith("delete "));
+    }
+
+    [Fact]
+    public async Task ClosingTheSessionFailsAfterTheRename_TheFileIsStillDelivered()
+    {
+        _sftp.FailDispose = true;
+        var request = Nacha.Request(Nacha.File());
+
+        var receipt = await Transmitter().TransmitAsync(request);
+
+        receipt.RemoteFileName.Should().Be(request.FileName);
+        _sftp.Files.Keys.Should().ContainSingle().Which.Should().EndWith("/" + request.FileName);
+        _log.All.Should().Contain("closing the SFTP session failed");
+    }
+
+    [Fact]
+    public async Task ClosingTheSessionFailsAfterAFailedUpload_IsStillNotDelivered()
+    {
+        _sftp.FailDispose = true;
+        _sftp.FailUpload = true;
+
+        var act = () => Transmitter().TransmitAsync(Nacha.Request(Nacha.File()));
+
+        var ex = (await act.Should().ThrowAsync<NachaTransmissionException>()).Which;
+        ex.DeliveryUnknown.Should().BeFalse();
+        ex.Message.Should().Contain("upload");
+    }
+
+    [Fact]
+    public async Task ClosingTheSessionFailsAfterADropCheck_TheAnswerStands()
+    {
+        var request = Nacha.Request(Nacha.File());
+        var receipt = await Transmitter().TransmitAsync(request);
+        _sftp.FailDispose = true;
+
+        var check = await Transmitter().CheckAsync(Nacha.Tenant, request.FileName, receipt.ByteSize);
+
+        check.Presence.Should().Be(NachaRemoteFilePresence.Present);
     }
 
     [Fact]

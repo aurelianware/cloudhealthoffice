@@ -47,6 +47,16 @@ public interface IRunSeparationOfDuties
     /// </summary>
     /// <exception cref="SeparationOfDutiesException">The actor is a service, unauthenticated, or the run's executor.</exception>
     string EnsureMayReleaseReservation(string runKind, string runNumber, string? executedBy);
+
+    /// <summary>
+    /// The acting user, after checking they may approve, send, retry or reconcile a
+    /// payment run's NACHA file at the bank (the step that actually moves money): a
+    /// user (never a service token) who neither created nor executed the run. A run
+    /// with no recorded creator is refused here (not merely logged): the maker-checker
+    /// comparison cannot be made.
+    /// </summary>
+    /// <exception cref="SeparationOfDutiesException">The actor is a service, unauthenticated, the run's creator or executor, or no creator is recorded.</exception>
+    string EnsureMayTransmit(string runNumber, string? createdBy, string? executedBy);
 }
 
 public sealed class RunSeparationOfDuties : IRunSeparationOfDuties
@@ -79,6 +89,26 @@ public sealed class RunSeparationOfDuties : IRunSeparationOfDuties
             throw new SeparationOfDutiesException(
                 $"Separation of duties: you executed {runKind} {runNumber}, so you cannot release its claim reservations. " +
                 "A different user with payments:approve must release them.");
+
+        return user;
+    }
+
+    public string EnsureMayTransmit(string runNumber, string? createdBy, string? executedBy)
+    {
+        var user = EnsureUser("sending a payment run's NACHA file to the bank moves money");
+
+        if (string.IsNullOrWhiteSpace(createdBy))
+            throw new SeparationOfDutiesException(
+                $"Separation of duties: payment run {runNumber} has no recorded creator, so its file cannot be sent to the bank " +
+                "(the maker-checker comparison cannot be made).");
+        if (string.Equals(createdBy, user, StringComparison.OrdinalIgnoreCase))
+            throw new SeparationOfDutiesException(
+                $"Separation of duties: you created payment run {runNumber}, so you cannot send its file to the bank. " +
+                "A different user with payments:approve must.");
+        if (string.Equals(executedBy, user, StringComparison.OrdinalIgnoreCase))
+            throw new SeparationOfDutiesException(
+                $"Separation of duties: you executed payment run {runNumber}, so you cannot also send its file to the bank. " +
+                "A different user with payments:approve must.");
 
         return user;
     }

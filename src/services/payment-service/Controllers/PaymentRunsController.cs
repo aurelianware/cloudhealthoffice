@@ -66,9 +66,18 @@ public class PaymentRunsController : ControllerBase
             request.Criteria.LineOfBusiness, SanitizeForLog(request.Criteria.ProviderNPI));
 
         // The creator is the token subject; request.CreatedBy is never read.
-        var paymentRun = await _paymentRunService.CreatePaymentRunAsync(
-            request.Criteria,
-            _actor.UserId);
+        PaymentRun paymentRun;
+        try
+        {
+            paymentRun = await _paymentRunService.CreatePaymentRunAsync(
+                request.Criteria,
+                _actor.UserId,
+                request.PaymentDate);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(title: "Invalid payment date", detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
 
         return CreatedAtAction(
             nameof(GetPaymentRunById),
@@ -203,6 +212,181 @@ public class PaymentRunsController : ControllerBase
     }
 
     /// <summary>
+    /// The bank transmission record of a run's NACHA file: status, attempts
+    /// (operator, hash, result), receipt. Never the file or a bank number.
+    /// </summary>
+    [HttpGet("{id}/eft-file/transmission")]
+    [ProducesResponseType(typeof(PaymentFileTransmission), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PaymentFileTransmission>> GetEftFileTransmission(
+        string id, [FromServices] IPaymentFileTransmissionService transmissions, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var record = await transmissions.GetAsync(id, cancellationToken);
+            return record == null
+                ? Problem(title: "Not transmitted", detail: "This run's NACHA file was never approved for transmission.", statusCode: StatusCodes.Status404NotFound)
+                : Ok(record);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Approve and send a completed ACH run's NACHA file to the tenant's bank
+    /// (SFTP, pinned host key), or retry one whose last attempt Failed. The bytes
+    /// are regenerated and must hash to the SHA-256 pinned at generation and at
+    /// approval, or nothing is sent (409). Exactly once: a Transmitted file answers
+    /// 200 without sending; a NeedsReview file (outcome unknown) is never re-sent
+    /// (409) until reconciled or resolved. Needs payments:approve from a user who
+    /// did not create the run; a service token is refused. 409 while
+    /// BankTransmission:Enabled is false (nothing is done). 200 Transmitted,
+    /// 502 Failed (nothing reached the bank; may be retried), 409 NeedsReview.
+    /// </summary>
+    [HttpPost("{id}/eft-file/transmission")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(PaymentFileTransmission), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PaymentFileTransmission), StatusCodes.Status502BadGateway)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<PaymentFileTransmission>> TransmitEftFile(
+        string id, [FromServices] IPaymentFileTransmissionService transmissions, CancellationToken cancellationToken)
+        => TransmissionAction(async () =>
+        {
+            var record = await transmissions.TransmitAsync(id, cancellationToken);
+            return record.Status switch
+            {
+                PaymentFileTransmissionStatus.Transmitted => Ok(record),
+                PaymentFileTransmissionStatus.Failed => StatusCode(StatusCodes.Status502BadGateway, record),
+                _ => StatusCode(StatusCodes.Status409Conflict, record),
+            };
+        });
+
+    /// <summary>
+    /// For a NeedsReview file: list the bank's drop (read-only). Found with the
+    /// expected size: Transmitted. Otherwise it stays NeedsReview (the bank may have
+    /// collected it already) for a second user to resolve. Needs payments:approve
+    /// from a user who did not create the run.
+    /// </summary>
+    [HttpPost("{id}/eft-file/transmission/reconcile")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(PaymentFileTransmission), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<PaymentFileTransmission>> ReconcileEftFileTransmission(
+        string id, [FromServices] IPaymentFileTransmissionService transmissions, CancellationToken cancellationToken)
+        => TransmissionAction(async () => Ok(await transmissions.ReconcileAsync(id, cancellationToken)));
+
+    /// <summary>
+    /// For a NeedsReview file: record what the bank said, with the evidence.
+    /// bankReceived true: Transmitted. False: Failed (it may then be retried).
+    /// Needs payments:approve from a user who neither created the run, approved
+    /// the transmission nor attempted it.
+    /// </summary>
+    [HttpPost("{id}/eft-file/transmission/resolve")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(PaymentFileTransmission), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<PaymentFileTransmission>> ResolveEftFileTransmission(
+        string id, [FromBody] ResolvePaymentFileTransmissionRequest? request,
+        [FromServices] IPaymentFileTransmissionService transmissions, CancellationToken cancellationToken)
+    {
+        if (request?.BankReceived == null || string.IsNullOrWhiteSpace(request.Reason))
+            return Task.FromResult<ActionResult<PaymentFileTransmission>>(Problem(title: "Bank answer required",
+                detail: "bankReceived (true/false) and reason (what the bank said, who, their reference) are required.",
+                statusCode: StatusCodes.Status400BadRequest));
+        return TransmissionAction(async () =>
+            Ok(await transmissions.ResolveAsync(id, request.BankReceived.Value, request.Reason, cancellationToken)));
+    }
+
+    /// <summary>
+    /// Re-date a run's NACHA file whose effective entry date can no longer be sent:
+    /// a new file (new creation time, effective date chosen now, new file ID modifier,
+    /// reference and name ending -R{n}) replaces the pinned one. The old file's
+    /// transmission record becomes Superseded (kept, linked, never sendable). Allowed
+    /// only when the old file was never approved, or its record is Pending or Failed
+    /// (including "bank did not receive it"); never when Transmitting, Transmitted or
+    /// NeedsReview; a Failed file is first looked for in the bank's drop (read-only,
+    /// audited) and refused if it is there or the drop cannot be checked. The new file
+    /// needs a fresh approval (POST .../transmission) by someone other than the
+    /// re-dater. The run's 835s keep their BPR16; each is listed in the new file's
+    /// remittanceDateNotices and a run warning. 409 if another re-date got there first.
+    /// payments:approve, a user who neither created nor executed the run; reason required.
+    /// </summary>
+    [HttpPost("{id}/eft-file/redate")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(PaymentRunEftFile), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<PaymentRunEftFile>> RedateEftFile(
+        string id, [FromBody] RedateEftFileRequest? request,
+        [FromServices] IPaymentFileTransmissionService transmissions, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Reason))
+            return Problem(title: "Reason required", detail: "A reason is required to re-date a NACHA file.",
+                statusCode: StatusCodes.Status400BadRequest);
+        var result = await TransmissionAction(async () =>
+        {
+            var file = await transmissions.RedateAsync(id, request.Reason, cancellationToken);
+            return new ObjectResult(file) { StatusCode = StatusCodes.Status200OK };
+        });
+        return result.Result!;
+    }
+
+    private async Task<ActionResult<PaymentFileTransmission>> TransmissionAction(Func<Task<ActionResult<PaymentFileTransmission>>> action)
+    {
+        if (_actor.IsService)
+            return SeparationOfDuties(new SeparationOfDutiesException(
+                "A service token cannot approve, transmit or settle a NACHA file; a user with payments:approve does."));
+        try
+        {
+            return await action();
+        }
+        catch (BankTransmissionDisabledException ex)
+        {
+            return Problem(title: "Bank transmission disabled", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return Problem(title: "Not found", detail: ex.Message, statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (PaymentFileHashMismatchException ex)
+        {
+            return Problem(title: "File differs from the approved file", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (PaymentFileApprovalStaleException ex)
+        {
+            return Problem(title: "Approval no longer valid", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (PaymentFileTransmissionStateException ex)
+        {
+            return Problem(title: "Transmission state", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(title: "Invalid request", detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(title: "Cannot transmit", detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    /// <summary>
     /// Get payment run by ID
     /// </summary>
     [HttpGet("{id}")]
@@ -295,10 +479,23 @@ internal static class ReservationRelease
     }
 }
 
+public class RedateEftFileRequest
+{
+    /// <summary>Why the file is re-dated (e.g. "approved after its effective date passed").</summary>
+    public string? Reason { get; set; }
+}
+
 public class CreatePaymentRunRequest
 {
     public PaymentRunCriteria Criteria { get; set; } = new();
     /// <summary>Ignored: the creator is the token subject.</summary>
     public string? CreatedBy { get; set; }
+
+    /// <summary>
+    /// Optional payment (ACH effective entry) date: not in the past, at most a year
+    /// ahead (else 400). A weekend or holiday is rolled to the next banking day when
+    /// the NACHA file is pinned. Omitted: the next banking day, re-chosen at pinning.
+    /// </summary>
+    public DateTime? PaymentDate { get; set; }
     public string? Description { get; set; }
 }

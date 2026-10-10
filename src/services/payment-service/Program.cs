@@ -118,6 +118,37 @@ else
 }
 builder.Services.AddScoped<IFfsEftFileService, FfsEftFileService>();
 
+// Bank transmission of a completed ACH run's NACHA file. Off unless
+// BankTransmission:Enabled is true (and the tenant's own
+// paymentControls.nachaTransmission.enabled in tenant-service). While off, no
+// SFTP, Key Vault or tenant-service client is even registered: the service
+// refuses before doing anything. See docs/operations/NACHA-BANK-TRANSMISSION-RUNBOOK.md.
+builder.Services.Configure<BankTransmissionOptions>(builder.Configuration.GetSection(BankTransmissionOptions.SectionName));
+// Effective entry dates (bank time zone, Federal Reserve calendar): chosen when a
+// run is created and when its NACHA file is pinned, checked when it is sent.
+builder.Services.AddSingleton<AchEffectiveDatePolicy>();
+if (builder.Configuration.GetValue<bool>($"{BankTransmissionOptions.SectionName}:Enabled"))
+{
+    CloudHealthOffice.NachaTransmission.NachaTransmissionServiceCollectionExtensions.AddChoNachaTransmission(
+        builder.Services, builder.Configuration, builder.Environment, "payment-service", databaseProvider);
+}
+else
+{
+    builder.Services.AddSingleton<CloudHealthOffice.NachaTransmission.INachaTransmitter, DisabledNachaTransmitter>();
+    builder.Services.AddSingleton<CloudHealthOffice.NachaTransmission.INachaRemoteFileProbe, DisabledNachaTransmitter>();
+}
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
+{
+    builder.Services.AddScoped<IPaymentFileTransmissionRepository, PaymentFileTransmissionRepositoryMongo>();
+    builder.Services.AddScoped<INachaFileIdModifierAllocator, NachaFileIdModifierAllocatorMongo>();
+}
+else
+{
+    builder.Services.AddSingleton<IPaymentFileTransmissionRepository, PaymentFileTransmissionRepositoryCosmos>();
+    builder.Services.AddSingleton<INachaFileIdModifierAllocator, NachaFileIdModifierAllocatorCosmos>();
+}
+builder.Services.AddScoped<IPaymentFileTransmissionService, PaymentFileTransmissionService>();
+
 // Services
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();
 builder.Services.AddScoped<IReversalRunService, ReversalRunService>();

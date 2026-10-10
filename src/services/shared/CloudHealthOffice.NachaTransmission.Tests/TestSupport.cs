@@ -82,6 +82,10 @@ internal sealed class FakeSftp : ISftpSessionFactory
     public List<string> Operations { get; } = new();
     public List<SftpConnectParameters> Connections { get; } = new();
     public bool FailRename { get; set; }
+    public bool FailUpload { get; set; }
+
+    /// <summary>Closing the session (disconnect) throws.</summary>
+    public bool FailDispose { get; set; }
     public Exception? FailConnect { get; set; }
 
     /// <summary>The server renames the file, but the reply is lost (the client sees an error).</summary>
@@ -111,9 +115,16 @@ internal sealed class FakeSftp : ISftpSessionFactory
             return _server.Files.ContainsKey(path);
         }
 
+        public long? Size(string path)
+        {
+            _server.Operations.Add($"size {path}");
+            return _server.Files.TryGetValue(path, out var bytes) ? bytes.LongLength : throw new IOException("no such file");
+        }
+
         public void Upload(Stream content, string path)
         {
             _server.Operations.Add($"upload {path}");
+            if (_server.FailUpload) throw new IOException("write failed");
             using var ms = new MemoryStream();
             content.CopyTo(ms);
             _server.Files[path] = ms.ToArray();
@@ -137,7 +148,11 @@ internal sealed class FakeSftp : ISftpSessionFactory
             _server.Files.Remove(path);
         }
 
-        public void Dispose() => _server.Operations.Add("close");
+        public void Dispose()
+        {
+            _server.Operations.Add("close");
+            if (_server.FailDispose) throw new ObjectDisposedException("SftpClient", "disconnect failed");
+        }
     }
 }
 

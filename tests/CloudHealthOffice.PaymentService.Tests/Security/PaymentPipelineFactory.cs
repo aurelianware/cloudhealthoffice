@@ -23,6 +23,7 @@ public sealed class PaymentPipelineFactory : WebApplicationFactory<Program>
     public IEraEnvelopeRepository Envelopes { get; } = Substitute.For<IEraEnvelopeRepository>();
     public ITradingPartnersClient TradingPartners { get; } = Substitute.For<ITradingPartnersClient>();
     public InMemoryClaimReservationRepository Reservations { get; } = new();
+    public InMemoryPaymentFileTransmissionRepository Transmissions { get; } = new();
     public NoCallerHost.CapturingHandler Claims { get; } = new() { Respond = _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[]") } };
 
     /// <summary>Bank numbers the 835 generator puts in BPR (payer then payee).</summary>
@@ -68,6 +69,8 @@ public sealed class PaymentPipelineFactory : WebApplicationFactory<Program>
             services.AddSingleton<IClaimReservationRepository>(Reservations);
             services.AddSingleton<IReservationAuditLog>(new InMemoryReservationAuditLog());
             services.AddSingleton<IProviderReceivableRepository>(new InMemoryProviderReceivableRepository());
+            services.AddSingleton<IPaymentFileTransmissionRepository>(Transmissions);
+            services.AddSingleton<INachaFileIdModifierAllocator>(new InMemoryNachaFileIdModifierAllocator());
             Runs.TryStartAsync(default!, default!, default).ReturnsForAnyArgs(true);
             ReversalRuns.TryStartAsync(default!, default!, default).ReturnsForAnyArgs(true);
             services.AddHttpClient(ClaimsServiceClient.HttpClientName)
