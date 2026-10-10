@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using EnrollmentImportService;
 using CloudHealthOffice.Infrastructure.Extensions;
 using EnrollmentImportService.Clients;
@@ -44,6 +45,9 @@ builder.Services.AddScoped<IEnrollmentEventPublisher, EnrollmentEventPublisher>(
 builder.Services.AddSingleton<IEnrollmentValidator, EnrollmentValidator>();
 builder.Services.AddScoped<IEnrollmentImportService, EnrollmentImportService.Services.EnrollmentImportService>();
 builder.Services.AddSingleton<IEnrollment834EdiParser, Enrollment834EdiParser>();
+
+// X12 interchange control: ISA/IEA validation, TA1, duplicate ISA13 (shared library).
+builder.Services.AddChoX12Interchange(builder.Configuration);
 builder.Services.AddSingleton<IPlanCodeGapReportService, PlanCodeGapReportService>();
 
 builder.Services.AddHostedService<EnrollmentIndexInitializer>();
@@ -136,6 +140,7 @@ if (app.Environment.IsDevelopment())
 app.UseChoAuthentication();
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.MapControllers();
+app.MapChoX12InterchangeEndpoints("api/v1/enrollment/interchange");
 
 app.MapChoHealthChecks();
 
