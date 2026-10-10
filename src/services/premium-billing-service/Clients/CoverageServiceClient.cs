@@ -16,6 +16,13 @@ public interface ICoverageServiceClient
     /// sponsor $0.
     /// </summary>
     Task<List<CoverageDto>> GetActiveCoveragesByGroupAsync(string tenantId, string groupNumber, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Every coverage record of the group, terminated ones included (rated
+    /// billing credits retro terms from them). Throws on any failure.
+    /// </summary>
+    Task<List<CoverageDto>> GetAllCoveragesByGroupAsync(string tenantId, string groupNumber, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("This coverage client cannot list terminated coverage");
 }
 
 public sealed class CoverageServiceClient : ICoverageServiceClient
@@ -33,8 +40,16 @@ public sealed class CoverageServiceClient : ICoverageServiceClient
         _logger = logger;
     }
 
-    public async Task<List<CoverageDto>> GetActiveCoveragesByGroupAsync(
+    public Task<List<CoverageDto>> GetActiveCoveragesByGroupAsync(
         string tenantId, string groupNumber, CancellationToken cancellationToken = default)
+        => ListAsync(tenantId, groupNumber, activeOnly: true, cancellationToken);
+
+    public Task<List<CoverageDto>> GetAllCoveragesByGroupAsync(
+        string tenantId, string groupNumber, CancellationToken cancellationToken = default)
+        => ListAsync(tenantId, groupNumber, activeOnly: false, cancellationToken);
+
+    private async Task<List<CoverageDto>> ListAsync(
+        string tenantId, string groupNumber, bool activeOnly, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(tenantId))
             throw new InvalidOperationException("A coverage-service call must name its tenant");
@@ -52,7 +67,7 @@ public sealed class CoverageServiceClient : ICoverageServiceClient
 
             // coverage-service: GET /api/v1/coverage (singular) with activeOnly,
             // answering { coverage, continuationToken, totalCount }.
-            var url = $"/api/v1/coverage?groupNumber={Uri.EscapeDataString(groupNumber)}&activeOnly=true&pageSize={PageSize}";
+            var url = $"/api/v1/coverage?groupNumber={Uri.EscapeDataString(groupNumber)}&activeOnly={(activeOnly ? "true" : "false")}&pageSize={PageSize}";
             if (continuationToken != null)
                 url += $"&continuationToken={Uri.EscapeDataString(continuationToken)}";
 

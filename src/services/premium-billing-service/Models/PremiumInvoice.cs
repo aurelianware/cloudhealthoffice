@@ -177,6 +177,34 @@ public class PremiumInvoice
     public SponsorSuspensionRecord? SponsorSuspension { get; set; }
 
     /// <summary>
+    /// Where the line premiums came from: coverage-service's stored premium
+    /// (the original behaviour) or the premium rating engine.
+    /// </summary>
+    public PricingSource PricingSource { get; set; } = PricingSource.CoveragePremium;
+
+    /// <summary>Rated invoices: list bill (a line per subscriber) or composite (a line per tier).</summary>
+    public BillFormat? BillFormat { get; set; }
+
+    /// <summary>
+    /// Rated invoices: what kept coverage off the invoice (no rate table in
+    /// force, unusable enrollment data…). An invoice with exceptions stays
+    /// <see cref="InvoiceStatus.Draft"/> and is never issued.
+    /// </summary>
+    public List<InvoiceRatingException> RatingExceptions { get; set; } = new();
+
+    /// <summary>Rated invoices: when the lines were last computed.</summary>
+    public DateTime? RatedAt { get; set; }
+
+    /// <summary>Rated invoices: how many times the draft was computed (1 for the first).</summary>
+    public int RatingRevision { get; set; }
+
+    /// <summary>Rated invoices: when the invoice left Draft (its lines are fixed from then on).</summary>
+    public DateTime? IssuedAt { get; set; }
+
+    /// <summary>Rated invoices: the sponsor's billing day, so a draft can be issued without sponsor-service.</summary>
+    public int? BillingDay { get; set; }
+
+    /// <summary>
     /// Optimistic concurrency (Mongo): incremented on every save; saving a
     /// stale copy throws <see cref="Repositories.ConcurrencyConflictException"/>.
     /// </summary>
@@ -197,8 +225,91 @@ public class PremiumInvoice
         TotalAmount = SubtotalPremium + TotalAdjustments;
         TotalPaid = Payments.Sum(p => p.Amount);
         BalanceDue = TotalAmount - TotalPaid;
-        MemberCount = LineItems.Select(li => li.MemberId).Distinct().Count();
+        // A composite (per-tier) line covers several subscribers: count them from its components.
+        MemberCount = LineItems
+            .SelectMany(li => li.Components is { Count: > 0 } c ? c.Select(x => x.MemberId) : new[] { li.MemberId })
+            .Distinct().Count();
     }
+}
+
+public enum PricingSource
+{
+    /// <summary>Line premium = coverage-service's monthlyPremium + employerContribution (original behaviour).</summary>
+    CoveragePremium = 0,
+
+    /// <summary>Line premium computed by the premium rating engine from the plan's rate table.</summary>
+    RatingEngine = 1
+}
+
+public enum BillFormat
+{
+    /// <summary>One line per subscriber coverage (and rate version).</summary>
+    ListBill,
+
+    /// <summary>
+    /// One line per plan, tier and rate for full-month coverage (quantity ×
+    /// unit rate); prorated coverage-months keep their own lines.
+    /// </summary>
+    Composite
+}
+
+/// <summary>Why coverage could not be put on a rated invoice.</summary>
+public class InvoiceRatingException
+{
+    /// <summary>RATE_NOT_FOUND, RATE_TABLE_INVALID, ENROLLMENT_DATA, ZERO_CHARGE.</summary>
+    [StringLength(50)]
+    public string Code { get; set; } = string.Empty;
+
+    [StringLength(50)]
+    public string? CoverageId { get; set; }
+
+    [StringLength(50)]
+    public string? MemberId { get; set; }
+
+    /// <summary>The coverage month that could not be charged or reconciled.</summary>
+    public DateTime? ServiceMonth { get; set; }
+
+    [StringLength(1000)]
+    public string Message { get; set; } = string.Empty;
+}
+
+/// <summary>A run of days on a rated line with one household rating.</summary>
+public class InvoiceRatingSegment
+{
+    public DateTime From { get; set; }
+    public DateTime To { get; set; }
+    public int Days { get; set; }
+
+    /// <summary>EMP, ESP, ECH, FAM for the household rated in this segment.</summary>
+    [StringLength(3)]
+    public string? CoverageLevel { get; set; }
+
+    public int RatedMembers { get; set; }
+
+    /// <summary>The household's monthly premium under the line's rate version.</summary>
+    public decimal MonthlyPremium { get; set; }
+
+    /// <summary>Charged for the segment, rounded once (see the rounding rules of PremiumInvoiceCalculator).</summary>
+    public decimal Amount { get; set; }
+
+    /// <summary>How the amount was reached, e.g. "500.00 × 22/31" or "full month".</summary>
+    [StringLength(200)]
+    public string? Basis { get; set; }
+}
+
+/// <summary>One coverage billed on a composite (per-tier) line.</summary>
+public class InvoiceLineComponent
+{
+    [StringLength(50)]
+    public string CoverageId { get; set; } = string.Empty;
+
+    [StringLength(50)]
+    public string MemberId { get; set; } = string.Empty;
+
+    [StringLength(200)]
+    public string? MemberName { get; set; }
+
+    public decimal Amount { get; set; }
 }
 
 /// <summary>
@@ -283,6 +394,45 @@ public class InvoiceLineItem
     /// </summary>
     [StringLength(500)]
     public string? AdjustmentReason { get; set; }
+
+    // ── Rated lines (PricingSource.RatingEngine) ──────────────────────
+
+    /// <summary>Rate table the line was rated with; with <see cref="RateTableVersion"/> it reproduces the line.</summary>
+    [StringLength(100)]
+    public string? RateTableId { get; set; }
+
+    /// <summary>Version of <see cref="RateTableId"/> used (stored versions never change).</summary>
+    public int? RateTableVersion { get; set; }
+
+    /// <summary>Content hash of that rate table version as stored.</summary>
+    [StringLength(100)]
+    public string? RateTableHash { get; set; }
+
+    /// <summary>Tier, AgeBand or Composite.</summary>
+    [StringLength(20)]
+    public string? RatingMethod { get; set; }
+
+    /// <summary>Daily, HalfMonth or FullMonth.</summary>
+    [StringLength(20)]
+    public string? ProrationRule { get; set; }
+
+    /// <summary>First day the line charges for.</summary>
+    public DateTime? ServicePeriodStart { get; set; }
+
+    /// <summary>Last day the line charges for.</summary>
+    public DateTime? ServicePeriodEnd { get; set; }
+
+    /// <summary>How the line amount was built; the line is the sum of its segments.</summary>
+    public List<InvoiceRatingSegment>? RatingSegments { get; set; }
+
+    /// <summary>Composite lines: how many subscriber coverages the line bills.</summary>
+    public int? Quantity { get; set; }
+
+    /// <summary>Composite lines: the monthly amount per coverage (TotalPremium = Quantity × UnitRate).</summary>
+    public decimal? UnitRate { get; set; }
+
+    /// <summary>Composite lines: each coverage billed and its amount (they sum to the line).</summary>
+    public List<InvoiceLineComponent>? Components { get; set; }
 }
 
 /// <summary>
@@ -337,6 +487,9 @@ public class InvoiceAdjustment
     /// Only these are folded into what later invoices treat as already billed.
     /// </summary>
     public bool IsRatingRetro { get; set; }
+
+    /// <summary>Rating retro adjustments: the rate table versions (<c>id@vN</c>) the corrected charge was rated with.</summary>
+    public List<string>? RateTableVersions { get; set; }
 }
 
 /// <summary>
@@ -437,7 +590,14 @@ public enum InvoiceStatus
     Overdue,
     Delinquent,
     Voided,
-    WriteOff
+    WriteOff,
+
+    /// <summary>
+    /// Rated invoice not issued yet (exceptions to resolve, or held for
+    /// review). A draft can be regenerated; it cannot be sent, paid, drafted
+    /// by EFT or go overdue. Appended last so stored numeric values keep their meaning.
+    /// </summary>
+    Draft
 }
 
 /// <summary>

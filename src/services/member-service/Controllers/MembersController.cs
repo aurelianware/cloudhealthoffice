@@ -9,6 +9,7 @@ using MemberService.Middleware;
 using MemberService.Models;
 using MemberService.Repositories;
 using MemberService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MemberService.Controllers;
@@ -123,6 +124,47 @@ public class MembersController : ControllerBase
             memberId: null, groupNumber: null, subscriberId: null,
             lastName: q, dateOfBirth: null, activeOnly: false,
             subscribersOnly: false, pageSize: 20, continuationToken: null);
+    }
+
+    /// <summary>
+    /// The rating census of a sponsor group: per member only what a premium
+    /// is rated on (subscriber link, relationship, date of birth, tobacco use)
+    /// and a display name. Premium billing calls it to rate invoices with the
+    /// Finance user's token or its own service token, so billing:read reads it;
+    /// it never returns identifiers, addresses or contact details.
+    /// </summary>
+    [HttpGet("rating-census")]
+    [RequirePermission("members:read,billing:read")]
+    [ProducesResponseType(typeof(RatingCensusResponse), 200)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> GetRatingCensus(
+        [FromQuery] string? groupNumber = null,
+        [FromQuery][Range(1, 100)] int pageSize = 100,
+        [FromQuery] string? continuationToken = null)
+    {
+        if (string.IsNullOrWhiteSpace(groupNumber))
+            return BadRequest(new { error = "groupNumber is required" });
+
+        var (items, token) = await _memberRepository.SearchAsync(
+            TenantId, groupNumber, null, null, activeOnly: false, subscribersOnly: false, pageSize, continuationToken);
+
+        return Ok(new RatingCensusResponse
+        {
+            Members = items.Where(m => !m.IsDraft).Select(m => new RatingCensusMember
+            {
+                MemberId = m.MemberId,
+                IsSubscriber = m.IsSubscriber,
+#pragma warning disable CS0618 // the legacy link is what dependents carry today; see Member.SubscriberMemberId
+                SubscriberMemberId = m.IsSubscriber ? null : m.SubscriberMemberId,
+#pragma warning restore CS0618
+                RelationshipCode = m.RelationshipCode,
+                FirstName = m.FirstName,
+                LastName = m.LastName,
+                DateOfBirth = m.DateOfBirth == default ? null : m.DateOfBirth.Date,
+                TobaccoUser = m.TobaccoUser
+            }).ToList(),
+            ContinuationToken = token
+        });
     }
 
     /// <summary>Get member details by member ID.</summary>
@@ -870,6 +912,26 @@ public class UpdateMemberRequest
 
     /// <summary>Optional idempotency key for the MemberUpdated event.</summary>
     public string? EventId { get; set; }
+}
+
+/// <summary>GET /api/v1/members/rating-census: one page of a group's rating census.</summary>
+public class RatingCensusResponse
+{
+    public List<RatingCensusMember> Members { get; set; } = new();
+    public string? ContinuationToken { get; set; }
+}
+
+/// <summary>What a premium is rated on, and nothing more (no identifiers, address or contact).</summary>
+public class RatingCensusMember
+{
+    public string MemberId { get; set; } = string.Empty;
+    public bool IsSubscriber { get; set; }
+    public string? SubscriberMemberId { get; set; }
+    public string? RelationshipCode { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+    public bool? TobaccoUser { get; set; }
 }
 
 public class MemberListResponse

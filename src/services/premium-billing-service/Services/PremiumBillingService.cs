@@ -29,6 +29,8 @@ public class PremiumBillingService : IPremiumBillingService
     private readonly ICurrentActor _actor;
     private readonly ILogger<PremiumBillingService> _logger;
     private readonly ISponsorAccountRepository? _sponsorAccounts;
+    private readonly IRatedInvoiceGenerator? _ratedInvoices;
+    private readonly RatedBillingOptions _ratedOptions;
 
     public PremiumBillingService(
         IBillingRunRepository billingRunRepository,
@@ -37,9 +39,13 @@ public class PremiumBillingService : IPremiumBillingService
         ICoverageServiceClient coverageClient,
         ICurrentActor actor,
         ILogger<PremiumBillingService> logger,
-        ISponsorAccountRepository? sponsorAccounts = null)
+        ISponsorAccountRepository? sponsorAccounts = null,
+        IRatedInvoiceGenerator? ratedInvoices = null,
+        Microsoft.Extensions.Options.IOptions<RatedBillingOptions>? ratedOptions = null)
     {
         _sponsorAccounts = sponsorAccounts;
+        _ratedInvoices = ratedInvoices;
+        _ratedOptions = ratedOptions?.Value ?? new RatedBillingOptions();
         _billingRunRepository = billingRunRepository;
         _invoiceRepository = invoiceRepository;
         _sponsorClient = sponsorClient;
@@ -97,12 +103,44 @@ public class PremiumBillingService : IPremiumBillingService
             decimal totalAdjustments = 0;
             int totalMembers = 0;
 
+            // Rated billing is per tenant and off unless configured (PremiumBilling:RatedBilling).
+            var rated = _ratedOptions.For(billingRun.TenantId).Enabled;
+            if (rated && _ratedInvoices == null)
+                throw new InvalidOperationException("Rated billing is enabled for this tenant but the rated invoice generator is not registered");
+
             foreach (var sponsor in sponsors)
             {
                 try
                 {
-                    var invoice = await GenerateInvoiceForSponsorAsync(
-                        sponsor, billingRun.TenantId, billingRun.BillingPeriod, billingRun.Id, billingRun.ExecutedBy);
+                    PremiumInvoice invoice;
+                    if (rated)
+                    {
+                        var outcome = await _ratedInvoices!.GenerateAsync(
+                            sponsor, billingRun.TenantId, billingRun.BillingPeriod, billingRun.Id, billingRun.ExecutedBy);
+                        invoice = outcome.Invoice;
+                        if (outcome.Kind is RatedInvoiceOutcomeKind.AlreadyIssued or RatedInvoiceOutcomeKind.UnratedInvoiceExists)
+                        {
+                            // Idempotent: an issued invoice is never regenerated or duplicated.
+                            billingRun.UnchangedInvoiceIds.Add(invoice.Id);
+                            billingRun.Warnings.Add(
+                                $"Group {sponsor.GroupNumber} already has invoice {invoice.InvoiceNumber} ({invoice.Status}) for {billingRun.BillingPeriod:yyyy-MM}; left unchanged");
+                            continue;
+                        }
+                        if (invoice.Status == InvoiceStatus.Draft)
+                        {
+                            billingRun.DraftInvoiceIds.Add(invoice.Id);
+                            billingRun.Warnings.Add(invoice.RatingExceptions.Count > 0
+                                ? $"Invoice {invoice.InvoiceNumber} for group {sponsor.GroupNumber} is Draft: {invoice.RatingExceptions.Count} rating exception(s), first: {invoice.RatingExceptions[0].Message}"
+                                : $"Invoice {invoice.InvoiceNumber} for group {sponsor.GroupNumber} is Draft, held for review");
+                            // A draft is not billed: it is not in the run's invoices or totals.
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        invoice = await GenerateInvoiceForSponsorAsync(
+                            sponsor, billingRun.TenantId, billingRun.BillingPeriod, billingRun.Id, billingRun.ExecutedBy);
+                    }
 
                     billingRun.InvoiceIds.Add(invoice.Id);
                     totalPremium += invoice.SubtotalPremium;
@@ -180,7 +218,7 @@ public class PremiumBillingService : IPremiumBillingService
         // reaches the API as 409 (ConcurrencyConflictException).
         var updated = await InvoiceWrites.UpdateWithRetryAsync(_invoiceRepository, invoiceId, null, invoice =>
         {
-            if (invoice.Status == InvoiceStatus.Voided || invoice.Status == InvoiceStatus.WriteOff)
+            if (invoice.Status is InvoiceStatus.Voided or InvoiceStatus.WriteOff or InvoiceStatus.Draft)
                 throw new InvalidOperationException($"Cannot record payment on {invoice.Status} invoice");
             if (invoice.Payments.Any(p => p.PaymentId == payment.PaymentId))
                 return false;
@@ -409,7 +447,7 @@ public class PremiumBillingService : IPremiumBillingService
     /// <summary>The same test as the overdue query: still owes money, past due, not closed.</summary>
     private static bool IsStillOverdue(PremiumInvoice invoice, DateTime now) =>
         invoice.BalanceDue > 0 && invoice.DueDate < now
-        && invoice.Status is not (InvoiceStatus.Voided or InvoiceStatus.WriteOff or InvoiceStatus.Paid);
+        && invoice.Status is not (InvoiceStatus.Voided or InvoiceStatus.WriteOff or InvoiceStatus.Paid or InvoiceStatus.Draft);
 
     // --- Private helper methods ---
 

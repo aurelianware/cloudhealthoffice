@@ -113,7 +113,8 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
             Builders<PremiumInvoice>.Filter.Lt(x => x.DueDate, now),
             Builders<PremiumInvoice>.Filter.Ne(x => x.Status, InvoiceStatus.Voided),
             Builders<PremiumInvoice>.Filter.Ne(x => x.Status, InvoiceStatus.WriteOff),
-            Builders<PremiumInvoice>.Filter.Ne(x => x.Status, InvoiceStatus.Paid));
+            Builders<PremiumInvoice>.Filter.Ne(x => x.Status, InvoiceStatus.Paid),
+            Builders<PremiumInvoice>.Filter.Ne(x => x.Status, InvoiceStatus.Draft));
         return await _collection.Find(filter).SortBy(x => x.DueDate).ToListAsync();
     }
 
@@ -136,7 +137,14 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
         invoice.TenantId = GetTenantId();
         invoice.CreatedAt = DateTime.UtcNow;
         invoice.LastUpdatedAt = DateTime.UtcNow;
-        await _collection.InsertOneAsync(invoice);
+        try
+        {
+            await _collection.InsertOneAsync(invoice);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
+        {
+            throw new InvoiceAlreadyExistsException(invoice.Id);
+        }
         _logger.LogInformation("Created premium invoice {InvoiceNumber} for group {GroupNumber}",
             invoice.InvoiceNumber, invoice.GroupNumber);
         return invoice;

@@ -125,6 +125,12 @@ public class BillingRun
     /// Warning messages during execution
     /// </summary>
     public List<string> Warnings { get; set; } = new();
+
+    /// <summary>Rated billing: invoices this run left in Draft (rating exceptions, or held for review).</summary>
+    public List<string> DraftInvoiceIds { get; set; } = new();
+
+    /// <summary>Rated billing: invoices already issued for the period that this run left unchanged.</summary>
+    public List<string> UnchangedInvoiceIds { get; set; } = new();
 }
 
 /// <summary>
