@@ -1523,7 +1523,7 @@ public class ClaimsController : ControllerBase
     ///     the fingerprint of the pends the examiner viewed
     ///     (<see cref="PendDetails.Fingerprint"/>); if the stored pends
     ///     changed since, 409.</description></item>
-    ///   <item><description>Approval re-adjudicates the claim in Production,
+    ///   <item><description>Approval re-adjudicates the claim (accumulators committed after the final write),
     ///     overriding only the stored pends (every one of them — a claim
     ///     that pended twice keeps both) with their exact reasons; a new pend
     ///     or a transient failure refuses it (409).</description></item>
