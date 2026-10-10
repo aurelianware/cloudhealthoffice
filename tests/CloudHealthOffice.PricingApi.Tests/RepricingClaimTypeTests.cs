@@ -151,7 +151,7 @@ public class RepricingClaimTypeTests
     }
 
     [Fact]
-    public async Task InstitutionalAgainstDrgSchedule_PricedByDrg()
+    public async Task InstitutionalInpatientBillTypeAgainstDrgSchedule_PricedByDrg()
     {
         var result = await _sut.RepriceClaimAsync(new RepricingRequest
         {
@@ -166,7 +166,102 @@ public class RepricingClaimTypeTests
         result.Lines[0].Breakdown.DrgRelativeWeight.Should().Be(1.9m);
     }
 
+    [Theory]
+    [InlineData(ClaimType.Institutional, "131")]
+    [InlineData(null, "0131")]
+    [InlineData(ClaimType.Institutional, null)]
+    public async Task InstitutionalOutpatientOrUnstatedBillType_AgainstDrgSchedule_PricedPerLine(ClaimType? claimType, string? billType)
+    {
+        // An outpatient type of bill (13x) — or none — is not a DRG stay: CPT lines price line by line.
+        var result = await _sut.RepriceClaimAsync(new RepricingRequest
+        {
+            FeeScheduleId = Drg,
+            ClaimType = claimType,
+            BillType = billType,
+            DrgCode = "470",
+            Lines = [new ClaimLineRequest { ProcedureCode = "99213", Units = 1 }],
+        });
+
+        result.Lines[0].Status.Should().Be(PricingStatus.Priced);
+        result.Lines[0].AllowedAmount.Should().Be(Facility);
+        result.Lines[0].Breakdown.DrgRelativeWeight.Should().BeNull();
+        _repo.Verify(r => r.LookupDrgAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("121")]
+    [InlineData("0111")]
+    public void InpatientBillTypes(string billType)
+        => RepricingClaimSetting.IsInpatientBillType(billType).Should().BeTrue();
+
+    [Theory]
+    [InlineData("131")]
+    [InlineData("211")]
+    [InlineData("831")]
+    [InlineData(null)]
+    [InlineData("N/A")]
+    public void NonInpatientBillTypes(string? billType)
+        => RepricingClaimSetting.IsInpatientBillType(billType).Should().BeFalse();
+
+    [Fact]
+    public async Task FacilitySetting_EntryWithOnlyNonFacilityRate_PricesAtThatRate_NotZero()
+    {
+        // A legacy entry without a facility price must not price at $0 in a facility setting.
+        _repo.Setup(r => r.LookupCodesAsync(Rbrvs, It.IsAny<IEnumerable<string>>(), It.IsAny<string?>()))
+            .ReturnsAsync([new FeeScheduleEntry { FeeScheduleId = Rbrvs, ProcedureCode = "99213", NonFacilityRate = NonFacility }]);
+
+        var result = await _sut.RepriceClaimAsync(Request(ClaimType.Institutional, "131", pos: "13"));
+
+        result.Lines[0].AllowedAmount.Should().Be(NonFacility);
+    }
+
+    [Theory]
+    [InlineData(ClaimType.Outpatient, "111", "contradicts inpatient type of bill 111")]
+    [InlineData(ClaimType.Outpatient, "0121", "contradicts inpatient type of bill 121")]
+    [InlineData(ClaimType.Inpatient, "131", "contradicts non-inpatient type of bill 131")]
+    public async Task ContradictoryClaimTypeAndBillType_PricedWithWarning(ClaimType claimType, string billType, string warning)
+    {
+        var result = await _sut.RepriceClaimAsync(Request(claimType, billType, pos: "13") with { DrgCode = "470" });
+
+        result.ClaimType.Should().Be(claimType);
+        result.Warnings.Should().Contain(w => w.Contains(warning));
+    }
+
+    [Theory]
+    [InlineData(ClaimType.Outpatient, "131")]
+    [InlineData(ClaimType.Inpatient, "111")]
+    [InlineData(ClaimType.Institutional, "111")]
+    public async Task ConsistentClaimTypeAndBillType_NoWarning(ClaimType claimType, string billType)
+    {
+        var result = await _sut.RepriceClaimAsync(Request(claimType, billType, pos: "13") with { DrgCode = "470" });
+
+        (result.Warnings ?? []).Should().NotContain(w => w.Contains("contradicts"));
+    }
+
     // ── HTTP: JSON contract and 400s ──────────────────────────────────
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Http_BlankBillType_IsAbsent_NotRejected(string billType)
+    {
+        // Before billType was validated a blank value was ignored; it still is.
+        using var factory = Factory();
+        var response = await Service(factory).PostAsJsonAsync("/api/v1/reprice", new
+        {
+            feeScheduleId = Rbrvs,
+            claimType = "professional",
+            billType,
+            placeOfService = "11",
+            lines = new[] { new { procedureCode = "99213", units = 1 } },
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var data = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        data.GetProperty("claimType").GetString().Should().Be("professional");
+        data.TryGetProperty("billType", out _).Should().BeFalse();
+        data.GetProperty("totalAllowed").GetDecimal().Should().Be(NonFacility);
+    }
 
     [Fact]
     public async Task Http_ClaimTypeAndBillType_AcceptedAndEchoed()
@@ -279,6 +374,11 @@ public class RepricingClaimTypeTests
             .ReturnsAsync([new FeeScheduleEntry
             {
                 FeeScheduleId = Rbrvs, ProcedureCode = "99213", NonFacilityRate = NonFacility, FacilityRate = Facility,
+            }]);
+        repo.Setup(r => r.LookupCodesAsync(Drg, It.IsAny<IEnumerable<string>>(), It.IsAny<string?>()))
+            .ReturnsAsync([new FeeScheduleEntry
+            {
+                FeeScheduleId = Drg, ProcedureCode = "99213", NonFacilityRate = NonFacility, FacilityRate = Facility,
             }]);
         repo.Setup(r => r.LookupDrgAsync(Drg, "470"))
             .ReturnsAsync(new FeeScheduleEntry { FeeScheduleId = Drg, ProcedureCode = "470", DrgWeight = 1.9m, DrgBaseRate = 7_000m });

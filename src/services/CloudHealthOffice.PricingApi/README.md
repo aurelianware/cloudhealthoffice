@@ -129,7 +129,7 @@ the same allowed amount for the same claim:
 |-------------|---------|-------|
 | `professional` | Facility rate only for a facility `placeOfService` (21, 22, 23, ...) | 837P |
 | `dental` | Same as professional | 837D |
-| `institutional` | Always the facility rate | 837I; priced by DRG against an MS-DRG schedule |
+| `institutional` | Always the facility rate | 837I; priced by DRG against an MS-DRG schedule only with an inpatient type of bill (11x/12x), otherwise line by line |
 | `outpatient` | Always the facility rate | 837I |
 | `inpatient` | Always the facility rate; priced by `drgCode` | 837I |
 | *(absent)* | `institutional` when `billType` is valid, otherwise `professional` | Unchanged for requests without `billType` |
@@ -138,7 +138,10 @@ the same allowed amount for the same claim:
 frequency): three digits (`"131"`) or four with a leading zero (`"0131"`). It is
 echoed in the response normalized to three digits. A malformed `billType`
 (`"0"`, `"N/A"`, `"13"`), or a `billType` on a `professional` or `dental` claim,
-is rejected with `400 INVALID_BILL_TYPE`. On an institutional claim
+is rejected with `400 INVALID_BILL_TYPE`. A blank or whitespace `billType` is
+treated as absent (it was ignored before the field was validated). A claim type
+that contradicts its type of bill (`outpatient` with 11x/12x, `inpatient` with any
+other) is priced by its claim type and the response carries a warning. On an institutional claim
 `placeOfService` is not read for the facility decision (it may hold the CLM05-1
 facility type code).
 
@@ -146,6 +149,11 @@ facility type code).
 > (RBRVS/commercial) schedule now takes the facility rate whatever its
 > `placeOfService`, matching adjudication (before, a non-facility POS such as the
 > default `11` gave the non-facility rate). OPPS and MS-DRG pricing are unaffected.
+>
+> 837I → facility rate is the parity rule with adjudication (ADR 016 §5). Known CMS
+> exceptions are not yet modelled: hospital outpatient therapy (TOB 13x, revenue
+> codes 042x–044x, paid at the MPFS non-facility rate) and CAH Method II
+> professional services (revenue codes 096x–098x).
 
 ```bash
 # Reprice a hospital outpatient claim (type of bill 131)

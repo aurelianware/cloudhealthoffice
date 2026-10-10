@@ -25,6 +25,33 @@ public static class RepricingClaimSetting
     public static bool IsInstitutional(ClaimType claimType)
         => claimType is ClaimType.Institutional or ClaimType.Outpatient or ClaimType.Inpatient;
 
+    /// <summary>
+    /// True for a hospital inpatient type of bill: facility type 1 (hospital) with bill
+    /// classification 1 (inpatient, Part A) or 2 (inpatient, Part B) — 11x / 12x.
+    /// </summary>
+    public static bool IsInpatientBillType(string? billType)
+        => NubcTypeOfBill.Normalize(billType) is { } tob && tob[0] == '1' && tob[1] is '1' or '2';
+
+    /// <summary>
+    /// A warning for a claim type that contradicts its type of bill (an outpatient claim
+    /// with an inpatient 11x/12x type of bill, or an inpatient claim with any other); null
+    /// otherwise. The claim is still priced by its claim type.
+    /// </summary>
+    public static string? ContradictionWarning(RepricingRequest request)
+    {
+        if (NubcTypeOfBill.Normalize(request.BillType) is not { } tob)
+            return null;
+        var inpatientTob = IsInpatientBillType(tob);
+        return request.ClaimType switch
+        {
+            ClaimType.Outpatient when inpatientTob =>
+                $"claimType outpatient contradicts inpatient type of bill {tob}; priced as outpatient (line by line).",
+            ClaimType.Inpatient when !inpatientTob =>
+                $"claimType inpatient contradicts non-inpatient type of bill {tob}; priced as inpatient (by DRG).",
+            _ => null,
+        };
+    }
+
     /// <summary>The request's type of bill, normalized to three digits; null when absent or malformed.</summary>
     public static string? NormalizedBillType(RepricingRequest request)
         => NubcTypeOfBill.Normalize(request.BillType);
@@ -46,6 +73,7 @@ public static class RepricingClaimSetting
             };
         }
 
+        // A blank type of bill is absent (it was ignored before the field was validated).
         if (string.IsNullOrWhiteSpace(request.BillType))
             return null;
 

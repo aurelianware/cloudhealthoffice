@@ -11,7 +11,8 @@ public sealed record PricingScheduleQuery(
     ClaimType ClaimType,
     string? Locality,
     IReadOnlyCollection<string> ProcedureCodes,
-    string? DrgCode);
+    string? DrgCode,
+    string? BillType = null);
 
 /// <summary>Display-only detail the engine schedule does not carry (APC code, conversion factor).</summary>
 public sealed record PricingLineDetail(string? ApcCode, decimal? ConversionFactor);
@@ -58,12 +59,12 @@ public interface IPricingScheduleSource
 /// <list type="bullet">
 ///   <item>Professional / outpatient entry → flat-rate line: <c>Rate</c> = non-facility
 ///   price (APC payment rate when absent), <c>FacilityRate</c> = facility price (APC
-///   payment rate when absent). The engine picks one by place of service. RVUs are
+///   payment rate when absent; none otherwise, so a facility setting uses <c>Rate</c>). The engine picks one by place of service. RVUs are
 ///   carried for display only.</item>
 ///   <item>MPFS multiple procedure indicator → the engine's indicator. An OPPS entry has
 ///   none: status indicator T (multiple procedure discount) maps to 2, any other
 ///   status indicator to 9 (concept does not apply).</item>
-///   <item>Inpatient claim (or institutional claim against an MS-DRG schedule) → DRG schedule with the claim's DRG row: <c>Rate</c> = base
+///   <item>Inpatient claim (or institutional claim with an inpatient 11x/12x type of bill against an MS-DRG schedule) → DRG schedule with the claim's DRG row: <c>Rate</c> = base
 ///   rate, <c>DrgWeight</c> = relative weight (case rate = base × weight).</item>
 ///   <item>Schedule type: RBRVS → MedicareMpfs, OPPS → MedicareOpps, Medicaid → Medicaid,
 ///   Commercial → Commercial.</item>
@@ -101,9 +102,12 @@ public sealed class LegacyEntryScheduleSource : IPricingScheduleSource
         var unpriced = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // An inpatient claim prices by its DRG; so does an institutional claim (setting
-        // unstated) against an MS-DRG schedule.
+        // unstated) with an inpatient type of bill (11x/12x) against an MS-DRG schedule.
+        // An outpatient type of bill (13x, ...) prices line by line.
         if (query.ClaimType == ClaimType.Inpatient
-            || (query.ClaimType == ClaimType.Institutional && info.Type == FeeScheduleType.MedicareDrg))
+            || (query.ClaimType == ClaimType.Institutional
+                && info.Type == FeeScheduleType.MedicareDrg
+                && RepricingClaimSetting.IsInpatientBillType(query.BillType)))
         {
             schedule.Type = EngineDomain.FeeScheduleType.Drg;
             if (!string.IsNullOrWhiteSpace(query.DrgCode)
@@ -167,7 +171,9 @@ public sealed class LegacyEntryScheduleSource : IPricingScheduleSource
         ProcedureCode = entry.ProcedureCode,
         RateType = EngineDomain.FeeScheduleRateType.FlatRate,
         Rate = entry.NonFacilityRate ?? entry.ApcPaymentRate ?? 0m,
-        FacilityRate = entry.FacilityRate ?? entry.ApcPaymentRate ?? 0m,
+        // Null when the entry has no facility price: the engine then uses Rate in a
+        // facility setting rather than pricing the line at $0.
+        FacilityRate = entry.FacilityRate ?? entry.ApcPaymentRate,
         WorkRvu = entry.WorkRvu,
         PeRvu = entry.PracticeExpenseRvu,
         PeRvuFacility = entry.PracticeExpenseRvuFacility,

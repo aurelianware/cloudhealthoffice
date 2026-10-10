@@ -305,6 +305,15 @@ BenefitEngine and claims-service have no facility-rate POS list
   are carried by the fee schedule's values, not by POS.
 - A line with no facility rate (no `FacilityRate`, no `PeRvuFacility`) still
   prices at its single rate in every setting.
+- **837I → facility rate is a parity rule, not full CMS policy.** Every entry
+  point (claims-service `PricingStage`, `AdjudicationController`,
+  `PaymentEstimateService`, and the Pricing API's `claimType` / `billType`)
+  prices an institutional claim in the facility setting, so they agree with one
+  another. Known CMS exceptions are **not yet modelled**: hospital outpatient
+  therapy (TOB 13x with revenue codes 042x–044x) is paid at the MPFS
+  **non-facility** rate, and critical access hospital Method II professional
+  services (TOB 85x, revenue codes 096x–098x) are paid under the MPFS like a
+  professional claim. Until they are, such lines take the facility rate.
 
 ## Consequences
 

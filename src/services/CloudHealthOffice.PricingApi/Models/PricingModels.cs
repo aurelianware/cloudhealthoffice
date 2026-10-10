@@ -22,8 +22,8 @@ public record RepricingRequest
     /// <see cref="BillType"/> is a valid type of bill and <c>professional</c> otherwise.
     /// Institutional, outpatient and inpatient claims (837I) always take the facility rate,
     /// as in claims adjudication; professional and dental claims take the facility rate only
-    /// for a facility <see cref="PlaceOfService"/>. Inpatient claims (and institutional claims
-    /// against an MS-DRG schedule) are priced by <see cref="DrgCode"/>.
+    /// for a facility <see cref="PlaceOfService"/>. Inpatient claims (and institutional claims with an
+    /// inpatient 11x/12x type of bill against an MS-DRG schedule) are priced by <see cref="DrgCode"/>.
     /// </summary>
     public ClaimType? ClaimType { get; init; }
 
@@ -31,7 +31,8 @@ public record RepricingRequest
     /// NUBC type of bill (837I CLM05-1 facility type + CLM05-3 frequency), three digits
     /// ("131") or four with a leading zero ("0131"). Optional; institutional claims only.
     /// A valid type of bill marks the claim institutional (facility rate). A malformed value,
-    /// or a type of bill on a professional or dental claim, is rejected with 400.
+    /// or a type of bill on a professional or dental claim, is rejected with 400; a blank value is
+    /// absent. A claim type that contradicts the type of bill is priced by the claim type, with a warning.
     /// </summary>
     public string? BillType { get; init; }
 

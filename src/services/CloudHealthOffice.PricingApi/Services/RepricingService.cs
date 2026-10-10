@@ -66,12 +66,15 @@ public class RepricingService : IRepricingService
         var requestId = Guid.NewGuid().ToString("N")[..12];
         var warnings = new List<string>();
         var claimType = RepricingClaimSetting.ResolveClaimType(request);
+        if (RepricingClaimSetting.ContradictionWarning(request) is { } contradiction)
+            warnings.Add(contradiction);
 
         var query = new PricingScheduleQuery(
             claimType,
             request.Locality,
             request.Lines.Select(l => l.ProcedureCode).ToList(),
-            request.DrgCode);
+            request.DrgCode,
+            RepricingClaimSetting.NormalizedBillType(request));
 
         var loaded = await _scheduleSource.LoadAsync(request.FeeScheduleId, query)
             ?? throw new InvalidOperationException($"Fee schedule '{request.FeeScheduleId}' not found.");
