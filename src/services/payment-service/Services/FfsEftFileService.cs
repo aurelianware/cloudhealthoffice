@@ -50,6 +50,7 @@ public sealed class FfsEftFileService : IFfsEftFileService
     private readonly IPaymentRepository _payments;
     private readonly IProviderPayeeAccountSource _accounts;
     private readonly IConfiguration _configuration;
+    private readonly INachaFileIdModifierAllocator _modifiers;
     private readonly TimeProvider _time;
     private readonly ILogger<FfsEftFileService> _logger;
 
@@ -58,12 +59,14 @@ public sealed class FfsEftFileService : IFfsEftFileService
         IPaymentRepository payments,
         IProviderPayeeAccountSource accounts,
         IConfiguration configuration,
+        INachaFileIdModifierAllocator modifiers,
         ILogger<FfsEftFileService> logger,
         TimeProvider? time = null)
     {
         _runs = runs;
         _payments = payments;
         _accounts = accounts;
+        _modifiers = modifiers;
         _configuration = configuration;
         _logger = logger;
         _time = time ?? TimeProvider.System;
@@ -93,7 +96,16 @@ public sealed class FfsEftFileService : IFfsEftFileService
         }
 
         var plan = await PlanAsync(run, payments, cancellationToken);
-        var header = BuildHeader(run);
+        var header = BuildHeader(run, "A");
+        // The pinned file keeps its modifier; a first file claims a free one for its
+        // creation day so no two same-day files of the tenant collide at the bank.
+        var modifier = run.EftFile != null
+            ? run.EftFile.FileIdModifier ?? (_configuration["Nacha:FileIdModifier"] ?? "A")
+            : plan.Entries.Count == 0
+                ? "A"
+                : await _modifiers.AllocateAsync(run.TenantId, header.ImmediateDestination, header.ImmediateOrigin,
+                    header.FileCreatedAt.Date, run.Id);
+        header = BuildHeader(run, modifier);
         var built = plan.Entries.Count == 0
             ? null
             : FfsNachaCreditFileBuilder.Build(header, plan.Entries.Select(e => e.Entry).ToList());
@@ -117,7 +129,12 @@ public sealed class FfsEftFileService : IFfsEftFileService
             run.EftFile.GenerationCount++;
             run.EftFile.LastVerifiedAt = now;
             run.EftFile.LastVerifiedBy = actorUserId;
-            await _runs.UpdateAsync(run);
+            // Only the EFT-file fields, and only while the same file is pinned: a
+            // concurrent write to the run (finalize retries, reservation outcomes) is kept.
+            if (!await _runs.TrySaveEftFileAsync(run.Id, run.EftFile, run.EftFile.Sha256,
+                    Array.Empty<CheckFallbackPayment>(), Array.Empty<string>()))
+                throw new RunConflictException(
+                    $"The EFT file of payment run {run.PaymentRunNumber} changed while it was being verified. Nothing was recorded; try again.");
             return new FfsEftFileOutcome { Run = run, File = built, Reproduced = true };
         }
 
@@ -136,6 +153,7 @@ public sealed class FfsEftFileService : IFfsEftFileService
             TotalDebitAmount = 0m,
             FileCreatedAt = header.FileCreatedAt,
             EffectiveEntryDate = header.EffectiveEntryDate,
+            FileIdModifier = built == null ? null : modifier,
             FirstGeneratedAt = now,
             FirstGeneratedBy = actorUserId,
             LastVerifiedAt = now,
@@ -164,23 +182,36 @@ public sealed class FfsEftFileService : IFfsEftFileService
         }
 
         // Fallbacks found now (the account was gone since execution) join the run's list.
+        var addFallbacks = new List<CheckFallbackPayment>();
+        var addWarnings = new List<string>();
         foreach (var fallback in plan.CheckFallbacks.Where(f => f.DecidedAt == "EftFile"))
         {
             if (run.CheckFallbacks.All(f => f.PaymentId != fallback.PaymentId))
-                run.CheckFallbacks.Add(fallback);
-            run.Warnings.Add(
+                addFallbacks.Add(fallback);
+            addWarnings.Add(
                 $"EFT file: payment {fallback.CheckNumber} to NPI {fallback.PayeeNpi} is not in the file and must be paid by check: {fallback.Reason}. " +
                 "Its 835 already went out as ACH; tell the provider.");
         }
         foreach (var split in plan.Entries.GroupBy(e => e.Entry.ReassociationTrace, StringComparer.Ordinal).Where(g => g.Count() > 1))
         {
-            run.Warnings.Add(
+            addWarnings.Add(
                 $"EFT file: 835 trace {split.Key} is paid as {split.Count()} credits (its payees have different TINs or accounts); " +
                 "each credit carries the trace, but no single credit equals that 835's BPR02");
         }
 
+        // The first pin: only the EFT-file fields, and only while no file is pinned,
+        // so two concurrent first generations can never pin two different files.
+        if (!await _runs.TrySaveEftFileAsync(run.Id, file, null, addFallbacks, addWarnings))
+        {
+            var current = await _runs.GetByIdAsync(run.Id);
+            if (current?.EftFile != null && string.Equals(current.EftFile.Sha256, sha, StringComparison.Ordinal))
+                return new FfsEftFileOutcome { Run = current, File = built, Reproduced = true };
+            throw new RunConflictException(
+                $"Another request pinned a different EFT file for payment run {run.PaymentRunNumber} meanwhile. Nothing was recorded.");
+        }
         run.EftFile = file;
-        await _runs.UpdateAsync(run);
+        run.CheckFallbacks.AddRange(addFallbacks);
+        run.Warnings.AddRange(addWarnings);
 
         _logger.LogInformation(
             "AUDIT EFT file {FileReference} for payment run {RunNumber} generated by {User}: {Entries} credits, {Total:F2}, {Checks} check fallbacks, sha256 {Sha}",
@@ -316,7 +347,7 @@ public sealed class FfsEftFileService : IFfsEftFileService
     /// a different <c>Nacha:CompanyId</c> is refused, since the provider
     /// reassociates on it.
     /// </summary>
-    private FfsNachaFileHeader BuildHeader(PaymentRun run)
+    private FfsNachaFileHeader BuildHeader(PaymentRun run, string fileIdModifier)
     {
         var companyId = _configuration["Era:OriginatingCompanyId"] ?? string.Empty;
         var configuredCompanyId = _configuration["Nacha:CompanyId"];
@@ -339,7 +370,7 @@ public sealed class FfsEftFileService : IFfsEftFileService
             OriginatingDfi = _configuration["Nacha:OriginatingDfi"] ?? (destination.Length >= 8 ? destination[..8] : string.Empty),
             CompanyDiscretionaryData = _configuration["Nacha:CompanyDiscretionaryData"],
             ReferenceCode = Last(run.PaymentRunNumber, 8),
-            FileIdModifier = _configuration["Nacha:FileIdModifier"] ?? "A",
+            FileIdModifier = fileIdModifier,
             FileCreatedAt = created,
             EffectiveEntryDate = run.PaymentDate.Date,
         };

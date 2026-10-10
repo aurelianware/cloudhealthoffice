@@ -121,6 +121,26 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         return result.MatchedCount == 1;
     }
 
+    public async Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings)
+    {
+        var tenantId = GetTenantId();
+        var f = Builders<PaymentRun>.Filter;
+        var filter = f.And(
+            f.Eq(x => x.Id, id),
+            f.Eq(x => x.TenantId, tenantId),
+            expectedSha256 == null
+                ? f.Eq(x => x.EftFile, null) // also matches a missing field
+                : f.Eq(x => x.EftFile!.Sha256, expectedSha256));
+        var updates = new List<UpdateDefinition<PaymentRun>> { Builders<PaymentRun>.Update.Set(x => x.EftFile, file) };
+        if (addFallbacks.Count > 0)
+            updates.Add(Builders<PaymentRun>.Update.PushEach(x => x.CheckFallbacks, addFallbacks));
+        if (addWarnings.Count > 0)
+            updates.Add(Builders<PaymentRun>.Update.PushEach(x => x.Warnings, addWarnings));
+        var result = await _collection.UpdateOneAsync(filter, Builders<PaymentRun>.Update.Combine(updates));
+        return result.MatchedCount == 1;
+    }
+
     public async Task<PaymentRun> UpdateAsync(PaymentRun paymentRun)
     {
         var filter = Builders<PaymentRun>.Filter.And(

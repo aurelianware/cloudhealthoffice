@@ -68,6 +68,14 @@ public class PaymentRunEftFile
     public DateTime FileCreatedAt { get; set; }
     public DateTime EffectiveEntryDate { get; set; }
 
+    /// <summary>
+    /// File header file ID modifier (A-Z, 0-9), allocated on first generation so no
+    /// two files of the tenant created the same day share one (duplicate-file
+    /// detection), and reused on every rebuild. Null on files pinned before allocation
+    /// existed: those rebuild with <c>Nacha:FileIdModifier</c> (default A).
+    /// </summary>
+    public string? FileIdModifier { get; set; }
+
     public DateTime FirstGeneratedAt { get; set; }
     public string? FirstGeneratedBy { get; set; }
     public DateTime? LastVerifiedAt { get; set; }

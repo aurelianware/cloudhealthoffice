@@ -109,6 +109,7 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
             services.AddSingleton<IReservationAuditLog>(Audit);
             services.AddSingleton<IProviderReceivableRepository>(new InMemoryProviderReceivableRepository());
             services.AddSingleton<IPaymentFileTransmissionRepository>(new InMemoryPaymentFileTransmissionRepository());
+            services.AddSingleton<INachaFileIdModifierAllocator>(new InMemoryNachaFileIdModifierAllocator());
             services.AddSingleton<TimeProvider>(Clock);
             services.AddHttpClient(ClaimsServiceClient.HttpClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => Claims);

@@ -110,6 +110,15 @@ public sealed class PaymentFileTransmission
     /// <summary>The run's maker (never the approver).</summary>
     [JsonPropertyName("runCreatedBy")] public string? RunCreatedBy { get; set; }
 
+    /// <summary>The run's executor (the checker), who may not approve its transmission either.</summary>
+    [JsonPropertyName("runExecutedBy")] public string? RunExecutedBy { get; set; }
+
+    /// <summary>
+    /// The payments the approved file pays (sorted). Every attempt checks that the
+    /// file still pays exactly these, and that none was reversed or reissued since.
+    /// </summary>
+    [JsonPropertyName("approvedPaymentIds")] public List<string> ApprovedPaymentIds { get; set; } = new();
+
     /// <summary>The user who approved sending this file to the bank (token subject).</summary>
     [JsonPropertyName("approvedBy")] public string ApprovedBy { get; set; } = string.Empty;
     [JsonPropertyName("approvedAt")] public DateTime ApprovedAt { get; set; }
@@ -178,6 +187,13 @@ public enum PaymentFileTransmissionAction
 
     /// <summary>A user recorded what the bank said about a NeedsReview file.</summary>
     Resolve,
+
+    /// <summary>
+    /// An attempt finished after its record had changed (its lease expired and the
+    /// record moved on). Its outcome is evidence: unless the record is already
+    /// Transmitted, it is forced back to NeedsReview.
+    /// </summary>
+    LateOutcome,
 }
 
 /// <summary>One audited action: operator, file hash, result. Never file content or bank numbers.</summary>

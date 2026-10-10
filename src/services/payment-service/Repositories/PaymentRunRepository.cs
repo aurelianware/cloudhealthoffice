@@ -24,6 +24,18 @@ public interface IPaymentRunRepository
     /// it cannot undo a run that finished meanwhile. False when the run is gone.
     /// </summary>
     Task<bool> RecordReservationOutcomesAsync(string id, ReservationOutcomes outcomes);
+
+    /// <summary>
+    /// Writes only the run's EFT-file fields: sets <see cref="PaymentRun.EftFile"/>
+    /// and appends <paramref name="addFallbacks"/> / <paramref name="addWarnings"/>,
+    /// never rewriting anything else on the run (status, payments, results). With
+    /// <paramref name="expectedSha256"/> null it applies only while the run has no
+    /// EFT file (the first pin); otherwise only while the pinned file's SHA-256 is
+    /// <paramref name="expectedSha256"/>. False when the condition did not hold or the run is gone.
+    /// </summary>
+    Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings);
+
     Task DeleteAsync(string id);
 }
 
@@ -212,6 +224,47 @@ public class PaymentRunRepository : IPaymentRunRepository
             }
         }
         throw new InvalidOperationException($"Payment run {id} kept changing; reservation outcomes not recorded");
+    }
+
+    public async Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings)
+    {
+        var tenantId = GetTenantId();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            ItemResponse<PaymentRun> current;
+            try
+            {
+                current = await _container.ReadItemAsync<PaymentRun>(id, new PartitionKey(tenantId));
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+
+            var run = current.Resource;
+            var holds = expectedSha256 == null
+                ? run.EftFile == null
+                : run.EftFile != null && string.Equals(run.EftFile.Sha256, expectedSha256, StringComparison.Ordinal);
+            if (!holds)
+                return false;
+
+            run.EftFile = file;
+            run.CheckFallbacks.AddRange(addFallbacks.Where(f => run.CheckFallbacks.All(x => x.PaymentId != f.PaymentId)));
+            run.Warnings.AddRange(addWarnings);
+            try
+            {
+                // Only the version just read: anything written since is re-read and kept.
+                await _container.ReplaceItemAsync(run, id, new PartitionKey(tenantId),
+                    new ItemRequestOptions { IfMatchEtag = current.ETag });
+                return true;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+            {
+                // Changed since read: re-check the condition on the new version.
+            }
+        }
+        throw new InvalidOperationException($"Payment run {id} kept changing; its EFT file was not recorded");
     }
 
     public async Task<PaymentRun> UpdateAsync(PaymentRun paymentRun)

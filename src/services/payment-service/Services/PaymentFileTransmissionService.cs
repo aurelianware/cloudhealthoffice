@@ -27,6 +27,29 @@ public sealed class BankTransmissionOptions
     /// parked as NeedsReview, never re-sent. Far above the SFTP timeouts (30 s per operation).
     /// </summary>
     public TimeSpan TransmittingLease { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// The bank's time zone, for "today" in the effective-entry-date check
+    /// (IANA id; default America/New_York, the Federal Reserve's settlement clock).
+    /// </summary>
+    public string BankTimeZone { get; set; } = "America/New_York";
+
+    /// <summary>
+    /// False (default): a file is sent only while its effective entry date is a
+    /// banking day after today. True: today is accepted too (same-day ACH, which
+    /// has its own bank cut-offs).
+    /// </summary>
+    public bool AllowSameDayEffectiveDate { get; set; }
+}
+
+/// <summary>
+/// The approval no longer matches the money: the effective entry date passed (or is
+/// not a banking day), or a payment in the file was reversed, reissued, voided or
+/// changed since approval. Nothing was sent; a new file needs a new approval.
+/// </summary>
+public sealed class PaymentFileApprovalStaleException : Exception
+{
+    public PaymentFileApprovalStaleException(string message) : base(message) { }
 }
 
 /// <summary>Bank transmission is switched off (<c>BankTransmission:Enabled</c>). Nothing was done.</summary>
@@ -51,10 +74,13 @@ public sealed class PaymentFileTransmissionStateException : Exception
 /// <summary>
 /// Sends a completed ACH payment run's NACHA file to the tenant's bank,
 /// exactly once. See <see cref="PaymentFileTransmissionStatus"/> for the state
-/// machine. Dual control reuses the payment-run maker-checker
-/// (<see cref="IRunSeparationOfDuties.EnsureMayRelease"/>): the run's creator
-/// cannot approve or retry its transmission, and a service token never can.
-/// A NeedsReview file is settled by a user who neither approved nor attempted it.
+/// machine. Dual control extends the payment-run maker-checker
+/// (<see cref="IRunSeparationOfDuties.EnsureMayTransmit"/>): neither the run's
+/// creator nor its executor may approve, retry or reconcile its transmission, a run
+/// without a recorded creator is refused, and a service token never can. A
+/// NeedsReview file is settled by a user who neither approved, attempted nor
+/// reconciled it. Every attempt re-checks the approval against the money
+/// (effective entry date, payments unreversed and not reissued).
 /// </summary>
 public interface IPaymentFileTransmissionService
 {
@@ -97,6 +123,8 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
     private static readonly JsonSerializerOptions EventJson = new(JsonSerializerDefaults.Web);
 
     private readonly IPaymentRunRepository _runs;
+    private readonly IPaymentRepository _payments;
+    private readonly IClaimReservationRepository _reservations;
     private readonly IFfsEftFileService _eftFiles;
     private readonly IPaymentFileTransmissionRepository _store;
     private readonly INachaTransmitter _transmitter;
@@ -108,6 +136,8 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
 
     public PaymentFileTransmissionService(
         IPaymentRunRepository runs,
+        IPaymentRepository payments,
+        IClaimReservationRepository reservations,
         IFfsEftFileService eftFiles,
         IPaymentFileTransmissionRepository store,
         INachaTransmitter transmitter,
@@ -118,6 +148,8 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         TimeProvider? clock = null)
     {
         _runs = runs;
+        _payments = payments;
+        _reservations = reservations;
         _eftFiles = eftFiles;
         _store = store;
         _transmitter = transmitter;
@@ -141,7 +173,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         EnsureEnabled(paymentRunId);
 
         var run = await LoadRunAsync(paymentRunId);
-        var user = _separation.EnsureMayRelease("payment run's bank transmission", run.PaymentRunNumber, run.CreatedBy);
+        var user = _separation.EnsureMayTransmit(run.PaymentRunNumber, run.CreatedBy, run.ExecutedBy);
         var pinned = RequireTransmittableFile(run);
 
         var record = await _store.GetAsync(run.TenantId, pinned.FileReference, cancellationToken);
@@ -171,6 +203,22 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                     record = await ExpireLeaseAsync(record, user, cancellationToken);
                     throw new PaymentFileTransmissionStateException(NeedsReviewMessage(record));
             }
+        }
+
+        // The approval covers money, not just bytes: before every attempt (first or
+        // retry) the effective entry date must still be ahead and the payments in the
+        // file still those approved, unreversed and not reissued elsewhere.
+        if (await StaleReasonAsync(run, pinned, record, cancellationToken) is { } stale)
+        {
+            if (record != null)
+                await RefuseAsync(record, user, pinned.Sha256, stale);
+            else
+                _logger.LogWarning(RefusedEvent,
+                    "AUDIT NACHA file {FileReference} of payment run {RunNumber}: approval by {User} refused ({Why})",
+                    Clean(pinned.FileReference), Clean(run.PaymentRunNumber), Clean(user), Clean(stale));
+            throw new PaymentFileApprovalStaleException(
+                $"NACHA file {pinned.FileReference} of payment run {run.PaymentRunNumber} cannot be sent: {stale}. Nothing was sent. " +
+                "Sending it now would not pay what was approved; a new file needs a new approval.");
         }
 
         // Regenerate the approved bytes. The EFT-file service itself refuses when
@@ -221,6 +269,8 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 TotalDebitAmount = facts.TotalDebitAmount,
                 EffectiveEntryDate = pinned.EffectiveEntryDate,
                 RunCreatedBy = run.CreatedBy,
+                RunExecutedBy = run.ExecutedBy,
+                ApprovedPaymentIds = PaymentIdsOf(pinned),
                 ApprovedBy = user,
                 ApprovedAt = Now,
                 Status = PaymentFileTransmissionStatus.Pending,
@@ -311,7 +361,8 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             MarkTransmitted(record, receipt!.RemoteFileName, receipt.Destination, receipt.TransmittedAt, user, PaymentFileDeliveryEvidence.Upload);
         Append(record, PaymentFileTransmissionAction.Transmit, user, facts.Sha256, result, detail);
 
-        await SaveOutcomeAsync(record, heldVersion, result);
+        if (!await SaveOutcomeAsync(record, heldVersion, result))
+            return await RecordLateOutcomeAsync(record, user, facts.Sha256, result, detail);
         LogOutcome(record, user, result, detail);
         return record;
     }
@@ -321,7 +372,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         EnsureEnabled(paymentRunId);
 
         var run = await LoadRunAsync(paymentRunId);
-        var user = _separation.EnsureMayRelease("payment run's bank transmission", run.PaymentRunNumber, run.CreatedBy);
+        var user = _separation.EnsureMayTransmit(run.PaymentRunNumber, run.CreatedBy, run.ExecutedBy);
         var record = await RequireNeedsReviewAsync(run, user, cancellationToken);
 
         PaymentFileTransmissionStatus result = PaymentFileTransmissionStatus.NeedsReview;
@@ -376,22 +427,27 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         reason = Clean(reason.Trim());
         if (reason.Length > 500) reason = reason[..500];
 
+        // Deliberately NOT gated by BankTransmission:Enabled: after an emergency stop
+        // operators must still be able to record what the bank said about a file
+        // whose outcome was unknown. Resolving sends nothing and contacts nothing.
         var run = await LoadRunAsync(paymentRunId);
-        var user = _separation.EnsureMayRelease("payment run's bank transmission", run.PaymentRunNumber, run.CreatedBy);
+        var user = _separation.EnsureMayTransmit(run.PaymentRunNumber, run.CreatedBy, run.ExecutedBy);
         var record = await RequireNeedsReviewAsync(run, user, cancellationToken);
 
+        // The bank's answer is recorded by someone who did not approve, attempt or
+        // reconcile this file.
         var involved = record.Attempts
-            .Where(a => a.Action == PaymentFileTransmissionAction.Transmit)
+            .Where(a => a.Action is PaymentFileTransmissionAction.Transmit or PaymentFileTransmissionAction.Reconcile)
             .Select(a => a.By)
             .Append(record.ApprovedBy);
         if (involved.Any(u => string.Equals(u, user, StringComparison.OrdinalIgnoreCase)))
         {
             _logger.LogWarning(RefusedEvent,
-                "AUDIT NACHA file {FileReference} of payment run {RunNumber}: {User} may not record the bank's answer (approved or attempted it)",
+                "AUDIT NACHA file {FileReference} of payment run {RunNumber}: {User} may not record the bank's answer (approved, attempted or reconciled it)",
                 Clean(record.FileReference), Clean(record.PaymentRunNumber), Clean(user));
             throw new SeparationOfDutiesException(
-                "Separation of duties: you approved or attempted this NACHA file's transmission, so you cannot record whether the bank " +
-                "received it. Another user with payments:approve must.");
+                "Separation of duties: you approved, attempted or reconciled this NACHA file's transmission, so you cannot record whether " +
+                "the bank received it. Another user with payments:approve must.");
         }
 
         var readVersion = record.Version;
@@ -447,6 +503,81 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         return file;
     }
 
+    private static List<string> PaymentIdsOf(PaymentRunEftFile file)
+        => file.Entries.SelectMany(e => e.PaymentIds).Distinct(StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal).ToList();
+
+    /// <summary>The bank's calendar date now.</summary>
+    private DateTime BankToday()
+    {
+        TimeZoneInfo zone;
+        try
+        {
+            zone = TimeZoneInfo.FindSystemTimeZoneById(_options.BankTimeZone);
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            // No tz database: Eastern Standard Time, the earlier of the two offsets
+            // (never later than the bank's real date).
+            zone = TimeZoneInfo.CreateCustomTimeZone("cho-bank-fallback", TimeSpan.FromHours(-5), "bank", "bank");
+        }
+        return TimeZoneInfo.ConvertTimeFromUtc(Now, zone).Date;
+    }
+
+    /// <summary>
+    /// Null while the approval still describes the money; otherwise why not. Checks
+    /// the effective entry date, and that every payment in the file is the one
+    /// approved: present, issued by this run, ACH, not a reversal, not in Exception,
+    /// its amounts still summing to the file's credits, none of its claims reserved
+    /// for reversal, and none of its claims' payment reservation held by another run.
+    /// </summary>
+    private async Task<string?> StaleReasonAsync(PaymentRun run, PaymentRunEftFile file, PaymentFileTransmission? record, CancellationToken cancellationToken)
+    {
+        var effective = file.EffectiveEntryDate.Date;
+        var today = BankToday();
+        if (!AchBankingCalendar.IsBankingDay(effective))
+            return $"its effective entry date {effective:yyyy-MM-dd} is not a banking day";
+        if (effective < today || (effective == today && !_options.AllowSameDayEffectiveDate))
+            return $"its effective entry date {effective:yyyy-MM-dd} is not after today ({today:yyyy-MM-dd} at the bank)";
+
+        var ids = PaymentIdsOf(file);
+        if (record != null && !record.ApprovedPaymentIds.SequenceEqual(ids, StringComparer.Ordinal))
+            return "the file no longer pays the payments that were approved";
+
+        var amounts = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        foreach (var id in ids)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var payment = await _payments.GetByIdAsync(id);
+            if (payment == null)
+                return $"payment {id} no longer exists";
+            if (payment.IsReversal || !string.Equals(payment.RunId, run.Id, StringComparison.Ordinal))
+                return $"payment {payment.CheckNumber} is no longer this run's payment";
+            if (!string.Equals(payment.PaymentMethod, "ACH", StringComparison.OrdinalIgnoreCase))
+                return $"payment {payment.CheckNumber} is now paid by {payment.PaymentMethod}";
+            if (payment.Status == PaymentStatus.Exception)
+                return $"payment {payment.CheckNumber} is in Exception";
+            amounts[id] = payment.TotalPaymentAmount;
+
+            foreach (var claimId in payment.ClaimPayments.Select(c => c.ClaimId).Distinct(StringComparer.Ordinal))
+            {
+                var reversal = await _reservations.GetAsync(ClaimReservationKind.Reversal, run.TenantId, claimId);
+                if (reversal != null)
+                    return $"a claim of payment {payment.CheckNumber} was reversed (or is being reversed) by reversal run {reversal.RunNumber ?? reversal.RunId}";
+                var paid = await _reservations.GetAsync(ClaimReservationKind.Payment, run.TenantId, claimId);
+                if (paid != null && !string.Equals(paid.RunId, run.Id, StringComparison.Ordinal))
+                    return $"a claim of payment {payment.CheckNumber} is now paid by run {paid.RunNumber ?? paid.RunId} (reissued)";
+            }
+        }
+
+        foreach (var entry in file.Entries)
+        {
+            if (entry.PaymentIds.Sum(id => amounts.TryGetValue(id, out var a) ? a : 0m) != entry.Amount)
+                return $"the payments of credit {entry.AchTraceNumber} no longer add up to its amount";
+        }
+
+        return null;
+    }
+
     private async Task<PaymentFileTransmission> RequireNeedsReviewAsync(PaymentRun run, string user, CancellationToken cancellationToken)
     {
         var record = await _store.GetAsync(run.TenantId, FileReferenceOf(run), cancellationToken)
@@ -497,7 +628,8 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             Clean(record.FileReference), Clean(record.PaymentRunNumber), Clean(user), why, record.ApprovedSha256, sha256);
     }
 
-    private async Task SaveOutcomeAsync(PaymentFileTransmission record, string heldVersion, PaymentFileTransmissionStatus result)
+    /// <summary>True when the outcome was recorded; false when the record changed meanwhile (a late outcome).</summary>
+    private async Task<bool> SaveOutcomeAsync(PaymentFileTransmission record, string heldVersion, PaymentFileTransmissionStatus result)
     {
         bool saved;
         try
@@ -513,16 +645,56 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             throw;
         }
 
-        if (!saved)
+        return saved;
+    }
+
+    /// <summary>
+    /// The attempt finished after its record moved on (its lease expired, and the
+    /// record may since have been reconciled, resolved or claimed again). A delivered
+    /// or unknown outcome is evidence the file may be at the bank: unless the record
+    /// is already Transmitted, it is forced to NeedsReview (even over a resolver's
+    /// Failed), with an audit entry. A definite failure is only logged.
+    /// </summary>
+    private async Task<PaymentFileTransmission> RecordLateOutcomeAsync(
+        PaymentFileTransmission attempted, string user, string sha256, PaymentFileTransmissionStatus result, string detail)
+    {
+        var attempt = attempted.AttemptCount;
+        _logger.LogCritical(UnrecordedEvent,
+            "AUDIT NACHA file {FileReference} of payment run {RunNumber}: attempt {Attempt} by {User} ended {Result} after its record changed " +
+            "(its lease was expired); recording it as late delivery evidence",
+            Clean(attempted.FileReference), Clean(attempted.PaymentRunNumber), attempt, Clean(user), result);
+
+        for (var tries = 0; tries < 10; tries++)
         {
-            _logger.LogCritical(UnrecordedEvent,
-                "AUDIT NACHA file {FileReference} of payment run {RunNumber}: attempt {Attempt} ended {Result} but its record changed meanwhile " +
-                "(its lease was expired by another request). It is NeedsReview; reconcile it",
-                Clean(record.FileReference), Clean(record.PaymentRunNumber), record.AttemptCount, result);
-            throw new PaymentFileTransmissionStateException(
-                $"NACHA file {record.FileReference}: the attempt ended {result}, but the record had changed meanwhile and was not updated. " +
-                "It is awaiting review; reconcile it before anything else.");
+            var current = await _store.GetAsync(attempted.TenantId, attempted.FileReference, CancellationToken.None)
+                ?? throw new PaymentFileTransmissionStateException($"NACHA file {attempted.FileReference}'s record disappeared.");
+            var readVersion = current.Version;
+            var previous = current.Status;
+            // A definite failure is no evidence of delivery: log only, and do not
+            // touch the record (a write would disturb an attempt holding it now).
+            if (result == PaymentFileTransmissionStatus.Failed)
+                return current;
+            if (current.Status != PaymentFileTransmissionStatus.Transmitted)
+            {
+                current.Status = PaymentFileTransmissionStatus.NeedsReview;
+                current.LeaseUntil = null;
+                current.Reason = $"late delivery evidence: attempt {attempt} ended {result} ({Clean(detail)}) after the record had moved on " +
+                                 $"(it was {previous}); the file may be at the bank";
+            }
+            current.UpdatedAt = Now;
+            Append(current, PaymentFileTransmissionAction.LateOutcome, user, sha256, current.Status,
+                $"late delivery evidence: attempt {attempt} ended {result} ({detail}); record was {previous}");
+            if (await _store.TryReplaceAsync(current, readVersion, CancellationToken.None))
+            {
+                if (current.Status == PaymentFileTransmissionStatus.NeedsReview)
+                    _logger.LogError(NeedsReviewEvent,
+                        "AUDIT NACHA file {FileReference} of payment run {RunNumber}: forced to NeedsReview by the late outcome of attempt {Attempt} (was {Previous})",
+                        Clean(current.FileReference), Clean(current.PaymentRunNumber), attempt, previous);
+                return current;
+            }
         }
+        throw new PaymentFileTransmissionStateException(
+            $"NACHA file {attempted.FileReference}: attempt {attempt} ended {result} but its record kept changing; reconcile it before anything else.");
     }
 
     private void LogOutcome(PaymentFileTransmission record, string user, PaymentFileTransmissionStatus result, string detail)

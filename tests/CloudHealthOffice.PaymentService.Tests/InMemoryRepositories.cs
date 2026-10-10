@@ -124,6 +124,33 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
 
     public Task<PaymentRun> UpdateAsync(PaymentRun run) { lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); } return Task.FromResult(run); }
 
+    public int EftFileWrites;
+
+    public Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings)
+    {
+        lock (_items)
+        {
+            var run = _items.FirstOrDefault(r => r.Id == id);
+            if (run == null)
+                return Task.FromResult(false);
+            var holds = expectedSha256 == null ? run.EftFile == null : run.EftFile?.Sha256 == expectedSha256;
+            if (!holds)
+                return Task.FromResult(false);
+            run.EftFile = JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(file));
+            run.CheckFallbacks.AddRange(addFallbacks);
+            run.Warnings.AddRange(addWarnings);
+            EftFileWrites++;
+            return Task.FromResult(true);
+        }
+    }
+
+    /// <summary>Changes a stored run in place (a concurrent writer), bypassing the service.</summary>
+    public void Mutate(string id, Action<PaymentRun> change)
+    {
+        lock (_items) change(_items.First(r => r.Id == id));
+    }
+
     public Task<bool> RecordReservationOutcomesAsync(string id, ReservationOutcomes outcomes)
     {
         lock (_items)
@@ -301,6 +328,22 @@ public sealed class InMemoryReservationAuditLog : IReservationAuditLog
             .Where(e => e.TenantId == tenantId && (runId == null || e.RunId == runId))
             .OrderByDescending(e => e.At)
             .ToList());
+}
+
+/// <summary>File ID modifier claims in memory, with the stores' insert-if-absent semantics.</summary>
+public sealed class InMemoryNachaFileIdModifierAllocator : INachaFileIdModifierAllocator
+{
+    private readonly Dictionary<string, string> _holders = new();
+
+    public Task<string> AllocateAsync(string tenantId, string immediateDestination, string immediateOrigin, DateTime fileCreationDate, string runId)
+        => NachaFileIdModifiers.AllocateAsync(tenantId, immediateDestination, immediateOrigin, fileCreationDate, runId, claim =>
+        {
+            lock (_holders)
+            {
+                _holders.TryAdd(claim.Id, claim.RunId);
+                return Task.FromResult(_holders[claim.Id]);
+            }
+        });
 }
 
 /// <summary>

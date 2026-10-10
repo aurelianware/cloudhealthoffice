@@ -116,9 +116,10 @@ public sealed class SftpNachaTransmitter : INachaTransmitter, INachaRemoteFilePr
         var name = NachaFileNames.Require(fileName);
         var drop = await PrepareAsync(tenantId, cancellationToken);
         var path = Combine(drop.Directory, name);
+        ISftpSession? session = null;
         try
         {
-            using var session = _sessions.Connect(drop.Parameters);
+            session = _sessions.Connect(drop.Parameters);
             if (!session.Exists(path))
                 return new NachaRemoteFileCheck { Presence = NachaRemoteFilePresence.Absent, Destination = drop.Destination };
             var size = session.Size(path);
@@ -139,6 +140,12 @@ public sealed class SftpNachaTransmitter : INachaTransmitter, INachaRemoteFilePr
                 drop.Destination, tenantId, ex.GetType().Name);
             throw new NachaTransmissionException($"The bank's SFTP drop could not be checked ({ex.GetType().Name}).");
         }
+        finally
+        {
+            // A failed close does not change what was seen.
+            try { session?.Dispose(); }
+            catch (Exception ex) { _logger.LogWarning("Closing the SFTP session after a drop check failed: {Error}", ex.GetType().Name); }
+        }
     }
 
     public async Task<NachaTransmissionReceipt> TransmitAsync(NachaTransmissionRequest request, CancellationToken cancellationToken = default)
@@ -154,9 +161,11 @@ public sealed class SftpNachaTransmitter : INachaTransmitter, INachaRemoteFilePr
         var destination = drop.Destination;
         var parameters = drop.Parameters;
 
+        ISftpSession? session = null;
+        var renamed = false;
         try
         {
-            using var session = _sessions.Connect(parameters);
+            session = _sessions.Connect(parameters);
             // File names carry the unique file reference: one already there is this
             // file from an earlier attempt whose outcome was not known.
             if (session.Exists(finalPath))
@@ -179,32 +188,37 @@ public sealed class SftpNachaTransmitter : INachaTransmitter, INachaRemoteFilePr
             try
             {
                 session.Rename(tempPath, finalPath);
+                renamed = true;
             }
-            catch (Exception renameError) when (renameError is not OperationCanceledException)
+            catch (Exception renameError)
             {
                 // The whole file is on the server under the temporary name. A failed
                 // rename reply does not say whether the server renamed it (the reply
-                // can be lost after the rename), so look before calling it a failure.
-                switch (ProbeRename(session, tempPath, finalPath))
+                // can be lost after the rename), so look before calling it anything.
+                // Only "final name there, temporary gone" is an answer. "Temporary
+                // still there, final absent" is not proof of non-delivery (servers
+                // that implement rename as copy-then-delete may be mid-copy, or the
+                // bank may already have collected the final file), so it is unknown
+                // and the temporary file is left alone.
+                if (renameError is not OperationCanceledException
+                    && ProbeRename(session, tempPath, finalPath) == RenameProbe.InPlace)
                 {
-                    case RenameProbe.InPlace:
-                        _logger.LogWarning(
-                            "NACHA file {FileReference} for tenant {TenantId}: the rename reported {Error}, but the file is in place at {Destination}",
-                            request.FileReference, request.TenantId, renameError.GetType().Name, destination);
-                        break;
-                    case RenameProbe.NotRenamed:
-                        TryDelete(session, tempPath);
-                        throw;
-                    default:
-                        _logger.LogError(
-                            "NACHA file {FileReference} for tenant {TenantId}: uploaded to {Destination} but the rename failed ({Error}) " +
-                            "and its outcome could not be checked; delivery is unknown",
-                            request.FileReference, request.TenantId, destination, renameError.GetType().Name);
-                        throw new NachaTransmissionException(
-                            $"The file was uploaded to the bank's SFTP server but renaming it into place failed ({renameError.GetType().Name}) " +
-                            "and the result could not be checked: it may or may not have reached the bank. Verify with the bank " +
-                            "before sending it again.",
-                            deliveryUnknown: true);
+                    renamed = true;
+                    _logger.LogWarning(
+                        "NACHA file {FileReference} for tenant {TenantId}: the rename reported {Error}, but the file is in place at {Destination}",
+                        request.FileReference, request.TenantId, renameError.GetType().Name, destination);
+                }
+                else
+                {
+                    _logger.LogError(
+                        "NACHA file {FileReference} for tenant {TenantId}: uploaded to {Destination} but the rename failed ({Error}) " +
+                        "and it could not be established that the file did not reach the bank; delivery is unknown",
+                        request.FileReference, request.TenantId, destination, renameError.GetType().Name);
+                    throw new NachaTransmissionException(
+                        $"The file was uploaded to the bank's SFTP server but renaming it into place failed ({renameError.GetType().Name}) " +
+                        "and the result could not be established: it may or may not have reached the bank. Verify with the bank " +
+                        "before sending it again.",
+                        deliveryUnknown: true);
                 }
             }
         }
@@ -214,11 +228,18 @@ public sealed class SftpNachaTransmitter : INachaTransmitter, INachaRemoteFilePr
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Before the upload completed (connect, exists, upload): not delivered.
             // The SSH library's messages can carry server banners; keep only the kind.
             _logger.LogWarning("NACHA file {FileReference} for tenant {TenantId} was not delivered to {Destination}: {Error}",
                 request.FileReference, request.TenantId, destination, ex.GetType().Name);
             throw new NachaTransmissionException(
                 $"The upload to the bank's SFTP server failed ({ex.GetType().Name}).");
+        }
+        finally
+        {
+            // Closing never changes the outcome: after the rename the file is at the
+            // bank whatever the disconnect does; before it, the outcome was already thrown.
+            CloseQuietly(session, request, renamed);
         }
 
         var receipt = NachaFileNames.Receipt(request, facts, fileName, destination, _clock.GetUtcNow().UtcDateTime);
@@ -246,6 +267,21 @@ public sealed class SftpNachaTransmitter : INachaTransmitter, INachaRemoteFilePr
         {
             _logger.LogWarning("The Key Vault secret for the NACHA SFTP {What} could not be read: {Error}", what, ex.GetType().Name);
             throw new NachaTransmissionException($"The Key Vault secret for the SFTP {what} could not be read ({ex.GetType().Name}).");
+        }
+    }
+
+    private void CloseQuietly(ISftpSession? session, NachaTransmissionRequest request, bool renamed)
+    {
+        if (session == null) return;
+        try
+        {
+            session.Dispose();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                "NACHA file {FileReference} for tenant {TenantId}: closing the SFTP session failed ({Error}) after the file was {State}",
+                request.FileReference, request.TenantId, ex.GetType().Name, renamed ? "renamed into place" : "not delivered");
         }
     }
 

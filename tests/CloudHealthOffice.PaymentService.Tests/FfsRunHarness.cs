@@ -24,6 +24,7 @@ internal sealed class FfsRunHarness
     public InMemoryPaymentRepository Payments { get; } = new(Tenant);
     public InMemoryPaymentRunRepository Runs { get; } = new(Tenant);
     public InMemoryClaimReservationRepository Reservations { get; } = new();
+    public InMemoryNachaFileIdModifierAllocator Modifiers { get; } = new();
     public InMemoryProviderReceivableRepository LedgerStore { get; } = new();
     public ScriptedPayeeAccounts Accounts { get; } = new();
     public List<EraEnvelopeRecord> Envelopes { get; } = new();
@@ -101,7 +102,7 @@ internal sealed class FfsRunHarness
         Approver, Approver.SeparationOfDuties(), Reservations, Ledger, accounts ?? Accounts);
 
     public FfsEftFileService EftFiles(IProviderPayeeAccountSource? accounts = null)
-        => new(Runs, Payments, accounts ?? Accounts, Configuration, NullLogger<FfsEftFileService>.Instance);
+        => new(Runs, Payments, accounts ?? Accounts, Configuration, Modifiers, NullLogger<FfsEftFileService>.Instance);
 
     /// <summary>Creates and executes one ACH payment run paying <paramref name="claims"/>.</summary>
     public async Task<PaymentRun> ExecuteRunAsync(params ClaimDto[] claims)

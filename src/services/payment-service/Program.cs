@@ -135,9 +135,15 @@ else
     builder.Services.AddSingleton<CloudHealthOffice.NachaTransmission.INachaRemoteFileProbe, DisabledNachaTransmitter>();
 }
 if (databaseProvider == ChoDatabaseProvider.MongoDb)
+{
     builder.Services.AddScoped<IPaymentFileTransmissionRepository, PaymentFileTransmissionRepositoryMongo>();
+    builder.Services.AddScoped<INachaFileIdModifierAllocator, NachaFileIdModifierAllocatorMongo>();
+}
 else
+{
     builder.Services.AddSingleton<IPaymentFileTransmissionRepository, PaymentFileTransmissionRepositoryCosmos>();
+    builder.Services.AddSingleton<INachaFileIdModifierAllocator, NachaFileIdModifierAllocatorCosmos>();
+}
 builder.Services.AddScoped<IPaymentFileTransmissionService, PaymentFileTransmissionService>();
 
 // Services

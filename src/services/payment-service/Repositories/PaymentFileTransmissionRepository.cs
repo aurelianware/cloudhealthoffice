@@ -87,11 +87,16 @@ public sealed class PaymentFileTransmissionRepositoryCosmos : IPaymentFileTransm
 {
     public const string ContainerName = "PaymentFileTransmissions";
 
+    // Reads and replaces never create the container: a GET (allowed while
+    // transmission is disabled) must not provision anything. Only the first
+    // approval (an insert, which needs transmission enabled) creates it.
     private readonly Lazy<Task<Container>> _container;
+    private readonly Container _existing;
 
     public PaymentFileTransmissionRepositoryCosmos(CosmosClient client, IConfiguration configuration)
     {
         var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
+        _existing = client.GetContainer(databaseName, ContainerName);
         _container = new Lazy<Task<Container>>(async () =>
         {
             var response = await client.GetDatabase(databaseName)
@@ -102,7 +107,8 @@ public sealed class PaymentFileTransmissionRepositoryCosmos : IPaymentFileTransm
 
     public async Task<PaymentFileTransmission?> GetAsync(string tenantId, string fileReference, CancellationToken cancellationToken = default)
     {
-        var container = await _container.Value;
+        // A missing container (nothing ever approved) also answers 404.
+        var container = _existing;
         try
         {
             var response = await container.ReadItemAsync<PaymentFileTransmission>(
@@ -133,7 +139,7 @@ public sealed class PaymentFileTransmissionRepositoryCosmos : IPaymentFileTransm
 
     public async Task<bool> TryReplaceAsync(PaymentFileTransmission record, string expectedVersion, CancellationToken cancellationToken = default)
     {
-        var container = await _container.Value;
+        var container = _existing;
         var previous = record.Version;
         try
         {

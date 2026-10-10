@@ -192,7 +192,12 @@ default (`BankTransmission:Enabled`): see
   verified out of band.
 - **Atomic upload:** the file is written as `.{name}.{guid}.part` in the
   remote directory, then renamed to its final name; a partial upload is
-  deleted; an existing file of the same name is never overwritten.
+  deleted; an existing file of the same name is never overwritten. After the
+  upload completed, a failed rename counts as delivered only when the final name
+  is there and the temporary one is gone; anything else (including "temporary
+  still there") is delivery unknown and the temporary file is left in place
+  (servers may rename by copy-then-delete). A failure closing the session after
+  the rename never makes a delivered file look undelivered.
 - **Development:** `NachaTransmission:Mode=LocalFolder` writes to a local
   folder (`NachaTransmission:LocalFolder`, default
   `{temp}/cho-nacha-outbox/{service}/{tenant}`) the same way. Startup fails

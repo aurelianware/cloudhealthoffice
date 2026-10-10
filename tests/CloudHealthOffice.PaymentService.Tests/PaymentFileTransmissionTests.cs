@@ -39,9 +39,9 @@ public class PaymentFileTransmissionTests
         _h.Accounts.Eft(Npi, account: Account, tin: "12-3456789");
     }
 
-    private PaymentFileTransmissionService Service(string user = "approver-1", bool isService = false,
+    private PaymentFileTransmissionService Service(string user = "treasury-1", bool isService = false,
         INachaTransmitter? transmitter = null, INachaRemoteFileProbe? probe = null)
-        => new(_h.Runs, _h.EftFiles(), _store, transmitter ?? _bank, probe ?? _bank,
+        => new(_h.Runs, _h.Payments, _h.Reservations, _h.EftFiles(), _store, transmitter ?? _bank, probe ?? _bank,
             new TestActor(user, FfsRunHarness.Tenant, isService).SeparationOfDuties(),
             Options.Create(_options), _log, _clock);
 
@@ -63,20 +63,20 @@ public class PaymentFileTransmissionTests
 
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, record.Status);
         Assert.Equal(PaymentFileDeliveryEvidence.Upload, record.ConfirmedBy);
-        Assert.Equal((1, "approver-1", "approver-1"), (record.AttemptCount, record.ApprovedBy, record.TransmittedBy));
+        Assert.Equal((1, "treasury-1", "treasury-1"), (record.AttemptCount, record.ApprovedBy, record.TransmittedBy));
         Assert.Equal(run.EftFile!.Sha256, record.ApprovedSha256);
         Assert.Equal(PaymentFileAcknowledgementStatus.Awaiting, record.Acknowledgement);
 
         var sent = Assert.Single(_bank.Sent);
         Assert.Equal(run.EftFile.FileName, sent.FileName);
         Assert.Equal(record.ApprovedSha256, NachaFileFacts.From(sent.Content).Sha256);
-        Assert.Equal("approver-1", sent.TransmittedBy);
+        Assert.Equal("treasury-1", sent.TransmittedBy);
 
         // Every action audited: operator, file hash, result.
         Assert.Collection(record.Attempts,
-            a => Assert.Equal((PaymentFileTransmissionAction.Transmit, "approver-1", record.ApprovedSha256, PaymentFileTransmissionStatus.Transmitting),
+            a => Assert.Equal((PaymentFileTransmissionAction.Transmit, "treasury-1", record.ApprovedSha256, PaymentFileTransmissionStatus.Transmitting),
                 (a.Action, a.By, a.Sha256, a.Result)),
-            a => Assert.Equal((PaymentFileTransmissionAction.Transmit, "approver-1", record.ApprovedSha256, PaymentFileTransmissionStatus.Transmitted),
+            a => Assert.Equal((PaymentFileTransmissionAction.Transmit, "treasury-1", record.ApprovedSha256, PaymentFileTransmissionStatus.Transmitted),
                 (a.Action, a.By, a.Sha256, a.Result)));
 
         // The GL-posting seam: one PaymentFileTransmitted event in the record's outbox.
@@ -99,7 +99,7 @@ public class PaymentFileTransmissionTests
         var run = await PinnedRunAsync();
         await Service().TransmitAsync(run.Id);
 
-        var again = await Service("approver-3").TransmitAsync(run.Id);
+        var again = await Service("treasury-3").TransmitAsync(run.Id);
 
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, again.Status);
         Assert.Single(_bank.Sent);
@@ -120,14 +120,14 @@ public class PaymentFileTransmissionTests
         Assert.Empty(failed.Outbox);
         Assert.Empty(_bank.Drop);
 
-        var retried = await Service("approver-3").TransmitAsync(run.Id);
+        var retried = await Service("treasury-3").TransmitAsync(run.Id);
 
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, retried.Status);
         Assert.Equal(2, retried.AttemptCount);
         Assert.Equal(2, _bank.Sent.Count);
         Assert.Single(_bank.Drop);
-        Assert.Equal("approver-1", retried.ApprovedBy);
-        Assert.Equal("approver-3", retried.TransmittedBy);
+        Assert.Equal("treasury-1", retried.ApprovedBy);
+        Assert.Equal("treasury-3", retried.TransmittedBy);
         Assert.Equal(new[] { PaymentFileTransmissionStatus.Transmitting, PaymentFileTransmissionStatus.Failed,
                              PaymentFileTransmissionStatus.Transmitting, PaymentFileTransmissionStatus.Transmitted },
             retried.Attempts.Select(a => a.Result));
@@ -147,7 +147,7 @@ public class PaymentFileTransmissionTests
 
         // Neither the approver nor anyone else can simply send it again.
         await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service().TransmitAsync(run.Id));
-        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("approver-3").TransmitAsync(run.Id));
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").TransmitAsync(run.Id));
 
         Assert.Single(_bank.Sent);
         Assert.Equal(1, (await _store.GetAsync(FfsRunHarness.Tenant, run.EftFile!.FileReference))!.AttemptCount);
@@ -160,11 +160,11 @@ public class PaymentFileTransmissionTests
         _bank.Script.Enqueue(_bank.RenameReplyLost); // the file did land
         await Service().TransmitAsync(run.Id);
 
-        var reconciled = await Service("approver-3").ReconcileAsync(run.Id);
+        var reconciled = await Service("treasury-3").ReconcileAsync(run.Id);
 
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, reconciled.Status);
         Assert.Equal(PaymentFileDeliveryEvidence.RemoteListing, reconciled.ConfirmedBy);
-        Assert.Equal("approver-1", reconciled.TransmittedBy);
+        Assert.Equal("treasury-1", reconciled.TransmittedBy);
         Assert.Single(_bank.Sent);
         Assert.Equal(1, _bank.Probes);
         Assert.Equal(PaymentFileTransmissionAction.Reconcile, reconciled.Attempts.Last().Action);
@@ -179,12 +179,12 @@ public class PaymentFileTransmissionTests
         _bank.Script.Enqueue(InMemoryBank.AmbiguousNothingLanded);
         await Service().TransmitAsync(run.Id);
 
-        var record = await Service("approver-3").ReconcileAsync(run.Id);
+        var record = await Service("treasury-3").ReconcileAsync(run.Id);
 
         Assert.Equal(PaymentFileTransmissionStatus.NeedsReview, record.Status);
         Assert.Contains("may already have collected it", record.Attempts.Last().Detail);
         Assert.Single(_bank.Sent);
-        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("approver-3").TransmitAsync(run.Id));
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").TransmitAsync(run.Id));
         Assert.Single(_bank.Sent);
     }
 
@@ -196,7 +196,7 @@ public class PaymentFileTransmissionTests
         await Service().TransmitAsync(run.Id);
         _bank.Drop[run.EftFile!.FileName] = new byte[] { 1, 2, 3 };
 
-        var record = await Service("approver-3").ReconcileAsync(run.Id);
+        var record = await Service("treasury-3").ReconcileAsync(run.Id);
 
         Assert.Equal(PaymentFileTransmissionStatus.NeedsReview, record.Status);
         Assert.Empty(record.Outbox);
@@ -210,16 +210,16 @@ public class PaymentFileTransmissionTests
         await Service().TransmitAsync(run.Id);
 
         // The approver (who also attempted it) and the run's maker may not settle it.
-        await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("approver-1").ResolveAsync(run.Id, false, "bank says no"));
+        await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("treasury-1").ResolveAsync(run.Id, false, "bank says no"));
         await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("maker-1").ResolveAsync(run.Id, false, "bank says no"));
-        await Assert.ThrowsAsync<ArgumentException>(() => Service("approver-3").ResolveAsync(run.Id, false, " "));
+        await Assert.ThrowsAsync<ArgumentException>(() => Service("treasury-3").ResolveAsync(run.Id, false, " "));
 
-        var resolved = await Service("approver-3").ResolveAsync(run.Id, false, "ACH ops (J. Doe) confirmed no file FFS received, ticket 4411");
+        var resolved = await Service("treasury-3").ResolveAsync(run.Id, false, "ACH ops (J. Doe) confirmed no file FFS received, ticket 4411");
 
         Assert.Equal(PaymentFileTransmissionStatus.Failed, resolved.Status);
-        Assert.Equal((PaymentFileTransmissionAction.Resolve, "approver-3"), (resolved.Attempts.Last().Action, resolved.Attempts.Last().By));
+        Assert.Equal((PaymentFileTransmissionAction.Resolve, "treasury-3"), (resolved.Attempts.Last().Action, resolved.Attempts.Last().By));
 
-        var retried = await Service("approver-1").TransmitAsync(run.Id);
+        var retried = await Service("treasury-1").TransmitAsync(run.Id);
 
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, retried.Status);
         Assert.Equal(2, _bank.Sent.Count);
@@ -232,11 +232,11 @@ public class PaymentFileTransmissionTests
         _bank.Script.Enqueue(InMemoryBank.AmbiguousNothingLanded);
         await Service().TransmitAsync(run.Id);
 
-        var resolved = await Service("approver-3").ResolveAsync(run.Id, true, "bank confirmed file received and collected 10:42, ref 9981");
+        var resolved = await Service("treasury-3").ResolveAsync(run.Id, true, "bank confirmed file received and collected 10:42, ref 9981");
 
         Assert.Equal((PaymentFileTransmissionStatus.Transmitted, PaymentFileDeliveryEvidence.BankConfirmation), (resolved.Status, resolved.ConfirmedBy));
         Assert.Single(resolved.Outbox);
-        Assert.Equal(resolved, await Service("approver-4").TransmitAsync(run.Id), new SameStatus());
+        Assert.Equal(resolved, await Service("treasury-4").TransmitAsync(run.Id), new SameStatus());
         Assert.Single(_bank.Sent);
     }
 
@@ -277,7 +277,7 @@ public class PaymentFileTransmissionTests
         var first = Service().TransmitAsync(run.Id);
         await inside.Task;
         _bank.BeforeSend = null;
-        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("approver-3").TransmitAsync(run.Id));
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").TransmitAsync(run.Id));
         gate.SetResult();
 
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await first).Status);
@@ -291,7 +291,7 @@ public class PaymentFileTransmissionTests
         var gate = new TaskCompletionSource();
         _bank.BeforeSend = () => gate.Task;
 
-        var attempts = Enumerable.Range(0, 4).Select(i => Task.Run(() => Service("approver-" + (10 + i)).TransmitAsync(run.Id))).ToList();
+        var attempts = Enumerable.Range(0, 4).Select(i => Task.Run(() => Service("treasury-" + (10 + i)).TransmitAsync(run.Id))).ToList();
         await Task.Delay(200);
         gate.SetResult();
         var outcomes = await Task.WhenAll(attempts.Select(async t =>
@@ -315,10 +315,10 @@ public class PaymentFileTransmissionTests
         Assert.Contains(_log.Entries, e => e.Level == LogLevel.Critical);
 
         // Within the lease: refused. After it: NeedsReview, reconciled from the drop.
-        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("approver-3").TransmitAsync(run.Id));
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").TransmitAsync(run.Id));
         _clock.Now = _clock.Now.AddMinutes(16);
-        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("approver-3").TransmitAsync(run.Id));
-        var reconciled = await Service("approver-3").ReconcileAsync(run.Id);
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").TransmitAsync(run.Id));
+        var reconciled = await Service("treasury-3").ReconcileAsync(run.Id);
 
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, reconciled.Status);
         Assert.Single(_bank.Sent);
@@ -334,12 +334,12 @@ public class PaymentFileTransmissionTests
         // The payee's approved account changes after approval: the file would differ.
         _h.Accounts.Eft(Npi, account: "999988887777", tin: "12-3456789");
 
-        await Assert.ThrowsAsync<PaymentFileHashMismatchException>(() => Service("approver-3").TransmitAsync(run.Id));
+        await Assert.ThrowsAsync<PaymentFileHashMismatchException>(() => Service("treasury-3").TransmitAsync(run.Id));
 
         Assert.Single(_bank.Sent);
         var record = (await _store.GetAsync(FfsRunHarness.Tenant, run.EftFile!.FileReference))!;
         Assert.Equal(PaymentFileTransmissionStatus.Failed, record.Status);
-        Assert.Equal((PaymentFileTransmissionAction.Refused, "approver-3"), (record.Attempts.Last().Action, record.Attempts.Last().By));
+        Assert.Equal((PaymentFileTransmissionAction.Refused, "treasury-3"), (record.Attempts.Last().Action, record.Attempts.Last().By));
     }
 
     [Fact]
@@ -428,7 +428,7 @@ public class PaymentFileTransmissionTests
 
         // Once the bank's real key answers, the retry goes through.
         var genuine = InMemorySftp.Transmitter(new InMemorySftp(presentedSeed: 1), pin: bankPin);
-        var retried = await Service("approver-3", transmitter: genuine, probe: genuine).TransmitAsync(run.Id);
+        var retried = await Service("treasury-3", transmitter: genuine, probe: genuine).TransmitAsync(run.Id);
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, retried.Status);
     }
 
@@ -443,7 +443,7 @@ public class PaymentFileTransmissionTests
         Assert.Equal(PaymentFileTransmissionStatus.NeedsReview, record.Status);
 
         sftp.RenameReplyLostAndConnectionDies = false;
-        var reconciled = await Service("approver-3", transmitter: transmitter, probe: transmitter).ReconcileAsync(run.Id);
+        var reconciled = await Service("treasury-3", transmitter: transmitter, probe: transmitter).ReconcileAsync(run.Id);
 
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, reconciled.Status);
         Assert.Equal(1, sftp.Uploads);
@@ -456,11 +456,213 @@ public class PaymentFileTransmissionTests
         var run = await PinnedRunAsync();
         _bank.Script.Enqueue(InMemoryBank.UploadFails);
         await Service().TransmitAsync(run.Id);
-        await Service("approver-3").TransmitAsync(run.Id);
+        await Service("treasury-3").TransmitAsync(run.Id);
 
         AssertNoBankNumbers();
-        Assert.Contains(_log.Entries, e => e.Message.StartsWith("AUDIT") && e.Message.Contains("approver-3") && e.Message.Contains(run.EftFile!.Sha256));
+        Assert.Contains(_log.Entries, e => e.Message.StartsWith("AUDIT") && e.Message.Contains("treasury-3") && e.Message.Contains(run.EftFile!.Sha256));
     }
+
+    [Fact]
+    public async Task The_runs_executor_cannot_send_its_file_either()
+    {
+        var run = await PinnedRunAsync();
+        Assert.Equal("approver-1", run.ExecutedBy);
+
+        await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("approver-1").TransmitAsync(run.Id));
+
+        Assert.Empty(_bank.Sent);
+        Assert.Empty(_store.All);
+    }
+
+    [Fact]
+    public async Task A_run_without_a_recorded_creator_is_refused()
+    {
+        var run = await PinnedRunAsync();
+        _h.Runs.Mutate(run.Id, r => r.CreatedBy = null);
+
+        var ex = await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service().TransmitAsync(run.Id));
+
+        Assert.Contains("no recorded creator", ex.Message);
+        Assert.Empty(_bank.Sent);
+    }
+
+    [Fact]
+    public async Task Whoever_reconciled_may_not_record_the_banks_answer()
+    {
+        var run = await PinnedRunAsync();
+        _bank.Script.Enqueue(InMemoryBank.AmbiguousNothingLanded);
+        await Service().TransmitAsync(run.Id);
+        await Service("treasury-3").ReconcileAsync(run.Id);
+
+        await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("treasury-3").ResolveAsync(run.Id, false, "bank says no"));
+
+        Assert.Equal(PaymentFileTransmissionStatus.Failed, (await Service("treasury-4").ResolveAsync(run.Id, false, "bank says no")).Status);
+    }
+
+    [Fact]
+    public async Task A_delivery_that_finishes_after_its_lease_was_expired_and_resolved_forces_NeedsReview()
+    {
+        var run = await PinnedRunAsync();
+        var gate = new TaskCompletionSource();
+        var inside = new TaskCompletionSource();
+        _bank.BeforeSend = async () => { inside.TrySetResult(); await gate.Task; };
+
+        var slow = Service().TransmitAsync(run.Id);
+        await inside.Task;
+        _bank.BeforeSend = null;
+
+        // The attempt hangs past its lease; another user parks it, a third records the
+        // bank's (premature) "not received".
+        _clock.Now = _clock.Now.AddMinutes(16);
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").TransmitAsync(run.Id));
+        Assert.Equal(PaymentFileTransmissionStatus.Failed,
+            (await Service("treasury-4").ResolveAsync(run.Id, false, "bank sees nothing yet")).Status);
+
+        // Then the hung upload completes: the file is at the bank.
+        gate.SetResult();
+        var late = await slow;
+
+        Assert.Equal(PaymentFileTransmissionStatus.NeedsReview, late.Status);
+        var stored = (await _store.GetAsync(FfsRunHarness.Tenant, run.EftFile!.FileReference))!;
+        Assert.Equal(PaymentFileTransmissionStatus.NeedsReview, stored.Status);
+        Assert.Contains("late delivery evidence", stored.Reason);
+        Assert.Equal(PaymentFileTransmissionAction.LateOutcome, stored.Attempts.Last().Action);
+        Assert.Empty(stored.Outbox);
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").TransmitAsync(run.Id));
+        Assert.Single(_bank.Sent);
+
+        // The listing then settles it.
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").ReconcileAsync(run.Id)).Status);
+    }
+
+    [Fact]
+    public async Task A_file_whose_effective_entry_date_has_passed_is_not_sent()
+    {
+        var run = await PinnedRunAsync();
+        _clock.Now = new DateTimeOffset(run.EftFile!.EffectiveEntryDate.AddDays(1).AddHours(15), TimeSpan.Zero);
+
+        var ex = await Assert.ThrowsAsync<PaymentFileApprovalStaleException>(() => Service().TransmitAsync(run.Id));
+
+        Assert.Contains("is not after today", ex.Message);
+        Assert.Empty(_bank.Sent);
+        Assert.Empty(_store.All);
+    }
+
+    [Fact]
+    public async Task A_retry_after_the_effective_entry_date_is_refused_and_audited()
+    {
+        var run = await PinnedRunAsync();
+        _bank.Script.Enqueue(InMemoryBank.UploadFails);
+        await Service().TransmitAsync(run.Id);
+
+        _clock.Now = new DateTimeOffset(run.EftFile!.EffectiveEntryDate.AddHours(15), TimeSpan.Zero); // the day itself: no same-day by default
+
+        await Assert.ThrowsAsync<PaymentFileApprovalStaleException>(() => Service("treasury-3").TransmitAsync(run.Id));
+
+        Assert.Single(_bank.Sent);
+        var record = (await _store.GetAsync(FfsRunHarness.Tenant, run.EftFile.FileReference))!;
+        Assert.Equal((PaymentFileTransmissionAction.Refused, PaymentFileTransmissionStatus.Failed), (record.Attempts.Last().Action, record.Status));
+
+        // Same-day ACH, when explicitly allowed, accepts the day itself.
+        _options.AllowSameDayEffectiveDate = true;
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").TransmitAsync(run.Id)).Status);
+    }
+
+    [Fact]
+    public async Task An_effective_entry_date_that_is_not_a_banking_day_is_refused()
+    {
+        var run = await PinnedRunAsync();
+        _h.Runs.Mutate(run.Id, r => r.EftFile!.EffectiveEntryDate = new DateTime(2026, 5, 9)); // a Saturday
+
+        var ex = await Assert.ThrowsAsync<PaymentFileApprovalStaleException>(() => Service().TransmitAsync(run.Id));
+
+        Assert.Contains("not a banking day", ex.Message);
+        Assert.Empty(_bank.Sent);
+    }
+
+    [Fact]
+    public async Task A_payment_reversed_after_approval_blocks_the_retry()
+    {
+        var run = await PinnedRunAsync();
+        _bank.Script.Enqueue(InMemoryBank.UploadFails);
+        await Service().TransmitAsync(run.Id);
+        await _h.Reservations.TryReserveAsync(new global::PaymentService.Repositories.ClaimReservation
+        {
+            TenantId = FfsRunHarness.Tenant, Kind = global::PaymentService.Repositories.ClaimReservationKind.Reversal,
+            ClaimId = "c1", RunId = "rr-1", RunNumber = "RR-1",
+        });
+
+        var ex = await Assert.ThrowsAsync<PaymentFileApprovalStaleException>(() => Service("treasury-3").TransmitAsync(run.Id));
+
+        Assert.Contains("reversal run RR-1", ex.Message);
+        Assert.Single(_bank.Sent);
+    }
+
+    [Fact]
+    public async Task A_payment_reissued_by_another_run_blocks_the_send()
+    {
+        var run = await PinnedRunAsync();
+        var held = (await _h.Reservations.GetAsync(global::PaymentService.Repositories.ClaimReservationKind.Payment, FfsRunHarness.Tenant, "c2"))!;
+        Assert.True(await _h.Reservations.TryDeleteIfUnchangedAsync(held));
+        await _h.Reservations.TryReserveAsync(new global::PaymentService.Repositories.ClaimReservation
+        {
+            TenantId = FfsRunHarness.Tenant, Kind = global::PaymentService.Repositories.ClaimReservationKind.Payment,
+            ClaimId = "c2", RunId = "run-other", RunNumber = "PR-OTHER",
+        });
+
+        var ex = await Assert.ThrowsAsync<PaymentFileApprovalStaleException>(() => Service().TransmitAsync(run.Id));
+
+        Assert.Contains("PR-OTHER", ex.Message);
+        Assert.Empty(_bank.Sent);
+    }
+
+    [Theory]
+    [InlineData("CHK")]
+    [InlineData("exception")]
+    [InlineData("amount")]
+    public async Task A_payment_changed_after_approval_blocks_the_send(string change)
+    {
+        var run = await PinnedRunAsync();
+        var payment = _h.Payments.All.First(p => p.RunId == run.Id);
+        switch (change)
+        {
+            case "CHK": payment.PaymentMethod = "CHK"; break;
+            case "exception": payment.Status = PaymentStatus.Exception; break;
+            default: payment.TotalPaymentAmount += 1m; break;
+        }
+
+        await Assert.ThrowsAsync<PaymentFileApprovalStaleException>(() => Service().TransmitAsync(run.Id));
+
+        Assert.Empty(_bank.Sent);
+    }
+
+    [Fact]
+    public async Task Resolve_still_works_while_transmission_is_disabled()
+    {
+        var run = await PinnedRunAsync();
+        _bank.Script.Enqueue(InMemoryBank.AmbiguousNothingLanded);
+        await Service().TransmitAsync(run.Id);
+        _options.Enabled = false;
+
+        var resolved = await Service("treasury-3").ResolveAsync(run.Id, true, "bank confirmed receipt, ref 77");
+
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, resolved.Status);
+        await Assert.ThrowsAsync<BankTransmissionDisabledException>(() => Service("treasury-3").TransmitAsync(run.Id));
+        Assert.Single(_bank.Sent);
+    }
+
+    [Theory]
+    [InlineData("2026-01-01", false)] // New Year's Day
+    [InlineData("2026-01-19", false)] // Martin Luther King Jr. Day
+    [InlineData("2026-05-25", false)] // Memorial Day
+    [InlineData("2026-07-03", true)]  // July 4 is a Saturday: not moved, the Friday is open
+    [InlineData("2027-07-05", false)] // July 4 is a Sunday: observed Monday
+    [InlineData("2026-11-26", false)] // Thanksgiving
+    [InlineData("2026-11-27", true)]
+    [InlineData("2026-05-09", false)] // Saturday
+    [InlineData("2026-05-05", true)]
+    public void Banking_days_follow_the_federal_reserve_calendar(string date, bool banking)
+        => Assert.Equal(banking, AchBankingCalendar.IsBankingDay(DateTime.Parse(date)));
 
     private void AssertNoBankNumbers()
     {
@@ -482,7 +684,8 @@ public class PaymentFileTransmissionTests
         ByteSize = run.EftFile.ByteSize,
         EntryCount = run.EftFile.EntryCount,
         TotalCreditAmount = run.EftFile.TotalCreditAmount,
-        ApprovedBy = "approver-1",
+        ApprovedBy = "treasury-1",
+        ApprovedPaymentIds = run.EftFile.Entries.SelectMany(e => e.PaymentIds).OrderBy(i => i, StringComparer.Ordinal).ToList(),
         Status = status,
         AttemptCount = status == PaymentFileTransmissionStatus.Transmitting ? 1 : 0,
         LeaseUntil = leaseUntil,
@@ -672,6 +875,6 @@ internal sealed class CapturingLogger<T> : ILogger<T>
 
 internal sealed class MutableClock : TimeProvider
 {
-    public DateTimeOffset Now { get; set; } = new(2026, 5, 20, 15, 0, 0, TimeSpan.Zero);
+    public DateTimeOffset Now { get; set; } = new(2026, 5, 1, 15, 0, 0, TimeSpan.Zero);
     public override DateTimeOffset GetUtcNow() => Now;
 }

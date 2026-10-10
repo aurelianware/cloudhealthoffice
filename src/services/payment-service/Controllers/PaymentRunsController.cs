@@ -323,6 +323,10 @@ public class PaymentRunsController : ControllerBase
         {
             return Problem(title: "File differs from the approved file", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
         }
+        catch (PaymentFileApprovalStaleException ex)
+        {
+            return Problem(title: "Approval no longer valid", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+        }
         catch (PaymentFileTransmissionStateException ex)
         {
             return Problem(title: "Transmission state", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
