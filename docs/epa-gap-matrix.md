@@ -140,20 +140,20 @@ The X12 278 entry is a stub with no consumer. The portal entry returns 400. REST
 | # | Hop | Where | Result |
 |---|---|---|---|
 | 1 | Auth + tenant | `PasController.cs:56`; `FhirControllerBase.cs:21-22` | ✅ Tenant from token. SMART scope `authorizations:write`. |
-| 2 | Bundle validation | `PasController.cs:445-498` | ⚠️ Works. No PAS profile validation; `Claim.use` and `Bundle.type` not checked. Only the first Claim is used; Patient and Coverage entries are ignored. |
+| 2 | Bundle validation | `PasController.cs` (`ValidateAndExtractClaim`); `Services/Pas/PasAuthorizationMapper.cs` | ⚠️ Works. No PAS profile validation; `Claim.use` and `Bundle.type` not checked. Only the first Claim is used. The Patient, Coverage and requesting Practitioner/Organization the Claim references are now read (and required); a request missing them gets a 422 OperationOutcome before adjudication (PR #1300). |
 | 3 | Compliance gate | `PasController.cs:80-86` → `Cms0057ComplianceChecker.ValidateClaim:513` | ⚠️ Presence checks only. |
 | 4 | Provider verification | `PasController.cs:89-123` | ⚠️ Fails open when the service is down (`:554-561`). |
 | 5 | Adjudication | `PasAutoAdjudicator.TryDecideAsync:49` | ⚠️ Order: enrollment gate → deny list → allow list → gold card (wrong scope, D-19) → **< $500 auto-approve** → rules engine. The rule-set **tenant comes from `Bundle.meta.tag` in the request body** (D-12). Defaults to TX / Medicaid. With no database configured, the NoOp engine always pends. |
 | 6 | Response | `PasResponseBuilder` | ⚠️ Provider gets an approved, denied or pended ClaimResponse plus a `preAuthRef`. No item-level decisions; `reviewAction` at the root, on pends only. |
-| 7 | **Persist** | `PasController.PersistAuthorizationAsync:344-381` → `POST api/authorizations` | ❌ **Breaks.** The payload fails model validation: `ServiceTypeCode` = "professional" (max length 2) and an empty `RequestingProviderNPI` (verified by probe). The 400 is ignored and exceptions are swallowed. Even a valid payload has its decision wiped by `ClearReviewOutcome` (D-02). Placeholder demographics are posted (D-03). |
+| 7 | **Persist** | `PasController.RecordAndRespondAsync` → `HttpPasAuthorizationRecorder` → `POST api/internal/authorizations/automated-decisions` (fhir-service service token only) | ✅ **Fixed (PR #1300).** The request is mapped from the Bundle (no placeholders) and stored with the adjudicator's decision, reason, approved period (the requested one) and a receipt + decision history, before the response is built. If the write fails, `$submit` answers 503/502 with an OperationOutcome and no `preAuthRef`. The public `POST api/authorizations` still clears body-supplied outcomes. Seam test: `PasSubmitPersistenceSeamTests` (both real hosts, real Mongo). |
 | 8 | Pend notification | — | ❌ Missing. No Subscriptions, events or notices. |
 | 9 | Reviewer decision | `POST api/authorizations/{id}/response` | ❌ No record to decide. No work queue or reviewer UI. |
-| 10 | Status | `POST Claim/$inquire` → `GET api/authorizations/number/{n}` | ❌ 404 for PAS-issued numbers. |
+| 10 | Status | `POST Claim/$inquire` → `GET api/authorizations/number/{n}` | ✅ Finds PAS-issued numbers and answers with the stored decision (PR #1300, seam-tested). Corroboration still comes from the body, not the token (D-26). |
 | 11 | Claim against the auth | 837: `X12837Parser` (REF*G1 not read). REST: `/validate` | ❌ EDI inpatient Medicaid claims are **always denied (CARC 197)** (D-05). For REST claims, a missing auth gives `/validate` 404 → null → **fails open, and the claim proceeds** (D-04). Outside inpatient Medicaid, no auth check runs at all. |
 
-**Net:** no hop after step 6 is connected for a real PAS request. The provider is
-told one thing; the system of record holds nothing (or "Submitted"); claims
-either deny or pay regardless.
+**Net:** since PR #1300, steps 7 and 10 are connected: the system of record holds
+what the provider was told, and `$inquire` reads it back. Steps 8, 9 and 11 are
+still not connected, so claims either deny or pay regardless.
 
 ---
 
@@ -164,14 +164,14 @@ will reference its D-number and update this table.
 
 | ID | Sev | Defect | Evidence | Fix sketch | Status |
 |---|---|---|---|---|---|
-| D-01 | Critical | PAS `$submit` never persists. The payload fails validation, the 400 is ignored, and the exception is swallowed. A `preAuthRef` is issued for a record that does not exist. | `FS/Controllers/PasController.cs:344-381`; `AS/Models/Authorization.cs:80-82,135-137`; confirmed by probe | Map fields correctly. Fail `$submit` (OperationOutcome) if the record isn't stored. Add an integration test across the seam. | Open |
-| D-02 | Critical | `POST api/authorizations` forces `Submitted` and runs `ClearReviewOutcome`, wiping automated PAS decisions and reasons. (The clearing is a deliberate security control for external REST callers and is pinned by `Submit_IgnoresBodyTenantActorAndReviewOutcome`.) | `AS/Controllers/AuthorizationsController.cs:132-145,162-192` | Keep the control. Add a separate internal, service-token-only "record automated decision" path that writes status history attributed to the adjudicator. | Open |
-| D-03 | High | PAS persists placeholder data ("PAS"/"Patient", DOB = now−30y, LOB Commercial, service date = now). The approved period is hard-coded to today..+1 year. | `PasController.cs:353-360`; `PasAutoAdjudicator.cs:357-366` | Map from the bundle's Patient, Coverage and Claim, and use the requested period. | Open |
+| D-01 | Critical | PAS `$submit` never persists. The payload fails validation, the 400 is ignored, and the exception is swallowed. A `preAuthRef` is issued for a record that does not exist. | `FS/Controllers/PasController.cs:344-381`; `AS/Models/Authorization.cs:80-82,135-137`; confirmed by probe | Map fields correctly. Fail `$submit` (OperationOutcome) if the record isn't stored. Add an integration test across the seam. | **Fixed** (`d0681cee`, `6a1d76d3`; failing test `7f901d5c`; PR #1300). `$submit` maps the record from the Bundle, refuses an incomplete request (422) before adjudicating, stores it through the internal automated-decision path, and answers only after the write succeeded; a failed write is a 503/502 OperationOutcome with no `preAuthRef`. The answer follows the stored status (a plan exclusion denies). Seam test `PasSubmitPersistenceSeamTests` runs fhir-service and authorization-service in process over EphemeralMongo; all nine of its tests failed on `main` (400: `ServiceTypeCode` "professional", empty `RequestingProviderNPI`; `$inquire` 404). |
+| D-02 | Critical | `POST api/authorizations` forces `Submitted` and runs `ClearReviewOutcome`, wiping automated PAS decisions and reasons. (The clearing is a deliberate security control for external REST callers and is pinned by `Submit_IgnoresBodyTenantActorAndReviewOutcome`.) | `AS/Controllers/AuthorizationsController.cs:132-145,162-192` | Keep the control. Add a separate internal, service-token-only "record automated decision" path that writes status history attributed to the adjudicator. | **Fixed** (`6a1d76d3`, PR #1300). Control kept: `POST api/authorizations` still forces Submitted and clears outcomes (`Submit_IgnoresBodyTenantActorAndReviewOutcome` unchanged). New `POST api/internal/authorizations/automated-decisions`, `[RequireServiceClient("fhir-service")]`: user tokens (even with `authorizations:decide`), other services and user-issuer tokens claiming `sub=fhir-service` get 401/403 (`AutomatedDecisionEndpointTests`). Tenant and actor from the service token; history = receipt (at `ReceivedAt`) + decision (`Source = automated:<rule>`); duplicates 409; backdated receipts and inconsistent periods 400; a plan exclusion still outranks the outcome. |
+| D-03 | High | PAS persists placeholder data ("PAS"/"Patient", DOB = now−30y, LOB Commercial, service date = now). The approved period is hard-coded to today..+1 year. | `PasController.cs:353-360`; `PasAutoAdjudicator.cs:357-366` | Map from the bundle's Patient, Coverage and Claim, and use the requested period. | **Fixed** (`d0681cee`, PR #1300). Member id (Patient identifier typed MB, else `Coverage.subscriberId`), name and DOB from the Patient; LOB from `Coverage.type` (X12 1032 or SOPT), otherwise `Unknown`, never Commercial; NPIs from the referenced Practitioner/Organization; `ServiceTypeCode` from `item.category` (X12 1365) or null, never the claim type; requested dates from `item.serviced[x]` (else `billablePeriod`); codes keep their system. Approved period = requested period; start + 1 year only for an open-ended period (the IG sets none; documented in `PasAuthorizationMapper`). Missing required data → 422. `PasAuthorizationMapperTests`. Not changed: the adjudicator still derives its own rule context from the Claim alone (LOB default Medicaid, NPI from `Claim.provider.identifier`). |
 | D-04 | Critical | Claims adjudication **fails open**: a null auth validation (404, error or exception) is treated as valid. Pinned by test `Execute_InpatientWithPriorAuthLookupDegraded_ContinuesToBenefitEngine`. | `claims-service/.../BenefitCalculationStage.cs:465`; `HttpAuthorizationValidationClient.cs:69-97` | 404 → deny or pend. Transport error → pend (retry), never pay. *Changes claim outcomes; doesn't touch posted payments.* | Open |
 | D-05 | High | The 837 parser never reads REF*G1, so EDI inpatient Medicaid claims are always denied with CARC 197. | `claims-service/EDI/Inbound/X12837Parser.cs:196-226`; `X12837ClaimMapper.cs:105` | Parse REF*G1 at claim and line level. | Open |
 | D-06 | High | Line-level `ServiceStatus` is never written by any API, so `/validate` with a procedure code always fails for API-decided auths. | `AS/Models/Authorization.cs:484`; `AuthorizationsController.cs:275-276` | Line-level decision model and API (also needed for PAS item adjudication and A2 partial approvals). | Open |
 | D-07 | Critical | The SLA watchdog throws on every run. A hosted service has no `HttpContext` tenant, so no authorization is ever escalated. Tests mock the repository. | `AS/Services/SlaWatchdogService.cs:58`; `AuthorizationRepositoryMongo.cs:26-34`; confirmed by probe | Iterate tenants explicitly, as the retention worker does. Test against a real repository. | Open |
-| D-08 | Critical | PAS `Claim.priority` isn't mapped to `LevelOfService`, so every PAS request runs on the 7-day clock. | `PasController.cs:348-373`; `SlaWatchdogService.cs:67` | Map `priority` (stat/urgent → expedited). Set the receipt timestamp on arrival, not after adjudication. | Open |
+| D-08 | Critical | PAS `Claim.priority` isn't mapped to `LevelOfService`, so every PAS request runs on the 7-day clock. | `PasController.cs:348-373`; `SlaWatchdogService.cs:67` | Map `priority` (stat/urgent → expedited). Set the receipt timestamp on arrival, not after adjudication. | **Fixed** (`d0681cee`, PR #1300). `Claim.priority` stat/urgent/expedited (and X12 `U`, `03`) → `LevelOfService` `U`; normal/routine/deferred/`E` → `E`; absent → null (standard). Receipt is stamped as the request arrives, before validation and adjudication, and stored as `SubmittedDate` and the first history entry. The clock itself is still not enforced (D-07) and no due date is persisted (G-18). |
 | D-09 | High | When RFI documents arrive, the decision clock restarts with a full new window. CMS-0057-F has no RFI tolling or restart. | `AS/Consumers/RfaiDocsReceivedConsumer.cs:168-195` | Keep the clock from receipt. Model extensions explicitly, where the program permits them. | Open |
 | D-10 | High | A denial (A3/Denied) is accepted with no reason. The rule engine falls back to the rule name as the reason. | `AuthorizationsController.cs:445-469,535-539`; `PaRuleBase.cs:88`; test `UMCoordinator_CanDecide` | Require a coded and human-readable reason for every denial and partial denial. | Open |
 | D-11 | High | Provider Access requires an active opt-in consent. CMS-0057-F requires sharing unless the patient **opts out**. | `FS/Services/ProviderAccess/ProviderAccessAuthorizationService.cs:129-140` | Invert to opt-out, keyed on attribution. | Open |
@@ -211,18 +211,18 @@ dependencies and order.
 
 | Requirement | Class | Evidence | Gap |
 |---|---|---|---|
-| `Claim/$submit` operation | P | `PasController.cs:56-170`. Tests mock the adjudicator and stub persistence. | G-01, G-06 |
+| `Claim/$submit` operation | P | `PasController.cs` `ClaimSubmit`. Persists through the real seam (`PasSubmitPersistenceSeamTests`); `Claim.use` unchecked, no profile validation, response not STU2-complete. | G-06, G-13, G-14 |
 | Request Bundle validation against PAS profiles | M | Presence checks only (`Cms0057ComplianceChecker.cs:513-600`). No FHIR validator. | G-14 |
 | `Claim.use = preauthorization` enforced on submit | M | Checked only on `$inquire` (`:314`). | G-13 |
-| Supporting resources (Patient, Coverage, Practitioner, Organization) read from the Bundle | M | Ignored; placeholder data instead (D-03). | G-01 |
-| Durable record of each request and decision | S | D-01, D-02. | G-01 |
+| Supporting resources (Patient, Coverage, Practitioner, Organization) read from the Bundle | I+T | `PasAuthorizationMapper` (PR #1300); `PasAuthorizationMapperTests`, seam test. PractitionerRole is followed if present but is not an allowed entry type yet. | — |
+| Durable record of each request and decision | I+T | Internal automated-decision path (D-01, D-02 fixed, PR #1300); seam test over a real Mongo repository. | — |
 | `ClaimResponse` PAS profile (bundle contents, identifiers) | P | Response Bundle holds only the ClaimResponse (`PasResponseBuilder.cs:317-333`). | G-13 |
 | `reviewAction` / `reviewActionCode` at `item.adjudication` | P | At the root, STU1 URL, pends only (`PasResponseBuilder.cs:14-18,80-95,176-188`). | G-13 |
 | Item-level decisions (A1 / A2 / A3 / A4 per line) | M (`$submit`) / P (`$inquire`) | `PasResponseBuilder.cs:224-258`; no line decision writer (D-06). | G-07, G-13 |
 | Denial reason in `reviewAction.reasonCode` (X12 HCR03) | P | Placed in `ClaimResponse.error` (`:54-62,191-201`). | G-17 |
-| `preAuthRef` / `preAuthPeriod` | I+T (emitted) | Period hard-coded to 1 year (D-03). The ref points at a missing record (D-01). | G-01 |
+| `preAuthRef` / `preAuthPeriod` | I+T | Issued only after the record is stored; period = requested period (PR #1300). | — |
 | Pended response (A4 / queued) | I+T | `PAS07_PendedResponse_SignalsOutstandingReviewViaX12A4`. | — |
-| `Claim/$inquire` | I+T (logic) / P (end to end) | `PasInquiryTests` (~20). Can't find PAS-issued numbers (D-01). | G-01 |
+| `Claim/$inquire` | I+T | `PasInquiryTests`; finds PAS-issued numbers end to end (seam test, PR #1300). Caller not bound to the token (D-26). | G-27 |
 | Pended → final via R5-backport topic-based Subscription | M | No Subscription / SubscriptionTopic anywhere. | G-15 |
 | Update / cancel of a submitted request | M | Only `$submit` / `$inquire` exist. | G-16 |
 | Additional information (CDex, attachments) | I+T | PAS-07 (42 tests). Never triggered by PAS pends. | G-16 |
@@ -280,15 +280,15 @@ dependencies and order.
 
 | Requirement | Class | Evidence | Gap |
 |---|---|---|---|
-| Urgency (expedited vs standard) captured | P | REST `LevelOfService` only; PAS drops it (D-08). | G-03 |
-| Clock starts at receipt | P | `SubmittedDate` = REST insert time. For PAS that is after adjudication (D-08). | G-03 |
+| Urgency (expedited vs standard) captured | I+T | REST `LevelOfService`; PAS maps `Claim.priority` (D-08 fixed, PR #1300). | — |
+| Clock starts at receipt | I+T | PAS stamps receipt on arrival, before adjudication, as `SubmittedDate` (D-08 fixed, PR #1300). REST: insert time. | — |
 | Due date computed **and persisted** (72 h expedited / 7 calendar days standard) | P | Computed on read, hours-based, not persisted. Appeals already has a richer deadline model to reuse. | G-18 |
 | Timers / escalation | S | Non-functional (D-07). | G-04 |
 | Alerts to the UM team | M | Log line only. | G-19 |
 | RFI does not restart the clock | ❌ defect | Restarts in full (D-09). | G-18 |
 | Extension tracking (where permitted) | M | No field. | G-18 |
 | Late-decision reporting | M | — | G-20 |
-| Specific reason for every denial | P | Not required (D-10). Lost for PAS (D-02). | G-08 |
+| Specific reason for every denial | P | Not required (D-10). Stored for PAS since PR #1300. | G-08 |
 | Partial denials carry line-level reasons | S | Fields exist; nothing writes them (D-06). | G-07 |
 | Denial reason in PAS ClaimResponse | P | In `error`, with ad-hoc codes in the HL7 code system. | G-17 |
 | Denial reason in X12 278 HCR | M | — | G-50 |
@@ -350,7 +350,7 @@ dependencies and order.
 | Capability | Today | Needed (design) |
 |---|---|---|
 | Medical vs pharmacy benefit | Inferred only from UM03 = "88" | Explicit `BenefitChannel` enum (Medical, Pharmacy) on the authorization and each line. Timelines and rules keyed by channel. |
-| Drug identity | `ProcedureCode` plus free-text `ProductOrServiceSystem`. PAS drops the system (`PasController.cs:401-416`). | Typed coding (system URI + code). NDC normalised to 11 digits. Optional RxNorm cross-walk. PAS keeps `productOrService.coding.system`. |
+| Drug identity | `ProcedureCode` plus free-text `ProductOrServiceSystem`. PAS now keeps `productOrService.coding.system` (PR #1300). | Typed coding (system URI + code). NDC normalised to 11 digits. Optional RxNorm cross-walk. |
 | Quantity semantics | Decimal units, free-text unit type | UCUM / NCPDP quantity unit, days supply, refills, dispense-as-written, strength and dose form. |
 | Participants | Requesting / servicing / facility NPI | Prescriber and dispensing pharmacy (NPI / NCPDP ID). |
 | FHIR intake | MedicationRequest and Medication not allowed in the PAS Bundle | Allow them. CRD already reads `MedicationRequest.medicationCodeableConcept`. |
@@ -635,6 +635,7 @@ that will be confirmed at the start of Phase 3.
 | 2026-10-11 | D-31 fixed (PR #1295): benefit-plan-service uses the shared Cosmos serializer; queries and models fixed for the stored shape; runbook for older Cosmos data. New D-33 (`GetDefaultForPlanAsync` filters on a property nothing writes). |
 | 2026-10-11 | PR #1295 review: D-33 widened to both backends (Mongo filters on the same unwritten property); new D-34 (PA-rule cache flush misses `RedisTimeoutException`) and D-35 (fee-schedule `@serviceDate` bound as a string); D-31 runbook revised for containers shared with fhir-service and claims-service; benchmark seeder writes plan enums in the stored form. |
 | 2026-10-11 | D-13 / T-1 receiving-payer binding (PR #1296): backend client registrations carry a `payerId`, minted as `payer_id`; fhir-service believes it only from the one issuer marked `IssuesChoClientRegistrations` (startup requires exactly one) and refuses unmapped clients and mismatched body payers before any member lookup. D-13 stays High (consent not bound to the receiving payer; `$member-match` not consent-gated; no per-issuer scope allowlist). §4.5 row and the §11 P2P-01 justification updated; no status changed. Deploy impact: clients of external IdPs must be registered with CHO before using Payer-to-Payer. |
+| 2026-10-11 | PAS persistence (PR #1300, G-01/G-03): D-01, D-02, D-03, D-08 fixed. New internal, fhir-service-only automated-decision path in authorization-service; the public create still clears outcomes. `$submit` maps the record from the Bundle, refuses incomplete requests (422), stores before answering and fails (503/502, no `preAuthRef`) if it cannot. Model additions on the existing Authorization document: `PatientReference`, `StatusHistory[].Source`; `ServiceTypeCode` nullable; `ProductOrServiceSystem` 256 and `DenialReasonCode` 50 chars. §2.2 rows 2/7/10, §4.1, §4.4 and §4.7 rows updated. §11: PAS-03 GAP → PARTIAL; PAS-04/05/06/08 justifications updated, no other status changed. |
 
 ---
 
@@ -677,12 +678,12 @@ change the row here in the same PR as the code and its test.
 |---|---|---|---|
 | PAS-01 | PARTIAL | §4.2, D-21, G-05, G-44, G-46 | CRD order-select/order-sign answer with free-text cards only; no coverage-information extension; context is hard-coded TX/Medicaid/STAR. Unknown codes now answer "could not be determined" (D-21 first part, PR #1294), which does not lift the class. |
 | PAS-02 | PARTIAL | §4.3, D-14, D-22, G-53, G-54, G-55 | Questionnaires are served from a largely in-memory store; `$questionnaire-package` returns the Questionnaire only (no CQL Library or ValueSets). The cross-tenant search leak is fixed (D-14, PR #1294). |
-| PAS-03 | GAP | §2.2, §4.1, D-01, D-02, D-03, G-01 | `$submit` adjudicates and answers, but no durable authorization record is created: the hand-off fails validation and the error is swallowed. |
-| PAS-04 | PARTIAL | §4.1, D-01, G-01 | `$inquire` logic is implemented and tested, but it cannot find authorization numbers issued by PAS `$submit`. |
-| PAS-05 | PARTIAL | §4.4, D-02, D-10, G-08, G-17 | A denial reason is stored when supplied via REST but is not required, is lost for PAS, and is not carried in `reviewAction`. |
-| PAS-06 | GAP | §4.4, §6.1, D-07, D-08, G-03, G-04, G-18 | The SLA watchdog throws on every run, PAS drops urgency, and no due date is persisted. The backing test asserts label strings only. |
+| PAS-03 | PARTIAL | §2.2, §4.1, D-01, D-02, D-03, G-01, G-13, G-14 | `$submit` now stores the request and its decision as a durable record before answering, and fails without a `preAuthRef` if it cannot (D-01/D-02/D-03 fixed, PR #1300; real-seam test). Still partial: `Claim.use` is not enforced, there is no PAS profile validation, and the response is not STU2-complete (§4.1 `$submit` row, P). |
+| PAS-04 | PARTIAL | §4.1, D-26, G-13, G-27 | `$inquire` finds authorizations issued by PAS `$submit` and answers with the stored decision (PR #1300, seam-tested). Still partial: the corroborating key comes from the request body, not the token (D-26), and there are no item-level decisions (G-13). |
+| PAS-05 | PARTIAL | §4.4, D-10, G-08, G-17 | A denial reason is stored for REST and, since PR #1300, for PAS decisions, but it is not required (D-10) and is not carried in `reviewAction` (G-17). |
+| PAS-06 | GAP | §4.4, §6.1, D-07, G-04, G-18 | The SLA watchdog throws on every run (D-07) and no due date is persisted (G-18). PAS urgency and receipt time are now captured (D-08 fixed, PR #1300), which does not lift the class. The backing test asserts label strings only. |
 | PAS-07 | PASSABLE | §2.1, §4.1, D-09, G-16, G-18 | CDex additional-information exchange is implemented and tested (I+T). Limitations: raised only from reviewer decisions, never from PAS pends; when documents arrive, the resume step these tests exercise restarts the decision clock in full (D-09). |
-| PAS-08 | PASSABLE | §2.1, §4.4, D-01 | Drug and benefit exclusion from CMS-0057-F medical PA scope is implemented and tested (`DrugExclusionEvaluator`, I+T). Limitations: applies to REST-created authorizations only; PAS `$submit` never persists (D-01), so PAS drug requests are never excluded; the exclusion catalog is empty by default. |
+| PAS-08 | PASSABLE | §2.1, §4.4 | Drug and benefit exclusion from CMS-0057-F medical PA scope is implemented and tested (`DrugExclusionEvaluator`, I+T). Since PR #1300 it also applies to PAS `$submit` records (the stored exclusion denial is what the provider is told). Limitation: the exclusion catalog is empty by default. |
 | PROV-01 | GAP | §4.5, §5 T-4, §6.1, G-30, G-33 | Rests on S and M rows: the data source is the mock adapter registered in every environment (§4.5 "Real, tenant-scoped data source", S) and Provider Access PA data is missing (M). The backing test runs on mock data. |
 | PROV-02 | PARTIAL | §4.5, §6.1, G-33 | Attribution is enforced and fails closed, but only from static configured panels. The backing test's "not attributed" case is a nonexistent member id. |
 | PROV-03 | GAP | §4.5, §6.1, D-11, G-09 | Provider Access requires an opt-in consent; CMS-0057-F requires sharing unless the patient opts out. The backing test asserts `Revoked != Active`. |
@@ -698,5 +699,5 @@ change the row here in the same PR as the code and its test.
 | METRICS-01 | GAP | §4.4, §6.1, D-27, G-20 | No CMS metric set is computed: only a counts/averages summary exists, with no median, split or annual extract. The backing test checks date arithmetic. |
 <!-- cms0057-evidence-status:end -->
 
-**Totals:** 3 PASSABLE, 10 PARTIAL, 8 GAP, 0 N/A (21 scenarios). The generator
+**Totals:** 3 PASSABLE, 11 PARTIAL, 7 GAP, 0 N/A (21 scenarios). The generator
 reports these itself; update this line when a row changes.
