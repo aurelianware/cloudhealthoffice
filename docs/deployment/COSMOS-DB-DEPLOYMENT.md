@@ -371,6 +371,54 @@ under the same partition key value, then delete the PascalCase original if its i
 - The partition key property (`tenantId` or `stateCode`) must be present, lower camelCase,
   and equal to the partition key value the document is stored under.
 
+## authorization-service: Cosmos deployments created before the D-18 fix
+
+Applies only to authorization-service running on the Cosmos DB **SQL (native) API**
+(`Database:Provider=CosmosDb`), container `Authorizations` (`CosmosDb:ContainerName`),
+partition key `/tenantId`. Deployments on MongoDB, or on Cosmos DB for MongoDB, are
+unaffected: MongoDB documents are written by the BSON serializer, which this fix does not
+touch. No production deployment is known to hold Cosmos authorization data.
+
+**What changed.** Before D-18, authorization-service registered its own `CosmosClient`
+(overriding the shared one from `AddChoDatabase`) with a System.Text.Json serializer that
+had no enum converter, so enums were stored as **numbers**, while every query compared them
+with PascalCase strings: search by status or line of business, the summary, the SLA
+watchdog's open authorizations and the retention sweep found nothing. The service now uses
+the shared `CosmosSystemTextJsonSerializer` and its queries bind enum values as parameters.
+In the stored document:
+
+| Property | Before | After |
+|---|---|---|
+| `status` | number: 1 Submitted, 2 InReview, 3 Pended, 4 Approved, 5 Modified, 6 Denied, 7 Expired, 8 Cancelled | camelCase string: `"submitted"`, `"inReview"`, `"pended"`, `"approved"`, `"modified"`, `"denied"`, `"expired"`, `"cancelled"` |
+| `lineOfBusiness` | number: 0 Unknown, 1 Commercial, 2 Medicare, 3 Medicaid, 4 Exchange, 5 TRICARE, 6 VA | `"unknown"`, `"commercial"`, `"medicare"`, `"medicaid"`, `"exchange"`, `"tricare"`, `"va"` |
+| `authorizationType` | number: 0 Unknown, 1 PreAuthorization, 2 ConcurrentReview, 3 RetrospectiveReview, 4 Referral | `"unknown"`, `"preAuthorization"`, `"concurrentReview"`, `"retrospectiveReview"`, `"referral"` |
+
+Unchanged: property names (already camelCase), `id`, `tenantId` and the partition key,
+dates, numbers and strings, null properties (omitted before and after), and
+`slaEscalation` and `statusHistory[].status`, which carry their own property-level
+converter and stay PascalCase strings (`"Warning"`, `"Approved"`).
+
+The fixed service still **reads** an old document (the enum converter accepts numbers), so
+`GET` by id or number keeps working, but no query matches its numeric `status` or
+`lineOfBusiness`: such a record is invisible to search, the summary, the SLA watchdog and
+the retention sweep until it is migrated.
+
+**Detect the old shape** (Data Explorer, `Authorizations` container):
+
+```sql
+SELECT VALUE COUNT(1) FROM c
+WHERE IS_NUMBER(c.status) OR IS_NUMBER(c.lineOfBusiness) OR IS_NUMBER(c.authorizationType)
+```
+
+**Migrate in place** (ids and partition key values do not change): for each document the
+query finds, replace each numeric `status`, `lineOfBusiness` and `authorizationType` with
+the string in the table above, and replace the document under the same `tenantId`. Touch
+no other property. Alternatively, read each one through the fixed service's repository
+and write it back unchanged: the shared serializer writes the string form. Scaling
+authorization-service down is not required if each replace carries the document's ETag
+(`If-Match`), so a concurrent write by the service is not lost; retry a 412. The SLA
+watchdog escalates a migrated, overdue record on its next 15-minute tick.
+
 ## Troubleshooting
 
 ### Common Issues
