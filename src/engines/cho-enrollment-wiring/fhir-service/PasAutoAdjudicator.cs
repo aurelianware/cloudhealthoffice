@@ -1,3 +1,11 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// REFERENCE ONLY — not compiled; see D-12 in docs/epa-gap-matrix.md.
+//
+// No project builds this file. The live adjudicator is
+// src/services/fhir-service/Services/PasAutoAdjudicator.cs. This copy still
+// takes the PA rule-set tenant from the request bundle's meta.tag
+// ("cho:tenant"), the defect D-12 fixed in the live code. Do not copy from it.
+// ─────────────────────────────────────────────────────────────────────────────
 using System.Diagnostics;
 using Hl7.Fhir.Model;
 using FhirService.Models;
