@@ -257,6 +257,8 @@ public class PasAuthorizationMapperTests
 
     private const string ProcessPriority = "http://terminology.hl7.org/CodeSystem/processpriority";
     private const string X12LevelOfService = "https://codesystem.x12.org/005010/1338";
+    private const string ActPriority = "http://terminology.hl7.org/CodeSystem/v3-ActPriority";
+    private const string RequestPriority = "http://hl7.org/fhir/request-priority";
 
     // Owner decision 2026-10-11 (§7.1): a recognised urgent value is expedited
     // (U) whatever system it arrives under; a nonstandard system/code pair is
@@ -279,6 +281,27 @@ public class PasAuthorizationMapperTests
     [InlineData("http://example.org/priority", "stat", "U", true)]
     [InlineData("http://example.org/priority", "03", "U", true)]
     [InlineData(null, "urgent", "U", true)]
+    // HL7 v3-ActPriority: S stat, A ASAP, UR urgent, EM emergency, CS/CR
+    // callback; R routine, EL elective
+    [InlineData(ActPriority, "S", "U", false)]
+    [InlineData(ActPriority, "A", "U", false)]
+    [InlineData(ActPriority, "UR", "U", false)]
+    [InlineData(ActPriority, "EM", "U", false)]
+    [InlineData(ActPriority, "CS", "U", false)]
+    [InlineData(ActPriority, "CR", "U", false)]
+    [InlineData(ActPriority, "R", "E", false)]
+    [InlineData(ActPriority, "EL", "E", false)]
+    // FHIR request-priority: routine is explicit standard; the others are urgent
+    [InlineData(RequestPriority, "routine", "E", false)]
+    [InlineData(RequestPriority, "urgent", "U", false)]
+    [InlineData(RequestPriority, "asap", "U", false)]
+    [InlineData(RequestPriority, "stat", "U", false)]
+    // emergency words: urgent in any system, warned outside a standard pair
+    [InlineData("http://example.org/priority", "emergency", "U", true)]
+    [InlineData("http://example.org/priority", "emergent", "U", true)]
+    [InlineData("http://example.org/priority", "immediate", "U", true)]
+    [InlineData(ProcessPriority, "emergency", "U", true)]
+    [InlineData(null, "Immediate", "U", true)]
     // unrecognised: standard, with a warning
     [InlineData(ProcessPriority, "whenever", "E", true)]
     [InlineData("http://example.org/priority", "P1", "E", true)]
@@ -351,6 +374,9 @@ public class PasAuthorizationMapperTests
     [InlineData("STAT")]
     [InlineData("urgent")]
     [InlineData(" Expedited ")]
+    [InlineData("Emergency")]
+    [InlineData("emergent")]
+    [InlineData("IMMEDIATE")]
     public void UrgencyInPriorityText_IsExpedited_AndWarned(string text)
     {
         var bundle = PasBundles.Complete(priority: null);

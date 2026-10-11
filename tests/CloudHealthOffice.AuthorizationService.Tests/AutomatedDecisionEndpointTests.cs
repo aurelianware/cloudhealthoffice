@@ -369,6 +369,7 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
     [InlineData("ConfigDisabled", "Pended")]
     [InlineData("TimeBudgetExceeded", "Pended")]
     [InlineData("LineOfBusinessUndetermined", "Pended")]
+    [InlineData("NoOp", "Pended")]
     public async Task NoEvaluationRule_WithoutLineOfBusiness_IsStored_AndClaimsNoBasis(string rule, string outcome)
     {
         using var client = ClientWithToken(ServiceToken("fhir-service"));
@@ -378,6 +379,34 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal($"automated:{rule};lob=n/a;state=none", _stored!.StatusHistory[^1].Source);
+    }
+
+    [Theory]
+    [InlineData("provider-exclusion-check", "Pended")]
+    [InlineData("provider-exclusion-check", "Approved")]
+    [InlineData("ConfigDisabled", "Approved")]
+    [InlineData("ConfigDisabled", "Denied")]
+    [InlineData("TimeBudgetExceeded", "Denied")]
+    [InlineData("LineOfBusinessUndetermined", "Approved")]
+    [InlineData("NoOp", "Denied")]
+    public async Task NoEvaluationRule_WithAnOutcomeItCannotReach_Returns400(string rule, string outcome)
+    {
+        // A provider exclusion only denies; the no-evaluation pends only pend.
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var response = await client.PostAsJsonAsync(Path, Body(
+            outcome: outcome, withApprovedPeriod: outcome == "Approved", decisionLineOfBusiness: null,
+            rule: rule, stateCode: null), Json);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task NoEvaluationRule_WithAnOutcomeItCannotReach_Returns400_EvenWithALineOfBusiness()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var response = await client.PostAsJsonAsync(Path, Body(
+            outcome: "Approved", rule: "ConfigDisabled"), Json);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

@@ -119,6 +119,26 @@ public class PasAutoAdjudicatorBasisTests
     }
 
     [Fact]
+    public async System.Threading.Tasks.Task NoOpRuleEngine_ClaimsNoBasis()
+    {
+        // The engine registered when no database is configured evaluates
+        // nothing; its pend is like ConfigDisabled.
+        _engine.Setup(e => e.EvaluateAsync(It.IsAny<PaRuleContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PaRuleDecision
+            {
+                Outcome = PaDecisionOutcome.Pend, FiringRuleId = "NoOp", FiringRuleName = "NoOp", ResolvedRuleSetKey = "none",
+            });
+
+        var result = await Adjudicator().TryDecideAsync(
+            Claim(state: "TX"), new Bundle(), "t", Basis(PaLineOfBusiness.Commercial, null), 12000);
+
+        result.RuleName.Should().Be("NoOp");
+        result.HasDecision.Should().BeFalse();
+        result.LineOfBusiness.Should().BeNull();
+        result.StateCode.Should().BeNull();
+    }
+
+    [Fact]
     public async System.Threading.Tasks.Task TimeBudgetExceeded_ClaimsNoBasis()
     {
         var result = await Adjudicator(goldCard: new Hang()).TryDecideAsync(
