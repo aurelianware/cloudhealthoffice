@@ -192,7 +192,8 @@ public class ClinicalResourceController : FhirControllerBase
     /// <summary>The caller, from the validated token. Never from a header or the query string.</summary>
     private string? ResolveCallerId()
     {
-        foreach (var claim in new[] { "sub", System.Security.Claims.ClaimTypes.NameIdentifier, "client_id", "azp" })
+        // JWT claim names: neither scheme maps inbound claims (D-32).
+        foreach (var claim in new[] { "sub", "client_id", "azp" })
         {
             var value = User?.FindFirst(claim)?.Value;
             if (!string.IsNullOrWhiteSpace(value)) return value;

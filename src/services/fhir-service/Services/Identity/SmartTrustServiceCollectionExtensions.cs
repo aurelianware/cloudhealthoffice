@@ -71,6 +71,14 @@ public static class SmartTrustServiceCollectionExtensions
         // the per-issuer behaviour SmartSigningKeyRing owns.
         jwt.RequireHttpsMetadata = !environment.IsDevelopment();
 
+        // D-32: claims arrive under their JWT names, as on the CHO scheme.
+        // With the handler's default inbound mapping, `scp` was renamed to the
+        // WS-* scope claim type, so grants carried only in `scp` were never
+        // seen and `scp` was never checked against `scope`. Every reader of a
+        // SMART principal uses the JWT names (`sub`, `scope`, `scp`, `roles`,
+        // `tid`, `oid`, ...).
+        jwt.MapInboundClaims = false;
+
         // The one definition of the rules — the same factory the tests assert
         // against, so there is no second copy to drift.
         jwt.TokenValidationParameters = SmartTokenValidation.CreateParameters(registry, keyRing);
@@ -79,6 +87,29 @@ public static class SmartTrustServiceCollectionExtensions
         {
             OnTokenValidated = context =>
             {
+                // D-32: a token whose `scope` and `scp` claims grant different
+                // sets of scopes is refused here, before tenant, identity or
+                // any resource handling. Neither the union nor the
+                // intersection is a safe reading of it. Only the claim NAMES
+                // are logged, never their values.
+                // The payload's claim names are passed so that an empty JSON
+                // array (which yields no principal claim) still counts as a
+                // present, empty claim.
+                var payloadClaimNames = context.SecurityToken is Microsoft.IdentityModel.JsonWebTokens.JsonWebToken jwtToken
+                    ? SmartScopeClaims.PayloadClaimNames(jwtToken)
+                    : null;
+                if (SmartScopeClaims.Read(context.Principal, payloadClaimNames).Conflict)
+                {
+                    context.HttpContext.RequestServices
+                        .GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("FhirService.Identity")
+                        .LogWarning(
+                            "SMART token refused: its {ScopeClaim} and {ScpClaim} claims grant different scopes",
+                            SanitizeForLog(SmartScopeClaims.ScopeClaim), SanitizeForLog(SmartScopeClaims.ScpClaim));
+                    context.Fail(ScopeClaimConflictMessage);
+                    return Task.CompletedTask;
+                }
+
                 var registryService = context.HttpContext.RequestServices
                     .GetRequiredService<TrustedIssuerRegistry>();
                 var resolver = context.HttpContext.RequestServices
@@ -157,4 +188,10 @@ public static class SmartTrustServiceCollectionExtensions
             },
         };
     }
+
+    /// <summary>The authentication failure for a token whose scope and scp claims differ.</summary>
+    internal const string ScopeClaimConflictMessage = "The token's scope and scp claims grant different scopes.";
+
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }
