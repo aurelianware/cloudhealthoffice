@@ -34,6 +34,13 @@ public sealed record PriorAuthorizationRecord
     [JsonPropertyName("memberId")]
     public string MemberId { get; init; } = string.Empty;
 
+    /// <summary>
+    /// The submitter's own patient reference from the PAS request
+    /// (<c>Patient/pat-001</c>). Null for records not created by PAS.
+    /// </summary>
+    [JsonPropertyName("patientReference")]
+    public string? PatientReference { get; init; }
+
     [JsonPropertyName("requestingProviderNPI")]
     public string? RequestingProviderNpi { get; init; }
 

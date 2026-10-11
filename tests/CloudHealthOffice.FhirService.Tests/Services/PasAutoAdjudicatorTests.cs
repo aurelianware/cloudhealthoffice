@@ -43,7 +43,7 @@ public class PasAutoAdjudicatorTests
         var adjudicator = CreateAdjudicator();
         var claim = CreateClaim("99213");
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", Basis(claim), 12000);
 
         result.HasDecision.Should().BeTrue();
         result.Decision.Should().Be("approved");
@@ -57,7 +57,7 @@ public class PasAutoAdjudicatorTests
         var adjudicator = CreateAdjudicator();
         var claim = CreateClaim("V2020");
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", Basis(claim), 12000);
 
         result.HasDecision.Should().BeTrue();
         result.Decision.Should().Be("denied");
@@ -75,7 +75,7 @@ public class PasAutoAdjudicatorTests
         var claim = CreateClaim("12345"); // not in approve/deny lists
         claim.Provider = new ResourceReference { Identifier = new Identifier { Value = "1234567890" } };
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", Basis(claim), 12000);
 
         result.HasDecision.Should().BeTrue();
         result.Decision.Should().Be("approved");
@@ -93,7 +93,7 @@ public class PasAutoAdjudicatorTests
         claim.Provider = new ResourceReference { Identifier = new Identifier { Value = "9999999999" } };
         claim.Total = new Money { Value = 200m, Currency = Money.Currencies.USD };
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", Basis(claim), 12000);
 
         result.HasDecision.Should().BeTrue();
         result.Decision.Should().Be("approved");
@@ -110,8 +110,9 @@ public class PasAutoAdjudicatorTests
         var claim = CreateClaim("12345"); // not in any list
         claim.Provider = new ResourceReference { Identifier = new Identifier { Value = "9999999999" } };
         claim.Total = new Money { Value = 10000m, Currency = Money.Currencies.USD }; // above threshold
+        claim.Item[0].Location = new Address { State = "TX" }; // the rule engine runs on a named state only
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", Basis(claim), 12000);
 
         result.HasDecision.Should().BeFalse();
         result.RuleName.Should().Be("NoRuleMatch");
@@ -138,7 +139,7 @@ public class PasAutoAdjudicatorTests
         claim.Provider = new ResourceReference { Identifier = new Identifier { Value = "1234567890" } };
 
         // Very short timeout — should cancel during gold-card HTTP call
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 50);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", Basis(claim), 50);
 
         result.HasDecision.Should().BeFalse();
         result.RuleName.Should().Be("TimeBudgetExceeded");
@@ -151,7 +152,7 @@ public class PasAutoAdjudicatorTests
         var adjudicator = CreateAdjudicator();
         var claim = CreateClaim("99213"); // would normally auto-approve
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", Basis(claim), 12000);
 
         result.HasDecision.Should().BeFalse();
         result.RuleName.Should().Be("ConfigDisabled");
@@ -202,6 +203,20 @@ public class PasAutoAdjudicatorTests
                 Content = JsonContent.Create(responseBody),
             });
     }
+
+    /// <summary>
+    /// The basis the controller would have mapped: Medicaid, the requesting
+    /// NPI these tests put on the Claim.provider reference, and the item codes.
+    /// </summary>
+    private static PasDecisionBasis Basis(Claim claim, PaLineOfBusiness lob = PaLineOfBusiness.Medicaid)
+        => new(lob, claim.Provider?.Identifier?.Value, null)
+        {
+            ServiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            ProcedureCodes = claim.Item
+                .SelectMany(i => i.ProductOrService.Coding)
+                .Select(c => new PasProcedureCode(c.System, c.Code))
+                .ToList(),
+        };
 
     private static Claim CreateClaim(string procedureCode) => new()
     {

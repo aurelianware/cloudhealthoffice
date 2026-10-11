@@ -10,6 +10,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using FluentAssertions;
+using CloudHealthOffice.FhirService.Tests.TestSupport;
+using FhirService.Services.Pas;
 
 namespace CloudHealthOffice.FhirService.Tests.Controllers;
 
@@ -21,6 +23,9 @@ public class PasProviderVerificationTests
     private readonly Mock<IHttpClientFactory> _httpClientFactoryMock;
     private readonly Mock<ILogger<PasController>> _loggerMock;
     private MockProviderVerificationHandler _verificationHandler = null!;
+
+    // Stands in for authorization-service; see PasControllerTests.
+    private readonly FakePasAuthorizationRecorder _recorder = new();
 
     public PasProviderVerificationTests()
     {
@@ -46,7 +51,7 @@ public class PasProviderVerificationTests
         // Default: auto-adjudicator approves
         _adjudicatorMock
             .Setup(a => a.TryDecideAsync(
-                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PasDecisionResult
             {
                 HasDecision = true,
@@ -90,6 +95,7 @@ public class PasProviderVerificationTests
             new Mock<IPriorAuthorizationInquiryService>().Object,
             config,
             _httpClientFactoryMock.Object,
+            _recorder,
             _loggerMock.Object);
 
         var httpContext = new DefaultHttpContext();
@@ -128,6 +134,17 @@ public class PasProviderVerificationTests
         var responseBundle = okResult.Value.Should().BeOfType<Bundle>().Subject;
         var claimResponse = responseBundle.Entry[0].Resource as ClaimResponse;
         claimResponse!.Disposition.Should().Be("denied");
+
+        // The exclusion denial is stored, with its code, before it is answered.
+        _recorder.Last!.Decision!.Outcome.Should().Be("Denied");
+        _recorder.Last.Decision.DenialReasonCode.Should().Be("PROVIDER_EXCLUDED");
+        _recorder.Last.RequestingProviderNPI.Should().Be("1234567890");
+        // A fact about the provider: no line of business or state was evaluated.
+        _recorder.Last.Decision.LineOfBusiness.Should().BeNull();
+        _recorder.Last.Decision.StateCode.Should().BeNull();
+        _adjudicatorMock.Verify(a => a.TryDecideAsync(
+            It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -214,72 +231,40 @@ public class PasProviderVerificationTests
         claimResponse!.Disposition.Should().Be("approved");
     }
 
+    // Changed: a request with no requesting-provider NPI used to skip
+    // verification and be approved, then fail to persist (the record requires
+    // the NPI, D-01). It is now refused with a 422 before verification or
+    // adjudication, and nothing is stored.
     [Fact]
-    public async System.Threading.Tasks.Task ClaimSubmit_NoProviderNpi_SkipsVerification()
+    public async System.Threading.Tasks.Task ClaimSubmit_NoProviderNpi_IsRefusedBeforeVerification()
     {
         var handler = new MockProviderVerificationHandler();
         var controller = CreateController(handler);
 
-        // Create claim without provider NPI (no Identifier)
         var bundle = CreateRequestBundle("99213", null);
         var result = await controller.ClaimSubmit(bundle);
 
-        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        var responseBundle = okResult.Value.Should().BeOfType<Bundle>().Subject;
-        var claimResponse = responseBundle.Entry[0].Resource as ClaimResponse;
-        claimResponse!.Disposition.Should().Be("approved");
-
-        // Verification handler should NOT have been called
+        var refused = result.Should().BeOfType<ObjectResult>().Subject;
+        refused.StatusCode.Should().Be(422);
+        refused.Value.Should().BeOfType<OperationOutcome>()
+            .Which.Issue.Should().Contain(i => i.Expression.Contains("Claim.provider"));
         handler.RequestCount.Should().Be(0);
+        _recorder.Calls.Should().BeEmpty();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    // A complete PAS Bundle whose requesting Practitioner carries the given NPI
+    // (or none). The NPI used to be read only from Claim.provider.identifier;
+    // it now comes from the Practitioner the Claim references (D-03).
     private static Bundle CreateRequestBundle(string procedureCode, string? providerNpi)
     {
-        var provider = new ResourceReference("Practitioner/prov-001");
-        var claim = new Claim
-        {
-            Id = Guid.NewGuid().ToString(),
-            Status = FinancialResourceStatusCodes.Active,
-            Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-            Use = ClaimUseCode.Preauthorization,
-            Patient = new ResourceReference("Patient/pat-001"),
-            Created = DateTime.UtcNow.ToString("yyyy-MM-dd"),
-            Insurer = new ResourceReference("Organization/cho-payer"),
-            Provider = provider,
-            Priority = new CodeableConcept("http://terminology.hl7.org/CodeSystem/processpriority", "normal"),
-            Insurance = new List<Claim.InsuranceComponent>
-            {
-                new() { Sequence = 1, Focal = true, Coverage = new ResourceReference("Coverage/cov-001") },
-            },
-            Item = new List<Claim.ItemComponent>
-            {
-                new()
-                {
-                    Sequence = 1,
-                    ProductOrService = new CodeableConcept("http://www.ama-assn.org/go/cpt", procedureCode),
-                },
-            },
-        };
-
+        var bundle = PasBundles.Complete(procedureCode: procedureCode);
+        var practitioner = bundle.Entry.Select(e => e.Resource).OfType<Practitioner>().Single();
+        practitioner.Identifier.Clear();
         if (!string.IsNullOrEmpty(providerNpi))
-        {
-            claim.Provider.Identifier = new Identifier
-            {
-                System = "http://hl7.org/fhir/sid/us-npi",
-                Value = providerNpi,
-            };
-        }
-
-        return new Bundle
-        {
-            Type = Bundle.BundleType.Collection,
-            Entry = new List<Bundle.EntryComponent>
-            {
-                new() { Resource = claim },
-            },
-        };
+            practitioner.Identifier.Add(new Identifier(PasBundles.NpiSystem, providerNpi));
+        return bundle;
     }
 
     private class NoOpHandler : HttpMessageHandler

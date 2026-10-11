@@ -374,6 +374,10 @@ builder.Services.Configure<PasAutoAdjudicationConfig>(
 // resolves this, which is itself scoped.
 builder.Services.AddScoped<IPasAutoAdjudicator, PasAutoAdjudicator>();
 builder.Services.AddSingleton<PasResponseBuilder>();
+// PAS $submit stores the request and its decision through authorization-service's
+// internal, fhir-service-only endpoint before it answers (D-01, D-02).
+builder.Services.AddScoped<FhirService.Services.Pas.IPasAuthorizationRecorder,
+    FhirService.Services.Pas.HttpPasAuthorizationRecorder>();
 
 // PAS $inquire (PAS-04). Read-only projection of the authoritative
 // authorization record held by authorization-service — no second PA store and

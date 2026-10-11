@@ -26,16 +26,22 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 ///
 /// Varies: YES. Persisting the created authorization into a QNXT system of
 /// record is engagement work; that seam is a NotImplementedException stub
-/// asserted in GapAdapterTests. In Demo/Cho mode the authorization is persisted
-/// via the CHO authorization-service HTTP path (stubbed here as unreachable —
-/// the controller returns the ClaimResponse to the caller regardless).
+/// asserted in GapAdapterTests. In Replace mode the authorization is persisted
+/// through authorization-service's internal automated-decision path (D-01,
+/// D-02). Here that path runs in process (<see cref="InProcessAuthorizationService"/>:
+/// the real AutomatedDecisionsController and ChoAuthorizationBackend over an
+/// in-memory repository). It used to be stubbed as unreachable while the
+/// controller answered regardless; $submit now fails when the record is not
+/// stored, so the tests assert the stored record instead.
 /// </summary>
 [Trait("Backend", "Replace")]
 public class PasSubmitTests
 {
     private const string CptSystem = "http://www.ama-assn.org/go/cpt";
 
-    private static PasController BuildController(Mock<IPasAutoAdjudicator> adjudicator, bool compliant = true)
+    private readonly InProcessAuthorizationService _authorizationService = new();
+
+    private PasController BuildController(Mock<IPasAutoAdjudicator> adjudicator, bool compliant = true)
     {
         var compliance = new Mock<ICms0057ComplianceChecker>();
         // Use the REAL compliance checker semantics by delegating to it, so the
@@ -59,17 +65,28 @@ public class PasSubmitTests
             // These suites exercise $submit; $inquire has its own coverage.
             new Mock<IPriorAuthorizationInquiryService>().Object,
             config,
+            // Provider verification: unreachable, so it fails open.
             new StubHttpClientFactory(),
+            _authorizationService,
             AcceptanceContext.Logger<PasController>())
             .WithTenant();
     }
 
+    /// <summary>
+    /// A stand-in adjudicator that, like the real one, reports the line of
+    /// business it decided on (the basis it was given), so the record's
+    /// decision basis is accepted by authorization-service.
+    /// </summary>
     private static Mock<IPasAutoAdjudicator> Adjudicator(PasDecisionResult decision)
     {
         var m = new Mock<IPasAutoAdjudicator>();
         m.Setup(a => a.TryDecideAsync(
-                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(decision);
+                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Claim _, Bundle _, string _, PasDecisionBasis basis, int _, CancellationToken _) =>
+            {
+                decision.LineOfBusiness ??= basis.LineOfBusiness.ToString();
+                return decision;
+            });
         return m;
     }
 
@@ -102,10 +119,44 @@ public class PasSubmitTests
             },
         };
 
+        // The resources the Claim references. $submit maps the record from
+        // them (D-03) and refuses a Claim whose Patient, Coverage or
+        // requesting-provider NPI is missing, instead of storing placeholders.
+        claim.Provider = new ResourceReference("Practitioner/npi-1234567890");
+        var patient = new Patient
+        {
+            Id = "pat-001",
+            Identifier = [new Identifier("http://example.org/member-id", "MBR-pat-001")
+            {
+                Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/v2-0203", "MB"),
+            }],
+            Name = [new HumanName { Family = "Synthetic", Given = ["Pat"] }],
+            BirthDate = "1980-01-01",
+        };
+        var coverage = new Coverage
+        {
+            Id = "cov-001",
+            Status = FinancialResourceStatusCodes.Active,
+            Beneficiary = new ResourceReference("Patient/pat-001"),
+            Payor = [new ResourceReference("Organization/cho-payer")],
+            Type = new CodeableConcept("https://codesystem.x12.org/005010/1032", "MC"),
+        };
+        var practitioner = new Practitioner
+        {
+            Id = "npi-1234567890",
+            Identifier = [new Identifier("http://hl7.org/fhir/sid/us-npi", "1234567890")],
+        };
+
         return new Bundle
         {
             Type = Bundle.BundleType.Collection,
-            Entry = new List<Bundle.EntryComponent> { new() { Resource = claim } },
+            Entry = new List<Bundle.EntryComponent>
+            {
+                new() { Resource = claim },
+                new() { Resource = patient },
+                new() { Resource = coverage },
+                new() { Resource = practitioner },
+            },
         };
     }
 
@@ -137,6 +188,96 @@ public class PasSubmitTests
         claimResponse.PreAuthPeriod!.Start.Should().Be("2026-09-10");   // decided date span
         claimResponse.Meta!.Profile.Should().Contain(
             "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse");
+
+        // The tracking id names a durable record holding the decision (D-01, D-02).
+        var stored = await _authorizationService.Repository.GetByAuthorizationNumberAsync("PAS-ACC-0003");
+        stored.Should().NotBeNull();
+        stored!.TenantId.Should().Be(AcceptanceContext.TenantId);
+        stored.Status.Should().Be(AuthorizationService.Models.AuthorizationStatus.Approved);
+        stored.ReviewDecision.Should().Be("A1");
+        stored.MemberId.Should().Be("MBR-pat-001");
+        stored.LineOfBusiness.Should().Be(AuthorizationService.Models.LineOfBusiness.Medicaid);
+        stored.RequestingProviderNPI.Should().Be("1234567890");
+        stored.CreatedBy.Should().Be("fhir-service");
+        stored.StatusHistory.Select(h => h.Status).Should().Equal(
+            AuthorizationService.Models.AuthorizationStatus.Submitted,
+            AuthorizationService.Models.AuthorizationStatus.Approved);
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-03")]
+    public async Task PAS03_Negative_RecordNotStored_NoClaimResponseAndNoTrackingId()
+    {
+        _authorizationService.Unavailable = true;
+        var controller = BuildController(Adjudicator(new PasDecisionResult
+        {
+            HasDecision = true, Decision = "approved", AuthorizationNumber = "PAS-ACC-LOST", RuleName = "AutoApproveList",
+        }));
+
+        var result = await controller.ClaimSubmit(RequestBundle());
+
+        var failed = result.Should().BeOfType<ObjectResult>().Subject;
+        failed.StatusCode.Should().Be(503);
+        failed.Value.Should().BeOfType<OperationOutcome>();
+        System.Text.Json.JsonSerializer.Serialize(failed.Value).Should().NotContain("PAS-ACC-LOST");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-03")]
+    public async Task PAS03_Negative_MissingPatient_Returns422_NothingStored()
+    {
+        var controller = BuildController(Adjudicator(new PasDecisionResult { HasDecision = true, Decision = "approved" }));
+        var bundle = RequestBundle();
+        bundle.Entry.RemoveAll(e => e.Resource is Patient);
+
+        var result = await controller.ClaimSubmit(bundle);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(422);
+        _authorizationService.Repository.CreateCount.Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public async Task PAS04_InquireFindsTheAuthorizationSubmitIssued()
+    {
+        var submit = BuildController(Adjudicator(new PasDecisionResult
+        {
+            HasDecision = true, Decision = "denied", DenialReasonCode = "NOT_COVERED",
+            DenialReason = "Service 27447 is not a covered benefit", RuleName = "AutoDenyList",
+        }));
+        var submitted = ((Bundle)((OkObjectResult)await submit.ClaimSubmit(RequestBundle())).Value!)
+            .Entry[0].Resource as ClaimResponse;
+
+        var inquire = new PasController(
+                new Mock<IPasAutoAdjudicator>().Object,
+                new PasResponseBuilder(),
+                new Cms0057ComplianceChecker(),
+                new PriorAuthorizationInquiryService(_authorizationService),
+                Options.Create(new PasAutoAdjudicationConfig()),
+                new StubHttpClientFactory(),
+                _authorizationService,
+                AcceptanceContext.Logger<PasController>())
+            .WithTenant();
+        var inquiryClaim = new Claim
+        {
+            Status = FinancialResourceStatusCodes.Active,
+            Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
+            Use = ClaimUseCode.Preauthorization,
+            Patient = new ResourceReference("Patient/pat-001"),
+            Identifier = [new Identifier("http://example.org/pas", submitted!.PreAuthRef)],
+        };
+
+        var result = await inquire.ClaimInquire(new Bundle
+        {
+            Type = Bundle.BundleType.Collection,
+            Entry = [new() { Resource = inquiryClaim }],
+        });
+
+        var answer = ((Bundle)result.Should().BeOfType<OkObjectResult>().Subject.Value!)
+            .Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
+        answer.PreAuthRef.Should().Be(submitted.PreAuthRef);
+        answer.Disposition.Should().Be("denied");
+        answer.Patient.Reference.Should().Be("Patient/pat-001");
     }
 
     [Fact]
