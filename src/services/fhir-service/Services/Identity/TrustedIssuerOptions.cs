@@ -63,6 +63,21 @@ public sealed class TrustedIssuerOptions
     /// </summary>
     public List<string> AdditionalJwksHosts { get; set; } = [];
 
+    /// <summary>
+    /// True for exactly one entry: the CHO authorization server
+    /// (smart-auth-service), whose backend client registrations carry the
+    /// payer each client acts for and which mints it into its tokens as
+    /// <c>payer_id</c>. fhir-service believes a <c>payer_id</c> claim ONLY
+    /// from this issuer; from any other trusted issuer the claim is ignored,
+    /// so that issuer's clients have no payer mapping and are refused by the
+    /// Payer-to-Payer operations until they are registered with CHO (D-13).
+    ///
+    /// Off by default. <see cref="SmartTrustOptions.Validate"/> requires
+    /// exactly one marked entry; in Demo mode the legacy single issuer (the
+    /// bundled smart-auth-service) is marked automatically.
+    /// </summary>
+    public bool IssuesChoClientRegistrations { get; set; }
+
     /// <summary>Development escape hatch for a local IdP over plain HTTP.</summary>
     public bool RequireHttpsMetadata { get; set; } = true;
 

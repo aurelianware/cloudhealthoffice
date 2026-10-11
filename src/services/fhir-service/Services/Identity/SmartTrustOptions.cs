@@ -105,6 +105,8 @@ public sealed class SmartTrustOptions
                     Audiences = string.IsNullOrWhiteSpace(Audience) ? ["fhir-api"] : [Audience!],
                     RequireHttpsMetadata = RequireHttpsMetadata,
                     Tenants = [.. Tenants],
+                    // The legacy Demo issuer IS the bundled smart-auth-service.
+                    IssuesChoClientRegistrations = true,
                 }
             ];
         }
@@ -161,6 +163,24 @@ public sealed class SmartTrustOptions
                     $"SmartAuth:TrustedIssuers contains '{issuer.Issuer}' more than once. "
                     + "Issuer configuration must resolve to exactly one entry.");
             }
+        }
+
+        // Payer-to-Payer binds the receiving payer to the payer_id claim that
+        // CHO's own authorization server mints from the client registration
+        // (D-13). Exactly one issuer may be believed about that: with none,
+        // no client could ever be mapped; with two, a second issuer could
+        // assert payer ids CHO never registered.
+        var marked = issuers.Where(i => i.IssuesChoClientRegistrations).Select(i => i.Issuer).ToList();
+        if (marked.Count != 1)
+        {
+            throw new SmartTrustValidationException(
+                marked.Count == 0
+                    ? "No SmartAuth:TrustedIssuers entry sets IssuesChoClientRegistrations=true. Exactly one "
+                      + "entry, the CHO authorization server (smart-auth-service) that holds backend client "
+                      + "registrations, must set it; Payer-to-Payer refuses every client otherwise."
+                    : "More than one SmartAuth:TrustedIssuers entry sets IssuesChoClientRegistrations=true ("
+                      + string.Join(", ", marked) + "). Exactly one entry, the CHO authorization server "
+                      + "(smart-auth-service), may set it.");
         }
     }
 }

@@ -54,10 +54,25 @@ host does not start, and the error names the setting.
         "FhirUserClaim": "fhirUser",
         "PatientClaim": "patient"
       }
+    },
+    {
+      // CHO's own authorization server (smart-auth-service), if deployed.
+      "Issuer": "https://auth.cloudhealthoffice.com",
+      "Audiences": ["fhir-api"],
+      "IssuesChoClientRegistrations": true   // exactly one entry sets this; see §9
     }
   ]
 }
 ```
+
+`IssuesChoClientRegistrations` (default `false`) marks the **one** issuer that
+holds CHO's backend client registrations, i.e. smart-auth-service. **Startup
+fails unless exactly one entry sets it**: zero (no client could ever be mapped
+to a payer) and two or more (a second issuer could assert payer ids CHO never
+registered) are both configuration errors. In `Demo` mode the legacy
+single-issuer entry (`SmartAuth:Issuer`) is the bundled smart-auth-service and
+is marked automatically; a `Demo` configuration that lists `TrustedIssuers`
+explicitly must mark one itself.
 
 Trust is **administrator-controlled**. Nothing in a token can add an issuer,
 change an audience, or redirect key retrieval.
@@ -180,7 +195,9 @@ TOCTOU check that reads as protection without being any.
 
 One resolution per request, into `AuthenticatedCaller`: issuer, subject,
 client id, authorized party, caller type, scopes, and — when the trusted issuer
-maps them — provider NPI, practitioner id, `fhirUser`, patient, tenant.
+maps them — provider NPI, practitioner id, `fhirUser`, patient, tenant; and,
+from the marked registration-authority issuer only, the client's registered
+payer (`payer_id`, see below).
 
 Caller type follows the granted scopes. A token holding both `patient/` and
 `system/` scopes is treated as **patient** context, because patient context is
@@ -209,6 +226,27 @@ That closes the substitution a corroborating key cannot detect — a caller who
 knows another provider's public NPI and puts it in the payload. This only ever
 tightens: deployments without a provider identity claim are unchanged.
 
+### Payer-to-Payer client identity (D-13)
+
+The inbound Payer-to-Payer operations (`PayerToPayer/$member-data-export`,
+`Patient/$member-match`) take the **receiving payer** from the authenticated
+backend client, never from the request body:
+
+- smart-auth-service stores a `payerId` on each backend client registration
+  (set by the registering tenant's administrator) and mints it into that
+  client's client_credentials access tokens as `payer_id`. It refuses to grant,
+  or to issue, `system/PayerToPayer.read` to a backend client without one.
+- fhir-service believes `payer_id` **only** from the issuer marked
+  `IssuesChoClientRegistrations`, and only when the token carries exactly one
+  well-formed value. From any other trusted issuer the claim is ignored. The
+  claim name is not in the JWT handler's default inbound claim map, so it
+  reaches fhir-service unrenamed (end-to-end test in
+  `SmartAuthToFhirEndToEndTests`).
+- A client with no registered payer (including every client of an unmarked
+  issuer), or a request body whose `receivingPayerId` differs from the
+  registered payer, gets one fixed `403` before any member is looked up. The
+  body field is optional; audit entries and logs record the registered payer.
+
 ## 10. Patient identity binding
 
 Unchanged and preserved: patient identity comes from the token, never a query
@@ -217,17 +255,18 @@ parameter. A token bound to patient A cannot search `?patient=Patient/B` **or**
 
 ## 11. Tenant binding
 
-Precedence:
+A SMART caller's tenant comes from the validated token only, in this order:
 
-1. the tenant claim from the token (the issuer's mapped claim, else `tenant_id` /
-   `extension_TenantId`);
-2. the `X-Tenant-ID` header, for service-to-service calls.
+1. the issuer's mapped tenant claim (a conventional `tenant_id` that disagrees
+   with it is a refused token);
+2. the conventional `tenant_id` / `extension_TenantId` claim;
+3. when the issuer's `Tenants` list has exactly one entry, that tenant.
 
-The header **may fill a vacuum, never contradict a token**. Previously it was
-consulted whenever the token carried no tenant claim, so any authenticated caller
-whose issuer did not map a tenant could name any tenant and be believed. Now a
-header that disagrees with the token is a **403 tenant conflict**, not an
-override.
+Otherwise there is no tenant and the request is refused with `401`
+(`SmartTenant`). The `X-Tenant-ID` header **never selects a SMART caller's
+tenant**; it may only echo the token's tenant, and a header that disagrees is a
+**403 tenant conflict**. (Earlier versions let the header fill the gap when the
+token named no tenant, so a caller could choose any tenant.)
 
 `X-Dev-Tenant-ID` is honoured on development hosts only — on a production host it
 would be an unauthenticated tenant selector.
@@ -258,6 +297,7 @@ host.
 | Demo mode on a non-development host | **startup fails** |
 | No trusted issuer in ExternalIssuer mode | **startup fails** |
 | Invalid issuer URI, missing audience, unsupported algorithm, bad skew, duplicate issuer, disallowed JWKS host | **startup fails** |
+| Not exactly one issuer with `IssuesChoClientRegistrations: true` | **startup fails** |
 | IdP unreachable at startup | starts; readiness reports it |
 | No issuer has keys | readiness **unhealthy** |
 | Some issuers have keys | readiness **degraded** |
@@ -310,8 +350,16 @@ synthetic and development-only.
    IdP still has to be configured and validated against.
 2. **Token introspection (RFC 7662) is not implemented.** CHO validates JWTs
    locally. An IdP issuing opaque reference tokens is not supported.
-3. **No dynamic client registration.** Client registration belongs to the
-   external IdP.
+3. **No dynamic client registration.** Interactive and general backend clients
+   are registered at whichever IdP issues their tokens. **Payer-to-Payer backend
+   clients are the exception: they must be registered in smart-auth-service**
+   (a backend client with a `payerId`), because fhir-service believes a
+   client's payer only from the issuer marked `IssuesChoClientRegistrations`
+   (§9). A client registered only at an external IdP cannot use Payer-to-Payer.
+8. **No per-issuer scope allowlist.** Any trusted issuer can mint any scope,
+   including `system/PayerToPayer.read`. Such a client of an unmarked issuer is
+   refused by Payer-to-Payer for want of a registered payer, not for want of the
+   scope.
 4. **Provider identity depends entirely on the IdP.** Where an issuer asserts no
    provider claim, PAS/CDex caller binding remains a corroborating key.
 5. **Cross-origin JWKS requires explicit configuration.** An IdP serving keys

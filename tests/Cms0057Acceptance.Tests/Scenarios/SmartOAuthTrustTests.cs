@@ -58,7 +58,7 @@ public class SmartOAuthTrustTests
     }
 
     private static (TokenValidationParameters Parameters, TrustedIssuerRegistry Registry) Server(
-        Action<TrustedIssuerOptions>? configurePayer = null)
+        Action<TrustedIssuerOptions>? configurePayer = null, bool markPayer = false)
     {
         var payer = new TrustedIssuerOptions
         {
@@ -78,6 +78,14 @@ public class SmartOAuthTrustTests
                 {
                     Issuer = OtherIdp,
                     Audiences = ["https://api.other-payer.example.com"],
+                },
+                // CHO's own authorization server: startup requires exactly one
+                // issuer marked as the client-registration authority (D-13).
+                new TrustedIssuerOptions
+                {
+                    Issuer = "https://auth.cloudhealthoffice.com",
+                    Audiences = [ChoAudience],
+                    IssuesChoClientRegistrations = !markPayer,
                 },
             ],
         };
@@ -333,6 +341,27 @@ public class SmartOAuthTrustTests
 
         resolver.Resolve(new ClaimsPrincipal(result.ClaimsIdentity))!
             .HasVerifiedProviderIdentity.Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Scenario", "SEC-01")]
+    [Trait("Backend", "Replace")]
+    public async Task SEC01_Replace_APayerIdIsBelievedOnlyFromTheRegistrationAuthority()
+    {
+        // D-13: a backend client's payer comes from its CHO registration, which
+        // only CHO's authorization server (the one marked issuer) mints into
+        // payer_id. The payer IdP here is trusted, but not that authority, so
+        // its payer_id is no mapping at all.
+        var (parameters, registry) = Server();
+        var resolver = new CallerIdentityResolver(registry);
+        var result = await ValidateAsync(Mint(PayerKey, claims: new Claim("payer_id", "PAYER-A")), parameters);
+        resolver.Resolve(new ClaimsPrincipal(result.ClaimsIdentity))!.RegisteredPayerId.Should().BeNull();
+
+        // The same token from an issuer marked as the authority is believed.
+        var (markedParameters, markedRegistry) = Server(payer => payer.IssuesChoClientRegistrations = true, markPayer: true);
+        var marked = await ValidateAsync(Mint(PayerKey, claims: new Claim("payer_id", "PAYER-A")), markedParameters);
+        new CallerIdentityResolver(markedRegistry).Resolve(new ClaimsPrincipal(marked.ClaimsIdentity))!
+            .RegisteredPayerId.Should().Be("PAYER-A");
     }
 
     // ── Fail-closed production configuration ──────────────────────────────────
