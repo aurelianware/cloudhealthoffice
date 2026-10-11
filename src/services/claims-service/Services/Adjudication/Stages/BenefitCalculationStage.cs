@@ -51,6 +51,19 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     public const string PriorAuthorizationInvalidReason = "Prior authorization is not valid for this claim";
 
     /// <summary>
+    /// <see cref="PendDetails.PendCode"/> for claims pended because a
+    /// prior-authorization lookup gave no definitive answer (transport
+    /// error, timeout, 5xx, 401/403, unreadable response) — D-04, owner
+    /// decision Q-9: never pay or deny on a failed lookup. Transient: an
+    /// examiner approval never overrides it; the approval re-run repeats the
+    /// lookup and passes or denies only on a definitive answer.
+    /// </summary>
+    public const string PriorAuthorizationUnavailablePendCode = "PAUNAVAIL";
+
+    /// <summary>Leading text of every <see cref="PriorAuthorizationUnavailablePendCode"/> pend reason.</summary>
+    public const string PriorAuthorizationUnavailableReason = "PA lookup unavailable";
+
+    /// <summary>
     /// <see cref="PendDetails.PendCode"/> value for claims pended because a
     /// retroactive benefit-plan/coverage change (X12 834 maintenance type
     /// code 001) was recorded with an effective date on or before the
@@ -188,12 +201,32 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Pend(StageName, spendDownReason);
         }
 
-        var priorAuthorizationDenialReason = await ResolvePriorAuthorizationDenialReasonAsync(
-            context.TenantId,
-            claim,
-            ct).ConfigureAwait(false);
+        // Prior authorization (D-04 / G-12, G-25). A failed lookup never pays
+        // and never denies (owner decision Q-9): it pends before the engine
+        // runs, so nothing is priced and no accumulator commit is prepared.
+        var priorAuthorization = await EvaluatePriorAuthorizationAsync(context, ct).ConfigureAwait(false);
 
-        if (priorAuthorizationDenialReason is not null)
+        if (priorAuthorization.PendReason is { } priorAuthorizationPendReason)
+        {
+            if (context.PendDetails is null)
+            {
+                context.PendDetails = new PendDetails
+                {
+                    PendCode = PriorAuthorizationUnavailablePendCode,
+                    PendReason = priorAuthorizationPendReason,
+                    PendedAt = DateTime.UtcNow,
+                };
+            }
+            else
+            {
+                context.PendDetails.AdditionalPendReasons.Add(
+                    Truncate($"{PriorAuthorizationUnavailablePendCode}: {priorAuthorizationPendReason}", 500));
+            }
+
+            return ClaimAdjudicationStageResult.Pend(StageName, priorAuthorizationPendReason);
+        }
+
+        if (priorAuthorization.DenialReason is { } priorAuthorizationDenialReason)
         {
             context.AdjudicationResult.DenialReasonCode = PriorAuthorizationRequiredCode;
             context.AdjudicationResult.DenialReason = priorAuthorizationDenialReason;
@@ -424,60 +457,129 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         return false;
     }
 
-    internal static bool RequiresPriorAuthorizationDenial(AdapterClaim claim)
-    {
-        return RequiresPriorAuthorizationValidation(claim)
-            && string.IsNullOrWhiteSpace(claim.PriorAuthorizationNumber);
-    }
+    /// <summary>What the prior-authorization check decided for this run.</summary>
+    private readonly record struct PriorAuthorizationDecision(string? DenialReason, string? PendReason);
 
-    private async Task<string?> ResolvePriorAuthorizationDenialReasonAsync(
-        string tenantId,
-        AdapterClaim claim,
+    /// <summary>
+    /// Checks every line that requires prior authorization (G-25), each
+    /// against its own authorization number (2400 REF*G1, else the claim's
+    /// 2300 REF*G1), procedure code and service date.
+    /// <list type="bullet">
+    ///   <item>Valid on every line → no finding.</item>
+    ///   <item>A line with no number, a number authorization-service says
+    ///   does not exist for this tenant (NotFound), or one that exists but
+    ///   does not cover the line (Invalid) → deny, CARC 197.</item>
+    ///   <item>Any lookup without a definitive answer (Unavailable) → pend
+    ///   <see cref="PriorAuthorizationUnavailablePendCode"/>, even when
+    ///   another line would deny: this run cannot decide the claim, and the
+    ///   re-run re-derives the denial (owner decision Q-9).</item>
+    /// </list>
+    /// </summary>
+    private async Task<PriorAuthorizationDecision> EvaluatePriorAuthorizationAsync(
+        ClaimAdjudicationContext context,
         CancellationToken ct)
     {
-        if (!RequiresPriorAuthorizationValidation(claim))
+        var claim = context.Claim;
+        var lines = LinesRequiringPriorAuthorization(claim);
+        if (lines.Count == 0)
         {
-            return null;
+            return default;
         }
 
-        if (string.IsNullOrWhiteSpace(claim.PriorAuthorizationNumber))
-        {
-            return PriorAuthorizationRequiredReason;
-        }
-
-        var procedureCode = claim.ClaimLines
-            .OrderBy(line => line.LineNumber)
-            .Select(line => line.ProcedureCode)
-            .FirstOrDefault(code => !string.IsNullOrWhiteSpace(code));
         var providerNpi = string.IsNullOrWhiteSpace(claim.RenderingProviderNPI)
             ? claim.BillingProviderNPI
             : claim.RenderingProviderNPI;
 
-        var validation = await _authorizationValidationClient.ValidateAsync(
-                tenantId,
-                claim.PriorAuthorizationNumber,
-                procedureCode,
-                claim.ServiceDateFrom,
-                providerNpi,
-                ct)
-            .ConfigureAwait(false);
+        string? denialReason = null;
+        var unavailable = new List<string>();
+        var lookups = new Dictionary<(string Number, string? Code, DateTime Date), AuthorizationLookupResult>();
 
-        if (validation is null || validation.IsValid)
+        foreach (var line in lines)
         {
-            return null;
+            var number = AuthorizationNumberFor(claim, line);
+            if (number is null)
+            {
+                denialReason ??= PriorAuthorizationRequiredReason;
+                continue;
+            }
+
+            var procedureCode = string.IsNullOrWhiteSpace(line.ProcedureCode) ? null : line.ProcedureCode.Trim();
+            var serviceDate = line.ServiceDateFrom == default ? claim.ServiceDateFrom : line.ServiceDateFrom;
+            var key = (number, procedureCode, serviceDate);
+
+            if (!lookups.TryGetValue(key, out var lookup))
+            {
+                // A null from a substitute or a future implementation is not
+                // an answer either.
+                lookup = await _authorizationValidationClient
+                    .ValidateAsync(context.TenantId, number, procedureCode, serviceDate, providerNpi, ct)
+                    .ConfigureAwait(false)
+                    ?? AuthorizationLookupResult.Unavailable("authorization lookup returned no result");
+                lookups[key] = lookup;
+            }
+
+            switch (lookup.Status)
+            {
+                case AuthorizationLookupStatus.Valid:
+                    break;
+                case AuthorizationLookupStatus.Invalid:
+                    denialReason ??= string.IsNullOrWhiteSpace(lookup.Reason)
+                        ? PriorAuthorizationInvalidReason
+                        : lookup.Reason;
+                    break;
+                case AuthorizationLookupStatus.NotFound:
+                    denialReason ??= PriorAuthorizationRequiredReason;
+                    break;
+                default:
+                    unavailable.Add($"line {line.LineNumber}: {lookup.Reason ?? "no definitive answer"}");
+                    break;
+            }
         }
 
-        return string.IsNullOrWhiteSpace(validation.ValidationMessage)
-            ? PriorAuthorizationInvalidReason
-            : validation.ValidationMessage;
+        if (unavailable.Count > 0)
+        {
+            _logger.LogWarning(
+                "Prior-authorization lookup unavailable for claim {ClaimVersionId} ({Count} line(s)); pending, not paying or denying",
+                SanitizeForLog(context.ClaimVersionId),
+                unavailable.Count);
+            var reason = $"{PriorAuthorizationUnavailableReason} ({string.Join("; ", unavailable)}); " +
+                         "the claim is re-adjudicated once authorization-service answers.";
+            return new PriorAuthorizationDecision(null, Truncate(reason, 500));
+        }
+
+        return new PriorAuthorizationDecision(denialReason, null);
     }
 
-    private static bool RequiresPriorAuthorizationValidation(AdapterClaim claim)
+    /// <summary>The line's own REF*G1 (2400), else the claim's (2300); null when neither is given.</summary>
+    private static string? AuthorizationNumberFor(AdapterClaim claim, AdapterClaimLine line)
+    {
+        if (!string.IsNullOrWhiteSpace(line.PriorAuthorizationNumber)) return line.PriorAuthorizationNumber.Trim();
+        if (!string.IsNullOrWhiteSpace(claim.PriorAuthorizationNumber)) return claim.PriorAuthorizationNumber.Trim();
+        return null;
+    }
+
+    /// <summary>
+    /// The claim's lines that require prior authorization, in line order.
+    /// Default (unchanged scope): an institutional Medicaid inpatient claim
+    /// (place of service 21) requires it on every line.
+    /// </summary>
+    private static List<AdapterClaimLine> LinesRequiringPriorAuthorization(AdapterClaim claim)
+    {
+        var claimWide = IsInpatientMedicaidInstitutional(claim);
+        return claim.ClaimLines
+            .Where(_ => claimWide)
+            .OrderBy(line => line.LineNumber)
+            .ToList();
+    }
+
+    private static bool IsInpatientMedicaidInstitutional(AdapterClaim claim)
     {
         return claim.ClaimType is ClaimsService.Models.ClaimType.Institutional
             && claim.LineOfBusiness is LineOfBusiness.Medicaid
             && string.Equals(claim.PlaceOfServiceCode, "21", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string Truncate(string value, int max) => value.Length > max ? value[..max] : value;
 
     private async Task<string> ResolveSubscriberIdAsync(
         ClaimAdjudicationContext context,

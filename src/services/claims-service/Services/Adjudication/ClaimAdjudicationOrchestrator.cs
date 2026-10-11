@@ -240,6 +240,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         Stages.CoordinationOfBenefitsStage.CoverageServiceUnavailablePendReason,
         "Coverage-service unavailable",
         Stages.BenefitCalculationStage.DeferredCommitUnsupportedReason,
+        Stages.BenefitCalculationStage.PriorAuthorizationUnavailableReason,
     ];
 
     /// <summary>See <see cref="TransientFailureMarkers"/>.</summary>

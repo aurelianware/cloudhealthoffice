@@ -24,7 +24,7 @@ namespace CloudHealthOffice.ClaimsService.Tests.Services.Adjudication.Stages;
 public sealed class BenefitCalculationStagePriorAuthLookupTests
 {
     private const string Tenant = "tenant-1";
-    private const string PaUnavailablePendCode = "PAUNAVAIL";
+    private const string PaUnavailablePendCode = BenefitCalculationStage.PriorAuthorizationUnavailablePendCode;
 
     private static readonly AccumulatorCommit Prepared = new()
     {

@@ -43,10 +43,9 @@ public sealed class HttpAuthorizationValidationClientTests
             new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc),
             "1234567890");
 
-        Assert.NotNull(result);
-        Assert.False(result!.IsValid);
-        Assert.Equal("AUTH-EXPIRED", result.AuthorizationNumber);
-        Assert.Equal("Authorization expired or not yet active", result.ValidationMessage);
+        Assert.Equal(AuthorizationLookupStatus.Invalid, result.Status);
+        Assert.Equal("AUTH-EXPIRED", result.Validation!.AuthorizationNumber);
+        Assert.Equal("Authorization expired or not yet active", result.Reason);
         Assert.NotNull(captured);
         Assert.Equal(UpstreamClientNames.AuthorizationService, handler.LastClientName);
         Assert.Equal("tenant-1", captured!.Headers.GetValues("X-Tenant-ID").Single());
@@ -57,19 +56,114 @@ public sealed class HttpAuthorizationValidationClientTests
     }
 
     [Fact]
-    public async Task ValidateAsync_NotFound_ReturnsNull()
+    public async Task ValidateAsync_ValidBody_IsValid()
     {
-        var handler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var sut = CreateClient(FakeHttpMessageHandler.Json(
+            """{ "authorizationNumber": "AUTH-1", "isValid": true, "status": "Approved", "validationMessage": "Authorization valid" }"""));
+
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+
+        Assert.Equal(AuthorizationLookupStatus.Valid, result.Status);
+    }
+
+    /// <summary>authorization-service's own answer for an unknown number is definitive (D-04).</summary>
+    [Fact]
+    public async Task ValidateAsync_ServiceNotFound_IsNotFound()
+    {
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StringContent("Authorization AUTH-UNKNOWN not found"),
+        });
         var sut = CreateClient(handler);
 
-        var result = await sut.ValidateAsync(
-            "tenant-1",
-            "AUTH-UNKNOWN",
-            "99213",
-            DateTime.UtcNow,
-            "1234567890");
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-UNKNOWN", "99213", DateTime.UtcNow, "1234567890");
 
-        Assert.Null(result);
+        Assert.Equal(AuthorizationLookupStatus.NotFound, result.Status);
+    }
+
+    /// <summary>A 404 that is not the service's answer (ingress, wrong base address) says nothing about the number.</summary>
+    [Fact]
+    public async Task ValidateAsync_BareNotFound_IsUnavailable()
+    {
+        var sut = CreateClient(FakeHttpMessageHandler.Status(HttpStatusCode.NotFound));
+
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-UNKNOWN", "99213", DateTime.UtcNow, "1234567890");
+
+        Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.GatewayTimeout)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task ValidateAsync_NonDefinitiveStatus_IsUnavailable(HttpStatusCode status)
+    {
+        var sut = CreateClient(FakeHttpMessageHandler.Status(status));
+
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+
+        Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
+        Assert.Contains(((int)status).ToString(), result.Reason);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_BodyForAnotherNumber_IsUnavailable()
+    {
+        var sut = CreateClient(FakeHttpMessageHandler.Json(
+            """{ "authorizationNumber": "AUTH-OTHER", "isValid": true, "status": "Approved" }"""));
+
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+
+        Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
+    }
+
+    [Theory]
+    [InlineData("{ not json")]
+    [InlineData("null")]
+    public async Task ValidateAsync_UnreadableBody_IsUnavailable(string body)
+    {
+        var sut = CreateClient(FakeHttpMessageHandler.Json(body));
+
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+
+        Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_HttpClientTimeout_IsUnavailable()
+    {
+        var sut = CreateClient(FakeHttpMessageHandler.Throw(new TaskCanceledException("HttpClient.Timeout")));
+
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+
+        Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_TransportError_IsUnavailable()
+    {
+        var sut = CreateClient(FakeHttpMessageHandler.Throw(new HttpRequestException("Connection refused")));
+
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+
+        Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
+    }
+
+    /// <summary>The caller's own cancellation is not a lookup result: it propagates (the message is redelivered).</summary>
+    [Fact]
+    public async Task ValidateAsync_CallerCancelled_Throws()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var sut = CreateClient(new FakeHttpMessageHandler(_ => throw new TaskCanceledException()));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890", cts.Token));
     }
 
     private static HttpAuthorizationValidationClient CreateClient(FakeHttpMessageHandler handler)

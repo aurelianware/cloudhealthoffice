@@ -604,6 +604,10 @@ public partial class BenefitCalculationStageTests
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
+        _authorizationValidationClient.ValidateAsync(
+                "tenant-1", "AUTH-123", "99213", claim.ServiceDateFrom, "9876543210", Arg.Any<CancellationToken>())
+            .Returns(AuthorizationLookupResult.Valid(new AuthorizationValidationResult(
+                "AUTH-123", true, "Approved", null, null, null, 1, "Authorization valid")));
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
             .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() });
 
@@ -645,14 +649,16 @@ public partial class BenefitCalculationStageTests
                 claim.ServiceDateFrom,
                 "1234567890",
                 Arg.Any<CancellationToken>())
-            .Returns(new AuthorizationValidationResult(
-                "AUTH-EXPIRED",
-                false,
-                "Approved",
-                claim.ServiceDateFrom.AddDays(-30),
-                claim.ServiceDateFrom.AddDays(-1),
-                claim.ServiceDateFrom.AddDays(-1),
-                1,
+            .Returns(AuthorizationLookupResult.Invalid(
+                new AuthorizationValidationResult(
+                    "AUTH-EXPIRED",
+                    false,
+                    "Approved",
+                    claim.ServiceDateFrom.AddDays(-30),
+                    claim.ServiceDateFrom.AddDays(-1),
+                    claim.ServiceDateFrom.AddDays(-1),
+                    1,
+                    "Authorization expired or not yet active"),
                 "Authorization expired or not yet active"));
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
@@ -664,8 +670,16 @@ public partial class BenefitCalculationStageTests
         await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
     }
 
+    /// <summary>
+    /// Replaces <c>Execute_InpatientWithPriorAuthLookupDegraded_ContinuesToBenefitEngine</c>,
+    /// which pinned the fail-open behaviour D-04 removes: a lookup that
+    /// returned no answer let the claim through to the engine (and so to
+    /// payment and accumulator writes). Owner decision Q-9: the claim pends
+    /// PAUNAVAIL instead — not paid, not denied, no engine call, no
+    /// accumulator commit prepared.
+    /// </summary>
     [Fact]
-    public async Task Execute_InpatientWithPriorAuthLookupDegraded_ContinuesToBenefitEngine()
+    public async Task Execute_InpatientWithPriorAuthLookupUnavailable_PendsWithoutEngineCall()
     {
         var claim = BuildClaim(Guid.NewGuid().ToString());
         claim.LineOfBusiness = LineOfBusiness.Medicaid;
@@ -689,14 +703,79 @@ public partial class BenefitCalculationStageTests
                 claim.ServiceDateFrom,
                 "1234567890",
                 Arg.Any<CancellationToken>())
-            .Returns((AuthorizationValidationResult?)null);
+            .Returns(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
             .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() });
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
-        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
-        await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, ctx.PendDetails!.PendCode);
+        Assert.StartsWith(BenefitCalculationStage.PriorAuthorizationUnavailableReason, ctx.PendDetails.PendReason);
+        Assert.Null(ctx.AdjudicationResult.DenialReasonCode);
+        Assert.Null(ctx.BenefitResolutionResult);
+        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(ctx.PendDetails.PendReason));
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
+    /// <summary>A substitute (or any implementation) that yields no result is not an answer either.</summary>
+    [Fact]
+    public async Task Execute_InpatientWithPriorAuthLookupReturningNull_PendsWithoutEngineCall()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        claim.LineOfBusiness = LineOfBusiness.Medicaid;
+        claim.ClaimType = ClaimType.Institutional;
+        claim.PlaceOfServiceCode = "21";
+        claim.PriorAuthorizationNumber = "AUTH-UNSCRIPTED";
+
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+        };
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, ctx.PendDetails!.PendCode);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
+    /// <summary>
+    /// A pricing pend is already on the claim: the PA pend is added to it,
+    /// not lost, so an approval can never pass without the lookup.
+    /// </summary>
+    [Fact]
+    public async Task Execute_PriorAuthUnavailableWithExistingPend_AddsPaUnavailableToThePend()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        claim.LineOfBusiness = LineOfBusiness.Medicaid;
+        claim.ClaimType = ClaimType.Institutional;
+        claim.PlaceOfServiceCode = "21";
+        claim.PriorAuthorizationNumber = "AUTH-1";
+
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+            PendDetails = new PendDetails { PendCode = "PRICING", PendReason = "Fee schedule unavailable" },
+        };
+        _authorizationValidationClient
+            .ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization lookup failed (HttpRequestException)"));
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal("PRICING", ctx.PendDetails!.PendCode);
+        Assert.Contains(ctx.PendDetails.AdditionalPendReasons,
+            r => r.StartsWith($"{BenefitCalculationStage.PriorAuthorizationUnavailablePendCode}: {BenefitCalculationStage.PriorAuthorizationUnavailableReason}"));
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
     }
 
     [Fact]
