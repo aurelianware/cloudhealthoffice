@@ -55,6 +55,9 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
         _logger          = logger;
     }
 
+    /// <summary>The rule name the NoOp rule engine reports; it evaluates nothing.</summary>
+    public const string NoOpRuleName = "NoOp";
+
     /// <summary>Recorded when the request names no service state for the state-specific rules.</summary>
     public const string StateUndeterminedPendReason =
         "The service state could not be determined from the request (Claim.item.locationAddress.state), "
@@ -241,6 +244,14 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
             };
 
             var ruleDecision = await _ruleEngine.EvaluateAsync(ruleContext, cts.Token);
+
+            // The NoOp engine (no database configured) evaluates nothing:
+            // like ConfigDisabled, no basis is claimed for its pend.
+            if (ruleDecision.FiringRuleName == NoOpRuleName)
+            {
+                consumed.LineOfBusiness = false;
+                consumed.State = false;
+            }
 
             _logger.LogInformation(
                 "PA rule engine: {Outcome} via {Rule} for {State}/{Lob}/{Program} in {Ms}ms",

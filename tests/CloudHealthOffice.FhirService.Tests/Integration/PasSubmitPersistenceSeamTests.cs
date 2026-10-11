@@ -19,6 +19,9 @@ using Microsoft.Extensions.Hosting;
 using MongoDB.Driver;
 using Moq;
 using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
+using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
+using CloudHealthOffice.PriorAuthRuleEngine.Domain;
+using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.ProviderEnrollmentService.Models;
 using EnrollmentLob = CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness;
 using StoredAuthorization = authsvc::AuthorizationService.Models.Authorization;
@@ -429,6 +432,13 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
                 services.RemoveAll<IEnrollmentDecisionGate>();
                 services.AddSingleton<IEnrollmentDecisionGate>(Gate);
 
+                // A rule engine that evaluates (and pends for review), so a
+                // request reaching Rule 5 is decided on its LOB and state. The
+                // factory's NoOp engine evaluates nothing, and its pend
+                // rightly claims no basis.
+                services.RemoveAll<IPriorAuthRuleEngine>();
+                services.AddSingleton<IPriorAuthRuleEngine>(new ReviewRuleEngine());
+
                 // Wrap the real adjudicator to see when it ran.
                 services.AddScoped<PasAutoAdjudicator>();
                 services.RemoveAll<IPasAutoAdjudicator>();
@@ -455,6 +465,22 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
             await Task.Delay(20, ct);
             return await Inner.TryDecideAsync(claim, context, tenantId, basis, timeoutMs, ct);
         }
+    }
+
+    /// <summary>A rule engine whose rules send everything to clinical review.</summary>
+    internal sealed class ReviewRuleEngine : IPriorAuthRuleEngine
+    {
+        public Task<PaRuleDecision> EvaluateAsync(PaRuleContext context, CancellationToken ct = default)
+            => Task.FromResult(new PaRuleDecision
+            {
+                Outcome = PaDecisionOutcome.Pend,
+                FiringRuleId = "ClinicalReviewRequired",
+                FiringRuleName = "ClinicalReviewRequired",
+                ResolvedRuleSetKey = $"test/{context.StateCode}/{context.Lob}",
+            });
+
+        public Task<IReadOnlyList<PaRuleDocument>> GetApplicableRulesAsync(RuleSetKey key, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<PaRuleDocument>>([]);
     }
 
     /// <summary>

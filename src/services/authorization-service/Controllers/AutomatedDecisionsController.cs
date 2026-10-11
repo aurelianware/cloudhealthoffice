@@ -199,9 +199,17 @@ public sealed class AutomatedDecisionsController : ControllerBase
         else if (decided > now + ClockSkew)
             Add("Decision.DecidedAt", "DecidedAt is in the future.");
 
+        // A no-evaluation rule reaches only its own outcome (an exclusion
+        // denies; the others pend), whatever else the request says.
+        var boundOutcome = default(AutomatedDecisionOutcome);
+        var noEvaluationRule = decision.Rule is not null
+            && AutomatedDecision.NoEvaluationRuleOutcomes.TryGetValue(decision.Rule, out boundOutcome);
+        if (noEvaluationRule && decision.Outcome != boundOutcome)
+            Add("Decision.Outcome", $"Rule {decision.Rule} can only be recorded as {boundOutcome}.");
+
         if (decision.LineOfBusiness is null)
         {
-            if (decision.Rule is null || !AutomatedDecision.RulesEvaluatingNoLineOfBusiness.Contains(decision.Rule))
+            if (!noEvaluationRule)
                 Add("Decision.LineOfBusiness",
                     "The decision's line of business is required, except for a rule that evaluates none.");
         }

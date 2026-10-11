@@ -69,6 +69,8 @@ public static class PasAuthorizationMapper
     public const string SourceOfPaymentTypologyOid = "urn:oid:2.16.840.1.113883.3.221.5";
     public const string ProcessPrioritySystem = "http://terminology.hl7.org/CodeSystem/processpriority";
     public const string X12LevelOfServiceSystem = "https://codesystem.x12.org/005010/1338";
+    public const string ActPrioritySystem = "http://terminology.hl7.org/CodeSystem/v3-ActPriority";
+    public const string RequestPrioritySystem = "http://hl7.org/fhir/request-priority";
     public const string Icd10CmSystem = "http://hl7.org/fhir/sid/icd-10-cm";
     public const string Icd10System = "http://hl7.org/fhir/sid/icd-10";
     private const string SubscriberRelationshipSystem = "http://terminology.hl7.org/CodeSystem/subscriber-relationship";
@@ -451,8 +453,37 @@ public static class PasAuthorizationMapper
     // ── Priority, dates ───────────────────────────────────────────────
 
     /// <summary>The words that state urgency, whatever system (or none) they arrive in.</summary>
-    private static readonly HashSet<string> UrgentValues =
-        new(StringComparer.OrdinalIgnoreCase) { "stat", "urgent", "expedited", "asap", "U", "03" };
+    private static readonly HashSet<string> UrgentValues = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "stat", "urgent", "expedited", "asap", "U", "03", "emergency", "emergent", "immediate",
+    };
+
+    /// <summary>
+    /// HL7 v3-ActPriority codes that are urgent: S stat, A ASAP, UR urgent,
+    /// EM emergency, CS / CR callback. Short codes, so urgent only in their
+    /// own system.
+    /// </summary>
+    private static readonly HashSet<string> ActPriorityUrgent = new(StringComparer.Ordinal) { "S", "A", "UR", "EM", "CS", "CR" };
+
+    /// <summary>The (system, code) pairs that state urgency in the system they belong to: no warning.</summary>
+    private static bool IsStandardUrgentPair(string? system, string code) => system switch
+    {
+        ProcessPrioritySystem => code == "stat",
+        X12LevelOfServiceSystem => code is "U" or "03",
+        RequestPrioritySystem => code is "urgent" or "asap" or "stat",
+        ActPrioritySystem => ActPriorityUrgent.Contains(code),
+        _ => false,
+    };
+
+    /// <summary>Explicit standard values in a known system: <c>E</c>, no warning.</summary>
+    private static bool IsExplicitStandard(string? system, string code) => system switch
+    {
+        ProcessPrioritySystem => code is "normal" or "deferred",
+        X12LevelOfServiceSystem => code == "E",
+        RequestPrioritySystem => code == "routine",
+        ActPrioritySystem => code is "R" or "EL",
+        _ => false,
+    };
 
     /// <summary>
     /// X12 UM06 level of service: <c>U</c> (expedited: 72 hours) or <c>E</c>
@@ -465,14 +496,19 @@ public static class PasAuthorizationMapper
     ///   signal wins, so a standard extension does not outrank a stat
     ///   priority.</item>
     ///   <item>A recognised urgent value (<c>stat</c>, <c>urgent</c>,
-    ///   <c>expedited</c>, <c>asap</c>, <c>U</c>, <c>03</c>) is <c>U</c> in any
-    ///   system, or as the concept's text. Outside its standard pair
-    ///   (processpriority <c>stat</c>; X12 1338 <c>U</c>/<c>03</c>) it is
-    ///   reported as a warning.</item>
-    ///   <item><c>E</c> only for an explicit standard value in a known system
-    ///   (processpriority <c>normal</c>/<c>deferred</c>; X12 1338 <c>E</c>).
-    ///   Anything else is unrecognised: standard (<c>E</c>), with a
-    ///   warning.</item>
+    ///   <c>expedited</c>, <c>asap</c>, <c>U</c>, <c>03</c>, <c>emergency</c>,
+    ///   <c>emergent</c>, <c>immediate</c>) is <c>U</c> in any system, or as
+    ///   the concept's text; so are HL7 v3-ActPriority <c>S</c>, <c>A</c>,
+    ///   <c>UR</c>, <c>EM</c>, <c>CS</c>, <c>CR</c>. Outside its standard pair
+    ///   (processpriority <c>stat</c>; X12 1338 <c>U</c>/<c>03</c>;
+    ///   request-priority <c>urgent</c>/<c>asap</c>/<c>stat</c>; those
+    ///   ActPriority codes) it is reported as a warning.</item>
+    ///   <item><c>E</c> for an explicit standard value in a known system
+    ///   (processpriority <c>normal</c>/<c>deferred</c>; X12 1338 <c>E</c>;
+    ///   request-priority <c>routine</c>; ActPriority <c>R</c>/<c>EL</c>).
+    ///   Anything else is unrecognised: standard (<c>E</c>), with a warning.
+    ///   A stored <c>E</c> therefore means "elective" or "not recognised";
+    ///   only the warning tells them apart.</item>
     /// </list>
     /// </summary>
     public static string? LevelOfService(Claim claim, ICollection<PasMappingWarning>? warnings = null)
@@ -512,20 +548,22 @@ public static class PasAuthorizationMapper
                 continue;
             anyCode = true;
 
-            if (UrgentValues.Contains(code))
+            if (IsStandardUrgentPair(coding.System, code))
             {
-                var standardPair = (coding.System == ProcessPrioritySystem && code == "stat")
-                                   || (coding.System == X12LevelOfServiceSystem && code is "U" or "03");
-                if (!standardPair)
-                    warnings?.Add(new(expression, "Urgent value outside its standard code system; treated as expedited (U).",
-                        coding.System, code));
                 level = "U";
                 continue;
             }
 
-            var explicitStandard = (coding.System == ProcessPrioritySystem && code is "normal" or "deferred")
-                                   || (coding.System == X12LevelOfServiceSystem && code == "E");
-            if (!explicitStandard)
+            if (UrgentValues.Contains(code))
+            {
+                // A recognised urgent word in a nonstandard pair.
+                warnings?.Add(new(expression, "Urgent value outside its standard code system; treated as expedited (U).",
+                    coding.System, code));
+                level = "U";
+                continue;
+            }
+
+            if (!IsExplicitStandard(coding.System, code))
                 warnings?.Add(new(expression, "Unrecognised priority; the standard clock (E) applies.", coding.System, code));
             level ??= "E";
         }

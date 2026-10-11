@@ -132,19 +132,25 @@ public sealed class AutomatedDecision
     /// be the record's <see cref="AutomatedDecisionRecordRequest.LineOfBusiness"/>:
     /// the record may not state a basis the decision did not use. Required,
     /// except for the rules that evaluate none
-    /// (<see cref="RulesEvaluatingNoLineOfBusiness"/>), recorded as <c>lob=n/a</c>.
+    /// (<see cref="NoEvaluationRuleOutcomes"/>), recorded as <c>lob=n/a</c>.
     /// </summary>
     public LineOfBusiness? LineOfBusiness { get; set; }
 
     /// <summary>
-    /// Rules that decide without evaluating a line of business: a provider
-    /// exclusion (a fact about the provider), disabled adjudication, an
-    /// exceeded time budget, and an undetermined line of business.
+    /// Rules that decide without evaluating a line of business, each bound to
+    /// the only outcome it can reach: a provider exclusion (a fact about the
+    /// provider) denies; disabled adjudication, an exceeded time budget, an
+    /// undetermined line of business and the NoOp rule engine pend.
     /// </summary>
-    public static readonly IReadOnlySet<string> RulesEvaluatingNoLineOfBusiness = new HashSet<string>(StringComparer.Ordinal)
-    {
-        "provider-exclusion-check", "ConfigDisabled", "TimeBudgetExceeded", "LineOfBusinessUndetermined",
-    };
+    public static readonly IReadOnlyDictionary<string, AutomatedDecisionOutcome> NoEvaluationRuleOutcomes =
+        new Dictionary<string, AutomatedDecisionOutcome>(StringComparer.Ordinal)
+        {
+            ["provider-exclusion-check"] = AutomatedDecisionOutcome.Denied,
+            ["ConfigDisabled"] = AutomatedDecisionOutcome.Pended,
+            ["TimeBudgetExceeded"] = AutomatedDecisionOutcome.Pended,
+            ["LineOfBusinessUndetermined"] = AutomatedDecisionOutcome.Pended,
+            ["NoOp"] = AutomatedDecisionOutcome.Pended,
+        };
 
     /// <summary>
     /// The service state the deciding path read (USPS code): the enrollment gate
