@@ -147,7 +147,8 @@ public class SmartScopeEnforcementMiddleware
                            ?? context.User.FindFirst("patient")?.Value;
 
         // ── 1. Scope check ────────────────────────────────────────────────────
-        if (!HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts))
+        if (!HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts,
+                interaction.ExplicitScopeOnly))
         {
             _logger.LogWarning(
                 "SMART scope denied — resource: {Resource}, access: {Access}, scopes: {Scopes}",
@@ -268,17 +269,19 @@ public class SmartScopeEnforcementMiddleware
     /// <summary>
     /// System context only: a payer-to-payer operation is invoked by another
     /// payer's backend (client-credentials), never by a member's patient app
-    /// or a provider's user app. See <see cref="ResourceOperationContexts"/>.
+    /// or a provider's user app. See <see cref="ExplicitScopeOperations"/>.
     /// </summary>
     private static readonly string[] SystemContexts = ["system"];
 
     /// <summary>
     /// What one request is, for authorization purposes: the resource whose scope
     /// governs it, the instance it names (for patient binding), whether it reads
-    /// or writes, and which scope contexts may invoke it.
+    /// or writes, and which scope contexts may invoke it. When
+    /// <paramref name="ExplicitScopeOnly"/> is set, only the exact
+    /// <c>{context}/{Resource}.{Access}</c> scope grants it — no wildcard.
     /// </summary>
     private sealed record FhirInteraction(
-        string Resource, string? ResourceId, string Access, string[] Contexts);
+        string Resource, string? ResourceId, string Access, string[] Contexts, bool ExplicitScopeOnly = false);
 
     /// <summary>
     /// SYSTEM-level FHIR operations — <c>/fhir/r4/$operation</c> — and the scope
@@ -351,13 +354,23 @@ public class SmartScopeEnforcementMiddleware
     /// admitting a patient-context token let member A name member B and pull
     /// B's data (D-13). They are therefore system-context only, and the
     /// controllers refuse any patient-bound caller again as defence in depth.
+    ///
+    /// Both are also governed by ONE dedicated scope,
+    /// <c>system/PayerToPayer.read</c>, that only an exact grant satisfies.
+    /// A wildcard (<c>system/*.read</c>, <c>system/*.*</c>) or a resource grant
+    /// such as <c>system/Patient.read</c> is what a Provider Access bulk client,
+    /// or any backend client of any trusted issuer, typically holds; none of
+    /// them is a grant to act as a payer in a payer-to-payer exchange.
     /// </summary>
-    private static readonly IReadOnlyDictionary<string, string[]> ResourceOperationContexts =
-        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+    private static readonly IReadOnlyDictionary<string, (string ScopeResource, string[] Contexts)>
+        ExplicitScopeOperations = new Dictionary<string, (string, string[])>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Patient/$member-match"] = SystemContexts,
-            ["PayerToPayer/$member-data-export"] = SystemContexts,
+            ["Patient/$member-match"] = (PayerToPayerScopeResource, SystemContexts),
+            ["PayerToPayer/$member-data-export"] = (PayerToPayerScopeResource, SystemContexts),
         };
+
+    /// <summary>The resource name in the payer-to-payer scope, <c>system/PayerToPayer.read</c>.</summary>
+    internal const string PayerToPayerScopeResource = "PayerToPayer";
 
     /// <summary>
     /// Resolves a request under <c>/fhir/r4</c> into the interaction that governs
@@ -412,10 +425,12 @@ public class SmartScopeEnforcementMiddleware
 
         // /fhir/r4/{Resource}/$operation
         if (segments.Length >= 4 && segments[3].StartsWith('$'))
-            return new FhirInteraction(resource, null, OperationAccess(resource, segments[3], methodAccess),
-                ResourceOperationContexts.TryGetValue($"{resource}/{segments[3]}", out var opContexts)
-                    ? opContexts
-                    : AllContexts);
+        {
+            var access = OperationAccess(resource, segments[3], methodAccess);
+            return ExplicitScopeOperations.TryGetValue($"{resource}/{segments[3]}", out var policy)
+                ? new FhirInteraction(policy.ScopeResource, null, access, policy.Contexts, ExplicitScopeOnly: true)
+                : new FhirInteraction(resource, null, access, AllContexts);
+        }
 
         // /fhir/r4/{Resource}/{id}/$operation
         if (segments.Length >= 5 && segments[4].StartsWith('$'))
@@ -461,10 +476,18 @@ public class SmartScopeEnforcementMiddleware
     /// asked for: a <c>.read</c> wildcard never satisfies a write.
     /// </summary>
     private static bool HasRequiredScope(
-        HashSet<string> scopes, string resourceType, string access, string[]? contexts = null)
+        HashSet<string> scopes, string resourceType, string access, string[]? contexts = null,
+        bool explicitOnly = false)
     {
         foreach (var context in contexts ?? AllContexts)
         {
+            if (explicitOnly)
+            {
+                if (scopes.Contains($"{context}/{resourceType}.{access}"))
+                    return true;
+                continue;
+            }
+
             if (scopes.Contains($"{context}/*.{access}")
                 || scopes.Contains($"{context}/*.*")
                 || scopes.Contains($"{context}/{resourceType}.{access}")

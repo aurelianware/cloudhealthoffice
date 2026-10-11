@@ -213,7 +213,12 @@ public class SecurityConsentMetricsTests
     // …and an operation that only READS is not gratuitously escalated: an
     // inquiry and a member match are POSTs by shape, not by effect.
     [InlineData("POST", "/fhir/r4/Claim/$inquire", "system/Claim.read", 200)]
-    [InlineData("POST", "/fhir/r4/Patient/$member-match", "system/Patient.read", 200)]
+    // Member match is a payer-to-payer operation (D-13): only the explicit
+    // system/PayerToPayer.read grants it. This row was system/Patient.read →
+    // 200; a Patient (or wildcard) read grant no longer opens it.
+    [InlineData("POST", "/fhir/r4/Patient/$member-match", "system/PayerToPayer.read", 200)]
+    [InlineData("POST", "/fhir/r4/Patient/$member-match", "system/Patient.read", 403)]
+    [InlineData("POST", "/fhir/r4/Patient/$member-match", "system/*.read", 403)]
     [InlineData("POST", "/fhir/r4/Questionnaire/$questionnaire-package", "user/*.read", 200)]
     // Plain REST follows the method: a GET reads, a POST/PUT writes.
     [InlineData("GET", "/fhir/r4/Patient/pat-001", "user/Patient.read", 200)]

@@ -58,6 +58,9 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
     private const string ExportPath = "/fhir/r4/PayerToPayer/$member-data-export";
     private const string MatchPath = "/fhir/r4/Patient/$member-match";
 
+    /// <summary>The one scope that opens both inbound payer-to-payer operations.</summary>
+    private const string P2PScope = "system/PayerToPayer.read";
+
     private static readonly JsonSerializerOptions FhirJson =
         new JsonSerializerOptions().ForFhir(typeof(Patient).Assembly);
 
@@ -83,7 +86,7 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
     private string PatientToken(string patientId, string scopes = "patient/*.read")
         => _factory.IssueToken(scopes, patientId);
 
-    private string BackendToken(string scopes = "system/*.read", string tenantId = "test-tenant")
+    private string BackendToken(string scopes = P2PScope, string tenantId = "test-tenant")
         => _factory.IssueToken(scopes, patientId: null, tenantId: tenantId,
             extraClaims: [new SecurityClaim("client_id", "new-plan-backend")]);
 
@@ -133,7 +136,7 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
         // A token bound to a patient is a patient token, however else it is
         // scoped (CallerIdentityResolver.ClassifyCaller takes the narrow reading).
         var response = await PostAsync(ExportPath,
-            PatientToken("pat-001", "patient/*.read system/*.read"), ExportBody("pat-002"));
+            PatientToken("pat-001", "patient/*.read " + P2PScope), ExportBody("pat-002"));
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await response.Content.ReadAsStringAsync()).Should().NotContain("pat-002");
@@ -150,13 +153,11 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
-    [Theory]
-    [InlineData("system/*.read")]
-    [InlineData("system/PayerToPayer.read")]
-    public async Task Export_BackendToken_ExportsTheOptedInMember(string scopes)
+    [Fact]
+    public async Task Export_BackendTokenWithTheExplicitP2PScope_ExportsTheOptedInMember()
     {
         // Positive control: the legitimate backend flow still works.
-        var response = await PostAsync(ExportPath, BackendToken(scopes), ExportBody("pat-002"));
+        var response = await PostAsync(ExportPath, BackendToken(P2PScope), ExportBody("pat-002"));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -181,6 +182,60 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
         => (await PostAsync(ExportPath, BackendToken("system/Coverage.read"), ExportBody("pat-002")))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
+    // ── Explicit scope only (review of #1294) ────────────────────────────────
+    //
+    // A wildcard such as system/*.read is what a Provider Access bulk client,
+    // or any backend client of any trusted issuer, typically holds. It must not
+    // open the payer-to-payer operations: only the dedicated scope does.
+
+    [Theory]
+    [InlineData("system/*.read")]
+    [InlineData("system/*.*")]
+    [InlineData("system/Patient.read")]
+    public async Task Export_BackendTokenWithoutTheExplicitP2PScope_IsRefused(string scopes)
+        => (await PostAsync(ExportPath, BackendToken(scopes), ExportBody("pat-002")))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+    [Theory]
+    [InlineData("system/*.read")]
+    [InlineData("system/*.*")]
+    [InlineData("system/Patient.read")]
+    public async Task MemberMatch_BackendTokenWithoutTheExplicitP2PScope_IsRefused(string scopes)
+        => (await PostAsync(MatchPath, BackendToken(scopes), MatchBody("pat-002")))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+    [Fact]
+    public async Task Export_P2PScopePlusAPatientScopeInScp_IsRefused()
+    {
+        // `scp` carries a patient-context scope and there is no patient claim.
+        // The caller is a patient-context caller (CallerIdentityResolver reads
+        // scope AND scp), so it is not a payer backend.
+        var token = _factory.IssueToken(P2PScope, patientId: null,
+            extraClaims: [new SecurityClaim("scp", "patient/*.read"), new SecurityClaim("client_id", "mixed-client")]);
+
+        (await PostAsync(ExportPath, token, ExportBody("pat-002")))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task MemberMatch_P2PScopePlusAUserScopeInScp_IsRefused()
+    {
+        var token = _factory.IssueToken(P2PScope, patientId: null,
+            extraClaims: [new SecurityClaim("scp", "user/*.read")]);
+
+        (await PostAsync(MatchPath, token, MatchBody("pat-002")))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task SmartConfiguration_AdvertisesTheP2PScope()
+    {
+        using var client = _factory.CreateClient();
+        using var doc = JsonDocument.Parse(await client.GetStringAsync("/fhir/r4/.well-known/smart-configuration"));
+        doc.RootElement.GetProperty("scopes_supported").EnumerateArray()
+            .Select(s => s.GetString()).Should().Contain(P2PScope);
+    }
+
     // ── $member-match ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -196,7 +251,7 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
 
     [Fact]
     public async Task MemberMatch_PatientTokenThatAlsoHoldsSystemScopes_IsRefused()
-        => (await PostAsync(MatchPath, PatientToken("pat-001", "patient/*.read system/*.read"), MatchBody("pat-002")))
+        => (await PostAsync(MatchPath, PatientToken("pat-001", "patient/*.read " + P2PScope), MatchBody("pat-002")))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
     [Fact]
@@ -206,7 +261,7 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
 
     [Fact]
     public async Task MemberMatch_BackendToken_Matches()
-        => (await PostAsync(MatchPath, BackendToken("system/Patient.read"), MatchBody("pat-002")))
+        => (await PostAsync(MatchPath, BackendToken(), MatchBody("pat-002")))
             .StatusCode.Should().Be(HttpStatusCode.OK);
 
     [Fact]

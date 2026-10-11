@@ -100,23 +100,45 @@ public abstract class FhirControllerBase : ControllerBase
         => HttpContext.Items["SmartScopes"] as HashSet<string> ?? new HashSet<string>();
 
     /// <summary>
-    /// True only for a SMART backend (client-credentials) caller: every granted
-    /// scope is <c>system/</c>-context and the token is bound to no patient.
-    /// A token carrying any patient/ or user/ scope, or any patient binding
+    /// True only for a SMART backend (client-credentials) caller: the token's
+    /// scopes — from BOTH the <c>scope</c> and <c>scp</c> claims, parsed by
+    /// <see cref="FhirService.Services.Identity.CallerIdentityResolver.ParseScopes"/>,
+    /// the parser <c>AuthenticatedCaller</c> is built from — classify it as a
+    /// system caller, and it is bound to no patient. A token carrying any
+    /// patient/ or user/ scope in either claim, or any patient binding
     /// (middleware-injected, issuer-mapped, or the raw <c>patient</c> claim),
     /// is not a backend caller, however else it is scoped.
     /// </summary>
+    private const string MappedScpClaimType = "http://schemas.microsoft.com/identity/claims/scope";
+
     protected bool IsBackendSystemCaller
     {
         get
         {
+            if (User is null) return false;
             if (!string.IsNullOrEmpty(SmartPatientId)) return false;
-            if (HttpContext.Items[FhirService.Services.Identity.AuthenticatedCaller.HttpContextItemKey]
-                    is FhirService.Services.Identity.AuthenticatedCaller { PatientId: { Length: > 0 } })
-                return false;
-            if (!string.IsNullOrEmpty(User?.FindFirst("patient")?.Value)) return false;
 
-            return FhirService.Services.Identity.CallerIdentityResolver.ClassifyCaller(SmartScopes)
+            var caller = HttpContext.Items[FhirService.Services.Identity.AuthenticatedCaller.HttpContextItemKey]
+                as FhirService.Services.Identity.AuthenticatedCaller;
+            if (!string.IsNullOrEmpty(caller?.PatientId)) return false;
+            if (!string.IsNullOrEmpty(User.FindFirst("patient")?.Value)) return false;
+            if (caller is not null && caller.CallerType != FhirService.Services.Identity.SmartCallerType.System)
+                return false;
+
+            // Also classify from the principal itself: AuthenticatedCaller is
+            // only present when the issuer resolved in the trusted registry.
+            var scopes = FhirService.Services.Identity.CallerIdentityResolver.ParseScopes(User);
+
+            // The SMART JWT scheme keeps the handler's default inbound claim
+            // mapping, which renames `scp` to the WS-* scope claim type, so
+            // ParseScopes never sees it. Read that spelling too: for a
+            // REFUSAL check, every claim that could carry a patient/ or user/
+            // scope must count.
+            foreach (var claim in User.FindAll(MappedScpClaimType))
+                foreach (var value in claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                    scopes.Add(value);
+
+            return FhirService.Services.Identity.CallerIdentityResolver.ClassifyCaller(scopes)
                    == FhirService.Services.Identity.SmartCallerType.System;
         }
     }

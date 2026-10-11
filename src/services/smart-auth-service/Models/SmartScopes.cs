@@ -43,6 +43,15 @@ public static class SmartScopes
     public const string SystemEncounterRead = "system/Encounter.read";
     public const string SystemClaimRead = "system/Claim.read";
 
+    /// <summary>
+    /// Payer-to-Payer (CMS-0057-F): the one scope that opens fhir-service's
+    /// inbound <c>PayerToPayer/$member-data-export</c> and
+    /// <c>Patient/$member-match</c>. fhir-service accepts only this exact grant
+    /// for them — <c>system/*.read</c> and <c>system/*.*</c> do not satisfy it —
+    /// so grant it only to another payer's backend client.
+    /// </summary>
+    public const string SystemPayerToPayerRead = "system/PayerToPayer.read";
+
     // ── Write scopes ──────────────────────────────────────────────────────────
     // The FHIR surface serves genuine writes — Da Vinci PAS Claim/$submit, the
     // CDex $submit-attachment response, DTR questionnaire responses — and a read
@@ -107,6 +116,7 @@ public static class SmartScopes
         (SystemEobRead,          "System: read ExplanationOfBenefit"),
         (SystemEncounterRead,    "System: read Encounter"),
         (SystemClaimRead,        "System: read Claim"),
+        (SystemPayerToPayerRead, "System: Payer-to-Payer member match and data export"),
 
         // Writes. Without these the FHIR surface's write operations —
         // PAS Claim/$submit, CDex $submit-attachment, DTR responses — are
