@@ -354,13 +354,14 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
 
     // ── Decision factories (unchanged) ────────────────────────────
 
+    // No approved period here: none of these rules decides one, and the
+    // controller approves the period the request asked for (D-03). It used to
+    // be hard-coded to today..+1 year whatever was requested.
     private static PasDecisionResult Approve(Stopwatch sw, string ruleName) => new()
     {
         HasDecision         = true,
         Decision            = "approved",
         AuthorizationNumber = $"PAS-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}",
-        EffectiveFrom       = DateTime.UtcNow.Date,
-        EffectiveTo         = DateTime.UtcNow.Date.AddYears(1),
         RuleName            = ruleName,
         ElapsedMs           = sw.ElapsedMilliseconds
     };

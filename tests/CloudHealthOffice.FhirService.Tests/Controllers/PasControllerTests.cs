@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using CloudHealthOffice.FhirService.Tests.TestSupport;
 
 namespace CloudHealthOffice.FhirService.Tests.Controllers;
 
@@ -21,6 +22,13 @@ public class PasControllerTests
     private readonly Mock<IHttpClientFactory> _httpClientFactoryMock;
     private readonly Mock<ILogger<PasController>> _loggerMock;
     private readonly PasController _controller;
+
+    // Persistence is now a seam of its own (IPasAuthorizationRecorder). The
+    // HTTP no-op that used to stand for authorization-service answered 201 to
+    // anything, which is how a payload that authorization-service rejects went
+    // unnoticed (D-01). The real seam is covered end to end by
+    // Integration/PasSubmitPersistenceSeamTests.
+    private readonly FakePasAuthorizationRecorder _recorder = new();
 
     public PasControllerTests()
     {
@@ -52,7 +60,9 @@ public class PasControllerTests
             .Setup(f => f.CreateClient("AuthorizationService"))
             .Returns(httpClient);
 
-        var verificationClient = new HttpClient(new NoOpHandler())
+        // The complete bundle names the requesting NPI, so verification now
+        // runs; 404 = no verdict, and the request proceeds (fail open).
+        var verificationClient = new HttpClient(new NoOpHandler(HttpStatusCode.NotFound))
         {
             BaseAddress = new Uri("http://provider-verification-service.test/"),
         };
@@ -74,6 +84,7 @@ public class PasControllerTests
             new Mock<IPriorAuthorizationInquiryService>().Object,
             config,
             _httpClientFactoryMock.Object,
+            _recorder,
             _loggerMock.Object);
 
         // Set up HttpContext with tenant
@@ -108,6 +119,7 @@ public class PasControllerTests
         var claimResponse = responseBundle.Entry[0].Resource as ClaimResponse;
         claimResponse!.Disposition.Should().Be("approved");
         claimResponse.PreAuthRef.Should().Be("PAS-TEST-001");
+        _recorder.Last!.AuthorizationNumber.Should().Be("PAS-TEST-001", "the preAuthRef names the stored record");
     }
 
     [Fact]
@@ -252,54 +264,23 @@ public class PasControllerTests
         claimResponse.Use.Should().Be(ClaimUseCode.Preauthorization);
     }
 
+    // A complete PAS Bundle (Claim + Patient + Coverage + Practitioner): $submit
+    // now refuses a Claim whose referenced resources are missing instead of
+    // storing placeholders (D-03), so a Claim-only bundle no longer reaches
+    // the adjudicator.
     private static Bundle CreateRequestBundle(string procedureCode)
-    {
-        var claim = new Claim
-        {
-            Id = Guid.NewGuid().ToString(),
-            Status = FinancialResourceStatusCodes.Active,
-            Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-            Use = ClaimUseCode.Preauthorization,
-            Patient = new ResourceReference("Patient/pat-001"),
-            Created = DateTime.UtcNow.ToString("yyyy-MM-dd"),
-            Insurer = new ResourceReference("Organization/cho-payer"),
-            Provider = new ResourceReference("Practitioner/1234567890"),
-            Priority = new CodeableConcept("http://terminology.hl7.org/CodeSystem/processpriority", "normal"),
-            Insurance = new List<Claim.InsuranceComponent>
-            {
-                new() { Sequence = 1, Focal = true, Coverage = new ResourceReference("Coverage/cov-001") }
-            },
-            Item = new List<Claim.ItemComponent>
-            {
-                new()
-                {
-                    Sequence = 1,
-                    ProductOrService = new CodeableConcept(
-                        "http://www.ama-assn.org/go/cpt", procedureCode),
-                }
-            },
-        };
-
-        return new Bundle
-        {
-            Type = Bundle.BundleType.Collection,
-            Entry = new List<Bundle.EntryComponent>
-            {
-                new() { Resource = claim }
-            },
-        };
-    }
+        => PasBundles.Complete(procedureCode: procedureCode);
 
     /// <summary>
-    /// No-op HTTP handler that returns 201 for auth-service persistence calls.
+    /// No-op HTTP handler answering a fixed status (201 by default) to
+    /// anything. Persistence no longer goes through it (see _recorder).
     /// </summary>
-    private class NoOpHandler : HttpMessageHandler
+    private class NoOpHandler(HttpStatusCode status = HttpStatusCode.Created) : HttpMessageHandler
     {
         protected override System.Threading.Tasks.Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            return System.Threading.Tasks.Task.FromResult(
-                new HttpResponseMessage(HttpStatusCode.Created));
+            return System.Threading.Tasks.Task.FromResult(new HttpResponseMessage(status));
         }
     }
 }
