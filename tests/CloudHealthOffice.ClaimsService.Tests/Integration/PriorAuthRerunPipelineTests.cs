@@ -187,7 +187,9 @@ public sealed class PriorAuthRerunPipelineTests
         Assert.Equal(0, run.Denied);
         Assert.Equal(0, run.Approved);
         Assert.Equal(1, run.StillPended);
-        await _claims.DidNotReceiveWithAnyArgs().UpdateHoldingResolutionLockAsync(default!, default!, default);
+        // Never finalized: the only write allowed is the re-stamp of a still-Pended claim (S1).
+        await _claims.DidNotReceive().UpdateHoldingResolutionLockAsync(
+            Arg.Is<Claim>(c => c.Status != ClaimStatus.Pended), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>(a) PA Valid, then benefit-plan-service answers 503 / 429: never finalized Denied(999).</summary>

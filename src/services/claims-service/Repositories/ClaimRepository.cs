@@ -251,7 +251,8 @@ public interface IClaimRepository
 
     /// <summary>
     /// Pended claims of the request tenant whose routing pend code is
-    /// <paramref name="pendCode"/>, least recently pended first
+    /// <paramref name="pendCode"/> and that carry no other pend reason (those
+    /// are left for an examiner), least recently pended first
     /// (<see cref="PendDetails.PendedAt"/>). A bulk re-run that pends a claim
     /// again re-stamps it, so it moves to the back instead of refilling every
     /// batch (#1299).
@@ -1888,6 +1889,9 @@ public class ClaimRepository : IClaimRepository
         var query = new QueryDefinition($@"
             SELECT TOP @limit * FROM c
             WHERE c.tenantId = @tenantId AND {pended} AND c.pendDetails.pendCode = @pendCode
+              AND (NOT IS_DEFINED(c.pendDetails.additionalPendReasons)
+                   OR IS_NULL(c.pendDetails.additionalPendReasons)
+                   OR ARRAY_LENGTH(c.pendDetails.additionalPendReasons) = 0)
             ORDER BY c.pendDetails.pendedAt")
             .WithParameter("@limit", limit)
             .WithParameter("@tenantId", tenantId)

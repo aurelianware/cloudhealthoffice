@@ -89,7 +89,9 @@ public sealed class PriorAuthUnavailableRerunTests
 
         Assert.Equal(0, run.Denied);
         Assert.Equal(1, run.StillPended);
-        await _claims.DidNotReceiveWithAnyArgs().UpdateHoldingResolutionLockAsync(default!, default!, default);
+        // Never finalized: the only write allowed is the re-stamp of a still-Pended claim (S1).
+        await _claims.DidNotReceive().UpdateHoldingResolutionLockAsync(
+            Arg.Is<Claim>(c => c.Status != ClaimStatus.Pended), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>The audit records the denying stage's own reason, not the first non-passing stage's.</summary>

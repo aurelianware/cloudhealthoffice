@@ -968,7 +968,13 @@ public class ClaimRepositoryMongo : IClaimRepository
         var filter = b.And(
             b.Eq(c => c.TenantId, GetTenantId()),
             b.Eq(c => c.Status, ClaimStatus.Pended),
-            b.Eq(c => c.PendDetails!.PendCode, pendCode));
+            b.Eq(c => c.PendDetails!.PendCode, pendCode),
+            // Claims with other pend reasons are left for an examiner by the
+            // bulk re-runs; returning them would let them fill every batch.
+            b.Or(
+                b.Exists(c => c.PendDetails!.AdditionalPendReasons, false),
+                b.Eq(c => c.PendDetails!.AdditionalPendReasons, null),
+                b.Size(c => c.PendDetails!.AdditionalPendReasons, 0)));
         return (await _collection.Find(filter).SortBy(c => c.PendDetails!.PendedAt).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
     }
 

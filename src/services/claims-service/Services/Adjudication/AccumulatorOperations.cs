@@ -271,7 +271,13 @@ public sealed class AccumulatorOperationsService
         if (!await _claims.TryAcquireResolutionLockAsync(
                 tenantId, claim.Id, lockToken, actor, now, Controllers.ClaimsController.ResolutionLockDuration, ct))
             return Item("Skipped", "being resolved, or no longer Pended");
-        AccumulatorPendRerunItem StillPended(string detail) => Item("StillPended", detail);
+        var failed = false;
+        var stillPended = false;
+        AccumulatorPendRerunItem StillPended(string detail)
+        {
+            stillPended = true;
+            return Item("StillPended", detail);
+        }
         try
         {
             claim = await _claims.GetForAccumulatorOutboxAsync(tenantId, claim.Id, ct) ?? claim;
@@ -370,11 +376,39 @@ public sealed class AccumulatorOperationsService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "{Kind} re-run of claim {ClaimId} failed", kind.Name, Sanitize(claim.Id));
+            failed = true;
             return Item("Failed", Describe(ex));
         }
         finally
         {
+            // #1299 re-verify S1: a run that made no progress (failed, or the
+            // re-run left the claim pended without re-stamping it) moves the
+            // claim to the back of the queue, so it cannot hold the head of
+            // every batch.
+            if (failed || stillPended)
+                await RestampAsync(tenantId, claim.Id, lockToken, now);
             await _claims.ReleaseResolutionLockAsync(tenantId, claim.Id, lockToken, CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Re-stamps <see cref="PendDetails.PendedAt"/> of a still-Pended claim the
+    /// re-run did not re-stamp, under the resolution lock this run holds. Best
+    /// effort: a failure leaves the claim where it was.
+    /// </summary>
+    private async Task RestampAsync(string tenantId, string claimId, string lockToken, DateTime attemptStartedAt)
+    {
+        try
+        {
+            var fresh = await _claims.GetForAccumulatorOutboxAsync(tenantId, claimId, CancellationToken.None);
+            if (fresh is not { Status: ClaimStatus.Pended, PendDetails: { } pend } || pend.PendedAt >= attemptStartedAt)
+                return;
+            pend.PendedAt = DateTime.UtcNow;
+            await _claims.UpdateHoldingResolutionLockAsync(fresh, lockToken, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Claim {ClaimId}: could not move the pend to the back of the re-run queue", Sanitize(claimId));
         }
     }
 
