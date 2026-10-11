@@ -3,7 +3,12 @@ info:
   title: Cloud Health Office — Prior Authorization API
   version: 4.0.0
   description: |
-    FHIR R4 Prior Authorization API with CDS Hooks for CMS-0057-F compliance.
+    FHIR R4 Prior Authorization API with CDS Hooks, built toward CMS-0057-F.
+
+    **Status:** CMS-0057-F conformance is in progress. Da Vinci CRD/DTR/PAS are
+    in development and not yet conformant. Operations marked "Not yet served"
+    below are design intent, not running endpoints. See the ePA gap matrix
+    (docs/epa-gap-matrix.md), which is the source of truth for current status.
 
     Implements electronic prior authorization aligned with the Da Vinci Prior
     Authorization Support (PAS) Implementation Guide and Coverage Requirements
@@ -13,11 +18,11 @@ info:
     status inquiry, and real-time coverage requirements discovery by January 1, 2027.
 
     **Key Capabilities:**
-    - FHIR Claim-based prior auth submission (replaces X12 278)
+    - FHIR Claim-based prior auth submission (Da Vinci PAS, in development)
     - Real-time auth status inquiry via ClaimResponse
-    - CDS Hooks for coverage requirements discovery (CRD)
-    - Bidirectional X12 278 ↔ FHIR mapping
-    - SLA tracking (urgent: 24h, standard: 7 days per CMS timelines)
+    - CDS Hooks for coverage requirements discovery (CRD, in development)
+    - X12 278 ↔ FHIR mapping (planned; X12 278 bridging is not yet built)
+    - SLA tracking (expedited: 72 hours, standard: 7 calendar days per CMS timelines; in development)
     - Clinical attachment support (DocumentReference, Binary)
     - Clearinghouse packaging for hybrid X12/FHIR workflows
     - Decision timeline audit trail
@@ -55,7 +60,7 @@ tags:
   - name: Attachments
     description: Clinical documentation attachments
   - name: X12 Mapping
-    description: Bidirectional X12 278 ↔ FHIR conversion
+    description: X12 278 ↔ FHIR conversion (planned; not yet served)
   - name: SLA
     description: Authorization decision SLA tracking
 
@@ -69,7 +74,8 @@ paths:
       summary: Submit a prior authorization request
       description: |
         Submit a FHIR Claim resource with `use: preauthorization` to request
-        prior authorization. Replaces the X12 278 request workflow.
+        prior authorization (Da Vinci PAS, in development). X12 278
+        bridging is planned.
 
         The payer processes the request and returns a ClaimResponse with the
         authorization decision (approved, denied, pended for review).
@@ -286,32 +292,39 @@ paths:
                       type: object
               example:
                 services:
-                  - id: "prior-auth-crd"
+                  - id: "cho-order-select"
+                    hook: "order-select"
+                    title: "Coverage Requirements Discovery"
+                    description: "Check if prior authorization is required for the selected service"
+                    prefetch:
+                      patient: "Patient/{{context.patientId}}"
+                      coverage: "Coverage?patient={{context.patientId}}&status=active"
+                  - id: "cho-order-sign"
                     hook: "order-sign"
                     title: "Coverage Requirements Discovery"
                     description: "Check if prior authorization is required for the ordered service"
                     prefetch:
                       patient: "Patient/{{context.patientId}}"
                       coverage: "Coverage?patient={{context.patientId}}&status=active"
-                  - id: "prior-auth-check"
-                    hook: "appointment-book"
-                    title: "Prior Auth Pre-Check"
-                    description: "Verify prior authorization before scheduling"
 
-  /cds-services/prior-auth-crd:
+  /cds-services/cho-order-sign:
     post:
       operationId: coverageRequirementsDiscovery
       summary: Check if prior auth is required (CRD)
       description: |
-        CDS Hooks endpoint for Coverage Requirements Discovery.
-        Called by the EHR during the `order-sign` hook to determine
-        if the ordered service requires prior authorization.
+        CDS Hooks endpoint for Coverage Requirements Discovery (in
+        development, not yet conformant). Called by the EHR during the
+        `order-sign` hook to determine if the ordered service requires
+        prior authorization. `/cds-services/cho-order-select` accepts the
+        `order-select` hook the same way.
 
-        Returns CDS Cards with:
+        Returns free-text CDS Cards indicating:
         - Whether prior auth is required
         - What documentation is needed (DTR link)
-        - Estimated approval timeline
-        - Alternative services that don't require auth
+
+        Not yet built: the CRD coverage-information extension
+        (systemActions), propose-alternate-request cards, and CDS Hooks
+        JWT verification (a CHO-issued SMART token is required instead).
       tags: [CDS Hooks]
       requestBody:
         required: true
@@ -390,6 +403,7 @@ paths:
       operationId: submitAttachment
       summary: Submit clinical documentation for prior auth
       description: |
+        **Not yet served.** fhir-service serves GET DocumentReference only.
         Submit supporting clinical documentation (operative reports,
         PT notes, imaging, lab results) as a FHIR DocumentReference
         linked to an existing prior authorization request.
@@ -430,6 +444,7 @@ paths:
       operationId: mapX12ToFhir
       summary: Convert X12 278 to FHIR prior auth
       description: |
+        **Not yet served.** X12 278 bridging is planned.
         Converts an inbound X12 278 Health Care Services Review
         request to a FHIR Claim resource. Used for clearinghouse
         integration and hybrid X12/FHIR workflows.
@@ -474,6 +489,7 @@ paths:
       operationId: mapFhirToX12
       summary: Convert FHIR prior auth response to X12 278
       description: |
+        **Not yet served.** X12 278 bridging is planned.
         Converts a FHIR ClaimResponse back to X12 278 format
         for clearinghouse transmission. Used for outbound responses
         to providers who submit via X12.
@@ -499,8 +515,10 @@ paths:
       operationId: getSlaStatus
       summary: Get authorization decision SLA status
       description: |
+        **Not yet served.** Decision timeframe tracking is in development
+        (authorization-service exposes GET sla/at-risk today).
         Returns the SLA timeline for an authorization request.
-        CMS-0057-F mandates: urgent requests within 24 hours,
+        CMS-0057-F mandates: expedited requests within 72 hours,
         standard requests within 7 calendar days.
       tags: [SLA]
       parameters:
@@ -600,7 +618,7 @@ components:
       properties:
         hook:
           type: string
-          enum: [order-sign, order-select, appointment-book]
+          enum: [order-sign, order-select]
         hookInstance:
           type: string
           format: uuid
