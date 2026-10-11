@@ -92,11 +92,10 @@ if (useMongo)
 }
 else
 {
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var cfg = sp.GetRequiredService<IConfiguration>();
-        return new CosmosClient(cfg["CosmosDb:Endpoint"], cfg["CosmosDb:Key"]);
-    });
+    // The CosmosClient is the one AddChoDatabase registered above, with the
+    // shared CosmosSystemTextJsonSerializer (camelCase, string enums, nulls
+    // omitted). Registering another client here would override it and store
+    // PascalCase documents with no "id" (D-31).
     builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepository>();
     builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryCosmos>();
     builder.Services.AddScoped<IPlanVersionTransitionRepository, CosmosPlanVersionTransitionRepository>();
