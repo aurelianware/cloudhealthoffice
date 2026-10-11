@@ -36,7 +36,11 @@ public sealed class ManifestScenario
     [JsonPropertyName("id")] public string Id { get; init; } = "";
     [JsonPropertyName("name")] public string Name { get; init; } = "";
     [JsonPropertyName("capability")] public string Capability { get; init; } = "";
-    [JsonPropertyName("replace")] public ManifestBackend Replace { get; init; } = new();
+    /// <summary>Cloud Health Office (Replace) status. Never read from the
+    /// manifest: it is filled from the status matrix (docs/epa-gap-matrix.md
+    /// §11) by <see cref="StatusMatrixResolver"/>. A manifest that still
+    /// declares it is rejected by <see cref="ManifestLoader"/>.</summary>
+    [JsonPropertyName("replace")] public ManifestBackend? Replace { get; init; }
     [JsonPropertyName("augment")] public Dictionary<string, ManifestBackend> Augment { get; init; } = new();
 }
 
@@ -60,7 +64,8 @@ public static class ManifestLoader
         AllowTrailingCommas = true,
     };
 
-    /// <summary>Load and structurally validate the scenario manifest.</summary>
+    /// <summary>Load and structurally validate the scenario manifest. The result has
+    /// no Replace status yet; apply <see cref="StatusMatrixResolver"/> before building evidence.</summary>
     public static ManifestDocument Load(string path)
     {
         if (!File.Exists(path))
@@ -90,8 +95,10 @@ public static class ManifestLoader
                 throw new ManifestException("Scenario manifest contains a scenario with an empty id.");
             if (!seen.Add(s.Id))
                 throw new ManifestException($"Scenario manifest contains a duplicate scenario id: {s.Id}.");
-            if (!Status.All.Contains(s.Replace.Status))
-                throw new ManifestException($"Scenario {s.Id} replace.status '{s.Replace.Status}' is not a valid status.");
+            if (s.Replace is not null)
+                throw new ManifestException(
+                    $"Scenario {s.Id} declares 'replace' in the manifest. The Cloud Health Office (Replace) status "
+                    + $"comes from the status matrix ({StatusMatrixParser.DefaultPath} §11); remove 'replace' from the manifest.");
             foreach (var (key, backend) in s.Augment)
             {
                 if (string.IsNullOrWhiteSpace(key))

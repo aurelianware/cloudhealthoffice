@@ -6,9 +6,11 @@ namespace Cms0057Acceptance.Tests.TestSupport;
 
 /// <summary>
 /// Loader + model for the CMS-0057-F scenario manifest
-/// (<c>scenarios.json</c>) — the machine-readable source of truth for scenario
-/// status. Shared by the drift tests here and, by the same JSON file, the
-/// evidence generator in <c>tools/Cms0057Evidence</c>.
+/// (<c>scenarios.json</c>): scenario ids, names, capabilities and external-core
+/// (Augment) statuses. The Cloud Health Office (Replace) status is NOT in the
+/// manifest; <c>tools/Cms0057Evidence</c> reads it from
+/// <c>docs/epa-gap-matrix.md</c> §11. Shared by the drift tests here and, by the
+/// same JSON file, the evidence generator.
 /// </summary>
 internal static class ScenarioManifest
 {
@@ -49,7 +51,9 @@ internal static class ScenarioManifest
         [JsonPropertyName("id")] public string Id { get; init; } = "";
         [JsonPropertyName("name")] public string Name { get; init; } = "";
         [JsonPropertyName("capability")] public string Capability { get; init; } = "";
-        [JsonPropertyName("replace")] public BackendStatus Replace { get; init; } = new();
+        /// <summary>Must be absent: the Replace status lives in docs/epa-gap-matrix.md §11.
+        /// Modelled only so a drift test can assert it is not reintroduced.</summary>
+        [JsonPropertyName("replace")] public BackendStatus? Replace { get; init; }
         [JsonPropertyName("augment")] public Dictionary<string, BackendStatus> Augment { get; init; } = new();
     }
 
