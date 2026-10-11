@@ -397,8 +397,9 @@ builder.Services.AddScoped<ICoverageResolver>(sp =>
         sp.GetRequiredService<HttpCoverageResolver>(),
         sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
 
-// Prior-authorization validation. The stage treats lookup degradation as
-// "not enough evidence to deny" while honoring known invalid auth responses.
+// Prior-authorization validation (D-04). Only a definitive answer from
+// authorization-service pays or denies; any failed lookup pends the claim
+// PAUNAVAIL (owner decision Q-9).
 builder.Services.AddHttpClient(UpstreamClientNames.AuthorizationService, client =>
 {
     client.BaseAddress = new Uri(

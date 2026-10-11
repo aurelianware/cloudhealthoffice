@@ -285,6 +285,24 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
         Assert.Equal(0, handler.RequestCount);
     }
 
+    /// <summary>
+    /// The plan could not be read, so which lines need PA is unknown: a
+    /// failed lookup, so the claim pends — never priced and paid without it.
+    /// </summary>
+    [Fact]
+    public async Task PlanNotResolved_PendsPaUnavailable_NeverPays()
+    {
+        var (stage, handler) = StageOver(_ => throw new InvalidOperationException("must not be called"));
+        var ctx = CommercialProfessional("AUTH-1", "72148");
+        ctx.PlanResolutionFailed = true;
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        AssertPendedPaUnavailable(result, ctx);
+        Assert.Contains("prior-authorization requirements could not be read", ctx.PendDetails!.PendReason);
+        Assert.Equal(0, handler.RequestCount);
+    }
+
     [Fact]
     public async Task PlanConfiguration_NeverStopsTheDefaultInpatientMedicaidCheck()
     {

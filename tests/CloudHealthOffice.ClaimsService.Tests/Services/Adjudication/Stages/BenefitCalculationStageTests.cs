@@ -744,6 +744,34 @@ public partial class BenefitCalculationStageTests
         await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
     }
 
+    /// <summary>A lookup implementation that throws pends the claim; it never rejects or escapes the stage.</summary>
+    [Fact]
+    public async Task Execute_InpatientWithPriorAuthLookupThrowing_PendsWithoutEngineCall()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        claim.LineOfBusiness = LineOfBusiness.Medicaid;
+        claim.ClaimType = ClaimType.Institutional;
+        claim.PlaceOfServiceCode = "21";
+        claim.PriorAuthorizationNumber = "AUTH-1";
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+        };
+        _authorizationValidationClient
+            .ValidateAsync(default!, default!, default, default, default, default)
+            .ThrowsAsyncForAnyArgs(new InvalidOperationException("boom"));
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, ctx.PendDetails!.PendCode);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
     /// <summary>
     /// A pricing pend is already on the claim: the PA pend is added to it,
     /// not lost, so an approval can never pass without the lookup.

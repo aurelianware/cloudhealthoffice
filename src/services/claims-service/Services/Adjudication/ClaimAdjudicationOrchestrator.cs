@@ -182,6 +182,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             context.ResolvedPlan = await _planResolver
                 .GetPlanAsync(tenantId, claim.BenefitPlanId!, ct)
                 .ConfigureAwait(false);
+            context.PlanResolutionFailed = context.ResolvedPlan is null;
         }
         if (!string.IsNullOrWhiteSpace(claim.MemberId))
         {

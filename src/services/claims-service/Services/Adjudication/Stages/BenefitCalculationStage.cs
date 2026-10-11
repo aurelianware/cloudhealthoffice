@@ -480,6 +480,19 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         CancellationToken ct)
     {
         var claim = context.Claim;
+
+        // The plan says which lines require PA (G-25). When the plan could
+        // not be read, that is a failed lookup too: never pay on it.
+        if (context.PlanResolutionFailed && context.ResolvedPlan is null)
+        {
+            _logger.LogWarning(
+                "Benefit plan not resolved for claim {ClaimVersionId}; its prior-authorization requirements are unknown, pending",
+                SanitizeForLog(context.ClaimVersionId));
+            return new PriorAuthorizationDecision(null,
+                $"{PriorAuthorizationUnavailableReason} (the benefit plan's prior-authorization requirements could not be read); " +
+                "the claim is re-adjudicated once benefit-plan-service answers.");
+        }
+
         var lines = LinesRequiringPriorAuthorization(claim, context.ResolvedPlan);
         if (lines.Count == 0)
         {
@@ -509,12 +522,24 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
             if (!lookups.TryGetValue(key, out var lookup))
             {
-                // A null from a substitute or a future implementation is not
-                // an answer either.
-                lookup = await _authorizationValidationClient
-                    .ValidateAsync(context.TenantId, number, procedureCode, serviceDate, providerNpi, ct)
-                    .ConfigureAwait(false)
-                    ?? AuthorizationLookupResult.Unavailable("authorization lookup returned no result");
+                try
+                {
+                    // A null from a substitute or a future implementation is
+                    // not an answer either.
+                    lookup = await _authorizationValidationClient
+                        .ValidateAsync(context.TenantId, number, procedureCode, serviceDate, providerNpi, ct)
+                        .ConfigureAwait(false)
+                        ?? AuthorizationLookupResult.Unavailable("authorization lookup returned no result");
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+                {
+                    // Nor is a lookup that threw: it must pend, not reject
+                    // or escape the stage.
+                    _logger.LogWarning(ex,
+                        "Prior-authorization lookup threw for claim {ClaimVersionId} line {LineNumber}",
+                        SanitizeForLog(context.ClaimVersionId), line.LineNumber);
+                    lookup = AuthorizationLookupResult.Unavailable($"authorization lookup failed ({ex.GetType().Name})");
+                }
                 lookups[key] = lookup;
             }
 

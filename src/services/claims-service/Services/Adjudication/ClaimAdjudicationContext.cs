@@ -30,6 +30,15 @@ public class ClaimAdjudicationContext
     /// <summary>Plan resolved by <see cref="IBenefitPlanResolver"/> at orchestrator entry.</summary>
     public ResolvedBenefitPlan? ResolvedPlan { get; set; }
 
+    /// <summary>
+    /// The claim names a benefit plan but <see cref="IBenefitPlanResolver"/>
+    /// returned nothing for it (benefit-plan-service failed, or the plan is
+    /// unknown), so the plan's prior-authorization requirements (G-25) are
+    /// unknown. <see cref="Stages.BenefitCalculationStage"/> pends rather
+    /// than paying a line the plan may require authorization for (D-04, Q-9).
+    /// </summary>
+    public bool PlanResolutionFailed { get; set; }
+
     /// <summary>Member resolved by <see cref="IMemberResolver"/> at orchestrator entry.</summary>
     public ResolvedMember? ResolvedMember { get; set; }
 

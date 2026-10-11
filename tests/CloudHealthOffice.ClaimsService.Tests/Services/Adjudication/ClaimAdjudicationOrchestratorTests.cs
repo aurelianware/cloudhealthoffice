@@ -541,6 +541,35 @@ public class ClaimAdjudicationOrchestratorTests
         await _planResolver.Received(1).GetPlanAsync("tenant-1", "resolved-plan-guid", Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// G-25 / D-04: a plan id that resolves to nothing is flagged, so the PA
+    /// check pends instead of paying lines the plan may require PA for.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Adjudicate_FlagsPlanResolutionFailure(bool planResolves)
+    {
+        bool? observed = null;
+        var stages = new IClaimAdjudicationStage[]
+        {
+            new RecordingStage("Observe", 100, isRequired: false, new List<string>(), ctx =>
+            {
+                observed = ctx.PlanResolutionFailed;
+                return ClaimAdjudicationStageResult.Pass("Observe");
+            }),
+            new RecordingStage("Persistence", 999, isRequired: true, new List<string>()),
+        };
+        var claim = BuildAdapterClaim();
+        SetupAdapterReturning(claim);
+        _planResolver.GetPlanAsync("tenant-1", claim.BenefitPlanId!, Arg.Any<CancellationToken>())
+            .Returns(planResolves ? new ResolvedBenefitPlan { Id = claim.BenefitPlanId! } : null);
+
+        await BuildOrchestrator(stages).AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+
+        Assert.Equal(!planResolves, observed);
+    }
+
     [Fact]
     public async Task Adjudicate_ClaimWithoutBenefitPlanId_NoActiveCoverage_LeavesBenefitPlanIdBlank()
     {
