@@ -74,6 +74,7 @@ public sealed class AccumulatorPendRerunResult
 public sealed class AccumulatorOperationsService
 {
     public const string RerunActorPrefix = "system:accumcommit-rerun";
+    public const string PriorAuthRerunActorPrefix = "system:paunavail-rerun";
     private const int LookupBatch = 500;
 
     private readonly IClaimRepository _claims;
@@ -176,6 +177,11 @@ public sealed class AccumulatorOperationsService
             Sanitize(operatorId), Sanitize(tenantId), result.Examined, result.Approved, result.StillPended, result.Skipped, result.Failed);
         return result;
     }
+
+    /// <summary>Re-runs claims pended PAUNAVAIL (scaffold).</summary>
+    public Task<AccumulatorPendRerunResult> RerunPriorAuthUnavailablePendsAsync(
+        string tenantId, string operatorId, int limit, CancellationToken ct)
+        => throw new NotImplementedException();
 
     private async Task<AccumulatorPendRerunItem> RerunOneAsync(string tenantId, Claim claim, string actor, CancellationToken ct)
     {

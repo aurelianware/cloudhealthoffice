@@ -219,7 +219,8 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
                 new HttpFeeSchedulePricingClient(http, NullLogger<HttpFeeSchedulePricingClient>.Instance),
                 NullLogger<PricingStage>.Instance),
             new BenefitCalculationStage(_engine, memberResolver, _authorization,
-                NullLogger<BenefitCalculationStage>.Instance),
+                NullLogger<BenefitCalculationStage>.Instance,
+                Options.Create(new PriorAuthAdjudicationOptions { UsePlanFlaggedCodes = true })),
             new HookStage("AfterPricing", 350, () => { var hook = _afterPricing; _afterPricing = null; return hook; }),
             new NcciPendStage(() => _ncciPends),
             new PersistenceStage(_claims, NullLogger<PersistenceStage>.Instance),
@@ -863,6 +864,44 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         Assert.Equal(Claims.ClaimStatus.Approved, (await Claim(pended.Id))!.Status);
         await AssertBalances(100m, 100m);
         await AssertCommittedOnceAsync(pended.Id);
+    }
+
+    /// <summary>
+    /// #1299 S1: claims pended PAUNAVAIL while authorization-service was down are
+    /// re-run in bulk once it answers, under the service identity (the lookup
+    /// always carries claims-service's token). A run while it is still down
+    /// leaves them pended and writes nothing; once it answers Valid they are
+    /// approved, each committed once; a second run finds nothing to do.
+    /// </summary>
+    [SkippableFact]
+    public async Task PaUnavailablePends_AreApprovedByTheBulkRerun_OnceTheLookupAnswers()
+    {
+        _ncciPends = false;
+        _priorAuthCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "99213" };
+        _beforeSubmit = claim => claim.PriorAuthorizationNumber = "AUTH-GOLD-01";
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
+        var pended = await SubmitAndAdjudicateAsync();
+        Assert.Equal(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, pended.PendDetails!.PendCode);
+
+        var early = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+        Assert.Equal(1, early.StillPended);
+        Assert.Equal(Claims.ClaimStatus.Pended, (await Claim(pended.Id))!.Status);
+        await AssertBalances(0m, 0m);
+        await AssertNoWriteForAsync(pended.Id);
+
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.Valid(new AuthorizationValidationResult(
+                "AUTH-GOLD-01", true, "Approved", null, null, null, 1, "Authorization valid")));
+        var run = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+
+        Assert.Equal(1, run.Approved);
+        var approved = (await Claim(pended.Id))!;
+        Assert.Equal(Claims.ClaimStatus.Approved, approved.Status);
+        Assert.Contains(approved.ExaminerResolutions, r => r.ApproverIds.Single().StartsWith(AccumulatorOperationsService.PriorAuthRerunActorPrefix));
+        await AssertBalances(100m, 100m);
+        await AssertCommittedOnceAsync(pended.Id);
+        Assert.Equal(0, (await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None)).Examined);
     }
 
     /// <summary>

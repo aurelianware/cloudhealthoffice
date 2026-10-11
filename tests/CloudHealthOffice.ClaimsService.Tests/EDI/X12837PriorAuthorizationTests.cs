@@ -147,6 +147,24 @@ public class X12837PriorAuthorizationTests
         Assert.Equal("AUTH-LINE-0001", roundTripped.ClaimLines[0].PriorAuthorizationNumber);
     }
 
+    /// <summary>
+    /// Nit 4: pins the <c>!InOtherPayerLoop()</c> guard on the 2300 REF*G1
+    /// case. A REF*G1 under 2330A (other subscriber, NM1*IL) is not caught by
+    /// the 2330B handler; without the guard it would be read as this claim's.
+    /// </summary>
+    [Fact]
+    public void RefG1Under2330A_IsNotThisPayersAuthorization()
+    {
+        var edi = Institutional
+            .Replace("REF*G1*AUTH-CLAIM-0001~", string.Empty)
+            .Replace("NM1*IL*1*TESTPATIENT*ALEX****MI*OTHER-MBR~",
+                     "NM1*IL*1*TESTPATIENT*ALEX****MI*OTHER-MBR~REF*G1*OTHER-SUBSCRIBER-AUTH~");
+
+        var claim = Assert.Single(X12837Parser.Parse(edi));
+
+        Assert.Null(claim.ClaimHeader.PriorAuthorizationNumber);
+    }
+
     [Fact]
     public void RefG1OnlyInOtherPayerLoop_IsNotThisPayersAuthorization()
     {

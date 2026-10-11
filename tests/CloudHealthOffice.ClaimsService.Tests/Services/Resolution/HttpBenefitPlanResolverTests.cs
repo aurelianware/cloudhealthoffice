@@ -72,6 +72,54 @@ public sealed class HttpBenefitPlanResolverTests
         Assert.Empty(plan!.PriorAuthRequiredProcedureCodes);
     }
 
+    /// <summary>#1299 S2: a definitive 404 is "no such plan" (null), as on main.</summary>
+    [Fact]
+    public async Task GetPlanAsync_NotFound_ReturnsNull()
+    {
+        var sut = new HttpBenefitPlanResolver(
+            new BaseAddressFactory(FakeHttpMessageHandler.Status(System.Net.HttpStatusCode.NotFound)),
+            NullLogger<HttpBenefitPlanResolver>.Instance);
+
+        Assert.Null(await sut.GetPlanAsync("tenant-1", "plan-1"));
+    }
+
+    /// <summary>#1299 S2: anything not definitive is reported as unavailable, not as "no plan".</summary>
+    [Theory]
+    [InlineData("503")]
+    [InlineData("500")]
+    [InlineData("401")]
+    [InlineData("transport")]
+    [InlineData("timeout")]
+    [InlineData("malformed")]
+    public async Task GetPlanAsync_NotDefinitive_ThrowsBenefitPlanUnavailable(string failure)
+    {
+        var handler = new FakeHttpMessageHandler(_ => failure switch
+        {
+            "transport" => throw new HttpRequestException("Connection refused"),
+            "timeout" => throw new TaskCanceledException("HttpClient.Timeout"),
+            "malformed" => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("{ not json", System.Text.Encoding.UTF8, "application/json"),
+            },
+            _ => new HttpResponseMessage((System.Net.HttpStatusCode)int.Parse(failure)),
+        });
+        var sut = new HttpBenefitPlanResolver(new BaseAddressFactory(handler), NullLogger<HttpBenefitPlanResolver>.Instance);
+
+        await Assert.ThrowsAsync<BenefitPlanUnavailableException>(() => sut.GetPlanAsync("tenant-1", "plan-1"));
+    }
+
+    [Fact]
+    public async Task GetPlanAsync_CallerCancelled_Throws()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var sut = new HttpBenefitPlanResolver(
+            new BaseAddressFactory(new FakeHttpMessageHandler(_ => throw new TaskCanceledException())),
+            NullLogger<HttpBenefitPlanResolver>.Instance);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.GetPlanAsync("tenant-1", "plan-1", cts.Token));
+    }
+
     private sealed class BaseAddressFactory(HttpMessageHandler handler) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) =>

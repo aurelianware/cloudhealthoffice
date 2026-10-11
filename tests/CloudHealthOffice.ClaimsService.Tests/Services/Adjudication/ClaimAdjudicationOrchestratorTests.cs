@@ -542,32 +542,42 @@ public class ClaimAdjudicationOrchestratorTests
     }
 
     /// <summary>
-    /// G-25 / D-04: a plan id that resolves to nothing is flagged, so the PA
-    /// check pends instead of paying lines the plan may require PA for.
+    /// #1299 S2: only a plan lookup without a definitive answer
+    /// (<see cref="BenefitPlanUnavailableException"/>) is flagged. A definitive
+    /// 404 (resolver returns null) keeps main's behaviour: not flagged.
     /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Adjudicate_FlagsPlanResolutionFailure(bool planResolves)
+    [InlineData("resolves", false)]
+    [InlineData("not-found", false)]
+    [InlineData("unavailable", true)]
+    public async Task Adjudicate_FlagsOnlyATransientPlanResolutionFailure(string plan, bool flagged)
     {
         bool? observed = null;
+        ResolvedBenefitPlan? seen = null;
         var stages = new IClaimAdjudicationStage[]
         {
             new RecordingStage("Observe", 100, isRequired: false, new List<string>(), ctx =>
             {
                 observed = ctx.PlanResolutionFailed;
+                seen = ctx.ResolvedPlan;
                 return ClaimAdjudicationStageResult.Pass("Observe");
             }),
             new RecordingStage("Persistence", 999, isRequired: true, new List<string>()),
         };
         var claim = BuildAdapterClaim();
         SetupAdapterReturning(claim);
-        _planResolver.GetPlanAsync("tenant-1", claim.BenefitPlanId!, Arg.Any<CancellationToken>())
-            .Returns(planResolves ? new ResolvedBenefitPlan { Id = claim.BenefitPlanId! } : null);
+        var call = _planResolver.GetPlanAsync("tenant-1", claim.BenefitPlanId!, Arg.Any<CancellationToken>());
+        switch (plan)
+        {
+            case "resolves": call.Returns(new ResolvedBenefitPlan { Id = claim.BenefitPlanId! }); break;
+            case "not-found": call.Returns((ResolvedBenefitPlan?)null); break;
+            default: call.ThrowsAsync(new BenefitPlanUnavailableException("benefit-plan-service returned 503")); break;
+        }
 
         await BuildOrchestrator(stages).AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
 
-        Assert.Equal(!planResolves, observed);
+        Assert.Equal(flagged, observed);
+        Assert.Equal(plan == "resolves", seen is not null);
     }
 
     [Fact]

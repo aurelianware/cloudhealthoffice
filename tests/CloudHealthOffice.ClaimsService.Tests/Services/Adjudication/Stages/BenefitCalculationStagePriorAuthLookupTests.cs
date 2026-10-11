@@ -235,7 +235,7 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
     [Fact]
     public async Task PlanFlagsProcedure_ChecksOnlyThatLine_OnAnyClaimType()
     {
-        var (stage, handler) = StageOver(req => ValidationBody("AUTH-1", isValid: true, "Authorization valid"));
+        var (stage, handler) = StageOver(req => ValidationBody("AUTH-1", isValid: true, "Authorization valid"), usePlanFlags: true);
         var ctx = CommercialProfessional("AUTH-1", "72148", "99213");
         ctx.ResolvedPlan = PlanRequiringPriorAuthFor("72148");
 
@@ -249,7 +249,7 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
     [Fact]
     public async Task PlanFlagsProcedure_NoNumber_DeniesWithCarc197()
     {
-        var (stage, handler) = StageOver(_ => throw new InvalidOperationException("must not be called"));
+        var (stage, handler) = StageOver(_ => throw new InvalidOperationException("must not be called"), usePlanFlags: true);
         var ctx = CommercialProfessional(null, "99213", "72148");
         ctx.ResolvedPlan = PlanRequiringPriorAuthFor("72148");
 
@@ -263,7 +263,7 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
     [Fact]
     public async Task PlanFlagsProcedure_LookupUnavailable_Pends()
     {
-        var (stage, _) = StageOver(_ => new HttpResponseMessage(HttpStatusCode.BadGateway));
+        var (stage, _) = StageOver(_ => new HttpResponseMessage(HttpStatusCode.BadGateway), usePlanFlags: true);
         var ctx = CommercialProfessional("AUTH-1", "72148");
         ctx.ResolvedPlan = PlanRequiringPriorAuthFor("72148");
 
@@ -285,12 +285,54 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
         Assert.Equal(0, handler.RequestCount);
     }
 
+    // ── #1299 S3: plan-flagged codes are off by default ───────────────
+
     /// <summary>
-    /// The plan could not be read, so which lines need PA is unknown: a
-    /// failed lookup, so the claim pends — never priced and paid without it.
+    /// Until line-level decisions (G-07) land, <c>/validate</c> with a code is
+    /// Invalid for API-decided auths, so plan flags would deny approved claims.
+    /// Off by default: a plan flag alone adds no check.
     /// </summary>
     [Fact]
-    public async Task PlanNotResolved_PendsPaUnavailable_NeverPays()
+    public async Task PlanFlaggedCodes_OffByDefault_AddNoCheck()
+    {
+        var (stage, handler) = StageOver(_ => throw new InvalidOperationException("must not be called"));
+        var ctx = CommercialProfessional(null, "72148");
+        ctx.ResolvedPlan = PlanRequiringPriorAuthFor("72148");
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Equal(0, handler.RequestCount);
+    }
+
+    // ── #1299 S2: benefit plan unavailable ────────────────────────────
+
+    /// <summary>
+    /// Plan flags in use, plan unavailable, claim outside the floor: which
+    /// lines need PA is unknown, so the claim pends PLANUNAVAIL (owner
+    /// decision 2026-10-11) — never priced and paid without the check.
+    /// </summary>
+    [Fact]
+    public async Task PlanUnavailable_PlanFlagsOn_OutsideTheFloor_PendsPlanUnavailable()
+    {
+        var (stage, handler) = StageOver(_ => throw new InvalidOperationException("must not be called"), usePlanFlags: true);
+        var ctx = CommercialProfessional("AUTH-1", "72148");
+        ctx.PlanResolutionFailed = true;
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(BenefitCalculationStage.PlanUnavailablePendCode, ctx.PendDetails!.PendCode);
+        Assert.StartsWith(BenefitCalculationStage.PlanUnavailableReason, ctx.PendDetails.PendReason);
+        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(ctx.PendDetails.PendReason));
+        Assert.Null(ctx.BenefitResolutionResult);
+        Assert.Equal(0, handler.RequestCount);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
+    /// <summary>Plan flags not in use: the floor alone settles the scope, so a plan outage creates no PA pend.</summary>
+    [Fact]
+    public async Task PlanUnavailable_PlanFlagsOff_NoPlanPend()
     {
         var (stage, handler) = StageOver(_ => throw new InvalidOperationException("must not be called"));
         var ctx = CommercialProfessional("AUTH-1", "72148");
@@ -298,9 +340,51 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
 
         var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
 
-        AssertPendedPaUnavailable(result, ctx);
-        Assert.Contains("prior-authorization requirements could not be read", ctx.PendDetails!.PendReason);
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Null(ctx.PendDetails);
         Assert.Equal(0, handler.RequestCount);
+    }
+
+    /// <summary>A floor claim already has every line in scope: a plan outage changes nothing about the PA check.</summary>
+    [Fact]
+    public async Task PlanUnavailable_FloorClaim_ChecksEveryLineAsUsual()
+    {
+        var (stage, handler) = StageOver(_ => ValidationBody("AUTH-1", isValid: true, "Authorization valid"), usePlanFlags: true);
+        var ctx = InpatientMedicaid("AUTH-1", "99223");
+        ctx.PlanResolutionFailed = true;
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    // ── #1299 S1 / nit 5 ──────────────────────────────────────────────
+
+    /// <summary>The pend text says how the claim is cleared; it promises no automatic re-run.</summary>
+    [Fact]
+    public async Task PaUnavailablePendReason_NamesHowItIsCleared()
+    {
+        var (stage, _) = StageOver(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var ctx = InpatientMedicaid("AUTH-1");
+
+        await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.DoesNotContain("re-adjudicated once", ctx.PendDetails!.PendReason);
+        Assert.Contains("examiner approval or the PAUNAVAIL re-run", ctx.PendDetails.PendReason);
+    }
+
+    /// <summary>Nit 5: once one line is Unavailable the claim pends; no further lookups.</summary>
+    [Fact]
+    public async Task FirstUnavailableLine_StopsFurtherLookups()
+    {
+        var (stage, handler) = StageOver(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var ctx = InpatientMedicaid("AUTH-1", "99223", "27447", "71045");
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        AssertPendedPaUnavailable(result, ctx);
+        Assert.Equal(1, handler.RequestCount);
     }
 
     [Fact]
@@ -367,7 +451,8 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
             ResolvedPlan = PlanRequiringPriorAuthFor("72148"),
         };
         var (stage, handler) = StageOver(req =>
-            ValidationBody(Uri.UnescapeDataString(req.RequestUri!.AbsolutePath.Split('/')[3]), isValid: true, "Authorization valid"));
+            ValidationBody(Uri.UnescapeDataString(req.RequestUri!.AbsolutePath.Split('/')[3]), isValid: true, "Authorization valid"),
+            usePlanFlags: true);
 
         var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
 
@@ -407,7 +492,7 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
     }
 
     private (BenefitCalculationStage Stage, RecordingHandler Handler) StageOver(
-        Func<HttpRequestMessage, HttpResponseMessage> responder)
+        Func<HttpRequestMessage, HttpResponseMessage> responder, bool usePlanFlags = false)
     {
         var handler = new RecordingHandler(responder);
         var client = new HttpAuthorizationValidationClient(
@@ -417,7 +502,8 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
             _engine,
             Substitute.For<IMemberResolver>(),
             client,
-            NullLogger<BenefitCalculationStage>.Instance);
+            NullLogger<BenefitCalculationStage>.Instance,
+            Microsoft.Extensions.Options.Options.Create(new PriorAuthAdjudicationOptions { UsePlanFlaggedCodes = usePlanFlags }));
         return (stage, handler);
     }
 

@@ -64,6 +64,17 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     public const string PriorAuthorizationUnavailableReason = "PA lookup unavailable";
 
     /// <summary>
+    /// <see cref="PendDetails.PendCode"/> for claims pended because
+    /// benefit-plan-service gave no definitive answer for the claim's plan,
+    /// so which lines need prior authorization cannot be settled (owner
+    /// decision 2026-10-11). Transient, like <see cref="PriorAuthorizationUnavailablePendCode"/>.
+    /// </summary>
+    public const string PlanUnavailablePendCode = "PLANUNAVAIL";
+
+    /// <summary>Leading text of every <see cref="PlanUnavailablePendCode"/> pend reason.</summary>
+    public const string PlanUnavailableReason = "Benefit plan unavailable";
+
+    /// <summary>
     /// <see cref="PendDetails.PendCode"/> value for claims pended because a
     /// retroactive benefit-plan/coverage change (X12 834 maintenance type
     /// code 001) was recorded with an effective date on or before the
@@ -109,17 +120,20 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     private readonly IMemberResolver _memberResolver;
     private readonly IAuthorizationValidationClient _authorizationValidationClient;
     private readonly ILogger<BenefitCalculationStage> _logger;
+    private readonly PriorAuthAdjudicationOptions _priorAuth;
 
     public BenefitCalculationStage(
         IBenefitCalculationEngine engine,
         IMemberResolver memberResolver,
         IAuthorizationValidationClient authorizationValidationClient,
-        ILogger<BenefitCalculationStage> logger)
+        ILogger<BenefitCalculationStage> logger,
+        Microsoft.Extensions.Options.IOptions<PriorAuthAdjudicationOptions>? priorAuthOptions = null)
     {
         _engine = engine;
         _memberResolver = memberResolver;
         _authorizationValidationClient = authorizationValidationClient;
         _logger = logger;
+        _priorAuth = priorAuthOptions?.Value ?? new PriorAuthAdjudicationOptions();
     }
 
     public string Name => StageName;

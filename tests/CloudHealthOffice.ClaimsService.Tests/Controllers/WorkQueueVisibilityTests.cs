@@ -123,6 +123,37 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
         Assert.Equal(0, summary.MedicalReview);
     }
 
+    /// <summary>
+    /// #1299 S2: a PA lookup outage is an authorization item; a benefit-plan
+    /// outage is not — it has its own label and is not counted as missing auth.
+    /// </summary>
+    [Fact]
+    public async Task WorkQueue_PaUnavailableAndPlanUnavailable_HaveDistinctLabels_OnlyPaCountsAsMissingAuth()
+    {
+        Claim Pended(string id, string code)
+        {
+            var claim = NcciPendedClaim();
+            claim.Id = id;
+            claim.PendDetails = new PendDetails { PendCode = code, PendReason = code + " reason", PendedAt = DateTime.UtcNow };
+            return claim;
+        }
+        _repo.SearchAsync(
+                memberId: null, providerNPI: null,
+                serviceDateFrom: null, serviceDateTo: null,
+                status: ClaimStatus.Pended, lineOfBusiness: null,
+                page: 1, pageSize: Arg.Any<int>())
+            .Returns(new[] { Pended("claim-pa", "PAUNAVAIL"), Pended("claim-plan", "PLANUNAVAIL") });
+
+        var summary = await (await _client.GetAsync("/api/claims/work-queue/summary"))
+            .Content.ReadFromJsonAsync<WorkQueueSummaryDto>(Json);
+        var items = await (await _client.GetAsync("/api/claims/work-queue/items"))
+            .Content.ReadFromJsonAsync<List<WorkQueueItemDto>>(Json);
+
+        Assert.Equal(1, summary!.MissingAuth);
+        Assert.Equal("Prior Authorization Lookup Unavailable", items!.Single(i => i.ClaimId == "claim-pa").QueueReason);
+        Assert.Equal("Benefit Plan Unavailable", items!.Single(i => i.ClaimId == "claim-plan").QueueReason);
+    }
+
     [Fact]
     public async Task WorkQueueItems_surfaces_pended_claim_with_examiner_relevant_fields()
     {
