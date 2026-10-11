@@ -959,10 +959,9 @@ public sealed class AccumulatorIntegrityCosmosTests(CosmosEmulatorFixture cosmos
         // (non-AsyncLocal) accessor carries it into every test method.
         var claims = new ClaimRepository(claimsClient, claimsConfig, new FixedAccessor(Tenant), NullLogger<ClaimRepository>.Instance);
 
-        var accumulatorClient = cosmos.CreateClient(serializerOptions: new CosmosSerializationOptions
-        {
-            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase,
-        });
+        // benefit-plan-service: the same AddChoDatabase serializer (D-31 removed
+        // the host's own Newtonsoft client).
+        var accumulatorClient = cosmos.CreateClient(new CloudHealthOffice.Infrastructure.Serialization.CosmosSystemTextJsonSerializer());
         var accumulatorDb = await cosmos.CreateDatabaseAsync(accumulatorClient, "integrity_accumulators");
         _accumulatorContainer = await CosmosEmulatorFixture.CreateContainerAsync(accumulatorDb, "Accumulators");
         var accumulatorConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
