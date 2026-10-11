@@ -14,9 +14,10 @@ namespace ClaimsService.Services.Resolution;
 /// <para>
 /// Mirrors the existing <see cref="ClaimsService.EDI.Florida.HttpProviderService"/>
 /// shape: <see cref="IHttpClientFactory"/> with a named client, a 5-second
-/// timeout (configured at registration time), and non-throwing failure —
-/// returns <c>null</c> on any error so the orchestrator can degrade
-/// cleanly rather than crash the message handler.
+/// timeout (configured at registration time). A definitive 404 returns
+/// <c>null</c> ("no such plan"); any other failure throws
+/// <see cref="BenefitPlanUnavailableException"/> (#1299 S2) so the pipeline
+/// can tell an outage from a missing plan.
 /// </para>
 /// </summary>
 public class HttpBenefitPlanResolver : IBenefitPlanResolver
@@ -65,13 +66,14 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
                 _logger.LogWarning(
                     "Benefit-plan-service returned {StatusCode} resolving plan {PlanId}",
                     response.StatusCode, SanitizeForLog(planId));
-                return null;
+                throw new BenefitPlanUnavailableException(
+                    $"benefit-plan-service returned {(int)response.StatusCode} for the plan");
             }
 
             var dto = await response.Content
                 .ReadFromJsonAsync<BenefitPlanDto>(JsonOptions, ct)
-                .ConfigureAwait(false);
-            if (dto is null) return null;
+                .ConfigureAwait(false)
+                ?? throw new BenefitPlanUnavailableException("benefit-plan-service returned an empty plan body");
 
             Guid? planGuid = Guid.TryParse(dto.Id, out var parsed) ? parsed : null;
 
@@ -89,6 +91,17 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
                 })
                 .ToList();
 
+            // G-25: the plan's own prior-authorization flags. A benefit
+            // flagged without CPT codes names a service category the
+            // claims pipeline cannot map a line to, so it adds nothing here.
+            var priorAuthCodes = new HashSet<string>(
+                (dto.Benefits ?? new List<BenefitDto>())
+                    .Where(b => b is not null && b.IsCovered && (b.PriorAuthRequired || b.RequiresPriorAuth))
+                    .SelectMany(b => b.CptCodes ?? new List<string>())
+                    .Where(code => !string.IsNullOrWhiteSpace(code))
+                    .Select(code => code.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+
             return new ResolvedBenefitPlan
             {
                 Id = dto.Id ?? planId,
@@ -96,16 +109,23 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
                 PlanName = dto.PlanName,
                 PlanType = dto.PlanType,
                 NetworkTiers = tiers,
+                PriorAuthRequiredProcedureCodes = priorAuthCodes,
             };
         }
-        catch (Exception ex) when (ex is HttpRequestException
-                                    or TaskCanceledException
-                                    or JsonException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            throw;
+        }
+        catch (Exception ex) when (ex is not BenefitPlanUnavailableException)
+        {
+            // #1299 S2: not an answer about the plan (transport error,
+            // HttpClient timeout, unreadable body). Reported as such rather
+            // than as null, which means "no such plan" (a definitive 404).
             _logger.LogWarning(ex,
                 "Failed to resolve benefit plan {PlanId} for tenant {TenantId}",
                 SanitizeForLog(planId), SanitizeForLog(tenantId));
-            return null;
+            throw new BenefitPlanUnavailableException(
+                $"benefit plan lookup failed ({ex.GetType().Name})", ex);
         }
     }
 
@@ -118,6 +138,16 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
         public string? PlanName { get; set; }
         public string? PlanType { get; set; }
         public List<NetworkTierDto>? NetworkTiers { get; set; }
+        public List<BenefitDto>? Benefits { get; set; }
+    }
+
+    /// <summary>The prior-authorization fields of <c>BenefitPlanService.Models.Benefit</c>.</summary>
+    private sealed class BenefitDto
+    {
+        public bool IsCovered { get; set; } = true;
+        public List<string>? CptCodes { get; set; }
+        public bool PriorAuthRequired { get; set; }
+        public bool RequiresPriorAuth { get; set; }
     }
 
     private sealed class NetworkTierDto

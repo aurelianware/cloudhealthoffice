@@ -40,6 +40,13 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
 {
     public const string HttpClientName = "BenefitPlanService";
     private const string CalculatePath = "/api/v1/adjudication/calculate-benefits";
+
+    /// <summary>
+    /// <c>DenialReasonCode</c> of the failed result this client returns when
+    /// benefit-plan-service answers non-2xx or an empty body: the engine gave
+    /// no answer. The approval re-run treats it as a failed check (#1299).
+    /// </summary>
+    public const string EngineUnavailableDenialCode = "999";
     private const string ReversePath = "/api/v1/adjudication/reverse-claim";
     private const string CommitPath = "/api/v1/adjudication/commit-accumulators";
     private const string CommitLookupPath = "/api/v1/adjudication/accumulator-commits/lookup";
@@ -99,7 +106,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
             return new BenefitResolutionResult
             {
                 Success = false,
-                DenialReasonCode = "999",
+                DenialReasonCode = EngineUnavailableDenialCode,
                 DenialReasonDescription =
                     $"Benefit calculation engine returned HTTP {(int)response.StatusCode}.",
             };
@@ -112,7 +119,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
         return result ?? new BenefitResolutionResult
         {
             Success = false,
-            DenialReasonCode = "999",
+            DenialReasonCode = EngineUnavailableDenialCode,
             DenialReasonDescription = "Benefit calculation engine returned an empty response.",
         };
     }

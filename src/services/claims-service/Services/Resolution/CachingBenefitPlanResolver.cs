@@ -56,8 +56,11 @@ public sealed class CachingBenefitPlanResolver : IBenefitPlanResolver
         // single-flight coalescing, every miss reaches benefit-plan-service
         // and can exhaust a Cosmos free-tier RU budget before the first result
         // populates the cache.
+        // The shared flight runs on no caller's token (#1299 S2): the first
+        // caller giving up cancels only its own wait, never the lookup the
+        // others are waiting on.
         var candidate = new Lazy<Task<ResolvedBenefitPlan?>>(
-            () => ResolveAndCacheAsync(key, tenantId, planId, ct),
+            () => ResolveAndCacheAsync(key, tenantId, planId, CancellationToken.None),
             LazyThreadSafetyMode.ExecutionAndPublication);
         var inflight = _inflight.GetOrAdd(key, candidate);
 

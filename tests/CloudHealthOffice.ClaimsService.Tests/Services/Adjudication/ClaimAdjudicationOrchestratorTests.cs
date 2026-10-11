@@ -346,6 +346,29 @@ public class ClaimAdjudicationOrchestratorTests
         Assert.Equal(2, full.OverriddenPends.Count);
     }
 
+    /// <summary>#1299 S-A: the approval re-run names the stage that denied, not the first non-passing stage.</summary>
+    [Fact]
+    public async Task ApprovalRerun_Deny_ReportsTheDenyingStagesReason()
+    {
+        SetupAdapterReturningClaim();
+        var orch = BuildOrchestrator(
+        [
+            new RecordingStage(CoordinationOfBenefitsStage.StageName, 275, isRequired: false, [], ctx =>
+            {
+                ctx.PendDetails = new PendDetails { PendCode = "COB", PendReason = "confirm the payer order" };
+                return ClaimAdjudicationStageResult.Pend(CoordinationOfBenefitsStage.StageName, "confirm the payer order");
+            }),
+            new RecordingStage(BenefitCalculationStage.StageName, 300, isRequired: false, [], _ =>
+                ClaimAdjudicationStageResult.Deny(BenefitCalculationStage.StageName, BenefitCalculationStage.PriorAuthorizationRequiredReason)),
+            new RecordingStage("Persistence", 999, isRequired: true, []),
+        ]);
+
+        var result = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1", new ExaminerApproval(), CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        Assert.Equal($"{BenefitCalculationStage.StageName}: {BenefitCalculationStage.PriorAuthorizationRequiredReason}", result.DenialReason);
+    }
+
     /// <summary>M4: NCCI needs the exact reason reviewed, not just the code.</summary>
     [Fact]
     public async Task Ncci_DifferentEditOnTheRerun_IsNotOverridden()
@@ -539,6 +562,45 @@ public class ClaimAdjudicationOrchestratorTests
 
         Assert.Equal("resolved-plan-guid", claim.BenefitPlanId);
         await _planResolver.Received(1).GetPlanAsync("tenant-1", "resolved-plan-guid", Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// #1299 S2: only a plan lookup without a definitive answer
+    /// (<see cref="BenefitPlanUnavailableException"/>) is flagged. A definitive
+    /// 404 (resolver returns null) keeps main's behaviour: not flagged.
+    /// </summary>
+    [Theory]
+    [InlineData("resolves", false)]
+    [InlineData("not-found", false)]
+    [InlineData("unavailable", true)]
+    public async Task Adjudicate_FlagsOnlyATransientPlanResolutionFailure(string plan, bool flagged)
+    {
+        bool? observed = null;
+        ResolvedBenefitPlan? seen = null;
+        var stages = new IClaimAdjudicationStage[]
+        {
+            new RecordingStage("Observe", 100, isRequired: false, new List<string>(), ctx =>
+            {
+                observed = ctx.PlanResolutionFailed;
+                seen = ctx.ResolvedPlan;
+                return ClaimAdjudicationStageResult.Pass("Observe");
+            }),
+            new RecordingStage("Persistence", 999, isRequired: true, new List<string>()),
+        };
+        var claim = BuildAdapterClaim();
+        SetupAdapterReturning(claim);
+        var call = _planResolver.GetPlanAsync("tenant-1", claim.BenefitPlanId!, Arg.Any<CancellationToken>());
+        switch (plan)
+        {
+            case "resolves": call.Returns(new ResolvedBenefitPlan { Id = claim.BenefitPlanId! }); break;
+            case "not-found": call.Returns((ResolvedBenefitPlan?)null); break;
+            default: call.ThrowsAsync(new BenefitPlanUnavailableException("benefit-plan-service returned 503")); break;
+        }
+
+        await BuildOrchestrator(stages).AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+
+        Assert.Equal(flagged, observed);
+        Assert.Equal(plan == "resolves", seen is not null);
     }
 
     [Fact]

@@ -350,6 +350,9 @@ public class AdapterClaimLine
     public string? NationalDrugCode { get; set; }
     public decimal? DrugQuantity { get; set; }
     public string? DrugUnitOfMeasure { get; set; }
+
+    /// <summary>837 2400 REF*G1; see <see cref="ClaimLine.PriorAuthorizationNumber"/>.</summary>
+    public string? PriorAuthorizationNumber { get; set; }
     public decimal? MpipMultiplierApplied { get; set; }
     public AdapterLineAdjudicationResult? AdjudicationResult { get; set; }
 
@@ -369,6 +372,7 @@ public class AdapterClaimLine
         NationalDrugCode = src.NationalDrugCode,
         DrugQuantity = src.DrugQuantity,
         DrugUnitOfMeasure = src.DrugUnitOfMeasure,
+        PriorAuthorizationNumber = src.PriorAuthorizationNumber,
         MpipMultiplierApplied = src.MpipMultiplierApplied,
         AdjudicationResult = src.AdjudicationResult is null
             ? null
@@ -391,6 +395,7 @@ public class AdapterClaimLine
         NationalDrugCode = NationalDrugCode,
         DrugQuantity = DrugQuantity,
         DrugUnitOfMeasure = DrugUnitOfMeasure,
+        PriorAuthorizationNumber = PriorAuthorizationNumber,
         MpipMultiplierApplied = MpipMultiplierApplied,
         AdjudicationResult = AdjudicationResult?.ToLineAdjudicationResult(),
     };
