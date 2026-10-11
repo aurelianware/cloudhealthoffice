@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace AuthorizationService.Models;
 
@@ -8,6 +9,13 @@ namespace AuthorizationService.Models;
 /// Represents a prior authorization request (278 transaction)
 /// Required before submitting claims for certain procedures/services
 /// </summary>
+/// <remarks>
+/// <c>[BsonIgnoreExtraElements]</c>: a document written by a newer build may
+/// carry fields this build does not know; reading it must not fail (rollback
+/// safety). Note that builds before this attribute existed (before PR #1300)
+/// still throw on such documents, so rolling back past #1300 is not covered.
+/// </remarks>
+[BsonIgnoreExtraElements]
 public class Authorization
 {
     /// <summary>
@@ -46,6 +54,15 @@ public class Authorization
     /// </summary>
     [StringLength(200)]
     public string? PatientReference { get; set; }
+
+    /// <summary>
+    /// SHA-256 (lower-case hex) of the automated-decision request this record
+    /// was created from, as fhir-service computed it. Recording the same
+    /// request again (a retry after a timeout) returns this record instead of
+    /// a conflict. Null for records not created by an automated decision.
+    /// </summary>
+    [StringLength(64)]
+    public string? RequestHash { get; set; }
 
     /// <summary>
     /// Coverage ID (links to Coverage Service for eligibility)
@@ -146,7 +163,7 @@ public class Authorization
     /// </summary>
     [Required]
     [StringLength(2)]
-    public string? ServiceTypeCode { get; set; } = string.Empty;
+    public string? ServiceTypeCode { get; set; }
 
     /// <summary>
     /// Level of service
@@ -374,6 +391,7 @@ public class Authorization
 /// <summary>
 /// A single entry in an authorization's append-only status/decision history.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class AuthorizationStatusChange
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -405,6 +423,7 @@ public class AuthorizationStatusChange
 /// Diagnosis code (ICD-10)
 /// 278: HI segment
 /// </summary>
+[BsonIgnoreExtraElements]
 public class DiagnosisCode
 {
     /// <summary>
@@ -433,6 +452,7 @@ public class DiagnosisCode
 /// Requested service/procedure
 /// 278: 2000F loop
 /// </summary>
+[BsonIgnoreExtraElements]
 public class RequestedService
 {
     /// <summary>
@@ -516,6 +536,7 @@ public class RequestedService
 /// Clinical attachment/documentation
 /// 278: PWK segment
 /// </summary>
+[BsonIgnoreExtraElements]
 public class ClinicalAttachment
 {
     /// <summary>

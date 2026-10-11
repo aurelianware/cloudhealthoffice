@@ -16,8 +16,22 @@ public sealed class AutomatedDecisionRecordRequest
 {
     /// <summary>The tracking number already chosen and about to be returned as the PAS <c>preAuthRef</c>.</summary>
     [Required]
-    [StringLength(50, MinimumLength = 1)]
+    [RegularExpression(AuthorizationNumberPattern,
+        ErrorMessage = "AuthorizationNumber is 1-50 letters, digits and hyphens.")]
     public string AuthorizationNumber { get; set; } = string.Empty;
+
+    /// <summary>The tracking-number format: what a PAS <c>preAuthRef</c> may be.</summary>
+    public const string AuthorizationNumberPattern = "^[A-Za-z0-9-]{1,50}$";
+
+    /// <summary>
+    /// SHA-256 (lower-case hex) of this request as the caller serialised it.
+    /// Recording the same number with the same hash again returns the stored
+    /// record (a retry after a lost response); with another hash it is a
+    /// conflict.
+    /// </summary>
+    [Required]
+    [RegularExpression("^[a-f0-9]{64}$", ErrorMessage = "RequestHash is a lower-case hex SHA-256.")]
+    public string RequestHash { get; set; } = string.Empty;
 
     /// <summary>
     /// When the request arrived at the payer, before it was adjudicated. The
@@ -112,6 +126,18 @@ public sealed class AutomatedDecision
     /// <summary>The adjudication rule that decided, recorded in the status history.</summary>
     [StringLength(100)]
     public string? Rule { get; set; }
+
+    /// <summary>
+    /// The line of business the decision was made on. Must be the record's
+    /// <see cref="AutomatedDecisionRecordRequest.LineOfBusiness"/>: the record
+    /// may not state a basis the decision did not use.
+    /// </summary>
+    [Required]
+    public LineOfBusiness? LineOfBusiness { get; set; }
+
+    /// <summary>The service state the state-specific rules used (USPS code), or null when none ran on a state.</summary>
+    [RegularExpression("^[A-Z]{2}$", ErrorMessage = "StateCode must be a two-letter state code.")]
+    public string? StateCode { get; set; }
 }
 
 public enum AutomatedDecisionOutcome

@@ -150,10 +150,22 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
             Reason = reason,
             ChangedAt = decidedAt,
             ChangedBy = authorization.CreatedBy,
-            Source = string.IsNullOrWhiteSpace(decision.Rule) ? "automated" : $"automated:{decision.Rule}",
+            Source = AutomatedSource(decision),
         });
 
         return await _repository.CreateAsync(authorization);
+    }
+
+    /// <summary>
+    /// The decision's history source, stating exactly what it was made on:
+    /// <c>automated:&lt;rule&gt;;lob=&lt;line of business&gt;;state=&lt;state or none&gt;</c>.
+    /// </summary>
+    internal static string AutomatedSource(AutomatedDecision decision)
+    {
+        var rule = string.IsNullOrWhiteSpace(decision.Rule) ? "automated" : $"automated:{decision.Rule}";
+        var lob = decision.LineOfBusiness ?? LineOfBusiness.Unknown;
+        var state = string.IsNullOrEmpty(decision.StateCode) ? "none" : decision.StateCode;
+        return $"{rule};lob={lob};state={state}";
     }
 
     public Task<Authorization?> GetByNumberAsync(string authorizationNumber, CancellationToken ct = default)

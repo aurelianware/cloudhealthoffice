@@ -24,6 +24,10 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
     private const string Path = "/api/internal/authorizations/automated-decisions";
     private const string Tenant = "tenant-a";
 
+    /// <summary>A SHA-256 of the request payload, as fhir-service sends it.</summary>
+    internal const string RequestHash = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+    private const string OtherHash = "60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752";
+
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -58,7 +62,9 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         string number = "PAS-20261011-AAAA0001",
         DateTime? receivedAt = null,
         bool withApprovedPeriod = true,
-        string? tenantInBody = null)
+        string? tenantInBody = null,
+        string? decisionLineOfBusiness = "Medicaid",
+        string? requestHash = RequestHash)
     {
         var received = receivedAt ?? DateTime.UtcNow.AddSeconds(-2);
         return new
@@ -67,6 +73,7 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
             createdBy = "attacker",             // not a field: must be ignored
             status = "Approved",                // not a field: must be ignored
             authorizationNumber = number,
+            requestHash,
             receivedAt = received,
             memberId = "MBR-778899",
             patientReference = "Patient/pat-001",
@@ -100,6 +107,8 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
                 approvedServiceDateTo = withApprovedPeriod ? new DateTime(2026, 11, 4, 0, 0, 0, DateTimeKind.Utc) : (DateTime?)null,
                 decidedAt = received.AddSeconds(1),
                 rule = "AutoApproveList",
+                lineOfBusiness = decisionLineOfBusiness,
+                stateCode = "TX",
             },
         };
     }
@@ -138,11 +147,15 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
     public async Task UserTokenNamedFhirService_Returns403()
     {
         // A user issuer cannot mint a service identity by choosing the subject.
-        var token = ChoDevelopmentAuth.UserTokenIssuer()
-            .IssueUserToken("fhir-service", Tenant, new[] { ChoServiceRole.Name, ChoRolePermissions.TenantAdmin });
+        // Hand-forged: the issuer helper strips cho.service from a user token,
+        // so only a forged token tests what the server does with one that
+        // carries it, with sub = azp = fhir-service.
+        var token = Forge(ChoDevelopmentAuth.UserIssuer, "fhir-service", "fhir-service",
+            ChoServiceRole.Name, ChoRolePermissions.TenantAdmin);
         using var client = ClientWithToken(token);
         var response = await client.PostAsJsonAsync(Path, Body(), Json);
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
     }
 
     // ── What it stores ─────────────────────────────────────────────────
@@ -171,6 +184,7 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         Assert.Equal("2", _stored.ServiceTypeCode);
         Assert.Equal(AuthorizationType.PreAuthorization, _stored.AuthorizationType);
         Assert.Equal("Patient/pat-001", _stored.PatientReference);
+        Assert.Equal(RequestHash, _stored.RequestHash);
         var line = Assert.Single(_stored.RequestedServices);
         Assert.Equal("http://www.ama-assn.org/go/cpt", line.ProductOrServiceSystem);
         Assert.Null(line.ApprovedUnits);
@@ -188,7 +202,7 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
                 Assert.Equal(AuthorizationStatus.Approved, decided.Status);
                 Assert.Equal("A1", decided.ReviewDecision);
                 Assert.Equal("fhir-service", decided.ChangedBy);
-                Assert.Equal("automated:AutoApproveList", decided.Source);
+                Assert.Equal("automated:AutoApproveList;lob=Medicaid;state=TX", decided.Source);
             });
     }
 
@@ -224,11 +238,11 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
     // ── What it refuses ────────────────────────────────────────────────
 
     [Fact]
-    public async Task ExistingNumber_Returns409()
+    public async Task ExistingNumber_FromAnotherRequest_Returns409()
     {
         _repo.GetByAuthorizationNumberAsync("PAS-DUP").Returns(new Authorization
         {
-            TenantId = Tenant, AuthorizationNumber = "PAS-DUP",
+            TenantId = Tenant, AuthorizationNumber = "PAS-DUP", RequestHash = OtherHash,
         });
         using var client = ClientWithToken(ServiceToken("fhir-service"));
 
@@ -271,6 +285,223 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         var json = JsonSerializer.Serialize(Body(), Json).Replace("\"1234567893\"", "\"\"");
         var response = await client.PostAsync(Path, new StringContent(json, System.Text.Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ExistingNumber_WithNoStoredHash_Returns409()
+    {
+        _repo.GetByAuthorizationNumberAsync("PAS-OLD").Returns(new Authorization
+        {
+            TenantId = Tenant, AuthorizationNumber = "PAS-OLD",
+        });
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, Body(number: "PAS-OLD"), Json);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    // ── Idempotency: the same request recorded twice is one record ─────
+
+    [Fact]
+    public async Task ExistingNumber_SameRequestHash_Returns200WithTheExistingRecord()
+    {
+        // fhir-service timed out after a write that succeeded, and records the
+        // same request again: the answer is the record already stored.
+        _repo.GetByAuthorizationNumberAsync("PAS-RETRY").Returns(new Authorization
+        {
+            TenantId = Tenant, AuthorizationNumber = "PAS-RETRY", RequestHash = RequestHash,
+            Status = AuthorizationStatus.Approved, ReviewDecision = "A1",
+        });
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, Body(number: "PAS-RETRY"), Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var stored = await response.Content.ReadFromJsonAsync<Authorization>(Json);
+        Assert.Equal("PAS-RETRY", stored!.AuthorizationNumber);
+        Assert.Equal(AuthorizationStatus.Approved, stored.Status);
+        Assert.Equal(RequestHash, stored.RequestHash);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-a-hash")]
+    [InlineData("9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08")]
+    public async Task MissingOrMalformedRequestHash_Returns400(string? hash)
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var response = await client.PostAsJsonAsync(Path, Body(requestHash: hash), Json);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    // ── The decision's basis must be the record's ──────────────────────
+
+    [Fact]
+    public async Task DecisionOnAnotherLineOfBusiness_Returns400()
+    {
+        // The record says Medicaid; the decision was made on Commercial. The
+        // record may not claim a basis the decision did not use.
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var response = await client.PostAsJsonAsync(Path, Body(decisionLineOfBusiness: "Commercial"), Json);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Decision.LineOfBusiness", await response.Content.ReadAsStringAsync());
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task DecisionWithoutLineOfBusiness_Returns400()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var response = await client.PostAsJsonAsync(Path, Body(decisionLineOfBusiness: null), Json);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    // ── The tracking number ────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("PAS 20261011")]
+    [InlineData("PAS/20261011")]
+    [InlineData("PAS_20261011")]
+    [InlineData("PAS-2026\n1011")]
+    [InlineData("A123456789B123456789C123456789D123456789E1234567890")]
+    public async Task MalformedAuthorizationNumber_Returns400(string number)
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var response = await client.PostAsJsonAsync(Path, Body(number: number), Json);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    // ── Reading back one record (fhir-service's compensating read) ─────
+
+    [Fact]
+    public async Task Get_ByNumber_ReturnsTheRecordInTheTokensTenant()
+    {
+        _repo.GetByAuthorizationNumberAsync("PAS-20261011-READ0001").Returns(new Authorization
+        {
+            TenantId = Tenant, AuthorizationNumber = "PAS-20261011-READ0001", RequestHash = RequestHash,
+            Status = AuthorizationStatus.Pended,
+        });
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.GetAsync($"{Path}/PAS-20261011-READ0001");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var stored = await response.Content.ReadFromJsonAsync<Authorization>(Json);
+        Assert.Equal(RequestHash, stored!.RequestHash);
+        Assert.Equal(AuthorizationStatus.Pended, stored.Status);
+    }
+
+    [Fact]
+    public async Task Get_Unknown_Returns404()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var response = await client.GetAsync($"{Path}/PAS-20261011-NONE0001");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_MalformedNumber_Returns400()
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var response = await client.GetAsync($"{Path}/PAS_1");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_OtherServiceOrUser_Returns403()
+    {
+        _repo.GetByAuthorizationNumberAsync("PAS-1").Returns(new Authorization { TenantId = Tenant, AuthorizationNumber = "PAS-1" });
+
+        using (var service = ClientWithToken(ServiceToken("claims-service")))
+            Assert.Equal(HttpStatusCode.Forbidden, (await service.GetAsync($"{Path}/PAS-1")).StatusCode);
+        using (var user = ClientWithToken(_factory.IssueToken(Tenant, ChoRolePermissions.TenantAdmin)))
+            Assert.Equal(HttpStatusCode.Forbidden, (await user.GetAsync($"{Path}/PAS-1")).StatusCode);
+    }
+
+    // ── Hand-forged tokens: only a real fhir-service service token ─────
+
+    /// <summary>
+    /// A token signed with the development key but with claims chosen freely,
+    /// for identities no issuer helper would mint.
+    /// </summary>
+    private static string Forge(string issuer, string? subject, string? authorizedParty, params string[] roles)
+    {
+        var claims = new Dictionary<string, object>
+        {
+            [ChoClaimTypes.TenantId] = Tenant,
+            [ChoClaimTypes.Role] = roles,
+        };
+        if (subject is not null) claims[ChoClaimTypes.Subject] = subject;
+        if (authorizedParty is not null) claims[ChoClaimTypes.AuthorizedParty] = authorizedParty;
+
+        var now = DateTime.UtcNow;
+        return new Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler().CreateToken(
+            new Microsoft.IdentityModel.Tokens.SecurityTokenDescriptor
+            {
+                Issuer = issuer,
+                Audience = ChoDevelopmentAuth.Audience,
+                IssuedAt = now,
+                NotBefore = now,
+                Expires = now.AddMinutes(5),
+                Claims = claims,
+                SigningCredentials = new Microsoft.IdentityModel.Tokens.SigningCredentials(
+                    new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
+                        Convert.FromBase64String(ChoDevelopmentAuth.SymmetricKey)),
+                    Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256),
+            });
+    }
+
+    public static TheoryData<string, string, HttpStatusCode> ForgedTokens => new()
+    {
+        // A user issuer cannot mint a service identity, even with the role and sub = azp.
+        { "user issuer, cho.service, sub=azp=fhir-service",
+            Forge(ChoDevelopmentAuth.UserIssuer, "fhir-service", "fhir-service", ChoServiceRole.Name), HttpStatusCode.Forbidden },
+        // A service issuer's token whose sub and azp disagree names no client.
+        { "service issuer, sub=fhir-service, azp=claims-service",
+            Forge(ChoDevelopmentAuth.ServiceIssuer, "fhir-service", "claims-service", ChoServiceRole.Name), HttpStatusCode.Forbidden },
+        { "service issuer, sub=fhir-service, no azp",
+            Forge(ChoDevelopmentAuth.ServiceIssuer, "fhir-service", null, ChoServiceRole.Name), HttpStatusCode.Forbidden },
+        // A workload issuer mints workloads (wf-*), never a service: a token
+        // from it naming fhir-service is refused at authentication.
+        { "workload issuer, cho.service, sub=azp=fhir-service",
+            Forge(ChoDevelopmentAuth.WorkloadIssuer, "fhir-service", "fhir-service", ChoServiceRole.Name), HttpStatusCode.Unauthorized },
+        { "workload issuer, cho.workload, sub=azp=fhir-service",
+            Forge(ChoDevelopmentAuth.WorkloadIssuer, "fhir-service", "fhir-service", ChoWorkloadRole.Name), HttpStatusCode.Unauthorized },
+        // An issuer nobody trusts, even signed with a known key, is not authenticated.
+        { "unknown issuer",
+            Forge("cho-attacker", "fhir-service", "fhir-service", ChoServiceRole.Name), HttpStatusCode.Unauthorized },
+    };
+
+    [Theory]
+    [MemberData(nameof(ForgedTokens))]
+    public async Task ForgedToken_IsRefused(string because, string token, HttpStatusCode expected)
+    {
+        using var client = ClientWithToken(token);
+
+        var response = await client.PostAsJsonAsync(Path, Body(), Json);
+
+        Assert.True(expected == response.StatusCode, $"{because}: expected {expected}, got {response.StatusCode}");
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task FhirServiceToken_WithAnotherTenantInTheHeader_Returns403()
+    {
+        // The tenant is the token's; a header naming another is a conflict, not a switch.
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-b");
+
+        var response = await client.PostAsJsonAsync(Path, Body(), Json);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
     }
 
     // ── Backend: a plan exclusion outranks the automated outcome ───────

@@ -2,6 +2,7 @@ using AuthorizationService.Backends;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AuthorizationService.Controllers;
@@ -77,8 +78,20 @@ public sealed class AutomatedDecisionsController : ControllerBase
         var number = request.AuthorizationNumber.Trim();
 
         // Tenant-scoped by the repository (tenant from the token).
-        if (await backend.GetByNumberAsync(number, HttpContext.RequestAborted) is not null)
+        if (await backend.GetByNumberAsync(number, HttpContext.RequestAborted) is { } existing)
         {
+            // The same request again (fhir-service lost the response to a
+            // write that succeeded): the answer is the record already stored,
+            // not a second one. Anything else under this number is a conflict.
+            if (existing.RequestHash is not null
+                && string.Equals(existing.RequestHash, request.RequestHash, StringComparison.Ordinal))
+            {
+                _logger.LogInformation(
+                    "Automated decision for authorization {AuthNumber} in tenant {Tenant} already recorded; returning it",
+                    SanitizeForLog(number), SanitizeForLog(_actor.TenantId));
+                return Ok(existing);
+            }
+
             _logger.LogWarning(
                 "Automated decision refused: authorization {AuthNumber} already exists in tenant {Tenant}",
                 SanitizeForLog(number), SanitizeForLog(_actor.TenantId));
@@ -91,6 +104,7 @@ public sealed class AutomatedDecisionsController : ControllerBase
             Id = Guid.NewGuid().ToString(),
             TenantId = _actor.TenantId,
             AuthorizationNumber = number,
+            RequestHash = request.RequestHash,
             MemberId = request.MemberId.Trim(),
             PatientReference = request.PatientReference,
             CoverageId = request.CoverageId,
@@ -141,6 +155,30 @@ public sealed class AutomatedDecisionsController : ControllerBase
         return StatusCode(StatusCodes.Status201Created, stored);
     }
 
+    /// <summary>
+    /// One record this endpoint stored, by number, in the token's tenant. For
+    /// fhir-service's compensating read when a write's answer was lost: it
+    /// compares the stored <see cref="Authorization.RequestHash"/> with its
+    /// own before answering the provider from the record.
+    /// </summary>
+    [HttpGet("{authorizationNumber}")]
+    [ProducesResponseType(typeof(Authorization), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<Authorization>> Get(string authorizationNumber)
+    {
+        if (!AuthorizationNumberFormat.IsMatch(authorizationNumber))
+            return BadRequest("Malformed authorization number.");
+
+        var stored = await _backends.Resolve().GetByNumberAsync(authorizationNumber, HttpContext.RequestAborted);
+        return stored is null ? NotFound() : Ok(stored);
+    }
+
+    // \z, not $: $ also matches before a trailing newline. (The body's
+    // [RegularExpression] already requires the match to be the whole value.)
+    private static readonly Regex AuthorizationNumberFormat =
+        new(@"^[A-Za-z0-9-]{1,50}\z", RegexOptions.Compiled);
+
     /// <summary>Checks the attributes cannot express. Null when the request is consistent.</summary>
     internal static ValidationProblemDetails? Validate(AutomatedDecisionRecordRequest request, DateTime now)
     {
@@ -160,6 +198,10 @@ public sealed class AutomatedDecisionsController : ControllerBase
             Add("Decision.DecidedAt", "DecidedAt is before ReceivedAt.");
         else if (decided > now + ClockSkew)
             Add("Decision.DecidedAt", "DecidedAt is in the future.");
+
+        if (decision.LineOfBusiness != request.LineOfBusiness)
+            Add("Decision.LineOfBusiness",
+                "The decision's line of business must be the record's: the record may not state a basis the decision did not use.");
 
         if (request.RequestedServiceDateTo < request.RequestedServiceDateFrom)
             Add(nameof(request.RequestedServiceDateTo), "RequestedServiceDateTo is before RequestedServiceDateFrom.");
