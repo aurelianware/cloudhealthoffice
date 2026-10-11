@@ -139,6 +139,26 @@ public class PasAutoAdjudicatorBasisTests
     }
 
     [Fact]
+    public async System.Threading.Tasks.Task NoOpRuleEngine_IsRecognisedByItsRuleId_NotItsDisplayName()
+    {
+        // As PaRuleDecisionExtensions.IsPriorAuthRequired does: the id is the
+        // contract, the name is display text.
+        _engine.Setup(e => e.EvaluateAsync(It.IsAny<PaRuleContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PaRuleDecision
+            {
+                Outcome = PaDecisionOutcome.Pend, FiringRuleId = "NoOp", FiringRuleName = "No-op rule engine",
+                ResolvedRuleSetKey = "none",
+            });
+
+        var result = await Adjudicator().TryDecideAsync(
+            Claim(state: "TX"), new Bundle(), "t", Basis(PaLineOfBusiness.Commercial, null), 12000);
+
+        result.RuleName.Should().Be("NoOp", "the rule authorization-service binds to a no-evaluation pend");
+        result.LineOfBusiness.Should().BeNull();
+        result.StateCode.Should().BeNull();
+    }
+
+    [Fact]
     public async System.Threading.Tasks.Task TimeBudgetExceeded_ClaimsNoBasis()
     {
         var result = await Adjudicator(goldCard: new Hang()).TryDecideAsync(
