@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using ClaimsService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -75,7 +76,13 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
                 url += $"&providerNpi={Uri.EscapeDataString(providerNpi.Trim())}";
             }
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            // Always claims-service's own identity, never the caller's (#1299
+            // B1): an examiner approval re-run runs inside the examiner's
+            // request, and ClaimsExaminer / ClaimsSupervisor do not hold
+            // authorizations:read — forwarding their token made every lookup
+            // a 403, so no examiner could clear a PA-required claim. The
+            // token is minted for the adjudication tenant named here.
+            using var request = new HttpRequestMessage(HttpMethod.Get, url).UseChoServiceIdentity();
             request.Headers.Add("X-Tenant-ID", tenantId);
 
             using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
@@ -145,12 +152,31 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
     /// <summary>
     /// authorization-service's own 404 for an unknown number is
     /// <c>NotFound($"Authorization {authNumber} not found")</c> (plain text,
-    /// or a JSON string). Any other 404 — an ingress, a wrong base address,
+    /// or a JSON string), pinned on the producer side by
+    /// <c>AuthorizationAuthenticationTests.Validate_UnknownNumber_Returns404WithTheNotFoundBody</c>. Any other 404 — an ingress, a wrong base address,
     /// a route that moved — says nothing about the number.
     /// </summary>
-    internal static bool IsServiceNotFound(string? body, string number) =>
-        !string.IsNullOrEmpty(body)
-        && body.Contains($"Authorization {number} not found", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsServiceNotFound(string? body, string number)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return false;
+
+        // With Accept: application/json the service writes the message as a
+        // JSON string, whose escapes (\u0022 …) must be decoded before matching.
+        var text = body.Trim();
+        if (text.StartsWith('"'))
+        {
+            try
+            {
+                text = JsonSerializer.Deserialize<string>(text) ?? string.Empty;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        return string.Equals(text, $"Authorization {number} not found", StringComparison.OrdinalIgnoreCase);
+    }
 
     private AuthorizationLookupResult Unavailable(
         string reason, string number, string tenantId, HttpStatusCode status)
