@@ -403,6 +403,12 @@ The fixed service still **reads** an old document (the enum converter accepts nu
 `lineOfBusiness`: such a record is invisible to search, the summary, the SLA watchdog and
 the retention sweep until it is migrated.
 
+**When.** Run detection and migration only **after the rollout has completed**, when no pod
+of the old version is left. Until then an old pod keeps writing numeric enums (every
+create and update rewrites the whole document with its own serializer), so a document
+migrated early can be turned back into the old shape, and a detection run would miss
+documents written after it.
+
 **Detect the old shape** (Data Explorer, `Authorizations` container):
 
 ```sql
@@ -412,11 +418,11 @@ WHERE IS_NUMBER(c.status) OR IS_NUMBER(c.lineOfBusiness) OR IS_NUMBER(c.authoriz
 
 **Migrate in place** (ids and partition key values do not change): for each document the
 query finds, replace each numeric `status`, `lineOfBusiness` and `authorizationType` with
-the string in the table above, and replace the document under the same `tenantId`. Touch
-no other property. Alternatively, read each one through the fixed service's repository
-and write it back unchanged: the shared serializer writes the string form. Scaling
-authorization-service down is not required if each replace carries the document's ETag
-(`If-Match`), so a concurrent write by the service is not lost; retry a 412. The SLA
+the string in the table above, and replace the document under the same `tenantId` (or
+patch just those properties with `set` operations). Touch no other property. There is no
+migration tool in the repository; this is a one-off script or Data Explorer edit.
+Scaling authorization-service down is not required if each write carries the document's
+ETag (`If-Match`), so a concurrent write by the service is not lost; retry a 412. The SLA
 watchdog escalates a migrated, overdue record on its next 15-minute tick.
 
 ## Troubleshooting
