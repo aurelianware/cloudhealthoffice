@@ -64,7 +64,7 @@ public class FeeScheduleRepositoryCosmos : IFeeScheduleRepository, IProviderCont
             "WHERE c.tenantId = @tenantId " +
             "AND c.defaultForPlanId = @planId " +
             "AND c.effectiveDate <= @serviceDate " +
-            "AND (c.termDate = null OR c.termDate > @serviceDate) " +
+            "AND (NOT IS_DEFINED(c.termDate) OR IS_NULL(c.termDate) OR c.termDate > @serviceDate) " +
             "ORDER BY c.effectiveDate DESC " +
             "OFFSET 0 LIMIT 1")
             .WithParameter("@tenantId", tenantId)
@@ -206,7 +206,7 @@ public class FeeScheduleRepositoryCosmos : IFeeScheduleRepository, IProviderCont
             "AND (c.providerNpi = @npi OR c.groupTin = @npi) " +
             "AND c.planId = @planId " +
             "AND c.effectiveDate <= @serviceDate " +
-            "AND (c.termDate = null OR c.termDate > @serviceDate) " +
+            "AND (NOT IS_DEFINED(c.termDate) OR IS_NULL(c.termDate) OR c.termDate > @serviceDate) " +
             "ORDER BY c.effectiveDate DESC " +
             "OFFSET 0 LIMIT 1")
             .WithParameter("@tenantId", tenantId)
