@@ -73,7 +73,7 @@ public sealed class PayerToPayerController : FhirControllerBase
         return result.Outcome switch
         {
             PayerToPayerOutcome.Exported => Ok(result.Bundle),
-            PayerToPayerOutcome.NotAuthorized => Forbidden(
+            PayerToPayerOutcome.NotAuthorized => FhirForbidden(
                 "Member has not authorized a Payer-to-Payer exchange (no active opt-in consent)."),
             PayerToPayerOutcome.AmbiguousMatch => FhirUnprocessable(
                 "The supplied identifiers matched more than one member; refusing to return data."),
@@ -87,20 +87,6 @@ public sealed class PayerToPayerController : FhirControllerBase
 
     internal const string BackendOnlyMessage =
         "Payer-to-Payer operations are restricted to payer backend (system) clients.";
-
-    private IActionResult Forbidden(string diagnostics)
-        => StatusCode(403, new OperationOutcome
-        {
-            Issue =
-            [
-                new OperationOutcome.IssueComponent
-                {
-                    Severity = OperationOutcome.IssueSeverity.Error,
-                    Code = OperationOutcome.IssueType.Forbidden,
-                    Diagnostics = diagnostics,
-                },
-            ],
-        });
 }
 
 /// <summary>
