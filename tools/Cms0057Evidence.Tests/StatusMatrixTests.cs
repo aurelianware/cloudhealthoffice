@@ -120,6 +120,17 @@ public class StatusMatrixParserTests
     public void NonTableLineInsideMarkers_Throws() =>
         ShouldFail(ValidDoc("| PAS-01 | GAP | D-01 | x |", "A stray note."), "*matrix.md:*unexpected non-table line*A stray note.*");
 
+    [Theory]
+    [InlineData("\t| PAS-01 | GAP | D-01 | x |")]
+    [InlineData("    | PAS-01 | GAP | D-01 | x |")]
+    [InlineData("      | PAS-01 | GAP | D-01 | x |")]
+    public void CodeBlockIndentedLine_Throws(string row) =>
+        ShouldFail(ValidDoc(row), "*matrix.md:10: status table line is indented by a tab or 4+ spaces*");
+
+    [Fact]
+    public void ShallowIndentation_IsAccepted() =>
+        Parse(ValidDoc("   | PAS-01 | GAP | D-01 | x |")).Rows.Should().ContainKey("PAS-01");
+
     [Fact]
     public void WrongCellCount_Throws() =>
         ShouldFail(ValidDoc("| PAS-01 | GAP | D-01 | has | an unescaped pipe |"), "*expected 4 cells, found 5*");
@@ -312,5 +323,22 @@ public class CommittedStatusMatrixTests
 
         resolved.Scenarios.Should().OnlyContain(s => s.Replace != null && Status.All.Contains(s.Replace.Status));
         matrix.Rows.Keys.Should().BeEquivalentTo(manifest.Scenarios.Select(s => s.Id));
+    }
+
+    [Fact]
+    public void CommittedMatrix_TotalsLine_MatchesTheTable()
+    {
+        var path = Path.Combine(RepoRoot(), StatusMatrixParser.DefaultPath);
+        var matrix = StatusMatrixParser.Load(path);
+        var m = System.Text.RegularExpressions.Regex.Match(File.ReadAllText(path),
+            @"\*\*Totals:\*\* (\d+) PASSABLE, (\d+) PARTIAL, (\d+) GAP, (\d+) N/A \((\d+) scenarios\)");
+        m.Success.Should().BeTrue("§11 carries a totals line under the status table");
+
+        int Count(string status) => matrix.Rows.Values.Count(r => r.Status == status);
+        int.Parse(m.Groups[1].Value).Should().Be(Count(Status.Passable));
+        int.Parse(m.Groups[2].Value).Should().Be(Count(Status.Partial));
+        int.Parse(m.Groups[3].Value).Should().Be(Count(Status.Gap));
+        int.Parse(m.Groups[4].Value).Should().Be(Count(Status.NotApplicable));
+        int.Parse(m.Groups[5].Value).Should().Be(matrix.Rows.Count);
     }
 }

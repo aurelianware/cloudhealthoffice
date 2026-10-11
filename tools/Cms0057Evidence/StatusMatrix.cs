@@ -77,6 +77,12 @@ public static class StatusMatrixParser
         {
             var text = lines[i].Trim();
             if (text.Length == 0) continue;
+            // A line indented by a tab or 4+ spaces renders as a code block on
+            // GitHub, so readers would not see the table the generator reads.
+            var raw = lines[i];
+            if (raw.StartsWith('\t') || raw.StartsWith("    ", StringComparison.Ordinal))
+                throw new StatusMatrixException(
+                    $"{source}:{i + 1}: status table line is indented by a tab or 4+ spaces (Markdown renders it as code); remove the indentation.");
             if (!text.StartsWith('|'))
                 throw new StatusMatrixException(
                     $"{source}:{i + 1}: unexpected non-table line inside the status table markers: '{text}'.");
