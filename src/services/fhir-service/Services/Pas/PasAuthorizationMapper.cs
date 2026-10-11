@@ -20,12 +20,14 @@ namespace FhirService.Services.Pas;
 ///   <item><term>Member, name, date of birth</term><description>The Patient
 ///   <c>Claim.patient</c> references, which must be in the Bundle. Member id
 ///   from its identifier typed <c>MB</c> (v2-0203), else
-///   <c>Coverage.subscriberId</c>, else a Coverage identifier typed
-///   <c>MB</c>.</description></item>
+///   <c>Coverage.subscriberId</c> when the patient IS the subscriber
+///   (<c>relationship</c> = self, or <c>subscriber</c> = <c>beneficiary</c>;
+///   for a dependent it is the policy holder's id), else a Coverage
+///   identifier typed <c>MB</c>.</description></item>
 ///   <item><term>Coverage, line of business</term><description>The Coverage
 ///   the focal <c>Claim.insurance</c> references, which must be in the Bundle.
 ///   Line of business from <c>Coverage.type</c> (X12 claim filing indicator
-///   1032 or Source of Payment Typology); anything else is
+///   1032 or Source of Payment Typology, by URL or OID); anything else is
 ///   <c>Unknown</c>.</description></item>
 ///   <item><term>Requesting provider</term><description>The NPI
 ///   (<c>http://hl7.org/fhir/sid/us-npi</c>) of the Practitioner /
@@ -37,21 +39,26 @@ namespace FhirService.Services.Pas;
 ///   <item><term>Service type (UM03)</term><description><c>Claim.item.category</c>
 ///   in the X12 service type code system (1365); null when absent. Never the
 ///   claim type.</description></item>
-///   <item><term>Level of service (UM06)</term><description><c>Claim.priority</c>:
-///   stat / urgent / expedited (and X12 <c>U</c>, <c>03</c>) → <c>U</c>;
-///   normal / routine / deferred (and X12 <c>E</c>) → <c>E</c>; absent or
-///   unrecognised → null, the standard clock.</description></item>
+///   <item><term>Level of service (UM06)</term><description>The PAS
+///   level-of-service extension (X12 1338: <c>U</c>, <c>03</c> → <c>U</c>;
+///   <c>E</c> → <c>E</c>) on the Claim or an item, else <c>Claim.priority</c>
+///   read by its system: processpriority <c>stat</c> → <c>U</c>,
+///   <c>normal</c> / <c>deferred</c> → <c>E</c>; X12 1338 as above. A code
+///   in no system or another system, or none → null, the standard
+///   clock.</description></item>
 ///   <item><term>Requested dates</term><description><c>Claim.item.servicedDate</c>
 ///   / <c>servicedPeriod</c> across all items, else <c>Claim.billablePeriod</c>.
 ///   Required.</description></item>
 ///   <item><term>Approved period (for an approval)</term><description>The
 ///   requested period. A single date (or several) approves that date range.
 ///   Only when the request gives an open-ended period (a start and no end)
-///   does the end fall back to start + 1 year (<see cref="OpenEndedApproval"/>);
-///   the PAS IG sets no default.</description></item>
+///   does the end fall back to start + 1 year (<see cref="OpenEndedApproval"/>),
+///   or to the latest end another service names if that is later; the PAS IG
+///   sets no default.</description></item>
 ///   <item><term>Codes</term><description>Each item's
 ///   <c>productOrService</c> code with its system, units, modifiers, place of
-///   service and revenue code; diagnoses with their codes.</description></item>
+///   service and revenue code; diagnoses by their ICD-10-CM coding (else
+///   ICD-10), a diagnosis with neither being skipped.</description></item>
 /// </list>
 /// </summary>
 public static class PasAuthorizationMapper
@@ -60,7 +67,17 @@ public static class PasAuthorizationMapper
     public const string X12ServiceTypeSystem = "https://codesystem.x12.org/005010/1365";
     public const string X12ClaimFilingIndicatorSystem = "https://codesystem.x12.org/005010/1032";
     public const string SourceOfPaymentTypologySystem = "https://nahdo.org/sopt";
+    public const string SourceOfPaymentTypologyOid = "urn:oid:2.16.840.1.113883.3.221.5";
+    public const string ProcessPrioritySystem = "http://terminology.hl7.org/CodeSystem/processpriority";
+    public const string X12LevelOfServiceSystem = "https://codesystem.x12.org/005010/1338";
+    public const string Icd10CmSystem = "http://hl7.org/fhir/sid/icd-10-cm";
+    public const string Icd10System = "http://hl7.org/fhir/sid/icd-10";
+    private const string SubscriberRelationshipSystem = "http://terminology.hl7.org/CodeSystem/subscriber-relationship";
     private const string IdentifierTypeSystem = "http://terminology.hl7.org/CodeSystem/v2-0203";
+
+    /// <summary>Da Vinci PAS level-of-service extension (X12 UM06, code system 1338).</summary>
+    public const string LevelOfServiceExtensionUrl =
+        "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-levelOfServiceCode";
 
     /// <summary>
     /// The end of an approval whose requested period has a start and no end.
@@ -81,7 +98,7 @@ public static class PasAuthorizationMapper
         MapProviders(bundle, claim, request, errors);
         MapServices(bundle, claim, request, errors);
 
-        request.LevelOfService = LevelOfService(claim.Priority);
+        request.LevelOfService = LevelOfService(claim);
         request.ServiceTypeCode = claim.Item?
             .Select(i => i.Category?.Coding?.FirstOrDefault(c =>
                 c.System == X12ServiceTypeSystem && c.Code is not null && ServiceTypeCode.IsMatch(c.Code))?.Code)
@@ -159,7 +176,9 @@ public static class PasAuthorizationMapper
         }
 
         var memberId = MemberIdentifier(patient?.Identifier)
-                       ?? coverage?.SubscriberId?.Trim()
+                       ?? (coverage is not null && PatientIsSubscriber(bundle, coverage)
+                           ? NullIfEmpty(coverage.SubscriberId?.Trim())
+                           : null)
                        ?? MemberIdentifier(coverage?.Identifier);
         if (string.IsNullOrEmpty(memberId))
         {
@@ -176,6 +195,31 @@ public static class PasAuthorizationMapper
             request.MemberId = memberId;
         }
     }
+
+    /// <summary>
+    /// Whether <c>Coverage.subscriberId</c> is the patient's own: the
+    /// relationship is <c>self</c>, or the subscriber is the beneficiary. For a
+    /// dependent (or when the Coverage does not say) it is the policy holder's
+    /// id, not the patient's.
+    /// </summary>
+    private static bool PatientIsSubscriber(Bundle bundle, Coverage coverage)
+    {
+        if (coverage.Relationship?.Coding?.Any(c =>
+                c.System == SubscriberRelationshipSystem && c.Code == "self") == true)
+            return true;
+
+        if (coverage.Subscriber?.Reference is not { Length: > 0 } subscriber
+            || coverage.Beneficiary?.Reference is not { Length: > 0 } beneficiary)
+            return false;
+
+        if (string.Equals(subscriber, beneficiary, StringComparison.Ordinal))
+            return true;
+
+        var subscriberResource = Resolve(bundle, coverage.Subscriber);
+        return subscriberResource is Patient && ReferenceEquals(subscriberResource, Resolve(bundle, coverage.Beneficiary));
+    }
+
+    private static string? NullIfEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
 
     private static string? MemberIdentifier(IEnumerable<Identifier>? identifiers)
         => identifiers?
@@ -209,7 +253,7 @@ public static class PasAuthorizationMapper
                 };
                 if (lob is not null) return lob;
             }
-            else if (coding.System == SourceOfPaymentTypologySystem)
+            else if (coding.System is SourceOfPaymentTypologySystem or SourceOfPaymentTypologyOid)
             {
                 // SOPT is hierarchical: the leading digits name the family.
                 var lob = code switch
@@ -378,7 +422,10 @@ public static class PasAuthorizationMapper
         {
             var concept = diagnosis.Diagnosis as CodeableConcept
                           ?? (Resolve(bundle, diagnosis.Diagnosis as ResourceReference) as Condition)?.Code;
-            var coding = concept?.Coding?.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.Code));
+            // ICD-10-CM preferred, then ICD-10; other codings (SNOMED, ...) are
+            // not what the record's diagnosis codes hold, so a diagnosis with
+            // neither is skipped rather than refusing the request.
+            var coding = Icd10Coding(concept, Icd10CmSystem) ?? Icd10Coding(concept, Icd10System);
             if (coding is null)
                 continue;
 
@@ -398,30 +445,63 @@ public static class PasAuthorizationMapper
         }
     }
 
+    private static Coding? Icd10Coding(CodeableConcept? concept, string system)
+        => concept?.Coding?.FirstOrDefault(c => c.System == system && !string.IsNullOrWhiteSpace(c.Code));
+
     // ── Priority, dates ───────────────────────────────────────────────
 
     /// <summary>
-    /// X12 UM06-style level of service from <c>Claim.priority</c>: <c>U</c>
-    /// (expedited: 72 hours) or <c>E</c> (standard), or null when the request
-    /// does not say (the standard clock applies).
+    /// X12 UM06 level of service: <c>U</c> (expedited: 72 hours) or <c>E</c>
+    /// (standard), or null when the request does not say (the standard clock
+    /// applies). The PAS level-of-service extension states UM06 directly, so
+    /// it is read first (on the Claim, then on its items); then
+    /// <c>Claim.priority</c>. A code is read only in the system it belongs to.
     /// </summary>
-    public static string? LevelOfService(CodeableConcept? priority)
+    public static string? LevelOfService(Claim claim)
     {
-        foreach (var coding in priority?.Coding ?? [])
+        var extensions = (claim.Extension ?? [])
+            .Concat((claim.Item ?? []).SelectMany(i => i.Extension ?? []))
+            .Where(e => e.Url == LevelOfServiceExtensionUrl);
+        foreach (var extension in extensions)
         {
-            switch (coding.Code?.Trim().ToLowerInvariant())
+            if (LevelOfService(extension.Value as CodeableConcept) is { } level)
+                return level;
+        }
+
+        return LevelOfService(claim.Priority);
+    }
+
+    /// <summary>The level of service a concept's codings state, by their systems.</summary>
+    public static string? LevelOfService(CodeableConcept? concept)
+    {
+        foreach (var coding in concept?.Coding ?? [])
+        {
+            var code = coding.Code?.Trim();
+            var level = coding.System switch
             {
-                case "stat" or "urgent" or "expedited" or "asap" or "u" or "03":
-                    return "U";
-                case "normal" or "routine" or "standard" or "deferred" or "e":
-                    return "E";
-            }
+                ProcessPrioritySystem => code switch
+                {
+                    "stat" => "U",
+                    "normal" or "deferred" => "E",
+                    _ => null,
+                },
+                X12LevelOfServiceSystem => code switch
+                {
+                    "U" or "03" => "U",
+                    "E" => "E",
+                    _ => null,
+                },
+                _ => null,
+            };
+            if (level is not null)
+                return level;
         }
 
         return null;
     }
 
-    private readonly record struct RequestedDates(DateTime From, DateTime? To, bool OpenEnded);
+    /// <param name="LatestEnd">The latest date any service names (an open-ended one counts its start).</param>
+    private readonly record struct RequestedDates(DateTime From, DateTime? To, bool OpenEnded, DateTime LatestEnd);
 
     private static RequestedDates? RequestedPeriod(Claim claim)
     {
@@ -456,7 +536,7 @@ public static class PasAuthorizationMapper
         if (from is null)
             return null;
 
-        return new RequestedDates(from.Value, openEnded ? null : to, openEnded);
+        return new RequestedDates(from.Value, openEnded ? null : to, openEnded, to!.Value);
 
         void Widen(DateTime start, DateTime end)
         {
@@ -465,8 +545,19 @@ public static class PasAuthorizationMapper
         }
     }
 
+    /// <summary>
+    /// The requested period; when a service is open-ended, the later of the
+    /// fallback (start + 1 year) and the latest end another service names, so
+    /// the fallback never cuts short a service the request bounded later.
+    /// </summary>
     private static (DateTime From, DateTime To) ApprovedPeriodFor(RequestedDates requested)
-        => (requested.From, requested.To ?? requested.From.Add(OpenEndedApproval));
+    {
+        if (requested.To is { } to)
+            return (requested.From, to);
+
+        var fallback = requested.From.Add(OpenEndedApproval);
+        return (requested.From, requested.LatestEnd > fallback ? requested.LatestEnd : fallback);
+    }
 
     /// <summary>The date part of a FHIR date/dateTime, only when it names a full day.</summary>
     private static DateTime? ParseFullDate(string? value)
@@ -538,6 +629,15 @@ public sealed class PasMappingResult
 public sealed class PasAuthorizationRecordRequest
 {
     public string AuthorizationNumber { get; set; } = string.Empty;
+
+    /// <summary>
+    /// SHA-256 (lower-case hex) of this request's payload, set by the
+    /// recorder. authorization-service returns the stored record when the same
+    /// number is recorded again with the same hash (a retry), and compares it
+    /// on fhir-service's compensating read.
+    /// </summary>
+    public string? RequestHash { get; set; }
+
     public DateTime ReceivedAt { get; set; }
     public string MemberId { get; set; } = string.Empty;
     public string? PatientReference { get; set; }
@@ -595,4 +695,10 @@ public sealed class PasAutomatedDecision
     public DateTime? ApprovedServiceDateTo { get; set; }
     public DateTime DecidedAt { get; set; }
     public string? Rule { get; set; }
+
+    /// <summary>The line of business the decision was made on; must be the record's.</summary>
+    public string LineOfBusiness { get; set; } = "Unknown";
+
+    /// <summary>The service state the state-specific rules used, or null when none ran on a state.</summary>
+    public string? StateCode { get; set; }
 }

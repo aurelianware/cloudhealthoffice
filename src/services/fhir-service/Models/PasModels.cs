@@ -14,6 +14,22 @@ public class PasDecisionResult
     public DateTime? EffectiveTo { get; set; }
     public string? RuleName { get; set; }        // Which rule triggered the decision
     public long ElapsedMs { get; set; }
+
+    /// <summary>
+    /// Why a pended request was pended, when a rule says so; recorded as the
+    /// record's pend reason. Null for the clinical-review default.
+    /// </summary>
+    public string? PendReason { get; set; }
+
+    /// <summary>The line of business the decision was made on (the record's).</summary>
+    public string? LineOfBusiness { get; set; }
+
+    /// <summary>
+    /// The service state the request named (<c>Claim.item.locationAddress.state</c>),
+    /// which the state-specific rules used; null when it named none, in which
+    /// case no state-specific rule ran.
+    /// </summary>
+    public string? StateCode { get; set; }
 }
 
 /// <summary>

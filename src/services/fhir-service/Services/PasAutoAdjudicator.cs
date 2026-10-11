@@ -16,12 +16,21 @@ namespace FhirService.Services;
 /// Respects a time budget — returns PEND if time runs out.
 ///
 /// Rule execution order:
-///   Rule 0: StateEnrollmentGate        — provider must be enrolled in state Medicaid
+/// The line of business and the providers are the ones the controller mapped
+/// from the request and stores with the record (<see cref="PasDecisionBasis"/>);
+/// nothing here re-derives or defaults them. The service state is the one the
+/// request names (<c>Claim.item.locationAddress.state</c>); a request naming
+/// none is never decided by a state-specific rule.
+///
+///   Rule 0: StateEnrollmentGate        — provider must be enrolled in the state
+///                                        program for the request's LOB (Medicaid,
+///                                        Medicare, Marketplace); not run for others
 ///   Rule 1: AutoDenyList               — non-covered service types (config)
 ///   Rule 2: AutoApproveList            — service type allowlist (config)
 ///   Rule 3: GoldCard (approval rate)   — existing authorization-service check
 ///   Rule 4: DollarThreshold            — cost-based auto-approve (config)
-///   Rule 5: PriorAuthRuleEngine        — state-specific clinical/regulatory rules
+///   Rule 5: PriorAuthRuleEngine        — state-specific clinical/regulatory rules;
+///                                        PEND (StateUndetermined) when no state
 ///   Rule 6: PEND                       — no rule reached a conclusion
 /// </summary>
 public class PasAutoAdjudicator : IPasAutoAdjudicator
@@ -46,12 +55,36 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
         _logger          = logger;
     }
 
+    /// <summary>Recorded when the request names no service state for the state-specific rules.</summary>
+    public const string StateUndeterminedPendReason =
+        "The service state could not be determined from the request (Claim.item.locationAddress.state), "
+        + "so no state-specific rule was applied. Pended for review.";
+
     public async Task<PasDecisionResult> TryDecideAsync(
         Claim claim,
         Bundle context,
         string tenantId,
+        PasDecisionBasis basis,
         int timeoutMs,
         CancellationToken ct = default)
+    {
+        var stateCode = ExtractStateCode(claim);
+        var result = await DecideAsync(claim, tenantId, basis, stateCode, timeoutMs, ct);
+
+        // The basis travels with the decision so the record states exactly
+        // what was used.
+        result.LineOfBusiness = basis.LineOfBusiness.ToString();
+        result.StateCode = stateCode;
+        return result;
+    }
+
+    private async Task<PasDecisionResult> DecideAsync(
+        Claim claim,
+        string tenantId,
+        PasDecisionBasis basis,
+        string? stateCode,
+        int timeoutMs,
+        CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
 
@@ -62,26 +95,29 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
         cts.CancelAfter(timeoutMs);
 
         var procedureCodes = ExtractProcedureCodes(claim);
-        var providerNpi    = ExtractProviderNpi(claim);
+        var providerNpi    = basis.RequestingProviderNpi;
         var taxonomy       = ExtractTaxonomy(claim);
         var serviceDate    = ExtractServiceDate(claim);
-        var stateCode      = ExtractStateCode(claim);
-        var lob            = ExtractLineOfBusiness(claim);
+        var lob            = basis.LineOfBusiness;
+        var enrollmentLob  = MapToPaEnrollmentLob(lob);
 
         try
         {
-            // ── Rule 0: State Medicaid enrollment gate ────────────────────
-            // Provider must be actively enrolled in state Medicaid before any
-            // clinical rules are evaluated. Unenrolled providers exit here
-            // without touching the 400+ TX Medicaid pathways.
-            if (!string.IsNullOrEmpty(providerNpi) && !string.IsNullOrEmpty(stateCode))
+            // ── Rule 0: State program enrollment gate ─────────────────────
+            // Provider must be actively enrolled in the state program for the
+            // request's line of business before any clinical rules are
+            // evaluated. Only for the lines of business the enrollment service
+            // knows: a Commercial, TRICARE or VA request is never gated on
+            // state Medicaid enrollment.
+            if (enrollmentLob != CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness.None
+                && !string.IsNullOrEmpty(providerNpi) && !string.IsNullOrEmpty(stateCode))
             {
                 var enrollmentResult = await _enrollmentGate.EvaluateAsync(
                     npi:         providerNpi,
                     taxonomy:    taxonomy ?? string.Empty,
                     stateCode:   stateCode,
                     serviceDate: serviceDate,
-                    lob:         MapToPaEnrollmentLob(lob),
+                    lob:         enrollmentLob,
                     ct:          cts.Token);
 
                 if (!enrollmentResult.Passed)
@@ -154,20 +190,28 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
             cts.Token.ThrowIfCancellationRequested();
 
             // ── Rule 5: State-specific PA rule engine ─────────────────────
-            // Replaces the previous default PEND.
             // Evaluates clinical criteria, quantity limits, regulatory exemptions
-            // and diagnosis requirements by (StateCode, LOB, Program).
+            // and diagnosis requirements by (StateCode, LOB, Program). Only on
+            // the state the request names: it used to default to TX, so a
+            // request naming no state was decided on Texas rules.
+            if (string.IsNullOrEmpty(stateCode))
+            {
+                var undetermined = Pend(sw, "StateUndetermined");
+                undetermined.PendReason = StateUndeterminedPendReason;
+                return undetermined;
+            }
+
             var ruleContext = new PaRuleContext
             {
                 // The authenticated tenant, passed in by the controller. The
                 // request bundle's meta.tag is NOT consulted (D-12): it is
                 // caller-controlled and once let tenant A select tenant B's rules.
                 TenantId              = tenantId,
-                StateCode             = stateCode ?? "TX",
+                StateCode             = stateCode,
                 Lob                   = lob,
                 Program               = ExtractProgram(claim),
                 RequestingProviderNpi = providerNpi ?? string.Empty,
-                ServicingProviderNpi  = ExtractServicingNpi(claim) ?? providerNpi ?? string.Empty,
+                ServicingProviderNpi  = basis.ServicingProviderNpi ?? providerNpi ?? string.Empty,
                 ServicingProviderTaxonomy = taxonomy,
                 MemberId              = ExtractMemberId(claim),
                 ServiceDate           = serviceDate,
@@ -242,14 +286,6 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
         return codes;
     }
 
-    private static string? ExtractProviderNpi(Claim claim) =>
-        claim.Provider?.Identifier?.Value;
-
-    private static string? ExtractServicingNpi(Claim claim) =>
-        // FHIR R4: servicing provider referenced via CareTeam, not Item.Provider
-        claim.CareTeam?.FirstOrDefault(ct => ct.Role?.Coding?.Any(
-            c => c.Code == "rendering") == true)?.Provider?.Identifier?.Value;
-
     private static string? ExtractTaxonomy(Claim claim) =>
         // FHIR R4: Provider taxonomy carried in Claim.Provider qualification extension
         // or CareTeam role. ResourceReference.Type is a string, not CodeableConcept.
@@ -275,26 +311,15 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
         return dob != null ? DateOnly.Parse(dob.Value) : null;
     }
 
-    private static string? ExtractStateCode(Claim claim) =>
-        // CMS-1500/278: servicing facility state from Item.LocationCodeableConcept
-        // or from the CRD CoverageRequirements extension
-        claim.Item?.FirstOrDefault()?.Location switch
-        {
-            Address a => a.State,
-            _ => null
-        };
-
-    private static PaLineOfBusiness ExtractLineOfBusiness(Claim claim)
+    /// <summary>
+    /// The service state the request names: the first item's
+    /// <c>locationAddress.state</c>, as a two-letter USPS code. Null when absent
+    /// or not a state code; never defaulted.
+    /// </summary>
+    private static string? ExtractStateCode(Claim claim)
     {
-        // Map FHIR Claim.insurance.coverage plan type to PaLineOfBusiness
-        var planType = claim.Insurance?.FirstOrDefault()?.Coverage?.Identifier?.Type?.Text;
-        return planType?.ToUpperInvariant() switch
-        {
-            "MEDICAID" or "STAR" or "STARPLUS" or "STARKIDS" => PaLineOfBusiness.Medicaid,
-            "EXCHANGE" or "QHP" or "MARKETPLACE"             => PaLineOfBusiness.Exchange,
-            "MEDICARE" or "MA"                               => PaLineOfBusiness.Medicare,
-            _                                                => PaLineOfBusiness.Medicaid // default for Texas Medicaid MCO tenants
-        };
+        var state = (claim.Item?.FirstOrDefault()?.Location as Address)?.State?.Trim().ToUpperInvariant();
+        return state is { Length: 2 } && state.All(c => c is >= 'A' and <= 'Z') ? state : null;
     }
 
     private static string? ExtractProgram(Claim claim)

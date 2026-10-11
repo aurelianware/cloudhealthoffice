@@ -51,7 +51,7 @@ public class PasProviderVerificationTests
         // Default: auto-adjudicator approves
         _adjudicatorMock
             .Setup(a => a.TryDecideAsync(
-                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PasDecisionResult
             {
                 HasDecision = true,
@@ -140,7 +140,7 @@ public class PasProviderVerificationTests
         _recorder.Last.Decision.DenialReasonCode.Should().Be("PROVIDER_EXCLUDED");
         _recorder.Last.RequestingProviderNPI.Should().Be("1234567890");
         _adjudicatorMock.Verify(a => a.TryDecideAsync(
-            It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

@@ -6,6 +6,7 @@ using Hl7.Fhir.Model;
 using FhirService.Models;
 using FhirService.Services;
 using FhirService.Services.Pas;
+using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -125,6 +126,9 @@ public class PasController : FhirControllerBase
                                            ? string.Empty
                                            : $" Source: {verificationResult.ExclusionSource}"),
                         RuleName = "provider-exclusion-check",
+                        // A fact about the provider, whatever the plan: decided
+                        // on no line of business or state of its own.
+                        LineOfBusiness = record.LineOfBusiness,
                     };
 
                     _logger.LogWarning(
@@ -143,10 +147,28 @@ public class PasController : FhirControllerBase
                 }
             }
 
-            // 3. Auto-adjudicate with time budget
+            // 3. Auto-adjudicate with time budget, on the line of business and
+            // providers the record stores (B1). A line of business the request
+            // does not determine is not guessed: nothing is auto-decided, the
+            // request is pended (A4) and the record says why.
+            if (!TryLineOfBusiness(record.LineOfBusiness, out var lineOfBusiness))
+            {
+                _logger.LogInformation(
+                    "PAS $submit for tenant {TenantId}: line of business undetermined, pended without adjudication",
+                    SanitizeForLog(TenantId));
+                return await RecordAndRespondAsync(claim, record, mapping, new PasDecisionResult
+                {
+                    HasDecision = false,
+                    RuleName = LineOfBusinessUndeterminedRule,
+                    PendReason = LineOfBusinessUndeterminedPendReason,
+                    LineOfBusiness = record.LineOfBusiness,
+                }, sw);
+            }
+
+            var basis = new PasDecisionBasis(lineOfBusiness, record.RequestingProviderNPI, record.ServicingProviderNPI);
             var timeBudgetMs = _config.MaxResponseMs;
             var decision = await _adjudicator.TryDecideAsync(
-                claim, requestBundle, TenantId, timeBudgetMs, HttpContext.RequestAborted);
+                claim, requestBundle, TenantId, basis, timeBudgetMs, HttpContext.RequestAborted);
 
             return await RecordAndRespondAsync(claim, record, mapping, decision, sw);
         }
@@ -191,11 +213,15 @@ public class PasController : FhirControllerBase
             Outcome = outcome,
             DenialReasonCode = outcome == "Denied" ? decision.DenialReasonCode : null,
             DenialReason = outcome == "Denied" ? decision.DenialReason : null,
-            PendReason = outcome == "Pended" ? PendReason : null,
+            PendReason = outcome == "Pended" ? decision.PendReason ?? PendReason : null,
             ApprovedServiceDateFrom = outcome == "Approved" ? decision.EffectiveFrom : null,
             ApprovedServiceDateTo = outcome == "Approved" ? decision.EffectiveTo : null,
             DecidedAt = DateTime.UtcNow,
             Rule = decision.RuleName is { Length: > 100 } rule ? rule[..100] : decision.RuleName,
+            // The basis the decision used; authorization-service refuses a
+            // decision whose line of business is not the record's.
+            LineOfBusiness = decision.LineOfBusiness ?? record.LineOfBusiness,
+            StateCode = decision.StateCode,
         };
 
         var stored = await _recorder.RecordAsync(record, TenantId, HttpContext.RequestAborted);
@@ -209,41 +235,82 @@ public class PasController : FhirControllerBase
             return NotRecorded(stored.Failure);
         }
 
-        // The stored record decides the answer. A plan exclusion in
-        // authorization-service denies a request the adjudicator would have
-        // approved or pended; the provider is told what the record says.
-        if (stored.Stored!.Status == PriorAuthorizationStatus.Denied && outcome != "Denied")
+        // The answer is built from the STORED record, never from the decision
+        // sent: the record is what $inquire will return, and it can differ (a
+        // plan exclusion in authorization-service denies a request the
+        // adjudicator approved or pended; a repeat of a stored request returns
+        // the record as stored). A status $submit has no answer for is a
+        // failure, with no preAuthRef.
+        var kept = stored.Stored!;
+        var answer = new PasDecisionResult
         {
-            decision = new PasDecisionResult
-            {
-                HasDecision = true,
-                Decision = "denied",
-                AuthorizationNumber = decision.AuthorizationNumber,
-                DenialReasonCode = stored.Stored.DenialReasonCode,
-                DenialReason = stored.Stored.DenialReason,
-                RuleName = "benefit-exclusion",
-            };
-            outcome = "Denied";
+            AuthorizationNumber = kept.AuthorizationNumber,
+            RuleName = decision.RuleName,
+        };
+        Bundle responseBundle;
+        switch (kept.Status)
+        {
+            case PriorAuthorizationStatus.Approved:
+                answer.HasDecision = true;
+                answer.Decision = "approved";
+                answer.EffectiveFrom = kept.ApprovedServiceDateFrom;
+                answer.EffectiveTo = kept.ApprovedServiceDateTo;
+                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer);
+                break;
+            case PriorAuthorizationStatus.Denied:
+                answer.HasDecision = true;
+                answer.Decision = "denied";
+                answer.DenialReasonCode = kept.DenialReasonCode;
+                answer.DenialReason = kept.DenialReason;
+                if (outcome != "Denied")
+                    answer.RuleName = "benefit-exclusion";
+                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer);
+                break;
+            case PriorAuthorizationStatus.Pended:
+                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber);
+                break;
+            default:
+                RecordMetrics(sw, "error", "unanswerable-stored-status");
+                _logger.LogError(
+                    "PAS $submit for tenant {TenantId}: authorization {AuthNumber} was stored as {Status}, "
+                    + "which $submit cannot answer; no preAuthRef issued",
+                    SanitizeForLog(TenantId), SanitizeForLog(kept.AuthorizationNumber), kept.Status);
+                return NotRecorded(PasRecordFailure.Rejected);
         }
 
-        var responseBundle = outcome switch
-        {
-            "Approved" => _responseBuilder.BuildApprovedResponse(claim, decision),
-            "Denied" => _responseBuilder.BuildDeniedResponse(claim, decision),
-            _ => _responseBuilder.BuildPendedResponse(claim, decision.AuthorizationNumber),
-        };
-        RecordMetrics(sw, outcome.ToLowerInvariant(), decision.RuleName);
+        var answered = kept.Status.ToString();
+        RecordMetrics(sw, answered.ToLowerInvariant(), answer.RuleName);
 
         _logger.LogInformation(
             "PAS $submit completed in {ElapsedMs}ms, authorization={AuthNumber}, decision={Decision}, rule={Rule}",
-            sw.ElapsedMilliseconds, SanitizeForLog(decision.AuthorizationNumber), outcome,
-            SanitizeForLog(decision.RuleName));
+            sw.ElapsedMilliseconds, SanitizeForLog(kept.AuthorizationNumber), answered,
+            SanitizeForLog(answer.RuleName));
 
         return Ok(responseBundle);
     }
 
     /// <summary>Recorded on a pended request; the ClaimResponse says the same (queued for review).</summary>
     private const string PendReason = "Pended for clinical review.";
+
+    /// <summary>The "rule" a request with an undetermined line of business is pended by.</summary>
+    public const string LineOfBusinessUndeterminedRule = "LineOfBusinessUndetermined";
+
+    public const string LineOfBusinessUndeterminedPendReason =
+        "The line of business could not be determined from Coverage.type, so the request was not "
+        + "auto-adjudicated. Pended for review.";
+
+    /// <summary>
+    /// The rule engine's line of business for the record's, or false for
+    /// <c>Unknown</c> (and anything else the engine has no value for).
+    /// </summary>
+    private static bool TryLineOfBusiness(string recorded, out PaLineOfBusiness lineOfBusiness)
+    {
+        lineOfBusiness = default;
+        return !string.Equals(recorded, "Unknown", StringComparison.Ordinal)
+               && Enum.TryParse(recorded, ignoreCase: false, out lineOfBusiness)
+               && Enum.IsDefined(lineOfBusiness)
+               && string.Equals(lineOfBusiness.ToString(), recorded, StringComparison.Ordinal);
+    }
 
     /// <summary>422 listing every element the request lacks; nothing was decided or stored.</summary>
     private IActionResult IncompleteRequest(IReadOnlyList<PasMappingError> errors)

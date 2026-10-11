@@ -93,12 +93,14 @@ public class PasRuleSetTenantTests : IClassFixture<FhirTestWebAppFactory>
     /// A PAS bundle that reaches the rule engine: a procedure on no auto list,
     /// no cost. It is now a complete bundle (Patient, Coverage, Practitioner
     /// with NPI), because $submit refuses a Claim whose referenced resources
-    /// are missing (D-03); the item has no location, so the enrollment gate is
-    /// still skipped, and the gold-card lookup answers 404.
+    /// are missing (D-03). The item names its service state (TX): the rule
+    /// engine runs only on a state the request names, never a default (B1).
+    /// The enrollment gate is the factory's passthrough, and the gold-card
+    /// lookup answers 404.
     /// </summary>
     private static string SubmitBundle(string? taggedTenant)
     {
-        var bundle = PasBundles.Complete(procedureCode: "70553");
+        var bundle = PasBundles.Complete(procedureCode: "70553", serviceState: "TX");
         if (taggedTenant != null)
             bundle.Meta = new Meta { Tag = [new Coding("cho:tenant", taggedTenant)] };
 

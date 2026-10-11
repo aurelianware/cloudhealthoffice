@@ -41,6 +41,9 @@ internal sealed class FakePasAuthorizationRecorder : IPasAuthorizationRecorder
                 },
                 DenialReasonCode = request.Decision?.DenialReasonCode,
                 DenialReason = request.Decision?.DenialReason,
+                ApprovedServiceDateFrom = request.Decision?.ApprovedServiceDateFrom,
+                ApprovedServiceDateTo = request.Decision?.ApprovedServiceDateTo,
+                RequestHash = request.RequestHash,
             };
         return Task.FromResult(new PasRecordOutcome { Stored = stored });
     }

@@ -56,6 +56,8 @@ internal sealed class InProcessAuthorizationService : IPasAuthorizationRecorder,
         if (Unavailable)
             return PasRecordOutcome.Failed(PasRecordFailure.Unavailable);
 
+        // As the HTTP recorder does: the payload's hash makes a repeat idempotent.
+        request.RequestHash = HttpPasAuthorizationRecorder.HashOf(request);
         var body = JsonSerializer.Deserialize<AutomatedDecisionRecordRequest>(
             JsonSerializer.Serialize(request, HttpPriorAuthorizationStore.WireFormat), AuthorizationServiceWire)!;
         if (!Validator.TryValidateObject(body, new ValidationContext(body), null, validateAllProperties: true))
@@ -68,7 +70,7 @@ internal sealed class InProcessAuthorizationService : IPasAuthorizationRecorder,
         };
 
         var result = await controller.Record(body);
-        if (result.Result is not ObjectResult { StatusCode: StatusCodes.Status201Created, Value: StoredAuthorization stored })
+        if (result.Result is not ObjectResult { StatusCode: StatusCodes.Status201Created or StatusCodes.Status200OK, Value: StoredAuthorization stored })
             return PasRecordOutcome.Failed(PasRecordFailure.Rejected);
 
         return new PasRecordOutcome

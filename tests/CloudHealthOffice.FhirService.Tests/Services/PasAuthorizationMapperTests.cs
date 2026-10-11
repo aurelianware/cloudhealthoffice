@@ -117,13 +117,86 @@ public class PasAuthorizationMapperTests
     }
 
     [Fact]
-    public void MemberIdFallsBackToCoverageSubscriberId()
+    public void MemberIdFallsBackToCoverageSubscriberId_WhenThePatientIsTheSubscriber()
     {
         var bundle = PasBundles.Complete();
         bundle.Entry.Select(e => e.Resource).OfType<Patient>().Single().Identifier.Clear();
-        bundle.Entry.Select(e => e.Resource).OfType<Coverage>().Single().SubscriberId = "SUB-42";
+        var coverage = bundle.Entry.Select(e => e.Resource).OfType<Coverage>().Single();
+        coverage.SubscriberId = "SUB-42";
+        coverage.Relationship = new CodeableConcept("http://terminology.hl7.org/CodeSystem/subscriber-relationship", "self");
 
         Map(bundle).Request!.MemberId.Should().Be("SUB-42");
+    }
+
+    [Fact]
+    public void MemberIdFallsBackToCoverageSubscriberId_WhenSubscriberIsTheBeneficiary()
+    {
+        var bundle = PasBundles.Complete();
+        bundle.Entry.Select(e => e.Resource).OfType<Patient>().Single().Identifier.Clear();
+        var coverage = bundle.Entry.Select(e => e.Resource).OfType<Coverage>().Single();
+        coverage.SubscriberId = "SUB-42";
+        coverage.Subscriber = new ResourceReference($"Patient/{PasBundles.PatientId}");
+
+        Map(bundle).Request!.MemberId.Should().Be("SUB-42");
+    }
+
+    [Theory]
+    [InlineData("child", null)]
+    [InlineData(null, "Patient/policy-holder")]
+    [InlineData(null, null)]
+    public void SubscriberId_IsNotTheMemberId_OfADependentOrAnUnstatedRelationship(string? relationship, string? subscriber)
+    {
+        // The subscriber id names the policy holder; for a dependent it is
+        // someone else's id, so it cannot stand in for the patient's.
+        var bundle = PasBundles.Complete();
+        bundle.Entry.Select(e => e.Resource).OfType<Patient>().Single().Identifier.Clear();
+        var coverage = bundle.Entry.Select(e => e.Resource).OfType<Coverage>().Single();
+        coverage.SubscriberId = "SUB-OF-THE-POLICY-HOLDER";
+        coverage.Relationship = relationship is null
+            ? null
+            : new CodeableConcept("http://terminology.hl7.org/CodeSystem/subscriber-relationship", relationship);
+        coverage.Subscriber = subscriber is null ? null : new ResourceReference(subscriber);
+
+        var result = Map(bundle);
+
+        result.Errors.Should().Contain(e => e.Expression == "Patient.identifier");
+    }
+
+    // ── Diagnoses: ICD-10 only ──────────────────────────────────────
+
+    [Fact]
+    public void Diagnosis_PrefersTheIcd10CmCoding_OverAnEarlierOtherCoding()
+    {
+        var bundle = PasBundles.Complete();
+        var concept = new CodeableConcept("http://snomed.info/sct", "1234567890123", "Primary osteoarthritis of knee");
+        concept.Coding.Add(new Coding("http://hl7.org/fhir/sid/icd-10-cm", "M17.11"));
+        PasBundles.ClaimOf(bundle).Diagnosis[0].Diagnosis = concept;
+
+        var result = Map(bundle);
+
+        result.IsValid.Should().BeTrue("a SNOMED coding first is not a reason to refuse the request");
+        result.Request!.DiagnosisCodes.Should().ContainSingle().Which.Code.Should().Be("M17.11");
+    }
+
+    [Fact]
+    public void Diagnosis_WithNoIcd10Coding_IsSkipped_NotAnError()
+    {
+        var bundle = PasBundles.Complete();
+        PasBundles.ClaimOf(bundle).Diagnosis[0].Diagnosis = new CodeableConcept("http://snomed.info/sct", "1234567890123");
+
+        var result = Map(bundle);
+
+        result.IsValid.Should().BeTrue();
+        result.Request!.DiagnosisCodes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Diagnosis_AcceptsIcd10_WhenThereIsNoIcd10Cm()
+    {
+        var bundle = PasBundles.Complete();
+        PasBundles.ClaimOf(bundle).Diagnosis[0].Diagnosis = new CodeableConcept("http://hl7.org/fhir/sid/icd-10", "M17.1");
+
+        Map(bundle).Request!.DiagnosisCodes.Should().ContainSingle().Which.Code.Should().Be("M17.1");
     }
 
     [Fact]
@@ -156,6 +229,8 @@ public class PasAuthorizationMapperTests
     [InlineData("https://nahdo.org/sopt", "111", "Medicare")]
     [InlineData("https://nahdo.org/sopt", "311", "TRICARE")]
     [InlineData("https://nahdo.org/sopt", "512", "Commercial")]
+    [InlineData("urn:oid:2.16.840.1.113883.3.221.5", "21", "Medicaid")]
+    [InlineData("urn:oid:2.16.840.1.113883.3.221.5", "512", "Commercial")]
     [InlineData("http://example.org/plan-type", "COMMERCIAL", "Unknown")]
     public void LineOfBusiness_FromCoverageType_OrUnknown(string system, string code, string expected)
     {
@@ -180,20 +255,59 @@ public class PasAuthorizationMapperTests
 
     // ── D-08: priority ───────────────────────────────────────────────
 
+    private const string ProcessPriority = "http://terminology.hl7.org/CodeSystem/processpriority";
+    private const string X12LevelOfService = "https://codesystem.x12.org/005010/1338";
+
     [Theory]
-    [InlineData("stat", "U")]
-    [InlineData("urgent", "U")]
-    [InlineData("expedited", "U")]
-    [InlineData("U", "U")]
-    [InlineData("03", "U")]
-    [InlineData("normal", "E")]
-    [InlineData("deferred", "E")]
-    [InlineData("E", "E")]
-    [InlineData("whenever", null)]
-    [InlineData(null, null)]
-    public void Priority_MapsToLevelOfService(string? priority, string? expected)
+    // processpriority: stat, normal, deferred (nothing else is a code there)
+    [InlineData(ProcessPriority, "stat", "U")]
+    [InlineData(ProcessPriority, "normal", "E")]
+    [InlineData(ProcessPriority, "deferred", "E")]
+    [InlineData(ProcessPriority, "urgent", null)]
+    [InlineData(ProcessPriority, "U", null)]
+    // X12 1338 (UM06): U urgent, 03 emergency, E elective
+    [InlineData(X12LevelOfService, "U", "U")]
+    [InlineData(X12LevelOfService, "03", "U")]
+    [InlineData(X12LevelOfService, "E", "E")]
+    [InlineData(X12LevelOfService, "stat", null)]
+    // A code means what its system says, so no system (or another) is no level
+    [InlineData("http://example.org/priority", "stat", null)]
+    [InlineData(null, "stat", null)]
+    public void Priority_MapsToLevelOfService_ByItsSystem(string? system, string code, string? expected)
     {
-        Map(PasBundles.Complete(priority: priority)).Request!.LevelOfService.Should().Be(expected);
+        var bundle = PasBundles.Complete();
+        PasBundles.ClaimOf(bundle).Priority = new CodeableConcept { Coding = [new Coding(system, code)] };
+
+        Map(bundle).Request!.LevelOfService.Should().Be(expected);
+    }
+
+    [Fact]
+    public void NoPriority_IsNoLevelOfService()
+    {
+        Map(PasBundles.Complete(priority: null)).Request!.LevelOfService.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("U", "normal", "U")]
+    [InlineData("E", "stat", "E")]
+    [InlineData("03", null, "U")]
+    public void PasLevelOfServiceExtension_IsUM06_AndOutranksClaimPriority(string extension, string? priority, string expected)
+    {
+        var bundle = PasBundles.Complete(priority: priority);
+        PasBundles.ClaimOf(bundle).Extension.Add(new Extension(
+            PasAuthorizationMapper.LevelOfServiceExtensionUrl, new CodeableConcept(X12LevelOfService, extension)));
+
+        Map(bundle).Request!.LevelOfService.Should().Be(expected);
+    }
+
+    [Fact]
+    public void PasLevelOfServiceExtension_OnTheItem_IsRead()
+    {
+        var bundle = PasBundles.Complete(priority: "normal");
+        PasBundles.ClaimOf(bundle).Item[0].Extension.Add(new Extension(
+            PasAuthorizationMapper.LevelOfServiceExtensionUrl, new CodeableConcept(X12LevelOfService, "U")));
+
+        Map(bundle).Request!.LevelOfService.Should().Be("U");
     }
 
     // ── Dates and the approved period ────────────────────────────────
@@ -220,6 +334,44 @@ public class PasAuthorizationMapperTests
         result.Request!.RequestedServiceDateTo.Should().BeNull();
         result.ApprovedFrom.Should().Be(new DateTime(2026, 12, 1));
         result.ApprovedTo.Should().Be(new DateTime(2026, 12, 1).Add(PasAuthorizationMapper.OpenEndedApproval));
+    }
+
+    [Fact]
+    public void MixedOpenAndClosedPeriods_ApprovalEndsAtTheLaterOfTheClosedEndAndTheFallback()
+    {
+        var bundle = PasBundles.Complete();
+        var claim = PasBundles.ClaimOf(bundle);
+        claim.Item[0].Serviced = new Period { Start = "2026-12-01" };
+        claim.Item.Add(new Claim.ItemComponent
+        {
+            Sequence = 2,
+            ProductOrService = new CodeableConcept(PasBundles.CptSystem, "97110"),
+            Serviced = new Period { Start = "2026-11-01", End = "2028-01-31" },
+        });
+
+        var result = Map(bundle);
+
+        result.Request!.RequestedServiceDateFrom.Should().Be(new DateTime(2026, 11, 1));
+        result.Request.RequestedServiceDateTo.Should().BeNull("one service is open-ended");
+        result.ApprovedFrom.Should().Be(new DateTime(2026, 11, 1));
+        result.ApprovedTo.Should().Be(new DateTime(2028, 1, 31),
+            "the fallback (2027-11-01) may not cut short a service the request bounded later");
+    }
+
+    [Fact]
+    public void MixedOpenAndClosedPeriods_ClosedEndBeforeTheFallback_UsesTheFallback()
+    {
+        var bundle = PasBundles.Complete();
+        var claim = PasBundles.ClaimOf(bundle);
+        claim.Item[0].Serviced = new Period { Start = "2026-12-01" };
+        claim.Item.Add(new Claim.ItemComponent
+        {
+            Sequence = 2,
+            ProductOrService = new CodeableConcept(PasBundles.CptSystem, "97110"),
+            Serviced = new Period { Start = "2026-11-01", End = "2026-11-30" },
+        });
+
+        Map(bundle).ApprovedTo.Should().Be(new DateTime(2026, 11, 1).Add(PasAuthorizationMapper.OpenEndedApproval));
     }
 
     [Fact]

@@ -433,11 +433,12 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
         public DateTime? StartedAt { get; private set; }
 
         public async Task<PasDecisionResult> TryDecideAsync(
-            Claim claim, Bundle context, string tenantId, int timeoutMs, CancellationToken ct = default)
+            Claim claim, Bundle context, string tenantId, PasDecisionBasis basis, int timeoutMs,
+            CancellationToken ct = default)
         {
             StartedAt = DateTime.UtcNow;
             await Task.Delay(20, ct);
-            return await Inner.TryDecideAsync(claim, context, tenantId, timeoutMs, ct);
+            return await Inner.TryDecideAsync(claim, context, tenantId, basis, timeoutMs, ct);
         }
     }
 

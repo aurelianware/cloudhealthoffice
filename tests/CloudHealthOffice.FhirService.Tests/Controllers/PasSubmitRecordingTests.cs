@@ -32,7 +32,7 @@ public class PasSubmitRecordingTests
     {
         _adjudicator
             .Setup(a => a.TryDecideAsync(
-                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(decision ?? new PasDecisionResult
             {
                 HasDecision = true, Decision = "approved", RuleName = "AutoApproveList",
@@ -68,7 +68,7 @@ public class PasSubmitRecordingTests
 
     private void AdjudicatorNeverRan() =>
         _adjudicator.Verify(a => a.TryDecideAsync(
-            It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
     // ── Incomplete requests: 422, nothing decided, nothing stored ────────
@@ -173,11 +173,136 @@ public class PasSubmitRecordingTests
         claimResponse.Error.Should().Contain(e => e.Code.Coding.Any(c => c.Code == "EXCL-NONCOV"));
     }
 
+    // ── SF1: the answer is built from the STORED record ─────────────────
+
+    private static ClaimResponse ClaimResponseOf(IActionResult result)
+        => ((Bundle)result.Should().BeOfType<OkObjectResult>().Subject.Value!)
+            .Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
+
+    [Fact]
+    public async Task StoredApproval_AnswersWithTheStoredApprovedPeriod()
+    {
+        _recorder.StoredOverride = new PasStoredAuthorization
+        {
+            Status = PriorAuthorizationStatus.Approved,
+            ApprovedServiceDateFrom = new DateTime(2026, 12, 1),
+            ApprovedServiceDateTo = new DateTime(2026, 12, 31),
+        };
+
+        var claimResponse = ClaimResponseOf(await Controller().ClaimSubmit(PasBundles.Complete()));
+
+        claimResponse.Disposition.Should().Be("approved");
+        claimResponse.PreAuthRef.Should().Be(_recorder.Last!.AuthorizationNumber);
+        claimResponse.PreAuthPeriod.Start.Should().Be("2026-12-01", "the period is the record's, not the decision's");
+        claimResponse.PreAuthPeriod.End.Should().Be("2026-12-31");
+    }
+
+    [Fact]
+    public async Task StoredPended_AnswersPended_EvenIfTheDecisionApproved()
+    {
+        _recorder.StoredOverride = new PasStoredAuthorization { Status = PriorAuthorizationStatus.Pended };
+
+        var claimResponse = ClaimResponseOf(await Controller().ClaimSubmit(PasBundles.Complete()));
+
+        claimResponse.Disposition.Should().Be("pended");
+        claimResponse.PreAuthRef.Should().Be(_recorder.Last!.AuthorizationNumber);
+        claimResponse.PreAuthPeriod.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task StoredDenied_AnswersWithTheStoredReason()
+    {
+        _recorder.StoredOverride = new PasStoredAuthorization
+        {
+            Status = PriorAuthorizationStatus.Denied, DenialReasonCode = "PEMS-001", DenialReason = "Not enrolled.",
+        };
+
+        var claimResponse = ClaimResponseOf(await Controller(new PasDecisionResult
+        {
+            HasDecision = true, Decision = "denied", DenialReasonCode = "PEMS-001",
+            DenialReason = "Not enrolled.", RuleName = "EnrollmentGate",
+        }).ClaimSubmit(PasBundles.Complete()));
+
+        claimResponse.Disposition.Should().Be("denied");
+        claimResponse.Error.Should().ContainSingle().Which.Code.Coding.Single().Code.Should().Be("PEMS-001");
+    }
+
+    [Theory]
+    [InlineData(PriorAuthorizationStatus.Unknown)]
+    [InlineData(PriorAuthorizationStatus.Submitted)]
+    [InlineData(PriorAuthorizationStatus.InReview)]
+    [InlineData(PriorAuthorizationStatus.Modified)]
+    [InlineData(PriorAuthorizationStatus.Expired)]
+    [InlineData(PriorAuthorizationStatus.Cancelled)]
+    public async Task StoredInAStatusSubmitCannotAnswer_Returns502_WithNoPreAuthRef(PriorAuthorizationStatus status)
+    {
+        _recorder.StoredOverride = new PasStoredAuthorization { Status = status };
+
+        var result = await Controller().ClaimSubmit(PasBundles.Complete());
+
+        var failed = result.Should().BeOfType<ObjectResult>().Subject;
+        failed.StatusCode.Should().Be(502);
+        var outcome = failed.Value.Should().BeOfType<OperationOutcome>().Subject;
+        JsonSerializer.Serialize(outcome).Should().NotContain(_recorder.Last!.AuthorizationNumber);
+    }
+
+    // ── B1: the record carries the basis the decision used ───────────────
+
+    [Fact]
+    public async Task Decision_IsMadeOnTheMappedLineOfBusinessAndProviders_AndRecordedWithIt()
+    {
+        PasDecisionBasis? basis = null;
+        var controller = Controller();
+        _adjudicator
+            .Setup(a => a.TryDecideAsync(
+                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<Claim, Bundle, string, PasDecisionBasis, int, CancellationToken>((_, _, _, b, _, _) => basis = b)
+            .ReturnsAsync(new PasDecisionResult
+            {
+                HasDecision = false, RuleName = "NoRuleMatch", LineOfBusiness = "Commercial", StateCode = "TX",
+            });
+
+        await controller.ClaimSubmit(PasBundles.Complete(coverageTypeCode: "CI"));
+
+        basis.Should().Be(new PasDecisionBasis(
+            CloudHealthOffice.PriorAuthRuleEngine.Domain.PaLineOfBusiness.Commercial, PasBundles.RequestingNpi, null));
+        _recorder.Last!.LineOfBusiness.Should().Be("Commercial");
+        _recorder.Last.Decision!.LineOfBusiness.Should().Be("Commercial");
+        _recorder.Last.Decision.StateCode.Should().Be("TX");
+    }
+
+    [Fact]
+    public async Task UnknownLineOfBusiness_IsPendedWithItsReason_WithoutAdjudication()
+    {
+        var claimResponse = ClaimResponseOf(await Controller().ClaimSubmit(PasBundles.Complete(coverageTypeCode: "ZZ")));
+
+        AdjudicatorNeverRan();
+        claimResponse.Disposition.Should().Be("pended");
+        var decision = _recorder.Last!.Decision!;
+        decision.Outcome.Should().Be("Pended");
+        decision.Rule.Should().Be(PasController.LineOfBusinessUndeterminedRule);
+        decision.PendReason.Should().Be(PasController.LineOfBusinessUndeterminedPendReason);
+        decision.LineOfBusiness.Should().Be("Unknown");
+        decision.StateCode.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task APendReasonFromTheAdjudicator_IsRecorded()
+    {
+        await Controller(new PasDecisionResult
+        {
+            HasDecision = false, RuleName = "StateUndetermined",
+            PendReason = PasAutoAdjudicator.StateUndeterminedPendReason, LineOfBusiness = "Medicaid",
+        }).ClaimSubmit(PasBundles.Complete());
+
+        _recorder.Last!.Decision!.PendReason.Should().Be(PasAutoAdjudicator.StateUndeterminedPendReason);
+    }
+
     // ── D-08 ─────────────────────────────────────────────────────────
 
     [Theory]
     [InlineData("stat", "U")]
-    [InlineData("urgent", "U")]
+    [InlineData("deferred", "E")]
     [InlineData("normal", "E")]
     [InlineData(null, null)]
     public async Task Priority_IsStoredAsLevelOfService(string? priority, string? levelOfService)
@@ -194,7 +319,7 @@ public class PasSubmitRecordingTests
         var controller = Controller();
         _adjudicator
             .Setup(a => a.TryDecideAsync(
-                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .Returns(async () =>
             {
                 adjudicatedAt = DateTime.UtcNow;
@@ -252,11 +377,149 @@ public class HttpPasAuthorizationRecorderTests
             NullLogger<HttpPasAuthorizationRecorder>.Instance), handler);
     }
 
-    private static PasAuthorizationRecordRequest Request() => new()
+    private static PasAuthorizationRecordRequest Request(string outcome = "Approved") => new()
     {
         AuthorizationNumber = "PAS-20261011-ABCDEF01",
-        Decision = new PasAutomatedDecision { Outcome = "Approved" },
+        Decision = new PasAutomatedDecision { Outcome = outcome, DecidedAt = new DateTime(2026, 10, 11, 9, 30, 1, DateTimeKind.Utc) },
     };
+
+    /// <summary>The requestHash the recorder put on the wire.</summary>
+    private static async Task<string?> SentHash(HttpRequestMessage request)
+    {
+        using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+        return body.RootElement.TryGetProperty("requestHash", out var hash) ? hash.GetString() : null;
+    }
+
+    // ── SF2: idempotent recording ──────────────────────────────────────
+
+    [Fact]
+    public async Task EveryRecord_CarriesAHashOfItsPayload_SameRequestSameHash()
+    {
+        var sent = new List<string?>();
+        var (recorder, _) = Recorder(async r =>
+        {
+            sent.Add(await SentHash(r));
+            return await Json(HttpStatusCode.Created, new { tenantId = Tenant, authorizationNumber = "PAS-20261011-ABCDEF01", status = "Approved" });
+        });
+
+        await recorder.RecordAsync(Request(), Tenant);
+        await recorder.RecordAsync(Request(), Tenant);
+        await recorder.RecordAsync(Request("Denied"), Tenant);
+
+        sent.Should().HaveCount(3);
+        sent[0].Should().MatchRegex("^[a-f0-9]{64}$");
+        sent[1].Should().Be(sent[0], "the same request hashes the same, so a retry is recognised");
+        sent[2].Should().NotBe(sent[0], "a different request is a different hash");
+    }
+
+    [Fact]
+    public async Task WriteAnswerLost_TheRecordIsReadBack_AndMatchesItsHash_IsRecorded()
+    {
+        string? hash = null;
+        var calls = new List<string>();
+        var (recorder, _) = Recorder(async r =>
+        {
+            calls.Add($"{r.Method} {r.RequestUri!.AbsolutePath}");
+            if (r.Method == HttpMethod.Post)
+            {
+                hash = await SentHash(r);
+                throw new TaskCanceledException("timed out after the write");
+            }
+
+            r.Headers.Authorization!.Scheme.Should().Be("Bearer");
+            return await Json(HttpStatusCode.OK, new
+            {
+                tenantId = Tenant, authorizationNumber = "PAS-20261011-ABCDEF01", status = "Approved", requestHash = hash,
+            });
+        });
+
+        var outcome = await recorder.RecordAsync(Request(), Tenant);
+
+        outcome.Recorded.Should().BeTrue("the write did succeed: the record exists and is this request's");
+        outcome.Stored!.Status.Should().Be(PriorAuthorizationStatus.Approved);
+        calls.Should().Equal(
+            "POST /" + HttpPasAuthorizationRecorder.Path,
+            "GET /" + HttpPasAuthorizationRecorder.Path + "/PAS-20261011-ABCDEF01");
+    }
+
+    [Fact]
+    public async Task Answered5xx_TheRecordIsReadBack_AndMatches_IsRecorded()
+    {
+        string? hash = null;
+        var (recorder, _) = Recorder(async r =>
+        {
+            if (r.Method == HttpMethod.Post)
+            {
+                hash = await SentHash(r);
+                return new HttpResponseMessage(HttpStatusCode.GatewayTimeout);
+            }
+            return await Json(HttpStatusCode.OK, new
+            {
+                tenantId = Tenant, authorizationNumber = "PAS-20261011-ABCDEF01", status = "Pended", requestHash = hash,
+            });
+        });
+
+        var outcome = await recorder.RecordAsync(Request(), Tenant);
+
+        outcome.Recorded.Should().BeTrue();
+        outcome.Stored!.Status.Should().Be(PriorAuthorizationStatus.Pended);
+    }
+
+    public static TheoryData<string, Func<HttpRequestMessage, Task<HttpResponseMessage>>> FailedReadBacks => new()
+    {
+        { "not found", _ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)) },
+        { "another request's record", _ => Json(HttpStatusCode.OK, new
+            {
+                tenantId = Tenant, authorizationNumber = "PAS-20261011-ABCDEF01", status = "Approved",
+                requestHash = new string('0', 64),
+            }) },
+        { "a record with no hash", _ => Json(HttpStatusCode.OK, new
+            {
+                tenantId = Tenant, authorizationNumber = "PAS-20261011-ABCDEF01", status = "Approved",
+            }) },
+        { "another tenant's record", _ => Json(HttpStatusCode.OK, new
+            {
+                tenantId = "tenant-b", authorizationNumber = "PAS-20261011-ABCDEF01", status = "Approved",
+            }) },
+        { "the read fails too", _ => throw new HttpRequestException("still down") },
+        { "unreadable", _ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{not json") }) },
+    };
+
+    [Theory]
+    [MemberData(nameof(FailedReadBacks))]
+    public async Task WriteAnswerLost_AndTheReadBackDoesNotFindThisRequest_IsUnavailable(
+        string because, Func<HttpRequestMessage, Task<HttpResponseMessage>> readBack)
+    {
+        var reads = 0;
+        var (recorder, _) = Recorder(r =>
+        {
+            if (r.Method == HttpMethod.Post)
+                throw new TaskCanceledException("timed out");
+            reads++;
+            return readBack(r);
+        });
+
+        var outcome = await recorder.RecordAsync(Request(), Tenant);
+
+        outcome.Failure.Should().Be(PasRecordFailure.Unavailable, because);
+        reads.Should().Be(1, "one compensating read, no more");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.Conflict)]
+    public async Task Rejected_IsNotReadBack(HttpStatusCode status)
+    {
+        var methods = new List<HttpMethod>();
+        var (recorder, _) = Recorder(r =>
+        {
+            methods.Add(r.Method);
+            return Task.FromResult(new HttpResponseMessage(status));
+        });
+
+        (await recorder.RecordAsync(Request(), Tenant)).Failure.Should().Be(PasRecordFailure.Rejected);
+        methods.Should().Equal(HttpMethod.Post);
+    }
 
     private static Task<HttpResponseMessage> Json(HttpStatusCode status, object body)
         => Task.FromResult(new HttpResponseMessage(status)
