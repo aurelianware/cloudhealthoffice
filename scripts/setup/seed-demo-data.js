@@ -840,7 +840,7 @@ authServiceTypes.forEach(function (svc) {
       ServicingProviderName: providerNameByIdx[provIdx],
       FacilityNPI: svc.type === "Inpatient" ? providerNpiByIdx[16] : null,
       FacilityName: svc.type === "Inpatient" ? providerNameByIdx[16] : null,
-      AuthorizationType: svc.type === "Specialist Referral" ? 2 : 1, // PreAuthorization=1, Referral=2
+      AuthorizationType: svc.type === "Specialist Referral" ? 4 : 1, // AuthorizationType: PreAuthorization=1, Referral=4 (2 is ConcurrentReview)
       CertificationTypeCode: svc.type === "Inpatient" ? "I" : "S",
       ServiceTypeCode: "02",
       LevelOfService: "U",

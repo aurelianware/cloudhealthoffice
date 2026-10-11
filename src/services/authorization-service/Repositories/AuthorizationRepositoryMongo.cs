@@ -237,6 +237,37 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         return await _collection.Find(filter).ToListAsync();
     }
 
+    public async Task<bool> RaiseSlaEscalationAsync(
+        string tenantId, string id, SlaEscalationLevel level, DateTime escalatedAtUtc, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("Tenant is required for an SLA escalation.", nameof(tenantId));
+
+        var builder = Builders<Authorization>.Filter;
+
+        // One conditional update: tenant, still open and still below the level
+        // are part of the filter, and only the two escalation fields are set,
+        // so a reviewer's concurrent change is never overwritten.
+        var filter = builder.Eq(x => x.Id, id)
+                     & builder.Eq(x => x.TenantId, tenantId)
+                     & builder.In(x => x.Status, new[]
+                       {
+                           AuthorizationStatus.Submitted,
+                           AuthorizationStatus.InReview,
+                           AuthorizationStatus.Pended,
+                       })
+                     & builder.Or(
+                           builder.Lt(x => x.SlaEscalation, level),
+                           builder.Exists(x => x.SlaEscalation, false));
+
+        var update = Builders<Authorization>.Update
+            .Set(x => x.SlaEscalation, level)
+            .Set(x => x.SlaEscalatedAt, escalatedAtUtc);
+
+        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.ModifiedCount == 1;
+    }
+
     public async Task<Authorization> CreateAsync(Authorization authorization)
     {
         var tenantId = GetTenantId();
