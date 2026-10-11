@@ -2,25 +2,31 @@
 
 # Prior Authorization API - Implementation Summary
 
+> **Status (October 2026):** CMS-0057-F conformance is in progress. This November 2024 summary
+> describes a TypeScript library (`src/fhir/prior-auth-api.ts`, not imported by any service) and the
+> removed Logic Apps orchestration. It overstated what was delivered. Da Vinci CRD/DTR/PAS are in
+> development and not yet conformant, and X12 278 bridging is planned. See the
+> [ePA gap matrix](../epa-gap-matrix.md), which is the source of truth for current status.
+
 **Project**: Cloud Health Office  
 **Feature**: CMS-0057-F Prior Authorization API with Da Vinci IGs  
-**Status**: PAS/CRD/DTR technical implementation complete; production use requires payer-specific rules, source-system integration, and operational governance
+**Status**: PAS/CRD/DTR in development, not yet conformant; CMS-0057-F conformance in progress
 **Date**: November 2024
 
 ---
 
 ## Executive Summary
 
-Cloud Health Office now provides a strong technical foundation for CMS-0057-F
-prior authorization workflows, including Da Vinci FHIR Implementation Guide
-support (CRD, DTR, PAS), X12 278 integration patterns, orchestration, and
-clearinghouse connectivity. Final production compliance depends on payer
+Cloud Health Office is building toward CMS-0057-F prior authorization
+workflows, including Da Vinci FHIR Implementation Guide support (CRD, DTR, PAS;
+in development, not yet conformant), an X12 278 mapping prototype (X12 278
+bridging is planned), orchestration, and clearinghouse connectivity. Final production compliance depends on payer
 configuration, utilization-management policy, operating procedures, and legal /
 compliance attestation.
 
 ### Key Achievement
 
-✅ **PAS/CRD/DTR technical capability delivered** for CMS-0057-F implementation
+- **PAS/CRD/DTR in development** for CMS-0057-F (see the [ePA gap matrix](../epa-gap-matrix.md))
 ✅ **42 comprehensive test cases** with 100% pass rate  
 ✅ **3,522 lines of code and documentation**  
 ✅ **Zero dependencies** = Zero vulnerabilities
@@ -33,15 +39,15 @@ compliance attestation.
 
 | Requirement | Status | Implementation |
 |-------------|--------|----------------|
-| **Da Vinci CRD Integration** | ✅ Complete | CDS Hooks with order-select, order-sign, appointment-book, encounter-start |
-| **Da Vinci DTR Integration** | ✅ Complete | Questionnaire/QuestionnaireResponse structures |
-| **Da Vinci PAS Integration** | ✅ Complete | FHIR Claim/ClaimResponse with PAS profiles |
-| **FHIR R4 Compliance** | ✅ Complete | All resources follow FHIR R4 specification |
-| **X12 278 Request Mapping** | ✅ Complete | Bi-directional X12 ↔ FHIR conversion |
-| **X12 278 Response Mapping** | ✅ Complete | Status codes A1, A2, A3, A4, A6 supported |
-| **Azure Logic Apps Orchestration** | ✅ Complete | Service Bus, SFTP, HTTP endpoint patterns |
-| **Provider-Facing Hooks** | ✅ Complete | CDS Hooks for requirements discovery |
-| **SLA Logic (72-hour)** | ✅ Complete | Urgent, standard, expedited timelines |
+| **Da Vinci CRD Integration** | In development | Library models order-select, order-sign, appointment-book, encounter-start; the running CRD service serves order-select and order-sign only. Not yet conformant |
+| **Da Vinci DTR Integration** | In development | Questionnaire/QuestionnaireResponse structures. Not yet conformant |
+| **Da Vinci PAS Integration** | In development | FHIR Claim/ClaimResponse structures; no PAS profile validation. Not yet conformant |
+| **FHIR R4 Compliance** | Partial | FHIR R4 resource shapes; no profile validation |
+| **X12 278 Request Mapping** | Prototype | JSON-object mapper in the TypeScript library, not wired into any service. X12 278 bridging is planned |
+| **X12 278 Response Mapping** | Prototype | Status codes A1, A2, A3, A4, A6 modelled in the library only. X12 278 bridging is planned |
+| **Azure Logic Apps Orchestration** | Removed | Logic Apps were removed (ADR-004) |
+| **Provider-Facing Hooks** | In development | CDS Hooks for requirements discovery |
+| **SLA Logic (72-hour)** | In development | Urgent, standard, expedited timelines modelled; decision timeframe tracking in the services is in development |
 | **Attachment Support** | ✅ Complete | FHIR Binary and DocumentReference |
 | **Error/Compliance Tests** | ✅ Complete | 42 Jest tests with full coverage |
 | **Endpoint Documentation** | ✅ Complete | Comprehensive API guide (24KB) |
@@ -282,7 +288,7 @@ Coverage:    100% of prior-auth-api functions
 1. **POST /api/prior-auth/submit**: Submit new request
 2. **GET /api/prior-auth/status/{authNumber}**: Check status
 3. **POST /api/prior-auth/documentation**: Submit attachments
-4. **POST /api/prior-auth/cancel**: Cancel authorization
+4. **POST /api/prior-auth/cancel**: Cancel authorization (not implemented; no service serves this endpoint)
 
 ### Workflow Pattern
 
@@ -497,18 +503,19 @@ await submitAttachment(authNumber, binary, docRef);
 
 ## Conclusion
 
-The Prior Authorization API implementation delivers a strong CMS-0057-F
-technical foundation with support for Da Vinci Implementation Guides, X12 278
-integration patterns, orchestration, and security controls. Production
+The Prior Authorization API library is a starting point for CMS-0057-F work,
+with models for the Da Vinci Implementation Guides, an X12 278 mapping
+prototype, orchestration, and security controls. CMS-0057-F conformance is in
+progress; see the [ePA gap matrix](../epa-gap-matrix.md). Production
 compliance remains payer-specific and depends on rule configuration,
 source-system integration, operating procedures, and compliance attestation.
 
 ### Key Achievements
 
-✅ **CMS-0057-F prior authorization technical readiness**
-✅ **Da Vinci IGs** implemented (CRD, DTR, PAS)  
+- **CMS-0057-F**: conformance in progress
+- **Da Vinci IGs** (CRD, DTR, PAS): in development, not yet conformant  
 ✅ **42 comprehensive tests** with 100% pass rate  
-✅ **3,522 lines** of production-ready code  
+✅ **3,522 lines** of code  
 ✅ **Zero dependencies** = Zero vulnerabilities  
 ✅ **Complete documentation** with examples  
 ✅ **Ready for payer-specific implementation planning and pilot deployment**
@@ -519,4 +526,4 @@ source-system integration, operating procedures, and compliance attestation.
 
 **Version**: 1.0.0  
 **Date**: November 2024  
-**Status**: PAS/CRD/DTR technical implementation complete; payer-specific production readiness requires integration and operational governance
+**Status**: PAS/CRD/DTR in development, not yet conformant; CMS-0057-F conformance in progress

@@ -2,6 +2,13 @@
 
 # Prior Authorization API - CMS-0057-F Compliance Guide
 
+> **Status (October 2026):** CMS-0057-F conformance is in progress. This guide describes a TypeScript
+> library (`src/fhir/prior-auth-api.ts`, not imported by any service) and the removed Logic Apps
+> orchestration; it is not a description of the running services. Da Vinci CRD/DTR/PAS are in
+> development and not yet conformant, X12 278 bridging is planned, and the `/api/prior-auth/*`
+> endpoints below (including cancel) are not served. See the
+> [ePA gap matrix](../epa-gap-matrix.md), which is the source of truth for current status.
+
 **Cloud Health Office** - HIPAA-compliant Prior Authorization API with Da Vinci Implementation Guides
 
 This document provides comprehensive guidance for implementing CMS-0057-F Prior Authorization workflows using FHIR R4, X12 278, and Azure Logic Apps orchestration.
@@ -40,12 +47,12 @@ The Prior Authorization API implements the **CMS-0057-F Prior Authorization Rule
 
 ### Key Features
 
-✅ **CMS-0057-F Compliant**: Meets all regulatory requirements  
-✅ **Da Vinci IGs**: CRD, DTR, and PAS implementation guides  
-✅ **FHIR R4 Native**: Full FHIR resource support  
-✅ **X12 278 Mapping**: Seamless EDI to FHIR conversion  
-✅ **SLA Tracking**: Automated decision timeline monitoring  
-✅ **Azure Logic Apps**: Cloud-native orchestration  
+- **CMS-0057-F**: conformance in progress (see the [ePA gap matrix](../epa-gap-matrix.md))
+- **Da Vinci IGs**: CRD, DTR, and PAS in development, not yet conformant
+- **FHIR R4 Native**: FHIR R4 resources
+- **X12 278 Mapping**: TypeScript mapping prototype only; X12 278 bridging is planned
+- **SLA Tracking**: decision timeline tracking in development
+- **Azure Logic Apps**: removed (see ADR-004)    
 ✅ **Clearinghouse Ready**: Clearinghouse integration support  
 ✅ **Comprehensive Testing**: 42+ test cases with full coverage
 
@@ -296,6 +303,9 @@ const card = createCRDCard(
 ```
 
 ### Cancel Authorization
+
+> **Not implemented.** No service serves a cancel endpoint, and PAS update/cancel of a submitted
+> request is not yet built. The cancel URL exists only as a string in the TypeScript library.
 
 **POST** `/api/prior-auth/cancel`
 
@@ -910,11 +920,11 @@ logger.logHIPAAEvent({
 
 ### Version 1.0.0 (November 2024)
 
-✅ Initial release with full CMS-0057-F compliance  
-✅ Da Vinci CRD, DTR, PAS implementation  
-✅ X12 278 ↔ FHIR R4 mapping  
-✅ SLA tracking and monitoring  
-✅ Azure Logic Apps orchestration  
+- Initial release of the TypeScript prior authorization library (CMS-0057-F conformance in progress)
+- Da Vinci CRD, DTR, PAS work started (not yet conformant)
+- X12 278 ↔ FHIR R4 mapping prototype (X12 278 bridging is planned)
+- SLA tracking model
+- Azure Logic Apps orchestration (since removed)    
 ✅ 42 comprehensive test cases  
 ✅ Complete documentation
 

@@ -148,6 +148,7 @@ CloudHealthOffice includes documentation and implementation surfaces for the CMS
 Interoperability and Prior Authorization Final Rule. Treat the readiness matrix
 as the source of truth for current status and gaps.
 
+- [ePA gap matrix](docs/epa-gap-matrix.md) — source of truth for prior authorization and SMART status; CMS-0057-F conformance is in progress
 - [CMS-0057-F readiness matrix](docs/compliance/CMS-0057-F-READINESS-MATRIX.md)
 - CMS-0057-F Compliance Accelerator offer (maintained in a private repository) — the SKU we sell first
 - [Pilot diligence binder](docs/diligence/README.md)
@@ -157,14 +158,14 @@ as the source of truth for current status and gaps.
 
 ## Da Vinci Interoperability
 
-Separate from the internal CMS-0057-F acceptance suite, which proves CHO
-implements the behavior its own acceptance specification requires, the
-interoperability harness proves CHO can exchange standards-conformant FHIR with
-independent HL7 Da Vinci reference implementations running in their own
-containers, pinned by image digest. Today it proves a PAS `$submit` exchange, a
-CRD CDS Hooks exchange, and a CRD → DTR chain in which CHO follows the
-questionnaire canonical the payer itself returned into that payer's
-`$questionnaire-package`.
+Separate from the internal CMS-0057-F acceptance suite, the interoperability
+harness runs CHO as the **provider-side client** against independent HL7 Da Vinci
+reference payer implementations running in their own containers, pinned by image
+digest. Today it shows a PAS `$submit` exchange, a CRD CDS Hooks exchange, and a
+CRD → DTR chain in which CHO follows the questionnaire canonical the payer itself
+returned into that payer's `$questionnaire-package`. It does not test CHO as the
+payer server: no Inferno or reference-implementation run has exercised CHO's own
+PAS, CRD or DTR endpoints yet (see the [ePA gap matrix](docs/epa-gap-matrix.md) §9).
 
 One command starts the pinned dependency, runs the scenario, writes sanitized
 evidence to `artifacts/interop/`, and tears the stack down:

@@ -5,7 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace FhirService.Controllers;
 
 /// <summary>
-/// Serves the SMART App Launch Framework v2 well-known configuration document.
+/// Serves the SMART App Launch well-known configuration document. The server supports SMART v1
+/// scopes only; SMART v2 scopes and launch context in the token response are not yet supported
+/// (see docs/epa-gap-matrix.md §4.6).
 ///
 /// Per SMART IG §3.1, this endpoint MUST be at {fhir-base}/.well-known/smart-configuration
 /// so that SMART clients can discover auth server endpoints from just the FHIR base URL.

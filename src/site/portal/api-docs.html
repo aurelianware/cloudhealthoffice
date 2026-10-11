@@ -51,12 +51,15 @@
     <!-- Hero Section -->
     <section style="text-align: center; padding: 60px 20px 40px;">
       <div style="display: inline-block; background: linear-gradient(135deg, var(--neon-cyan), var(--neon-green)); padding: 8px 20px; border-radius: 20px; margin-bottom: 20px;">
-        <span style="font-weight: bold; font-size: 0.9rem;">CMS-0057-F COMPLIANT</span>
+        <span style="font-weight: bold; font-size: 0.9rem;">CMS-0057-F CONFORMANCE IN PROGRESS</span>
       </div>
       
       <h1 style="font-size: 2.5rem; margin: 20px 0;">FHIR R4 APIs</h1>
       <p style="font-size: 1.3rem; color: var(--text-secondary); max-width: 800px; margin: 0 auto 40px;">
         FHIR APIs for Patient Access, Provider Access, Payer-to-Payer Exchange, and Prior Authorization
+      </p>
+      <p style="font-size: 0.95rem; color: var(--text-secondary); max-width: 800px; margin: -20px auto 40px;">
+        These APIs are in development and not yet CMS-0057-F conformant. See the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer">ePA gap matrix</a> for requirement-by-requirement status.
       </p>
 
       <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-bottom: 40px;">
@@ -184,10 +187,10 @@ GET  /fhir/Consent</code></pre>
             <span style="background: var(--accent-orange); color: var(--dark-bg); padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">CMS-0057-F</span>
           </div>
           
-          <p>X12 278 ↔ FHIR bidirectional prior authorization with Da Vinci PAS.</p>
+          <p>Prior authorization with Da Vinci PAS (in development). X12 278 bridging is planned.</p>
           
           <div style="margin: 20px 0; padding: 15px; background: var(--dark-gray); border-radius: 8px; font-size: 0.85rem;">
-            <strong>Features:</strong> Real-time decisions, CDS Hooks, 72-hour SLA tracking
+            <strong>Features:</strong> Real-time decisions, CDS Hooks (CRD, in development); 72-hour / 7-day decision timeframe tracking is in development
           </div>
 
           <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;">
@@ -309,27 +312,27 @@ curl -X POST https://sandbox.cloudhealthoffice.com/scrubbing/v1/claims/validate 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto;">
         <div class="card">
           <h3 style="color: var(--neon-cyan);">✅ HL7 FHIR R4</h3>
-          <p>Full FHIR R4.0.1 specification compliance with US Core 3.1.1+ profiles</p>
+          <p>FHIR R4.0.1 APIs aligned to US Core 3.1.1+ profiles; profile validation is not yet in place</p>
         </div>
         
         <div class="card">
-          <h3 style="color: var(--neon-green);">✅ CMS Rules</h3>
-          <p>CMS-9115-F (Patient Access) and CMS-0057-F (Interoperability)</p>
+          <h3 style="color: var(--neon-green);">🟡 CMS Rules</h3>
+          <p>CMS-9115-F (Patient Access) and CMS-0057-F (Interoperability): conformance in progress</p>
         </div>
         
         <div class="card">
-          <h3 style="color: var(--accent-purple);">✅ Da Vinci IGs</h3>
-          <p>PDex, PAS, CRD, and DTR Implementation Guides</p>
+          <h3 style="color: var(--accent-purple);">🟡 Da Vinci IGs</h3>
+          <p>PDex, PAS, CRD, and DTR Implementation Guides: in development, not yet conformant</p>
         </div>
         
         <div class="card">
-          <h3 style="color: var(--accent-orange);">✅ SMART on FHIR</h3>
-          <p>App Launch v2.0 with OAuth 2.0 security</p>
+          <h3 style="color: var(--accent-orange);">🟡 SMART on FHIR</h3>
+          <p>SMART App Launch (v1 scopes) with OAuth 2.0 security; v2 scopes, launch context in the token response and asymmetric client auth are in progress</p>
         </div>
 
         <div class="card">
           <h3 style="color: var(--neon-cyan);">✅ X12 EDI</h3>
-          <p>Bidirectional conversion: 837, 835, 270, 271, 278 transactions</p>
+          <p>Bidirectional conversion: 837, 835, 270, 271 transactions; X12 278 bridging is planned</p>
         </div>
         
         <div class="card">

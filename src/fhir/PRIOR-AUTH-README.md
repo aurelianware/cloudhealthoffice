@@ -1,8 +1,8 @@
 # Prior Authorization API - Quick Start Guide
 
 **Module**: `src/fhir/prior-auth-api.ts`  
-**Purpose**: CMS-0057-F compliant prior authorization with Da Vinci IGs  
-**Status**: ✅ Production Ready (42 tests, 100% coverage)
+**Purpose**: Prior authorization library with Da Vinci IG models (CMS-0057-F conformance in progress)
+**Status**: Not imported by any service; X12 278 mapping is a prototype (42 tests). See the [ePA gap matrix](../../docs/epa-gap-matrix.md).
 
 ---
 

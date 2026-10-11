@@ -2,6 +2,9 @@
 
 # CMS-0057-F Compliance Guide
 
+> **Status (October 2026):** CMS-0057-F conformance is in progress. Where this guide and the
+> [ePA gap matrix](../epa-gap-matrix.md) differ, the gap matrix is the source of truth.
+
 **Cloud Health Office** - Comprehensive Support for CMS Prior Authorization Rule
 
 ---
@@ -34,14 +37,14 @@ compliance attestation.
 
 ### Key Capabilities
 
-✅ **FHIR R4 APIs** - Complete implementation of required FHIR APIs  
-✅ **Da Vinci IGs** - Support for PDex, PAS, CRD, and DTR profiles  
-✅ **Prior Authorization** - End-to-end prior auth workflows (X12 278 ↔ FHIR ServiceRequest)  
+- **FHIR R4 APIs** - Required FHIR APIs in development; CMS-0057-F conformance in progress
+- **Da Vinci IGs** - PDex, PAS, CRD, and DTR in development, not yet conformant
+- **Prior Authorization** - FHIR prior auth workflows in development; X12 278 bridging is planned    
 ✅ **Claims & EOBs** - Full claims lifecycle (X12 837/835 ↔ FHIR Claim/EOB)  
-✅ **Timeline Compliance** - 72-hour urgent, 7-day standard response tracking  
+- **Timeline Compliance** - 72-hour urgent, 7-day standard response tracking in development  
 ✅ **USCDI Support** - Complete USCDI v1 & v2 data class coverage  
-✅ **OAuth 2.0** - Secure authorization with Azure AD integration  
-✅ **Bulk FHIR** - Efficient data export for regulatory reporting  
+✅ **OAuth 2.0** - SMART App Launch (v1 scopes) via CHO's SMART authorization server, which can trust a customer IdP such as Azure AD; v2 scopes, launch context in the token response and asymmetric client auth are in progress  
+- **Bulk FHIR** - Planned; the `$export` path is a stub today  
 ✅ **Security Foundation** - HIPAA-oriented controls, tenant isolation patterns, audit logging, and observability building blocks
 
 ### Deployment Time
@@ -64,9 +67,9 @@ compliance attestation.
 | **Patient Access API** | Integration required | FHIR controller and SMART tests | See readiness matrix |
 | **Provider Access API** | Integration required | Provider directory and SMART tests | See readiness matrix |
 | **Payer-to-Payer API** | Phase 2 required | Bulk FHIR and consent building blocks | See readiness matrix |
-| **Prior Authorization API** | Implemented / integration required | PAS/CRD/DTR tests | See readiness matrix |
-| **72-Hour Urgent Response** | Implemented / integration required | PAS and compliance checker tests | See readiness matrix |
-| **7-Day Standard Response** | Implemented / integration required | PAS and compliance checker tests | See readiness matrix |
+| **Prior Authorization API** | In development (not yet conformant) | PAS/CRD/DTR tests | See [ePA gap matrix](../epa-gap-matrix.md) |
+| **72-Hour Urgent Response** | In development | PAS and compliance checker tests | See [ePA gap matrix](../epa-gap-matrix.md) |
+| **7-Day Standard Response** | In development | PAS and compliance checker tests | See [ePA gap matrix](../epa-gap-matrix.md) |
 | **USCDI v1/v2 Coverage** | Integration required | Resource mapping coverage varies by service | See readiness matrix |
 | **Da Vinci IG Conformance** | Integration required | PAS/CRD/DTR technical support | See readiness matrix |
 
@@ -78,11 +81,11 @@ compliance attestation.
 
 | X12 Transaction | FHIR Resource | Profile | Status |
 |-----------------|---------------|---------|--------|
-| X12 270 Eligibility | Patient, CoverageEligibilityRequest | US Core 3.1.1 | ✅ Production |
-| X12 837 Claims | Claim | Da Vinci PDex | ✅ Production |
-| X12 278 Prior Auth | ServiceRequest | Da Vinci PAS | ✅ Production |
-| X12 835 Remittance | ExplanationOfBenefit | Da Vinci PDex | ✅ Production |
-| X12 275 Attachments | DocumentReference | US Core | ✅ Production |
+| X12 270 Eligibility | Patient, CoverageEligibilityRequest | US Core 3.1.1 | Implemented |
+| X12 837 Claims | Claim | Da Vinci PDex | Implemented |
+| X12 278 Prior Auth | ServiceRequest | Da Vinci PAS | Planned (TypeScript mapping prototype only) |
+| X12 835 Remittance | ExplanationOfBenefit | Da Vinci PDex | Implemented |
+| X12 275 Attachments | DocumentReference | US Core | Implemented |
 
 ### Timeline to Compliance Deadline
 
@@ -880,6 +883,6 @@ For questions about CMS-0057-F compliance with Cloud Health Office:
 
 ---
 
-**Cloud Health Office** – Production-Ready CMS-0057-F Compliance
+**Cloud Health Office** – CMS-0057-F conformance in progress
 
 *Source-Available | Azure-Native | FHIR R4 | Da Vinci IGs | <10 Minute Deployment*

@@ -128,7 +128,7 @@ All referenced docs already exist:
 - "Augment legacy systems, don't replace"
 - Deploy <1 hour vs 12-18 months
 - $50k-250k vs $2M+ upgrade
-- CMS-0057-F compliant (18 months early)
+- CMS-0057-F conformance in progress (see the [ePA gap matrix](../epa-gap-matrix.md))
 - Multi-clearinghouse support
 
 **Providers**:
@@ -142,7 +142,7 @@ All referenced docs already exist:
 - 82% cost reduction
 - <1 hour deployment
 - 480+ tests, 100% pass rate
-- CMS-0057-F compliant
+- CMS-0057-F conformance in progress
 
 **Tone**:
 - Payers: Professional, ROI-focused, technical credibility
