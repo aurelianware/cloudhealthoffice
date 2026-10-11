@@ -28,7 +28,8 @@ public class PasSubmitRecordingTests
     private readonly Mock<IPasAutoAdjudicator> _adjudicator = new();
     private readonly FakePasAuthorizationRecorder _recorder = new();
 
-    private PasController Controller(PasDecisionResult? decision = null)
+    private PasController Controller(
+        PasDecisionResult? decision = null, Microsoft.Extensions.Logging.ILogger<PasController>? logger = null)
     {
         _adjudicator
             .Setup(a => a.TryDecideAsync(
@@ -58,7 +59,7 @@ public class PasSubmitRecordingTests
             Options.Create(new PasAutoAdjudicationConfig { Enabled = true, MaxResponseMs = 12000 }),
             factory.Object,
             _recorder,
-            NullLogger<PasController>.Instance);
+            logger ?? NullLogger<PasController>.Instance);
 
         var http = new DefaultHttpContext();
         http.Items["TenantId"] = "tenant-a";
@@ -299,6 +300,25 @@ public class PasSubmitRecordingTests
     }
 
     // ── D-08 ─────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("http://example.org/prio\r\nFORGED", "stat", "U")]
+    [InlineData("http://example.org/priority", "P1", "E")]
+    public async Task NonstandardOrUnrecognisedPriority_IsLoggedAtWarning_Sanitized(string system, string code, string level)
+    {
+        var logger = new CapturingLogger<PasController>();
+        var bundle = PasBundles.Complete();
+        PasBundles.ClaimOf(bundle).Priority = new CodeableConcept { Coding = [new Coding(system, code)] };
+
+        await Controller(logger: logger).ClaimSubmit(bundle);
+
+        _recorder.Last!.LevelOfService.Should().Be(level);
+        var warning = logger.Entries.Should().ContainSingle(e =>
+            e.Level == Microsoft.Extensions.Logging.LogLevel.Warning && e.Message.Contains("Claim.priority")).Subject;
+        warning.Message.Should().Contain(code);
+        warning.Message.Should().NotContain("\r").And.NotContain("\n", "values from the request are sanitized");
+        warning.Message.Should().Contain("http://example.org/prio");
+    }
 
     [Theory]
     [InlineData("stat", "U")]
@@ -646,5 +666,21 @@ public class HttpPasAuthorizationRecorderTests
         }));
 
         (await recorder.RecordAsync(Request(), Tenant)).Failure.Should().Be(PasRecordFailure.Rejected);
+    }
+}
+
+/// <summary>Collects formatted log entries for assertions.</summary>
+internal sealed class CapturingLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
+{
+    public List<(Microsoft.Extensions.Logging.LogLevel Level, string Message)> Entries { get; } = [];
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+    public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+        TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        lock (Entries) Entries.Add((logLevel, formatter(state, exception)));
     }
 }

@@ -603,6 +603,13 @@ public static class PasAuthorizationMapper
 
 public sealed record PasMappingError(string Expression, string Message);
 
+/// <summary>
+/// Something in the request that was mapped but is worth an operator's
+/// attention (a nonstandard or unrecognised code). The values are the
+/// request's own, so whoever logs them sanitizes them.
+/// </summary>
+public sealed record PasMappingWarning(string Expression, string Message, string? System, string? Code);
+
 public sealed class PasMappingResult
 {
     public PasAuthorizationRecordRequest? Request { get; private init; }
@@ -613,6 +620,9 @@ public sealed class PasMappingResult
     public DateTime ApprovedTo { get; private init; }
 
     public IReadOnlyList<PasMappingError> Errors { get; private init; } = [];
+
+    /// <summary>Nonstandard or unrecognised values that were mapped anyway; logged by the caller.</summary>
+    public IReadOnlyList<PasMappingWarning> Warnings { get; private init; } = [];
 
     public bool IsValid => Errors.Count == 0;
 

@@ -258,33 +258,52 @@ public class PasAuthorizationMapperTests
     private const string ProcessPriority = "http://terminology.hl7.org/CodeSystem/processpriority";
     private const string X12LevelOfService = "https://codesystem.x12.org/005010/1338";
 
+    // Owner decision 2026-10-11 (§7.1): a recognised urgent value is expedited
+    // (U) whatever system it arrives under; a nonstandard system/code pair is
+    // logged. Only a genuinely unrecognised value defaults to standard (E),
+    // and that is logged too.
     [Theory]
-    // processpriority: stat, normal, deferred (nothing else is a code there)
-    [InlineData(ProcessPriority, "stat", "U")]
-    [InlineData(ProcessPriority, "normal", "E")]
-    [InlineData(ProcessPriority, "deferred", "E")]
-    [InlineData(ProcessPriority, "urgent", null)]
-    [InlineData(ProcessPriority, "U", null)]
-    // X12 1338 (UM06): U urgent, 03 emergency, E elective
-    [InlineData(X12LevelOfService, "U", "U")]
-    [InlineData(X12LevelOfService, "03", "U")]
-    [InlineData(X12LevelOfService, "E", "E")]
-    [InlineData(X12LevelOfService, "stat", null)]
-    // A code means what its system says, so no system (or another) is no level
-    [InlineData("http://example.org/priority", "stat", null)]
-    [InlineData(null, "stat", null)]
-    public void Priority_MapsToLevelOfService_ByItsSystem(string? system, string code, string? expected)
+    // standard pairs: no warning
+    [InlineData(ProcessPriority, "stat", "U", false)]
+    [InlineData(ProcessPriority, "normal", "E", false)]
+    [InlineData(ProcessPriority, "deferred", "E", false)]
+    [InlineData(X12LevelOfService, "U", "U", false)]
+    [InlineData(X12LevelOfService, "03", "U", false)]
+    [InlineData(X12LevelOfService, "E", "E", false)]
+    // recognised urgent values in a nonstandard pair: expedited, with a warning
+    [InlineData(ProcessPriority, "urgent", "U", true)]
+    [InlineData(ProcessPriority, "asap", "U", true)]
+    [InlineData(ProcessPriority, "U", "U", true)]
+    [InlineData(ProcessPriority, "expedited", "U", true)]
+    [InlineData(X12LevelOfService, "stat", "U", true)]
+    [InlineData("http://example.org/priority", "stat", "U", true)]
+    [InlineData("http://example.org/priority", "03", "U", true)]
+    [InlineData(null, "urgent", "U", true)]
+    // unrecognised: standard, with a warning
+    [InlineData(ProcessPriority, "whenever", "E", true)]
+    [InlineData("http://example.org/priority", "P1", "E", true)]
+    public void Priority_MapsToLevelOfService(string? system, string code, string expected, bool warned)
     {
         var bundle = PasBundles.Complete();
         PasBundles.ClaimOf(bundle).Priority = new CodeableConcept { Coding = [new Coding(system, code)] };
 
-        Map(bundle).Request!.LevelOfService.Should().Be(expected);
+        var result = Map(bundle);
+
+        result.Request!.LevelOfService.Should().Be(expected);
+        if (warned)
+            result.Warnings.Should().ContainSingle(w => w.Expression == "Claim.priority"
+                                                        && w.System == system && w.Code == code);
+        else
+            result.Warnings.Should().BeEmpty();
     }
 
     [Fact]
     public void NoPriority_IsNoLevelOfService()
     {
-        Map(PasBundles.Complete(priority: null)).Request!.LevelOfService.Should().BeNull();
+        var result = Map(PasBundles.Complete(priority: null));
+
+        result.Request!.LevelOfService.Should().BeNull("an absent priority is not an unrecognised one");
+        result.Warnings.Should().BeEmpty();
     }
 
     [Theory]
