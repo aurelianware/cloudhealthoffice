@@ -242,6 +242,20 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CommercialAutoApproval_WithAState_DoesNotClaimTheState()
+    {
+        // The approval list reads no state, and the gate does not run for
+        // Commercial: the TX in the request played no part in the decision.
+        var claimResponse = await SubmitAsync(WithProviderIdentifier(PasBundles.Complete(
+            procedureCode: ApproveCode, coverageTypeCode: "CI", serviceState: "TX")));
+        var stored = await StoredAsync(claimResponse.PreAuthRef);
+
+        stored.Should().NotBeNull();
+        stored!.Status.Should().Be(StoredStatus.Approved);
+        stored.StatusHistory.Last().Source.Should().Be("automated:AutoApproveList;lob=Commercial;state=none");
+    }
+
+    [Fact]
     public async Task UnknownLineOfBusiness_IsPended_NotAutoDecided()
     {
         // A Coverage.type no mapping recognises: the line of business cannot
@@ -255,7 +269,8 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
         stored.Status.Should().Be(StoredStatus.Pended);
         stored.ReviewDecision.Should().Be("A4");
         stored.PendReason.Should().Contain("line of business");
-        stored.StatusHistory.Last().Source.Should().StartWith("automated:LineOfBusinessUndetermined;lob=Unknown");
+        stored.StatusHistory.Last().Source.Should().Be("automated:LineOfBusinessUndetermined;lob=n/a;state=none",
+            "no rule was evaluated, so no line of business or state is claimed");
         _fhirService.Adjudicator.StartedAt.Should().BeNull("nothing is auto-decided on an unknown line of business");
     }
 

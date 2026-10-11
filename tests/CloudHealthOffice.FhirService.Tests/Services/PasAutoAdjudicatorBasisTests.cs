@@ -105,25 +105,107 @@ public class PasAutoAdjudicatorBasisTests
         _ruleContext!.ServicingProviderNpi.Should().Be("1987654325");
     }
 
+    // ── Only the inputs a deciding path actually consumed are reported ──
+
     [Fact]
-    public async System.Threading.Tasks.Task EveryDecision_CarriesItsBasis_EvenWhenDisabled()
+    public async System.Threading.Tasks.Task Disabled_ClaimsNoBasis()
     {
         var result = await Adjudicator(enabled: false).TryDecideAsync(
             Claim(state: "NM"), new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.VA, Npi, null), 12000);
 
         result.RuleName.Should().Be("ConfigDisabled");
-        result.LineOfBusiness.Should().Be("VA");
-        result.StateCode.Should().Be("NM");
+        result.LineOfBusiness.Should().BeNull("nothing was evaluated");
+        result.StateCode.Should().BeNull("nothing was evaluated");
     }
 
-    private PasAutoAdjudicator Adjudicator(bool enabled = true)
+    [Fact]
+    public async System.Threading.Tasks.Task TimeBudgetExceeded_ClaimsNoBasis()
+    {
+        var result = await Adjudicator(goldCard: new Hang()).TryDecideAsync(
+            Claim(state: "TX"), new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.Commercial, Npi, null), 50);
+
+        result.RuleName.Should().Be("TimeBudgetExceeded");
+        result.LineOfBusiness.Should().BeNull();
+        result.StateCode.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("70553", "AutoApproveList")]
+    [InlineData("V2020", "AutoDenyList")]
+    public async System.Threading.Tasks.Task ListRule_OnCommercialWithAState_ClaimsNoState(string code, string rule)
+    {
+        // The gate does not run for Commercial and the list rules read no
+        // state, so the TX the request names played no part.
+        var claim = Claim(state: "TX");
+        claim.Item[0].ProductOrService = new CodeableConcept("http://www.ama-assn.org/go/cpt", code);
+
+        var result = await Adjudicator(approve: ["70553"], deny: ["V2020"]).TryDecideAsync(
+            claim, new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.Commercial, Npi, null), 12000);
+
+        result.RuleName.Should().Be(rule);
+        result.StateCode.Should().BeNull();
+        result.LineOfBusiness.Should().Be("Commercial");
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task DollarThreshold_OnCommercialWithAState_ClaimsNoState()
+    {
+        var claim = Claim(state: "TX");
+        claim.Total = new Money { Value = 10m, Currency = Money.Currencies.USD };
+
+        var result = await Adjudicator(dollarThreshold: 500m).TryDecideAsync(
+            claim, new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.Commercial, Npi, null), 12000);
+
+        result.RuleName.Should().Be("DollarThreshold");
+        result.StateCode.Should().BeNull();
+    }
+
+    // ── The service date is the requested one ──────────────────────────
+
+    [Fact]
+    public async System.Threading.Tasks.Task Gate_IsAskedAboutTheRequestedServiceDate_NotToday()
+    {
+        // Enrollment ended 2026-10-31; the service is requested for
+        // 2026-11-02 (a FHIR date, servicedDate). Asked about today, the gate
+        // would pass a provider who is not enrolled on the day of service.
+        _gate.Setup(g => g.EvaluateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<DateOnly>(), It.IsAny<EnrollmentLob>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, string _, string _, DateOnly date, EnrollmentLob _, CancellationToken _) =>
+                date > new DateOnly(2026, 10, 31)
+                    ? GateResult.Deny("PEMS-001", "Enrollment ended 2026-10-31.")
+                    : GateResult.Pass());
+
+        var result = await Adjudicator().TryDecideAsync(
+            Claim(state: "TX"), new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.Medicaid, Npi, null), 12000);
+
+        result.Decision.Should().Be("denied");
+        result.RuleName.Should().Be("EnrollmentGate");
+    }
+
+    private PasAutoAdjudicator Adjudicator(
+        bool enabled = true, List<string>? approve = null, List<string>? deny = null,
+        decimal dollarThreshold = 0m, HttpMessageHandler? goldCard = null)
     {
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(It.IsAny<string>()))
-            .Returns(new HttpClient(new NotFound()) { BaseAddress = new Uri("http://authorization-service.test/") });
+            .Returns(new HttpClient(goldCard ?? new NotFound()) { BaseAddress = new Uri("http://authorization-service.test/") });
         return new PasAutoAdjudicator(
-            Options.Create(new PasAutoAdjudicationConfig { Enabled = enabled, DollarThreshold = 0m }),
+            Options.Create(new PasAutoAdjudicationConfig
+            {
+                Enabled = enabled, DollarThreshold = dollarThreshold,
+                AutoApproveServiceTypes = approve ?? [], AutoDenyServiceTypes = deny ?? [],
+            }),
             factory.Object, _gate.Object, _engine.Object, NullLogger<PasAutoAdjudicator>.Instance);
+    }
+
+    private sealed class Hang : HttpMessageHandler
+    {
+        protected override async System.Threading.Tasks.Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken ct)
+        {
+            await System.Threading.Tasks.Task.Delay(Timeout.Infinite, ct);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
     }
 
     private static Claim Claim(string? state) => new()

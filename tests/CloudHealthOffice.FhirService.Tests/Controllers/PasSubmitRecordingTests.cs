@@ -283,7 +283,7 @@ public class PasSubmitRecordingTests
         decision.Outcome.Should().Be("Pended");
         decision.Rule.Should().Be(PasController.LineOfBusinessUndeterminedRule);
         decision.PendReason.Should().Be(PasController.LineOfBusinessUndeterminedPendReason);
-        decision.LineOfBusiness.Should().Be("Unknown");
+        decision.LineOfBusiness.Should().BeNull("no rule was evaluated on a line of business");
         decision.StateCode.Should().BeNull();
     }
 

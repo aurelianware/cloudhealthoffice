@@ -139,6 +139,9 @@ public class PasProviderVerificationTests
         _recorder.Last!.Decision!.Outcome.Should().Be("Denied");
         _recorder.Last.Decision.DenialReasonCode.Should().Be("PROVIDER_EXCLUDED");
         _recorder.Last.RequestingProviderNPI.Should().Be("1234567890");
+        // A fact about the provider: no line of business or state was evaluated.
+        _recorder.Last.Decision.LineOfBusiness.Should().BeNull();
+        _recorder.Last.Decision.StateCode.Should().BeNull();
         _adjudicatorMock.Verify(a => a.TryDecideAsync(
             It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Never);

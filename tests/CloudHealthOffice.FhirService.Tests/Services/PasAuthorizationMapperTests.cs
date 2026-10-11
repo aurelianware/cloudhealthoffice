@@ -306,11 +306,16 @@ public class PasAuthorizationMapperTests
         result.Warnings.Should().BeEmpty();
     }
 
+    // Urgency is never under-classified: the MOST urgent signal across the
+    // PAS extension (Claim and items) and Claim.priority wins, so a standard
+    // extension does not outrank a stat priority.
     [Theory]
     [InlineData("U", "normal", "U")]
-    [InlineData("E", "stat", "E")]
+    [InlineData("E", "stat", "U")]
     [InlineData("03", null, "U")]
-    public void PasLevelOfServiceExtension_IsUM06_AndOutranksClaimPriority(string extension, string? priority, string expected)
+    [InlineData("E", "normal", "E")]
+    [InlineData("E", null, "E")]
+    public void MostUrgentSignal_AcrossExtensionAndPriority_Wins(string extension, string? priority, string expected)
     {
         var bundle = PasBundles.Complete(priority: priority);
         PasBundles.ClaimOf(bundle).Extension.Add(new Extension(
@@ -327,6 +332,47 @@ public class PasAuthorizationMapperTests
             PasAuthorizationMapper.LevelOfServiceExtensionUrl, new CodeableConcept(X12LevelOfService, "U")));
 
         Map(bundle).Request!.LevelOfService.Should().Be("U");
+    }
+
+    [Fact]
+    public void UrgentItemExtension_OutranksAStandardClaimExtension()
+    {
+        var bundle = PasBundles.Complete(priority: null);
+        var claim = PasBundles.ClaimOf(bundle);
+        claim.Extension.Add(new Extension(
+            PasAuthorizationMapper.LevelOfServiceExtensionUrl, new CodeableConcept(X12LevelOfService, "E")));
+        claim.Item[0].Extension.Add(new Extension(
+            PasAuthorizationMapper.LevelOfServiceExtensionUrl, new CodeableConcept(X12LevelOfService, "U")));
+
+        Map(bundle).Request!.LevelOfService.Should().Be("U");
+    }
+
+    [Theory]
+    [InlineData("STAT")]
+    [InlineData("urgent")]
+    [InlineData(" Expedited ")]
+    public void UrgencyInPriorityText_IsExpedited_AndWarned(string text)
+    {
+        var bundle = PasBundles.Complete(priority: null);
+        PasBundles.ClaimOf(bundle).Priority = new CodeableConcept { Text = text };
+
+        var result = Map(bundle);
+
+        result.Request!.LevelOfService.Should().Be("U");
+        result.Warnings.Should().ContainSingle(w => w.Expression == "Claim.priority" && w.System == null);
+    }
+
+    [Fact]
+    public void StandardWordInAnUnknownSystem_IsUnrecognised_StandardAndWarned()
+    {
+        // E only for an explicit standard value in a known system.
+        var bundle = PasBundles.Complete();
+        PasBundles.ClaimOf(bundle).Priority = new CodeableConcept("http://example.org/priority", "normal");
+
+        var result = Map(bundle);
+
+        result.Request!.LevelOfService.Should().Be("E");
+        result.Warnings.Should().ContainSingle(w => w.Expression == "Claim.priority" && w.Code == "normal");
     }
 
     // ── Dates and the approved period ────────────────────────────────

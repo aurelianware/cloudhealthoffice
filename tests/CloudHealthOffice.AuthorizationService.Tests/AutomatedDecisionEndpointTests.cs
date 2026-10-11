@@ -64,7 +64,9 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         bool withApprovedPeriod = true,
         string? tenantInBody = null,
         string? decisionLineOfBusiness = "Medicaid",
-        string? requestHash = RequestHash)
+        string? requestHash = RequestHash,
+        string rule = "AutoApproveList",
+        string? stateCode = "TX")
     {
         var received = receivedAt ?? DateTime.UtcNow.AddSeconds(-2);
         return new
@@ -106,9 +108,9 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
                 approvedServiceDateFrom = withApprovedPeriod ? new DateTime(2026, 11, 2, 0, 0, 0, DateTimeKind.Utc) : (DateTime?)null,
                 approvedServiceDateTo = withApprovedPeriod ? new DateTime(2026, 11, 4, 0, 0, 0, DateTimeKind.Utc) : (DateTime?)null,
                 decidedAt = received.AddSeconds(1),
-                rule = "AutoApproveList",
+                rule,
                 lineOfBusiness = decisionLineOfBusiness,
-                stateCode = "TX",
+                stateCode,
             },
         };
     }
@@ -360,6 +362,32 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         var response = await client.PostAsJsonAsync(Path, Body(decisionLineOfBusiness: null), Json);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Theory]
+    [InlineData("provider-exclusion-check", "Denied")]
+    [InlineData("ConfigDisabled", "Pended")]
+    [InlineData("TimeBudgetExceeded", "Pended")]
+    [InlineData("LineOfBusinessUndetermined", "Pended")]
+    public async Task NoEvaluationRule_WithoutLineOfBusiness_IsStored_AndClaimsNoBasis(string rule, string outcome)
+    {
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, Body(
+            outcome: outcome, withApprovedPeriod: false, decisionLineOfBusiness: null, rule: rule, stateCode: null), Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal($"automated:{rule};lob=n/a;state=none", _stored!.StatusHistory[^1].Source);
+    }
+
+    [Fact]
+    public async Task NoEvaluationRule_WithAnotherLineOfBusiness_Returns400()
+    {
+        // Optional for these rules, but if stated it must still be the record's.
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var response = await client.PostAsJsonAsync(Path, Body(
+            outcome: "Pended", withApprovedPeriod: false, decisionLineOfBusiness: "Commercial", rule: "ConfigDisabled"), Json);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     // ── The tracking number ────────────────────────────────────────────
