@@ -17,7 +17,7 @@
 
 This roadmap outlines **quarterly milestones** across four strategic pillars:
 
-1. **CMS Compliance** — Full CMS-0057-F readiness 6+ months ahead of deadline
+1. **CMS Compliance** — CMS-0057-F conformance (in progress; see the [ePA gap matrix](../epa-gap-matrix.md))
 2. **Microservice Releases** — Modular, scalable services for enterprise deployment
 3. **Community Growth** — Open-source adoption, contributor expansion, partner ecosystem
 4. **Innovation** — AI/ML capabilities that reduce manual intervention by 80%+
@@ -598,15 +598,15 @@ Latency Target: <1s per claim
 - Publish compliance documentation for payers
 - Support payer attestation processes
 
-**Compliance Checklist**:
+**Compliance Checklist** (status corrected October 2026; see the [ePA gap matrix](../epa-gap-matrix.md)):
 | Requirement | Status | Validation | Deadline |
 |-------------|--------|------------|----------|
-| Patient Access API | ✅ Ready | ONC certified | Oct 31 |
-| Provider Access API | ✅ Ready | SMART on FHIR | Oct 31 |
-| Payer-to-Payer API | ✅ Ready | Bulk export tested | Nov 15 |
-| Prior Auth API | ✅ Ready | Da Vinci PAS 2.0 | Oct 31 |
-| 72-hour response | ✅ Automated | SLA monitoring | Oct 15 |
-| 7-day response | ✅ Automated | SLA monitoring | Oct 15 |
+| Patient Access API | 🔄 In Progress | Not certified; reads served from a mock data adapter today | Oct 31 |
+| Provider Access API | 🔄 In Progress | SMART on FHIR (v1 scopes) | Oct 31 |
+| Payer-to-Payer API | 🔄 In Progress | Bulk export is a stub; not tested end to end | Nov 15 |
+| Prior Auth API | 🔄 In Progress | Da Vinci PAS 2.0, not yet conformant | Oct 31 |
+| 72-hour response | 🔄 In Progress | SLA monitoring not yet functional | Oct 15 |
+| 7-day response | 🔄 In Progress | SLA monitoring not yet functional | Oct 15 |
 | Denial rationale | ✅ Implemented | Explainable AI | Nov 30 |
 | **Final Attestation** | 🔄 In Progress | Third-party audit | Dec 15 |
 
