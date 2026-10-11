@@ -1,15 +1,42 @@
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
+using AuthorizationService.Services.Retention;
 
 namespace AuthorizationService.Services;
 
 /// <summary>
 /// Background service that periodically evaluates open authorizations
 /// and escalates SLA levels as deadlines approach or are breached.
+///
+/// <para>
+/// A hosted service has no request, so no ambient tenant (D-07). Each tick
+/// lists the tenants that have authorization data and evaluates them one at a
+/// time, passing the tenant EXPLICITLY to every repository call, in a fresh
+/// DI scope per tenant (the repository is Scoped; nothing is captured for the
+/// process lifetime). Modelled on <see cref="PriorAuthorizationRetentionWorker"/>.
+/// One tenant's failure, or one record's, is logged and does not stop the rest.
+/// </para>
+///
+/// <para>
+/// The tenant list is cached for <see cref="TenantListRefreshInterval"/>:
+/// listing tenants is a cross-partition DISTINCT on Cosmos and a collection
+/// scan on Mongo (D-37), and tenants appear rarely. A new tenant's
+/// authorizations are first evaluated within that interval.
+/// </para>
+///
+/// <para>
+/// Not supported with <c>MongoDb:UseTenantScoping=true</c> (a database per
+/// tenant): with no request the repository sees only the base database, so
+/// the watchdog would silently find nothing. It logs a warning and does
+/// nothing instead (D-38).
+/// </para>
 /// </summary>
 public class SlaWatchdogService : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(15);
+
+    /// <summary>How long a listed set of tenants is reused before it is listed again.</summary>
+    public static readonly TimeSpan TenantListRefreshInterval = TimeSpan.FromHours(1);
 
     // Urgent (LevelOfService == "U") thresholds in hours
     private const double UrgentWarningHours = 48;
@@ -21,66 +48,191 @@ public class SlaWatchdogService : BackgroundService
     private const double StandardCriticalHours = 144;
     private const double StandardBreachHours = 168;
 
-    private readonly IAuthorizationRepository _repository;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SlaWatchdogService> _logger;
+    private readonly TimeProvider _clock;
+    private readonly string? _unsupportedReason;
+
+    private IReadOnlyList<string>? _tenants;
+    private DateTimeOffset _tenantsListedAt;
 
     public SlaWatchdogService(
-        IServiceProvider serviceProvider,
-        ILogger<SlaWatchdogService> logger)
+        IServiceScopeFactory scopeFactory,
+        IConfiguration configuration,
+        ILogger<SlaWatchdogService> logger,
+        TimeProvider? clock = null)
     {
-        var scope = serviceProvider.CreateScope();
-        _repository = scope.ServiceProvider.GetRequiredService<IAuthorizationRepository>();
+        _scopeFactory = scopeFactory;
         _logger = logger;
+        _clock = clock ?? TimeProvider.System;
+
+        var cosmos = string.Equals(configuration["Database:Provider"], "CosmosDb", StringComparison.OrdinalIgnoreCase);
+        if (!cosmos && configuration.GetValue("MongoDb:UseTenantScoping", false))
+        {
+            _unsupportedReason =
+                "MongoDb:UseTenantScoping=true is not supported by the SLA watchdog: with no request it can " +
+                "reach only the base database, not each tenant's. No authorization will be escalated (D-38).";
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(Interval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        if (_unsupportedReason is not null)
         {
-            try
+            // Say so once, loudly, rather than run every 15 minutes and find nothing.
+            _logger.LogWarning("SLA watchdog disabled: {Reason}", _unsupportedReason);
+            return;
+        }
+
+        using var timer = new PeriodicTimer(Interval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                await EvaluateAllAuthorizationsAsync();
+                try
+                {
+                    await EvaluateAllAuthorizationsAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "SLA watchdog evaluation failed");
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "SLA watchdog evaluation failed");
-            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Shutting down.
         }
     }
 
     /// <summary>
-    /// Evaluates all open authorizations and escalates SLA levels.
+    /// Evaluates every tenant's open authorizations and escalates SLA levels.
     /// Public to allow direct invocation from tests.
     /// </summary>
-    public async Task EvaluateAllAuthorizationsAsync()
+    public async Task<SlaWatchdogRunSummary> EvaluateAllAuthorizationsAsync(CancellationToken ct = default)
     {
-        var auths = await _repository.GetOpenAuthorizationsAsync();
+        var summary = new SlaWatchdogRunSummary();
+
+        if (_unsupportedReason is not null)
+        {
+            _logger.LogWarning("SLA watchdog disabled: {Reason}", _unsupportedReason);
+            summary.SkippedReason = _unsupportedReason;
+            return summary;
+        }
+
+        var tenants = await GetTenantsAsync(ct);
+
+        foreach (var tenantId in tenants)
+        {
+            ct.ThrowIfCancellationRequested();
+            summary.Tenants++;
+
+            // A scope per tenant: one tenant's work never shares state with another's.
+            using var scope = _scopeFactory.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IAuthorizationRepository>();
+
+            try
+            {
+                await EvaluateTenantAsync(repository, tenantId, summary, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                summary.FailedTenants++;
+                _logger.LogError(ex, "SLA watchdog evaluation failed for tenant {Tenant}", SanitizeForLog(tenantId));
+            }
+        }
+
+        return summary;
+    }
+
+    private async Task<IReadOnlyList<string>> GetTenantsAsync(CancellationToken ct)
+    {
+        var now = _clock.GetUtcNow();
+        if (_tenants is not null && now - _tenantsListedAt < TenantListRefreshInterval)
+            return _tenants;
+
+        using var scope = _scopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IAuthorizationRepository>();
+        _tenants = await repository.ListTenantIdsAsync(ct);
+        _tenantsListedAt = now;
+        return _tenants;
+    }
+
+    private async Task EvaluateTenantAsync(
+        IAuthorizationRepository repository, string tenantId, SlaWatchdogRunSummary summary, CancellationToken ct)
+    {
+        var auths = await repository.GetOpenAuthorizationsAsync(tenantId);
 
         foreach (var auth in auths)
         {
-            if (!IsOpenStatus(auth.Status))
+            ct.ThrowIfCancellationRequested();
+
+            // Strict isolation: act only on records of the tenant being evaluated.
+            if (!string.Equals(auth.TenantId, tenantId, StringComparison.Ordinal))
+            {
+                _logger.LogError(
+                    "SLA watchdog skipped authorization {AuthId}: listed for tenant {Tenant} but belongs to another tenant",
+                    SanitizeForLog(auth.Id), SanitizeForLog(tenantId));
+                continue;
+            }
+
+            if (!auth.Status.IsOpen())
                 continue;
 
-            var slaStart = auth.SlaResumedAt ?? auth.SubmittedDate;
-            var elapsed = (DateTime.UtcNow - slaStart).TotalHours;
-            var isUrgent = auth.LevelOfService == "U";
-            var deadline = isUrgent ? UrgentBreachHours : StandardBreachHours;
-            var remaining = deadline - elapsed;
+            summary.Evaluated++;
 
-            var newLevel = ComputeEscalationLevel(elapsed, isUrgent);
-
-            if (newLevel > auth.SlaEscalation)
+            try
             {
-                auth.SlaEscalation = newLevel;
-                auth.SlaEscalatedAt = DateTime.UtcNow;
-                await _repository.UpdateAsync(auth);
-
-                _logger.LogWarning(
-                    "SLA {Level} for authorization {AuthNumber}: {HoursElapsed:F1}h elapsed, {HoursRemaining:F1}h remaining",
-                    newLevel, auth.AuthorizationNumber, elapsed, remaining);
+                await EvaluateRecordAsync(repository, tenantId, auth, summary, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // One bad record never stops the rest of the tenant.
+                summary.FailedRecords++;
+                _logger.LogError(ex,
+                    "SLA watchdog evaluation failed for authorization {AuthId} (tenant {Tenant})",
+                    SanitizeForLog(auth.Id), SanitizeForLog(tenantId));
             }
         }
+    }
+
+    private async Task EvaluateRecordAsync(
+        IAuthorizationRepository repository, string tenantId, Authorization auth,
+        SlaWatchdogRunSummary summary, CancellationToken ct)
+    {
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var slaStart = auth.SlaResumedAt ?? auth.SubmittedDate;
+        var elapsed = (now - slaStart).TotalHours;
+        var isUrgent = auth.LevelOfService == "U";
+        var deadline = isUrgent ? UrgentBreachHours : StandardBreachHours;
+        var remaining = deadline - elapsed;
+
+        var newLevel = ComputeEscalationLevel(elapsed, isUrgent);
+
+        if (newLevel <= auth.SlaEscalation)
+            return;
+
+        // Conditional on the tenant, the record still being open and its
+        // level still being lower; writes only the escalation fields.
+        if (!await repository.RaiseSlaEscalationAsync(tenantId, auth.Id, newLevel, now, ct))
+            return;
+
+        summary.Escalated++;
+        _logger.LogWarning(
+            "SLA {Level} for authorization {AuthNumber} (tenant {Tenant}): {HoursElapsed:F1}h elapsed, {HoursRemaining:F1}h remaining",
+            newLevel, SanitizeForLog(auth.AuthorizationNumber), SanitizeForLog(tenantId), elapsed, remaining);
     }
 
     /// <summary>
@@ -125,8 +277,32 @@ public class SlaWatchdogService : BackgroundService
         return SlaEscalationLevel.None;
     }
 
-    private static bool IsOpenStatus(AuthorizationStatus status) =>
-        status is AuthorizationStatus.Submitted
-            or AuthorizationStatus.InReview
-            or AuthorizationStatus.Pended;
+    /// <summary>Strips CR/LF so a stored value cannot forge a log entry (CWE-117).</summary>
+    private static string SanitizeForLog(string? value)
+        => string.IsNullOrEmpty(value)
+            ? string.Empty
+            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
+                   .Replace("\n", string.Empty, StringComparison.Ordinal);
+}
+
+/// <summary>Counts from one watchdog run. Aggregate only; no member identifiers.</summary>
+public sealed class SlaWatchdogRunSummary
+{
+    /// <summary>Tenants evaluated.</summary>
+    public int Tenants { get; set; }
+
+    /// <summary>Tenants whose evaluation failed (logged; the others still ran).</summary>
+    public int FailedTenants { get; set; }
+
+    /// <summary>Open authorizations evaluated.</summary>
+    public int Evaluated { get; set; }
+
+    /// <summary>Escalations recorded.</summary>
+    public int Escalated { get; set; }
+
+    /// <summary>Records whose evaluation failed (logged; the rest of the tenant still ran).</summary>
+    public int FailedRecords { get; set; }
+
+    /// <summary>Why the run did nothing at all (an unsupported configuration), or null.</summary>
+    public string? SkippedReason { get; set; }
 }
