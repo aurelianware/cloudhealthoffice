@@ -132,7 +132,9 @@ public sealed class AutomatedDecision
     /// be the record's <see cref="AutomatedDecisionRecordRequest.LineOfBusiness"/>:
     /// the record may not state a basis the decision did not use. Required,
     /// except for the rules that evaluate none
-    /// (<see cref="NoEvaluationRuleOutcomes"/>), recorded as <c>lob=n/a</c>.
+    /// (<see cref="NoEvaluationRuleOutcomes"/>), recorded as <c>lob=n/a</c>. The
+    /// no-evaluation pends must carry neither a line of business nor a state;
+    /// a provider exclusion may carry the record's line of business.
     /// </summary>
     public LineOfBusiness? LineOfBusiness { get; set; }
 

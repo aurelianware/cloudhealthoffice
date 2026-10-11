@@ -207,7 +207,16 @@ public sealed class AutomatedDecisionsController : ControllerBase
         if (noEvaluationRule && decision.Outcome != boundOutcome)
             Add("Decision.Outcome", $"Rule {decision.Rule} can only be recorded as {boundOutcome}.");
 
-        if (decision.LineOfBusiness is null)
+        // The no-evaluation pends read nothing: any LOB or state on them,
+        // even the record's own LOB, would be stored as a basis not used.
+        // (A provider exclusion keeps the general rule below.)
+        if (noEvaluationRule && boundOutcome == AutomatedDecisionOutcome.Pended
+            && (decision.LineOfBusiness is not null || decision.StateCode is not null))
+        {
+            Add("Decision.LineOfBusiness",
+                $"Rule {decision.Rule} evaluates nothing, so it carries no line of business or state.");
+        }
+        else if (decision.LineOfBusiness is null)
         {
             if (!noEvaluationRule)
                 Add("Decision.LineOfBusiness",
