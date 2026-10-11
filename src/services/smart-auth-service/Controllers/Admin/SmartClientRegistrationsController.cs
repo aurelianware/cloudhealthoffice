@@ -14,7 +14,11 @@ public sealed record ClientRegistrationRequest(
     string? DisplayName,
     List<string>? RedirectUris,
     List<string>? Scopes,
-    bool Confidential = false);
+    bool Confidential = false,
+    string? PayerId = null);
+
+/// <summary>Body of <c>PUT {clientId}/payer</c>.</summary>
+public sealed record ClientPayerRequest(string? PayerId);
 
 /// <summary>
 /// SMART client registrations. The registering administrator's CHO token
@@ -65,6 +69,10 @@ public sealed class SmartClientRegistrationsController : ControllerBase
         var scopeError = ValidateScopes(kind, scopes);
         if (scopeError != null) return BadRequest(new { error = scopeError });
 
+        var payerId = string.IsNullOrWhiteSpace(request.PayerId) ? null : request.PayerId.Trim();
+        var payerError = ValidatePayer(kind, payerId, grantsPayerToPayer: scopes.Contains(SmartScopes.SystemPayerToPayerRead));
+        if (payerError != null) return BadRequest(new { error = payerError });
+
         var redirectUris = new List<Uri>();
         if (kind != SmartClientKind.Backend)
         {
@@ -93,6 +101,7 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             TenantId = _actor.TenantId,
             Kind = kind,
             DisplayName = displayName,
+            PayerId = payerId,
             CreatedBy = _actor.UserId,
             CreatedAt = DateTimeOffset.UtcNow,
         }, ct);
@@ -135,7 +144,8 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             throw;
         }
 
-        _audit.Admin("client-registered", _actor.TenantId, _actor.UserId, $"client={clientId} kind={kind}");
+        _audit.Admin("client-registered", _actor.TenantId, _actor.UserId,
+            payerId is null ? $"client={clientId} kind={kind}" : $"client={clientId} kind={kind} payer={payerId}");
         return StatusCode(201, new
         {
             clientId,
@@ -145,7 +155,37 @@ public sealed class SmartClientRegistrationsController : ControllerBase
             clientSecret = secret,
             redirectUris = redirectUris.Select(u => u.ToString()),
             scopes,
+            payerId,
         });
+    }
+
+    /// <summary>
+    /// PUT {clientId}/payer — sets the payer one of this tenant's backend
+    /// clients acts for in Payer-to-Payer exchange (D-13). A client granted
+    /// <c>system/PayerToPayer.read</c> must keep one, so it cannot be cleared
+    /// on such a client. The change applies to tokens issued from now on;
+    /// access tokens already issued keep the payer they were minted with
+    /// until they expire.
+    /// </summary>
+    [HttpPut("{clientId}/payer")]
+    public async Task<IActionResult> SetPayer(string clientId, [FromBody] ClientPayerRequest request, CancellationToken ct)
+    {
+        var binding = await _store.FindClientAsync(clientId, ct);
+        if (binding == null || binding.TenantId != _actor.TenantId)
+            return NotFound();
+
+        var payerId = string.IsNullOrWhiteSpace(request.PayerId) ? null : request.PayerId.Trim();
+        var application = await _applications.FindByClientIdAsync(clientId, ct);
+        var grantsPayerToPayer = application is not null
+            && await _applications.HasPermissionAsync(application, Permissions.Prefixes.Scope + SmartScopes.SystemPayerToPayerRead, ct);
+        var payerError = ValidatePayer(binding.Kind, payerId, grantsPayerToPayer);
+        if (payerError != null) return BadRequest(new { error = payerError });
+
+        if (!await _store.SetClientPayerIdAsync(_actor.TenantId, clientId, payerId, ct))
+            return NotFound();
+
+        _audit.Admin("client-payer-set", _actor.TenantId, _actor.UserId, $"client={clientId} payer={payerId ?? "(none)"}");
+        return Ok(await _store.FindClientAsync(clientId, ct));
     }
 
     [HttpGet]
@@ -228,6 +268,23 @@ public sealed class SmartClientRegistrationsController : ControllerBase
 
     private async Task<bool> IsOwnClientAsync(string clientId, CancellationToken ct)
         => await _store.FindClientAsync(clientId, ct) is { } binding && binding.TenantId == _actor.TenantId;
+
+    /// <summary>
+    /// A payer id belongs to backend clients only, must be well formed, and is
+    /// required for a client granted <c>system/PayerToPayer.read</c>: that
+    /// scope is never granted to a backend client that does not say which
+    /// payer it is.
+    /// </summary>
+    private static string? ValidatePayer(string kind, string? payerId, bool grantsPayerToPayer)
+    {
+        if (payerId != null && kind != SmartClientKind.Backend)
+            return "payerId is available to backend clients only.";
+        if (payerId != null && !SmartIdentifiers.IsPayerId(payerId))
+            return "payerId must be 1-64 letters, digits, '.', '-' or '_', starting with a letter or digit.";
+        if (payerId == null && grantsPayerToPayer)
+            return $"payerId is required for a client granted {SmartScopes.SystemPayerToPayerRead}.";
+        return null;
+    }
 
     private static string? ValidateScopes(string kind, IReadOnlyList<string> scopes)
     {
