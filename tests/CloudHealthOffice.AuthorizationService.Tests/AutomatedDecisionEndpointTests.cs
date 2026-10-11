@@ -409,6 +409,35 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("NoOp", "Medicaid", "TX")]
+    [InlineData("NoOp", "Medicaid", null)]
+    [InlineData("NoOp", null, "TX")]
+    [InlineData("ConfigDisabled", "Medicaid", null)]
+    [InlineData("TimeBudgetExceeded", null, "TX")]
+    [InlineData("LineOfBusinessUndetermined", "Medicaid", null)]
+    public async Task NoEvaluationPend_ClaimingABasis_Returns400(string rule, string? lob, string? state)
+    {
+        // These pends evaluated nothing; a LOB or state on them (even the
+        // record's own LOB) would be stored as a basis the decision did not use.
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var response = await client.PostAsJsonAsync(Path, Body(
+            outcome: "Pended", withApprovedPeriod: false, decisionLineOfBusiness: lob, rule: rule, stateCode: state), Json);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Fact]
+    public async Task ProviderExclusion_WithTheRecordsLineOfBusiness_IsStillAccepted()
+    {
+        // Unchanged for the exclusion: a stated LOB must be the record's.
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+        var response = await client.PostAsJsonAsync(Path, Body(
+            outcome: "Denied", withApprovedPeriod: false, decisionLineOfBusiness: "Medicaid",
+            rule: "provider-exclusion-check", stateCode: null), Json);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
     [Fact]
     public async Task NoEvaluationRule_WithAnotherLineOfBusiness_Returns400()
     {
