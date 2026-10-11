@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Extensions;
+using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using AuthorizationService;
 using AuthorizationService.Consumers;
@@ -85,6 +86,16 @@ else
     // it; the service's own copy stored enums as numbers while every query
     // compared strings, so search, summary, open authorizations and retention
     // found nothing (D-18).
+    if (databaseProvider is null)
+    {
+        // Nothing is configured, so AddChoDatabase registered no client. Keep
+        // the host buildable (test hosts substitute the repository) and fail
+        // on first use, as the removed registration did with no endpoint.
+        builder.Services.AddSingleton<CosmosClient>(_ => throw new InvalidOperationException(
+            "No database is configured. Set MongoDb:ConnectionString, or Database:Provider=CosmosDb " +
+            "with CosmosDb:ConnectionString or CosmosDb:Endpoint and CosmosDb:Key."));
+    }
+
     builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepository>();
     Console.WriteLine("Using Cosmos DB repository");
 }
