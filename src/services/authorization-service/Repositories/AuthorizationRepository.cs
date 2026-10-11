@@ -53,6 +53,21 @@ public interface IAuthorizationRepository
     /// </summary>
     Task<bool> PurgeIfStillEligibleAsync(
         string tenantId, string id, AuthorizationStatus expectedStatus, CancellationToken ct = default);
+
+    // ── SLA watchdog (D-07) ──────────────────────────────────────────────────
+    // Background-callable like the retention methods: the tenant is explicit,
+    // and GetOpenAuthorizationsAsync(tenantId) lists that tenant's open records.
+
+    /// <summary>
+    /// Raises one authorization's SLA escalation to <paramref name="level"/>
+    /// and stamps <paramref name="escalatedAtUtc"/>, ONLY IF it belongs to
+    /// <paramref name="tenantId"/>, is still open and is below that level.
+    /// Writes nothing else, so a reviewer's concurrent change is never
+    /// overwritten. Returns false when the record moved on, was already at or
+    /// above the level, or is gone.
+    /// </summary>
+    Task<bool> RaiseSlaEscalationAsync(
+        string tenantId, string id, SlaEscalationLevel level, DateTime escalatedAtUtc, CancellationToken ct = default);
 }
 
 public class AuthorizationRepository : IAuthorizationRepository
@@ -454,6 +469,51 @@ public class AuthorizationRepository : IAuthorizationRepository
         }
 
         return results;
+    }
+
+    public async Task<bool> RaiseSlaEscalationAsync(
+        string tenantId, string id, SlaEscalationLevel level, DateTime escalatedAtUtc, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("Tenant is required for an SLA escalation.", nameof(tenantId));
+
+        var partition = new PartitionKey(tenantId);
+
+        try
+        {
+            // Read in the tenant's partition and replace with the read's ETag:
+            // only the two escalation fields change, and a record a reviewer
+            // changed in between fails the precondition rather than being
+            // overwritten with the stale copy.
+            var current = await _container.ReadItemAsync<Authorization>(id, partition, cancellationToken: ct);
+            var auth = current.Resource;
+
+            if (auth is null
+                || !string.Equals(auth.TenantId, tenantId, StringComparison.Ordinal)
+                || !auth.Status.IsOpen()
+                || auth.SlaEscalation >= level)
+            {
+                return false;
+            }
+
+            auth.SlaEscalation = level;
+            auth.SlaEscalatedAt = escalatedAtUtc;
+
+            await _container.ReplaceItemAsync(
+                auth,
+                id,
+                partition,
+                new ItemRequestOptions { IfMatchEtag = current.ETag },
+                ct);
+
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.NotFound
+                                              or System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            // Gone, or changed under us. The next tick re-evaluates.
+            return false;
+        }
     }
 
     public async Task<Authorization> CreateAsync(Authorization authorization)
