@@ -69,6 +69,15 @@ public sealed record AuthenticatedCaller
     /// <summary>The patient a patient-context token is bound to, unprefixed.</summary>
     public string? PatientId { get; init; }
 
+    /// <summary>
+    /// The payer this backend client is registered to act for (D-13): the
+    /// <c>payer_id</c> claim, taken ONLY when the issuer is the one marked
+    /// <see cref="TrustedIssuerOptions.IssuesChoClientRegistrations"/>, and
+    /// only when the token carries exactly one well-formed value. Null from any
+    /// other issuer, whatever its token says.
+    /// </summary>
+    public string? RegisteredPayerId { get; init; }
+
     /// <summary>Tenant asserted by the token, when the issuer maps one.</summary>
     public string? TenantClaim { get; init; }
 

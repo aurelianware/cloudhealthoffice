@@ -82,6 +82,15 @@ public static partial class SmartIdentifiers
     public static bool IsClientId(string? value)
         => !string.IsNullOrEmpty(value) && ClientIdPattern().IsMatch(value);
 
+    /// <summary>
+    /// A payer identifier (the payer a backend client acts for in
+    /// Payer-to-Payer exchange): 1-64 characters, a letter or digit first,
+    /// then letters, digits, '.', '-' or '_'. No spaces or control characters,
+    /// because it is minted into tokens and written to audit logs.
+    /// </summary>
+    public static bool IsPayerId(string? value)
+        => !string.IsNullOrEmpty(value) && PayerIdPattern().IsMatch(value);
+
     /// <summary>Ten digits with a valid check digit (Luhn over the 80840 prefix).</summary>
     public static bool IsNpi(string? value)
     {
@@ -114,4 +123,8 @@ public static partial class SmartIdentifiers
 
     [GeneratedRegex("^[a-z0-9][a-z0-9\\-]{2,63}$")]
     private static partial Regex ClientIdPattern();
+
+    // \z, not $: $ also matches before a trailing newline.
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._\\-]{0,63}\\z")]
+    private static partial Regex PayerIdPattern();
 }

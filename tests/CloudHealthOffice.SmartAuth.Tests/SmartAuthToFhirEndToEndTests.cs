@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 using FhirService.Services.Identity;
 using FluentAssertions;
@@ -87,6 +88,65 @@ public class SmartAuthToFhirEndToEndTests
     }
 
     [Fact]
+    public async Task PayerToPayerToken_ItsRegisteredPayer_ReachesTheFhirController()
+    {
+        // D-13 / D-32: smart-auth mints payer_id from the registration; the
+        // fhir-service SMART scheme (default inbound claim mapping) delivers
+        // it to the P2P controller unrenamed, from the marked issuer only.
+        // demo-tenant is the tenant fhir-service's development P2P data serves.
+        var (clientId, secret) = await RegisterInDemoTenantAsync("PAYER-E2E");
+        var (status, body) = await _smart.ClientCredentialsAsync(clientId, secret, "system/PayerToPayer.read");
+        status.Should().Be(HttpStatusCode.OK, body.ToString());
+
+        using var fhir = await FhirTrustingSmartAuthAsync(confineTo: null);
+        var client = Bearer(fhir, body.GetProperty("access_token").GetString()!);
+
+        var same = await PostJson(client, "/fhir/r4/Patient/$member-match",
+            new { receivingPayerId = "PAYER-E2E", memberId = "pat-001" });
+        var omitted = await PostJson(client, "/fhir/r4/Patient/$member-match", new { memberId = "pat-001" });
+        var other = await PostJson(client, "/fhir/r4/Patient/$member-match",
+            new { receivingPayerId = "PAYER-OTHER", memberId = "pat-001" });
+
+        same.StatusCode.Should().Be(HttpStatusCode.OK, await same.Content.ReadAsStringAsync());
+        omitted.StatusCode.Should().Be(HttpStatusCode.OK, await omitted.Content.ReadAsStringAsync());
+        other.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await other.Content.ReadAsStringAsync()).Should().Contain("registered with Cloud Health Office");
+    }
+
+    [Fact]
+    public async Task PayerToPayerToken_FromAnIssuerNotMarkedAsTheRegistrationAuthority_IsRefused()
+    {
+        // Same smart-auth token, but fhir-service is configured as if this
+        // issuer were an external IdP (another entry is the authority): its
+        // payer_id is ignored and the client counts as unmapped.
+        var (clientId, secret) = await RegisterInDemoTenantAsync("PAYER-E2E-2");
+        var (_, body) = await _smart.ClientCredentialsAsync(clientId, secret, "system/PayerToPayer.read");
+
+        using var fhir = await FhirTrustingSmartAuthAsync(confineTo: null, markSmartAuth: false);
+        var response = await PostJson(Bearer(fhir, body.GetProperty("access_token").GetString()!),
+            "/fhir/r4/Patient/$member-match", new { receivingPayerId = "PAYER-E2E-2", memberId = "pat-001" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("registered with Cloud Health Office");
+    }
+
+    private async Task<(string ClientId, string Secret)> RegisterInDemoTenantAsync(string payerId)
+    {
+        var resp = await _smart.Admin("demo-tenant").PostAsJsonAsync("/api/admin/smart/clients", new
+        {
+            kind = "backend",
+            scopes = new[] { "system/PayerToPayer.read" },
+            payerId,
+        });
+        resp.StatusCode.Should().Be(HttpStatusCode.Created, await resp.Content.ReadAsStringAsync());
+        var created = JsonDocument.Parse(await resp.Content.ReadAsStringAsync()).RootElement;
+        return (created.GetProperty("clientId").GetString()!, created.GetProperty("clientSecret").GetString()!);
+    }
+
+    private static Task<HttpResponseMessage> PostJson(HttpClient client, string path, object body)
+        => client.PostAsJsonAsync(path, body);
+
+    [Fact]
     public async Task DevelopmentConfinementOfTheDemoIssuer_StillHolds_AsAFallback()
     {
         // fhir-service Development confines the demo issuer to demo-tenant.
@@ -108,7 +168,7 @@ public class SmartAuthToFhirEndToEndTests
 
     // ── fhir-service host trusting this smart-auth-service ────────────────────
 
-    private async Task<WebApplicationFactory<Program>> FhirTrustingSmartAuthAsync(string? confineTo)
+    private async Task<WebApplicationFactory<Program>> FhirTrustingSmartAuthAsync(string? confineTo, bool markSmartAuth = true)
     {
         var smartHttp = _fixture.Factory.CreateClient();
         var discovery = JsonDocument.Parse(await smartHttp.GetStringAsync("/.well-known/openid-configuration")).RootElement;
@@ -125,7 +185,21 @@ public class SmartAuthToFhirEndToEndTests
                     Audiences = ["fhir-api"],
                     RequireHttpsMetadata = false,
                     Tenants = confineTo is null ? [] : [confineTo],
+                    // This IS smart-auth-service: the registration authority
+                    // whose payer_id fhir-service believes (D-13).
+                    IssuesChoClientRegistrations = markSmartAuth,
                 },
+                .. (markSmartAuth ? Array.Empty<TrustedIssuerOptions>() :
+                [
+                    // Some other issuer is the registration authority here.
+                    new TrustedIssuerOptions
+                    {
+                        Issuer = "https://registration-authority.test.local",
+                        Audiences = ["fhir-api"],
+                        RequireHttpsMetadata = false,
+                        IssuesChoClientRegistrations = true,
+                    },
+                ]),
             ],
         };
         options.Validate(isDevelopmentHost: true);

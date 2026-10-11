@@ -135,6 +135,19 @@ public sealed class ClientTenantRegistration
     public string TenantId { get; set; } = string.Empty;
     public string Kind { get; set; } = SmartClientKind.Backend;
     public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Backend clients only: the payer this client acts for in Payer-to-Payer
+    /// exchange. Set by the tenant administrator who registered the client
+    /// (never by the client), required before the client may be granted or
+    /// issued <c>system/PayerToPayer.read</c>, and minted into its access
+    /// tokens as the <c>payer_id</c> claim. fhir-service takes the receiving
+    /// payer of an inbound Payer-to-Payer request from that claim, not from
+    /// the request body. Null for a registration made before this field
+    /// existed, or for a backend client that is not a payer.
+    /// </summary>
+    public string? PayerId { get; set; }
+
     public string CreatedBy { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
 }

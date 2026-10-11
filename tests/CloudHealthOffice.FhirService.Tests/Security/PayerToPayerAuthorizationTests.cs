@@ -7,6 +7,10 @@ using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using FhirService.Services.Identity;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using SecurityClaim = System.Security.Claims.Claim;
 
 namespace CloudHealthOffice.FhirService.Tests.Security;
@@ -17,8 +21,13 @@ namespace CloudHealthOffice.FhirService.Tests.Security;
 /// "member A" (the caller in the patient-token attack), pat-002 is "member B"
 /// (the victim). Everything else is the shared test host.
 /// </summary>
-public sealed class PayerToPayerWebAppFactory : FhirTestWebAppFactory
+public class PayerToPayerWebAppFactory : FhirTestWebAppFactory
 {
+    /// <summary>A second trusted identity provider: NOT CHO's registration authority.</summary>
+    public const string ExternalIssuer = "https://external-idp.test.local";
+
+    protected override IReadOnlyList<string> AdditionalValidIssuers => [ExternalIssuer];
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);
@@ -26,6 +35,7 @@ public sealed class PayerToPayerWebAppFactory : FhirTestWebAppFactory
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
+
                 // The P2P member sources serve exactly one tenant (G-30 / T-4);
                 // make it the tenant the test tokens carry.
                 ["FhirAdapters:TenantId"] = "test-tenant",
@@ -36,6 +46,37 @@ public sealed class PayerToPayerWebAppFactory : FhirTestWebAppFactory
                 ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:3:PurposeOfUse"] = "PayerToPayerExchange",
                 ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:3:Status"] = "Active",
             });
+        });
+
+        // Two trusted issuers, so the caller's issuer resolves: the test issuer
+        // stands for smart-auth-service (the one marked registration
+        // authority, whose payer_id is believed), the other for an external
+        // IdP (whose payer_id is ignored). Replaced in DI rather than set in
+        // configuration because Program reads SmartAuth eagerly, before a test
+        // host's configuration is applied.
+        builder.ConfigureTestServices(services =>
+        {
+            var trust = new SmartTrustOptions
+            {
+                Mode = SmartTrustMode.Demo,
+                TrustedIssuers =
+                [
+                    new TrustedIssuerOptions
+                    {
+                        Issuer = TestIssuer, Audiences = ["fhir-api"], RequireHttpsMetadata = false,
+                        IssuesChoClientRegistrations = true,
+                    },
+                    new TrustedIssuerOptions
+                    {
+                        Issuer = ExternalIssuer, Audiences = ["fhir-api"], RequireHttpsMetadata = false,
+                    },
+                ],
+            };
+            trust.Validate(isDevelopmentHost: true);
+            services.RemoveAll<SmartTrustOptions>();
+            services.RemoveAll<TrustedIssuerRegistry>();
+            services.AddSingleton(trust);
+            services.AddSingleton(new TrustedIssuerRegistry(trust));
         });
     }
 }
@@ -86,9 +127,10 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
     private string PatientToken(string patientId, string scopes = "patient/*.read")
         => _factory.IssueToken(scopes, patientId);
 
+    // A backend client registered to the payer the bodies name (D-13).
     private string BackendToken(string scopes = P2PScope, string tenantId = "test-tenant")
         => _factory.IssueToken(scopes, patientId: null, tenantId: tenantId,
-            extraClaims: [new SecurityClaim("client_id", "new-plan-backend")]);
+            extraClaims: [new SecurityClaim("client_id", "new-plan-backend"), new SecurityClaim("payer_id", "NEW-PLAN")]);
 
     private static async Task<string> DiagnosticsAsync(HttpResponseMessage response)
     {

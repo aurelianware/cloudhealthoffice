@@ -49,6 +49,13 @@ public interface ISmartIdentityStore
     Task<IReadOnlyList<ClientTenantRegistration>> ListClientsAsync(string tenantId, CancellationToken ct = default);
     Task<bool> DeleteClientAsync(string tenantId, string clientId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Sets (or, with null, clears) the payer a registration acts for. Only a
+    /// registration of <paramref name="tenantId"/> is touched: another
+    /// tenant's client id behaves exactly like a missing one (false).
+    /// </summary>
+    Task<bool> SetClientPayerIdAsync(string tenantId, string clientId, string? payerId, CancellationToken ct = default);
+
     /// <summary>Development seeding only: binds an identity directly, skipping enrolment.</summary>
     Task SeedDevelopmentBindingsAsync(
         IEnumerable<MemberLink> members, IEnumerable<ProviderUserLink> providers,
@@ -315,6 +322,16 @@ public sealed class MongoSmartIdentityStore : ISmartIdentityStore
         await ReadyAsync();
         var result = await _clients.DeleteOneAsync(c => c.ClientId == clientId && c.TenantId == tenantId, ct);
         return result.DeletedCount == 1;
+    }
+
+    public async Task<bool> SetClientPayerIdAsync(string tenantId, string clientId, string? payerId, CancellationToken ct = default)
+    {
+        await ReadyAsync();
+        var result = await _clients.UpdateOneAsync(
+            c => c.ClientId == clientId && c.TenantId == tenantId,
+            Builders<ClientTenantRegistration>.Update.Set(c => c.PayerId, payerId),
+            cancellationToken: ct);
+        return result.MatchedCount == 1;
     }
 
     public async Task SeedDevelopmentBindingsAsync(

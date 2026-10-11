@@ -2,6 +2,7 @@ using FhirService.Services.Identity;
 using FhirService.Models.PayerToPayer;
 using FhirService.Services.PayerToPayer;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace FhirService.Controllers;
 
@@ -31,8 +32,14 @@ namespace FhirService.Controllers;
 public sealed class PayerToPayerMemberMatchController : FhirControllerBase
 {
     private readonly IPayerToPayerMemberMatchService _matcher;
+    private readonly ILogger<PayerToPayerMemberMatchController> _logger;
 
-    public PayerToPayerMemberMatchController(IPayerToPayerMemberMatchService matcher) => _matcher = matcher;
+    public PayerToPayerMemberMatchController(
+        IPayerToPayerMemberMatchService matcher, ILogger<PayerToPayerMemberMatchController> logger)
+    {
+        _matcher = matcher;
+        _logger = logger;
+    }
 
     [HttpPost("Patient/$member-match")]
     public async Task<IActionResult> MemberMatch(
@@ -43,16 +50,15 @@ public sealed class PayerToPayerMemberMatchController : FhirControllerBase
         if (!IsBackendSystemCaller)
             return FhirForbidden(PayerToPayerController.BackendOnlyMessage);
 
+        // D-13: HRex/PDex $member-match carries no receiving-payer parameter;
+        // the receiving payer is the one the authenticated client is
+        // registered to. A client with no registered payer, or a body naming
+        // another payer, gets one fixed refusal before any member is looked at.
+        if (!TryBindReceivingPayer(body?.ReceivingPayerId, _logger, "member-match", out var receivingPayerId))
+            return FhirForbidden(PayerToPayerController.PayerBindingMessage);
+
         if (body is null)
             return FhirBadRequest("A member-match request body is required.");
-
-        // The receiving payer must identify itself so the match is auditable
-        // ("which receiving payer asked"); normalize it so audit/log values are stable.
-        // Still self-declared: there is no client -> payer registration to bind
-        // it to yet (D-13 remainder). InitiatedBy is the authenticated client.
-        var receivingPayerId = body.ReceivingPayerId?.Trim();
-        if (string.IsNullOrEmpty(receivingPayerId))
-            return FhirBadRequest("receivingPayerId is required to identify the requesting payer for audit.");
 
         var request = new MemberMatchRequest
         {
