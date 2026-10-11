@@ -126,7 +126,9 @@ public class AccumulatorRepositoryCosmos : IAccumulatorRepository
             .WithParameter("@planId", benefitPlanId.ToString())
             .WithParameter("@planYear", planYear);
 
-        var iterator = _container.GetItemQueryIterator<dynamic>(
+        // Typed projection, not dynamic: under the shared System.Text.Json
+        // serializer a dynamic item is a JsonElement, which has no ".id".
+        var iterator = _container.GetItemQueryIterator<IdOnly>(
             query,
             requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
 
@@ -136,9 +138,8 @@ public class AccumulatorRepositoryCosmos : IAccumulatorRepository
             var page = await iterator.ReadNextAsync(ct);
             foreach (var item in page)
             {
-                string id = item.id.ToString();
                 await _container.DeleteItemAsync<AccumulatorDocument>(
-                    id, new PartitionKey(tenantId), cancellationToken: ct);
+                    item.Id, new PartitionKey(tenantId), cancellationToken: ct);
                 deleted++;
             }
         }
@@ -146,5 +147,12 @@ public class AccumulatorRepositoryCosmos : IAccumulatorRepository
         _logger.LogInformation(
             "Deleted {Count} Cosmos accumulator documents for plan {PlanId} / year {PlanYear}",
             deleted, benefitPlanId, planYear);
+    }
+
+    /// <summary>Projection of the document id for <see cref="DeleteByPlanYearAsync"/>.</summary>
+    private sealed record IdOnly
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public string Id { get; init; } = string.Empty;
     }
 }

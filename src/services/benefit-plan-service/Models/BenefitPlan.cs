@@ -56,6 +56,7 @@ public class BenefitPlan
     public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
 
     [JsonPropertyName("benefits")]
+    [JsonConverter(typeof(BenefitListJsonConverter))]
     public List<Benefit> Benefits { get; set; } = new();
 
     [JsonPropertyName("networkTiers")]

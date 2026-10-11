@@ -1,3 +1,8 @@
+// REFERENCE ONLY — not compiled; see D-31 in docs/epa-gap-matrix.md.
+// This snapshot of the benefit-plan wiring still registers its own CosmosClient
+// (SDK default Newtonsoft serializer), which D-31 removed from the real
+// src/services/benefit-plan-service/Program.cs. Do not copy that registration.
+
 using Microsoft.Azure.Cosmos;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Repositories;
