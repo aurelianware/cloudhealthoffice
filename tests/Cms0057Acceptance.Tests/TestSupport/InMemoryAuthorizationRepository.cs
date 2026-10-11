@@ -46,6 +46,19 @@ internal sealed class InMemoryAuthorizationRepository : IAuthorizationRepository
                   .Distinct(StringComparer.Ordinal)
                   .ToList());
 
+    public Task<bool> RaiseSlaEscalationAsync(
+        string tenantId, string id, SlaEscalationLevel level, DateTime escalatedAtUtc, CancellationToken ct = default)
+    {
+        var record = _store.FirstOrDefault(a =>
+            a.Id == id && string.Equals(a.TenantId, tenantId, StringComparison.Ordinal));
+        if (record is null || !record.Status.IsOpen() || record.SlaEscalation >= level)
+            return Task.FromResult(false);
+
+        record.SlaEscalation = level;
+        record.SlaEscalatedAt = escalatedAtUtc;
+        return Task.FromResult(true);
+    }
+
     public Task<IReadOnlyList<Authorization>> FindRetentionCandidatesAsync(
         string tenantId, DateTime anchorCutoffUtc, int limit, CancellationToken ct = default)
     {

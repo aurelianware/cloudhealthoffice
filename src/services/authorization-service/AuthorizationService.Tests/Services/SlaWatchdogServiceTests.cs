@@ -1,6 +1,7 @@
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -30,7 +31,8 @@ public class SlaWatchdogServiceTests
         // Assert
         auth.SlaEscalation.Should().Be(SlaEscalationLevel.Warning);
         auth.SlaEscalatedAt.Should().NotBeNull();
-        _repositoryMock.Verify(r => r.UpdateAsync(auth), Times.Once);
+        _repositoryMock.Verify(r => r.RaiseSlaEscalationAsync(
+            "tenant-1", auth.Id, SlaEscalationLevel.Warning, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -106,7 +108,7 @@ public class SlaWatchdogServiceTests
         await RunWatchdog();
 
         auth.SlaEscalation.Should().Be(SlaEscalationLevel.None);
-        _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<Authorization>()), Times.Never);
+        VerifyNoEscalationWritten();
     }
 
     [Fact]
@@ -134,7 +136,7 @@ public class SlaWatchdogServiceTests
         await RunWatchdog();
 
         auth.SlaEscalation.Should().Be(SlaEscalationLevel.None);
-        _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<Authorization>()), Times.Never);
+        VerifyNoEscalationWritten();
     }
 
     [Fact]
@@ -147,7 +149,7 @@ public class SlaWatchdogServiceTests
         await RunWatchdog();
 
         auth.SlaEscalation.Should().Be(SlaEscalationLevel.None);
-        _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<Authorization>()), Times.Never);
+        VerifyNoEscalationWritten();
     }
 
     [Fact]
@@ -162,7 +164,7 @@ public class SlaWatchdogServiceTests
         await RunWatchdog();
 
         auth.SlaEscalation.Should().Be(SlaEscalationLevel.Critical);
-        _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<Authorization>()), Times.Never);
+        VerifyNoEscalationWritten();
     }
 
     [Fact]
@@ -177,24 +179,215 @@ public class SlaWatchdogServiceTests
         auth.SlaEscalatedAt.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task EveryTenant_IsEvaluatedWithItsOwnTenant_InItsOwnScope()
+    {
+        var a = CreateAuth(levelOfService: "U", hoursAgo: 50);
+        var b = CreateAuth(levelOfService: "U", hoursAgo: 65);
+        b.TenantId = "tenant-2";
+        _repositoryMock.Setup(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { "tenant-1", "tenant-2" });
+        _repositoryMock.Setup(r => r.GetOpenAuthorizationsAsync("tenant-1")).ReturnsAsync(new[] { a });
+        _repositoryMock.Setup(r => r.GetOpenAuthorizationsAsync("tenant-2")).ReturnsAsync(new[] { b });
+        SetupRaise(a, b);
+
+        var summary = await RunWatchdog();
+
+        a.SlaEscalation.Should().Be(SlaEscalationLevel.Warning);
+        b.SlaEscalation.Should().Be(SlaEscalationLevel.Critical);
+        _repositoryMock.Verify(r => r.GetOpenAuthorizationsAsync(null), Times.Never);
+        _repositoryMock.Verify(r => r.RaiseSlaEscalationAsync(
+            "tenant-2", b.Id, SlaEscalationLevel.Critical, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        summary.Tenants.Should().Be(2);
+        summary.Escalated.Should().Be(2);
+        _scopesCreated.Should().Be(3, "one scope lists the tenants, then one per tenant");
+    }
+
+    [Fact]
+    public async Task RecordListedForAnotherTenant_IsNeverEscalated()
+    {
+        var foreign = CreateAuth(levelOfService: "U", hoursAgo: 100);
+        foreign.TenantId = "tenant-2";
+        SetupRepository(foreign);
+
+        await RunWatchdog();
+
+        foreign.SlaEscalation.Should().Be(SlaEscalationLevel.None);
+        VerifyNoEscalationWritten();
+    }
+
+    [Fact]
+    public async Task OneTenantFailing_DoesNotStopTheOthers()
+    {
+        var b = CreateAuth(levelOfService: "U", hoursAgo: 50);
+        b.TenantId = "tenant-2";
+        _repositoryMock.Setup(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { "tenant-1", "tenant-2" });
+        _repositoryMock.Setup(r => r.GetOpenAuthorizationsAsync("tenant-1"))
+            .ThrowsAsync(new InvalidOperationException("store unavailable"));
+        _repositoryMock.Setup(r => r.GetOpenAuthorizationsAsync("tenant-2")).ReturnsAsync(new[] { b });
+        SetupRaise(b);
+
+        var summary = await RunWatchdog();
+
+        b.SlaEscalation.Should().Be(SlaEscalationLevel.Warning);
+        summary.FailedTenants.Should().Be(1);
+        summary.Escalated.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task EscalationRefusedByTheStore_IsNotCounted()
+    {
+        var auth = CreateAuth(levelOfService: "U", hoursAgo: 50);
+        _repositoryMock.Setup(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { "tenant-1" });
+        _repositoryMock.Setup(r => r.GetOpenAuthorizationsAsync("tenant-1")).ReturnsAsync(new[] { auth });
+        // Changed under us (closed, or already escalated): the conditional write declines.
+        _repositoryMock.Setup(r => r.RaiseSlaEscalationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SlaEscalationLevel>(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var summary = await RunWatchdog();
+
+        summary.Escalated.Should().Be(0);
+    }
+
+    private int _scopesCreated;
+
     private void SetupRepository(Authorization auth)
     {
         _repositoryMock
-            .Setup(r => r.GetOpenAuthorizationsAsync(null))
-            .ReturnsAsync(new[] { auth });
+            .Setup(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { "tenant-1" });
         _repositoryMock
-            .Setup(r => r.UpdateAsync(It.IsAny<Authorization>()))
-            .ReturnsAsync((Authorization a) => a);
+            .Setup(r => r.GetOpenAuthorizationsAsync("tenant-1"))
+            .ReturnsAsync(new[] { auth });
+        SetupRaise(auth);
     }
 
-    private async Task RunWatchdog()
+    /// <summary>The store applies the escalation, as the real conditional write does.</summary>
+    private void SetupRaise(params Authorization[] auths)
     {
-        var services = new ServiceCollection();
-        services.AddSingleton(_repositoryMock.Object);
-        var sp = services.BuildServiceProvider();
+        _repositoryMock
+            .Setup(r => r.RaiseSlaEscalationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SlaEscalationLevel>(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string tenant, string id, SlaEscalationLevel level, DateTime at, CancellationToken _) =>
+            {
+                var auth = auths.SingleOrDefault(a => a.Id == id && a.TenantId == tenant);
+                if (auth is null || auth.SlaEscalation >= level) return false;
+                auth.SlaEscalation = level;
+                auth.SlaEscalatedAt = at;
+                return true;
+            });
+    }
 
-        var service = new SlaWatchdogService(sp, _loggerMock.Object);
-        await service.EvaluateAllAuthorizationsAsync();
+    private void VerifyNoEscalationWritten()
+    {
+        _repositoryMock.Verify(r => r.RaiseSlaEscalationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SlaEscalationLevel>(),
+            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<Authorization>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task TenantList_IsCached_AndRefreshedAfterTheInterval()
+    {
+        var auth = CreateAuth(levelOfService: "U", hoursAgo: 10);
+        SetupRepository(auth);
+
+        await RunWatchdog();
+        await RunWatchdog();
+        _repositoryMock.Verify(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()), Times.Once);
+
+        _clock.Advance(SlaWatchdogService.TenantListRefreshInterval);
+        await RunWatchdog();
+        _repositoryMock.Verify(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task OneRecordFailing_DoesNotStopTheRestOfItsTenant()
+    {
+        var first = CreateAuth(levelOfService: "U", hoursAgo: 50);
+        var second = CreateAuth(levelOfService: "U", hoursAgo: 50);
+        _repositoryMock.Setup(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { "tenant-1" });
+        _repositoryMock.Setup(r => r.GetOpenAuthorizationsAsync("tenant-1")).ReturnsAsync(new[] { first, second });
+        SetupRaise(second);
+        _repositoryMock.Setup(r => r.RaiseSlaEscalationAsync(
+                "tenant-1", first.Id, It.IsAny<SlaEscalationLevel>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("transient"));
+
+        var summary = await RunWatchdog();
+
+        second.SlaEscalation.Should().Be(SlaEscalationLevel.Warning);
+        summary.Escalated.Should().Be(1);
+        summary.FailedRecords.Should().Be(1);
+        summary.FailedTenants.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task MongoTenantScoping_IsNotSupported_AndSaysSo()
+    {
+        _settings["MongoDb:UseTenantScoping"] = "true";
+        SetupRepository(CreateAuth(levelOfService: "U", hoursAgo: 100));
+
+        var summary = await RunWatchdog();
+
+        summary.SkippedReason.Should().Contain("UseTenantScoping");
+        _repositoryMock.Verify(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _loggerMock.Verify(l => l.Log(
+            LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TenantScopingOnCosmos_IsIrrelevant()
+    {
+        _settings["Database:Provider"] = "CosmosDb";
+        _settings["MongoDb:UseTenantScoping"] = "true";
+        var auth = CreateAuth(levelOfService: "U", hoursAgo: 50);
+        SetupRepository(auth);
+
+        var summary = await RunWatchdog();
+
+        summary.SkippedReason.Should().BeNull();
+        auth.SlaEscalation.Should().Be(SlaEscalationLevel.Warning);
+    }
+
+    private readonly Dictionary<string, string?> _settings = new();
+    private readonly ManualClock _clock = new();
+    private SlaWatchdogService? _service;
+
+    private async Task<SlaWatchdogRunSummary> RunWatchdog()
+    {
+        if (_service is null)
+        {
+            var services = new ServiceCollection();
+            services.AddScoped(_ =>
+            {
+                _scopesCreated++;
+                return _repositoryMock.Object;
+            });
+            var sp = services.BuildServiceProvider();
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(_settings).Build();
+
+            _service = new SlaWatchdogService(
+                sp.GetRequiredService<IServiceScopeFactory>(), configuration, _loggerMock.Object, _clock);
+        }
+
+        return await _service.EvaluateAllAuthorizationsAsync();
+    }
+
+    /// <summary>Real time plus whatever the test has advanced it by.</summary>
+    private sealed class ManualClock : TimeProvider
+    {
+        private TimeSpan _offset;
+
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UtcNow + _offset;
+
+        public void Advance(TimeSpan by) => _offset += by;
     }
 
     private static Authorization CreateAuth(string? levelOfService, double hoursAgo) => new()

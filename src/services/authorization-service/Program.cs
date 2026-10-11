@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
@@ -81,26 +80,27 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
 }
 else
 {
-    // Use Cosmos DB (Default)
-    builder.Services.AddSingleton<CosmosClient>(sp =>
+    // Cosmos DB. The CosmosClient is the one AddChoDatabase registered above,
+    // with the shared CosmosSystemTextJsonSerializer (camelCase, enums as
+    // strings, nulls omitted). Registering another client here would override
+    // it; the service's own copy stored enums as numbers while every query
+    // compared strings, so search, summary, open authorizations and retention
+    // found nothing (D-18).
+    if (databaseProvider is null)
     {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"];
-        var key = configuration["CosmosDb:Key"];
-        
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
-        
-        var options = new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
-        };
-        
-        return new CosmosClient(endpoint, key, options);
-    });
+        const string noDatabase =
+            "No database is configured. Set MongoDb:ConnectionString, or Database:Provider=CosmosDb " +
+            "with CosmosDb:ConnectionString or CosmosDb:Endpoint and CosmosDb:Key.";
+
+        // A deployed host refuses to start rather than going Ready and failing
+        // every request.
+        if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing"))
+            throw new InvalidOperationException(noDatabase);
+
+        // Development and test hosts (which substitute the repository) still
+        // build; a real call fails on first use with the same message.
+        builder.Services.AddSingleton<CosmosClient>(_ => throw new InvalidOperationException(noDatabase));
+    }
 
     builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepository>();
     Console.WriteLine("Using Cosmos DB repository");

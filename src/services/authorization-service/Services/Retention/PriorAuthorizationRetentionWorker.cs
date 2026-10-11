@@ -14,10 +14,9 @@ namespace AuthorizationService.Services.Retention;
 ///
 /// Modelled on provider-service's IntegrityProjectionWorker: a scope per tenant
 /// from IServiceScopeFactory, an Enabled gate, a bounded batch, and cancellation
-/// observed between every unit of work. Deliberately NOT modelled on this
-/// service's SlaWatchdogService, which captures a scoped repository for the
-/// process lifetime and calls a tenant-less repository method from a background
-/// thread — both of which this worker avoids.
+/// observed between every unit of work. This service's SlaWatchdogService
+/// follows the same pattern since D-07 (it used to capture a scoped repository
+/// for the process lifetime and call a tenant-less repository method).
 /// </summary>
 public sealed class PriorAuthorizationRetentionWorker : BackgroundService
 {
