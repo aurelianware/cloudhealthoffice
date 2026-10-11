@@ -51,13 +51,25 @@ public class CrdService : ICrdService
             var ruleDecision = await EvaluatePriorAuthRuleAsync(
                 request, tenantId, effectiveCode, ct);
 
+            // Fail closed (D-21): "no prior authorization needed" only on an
+            // explicit, positive determination. Today that is the tenant's own
+            // classification listing the code as auto-approved. Everything
+            // else that is not a "required" answer is UNKNOWN:
+            //   - a code nothing classifies;
+            //   - the rule engine unavailable, no-op, erroring or timing out
+            //     (EvaluatePriorAuthRuleAsync returns null, or a NoOp /
+            //     NoRuleMatch / NoRulesConfigured / RuleError Pend);
+            //   - an engine Approve. CRD calls the engine with a fixed
+            //     TX / Medicaid / STAR context, no diagnoses, no member DOB,
+            //     no provider taxonomy and cost 0, so an Approve here (e.g.
+            //     DiagnosisRequired passing because no diagnosis was sent) is
+            //     not a determination that PA is not required. Until CRD
+            //     derives a real context (rest of D-21), it is not trusted.
+            // A "required" answer from either source still wins: erring toward
+            // requiring authorization is the safe direction.
             if (ruleDecision.IsPriorAuthRequired())
             {
                 cards.Add(BuildAuthRequiredCard(display, ruleDecision));
-            }
-            else if (ruleDecision?.Outcome is PaDecisionOutcome.Approve)
-            {
-                cards.Add(BuildAutoApprovedCard(display, ruleDecision));
             }
             else if (classification.AuthRequiredCodes.Contains(effectiveCode))
             {
@@ -73,7 +85,7 @@ public class CrdService : ICrdService
             }
             else
             {
-                cards.Add(BuildNoAuthRequiredCard(display));
+                cards.Add(BuildRequirementsUnknownCard(display));
             }
         }
 
@@ -352,15 +364,15 @@ public class CrdService : ICrdService
         },
     };
 
-    private static CrdCard BuildAutoApprovedCard(
-        string serviceDisplay,
-        PaRuleDecision? decision = null) => new()
+    /// <summary>
+    /// The ONLY "not required" card: issued when the tenant's classification
+    /// explicitly lists the code as auto-approved.
+    /// </summary>
+    private static CrdCard BuildAutoApprovedCard(string serviceDisplay) => new()
     {
         Uuid = Guid.NewGuid().ToString(),
         Summary = $"No prior authorization needed for {serviceDisplay}",
-        Detail = decision is null
-            ? "This service is auto-approved and does not require prior authorization."
-            : $"This service does not require prior authorization. Rule: {decision.FiringRuleName}.",
+        Detail = "This service is auto-approved and does not require prior authorization.",
         Indicator = "info",
         Source = new CrdCardSource
         {
@@ -373,19 +385,25 @@ public class CrdService : ICrdService
         },
     };
 
-    private static CrdCard BuildNoAuthRequiredCard(string serviceDisplay) => new()
+    /// <summary>
+    /// Fail-closed answer (D-21): CHO could not positively determine the
+    /// coverage requirements. Never phrased as "not required".
+    /// </summary>
+    private static CrdCard BuildRequirementsUnknownCard(string serviceDisplay) => new()
     {
         Uuid = Guid.NewGuid().ToString(),
-        Summary = $"No prior authorization needed for {serviceDisplay}",
-        Detail = "Based on current benefit configuration, prior authorization is not required.",
-        Indicator = "info",
+        Summary = $"Coverage requirements could not be determined for {serviceDisplay}",
+        Detail = "Cloud Health Office could not determine whether prior authorization is required for this "
+                 + "service. Contact the payer, or submit a prior authorization request for review, before "
+                 + "proceeding. This is not a determination that prior authorization is not required.",
+        Indicator = "warning",
         Source = new CrdCardSource
         {
             Topic = new CrdCoding
             {
                 System = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp",
-                Code = "no-auth",
-                Display = "No Authorization Required",
+                Code = "info-needed",
+                Display = "Coverage Requirements Unknown",
             },
         },
     };
