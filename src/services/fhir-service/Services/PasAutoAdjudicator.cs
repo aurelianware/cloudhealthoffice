@@ -247,10 +247,15 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
 
             // The NoOp engine (no database configured) evaluates nothing:
             // like ConfigDisabled, no basis is claimed for its pend.
-            if (ruleDecision.FiringRuleName == NoOpRuleName)
+            // Recognised by its rule id, the contract (as
+            // PaRuleDecisionExtensions.IsPriorAuthRequired does); the name is
+            // display text. Recorded under that id, the rule
+            // authorization-service binds to a no-evaluation pend.
+            if (ruleDecision.FiringRuleId == NoOpRuleName)
             {
                 consumed.LineOfBusiness = false;
                 consumed.State = false;
+                return Pend(sw, NoOpRuleName);
             }
 
             _logger.LogInformation(
