@@ -205,11 +205,18 @@ public class PasAutoAdjudicatorTests
     }
 
     /// <summary>
-    /// The basis the controller would have mapped: Medicaid, and the requesting
-    /// NPI these tests put on the Claim.provider reference.
+    /// The basis the controller would have mapped: Medicaid, the requesting
+    /// NPI these tests put on the Claim.provider reference, and the item codes.
     /// </summary>
     private static PasDecisionBasis Basis(Claim claim, PaLineOfBusiness lob = PaLineOfBusiness.Medicaid)
-        => new(lob, claim.Provider?.Identifier?.Value, null);
+        => new(lob, claim.Provider?.Identifier?.Value, null)
+        {
+            ServiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            ProcedureCodes = claim.Item
+                .SelectMany(i => i.ProductOrService.Coding)
+                .Select(c => new PasProcedureCode(c.System, c.Code))
+                .ToList(),
+        };
 
     private static Claim CreateClaim(string procedureCode) => new()
     {

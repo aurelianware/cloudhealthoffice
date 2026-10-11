@@ -39,13 +39,12 @@ namespace FhirService.Services.Pas;
 ///   <item><term>Service type (UM03)</term><description><c>Claim.item.category</c>
 ///   in the X12 service type code system (1365); null when absent. Never the
 ///   claim type.</description></item>
-///   <item><term>Level of service (UM06)</term><description>The PAS
-///   level-of-service extension (X12 1338: <c>U</c>, <c>03</c> → <c>U</c>;
-///   <c>E</c> → <c>E</c>) on the Claim or an item, else <c>Claim.priority</c>
-///   read by its system: processpriority <c>stat</c> → <c>U</c>,
-///   <c>normal</c> / <c>deferred</c> → <c>E</c>; X12 1338 as above. A code
-///   in no system or another system, or none → null, the standard
-///   clock.</description></item>
+///   <item><term>Level of service (UM06)</term><description>The most urgent
+///   signal across the PAS level-of-service extension (Claim and items) and
+///   <c>Claim.priority</c>; urgent values are <c>U</c> in any system or as
+///   text (warned when nonstandard); <c>E</c> only for an explicit standard
+///   value in a known system, otherwise standard with a warning; none →
+///   null (standard clock). See <see cref="LevelOfService(Claim, ICollection{PasMappingWarning})"/>.</description></item>
 ///   <item><term>Requested dates</term><description><c>Claim.item.servicedDate</c>
 ///   / <c>servicedPeriod</c> across all items, else <c>Claim.billablePeriod</c>.
 ///   Required.</description></item>
@@ -92,13 +91,14 @@ public static class PasAuthorizationMapper
     public static PasMappingResult Map(Bundle bundle, Claim claim, DateTime receivedAt)
     {
         var errors = new List<PasMappingError>();
+        var warnings = new List<PasMappingWarning>();
         var request = new PasAuthorizationRecordRequest { ReceivedAt = receivedAt };
 
         MapPatientAndCoverage(bundle, claim, request, errors);
         MapProviders(bundle, claim, request, errors);
         MapServices(bundle, claim, request, errors);
 
-        request.LevelOfService = LevelOfService(claim);
+        request.LevelOfService = LevelOfService(claim, warnings);
         request.ServiceTypeCode = claim.Item?
             .Select(i => i.Category?.Coding?.FirstOrDefault(c =>
                 c.System == X12ServiceTypeSystem && c.Code is not null && ServiceTypeCode.IsMatch(c.Code))?.Code)
@@ -117,8 +117,8 @@ public static class PasAuthorizationMapper
         }
 
         return errors.Count > 0
-            ? PasMappingResult.Invalid(errors)
-            : PasMappingResult.Valid(request, ApprovedPeriodFor(period!.Value));
+            ? PasMappingResult.Invalid(errors, warnings)
+            : PasMappingResult.Valid(request, ApprovedPeriodFor(period!.Value), warnings);
     }
 
     // ── Patient, Coverage ─────────────────────────────────────────────
@@ -450,54 +450,102 @@ public static class PasAuthorizationMapper
 
     // ── Priority, dates ───────────────────────────────────────────────
 
+    /// <summary>The words that state urgency, whatever system (or none) they arrive in.</summary>
+    private static readonly HashSet<string> UrgentValues =
+        new(StringComparer.OrdinalIgnoreCase) { "stat", "urgent", "expedited", "asap", "U", "03" };
+
     /// <summary>
     /// X12 UM06 level of service: <c>U</c> (expedited: 72 hours) or <c>E</c>
-    /// (standard), or null when the request does not say (the standard clock
-    /// applies). The PAS level-of-service extension states UM06 directly, so
-    /// it is read first (on the Claim, then on its items); then
-    /// <c>Claim.priority</c>. A code is read only in the system it belongs to.
+    /// (standard), or null when the request states none (the standard clock
+    /// applies). Owner decision 2026-10-11 (§7.1): urgency is never
+    /// under-classified.
+    /// <list type="bullet">
+    ///   <item>Every source is read: the PAS level-of-service extension on the
+    ///   Claim and on each item, and <c>Claim.priority</c>. The MOST urgent
+    ///   signal wins, so a standard extension does not outrank a stat
+    ///   priority.</item>
+    ///   <item>A recognised urgent value (<c>stat</c>, <c>urgent</c>,
+    ///   <c>expedited</c>, <c>asap</c>, <c>U</c>, <c>03</c>) is <c>U</c> in any
+    ///   system, or as the concept's text. Outside its standard pair
+    ///   (processpriority <c>stat</c>; X12 1338 <c>U</c>/<c>03</c>) it is
+    ///   reported as a warning.</item>
+    ///   <item><c>E</c> only for an explicit standard value in a known system
+    ///   (processpriority <c>normal</c>/<c>deferred</c>; X12 1338 <c>E</c>).
+    ///   Anything else is unrecognised: standard (<c>E</c>), with a
+    ///   warning.</item>
+    /// </list>
     /// </summary>
-    public static string? LevelOfService(Claim claim)
+    public static string? LevelOfService(Claim claim, ICollection<PasMappingWarning>? warnings = null)
     {
-        var extensions = (claim.Extension ?? [])
-            .Concat((claim.Item ?? []).SelectMany(i => i.Extension ?? []))
-            .Where(e => e.Url == LevelOfServiceExtensionUrl);
-        foreach (var extension in extensions)
+        var sources = new List<(string Expression, CodeableConcept? Concept)>();
+        foreach (var extension in (claim.Extension ?? []).Where(e => e.Url == LevelOfServiceExtensionUrl))
+            sources.Add(("Claim.extension(levelOfServiceCode)", extension.Value as CodeableConcept));
+        foreach (var item in claim.Item ?? [])
+            foreach (var extension in (item.Extension ?? []).Where(e => e.Url == LevelOfServiceExtensionUrl))
+                sources.Add(($"Claim.item[{item.Sequence}].extension(levelOfServiceCode)", extension.Value as CodeableConcept));
+        sources.Add(("Claim.priority", claim.Priority));
+
+        string? level = null;
+        foreach (var (expression, concept) in sources)
         {
-            if (LevelOfService(extension.Value as CodeableConcept) is { } level)
-                return level;
+            var stated = Classify(expression, concept, warnings);
+            if (stated == "U")
+                level = "U";
+            else if (stated == "E")
+                level ??= "E";
         }
 
-        return LevelOfService(claim.Priority);
+        return level;
     }
 
-    /// <summary>The level of service a concept's codings state, by their systems.</summary>
-    public static string? LevelOfService(CodeableConcept? concept)
+    private static string? Classify(string expression, CodeableConcept? concept, ICollection<PasMappingWarning>? warnings)
     {
-        foreach (var coding in concept?.Coding ?? [])
+        if (concept is null)
+            return null;
+
+        string? level = null;
+        var anyCode = false;
+        foreach (var coding in concept.Coding ?? [])
         {
             var code = coding.Code?.Trim();
-            var level = coding.System switch
+            if (string.IsNullOrEmpty(code))
+                continue;
+            anyCode = true;
+
+            if (UrgentValues.Contains(code))
             {
-                ProcessPrioritySystem => code switch
-                {
-                    "stat" => "U",
-                    "normal" or "deferred" => "E",
-                    _ => null,
-                },
-                X12LevelOfServiceSystem => code switch
-                {
-                    "U" or "03" => "U",
-                    "E" => "E",
-                    _ => null,
-                },
-                _ => null,
-            };
-            if (level is not null)
-                return level;
+                var standardPair = (coding.System == ProcessPrioritySystem && code == "stat")
+                                   || (coding.System == X12LevelOfServiceSystem && code is "U" or "03");
+                if (!standardPair)
+                    warnings?.Add(new(expression, "Urgent value outside its standard code system; treated as expedited (U).",
+                        coding.System, code));
+                level = "U";
+                continue;
+            }
+
+            var explicitStandard = (coding.System == ProcessPrioritySystem && code is "normal" or "deferred")
+                                   || (coding.System == X12LevelOfServiceSystem && code == "E");
+            if (!explicitStandard)
+                warnings?.Add(new(expression, "Unrecognised priority; the standard clock (E) applies.", coding.System, code));
+            level ??= "E";
         }
 
-        return null;
+        var text = concept.Text?.Trim();
+        if (!string.IsNullOrEmpty(text))
+        {
+            if (UrgentValues.Contains(text))
+            {
+                warnings?.Add(new(expression, "Urgency stated as text, not a code; treated as expedited (U).", null, text));
+                level = "U";
+            }
+            else if (!anyCode)
+            {
+                warnings?.Add(new(expression, "Unrecognised priority text; the standard clock (E) applies.", null, text));
+                level ??= "E";
+            }
+        }
+
+        return level;
     }
 
     /// <param name="LatestEnd">The latest date any service names (an open-ended one counts its start).</param>
@@ -626,10 +674,14 @@ public sealed class PasMappingResult
 
     public bool IsValid => Errors.Count == 0;
 
-    public static PasMappingResult Valid(PasAuthorizationRecordRequest request, (DateTime From, DateTime To) approved)
-        => new() { Request = request, ApprovedFrom = approved.From, ApprovedTo = approved.To };
+    public static PasMappingResult Valid(
+        PasAuthorizationRecordRequest request, (DateTime From, DateTime To) approved,
+        IReadOnlyList<PasMappingWarning>? warnings = null)
+        => new() { Request = request, ApprovedFrom = approved.From, ApprovedTo = approved.To, Warnings = warnings ?? [] };
 
-    public static PasMappingResult Invalid(IReadOnlyList<PasMappingError> errors) => new() { Errors = errors };
+    public static PasMappingResult Invalid(
+        IReadOnlyList<PasMappingError> errors, IReadOnlyList<PasMappingWarning>? warnings = null)
+        => new() { Errors = errors, Warnings = warnings ?? [] };
 }
 
 /// <summary>
@@ -706,9 +758,16 @@ public sealed class PasAutomatedDecision
     public DateTime DecidedAt { get; set; }
     public string? Rule { get; set; }
 
-    /// <summary>The line of business the decision was made on; must be the record's.</summary>
-    public string LineOfBusiness { get; set; } = "Unknown";
+    /// <summary>
+    /// The line of business the deciding path evaluated; must be the record's.
+    /// Null when none was (provider exclusion, disabled adjudication, time
+    /// budget exceeded, undetermined line of business).
+    /// </summary>
+    public string? LineOfBusiness { get; set; }
 
-    /// <summary>The service state the state-specific rules used, or null when none ran on a state.</summary>
+    /// <summary>
+    /// The service state the deciding path read (the enrollment gate ran, or the
+    /// state rule engine was reached); null when no rule read one.
+    /// </summary>
     public string? StateCode { get; set; }
 }

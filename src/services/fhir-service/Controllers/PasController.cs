@@ -97,6 +97,17 @@ public class PasController : FhirControllerBase
             // placeholders is refused here, so nothing is decided that cannot
             // be stored.
             var mapping = PasAuthorizationMapper.Map(requestBundle, claim, receivedAt);
+
+            // Nonstandard or unrecognised values that were mapped anyway (e.g.
+            // an urgent priority outside its code system). Request values,
+            // so sanitized.
+            foreach (var warning in mapping.Warnings)
+            {
+                _logger.LogWarning(
+                    "PAS $submit for tenant {TenantId}: {Element}: {Warning} (system {System}, code {Code})",
+                    SanitizeForLog(TenantId), SanitizeForLog(warning.Expression), warning.Message,
+                    SanitizeForLog(warning.System ?? "none"), SanitizeForLog(warning.Code));
+            }
             if (!mapping.IsValid)
             {
                 _logger.LogWarning(
@@ -125,10 +136,9 @@ public class PasController : FhirControllerBase
                                        (string.IsNullOrWhiteSpace(verificationResult.ExclusionSource)
                                            ? string.Empty
                                            : $" Source: {verificationResult.ExclusionSource}"),
-                        RuleName = "provider-exclusion-check",
-                        // A fact about the provider, whatever the plan: decided
-                        // on no line of business or state of its own.
-                        LineOfBusiness = record.LineOfBusiness,
+                        // A fact about the provider, whatever the plan: no line
+                        // of business or state was evaluated, so none is claimed.
+                        RuleName = ProviderExclusionRule,
                     };
 
                     _logger.LogWarning(
@@ -161,11 +171,11 @@ public class PasController : FhirControllerBase
                     HasDecision = false,
                     RuleName = LineOfBusinessUndeterminedRule,
                     PendReason = LineOfBusinessUndeterminedPendReason,
-                    LineOfBusiness = record.LineOfBusiness,
+                    // Nothing was evaluated: no line of business is claimed.
                 }, sw);
             }
 
-            var basis = new PasDecisionBasis(lineOfBusiness, record.RequestingProviderNPI, record.ServicingProviderNPI);
+            var basis = PasDecisionBasis.From(lineOfBusiness, record);
             var timeBudgetMs = _config.MaxResponseMs;
             var decision = await _adjudicator.TryDecideAsync(
                 claim, requestBundle, TenantId, basis, timeBudgetMs, HttpContext.RequestAborted);
@@ -218,9 +228,11 @@ public class PasController : FhirControllerBase
             ApprovedServiceDateTo = outcome == "Approved" ? decision.EffectiveTo : null,
             DecidedAt = DateTime.UtcNow,
             Rule = decision.RuleName is { Length: > 100 } rule ? rule[..100] : decision.RuleName,
-            // The basis the decision used; authorization-service refuses a
-            // decision whose line of business is not the record's.
-            LineOfBusiness = decision.LineOfBusiness ?? record.LineOfBusiness,
+            // Only the basis the deciding path actually used (null = none).
+            // authorization-service refuses a stated LOB that is not the
+            // record's, and a missing one except for the rules that evaluate
+            // none.
+            LineOfBusiness = decision.LineOfBusiness,
             StateCode = decision.StateCode,
         };
 
@@ -291,6 +303,9 @@ public class PasController : FhirControllerBase
 
     /// <summary>Recorded on a pended request; the ClaimResponse says the same (queued for review).</summary>
     private const string PendReason = "Pended for clinical review.";
+
+    /// <summary>The rule an excluded provider's request is denied by, before any adjudication.</summary>
+    public const string ProviderExclusionRule = "provider-exclusion-check";
 
     /// <summary>The "rule" a request with an undetermined line of business is pended by.</summary>
     public const string LineOfBusinessUndeterminedRule = "LineOfBusinessUndetermined";

@@ -157,13 +157,17 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
     }
 
     /// <summary>
-    /// The decision's history source, stating exactly what it was made on:
-    /// <c>automated:&lt;rule&gt;;lob=&lt;line of business&gt;;state=&lt;state or none&gt;</c>.
+    /// The decision's history source, stating exactly the inputs the deciding
+    /// path read and nothing else:
+    /// <c>automated:&lt;rule&gt;;lob=&lt;line of business|n/a&gt;;state=&lt;state|none&gt;</c>.
+    /// <c>lob=n/a</c>: no line of business was evaluated (provider exclusion,
+    /// disabled, time budget, undetermined). <c>state=none</c>: no rule read a
+    /// state, whether or not the request named one.
     /// </summary>
     internal static string AutomatedSource(AutomatedDecision decision)
     {
         var rule = string.IsNullOrWhiteSpace(decision.Rule) ? "automated" : $"automated:{decision.Rule}";
-        var lob = decision.LineOfBusiness ?? LineOfBusiness.Unknown;
+        var lob = decision.LineOfBusiness?.ToString() ?? "n/a";
         var state = string.IsNullOrEmpty(decision.StateCode) ? "none" : decision.StateCode;
         return $"{rule};lob={lob};state={state}";
     }

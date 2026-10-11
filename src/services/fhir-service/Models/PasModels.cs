@@ -21,13 +21,16 @@ public class PasDecisionResult
     /// </summary>
     public string? PendReason { get; set; }
 
-    /// <summary>The line of business the decision was made on (the record's).</summary>
+    /// <summary>
+    /// The line of business the deciding path evaluated (the record's); null
+    /// when nothing was evaluated (disabled, time budget exceeded).
+    /// </summary>
     public string? LineOfBusiness { get; set; }
 
     /// <summary>
-    /// The service state the request named (<c>Claim.item.locationAddress.state</c>),
-    /// which the state-specific rules used; null when it named none, in which
-    /// case no state-specific rule ran.
+    /// The service state (<c>Claim.item.locationAddress.state</c>) when the
+    /// deciding path read it (the enrollment gate ran or the state rule engine
+    /// was reached); null otherwise, including when the request named none.
     /// </summary>
     public string? StateCode { get; set; }
 }

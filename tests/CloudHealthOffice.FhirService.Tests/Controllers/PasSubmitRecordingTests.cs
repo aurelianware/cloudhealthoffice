@@ -263,10 +263,19 @@ public class PasSubmitRecordingTests
                 HasDecision = false, RuleName = "NoRuleMatch", LineOfBusiness = "Commercial", StateCode = "TX",
             });
 
-        await controller.ClaimSubmit(PasBundles.Complete(coverageTypeCode: "CI"));
+        // A FHIR date (servicedDate): the adjudicator used to ignore it and
+        // evaluate against today.
+        await controller.ClaimSubmit(PasBundles.Complete(
+            coverageTypeCode: "CI", servicedStart: "2026-11-02", servicedEnd: null));
 
-        basis.Should().Be(new PasDecisionBasis(
-            CloudHealthOffice.PriorAuthRuleEngine.Domain.PaLineOfBusiness.Commercial, PasBundles.RequestingNpi, null));
+        basis!.LineOfBusiness.Should().Be(CloudHealthOffice.PriorAuthRuleEngine.Domain.PaLineOfBusiness.Commercial);
+        basis.RequestingProviderNpi.Should().Be(PasBundles.RequestingNpi);
+        basis.ServicingProviderNpi.Should().BeNull();
+        basis.ServiceDate.Should().Be(new DateOnly(2026, 11, 2), "the requested service date, not today");
+        basis.ProcedureCodes.Should().Equal(new PasProcedureCode(PasBundles.CptSystem, "27447"));
+        basis.MemberId.Should().Be(PasBundles.MemberId);
+        basis.PatientDateOfBirth.Should().Be(new DateOnly(1984, 3, 7));
+        basis.DiagnosisCodes.Should().Equal("M17.11");
         _recorder.Last!.LineOfBusiness.Should().Be("Commercial");
         _recorder.Last.Decision!.LineOfBusiness.Should().Be("Commercial");
         _recorder.Last.Decision.StateCode.Should().Be("TX");

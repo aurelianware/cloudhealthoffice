@@ -199,9 +199,17 @@ public sealed class AutomatedDecisionsController : ControllerBase
         else if (decided > now + ClockSkew)
             Add("Decision.DecidedAt", "DecidedAt is in the future.");
 
-        if (decision.LineOfBusiness != request.LineOfBusiness)
+        if (decision.LineOfBusiness is null)
+        {
+            if (decision.Rule is null || !AutomatedDecision.RulesEvaluatingNoLineOfBusiness.Contains(decision.Rule))
+                Add("Decision.LineOfBusiness",
+                    "The decision's line of business is required, except for a rule that evaluates none.");
+        }
+        else if (decision.LineOfBusiness != request.LineOfBusiness)
+        {
             Add("Decision.LineOfBusiness",
                 "The decision's line of business must be the record's: the record may not state a basis the decision did not use.");
+        }
 
         if (request.RequestedServiceDateTo < request.RequestedServiceDateFrom)
             Add(nameof(request.RequestedServiceDateTo), "RequestedServiceDateTo is before RequestedServiceDateFrom.");

@@ -69,13 +69,22 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
         CancellationToken ct = default)
     {
         var stateCode = ExtractStateCode(claim);
-        var result = await DecideAsync(claim, tenantId, basis, stateCode, timeoutMs, ct);
+        var consumed = new Consumed();
+        var result = await DecideAsync(claim, tenantId, basis, stateCode, consumed, timeoutMs, ct);
 
-        // The basis travels with the decision so the record states exactly
-        // what was used.
-        result.LineOfBusiness = basis.LineOfBusiness.ToString();
-        result.StateCode = stateCode;
+        // The record states exactly what the deciding path used, and nothing
+        // it did not: a LOB only once rules ran on it, a state only when the
+        // enrollment gate ran or the state rule engine was reached.
+        result.LineOfBusiness = consumed.LineOfBusiness ? basis.LineOfBusiness.ToString() : null;
+        result.StateCode = consumed.State ? stateCode : null;
         return result;
+    }
+
+    /// <summary>Which of the decision's inputs the deciding path actually read.</summary>
+    private sealed class Consumed
+    {
+        public bool LineOfBusiness { get; set; }
+        public bool State { get; set; }
     }
 
     private async Task<PasDecisionResult> DecideAsync(
@@ -83,23 +92,29 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
         string tenantId,
         PasDecisionBasis basis,
         string? stateCode,
+        Consumed consumed,
         int timeoutMs,
         CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
 
         if (!_config.Enabled)
-            return Pend(sw, "ConfigDisabled");
+            return Pend(sw, "ConfigDisabled");   // nothing evaluated
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeoutMs);
 
-        var procedureCodes = ExtractProcedureCodes(claim);
+        // The mapped values the record stores, never re-read from the Claim.
+        var procedureCodes = basis.ProcedureCodes.Select(c => c.Code).ToList();
         var providerNpi    = basis.RequestingProviderNpi;
         var taxonomy       = ExtractTaxonomy(claim);
-        var serviceDate    = ExtractServiceDate(claim);
+        var serviceDate    = basis.ServiceDate;
         var lob            = basis.LineOfBusiness;
         var enrollmentLob  = MapToPaEnrollmentLob(lob);
+
+        // From here every path has consulted the line of business (if only
+        // to decide that the enrollment gate does not apply to it).
+        consumed.LineOfBusiness = true;
 
         try
         {
@@ -112,6 +127,7 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
             if (enrollmentLob != CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness.None
                 && !string.IsNullOrEmpty(providerNpi) && !string.IsNullOrEmpty(stateCode))
             {
+                consumed.State = true;
                 var enrollmentResult = await _enrollmentGate.EvaluateAsync(
                     npi:         providerNpi,
                     taxonomy:    taxonomy ?? string.Empty,
@@ -201,6 +217,7 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
                 return undetermined;
             }
 
+            consumed.State = true;
             var ruleContext = new PaRuleContext
             {
                 // The authenticated tenant, passed in by the controller. The
@@ -213,13 +230,13 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
                 RequestingProviderNpi = providerNpi ?? string.Empty,
                 ServicingProviderNpi  = basis.ServicingProviderNpi ?? providerNpi ?? string.Empty,
                 ServicingProviderTaxonomy = taxonomy,
-                MemberId              = ExtractMemberId(claim),
+                MemberId              = basis.MemberId ?? string.Empty,
                 ServiceDate           = serviceDate,
                 ProcedureCodes        = procedureCodes,
-                DiagnosisCodes        = ExtractDiagnosisCodes(claim),
-                PlaceOfServiceCode    = ExtractPlaceOfService(claim),
+                DiagnosisCodes        = basis.DiagnosisCodes,
+                PlaceOfServiceCode    = basis.PlaceOfServiceCode,
                 EstimatedCost         = estimatedCost ?? 0m,
-                MemberDateOfBirth     = ExtractMemberDob(claim)
+                MemberDateOfBirth     = basis.PatientDateOfBirth
                 // ProviderHistory and MemberHistory pre-fetched inside the engine
             };
 
@@ -250,6 +267,9 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
         {
             _logger.LogWarning(
                 "PAS auto-adjudication timed out after {ElapsedMs}ms", sw.ElapsedMilliseconds);
+            // No rule reached a conclusion: nothing is claimed as its basis.
+            consumed.LineOfBusiness = false;
+            consumed.State = false;
             return Pend(sw, "TimeBudgetExceeded");
         }
     }
@@ -274,42 +294,10 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
         }
     }
 
-    private static List<string> ExtractProcedureCodes(Claim claim)
-    {
-        var codes = new List<string>();
-        if (claim.Item == null) return codes;
-        foreach (var item in claim.Item)
-            if (item.ProductOrService?.Coding != null)
-                codes.AddRange(item.ProductOrService.Coding
-                    .Where(c => !string.IsNullOrEmpty(c.Code))
-                    .Select(c => c.Code!));
-        return codes;
-    }
-
     private static string? ExtractTaxonomy(Claim claim) =>
         // FHIR R4: Provider taxonomy carried in Claim.Provider qualification extension
         // or CareTeam role. ResourceReference.Type is a string, not CodeableConcept.
         claim.CareTeam?.FirstOrDefault()?.Qualification?.Coding?.FirstOrDefault()?.Code;
-
-    private static string? ExtractMemberId(Claim claim) =>
-        claim.Patient?.Identifier?.Value ?? string.Empty;
-
-    private static DateOnly ExtractServiceDate(Claim claim)
-    {
-        if (claim.Item?.FirstOrDefault()?.Serviced is Period p && p.StartElement != null)
-            return DateOnly.Parse(p.Start);
-        if (claim.Item?.FirstOrDefault()?.Serviced is FhirDateTime dt)
-            return DateOnly.Parse(dt.Value);
-        return DateOnly.FromDateTime(DateTime.UtcNow);
-    }
-
-    private static DateOnly? ExtractMemberDob(Claim claim)
-    {
-        // Patient DOB is in the Bundle context — best-effort extraction
-        var dob = claim.Patient?.Extension
-            .FirstOrDefault(e => e.Url.Contains("birthDate"))?.Value as FhirDateTime;
-        return dob != null ? DateOnly.Parse(dob.Value) : null;
-    }
 
     /// <summary>
     /// The service state the request names: the first item's
@@ -335,17 +323,6 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
             _                     => null
         };
     }
-
-    private static IReadOnlyList<string> ExtractDiagnosisCodes(Claim claim) =>
-        claim.Diagnosis?
-            .Select(d => (d.Diagnosis as CodeableConcept)?.Coding?.FirstOrDefault()?.Code)
-            .Where(c => !string.IsNullOrEmpty(c))
-            .Cast<string>()
-            .ToList() ?? [];
-
-    private static string? ExtractPlaceOfService(Claim claim) =>
-        (claim.Item?.FirstOrDefault()?.Location as CodeableConcept)
-            ?.Coding?.FirstOrDefault()?.Code;
 
     private static decimal? ExtractEstimatedCost(Claim claim)
     {

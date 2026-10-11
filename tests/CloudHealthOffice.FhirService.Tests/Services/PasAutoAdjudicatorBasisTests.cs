@@ -48,7 +48,7 @@ public class PasAutoAdjudicatorBasisTests
     public async System.Threading.Tasks.Task Commercial_IsNotGatedOnStateMedicaidEnrollment()
     {
         var result = await Adjudicator().TryDecideAsync(
-            Claim(state: "TX"), new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.Commercial, Npi, null), 12000);
+            Claim(state: "TX"), new Bundle(), "t", Basis(PaLineOfBusiness.Commercial, null), 12000);
 
         _gate.VerifyNoOtherCalls();
         result.RuleName.Should().NotBe("EnrollmentGate");
@@ -67,7 +67,7 @@ public class PasAutoAdjudicatorBasisTests
         PaLineOfBusiness lob, EnrollmentLob expected)
     {
         var result = await Adjudicator().TryDecideAsync(
-            Claim(state: "tx"), new Bundle(), "t", new PasDecisionBasis(lob, Npi, null), 12000);
+            Claim(state: "tx"), new Bundle(), "t", Basis(lob, null), 12000);
 
         _gate.Verify(g => g.EvaluateAsync(Npi, It.IsAny<string>(), "TX", It.IsAny<DateOnly>(), expected,
             It.IsAny<CancellationToken>()), Times.Once);
@@ -84,7 +84,7 @@ public class PasAutoAdjudicatorBasisTests
     public async System.Threading.Tasks.Task NoStateNamed_PendsWithoutStateRules_AndNeverDefaultsToTexas(string? state)
     {
         var result = await Adjudicator().TryDecideAsync(
-            Claim(state), new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.Medicaid, Npi, null), 12000);
+            Claim(state), new Bundle(), "t", Basis(PaLineOfBusiness.Medicaid, null), 12000);
 
         result.HasDecision.Should().BeFalse();
         result.RuleName.Should().Be("StateUndetermined");
@@ -100,7 +100,7 @@ public class PasAutoAdjudicatorBasisTests
     {
         await Adjudicator().TryDecideAsync(
             Claim(state: "TX"), new Bundle(), "t",
-            new PasDecisionBasis(PaLineOfBusiness.Commercial, Npi, "1987654325"), 12000);
+            Basis(PaLineOfBusiness.Commercial, "1987654325"), 12000);
 
         _ruleContext!.ServicingProviderNpi.Should().Be("1987654325");
     }
@@ -111,7 +111,7 @@ public class PasAutoAdjudicatorBasisTests
     public async System.Threading.Tasks.Task Disabled_ClaimsNoBasis()
     {
         var result = await Adjudicator(enabled: false).TryDecideAsync(
-            Claim(state: "NM"), new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.VA, Npi, null), 12000);
+            Claim(state: "NM"), new Bundle(), "t", Basis(PaLineOfBusiness.VA, null), 12000);
 
         result.RuleName.Should().Be("ConfigDisabled");
         result.LineOfBusiness.Should().BeNull("nothing was evaluated");
@@ -122,7 +122,7 @@ public class PasAutoAdjudicatorBasisTests
     public async System.Threading.Tasks.Task TimeBudgetExceeded_ClaimsNoBasis()
     {
         var result = await Adjudicator(goldCard: new Hang()).TryDecideAsync(
-            Claim(state: "TX"), new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.Commercial, Npi, null), 50);
+            Claim(state: "TX"), new Bundle(), "t", Basis(PaLineOfBusiness.Commercial, null), 50);
 
         result.RuleName.Should().Be("TimeBudgetExceeded");
         result.LineOfBusiness.Should().BeNull();
@@ -140,7 +140,7 @@ public class PasAutoAdjudicatorBasisTests
         claim.Item[0].ProductOrService = new CodeableConcept("http://www.ama-assn.org/go/cpt", code);
 
         var result = await Adjudicator(approve: ["70553"], deny: ["V2020"]).TryDecideAsync(
-            claim, new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.Commercial, Npi, null), 12000);
+            claim, new Bundle(), "t", Basis(PaLineOfBusiness.Commercial, null, code), 12000);
 
         result.RuleName.Should().Be(rule);
         result.StateCode.Should().BeNull();
@@ -154,7 +154,7 @@ public class PasAutoAdjudicatorBasisTests
         claim.Total = new Money { Value = 10m, Currency = Money.Currencies.USD };
 
         var result = await Adjudicator(dollarThreshold: 500m).TryDecideAsync(
-            claim, new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.Commercial, Npi, null), 12000);
+            claim, new Bundle(), "t", Basis(PaLineOfBusiness.Commercial, null), 12000);
 
         result.RuleName.Should().Be("DollarThreshold");
         result.StateCode.Should().BeNull();
@@ -176,11 +176,22 @@ public class PasAutoAdjudicatorBasisTests
                     : GateResult.Pass());
 
         var result = await Adjudicator().TryDecideAsync(
-            Claim(state: "TX"), new Bundle(), "t", new PasDecisionBasis(PaLineOfBusiness.Medicaid, Npi, null), 12000);
+            Claim(state: "TX"), new Bundle(), "t", Basis(PaLineOfBusiness.Medicaid, null), 12000);
 
         result.Decision.Should().Be("denied");
         result.RuleName.Should().Be("EnrollmentGate");
     }
+
+    /// <summary>
+    /// The basis the controller maps for <see cref="Claim"/>: the requested
+    /// service date (2026-11-02, a FHIR date) and the requested code.
+    /// </summary>
+    private static PasDecisionBasis Basis(PaLineOfBusiness lob, string? servicingNpi, string code = "70553")
+        => new(lob, Npi, servicingNpi)
+        {
+            ServiceDate = new DateOnly(2026, 11, 2),
+            ProcedureCodes = [new PasProcedureCode("http://www.ama-assn.org/go/cpt", code)],
+        };
 
     private PasAutoAdjudicator Adjudicator(
         bool enabled = true, List<string>? approve = null, List<string>? deny = null,

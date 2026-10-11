@@ -128,14 +128,30 @@ public sealed class AutomatedDecision
     public string? Rule { get; set; }
 
     /// <summary>
-    /// The line of business the decision was made on. Must be the record's
-    /// <see cref="AutomatedDecisionRecordRequest.LineOfBusiness"/>: the record
-    /// may not state a basis the decision did not use.
+    /// The line of business the deciding path evaluated. When present it must
+    /// be the record's <see cref="AutomatedDecisionRecordRequest.LineOfBusiness"/>:
+    /// the record may not state a basis the decision did not use. Required,
+    /// except for the rules that evaluate none
+    /// (<see cref="RulesEvaluatingNoLineOfBusiness"/>), recorded as <c>lob=n/a</c>.
     /// </summary>
-    [Required]
     public LineOfBusiness? LineOfBusiness { get; set; }
 
-    /// <summary>The service state the state-specific rules used (USPS code), or null when none ran on a state.</summary>
+    /// <summary>
+    /// Rules that decide without evaluating a line of business: a provider
+    /// exclusion (a fact about the provider), disabled adjudication, an
+    /// exceeded time budget, and an undetermined line of business.
+    /// </summary>
+    public static readonly IReadOnlySet<string> RulesEvaluatingNoLineOfBusiness = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "provider-exclusion-check", "ConfigDisabled", "TimeBudgetExceeded", "LineOfBusinessUndetermined",
+    };
+
+    /// <summary>
+    /// The service state the deciding path read (USPS code): the enrollment gate
+    /// ran, or the state rule engine was reached. Null when no rule read one,
+    /// recorded as <c>state=none</c>; a state the request named but no rule read
+    /// is not sent.
+    /// </summary>
     [RegularExpression("^[A-Z]{2}$", ErrorMessage = "StateCode must be a two-letter state code.")]
     public string? StateCode { get; set; }
 }

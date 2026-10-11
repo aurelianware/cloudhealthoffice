@@ -72,12 +72,21 @@ public class PasSubmitTests
             .WithTenant();
     }
 
+    /// <summary>
+    /// A stand-in adjudicator that, like the real one, reports the line of
+    /// business it decided on (the basis it was given), so the record's
+    /// decision basis is accepted by authorization-service.
+    /// </summary>
     private static Mock<IPasAutoAdjudicator> Adjudicator(PasDecisionResult decision)
     {
         var m = new Mock<IPasAutoAdjudicator>();
         m.Setup(a => a.TryDecideAsync(
                 It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(decision);
+            .ReturnsAsync((Claim _, Bundle _, string _, PasDecisionBasis basis, int _, CancellationToken _) =>
+            {
+                decision.LineOfBusiness ??= basis.LineOfBusiness.ToString();
+                return decision;
+            });
         return m;
     }
 
