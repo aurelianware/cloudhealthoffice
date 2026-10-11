@@ -142,6 +142,18 @@ public sealed class ChoOutboundTokenHandler : DelegatingHandler
     private async ValueTask<AuthenticationHeaderValue?> ServiceIdentityAsync(
         HttpRequestMessage request, HttpContext? http, CancellationToken cancellationToken)
     {
+        // An authenticated caller whose tenant was never resolved leaves
+        // nothing to hold the named tenant against: no token.
+        if (http?.User?.Identities.Any(i => i.IsAuthenticated) == true
+            && !(http.Items["TenantId"] is string resolved && !string.IsNullOrEmpty(resolved)))
+        {
+            _logger.LogWarning(
+                "Outbound call to {Host} asks for the service identity inside a request with no resolved tenant; " +
+                "no token is attached. The callee will reject it.",
+                request.RequestUri?.Host);
+            return null;
+        }
+
         if (http?.Items["TenantId"] is string callerTenant && !string.IsNullOrEmpty(callerTenant))
         {
             var named = request.Headers.TryGetValues(TenantMiddleware.TenantHeaderName, out var values)

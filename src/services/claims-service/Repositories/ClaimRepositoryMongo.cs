@@ -969,7 +969,7 @@ public class ClaimRepositoryMongo : IClaimRepository
             b.Eq(c => c.TenantId, GetTenantId()),
             b.Eq(c => c.Status, ClaimStatus.Pended),
             b.Eq(c => c.PendDetails!.PendCode, pendCode));
-        return (await _collection.Find(filter).SortBy(c => c.SubmittedDate).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
+        return (await _collection.Find(filter).SortBy(c => c.PendDetails!.PendedAt).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
     }
 
     public async Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(

@@ -331,6 +331,12 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             .ToList();
         return new ApprovalReadjudicationResult(outcome, reasons.FirstOrDefault(), reasons)
         {
+            DenialReason = outcome == ClaimAdjudicationOutcome.Deny
+                ? context.StageResults
+                    .Where(r => r.Outcome == ClaimAdjudicationOutcome.Deny)
+                    .Select(r => $"{r.StageName}: {r.Reason}")
+                    .FirstOrDefault()
+                : null,
             OverriddenPends = context.ExaminerOverrides.ToList(),
             PreparedAccumulatorCommit = outcome == ClaimAdjudicationOutcome.Pass
                 ? context.BenefitResolutionResult?.PreparedAccumulatorCommit

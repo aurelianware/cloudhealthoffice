@@ -184,12 +184,7 @@ public sealed class AccumulatorOperationsService
     {
         if (_readjudicator is null) throw new InvalidOperationException("Approval re-adjudication is unavailable.");
         var actor = $"{PriorAuthRerunActorPrefix}:{operatorId}";
-        var pended = new List<Claim>();
-        foreach (var code in PriorAuthRerunCodes)
-        {
-            if (pended.Count >= limit) break;
-            pended.AddRange(await _claims.FindPendedByPendCodeAsync(code, limit - pended.Count, ct));
-        }
+        var pended = await FairBatchAsync(PriorAuthRerunCodes, limit, ct);
         var result = await RerunAllAsync(tenantId, pended, actor, PriorAuthRerun, ct);
         _logger.LogInformation(
             "AUDIT PAUNAVAIL bulk re-run by {Operator} (tenant {TenantId}): {Examined} examined, {Approved} approved, {Denied} denied, {StillPended} still pended, {Skipped} skipped, {Failed} failed",
@@ -202,6 +197,35 @@ public sealed class AccumulatorOperationsService
         Stages.BenefitCalculationStage.PriorAuthorizationUnavailablePendCode,
         Stages.BenefitCalculationStage.PlanUnavailablePendCode,
     ];
+
+    /// <summary>
+    /// Up to <paramref name="limit"/> claims across <paramref name="codes"/>,
+    /// taken in turn from each code (least recently pended first within a
+    /// code), so a backlog under one code cannot starve another; a code with
+    /// fewer claims than its share leaves the rest of the batch to the others.
+    /// </summary>
+    private async Task<List<Claim>> FairBatchAsync(IReadOnlyList<string> codes, int limit, CancellationToken ct)
+    {
+        var queues = new List<Queue<Claim>>();
+        foreach (var code in codes)
+            queues.Add(new Queue<Claim>(await _claims.FindPendedByPendCodeAsync(code, limit, ct)));
+
+        var batch = new List<Claim>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        while (batch.Count < limit && queues.Any(q => q.Count > 0))
+        {
+            foreach (var queue in queues)
+            {
+                if (batch.Count >= limit) break;
+                while (queue.Count > 0)
+                {
+                    var next = queue.Dequeue();
+                    if (seen.Add(next.Id)) { batch.Add(next); break; }
+                }
+            }
+        }
+        return batch;
+    }
 
     /// <summary>What distinguishes one bulk re-run from another.</summary>
     private sealed record RerunKind(string Name, IReadOnlyList<string> PendCodes, string Reason, bool DenyIsFinal);
@@ -266,10 +290,17 @@ public sealed class AccumulatorOperationsService
             }, ct);
             if (rerun.ResolutionLockLost)
                 return Item("Failed", "the resolution lock was lost during the re-run");
-            // A definitive PA answer (NotFound / Invalid) on the re-run: the
-            // claim is denied (CARC 197), exactly as first adjudication would
-            // have denied it. Only for the PAUNAVAIL re-run.
-            var deny = kind.DenyIsFinal && rerun.Outcome == ClaimAdjudicationOutcome.Deny;
+            // A definitive answer on the re-run denies (owner decision
+            // 2026-10-11: CARC 197 after authorization-service's NotFound /
+            // Invalid) — but only when no check on this run failed (#1299
+            // S-A): with a PA lookup still unavailable, or a check that threw,
+            // another stage's Deny must not finalize the claim; it stays pended.
+            var transientFailure = (rerun.UnresolvedReasons ?? [])
+                .Append(rerun.Reason)
+                .Any(ClaimAdjudicationOrchestrator.IsTransientFailure);
+            var deny = kind.DenyIsFinal && rerun.Outcome == ClaimAdjudicationOutcome.Deny && !transientFailure;
+            if (kind.DenyIsFinal && rerun.Outcome == ClaimAdjudicationOutcome.Deny && transientFailure)
+                return Item("StillPended", $"Deny not finalized: a check could not run on this re-run ({rerun.DenialReason ?? rerun.Reason})");
             if (!deny && rerun.Outcome != ClaimAdjudicationOutcome.Pass)
                 return Item("StillPended", $"{rerun.Outcome}: {rerun.Reason}");
             if (!deny && rerun.PreparedAccumulatorCommit is null)
@@ -296,7 +327,7 @@ public sealed class AccumulatorOperationsService
             {
                 Disposition = disposition.ToString(),
                 ApproverIds = [actor],
-                Reason = deny ? $"{kind.Reason}; denied on a definitive answer: {rerun.Reason}" : $"{kind.Reason}; nothing overridden",
+                Reason = deny ? $"{kind.Reason}; denied on a definitive answer: {rerun.DenialReason ?? rerun.Reason}" : $"{kind.Reason}; nothing overridden",
                 ApproverReasons = [null],
                 PendFingerprint = PendDetails.ComputeFingerprint(reviewed),
                 ReviewedPends = ExaminerApproval.ReviewedFrom(reviewed).Select(p => $"{p.Code}: {p.Reason}").ToList(),
@@ -326,17 +357,42 @@ public sealed class AccumulatorOperationsService
             await _versionEvents.PublishVersionResolvedAsync(
                 updated, disposition.ToString(), $"{kind.Name} re-run", actor, correlationId, CancellationToken.None);
             await _events.PublishClaimFinalizedAsync(updated, tenantId);
-            return deny ? Item("Denied", rerun.Reason) : Item("Approved");
+            return deny ? Item("Denied", rerun.DenialReason ?? rerun.Reason) : Item("Approved");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "{Kind} re-run of claim {ClaimId} failed", kind.Name, Sanitize(claim.Id));
-            return Item("Failed", ex.GetType().Name);
+            return Item("Failed", Describe(ex));
         }
         finally
         {
             await _claims.ReleaseResolutionLockAsync(tenantId, claim.Id, lockToken, CancellationToken.None);
         }
+    }
+
+    /// <summary>
+    /// What failed, for the operator's item result: the exception type, a
+    /// store's status codes when it is a Cosmos error, and the claims-service
+    /// frame it came from. No claim data.
+    /// </summary>
+    internal static string Describe(Exception ex)
+    {
+        var where = ex.StackTrace?
+            .Split('\n')
+            .Select(l => l.Trim())
+            .FirstOrDefault(l => l.Contains("ClaimsService.", StringComparison.Ordinal));
+        string what;
+        if (ex is Microsoft.Azure.Cosmos.CosmosException cosmos)
+        {
+            var message = Sanitize(cosmos.Message.Split('\n')[0]);
+            if (message.Length > 300) message = message[..300];
+            what = $"CosmosException {(int)cosmos.StatusCode} {cosmos.StatusCode} (sub-status {cosmos.SubStatusCode}): {message}";
+        }
+        else
+        {
+            what = ex.GetType().Name;
+        }
+        return where is null ? what : $"{what} at {Sanitize(where)}";
     }
 
     private static string Sanitize(string? value) =>

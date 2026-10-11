@@ -249,7 +249,13 @@ public interface IClaimRepository
     Task<bool> RecordAccumulatorReviewAsync(
         string tenantId, string claimId, AccumulatorClampReview review, CancellationToken ct = default);
 
-    /// <summary>Pended claims of the request tenant whose routing pend code is <paramref name="pendCode"/> (oldest first).</summary>
+    /// <summary>
+    /// Pended claims of the request tenant whose routing pend code is
+    /// <paramref name="pendCode"/>, least recently pended first
+    /// (<see cref="PendDetails.PendedAt"/>). A bulk re-run that pends a claim
+    /// again re-stamps it, so it moves to the back instead of refilling every
+    /// batch (#1299).
+    /// </summary>
     Task<IReadOnlyList<Claim>> FindPendedByPendCodeAsync(string pendCode, int limit, CancellationToken ct = default);
 
     /// <summary>
@@ -1871,7 +1877,7 @@ public class ClaimRepository : IClaimRepository
         var query = new QueryDefinition($@"
             SELECT TOP @limit * FROM c
             WHERE c.tenantId = @tenantId AND {pended} AND c.pendDetails.pendCode = @pendCode
-            ORDER BY c.submittedDate")
+            ORDER BY c.pendDetails.pendedAt")
             .WithParameter("@limit", limit)
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@pendCode", pendCode);
