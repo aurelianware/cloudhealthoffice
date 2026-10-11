@@ -789,6 +789,7 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     [InlineData(ClaimStatus.Denied, ClaimStatus.Approved, 150, null, null, true)]
     [InlineData(ClaimStatus.Denied, ClaimStatus.Approved, 150, "96", null, false)]
     [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 0, "197", "other-token", false)]
+    [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 0, "197", "my-token", true)]
     public void IsRepairableContradiction_ChecksTheLiveRow(
         ClaimStatus rowStatus, ClaimStatus desired, int payerPayment, string? denialCode, string? lockOnRow, bool expected)
     {
@@ -801,6 +802,19 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
 
         ClaimRepository.IsRepairableContradiction(row, desired, lockOnRow is null ? null : "my-token")
             .Should().Be(expected);
+    }
+
+    /// <summary>A stored row may deserialize "adjustmentReasons": null; the check must not throw.</summary>
+    [Fact]
+    public void IsRepairableContradiction_NullAdjustmentReasons_DoesNotThrow()
+    {
+        var row = new Claim
+        {
+            Status = ClaimStatus.Approved,
+            AdjudicationResult = new AdjudicationResult { PayerPayment = 0m, AdjustmentReasons = null! },
+        };
+
+        ClaimRepository.IsRepairableContradiction(row, ClaimStatus.Denied, null).Should().BeFalse();
     }
 
     [Fact]

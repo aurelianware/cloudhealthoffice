@@ -6,6 +6,7 @@ using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Adjudication.Stages;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace CloudHealthOffice.ClaimsService.Tests.Services.Adjudication;
@@ -102,6 +103,7 @@ public sealed class PriorAuthUnavailableRerunTests
             ["CoordinationOfBenefits: confirm the payer order", denial])
         {
             DenialReason = denial,
+            DenialReasonCode = BenefitCalculationStage.PriorAuthorizationRequiredCode,
         });
 
         var run = await _sut.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
@@ -114,6 +116,69 @@ public sealed class PriorAuthUnavailableRerunTests
             Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// #1299 re-verify B1: only the PA branch's denial (CARC 197) is final in
+    /// the bulk re-run; any other stage's Deny (e.g. the benefit engine's 999)
+    /// is left for an examiner.
+    /// </summary>
+    [Fact]
+    public async Task Deny_FromAnotherStage_StaysPended()
+    {
+        Pending(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, Pended("C1", BenefitCalculationStage.PriorAuthorizationUnavailablePendCode));
+        RerunAnswers(new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Deny,
+            "BenefitCalculation: Benefit calculation engine returned HTTP 503.", ["BenefitCalculation: Benefit calculation engine returned HTTP 503."])
+        {
+            DenialReason = "BenefitCalculation: Benefit calculation engine returned HTTP 503.",
+            DenialReasonCode = "999",
+        });
+
+        var run = await _sut.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+
+        Assert.Equal(0, run.Denied);
+        Assert.Equal(1, run.StillPended);
+    }
+
+    /// <summary>A CARC 197 denial on a run where a check failed (structured flag) is not final either.</summary>
+    [Fact]
+    public async Task Deny197_WhenACheckFailedOnTheRun_StaysPended()
+    {
+        Pending(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, Pended("C1", BenefitCalculationStage.PriorAuthorizationUnavailablePendCode));
+        var denial = $"{BenefitCalculationStage.StageName}: {BenefitCalculationStage.PriorAuthorizationRequiredReason}";
+        RerunAnswers(new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Deny, denial, [denial])
+        {
+            DenialReason = denial,
+            DenialReasonCode = BenefitCalculationStage.PriorAuthorizationRequiredCode,
+            CheckFailed = true,
+        });
+
+        var run = await _sut.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+
+        Assert.Equal(0, run.Denied);
+        Assert.Equal(1, run.StillPended);
+    }
+
+    /// <summary>
+    /// #1299 re-verify S1: a re-run that fails (throws) does not leave the claim
+    /// at the head of the queue: it is re-stamped to the back under its lock.
+    /// </summary>
+    [Fact]
+    public async Task Failed_ReStampsTheClaimToTheBackOfTheQueue()
+    {
+        var claim = Pended("C1", BenefitCalculationStage.PriorAuthorizationUnavailablePendCode);
+        claim.PendDetails!.PendedAt = DateTime.UtcNow.AddDays(-3);
+        Pending(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, claim);
+        _readjudicator.ReadjudicateForApprovalAsync(default!, default!, default!, default)
+            .ThrowsAsyncForAnyArgs(new InvalidOperationException("boom"));
+        var before = DateTime.UtcNow.AddSeconds(-1);
+
+        var run = await _sut.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+
+        Assert.Equal(1, run.Failed);
+        await _claims.Received(1).UpdateHoldingResolutionLockAsync(
+            Arg.Is<Claim>(c => c.Status == ClaimStatus.Pended && c.PendDetails!.PendedAt >= before),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     // ── S-B: the denial carries the reversal fence ────────────────────
 
     [Fact]
@@ -121,7 +186,11 @@ public sealed class PriorAuthUnavailableRerunTests
     {
         Pending(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, Pended("C1", BenefitCalculationStage.PriorAuthorizationUnavailablePendCode));
         var denial = $"{BenefitCalculationStage.StageName}: {BenefitCalculationStage.PriorAuthorizationRequiredReason}";
-        RerunAnswers(new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Deny, denial, [denial]) { DenialReason = denial });
+        RerunAnswers(new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Deny, denial, [denial])
+        {
+            DenialReason = denial,
+            DenialReasonCode = BenefitCalculationStage.PriorAuthorizationRequiredCode,
+        });
 
         await _sut.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
 

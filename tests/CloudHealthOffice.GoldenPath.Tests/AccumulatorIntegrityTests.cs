@@ -923,12 +923,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
             .ReturnsForAnyArgs(AuthorizationLookupResult.NotFound());
         var run = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
 
-        // Diagnostics: each re-run item's result and detail, and the claim as stored.
-        var stored = await Claim(pended.Id);
-        Assert.True(run.Denied == 1,
-            $"examined {run.Examined}; items: [{string.Join("; ", run.Claims.Select(c => $"{c.Result}: {c.Detail}"))}]; " +
-            $"stored status {stored?.Status}, version state {stored?.VersionState}, lock {(stored?.ResolutionLock is null ? "none" : "held")}, " +
-            $"denial {stored?.AdjudicationResult?.DenialReasonCode}, pend {stored?.PendDetails?.PendCode}");
+        Assert.Equal(1, run.Denied);
         var denied = (await Claim(pended.Id))!;
         Assert.Equal(Claims.ClaimStatus.Denied, denied.Status);
         Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredCode, denied.AdjudicationResult!.DenialReasonCode);
