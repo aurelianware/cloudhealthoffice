@@ -1,3 +1,8 @@
+// REFERENCE ONLY — not compiled; see D-31 in docs/epa-gap-matrix.md.
+// This snapshot of the fhir-service wiring registers its own CosmosClient
+// (SDK default Newtonsoft serializer). The real src/services/fhir-service/Program.cs
+// uses the shared client from AddChoDatabase. Do not copy that registration.
+
 using CloudHealthOffice.Infrastructure.Security;
 using FhirService.Formatters;
 using FhirService.Middleware;

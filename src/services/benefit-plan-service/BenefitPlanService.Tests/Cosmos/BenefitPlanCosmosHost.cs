@@ -67,8 +67,10 @@ internal sealed class BenefitPlanCosmosHost : WebApplicationFactory<Program>
             ["CosmosDb:Key"] = CosmosEmulator.Key,
             ["CosmosDb:DatabaseName"] = _databaseName,
             ["CosmosDb:ContainerName"] = BenefitPlansContainer,
-            // Nothing listens here: the PA-rule cache's state flush (the only
-            // Redis use on these paths) logs the failure and carries on.
+            // Nothing listens here; the multiplexer is only built, never needed.
+            // The PA-rule cache decorator's SCAN flush on delete would time out and
+            // throw (RedisTimeoutException is not a RedisException, D-34), so tests
+            // that delete PA rules use PaRuleRepositoryCosmos directly.
             ["Redis:ConnectionString"] = "localhost:1,abortConnect=false,connectTimeout=100",
         };
         foreach (var (key, value) in settings)
