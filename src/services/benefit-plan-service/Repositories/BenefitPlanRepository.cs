@@ -189,7 +189,7 @@ public class BenefitPlanRepository : IBenefitPlanRepository
                 "ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@planId", planId)
-            .WithParameter("@published", PlanVersionState.Published.ToString())
+            .WithParameter("@published", PlanVersionState.Published)
             .WithParameter("@asOf", asOf);
 
         var iterator = _container.GetItemQueryIterator<BenefitPlan>(query);
@@ -251,52 +251,39 @@ public class BenefitPlanRepository : IBenefitPlanRepository
         int page,
         int pageSize)
     {
+        // Filters arrive as enum names from the API. Like the Mongo repository,
+        // they are parsed case-insensitively and an unrecognized value applies
+        // no filter. Each is bound as the enum itself, so the client's
+        // serializer writes the parameter exactly as it stores the property
+        // (camelCase string under CosmosSystemTextJsonSerializer).
         var queryText = "SELECT * FROM c WHERE c.tenantId = @tenantId";
-        var queryDef = new QueryDefinition(queryText)
-            .WithParameter("@tenantId", tenantId);
+        var parameters = new List<(string Name, object Value)> { ("@tenantId", tenantId) };
 
-        if (!string.IsNullOrEmpty(lineOfBusiness))
+        if (!string.IsNullOrEmpty(lineOfBusiness) && Enum.TryParse<LineOfBusiness>(lineOfBusiness, true, out var lob))
         {
             queryText += " AND c.lineOfBusiness = @lineOfBusiness";
-            queryDef = new QueryDefinition(queryText)
-                .WithParameter("@tenantId", tenantId)
-                .WithParameter("@lineOfBusiness", lineOfBusiness);
+            parameters.Add(("@lineOfBusiness", lob));
         }
 
-        if (!string.IsNullOrEmpty(planType))
+        if (!string.IsNullOrEmpty(planType) && Enum.TryParse<PlanType>(planType, true, out var pt))
         {
             queryText += " AND c.planType = @planType";
-            queryDef = new QueryDefinition(queryText)
-                .WithParameter("@tenantId", tenantId);
-            if (!string.IsNullOrEmpty(lineOfBusiness))
-                queryDef = queryDef.WithParameter("@lineOfBusiness", lineOfBusiness);
-            queryDef = queryDef.WithParameter("@planType", planType);
+            parameters.Add(("@planType", pt));
         }
 
-        if (!string.IsNullOrEmpty(metalLevel))
+        if (!string.IsNullOrEmpty(metalLevel) && Enum.TryParse<MetalLevel>(metalLevel, true, out var ml))
         {
             queryText += " AND c.metalLevel = @metalLevel";
-            queryDef = new QueryDefinition(queryText)
-                .WithParameter("@tenantId", tenantId);
-            if (!string.IsNullOrEmpty(lineOfBusiness))
-                queryDef = queryDef.WithParameter("@lineOfBusiness", lineOfBusiness);
-            if (!string.IsNullOrEmpty(planType))
-                queryDef = queryDef.WithParameter("@planType", planType);
-            queryDef = queryDef.WithParameter("@metalLevel", metalLevel);
+            parameters.Add(("@metalLevel", ml));
         }
 
         queryText += " ORDER BY c.planName OFFSET @offset LIMIT @limit";
-        queryDef = new QueryDefinition(queryText)
-            .WithParameter("@tenantId", tenantId);
-        if (!string.IsNullOrEmpty(lineOfBusiness))
-            queryDef = queryDef.WithParameter("@lineOfBusiness", lineOfBusiness);
-        if (!string.IsNullOrEmpty(planType))
-            queryDef = queryDef.WithParameter("@planType", planType);
-        if (!string.IsNullOrEmpty(metalLevel))
-            queryDef = queryDef.WithParameter("@metalLevel", metalLevel);
-        queryDef = queryDef
-            .WithParameter("@offset", (page - 1) * pageSize)
-            .WithParameter("@limit", pageSize);
+        parameters.Add(("@offset", (page - 1) * pageSize));
+        parameters.Add(("@limit", pageSize));
+
+        var queryDef = new QueryDefinition(queryText);
+        foreach (var (name, value) in parameters)
+            queryDef = queryDef.WithParameter(name, value);
 
         var iterator = _container.GetItemQueryIterator<BenefitPlan>(queryDef);
         var results = new List<BenefitPlan>();
@@ -455,7 +442,7 @@ public class BenefitPlanRepository : IBenefitPlanRepository
                 "ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@planId", planId)
-            .WithParameter("@published", PlanVersionState.Published.ToString())
+            .WithParameter("@published", PlanVersionState.Published)
             .WithParameter("@asOf", asOf);
 
         string? rowId = null;

@@ -18,6 +18,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Moq" />
     <PackageReference Include="xunit" />
+    <PackageReference Include="Xunit.SkippableFact" />
     <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -26,6 +27,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\benefit-plan-service.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Cosmos DB emulator fixture (Category=Cosmos); see tests/Shared/CosmosEmulator. -->
+    <Compile Include="..\..\..\..\tests\Shared\CosmosEmulator\*.cs" Link="Shared\CosmosEmulator\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

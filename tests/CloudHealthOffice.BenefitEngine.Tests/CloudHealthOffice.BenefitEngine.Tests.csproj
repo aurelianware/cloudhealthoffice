@@ -26,5 +26,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\engines\CloudHealthOffice.BenefitEngine\CloudHealthOffice.BenefitEngine.csproj" />
+    <!-- CosmosSystemTextJsonSerializer, so the Cosmos tests run on the production serializer. -->
+    <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

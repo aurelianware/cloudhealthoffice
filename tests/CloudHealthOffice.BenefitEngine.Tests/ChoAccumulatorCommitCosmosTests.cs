@@ -31,10 +31,9 @@ public sealed class ChoAccumulatorCommitCosmosTests(CosmosEmulatorFixture cosmos
     public async Task InitializeAsync()
     {
         cosmos.SkipIfUnavailable();
-        var client = cosmos.CreateClient(serializerOptions: new CosmosSerializationOptions
-        {
-            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase,
-        });
+        // The serializer production uses: AddChoDatabase's shared
+        // CosmosSystemTextJsonSerializer (the benefit-plan host's client, D-31).
+        var client = cosmos.CreateClient(new CloudHealthOffice.Infrastructure.Serialization.CosmosSystemTextJsonSerializer());
         var db = await cosmos.CreateDatabaseAsync(client, "benefit_engine_accum");
         await CosmosEmulatorFixture.CreateContainerAsync(db, "Accumulators");
         _database = db.Id;
@@ -143,6 +142,17 @@ public sealed class ChoAccumulatorCommitCosmosTests(CosmosEmulatorFixture cosmos
         Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, (await _store.CommitAsync(original)).Outcome);
         Assert.Equal(300m, await Read(AccumulatorType.IndividualDeductible));
         Assert.Equal(300m, await Read(AccumulatorType.FamilyDeductible));
+    }
+
+    [SkippableFact]
+    public async Task ResetForPlanYear_DeletesThePlanYearsAccumulators()
+    {
+        await _store.CommitAsync(Commit("C1", 100m));
+        Assert.Equal(100m, await Read(AccumulatorType.IndividualDeductible));
+
+        await _store.ResetForPlanYearAsync(Plan, Year);
+
+        Assert.Empty(await _store.GetAccumulatorsAsync("M1", "S1", Plan, Year));
     }
 
     private sealed class Tenant(string id) : IBenefitEngineTenantContext
