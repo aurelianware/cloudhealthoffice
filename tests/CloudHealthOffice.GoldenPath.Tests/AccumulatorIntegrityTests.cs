@@ -937,6 +937,44 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// #1299 S-B: the bulk re-run's denial carries the terminal reversal, which fences the
+    /// claim id in the accumulator store: a commit for that claim arriving afterwards (a
+    /// stale prepared write) is refused and changes nothing.
+    /// </summary>
+    [SkippableFact]
+    public async Task PaUnavailablePend_BulkDenied_ALateCommitIsRefused()
+    {
+        // A priced claim of the same member: its prepared commit is the template for the
+        // late write, re-addressed to the denied claim.
+        _ncciPends = true;
+        var template = await SubmitAndAdjudicateAsync();
+        Assert.Equal("NCCI", template.PendDetails!.PendCode);
+        var prepared = _calculated[^1].PreparedAccumulatorCommit!;
+
+        _ncciPends = false;
+        _priorAuthCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "99213" };
+        _beforeSubmit = claim => claim.PriorAuthorizationNumber = "AUTH-GOLD-UNKNOWN";
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
+        var pended = await SubmitAndAdjudicateAsync();
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.NotFound());
+        var run = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+        Assert.Equal(1, run.Denied);
+        await AssertFencedAsync(pended.Id);
+
+        var late = await _engine.CommitAccumulatorsAsync(prepared with
+        {
+            CommitId = "late-" + Guid.NewGuid().ToString("N"),
+            ClaimId = pended.Id,
+        });
+
+        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, late.Outcome);
+        await AssertBalances(0m, 0m);
+        await AssertNoWriteForAsync(pended.Id);
+    }
+
+    /// <summary>
     /// The post-rollout sweep lists finalized claims with no pending entry and no write record
     /// in the store (an old pod dropped the entry), and nothing for a committed claim.
     /// </summary>

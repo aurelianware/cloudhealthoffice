@@ -223,6 +223,25 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
         (await Repo.FindPendedByPendCodeAsync("ACCUMCOMMIT", 10)).Select(c => c.Id).Should().BeEquivalentTo(["P1"]);
     }
 
+    /// <summary>
+    /// #1299 nit: the bulk re-runs take the least recently pended first. A
+    /// re-run that pends again re-stamps PendedAt, so it goes to the back of
+    /// the queue instead of refilling every batch (oldest-submitted-first did).
+    /// </summary>
+    [SkippableFact]
+    public async Task ThePendCodeQuery_ReturnsTheLeastRecentlyPendedFirst()
+    {
+        await SeedAsync("RETRIED", ClaimStatus.Pended);
+        await SeedAsync("WAITING", ClaimStatus.Pended);
+        await Repo.UpdateAdjudicationProjectionAsync(Tenant, "RETRIED", new AdjudicationResult(), [],
+            pendDetails: new PendDetails { PendCode = "PAUNAVAIL", PendReason = "x", PendedAt = Now.AddHours(2) }, isPend: true);
+        await Repo.UpdateAdjudicationProjectionAsync(Tenant, "WAITING", new AdjudicationResult(), [],
+            pendDetails: new PendDetails { PendCode = "PAUNAVAIL", PendReason = "y", PendedAt = Now.AddHours(1) }, isPend: true);
+
+        (await Repo.FindPendedByPendCodeAsync("PAUNAVAIL", 1)).Select(c => c.Id).Should().Equal("WAITING");
+        (await Repo.FindPendedByPendCodeAsync("PAUNAVAIL", 10)).Select(c => c.Id).Should().Equal("WAITING", "RETRIED");
+    }
+
     [SkippableFact]
     public async Task TheSweepQuery_ReturnsFinalizedClaimsWithNoPendingCommit_InTheWindow()
     {

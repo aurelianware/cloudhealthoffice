@@ -329,6 +329,24 @@ public class ChoOutboundTokenHandlerTests
         capture.Last!.Headers.Authorization.Should().BeNull();
     }
 
+    /// <summary>
+    /// #1299 nit: an authenticated caller whose tenant was never resolved gives
+    /// the service identity nothing to check the named tenant against: no token.
+    /// </summary>
+    [Fact]
+    public async Task ServiceIdentity_AuthenticatedCallerWithoutAResolvedTenant_GetsNoToken()
+    {
+        var http = UserContext("tenant-a");
+        http.Items.Remove("TenantId");
+        var (invoker, capture) = Build(http, withServiceToken: true);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "http://member-service/api/v1/members").UseChoServiceIdentity();
+        request.Headers.Add("X-Tenant-ID", "tenant-b");
+        await invoker.SendAsync(request, default);
+
+        capture.Last!.Headers.Authorization.Should().BeNull();
+    }
+
     [Fact]
     public async Task ServiceIdentity_IsNeverSentToExternalHosts()
     {

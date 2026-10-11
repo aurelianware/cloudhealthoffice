@@ -346,6 +346,29 @@ public class ClaimAdjudicationOrchestratorTests
         Assert.Equal(2, full.OverriddenPends.Count);
     }
 
+    /// <summary>#1299 S-A: the approval re-run names the stage that denied, not the first non-passing stage.</summary>
+    [Fact]
+    public async Task ApprovalRerun_Deny_ReportsTheDenyingStagesReason()
+    {
+        SetupAdapterReturningClaim();
+        var orch = BuildOrchestrator(
+        [
+            new RecordingStage(CoordinationOfBenefitsStage.StageName, 275, isRequired: false, [], ctx =>
+            {
+                ctx.PendDetails = new PendDetails { PendCode = "COB", PendReason = "confirm the payer order" };
+                return ClaimAdjudicationStageResult.Pend(CoordinationOfBenefitsStage.StageName, "confirm the payer order");
+            }),
+            new RecordingStage(BenefitCalculationStage.StageName, 300, isRequired: false, [], _ =>
+                ClaimAdjudicationStageResult.Deny(BenefitCalculationStage.StageName, BenefitCalculationStage.PriorAuthorizationRequiredReason)),
+            new RecordingStage("Persistence", 999, isRequired: true, []),
+        ]);
+
+        var result = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1", new ExaminerApproval(), CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        Assert.Equal($"{BenefitCalculationStage.StageName}: {BenefitCalculationStage.PriorAuthorizationRequiredReason}", result.DenialReason);
+    }
+
     /// <summary>M4: NCCI needs the exact reason reviewed, not just the code.</summary>
     [Fact]
     public async Task Ncci_DifferentEditOnTheRerun_IsNotOverridden()
