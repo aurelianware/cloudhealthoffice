@@ -133,14 +133,34 @@ public class CallerIdentityResolverTests
     }
 
     [Fact]
-    public void ScopesComeFromBothScopeAndScpClaims()
+    public void ScopesComeFromScp_WhenTheTokenHasNoScopeClaim()
     {
-        // Matching SmartScopeEnforcementMiddleware exactly. Two scope parsers
-        // that drift are two different answers to "what may this caller do".
+        // The shared parser (SmartScopeClaims), the same one
+        // SmartScopeEnforcementMiddleware uses. Two scope parsers that drift
+        // are two different answers to "what may this caller do".
+        var caller = Resolver().Resolve(Token(claims: ("scp", "user/Patient.read user/Claim.write")));
+
+        caller!.Scopes.Should().BeEquivalentTo(["user/Patient.read", "user/Claim.write"]);
+        caller.CallerType.Should().Be(SmartCallerType.User);
+    }
+
+    [Fact]
+    public void ScopeAndScpThatDisagree_GrantNothing_NotTheirUnion()
+    {
+        // D-32: such a token is refused at authentication. Were a principal
+        // like it ever resolved, it would hold no scopes and no caller type.
         var caller = Resolver().Resolve(Token(
             claims: [("scope", "user/Patient.read"), ("scp", "user/Claim.write")]));
 
-        caller!.Scopes.Should().BeEquivalentTo(["user/Patient.read", "user/Claim.write"]);
+        caller!.Scopes.Should().BeEmpty();
+        caller.CallerType.Should().Be(SmartCallerType.Unknown);
+    }
+
+    [Fact]
+    public void TheSubject_IsTheJwtSubClaim_NotAMappedNameIdentifier()
+    {
+        Resolver().Resolve(Token(claims: ("sub", "user-1")))!.Subject.Should().Be("user-1");
+        Resolver().Resolve(Token(claims: (ClaimTypes.NameIdentifier, "user-1")))!.Subject.Should().BeNull();
     }
 
     // ── Patient and tenant ────────────────────────────────────────────────────
