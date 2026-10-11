@@ -459,16 +459,14 @@ public class SmartScopeEnforcementMiddleware
 
     // ── Scope analysis helpers ────────────────────────────────────────────────
 
+    /// <summary>
+    /// The shared parser (<see cref="SmartScopeClaims"/>): <c>scope</c> or
+    /// <c>scp</c>, either as a space-delimited string or an array, or both
+    /// when they agree. A token whose two claims disagree never authenticates;
+    /// if one reached here it would hold no scopes and be refused.
+    /// </summary>
     private static HashSet<string> ParseScopes(System.Security.Claims.ClaimsPrincipal user)
-    {
-        // OpenIddict emits scopes as space-separated values in a single claim,
-        // or as multiple "scope" claims — handle both.
-        var result = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var claim in user.FindAll("scope"))
-            foreach (var s in claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                result.Add(s);
-        return result;
-    }
+        => SmartScopeClaims.Parse(user);
 
     /// <summary>
     /// Whether the token grants <c>{resourceType}.{access}</c> in one of the

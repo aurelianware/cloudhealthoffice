@@ -160,11 +160,11 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
 
     /// <summary>
     /// The calling provider or backend client, from the validated token.
-    /// The JWT bearer handler maps <c>sub</c> onto
-    /// <see cref="System.Security.Claims.ClaimTypes.NameIdentifier"/> by default,
-    /// so both spellings are checked; <c>client_id</c>/<c>azp</c> cover backend
-    /// service tokens issued without a subject. Never read from a header or the
-    /// query string — the caller does not get to name itself.
+    /// Claims are read under their JWT names: neither the CHO nor the SMART
+    /// scheme maps inbound claims (D-32), so <c>sub</c> arrives as <c>sub</c>;
+    /// <c>client_id</c>/<c>azp</c> cover backend service tokens issued without
+    /// a subject. Never read from a header or the query string — the caller
+    /// does not get to name itself.
     /// </summary>
     private static string? ResolveCallerId(HttpContext http)
     {
@@ -172,13 +172,7 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
         if (user is null)
             return null;
 
-        foreach (var claim in new[]
-                 {
-                     "sub",
-                     System.Security.Claims.ClaimTypes.NameIdentifier,
-                     "client_id",
-                     "azp",
-                 })
+        foreach (var claim in new[] { "sub", "client_id", "azp" })
         {
             var value = user.FindFirst(claim)?.Value;
             if (!string.IsNullOrWhiteSpace(value))

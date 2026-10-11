@@ -91,8 +91,8 @@ public class SmartAuthToFhirEndToEndTests
     public async Task PayerToPayerToken_ItsRegisteredPayer_ReachesTheFhirController()
     {
         // D-13 / D-32: smart-auth mints payer_id from the registration; the
-        // fhir-service SMART scheme (default inbound claim mapping) delivers
-        // it to the P2P controller unrenamed, from the marked issuer only.
+        // fhir-service SMART scheme (inbound claim mapping off) delivers it to
+        // the P2P controller unrenamed, from the marked issuer only.
         // demo-tenant is the tenant fhir-service's development P2P data serves.
         var (clientId, secret) = await RegisterInDemoTenantAsync("PAYER-E2E");
         var (status, body) = await _smart.ClientCredentialsAsync(clientId, secret, "system/PayerToPayer.read");

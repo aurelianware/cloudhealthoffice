@@ -71,7 +71,13 @@ Writes CHO's surface actually serves: `Claim/$submit` (PAS),
 **no patient-context write scope** — every write here is a provider/payer
 transaction.
 
-Scopes may arrive in a space-delimited `scope` claim or repeated `scp` claims.
+Scopes may arrive in a `scope` claim, an `scp` claim, or both. Each claim may be
+a space-delimited string or a JSON array of strings. CHO reads the claims under
+their JWT names (no inbound claim mapping) and treats an `scp`-only token exactly
+like a `scope`-only one. A token that carries both must grant the same **set** of
+scopes in each (order, repetition and extra spaces ignored; case-sensitive); if
+the sets differ, the token is refused with 401. CHO never takes their union or
+intersection.
 
 ## 4. Patient context
 

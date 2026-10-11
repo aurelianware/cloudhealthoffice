@@ -30,10 +30,8 @@ public abstract class FhirControllerBase : ControllerBase
     {
         get
         {
-            foreach (var claimType in new[]
-                     {
-                         "sub", System.Security.Claims.ClaimTypes.NameIdentifier, "client_id", "azp",
-                     })
+            // JWT claim names: neither scheme maps inbound claims (D-32).
+            foreach (var claimType in new[] { "sub", "client_id", "azp" })
             {
                 var value = User?.FindFirst(claimType)?.Value;
                 if (!string.IsNullOrWhiteSpace(value))
@@ -101,16 +99,15 @@ public abstract class FhirControllerBase : ControllerBase
 
     /// <summary>
     /// True only for a SMART backend (client-credentials) caller: the token's
-    /// scopes — from BOTH the <c>scope</c> and <c>scp</c> claims, parsed by
-    /// <see cref="FhirService.Services.Identity.CallerIdentityResolver.ParseScopes"/>,
-    /// the parser <c>AuthenticatedCaller</c> is built from — classify it as a
-    /// system caller, and it is bound to no patient. A token carrying any
-    /// patient/ or user/ scope in either claim, or any patient binding
-    /// (middleware-injected, issuer-mapped, or the raw <c>patient</c> claim),
-    /// is not a backend caller, however else it is scoped.
+    /// scopes — from the <c>scope</c> and/or <c>scp</c> claims, parsed by
+    /// <see cref="FhirService.Services.Identity.SmartScopeClaims"/>, the parser
+    /// <c>AuthenticatedCaller</c> and the scope middleware use — classify it as
+    /// a system caller, and it is bound to no patient. A token carrying any
+    /// patient/ or user/ scope, or any patient binding (middleware-injected,
+    /// issuer-mapped, or the raw <c>patient</c> claim), is not a backend
+    /// caller, however else it is scoped. A token whose <c>scope</c> and
+    /// <c>scp</c> disagree never authenticates (D-32).
     /// </summary>
-    private const string MappedScpClaimType = "http://schemas.microsoft.com/identity/claims/scope";
-
     protected bool IsBackendSystemCaller
     {
         get
@@ -127,16 +124,7 @@ public abstract class FhirControllerBase : ControllerBase
 
             // Also classify from the principal itself: AuthenticatedCaller is
             // only present when the issuer resolved in the trusted registry.
-            var scopes = FhirService.Services.Identity.CallerIdentityResolver.ParseScopes(User);
-
-            // The SMART JWT scheme keeps the handler's default inbound claim
-            // mapping, which renames `scp` to the WS-* scope claim type, so
-            // ParseScopes never sees it. Read that spelling too: for a
-            // REFUSAL check, every claim that could carry a patient/ or user/
-            // scope must count.
-            foreach (var claim in User.FindAll(MappedScpClaimType))
-                foreach (var value in claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                    scopes.Add(value);
+            var scopes = FhirService.Services.Identity.SmartScopeClaims.Parse(User);
 
             return FhirService.Services.Identity.CallerIdentityResolver.ClassifyCaller(scopes)
                    == FhirService.Services.Identity.SmartCallerType.System;

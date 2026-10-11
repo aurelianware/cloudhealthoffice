@@ -3,6 +3,8 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Logging;
 using SecurityClaim = System.Security.Claims.Claim;
 
 namespace CloudHealthOffice.FhirService.Tests.Security;
@@ -190,7 +192,53 @@ public class SmartScpClaimTests : IClassFixture<FhirTestWebAppFactory>
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task BothClaims_DifferentSets_RefusalLogsClaimNamesOnly()
+    {
+        var capture = new CapturingLoggerProvider();
+        using var host = _factory.WithWebHostBuilder(b => b.ConfigureLogging(l => l.AddProvider(capture)));
+        using var client = host.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/fhir/r4/Patient/pat-001");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer",
+            Token("system/SECRET-SCOPE-A.read", extra: Scp("system/SECRET-SCOPE-B.read")));
+
+        (await client.SendAsync(request)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var lines = capture.Messages.ToList();
+        lines.Should().Contain(m => m.Contains("scope") && m.Contains("scp") && m.Contains("different scopes"));
+        lines.Should().NotContain(m => m.Contains("SECRET-SCOPE"));
+    }
+
+    private sealed class CapturingLoggerProvider : Microsoft.Extensions.Logging.ILoggerProvider
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<string> Messages { get; } = new();
+
+        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => new Logger(Messages);
+
+        public void Dispose() { }
+
+        private sealed class Logger(System.Collections.Concurrent.ConcurrentQueue<string> messages)
+            : Microsoft.Extensions.Logging.ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+            public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel,
+                Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter)
+                => messages.Enqueue(formatter(state, exception) + (exception?.ToString() ?? string.Empty));
+        }
+    }
+
     // ── Claims the SMART scheme now sees under their JWT names ───────────────
+
+    [Fact]
+    public async Task SmartSubject_IsReadFromSub_ForProviderAccessAttribution()
+        // test-user (the token's `sub`) is attributed to pat-001 with consent.
+        // On main the handler renamed `sub` to NameIdentifier; now readers use `sub`.
+        => (await GetAsync("/fhir/r4/Patient/pat-001", Token("system/*.read")))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
 
     [Fact]
     public async Task SmartToken_WritingChoServiceClaims_StillCannotUseAChoOnlyEndpoint()

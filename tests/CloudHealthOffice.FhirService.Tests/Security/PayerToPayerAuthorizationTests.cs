@@ -250,13 +250,13 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
     public async Task Export_P2PScopePlusAPatientScopeInScp_IsRefused()
     {
         // `scp` carries a patient-context scope and there is no patient claim.
-        // The caller is a patient-context caller (CallerIdentityResolver reads
-        // scope AND scp), so it is not a payer backend.
+        // Before D-32 the controller's backend-caller check caught it (403);
+        // now a token whose scope and scp disagree never authenticates (401).
         var token = _factory.IssueToken(P2PScope, patientId: null,
             extraClaims: [new SecurityClaim("scp", "patient/*.read"), new SecurityClaim("client_id", "mixed-client")]);
 
         (await PostAsync(ExportPath, token, ExportBody("pat-002")))
-            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
@@ -266,6 +266,30 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
             extraClaims: [new SecurityClaim("scp", "user/*.read")]);
 
         (await PostAsync(MatchPath, token, MatchBody("pat-002")))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Export_P2PScopeInScpOnly_IsAPayerBackend()
+    {
+        // An Entra/Okta-style issuer that grants in `scp` only: read exactly
+        // like `scope`, so the registered payer's backend is served.
+        var token = _factory.IssueToken(scopes: null, patientId: null,
+            extraClaims: [new SecurityClaim("scp", P2PScope), new SecurityClaim("client_id", "new-plan-backend"),
+                new SecurityClaim("payer_id", "NEW-PLAN")]);
+
+        (await PostAsync(ExportPath, token, ExportBody("pat-002")))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Export_P2PScopeInScpOnly_WithAPatientScope_IsNotAPayerBackend()
+    {
+        var token = _factory.IssueToken(scopes: null, patientId: null,
+            extraClaims: [new SecurityClaim("scp", P2PScope + " patient/*.read"),
+                new SecurityClaim("client_id", "new-plan-backend"), new SecurityClaim("payer_id", "NEW-PLAN")]);
+
+        (await PostAsync(ExportPath, token, ExportBody("pat-002")))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
