@@ -76,6 +76,17 @@ public class CosmosDbSeeder
     }
 
     /// <summary>
+    /// The stored form of a benefit-plan enum member (<c>PlanType</c>,
+    /// <c>LineOfBusiness</c>, ...) under the shared Cosmos serializer,
+    /// <c>CosmosSystemTextJsonSerializer</c>: <see cref="System.Text.Json.Serialization.JsonStringEnumConverter"/>
+    /// with <see cref="JsonNamingPolicy.CamelCase"/> ("Medicaid" → "medicaid").
+    /// benefit-plan-service binds its enum filters in this form (D-31), so a seeded
+    /// plan must carry it to be found by a line-of-business or plan-type search.
+    /// </summary>
+    internal static string? StoredEnumName(string? memberName) =>
+        string.IsNullOrEmpty(memberName) ? memberName : JsonNamingPolicy.CamelCase.ConvertName(memberName);
+
+    /// <summary>
     /// Seed benefit plans into Cosmos DB.
     /// </summary>
     public async Task<int> SeedBenefitPlansAsync(
@@ -90,8 +101,8 @@ public class CosmosDbSeeder
             planId = p.PlanId,
             planName = p.PlanName,
             payer = p.Payer,
-            planType = p.PlanType,
-            lineOfBusiness = p.LineOfBusiness,
+            planType = StoredEnumName(p.PlanType),
+            lineOfBusiness = StoredEnumName(p.LineOfBusiness),
             medicaidProgram = p.MedicaidProgram,
             effectiveDate = p.EffectiveDate,
             terminationDate = p.TerminationDate,
