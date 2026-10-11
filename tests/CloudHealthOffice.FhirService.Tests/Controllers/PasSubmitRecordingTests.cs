@@ -342,6 +342,60 @@ public class PasSubmitRecordingTests
 }
 
 /// <summary>
+/// D-32 follow-up: <c>$inquire</c>'s caller is read from the JWT claim names
+/// (<c>sub</c>, then <c>client_id</c>, then <c>azp</c>). Neither scheme maps
+/// inbound claims any more, so a <c>NameIdentifier</c> claim is not a token's
+/// subject and is never taken as the caller.
+/// </summary>
+public class PasInquireCallerTests
+{
+    [Theory]
+    [InlineData(new[] { "sub", "user-1", "azp", "client-x" }, "user-1")]
+    [InlineData(new[] { System.Security.Claims.ClaimTypes.NameIdentifier, "mapped-subject", "azp", "client-x" }, "client-x")]
+    [InlineData(new[] { System.Security.Claims.ClaimTypes.NameIdentifier, "mapped-subject" }, null)]
+    public async Task Caller_IsReadFromJwtClaimNamesOnly(string[] claims, string? expected)
+    {
+        string? caller = "unset";
+        var inquiry = new Mock<IPriorAuthorizationInquiryService>();
+        inquiry.Setup(i => i.FromInquiryClaim(It.IsAny<Claim>(), It.IsAny<string>(), It.IsAny<string?>()))
+            .Callback<Claim, string, string?>((_, _, c) => caller = c)
+            .Returns(new PriorAuthorizationInquiryRequest { TenantId = "tenant-a" });
+        inquiry.Setup(i => i.InquireAsync(It.IsAny<PriorAuthorizationInquiryRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PriorAuthorizationInquiryResult.Refused(PriorAuthorizationInquiryOutcome.NotFound));
+
+        var controller = new PasController(
+            new Mock<IPasAutoAdjudicator>().Object, new PasResponseBuilder(),
+            new Mock<ICms0057ComplianceChecker>().Object, inquiry.Object,
+            Options.Create(new PasAutoAdjudicationConfig()), new Mock<IHttpClientFactory>().Object,
+            new FakePasAuthorizationRecorder(), NullLogger<PasController>.Instance);
+        var http = new DefaultHttpContext();
+        http.Items["TenantId"] = "tenant-a";
+        http.User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            claims.Chunk(2).Select(c => new System.Security.Claims.Claim(c[0], c[1])), "Bearer"));
+        controller.ControllerContext = new ControllerContext { HttpContext = http };
+
+        var bundle = new Bundle
+        {
+            Entry =
+            [
+                new()
+                {
+                    Resource = new Claim
+                    {
+                        Use = ClaimUseCode.Preauthorization,
+                        Identifier = [new Identifier("http://example.org/pas", "PAS-20261011-AAAA0001")],
+                    },
+                },
+            ],
+        };
+
+        await controller.ClaimInquire(bundle);
+
+        caller.Should().Be(expected);
+    }
+}
+
+/// <summary>
 /// The HTTP recorder: fhir-service's own service token (never the caller's),
 /// and every failure mode reported as not recorded.
 /// </summary>

@@ -493,27 +493,13 @@ public class PasController : FhirControllerBase
     }
 
     /// <summary>
-    /// The authenticated caller, from the validated token. The JWT handler maps
-    /// <c>sub</c> onto NameIdentifier, and backend clients may carry only
-    /// <c>client_id</c>/<c>azp</c>. Never read from a header or the body.
+    /// The authenticated caller, from the validated token: <c>sub</c>, else
+    /// <c>client_id</c>, else <c>azp</c> (backend clients may carry only
+    /// those). JWT claim names only: neither scheme maps inbound claims (D-32),
+    /// so a <c>NameIdentifier</c> claim is not the token's subject. Never read
+    /// from a header or the body.
     /// </summary>
-    private string? CallerId()
-    {
-        foreach (var claimType in new[]
-                 {
-                     "sub",
-                     System.Security.Claims.ClaimTypes.NameIdentifier,
-                     "client_id",
-                     "azp",
-                 })
-        {
-            var value = User?.FindFirst(claimType)?.Value;
-            if (!string.IsNullOrWhiteSpace(value))
-                return value;
-        }
-
-        return null;
-    }
+    private string? CallerId() => AuthenticatedActorId;
 
     /// <summary>Tracking handle issued at submit and used to inquire later.</summary>
     private static string NewAuthorizationNumber()
