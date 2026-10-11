@@ -93,6 +93,26 @@ public class ScenarioManifestTests
     }
 
     [Fact]
+    public void PassableMatrixRows_HaveANonGapReplaceTest()
+    {
+        // Static mirror of the generator's reconciliation, so a plain `dotnet test`
+        // catches a PASSABLE row in docs/epa-gap-matrix.md §11 that no
+        // Replace-tagged, non-GAP test backs. (The generator also requires the
+        // test to have passed; this guard only checks that one exists.)
+        var statuses = MatrixReplaceStatuses.Load();
+        statuses.Keys.Should().BeEquivalentTo(Manifest.Scenarios.Select(s => s.Id),
+            "the §11 table has one row per manifest scenario");
+
+        var passable = statuses.Where(r => r.Value == "PASSABLE").Select(r => r.Key).ToList();
+        foreach (var id in passable)
+        {
+            Traits.Should().Contain(
+                t => t.ScenarioId == id && t.Backend == ScenarioManifest.ReplaceBackend && !t.IsGap,
+                $"scenario {id} is PASSABLE in docs/epa-gap-matrix.md §11 and needs a Replace-tagged, non-GAP test");
+        }
+    }
+
+    [Fact]
     public void PassableAugmentScenarios_HaveANonGapAugmentTest()
     {
         foreach (var s in Manifest.Scenarios)
