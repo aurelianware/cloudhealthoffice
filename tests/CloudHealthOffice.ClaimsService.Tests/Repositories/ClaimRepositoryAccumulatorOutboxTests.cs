@@ -224,6 +224,31 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
     }
 
     /// <summary>
+    /// #1299 (Cosmos CI): an approval re-run that ends Deny on a Pended claim
+    /// writes its fenced projection; the status write is blocked (a pend is
+    /// never downgraded by the projection) and the contradictory-status repair
+    /// it then attempts must not fail. On Cosmos the repair predicate used
+    /// ARRAY_LENGTH, which the emulator cannot evaluate in a patch filter
+    /// (400), so the whole re-run threw.
+    /// </summary>
+    [SkippableFact]
+    public async Task AFencedDenyProjection_OnAPendedClaim_IsWritten_AndLeavesItPended()
+    {
+        await SeedAsync("PD", ClaimStatus.Pended);
+        (await Repo.TryAcquireResolutionLockAsync(Tenant, "PD", "tok-1", "examiner", DateTime.UtcNow, TimeSpan.FromMinutes(5))).Should().BeTrue();
+
+        var written = await Repo.UpdateAdjudicationProjectionAsync(
+            Tenant, "PD",
+            new AdjudicationResult { DenialReasonCode = "197", DenialReason = "Prior authorization required but not provided" },
+            [], resolvedStatus: ClaimStatus.Denied, requiredResolutionLockToken: "tok-1");
+
+        written.Should().BeTrue();
+        var stored = await StoredAsync("PD");
+        stored.Status.Should().Be(ClaimStatus.Pended);
+        stored.AdjudicationResult!.DenialReasonCode.Should().Be("197");
+    }
+
+    /// <summary>
     /// #1299 nit: the bulk re-runs take the least recently pended first. A
     /// re-run that pends again re-stamps PendedAt, so it goes to the back of
     /// the queue instead of refilling every batch (oldest-submitted-first did).
