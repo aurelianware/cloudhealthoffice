@@ -16,7 +16,7 @@
         FHIR R4 APIs
     </MudText>
     <MudText Typo="Typo.body1" Class="apis-page-sub">
-        Production-ready FHIR R4 APIs for CMS-compliant healthcare integration.
+        FHIR R4 APIs for CMS interoperability. CMS-0057-F conformance is in progress.
         OAuth 2.0 authentication, OpenAPI documentation, and real-time X12 EDI ↔ FHIR transformation.
     </MudText>
 
@@ -93,7 +93,7 @@
                 <MudCardHeader>
                     <CardHeaderContent>
                         <MudText Typo="Typo.h6">Patient Access API</MudText>
-                        <MudChip Size="Size.Small" Color="Color.Success" Style="margin-top: 8px;">CMS-9115-F Compliant</MudChip>
+                        <MudChip Size="Size.Small" Color="Color.Warning" Style="margin-top: 8px;">Conformance in progress</MudChip>
                     </CardHeaderContent>
                     <CardHeaderActions>
                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
@@ -136,7 +136,7 @@
                 <MudCardHeader>
                     <CardHeaderContent>
                         <MudText Typo="Typo.h6">Prior Authorization API</MudText>
-                        <MudChip Size="Size.Small" Color="Color.Success" Style="margin-top: 8px;">CMS-0057-F Compliant</MudChip>
+                        <MudChip Size="Size.Small" Color="Color.Warning" Style="margin-top: 8px;">CMS-0057-F conformance in progress</MudChip>
                     </CardHeaderContent>
                     <CardHeaderActions>
                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
@@ -146,14 +146,14 @@
                 </MudCardHeader>
                 <MudCardContent>
                     <MudText Typo="Typo.body2" Class="mb-3">
-                        Electronic prior authorization with CDS Hooks for real-time coverage requirements discovery.
-                        Replaces X12 278 workflows with FHIR Claim-based submission.
+                        Electronic prior authorization with CDS Hooks for real-time coverage requirements discovery and
+                        FHIR Claim-based submission. Da Vinci CRD/DTR/PAS: in development. X12 278 bridging is planned.
                     </MudText>
                     <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">Key Endpoints:</MudText>
                     <MudChipSet>
                         <MudChip Size="Size.Small" Variant="Variant.Outlined">POST /Claim/$submit</MudChip>
-                        <MudChip Size="Size.Small" Variant="Variant.Outlined">GET /ClaimResponse</MudChip>
-                        <MudChip Size="Size.Small" Variant="Variant.Outlined">POST /cds-services/coverage-requirements</MudChip>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">POST /Claim/$inquire</MudChip>
+                        <MudChip Size="Size.Small" Variant="Variant.Outlined">POST /cds-services/cho-order-sign</MudChip>
                     </MudChipSet>
                 </MudCardContent>
                 <MudCardActions>
@@ -178,7 +178,7 @@
                 <MudCardHeader>
                     <CardHeaderContent>
                         <MudText Typo="Typo.h6">Provider Directory API</MudText>
-                        <MudChip Size="Size.Small" Color="Color.Success" Style="margin-top: 8px;">CMS-9115-F Compliant</MudChip>
+                        <MudChip Size="Size.Small" Color="Color.Warning" Style="margin-top: 8px;">Conformance in progress</MudChip>
                     </CardHeaderContent>
                     <CardHeaderActions>
                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
@@ -220,7 +220,7 @@
                 <MudCardHeader>
                     <CardHeaderContent>
                         <MudText Typo="Typo.h6">Payer-to-Payer API</MudText>
-                        <MudChip Size="Size.Small" Color="Color.Success" Style="margin-top: 8px;">CMS-9115-F Compliant</MudChip>
+                        <MudChip Size="Size.Small" Color="Color.Warning" Style="margin-top: 8px;">Conformance in progress</MudChip>
                     </CardHeaderContent>
                     <CardHeaderActions>
                         <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
