@@ -272,6 +272,92 @@ kubectl logs -n cloudhealthoffice -l app=claims-service --tail=100
 kubectl get hpa -n cloudhealthoffice
 ```
 
+## benefit-plan-service: Cosmos deployments created before the D-31 fix
+
+Applies only to benefit-plan-service running on the Cosmos DB **SQL (native) API**
+(`Database:Provider=CosmosDb`). Deployments on MongoDB, or on Cosmos DB for MongoDB
+(reached with a `MongoDb:ConnectionString`), are unaffected: on that path the service
+never registered the faulty client, and MongoDB documents are written by the BSON
+serializer, which this fix does not touch.
+
+**What changed.** Before D-31, benefit-plan-service registered its own `CosmosClient` with
+the SDK's default Newtonsoft serializer, overriding the shared client from
+`AddChoDatabase`. Every repository the service resolves wrote PascalCase documents through
+it: `"Id"` instead of `"id"`, `"TenantId"` instead of `"tenantId"`, enums as numbers, nulls
+stored as `null`. The service now uses the shared `CosmosSystemTextJsonSerializer`
+(camelCase, enums as camelCase strings, null properties omitted), which is what its
+queries and the containers' partition keys expect. The fixed service does not read the
+old shape correctly: a PascalCase document has no `id`, its `tenantId` / `stateCode` and
+other filtered properties are undefined to camelCase queries, and numeric enums no longer
+match.
+
+In practice the old client's writes were rejected (400 "Document does not contain an id
+field", or a partition-key mismatch), so most such deployments hold no benefit-plan
+documents at all. Check before deciding anything.
+
+**Containers involved** (names are the configuration defaults; partition key paths must
+be exactly these, lower camelCase):
+
+| Container | Written by | Partition key |
+|---|---|---|
+| `BenefitPlans` (`CosmosDb:ContainerName`) | BenefitPlanRepository | `/tenantId` |
+| `PlanVersionTransitions` | CosmosPlanVersionTransitionRepository | `/tenantId` |
+| `ServiceCategoryMappings` | ChoServiceCategoryMappingRepository | `/tenantId` |
+| `Accumulators` | BenefitEngine AccumulatorRepositoryCosmos | `/tenantId` |
+| `FeeSchedules`, `ProviderContracts` | FeeScheduleEngine | `/tenantId` |
+| `NcciPairs`, `MueEntries`, `NcciVersion`, `NcciLoadLedger` | NcciEngine (created at startup) | `/tenantId` |
+| `prior-auth-rules` | PriorAuthRuleEngine | `/stateCode` |
+| `enrollment-cache` | ProviderEnrollmentService | `/stateCode` |
+| `enrollment-tenant-config` | ProviderEnrollmentService | `/tenantId` |
+
+A container created with `/TenantId`, `/StateCode` or `/id` must be re-created with the
+path above; Cosmos cannot change a container's partition key.
+
+**Detect the old shape.** Cosmos property names are case-sensitive, so in Data Explorer run,
+per container:
+
+```sql
+SELECT VALUE COUNT(1) FROM c WHERE IS_DEFINED(c.Id) OR IS_DEFINED(c.TenantId) OR IS_DEFINED(c.StateCode)
+```
+
+A non-zero count means documents from before the fix. `SELECT TOP 5 * FROM c WHERE IS_DEFINED(c.Id)`
+shows them.
+
+**Option 1: re-seed (preferred when the data can be re-created).**
+
+1. Scale benefit-plan-service to zero.
+2. Delete each container above that holds old documents, and re-create it with the
+   partition key in the table, e.g.
+   `az cosmosdb sql container create -g <rg> -a <account> -d <database> -n BenefitPlans --partition-key-path /tenantId`.
+   The NCCI containers may simply be deleted; the service re-creates them at startup.
+3. Deploy the fixed service and scale it back up. On startup the PA-rule seeder writes the
+   platform prior-auth rules; check the log for `PriorAuthRuleEngine: seeded`.
+4. Call `POST /api/v1/prior-auth-rules/seed-platform` with a token carrying
+   `settings:manage`; it reports `seededRules` (0 if startup already seeded them).
+5. Re-create the tenant data from its source: plans through the benefit-plan API (or the
+   tenant-onboarding seed step), fee schedules and contracts through their imports, the
+   NCCI quarter through the NCCI load endpoint. Service-category system defaults are
+   re-applied by `SystemDefaultMappingSeeder` the first time each tenant is seen again;
+   tenant-specific mappings must be re-entered.
+
+**Option 2: migrate in place.** Rewrite each old document (read it, transform it, replace it
+under the same partition key value, then delete the PascalCase original if its id differs):
+
+- Every property name, at every depth (nested objects and array items included), becomes
+  camelCase: first letter lower-cased (`Id` → `id`, `TenantId` → `tenantId`,
+  `NetworkTiers[].TierName` → `networkTiers[].tierName`, `Column1Code` → `column1Code`).
+  `NcciVersion`'s `id` was already lower-case.
+- Enums stored as numbers become their member name in camelCase: `"planType": 1` →
+  `"planType": "ppo"`, `"versionState": 1` → `"published"`, `"lob": 3` → `"medicaid"`,
+  `"networkStatus": 0` → `"inNetwork"`, `"cobDeductibleCredit": 1` → `"naicFullCredit"`.
+  The enrollment documents' `status`, `providerType` and `defaultGateMode` were already
+  strings (`"Active"`, `"PhysicianMD"`) and keep their values; `supportedLobs` stays a number.
+- Remove properties whose value is `null` (the service omits them; its queries treat
+  missing and null alike, but removing them keeps one shape).
+- Dates, numbers and string values are unchanged.
+- The partition key property (`tenantId` or `stateCode`) must be present, lower camelCase,
+  and equal to the partition key value the document is stored under.
+
 ## Troubleshooting
 
 ### Common Issues
