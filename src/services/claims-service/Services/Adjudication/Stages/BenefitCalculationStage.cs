@@ -480,7 +480,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         CancellationToken ct)
     {
         var claim = context.Claim;
-        var lines = LinesRequiringPriorAuthorization(claim);
+        var lines = LinesRequiringPriorAuthorization(claim, context.ResolvedPlan);
         if (lines.Count == 0)
         {
             return default;
@@ -559,15 +559,26 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     }
 
     /// <summary>
-    /// The claim's lines that require prior authorization, in line order.
-    /// Default (unchanged scope): an institutional Medicaid inpatient claim
-    /// (place of service 21) requires it on every line.
+    /// The claim's lines that require prior authorization, in line order (G-25):
+    /// <list type="bullet">
+    ///   <item>every line of an institutional Medicaid inpatient claim (place
+    ///   of service 21) — the default scope, unchanged, and kept as a floor
+    ///   so plan configuration never stops an existing check;</item>
+    ///   <item>any line whose procedure code the claim's plan flags as
+    ///   requiring prior authorization (benefit-plan-service
+    ///   <c>benefits[].priorAuthRequired</c> / <c>requiresPriorAuth</c> with
+    ///   <c>cptCodes</c>; see <see cref="ResolvedBenefitPlan.PriorAuthRequiredProcedureCodes"/>).</item>
+    /// </list>
     /// </summary>
-    private static List<AdapterClaimLine> LinesRequiringPriorAuthorization(AdapterClaim claim)
+    internal static List<AdapterClaimLine> LinesRequiringPriorAuthorization(AdapterClaim claim, ResolvedBenefitPlan? plan)
     {
         var claimWide = IsInpatientMedicaidInstitutional(claim);
+        var planCodes = plan?.PriorAuthRequiredProcedureCodes;
         return claim.ClaimLines
-            .Where(_ => claimWide)
+            .Where(line => claimWide
+                || (planCodes is { Count: > 0 }
+                    && !string.IsNullOrWhiteSpace(line.ProcedureCode)
+                    && planCodes.Contains(line.ProcedureCode.Trim())))
             .OrderBy(line => line.LineNumber)
             .ToList();
     }

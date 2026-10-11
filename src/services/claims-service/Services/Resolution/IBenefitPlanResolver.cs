@@ -56,6 +56,17 @@ public class ResolvedBenefitPlan
     /// </summary>
     public IReadOnlyList<ResolvedNetworkTier> NetworkTiers { get; init; } =
         Array.Empty<ResolvedNetworkTier>();
+
+    /// <summary>
+    /// Procedure codes this plan requires prior authorization for (G-25):
+    /// the <c>cptCodes</c> of every covered benefit flagged
+    /// <c>priorAuthRequired</c> or <c>requiresPriorAuth</c> on
+    /// benefit-plan-service. Case-insensitive. Empty when the plan
+    /// configures none — the claims pipeline then keeps its default scope
+    /// (institutional Medicaid inpatient claims).
+    /// </summary>
+    public IReadOnlySet<string> PriorAuthRequiredProcedureCodes { get; init; } =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>

@@ -230,7 +230,152 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
         Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredReason, ctx.AdjudicationResult.DenialReason);
     }
 
+    // ── Which lines require PA is configurable per plan (G-25) ───────
+
+    [Fact]
+    public async Task PlanFlagsProcedure_ChecksOnlyThatLine_OnAnyClaimType()
+    {
+        var (stage, handler) = StageOver(req => ValidationBody("AUTH-1", isValid: true, "Authorization valid"));
+        var ctx = CommercialProfessional("AUTH-1", "72148", "99213");
+        ctx.ResolvedPlan = PlanRequiringPriorAuthFor("72148");
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal("72148", Query(request, "procedureCode"));
+    }
+
+    [Fact]
+    public async Task PlanFlagsProcedure_NoNumber_DeniesWithCarc197()
+    {
+        var (stage, handler) = StageOver(_ => throw new InvalidOperationException("must not be called"));
+        var ctx = CommercialProfessional(null, "99213", "72148");
+        ctx.ResolvedPlan = PlanRequiringPriorAuthFor("72148");
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredCode, ctx.AdjudicationResult.DenialReasonCode);
+        Assert.Equal(0, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task PlanFlagsProcedure_LookupUnavailable_Pends()
+    {
+        var (stage, _) = StageOver(_ => new HttpResponseMessage(HttpStatusCode.BadGateway));
+        var ctx = CommercialProfessional("AUTH-1", "72148");
+        ctx.ResolvedPlan = PlanRequiringPriorAuthFor("72148");
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        AssertPendedPaUnavailable(result, ctx);
+    }
+
+    [Fact]
+    public async Task PlanWithoutPriorAuthConfiguration_KeepsDefaultScope_NoLookupOutsideInpatientMedicaid()
+    {
+        var (stage, handler) = StageOver(_ => throw new InvalidOperationException("must not be called"));
+        var ctx = CommercialProfessional(null, "72148");
+        ctx.ResolvedPlan = new ResolvedBenefitPlan { Id = "plan-1", PlanGuid = Guid.NewGuid() };
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Equal(0, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task PlanConfiguration_NeverStopsTheDefaultInpatientMedicaidCheck()
+    {
+        var (stage, handler) = StageOver(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var ctx = InpatientMedicaid("AUTH-1", "99223");
+        ctx.ResolvedPlan = PlanRequiringPriorAuthFor("72148");
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        AssertPendedPaUnavailable(result, ctx);
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    /// <summary>
+    /// D-05 end to end: an 837P whose line carries its own REF*G1 reaches
+    /// authorization-service with that number for that line.
+    /// </summary>
+    [Fact]
+    public async Task Edi837P_LineLevelRefG1_IsTheNumberValidatedForThatLine()
+    {
+        const string edi =
+            "ISA*00*          *00*          *ZZ*SUBMITTER01    *ZZ*CHOPAYER       *260301*1200*^*00501*000000203*0*T*:~" +
+            "GS*HC*SUBMITTER01*CHOPAYER*20260301*1200*203*X*005010X222A1~" +
+            "ST*837*0203*005010X222A1~" +
+            "BHT*0019*00*PA-PROF-0003*20260301*1200*CH~" +
+            "NM1*41*2*SYNTHETIC CLINIC*****46*SUBMITTER01~" +
+            "NM1*40*2*CHO TEST PAYER*****46*CHOPAYER~" +
+            "HL*1**20*1~" +
+            "NM1*85*2*SYNTHETIC CLINIC*****XX*1234567890~" +
+            "HL*2*1*22*0~" +
+            "SBR*P*18*GRP-0003******CI~" +
+            "NM1*IL*1*TESTPATIENT*SAM****MI*MEM-1~" +
+            "NM1*PR*2*CHO TEST PAYER*****PI*PAYER01~" +
+            "CLM*PA-PROF-0003*1250.00***11:B:1*Y*A*Y*Y~" +
+            "REF*G1*AUTH-CLAIM-0003~" +
+            "HI*ABK:M5416~" +
+            "LX*1~" +
+            "SV1*HC:72148*1000.00*UN*1*11**1~" +
+            "DTP*472*D8*20260305~" +
+            "REF*G1*AUTH-LINE-0003~" +
+            "LX*2~" +
+            "SV1*HC:99214*250.00*UN*1*11**1~" +
+            "DTP*472*D8*20260305~" +
+            "SE*21*0203~" +
+            "GE*1*203~" +
+            "IEA*1*000000203~";
+        var claim = global::ClaimsService.EDI.Inbound.X12837ClaimMapper.Map(
+            Assert.Single(global::ClaimsService.EDI.Inbound.X12837Parser.Parse(edi)), Tenant);
+        claim.Id = "claim-edi";
+        claim.ClaimVersionId = "claim-edi";
+        claim.BenefitPlanId = Guid.NewGuid().ToString();
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = Tenant,
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = new PricingOutcome
+            {
+                AllowedAmounts = claim.ClaimLines.ToDictionary(l => l.LineNumber, _ => 72m),
+            },
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+            ResolvedPlan = PlanRequiringPriorAuthFor("72148"),
+        };
+        var (stage, handler) = StageOver(req =>
+            ValidationBody(Uri.UnescapeDataString(req.RequestUri!.AbsolutePath.Split('/')[3]), isValid: true, "Authorization valid"));
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal("/api/authorizations/AUTH-LINE-0003/validate", request.RequestUri!.AbsolutePath);
+        Assert.Equal("72148", Query(request, "procedureCode"));
+    }
+
     // ── helpers ───────────────────────────────────────────────────────
+
+    private static ResolvedBenefitPlan PlanRequiringPriorAuthFor(params string[] codes) => new()
+    {
+        Id = "plan-1",
+        PlanGuid = Guid.NewGuid(),
+        PriorAuthRequiredProcedureCodes = new HashSet<string>(codes, StringComparer.OrdinalIgnoreCase),
+    };
+
+    private static ClaimAdjudicationContext CommercialProfessional(string? authNumber, params string[] procedureCodes)
+    {
+        var ctx = InpatientMedicaid(authNumber, procedureCodes);
+        ctx.Claim.LineOfBusiness = LineOfBusiness.Commercial;
+        ctx.Claim.ClaimType = ClaimType.Professional;
+        ctx.Claim.PlaceOfServiceCode = "11";
+        return ctx;
+    }
 
     private void AssertPendedPaUnavailable(ClaimAdjudicationStageResult result, ClaimAdjudicationContext ctx)
     {

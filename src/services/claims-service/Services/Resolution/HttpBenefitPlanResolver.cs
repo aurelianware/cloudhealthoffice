@@ -89,6 +89,17 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
                 })
                 .ToList();
 
+            // G-25: the plan's own prior-authorization flags. A benefit
+            // flagged without CPT codes names a service category the
+            // claims pipeline cannot map a line to, so it adds nothing here.
+            var priorAuthCodes = new HashSet<string>(
+                (dto.Benefits ?? new List<BenefitDto>())
+                    .Where(b => b is not null && b.IsCovered && (b.PriorAuthRequired || b.RequiresPriorAuth))
+                    .SelectMany(b => b.CptCodes ?? new List<string>())
+                    .Where(code => !string.IsNullOrWhiteSpace(code))
+                    .Select(code => code.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+
             return new ResolvedBenefitPlan
             {
                 Id = dto.Id ?? planId,
@@ -96,6 +107,7 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
                 PlanName = dto.PlanName,
                 PlanType = dto.PlanType,
                 NetworkTiers = tiers,
+                PriorAuthRequiredProcedureCodes = priorAuthCodes,
             };
         }
         catch (Exception ex) when (ex is HttpRequestException
@@ -118,6 +130,16 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
         public string? PlanName { get; set; }
         public string? PlanType { get; set; }
         public List<NetworkTierDto>? NetworkTiers { get; set; }
+        public List<BenefitDto>? Benefits { get; set; }
+    }
+
+    /// <summary>The prior-authorization fields of <c>BenefitPlanService.Models.Benefit</c>.</summary>
+    private sealed class BenefitDto
+    {
+        public bool IsCovered { get; set; } = true;
+        public List<string>? CptCodes { get; set; }
+        public bool PriorAuthRequired { get; set; }
+        public bool RequiresPriorAuth { get; set; }
     }
 
     private sealed class NetworkTierDto
