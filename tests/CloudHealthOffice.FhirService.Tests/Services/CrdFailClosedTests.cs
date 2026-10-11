@@ -252,6 +252,52 @@ public class CrdFailClosedTests
     }
 
     [Fact]
+    public async Task UncodedOrder_OfAnUnknownType_DoesNotEchoTheCallersResourceType()
+    {
+        // resourceType is caller-supplied; the card must not repeat it verbatim.
+        var result = await Service().EvaluateCoverageRequirementsAsync(
+            HookWith(new CrdDraftOrderResource { ResourceType = "<b>Pay now at evil.example</b>" }), Tenant);
+
+        var card = result.Cards.Should().ContainSingle().Subject;
+        ShouldBeUnknown(card);
+        card.Summary.Should().NotContain("evil.example").And.NotContain("<b>");
+        card.Summary.Should().Contain("Draft order (no coded service)");
+    }
+
+    [Theory]
+    [InlineData("ServiceRequest")]
+    [InlineData("MedicationRequest")]
+    [InlineData("DeviceRequest")]
+    [InlineData("NutritionOrder")]
+    [InlineData("VisionPrescription")]
+    [InlineData("CommunicationRequest")]
+    [InlineData("Appointment")]
+    public async Task UncodedOrder_OfAKnownOrderType_NamesTheType(string type)
+    {
+        var result = await Service().EvaluateCoverageRequirementsAsync(
+            HookWith(new CrdDraftOrderResource { ResourceType = type }), Tenant);
+
+        result.Cards.Should().ContainSingle().Which.Summary.Should().Contain($"{type} order (no coded service)");
+    }
+
+    [Fact]
+    public async Task OrderWhoseCodingsAreAllBlank_GetsOnlyTheUncodedCard()
+    {
+        EngineReturns(PaDecisionOutcome.Pend, "NoRuleMatch");
+        var result = await Service().EvaluateCoverageRequirementsAsync(
+            HookWith(new CrdDraftOrderResource
+            {
+                ResourceType = "ServiceRequest",
+                Code = new CrdCodeableConcept { Coding = [new() { System = CptSystem, Code = "" }, new() { System = CptSystem, Code = "  " }] },
+            }),
+            Tenant);
+
+        var card = result.Cards.Should().ContainSingle().Subject;
+        card.Summary.Should().Contain("ServiceRequest order (no coded service)");
+        result.CodesEvaluated.Should().Be(0);
+    }
+
+    [Fact]
     public async Task NoDraftOrders_StillProducesNoCards()
     {
         // Nothing was ordered, so there is nothing to answer about.

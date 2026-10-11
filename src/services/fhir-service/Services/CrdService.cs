@@ -83,7 +83,18 @@ public class CrdService : ICrdService
         };
     }
 
-    /// <summary>Resource types of draft orders that carry no code to evaluate.</summary>
+    /// <summary>
+    /// CDS Hooks draft-order resource types a card may name. resourceType is
+    /// caller-supplied, so anything else is labelled "Draft" rather than echoed
+    /// into a card the EHR displays. Canonical spelling from this set.
+    /// </summary>
+    private static readonly HashSet<string> KnownOrderTypes = new(StringComparer.Ordinal)
+    {
+        "ServiceRequest", "MedicationRequest", "DeviceRequest", "NutritionOrder",
+        "VisionPrescription", "CommunicationRequest", "Appointment",
+    };
+
+    /// <summary>Order types (known ones by name, others as "Draft") of draft orders with no code to evaluate.</summary>
     internal static List<string> UncodedOrders(CrdHookRequest request)
     {
         var uncoded = new List<string>();
@@ -95,7 +106,9 @@ public class CrdService : ICrdService
                 ? resource.MedicationCodeableConcept
                 : resource.Code;
             if (concept?.Coding is not { Count: > 0 } || concept.Coding.All(c => string.IsNullOrWhiteSpace(c.Code)))
-                uncoded.Add(string.IsNullOrWhiteSpace(resource.ResourceType) ? "Draft" : resource.ResourceType);
+                uncoded.Add(KnownOrderTypes.TryGetValue(resource.ResourceType ?? string.Empty, out var known)
+                    ? known
+                    : "Draft");
         }
         return uncoded;
     }
@@ -248,7 +261,9 @@ public class CrdService : ICrdService
 
             if (codeableConcept?.Coding != null)
             {
-                codes.AddRange(codeableConcept.Coding);
+                // A blank code classifies nothing; the order is answered once,
+                // as uncoded (UncodedOrders), not also as an "unknown" blank code.
+                codes.AddRange(codeableConcept.Coding.Where(c => !string.IsNullOrWhiteSpace(c.Code)));
             }
         }
 
