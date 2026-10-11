@@ -122,6 +122,7 @@ public class DtrService : IDtrService
     public async Task<Questionnaire> CreateQuestionnaireAsync(
         Questionnaire questionnaire, string tenantId, CancellationToken ct = default)
     {
+        EnsureNotDefaultLibrary(tenantId);
         var id = questionnaire.Id;
         if (string.IsNullOrEmpty(id) || _questionnaires.ContainsKey($"{tenantId}:{id}"))
             id = $"q-{Guid.NewGuid().ToString("N")[..8]}";
@@ -152,6 +153,7 @@ public class DtrService : IDtrService
     public Task<Questionnaire?> UpdateQuestionnaireAsync(
         string id, Questionnaire questionnaire, string tenantId, CancellationToken ct = default)
     {
+        EnsureNotDefaultLibrary(tenantId);
         var key = $"{tenantId}:{id}";
         if (!_questionnaires.ContainsKey(key) && !_questionnaires.ContainsKey($"default:{id}"))
             return Task.FromResult<Questionnaire?>(null);
@@ -300,7 +302,22 @@ public class DtrService : IDtrService
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private const string DefaultLibraryTenant = "default";
+    /// <summary>
+    /// Store key of the read-only default library every tenant sees. Reserved:
+    /// no caller may write under it (D-14).
+    /// </summary>
+    public const string DefaultLibraryTenant = "default";
+
+    /// <summary>
+    /// Defence in depth behind DtrController's 403: the shared library is
+    /// seeded at startup, never written through the API.
+    /// </summary>
+    private static void EnsureNotDefaultLibrary(string tenantId)
+    {
+        if (string.Equals(tenantId, DefaultLibraryTenant, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "The default questionnaire library is read-only; tenant id 'default' is reserved.");
+    }
 
     /// <summary>
     /// The questionnaires one tenant may see: its own, plus each entry of the

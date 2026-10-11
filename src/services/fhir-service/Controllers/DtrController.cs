@@ -60,6 +60,18 @@ public class DtrController : FhirControllerBase
         return Ok(bundle);
     }
 
+    /// <summary>
+    /// D-14: <c>"default"</c> is the store key of the read-only library every
+    /// tenant's search includes. A tenant whose id is "default" writing there
+    /// would publish its forms to every tenant, so that id is reserved for
+    /// questionnaire writes.
+    /// </summary>
+    private bool IsReservedLibraryTenant
+        => string.Equals(TenantId, DtrService.DefaultLibraryTenant, StringComparison.Ordinal);
+
+    private const string ReservedLibraryMessage =
+        "Tenant id 'default' is reserved for the shared, read-only questionnaire library.";
+
     /// <summary>POST /fhir/r4/Questionnaire — create</summary>
     [HttpPost("Questionnaire")]
     // CHO administrators only (D-15): a payer's questionnaires are its
@@ -73,6 +85,8 @@ public class DtrController : FhirControllerBase
     public async Task<IActionResult> CreateQuestionnaire(
         [FromBody] Questionnaire questionnaire, CancellationToken ct)
     {
+        if (IsReservedLibraryTenant) return FhirForbidden(ReservedLibraryMessage);
+
         // Validate required fields
         if (questionnaire.Status == null)
             return FhirBadRequest("Questionnaire.status is required");
@@ -105,6 +119,8 @@ public class DtrController : FhirControllerBase
     public async Task<IActionResult> UpdateQuestionnaire(
         string id, [FromBody] Questionnaire questionnaire, CancellationToken ct)
     {
+        if (IsReservedLibraryTenant) return FhirForbidden(ReservedLibraryMessage);
+
         if (questionnaire.Status == null)
             return FhirBadRequest("Questionnaire.status is required");
         if (questionnaire.Item == null || questionnaire.Item.Count == 0)

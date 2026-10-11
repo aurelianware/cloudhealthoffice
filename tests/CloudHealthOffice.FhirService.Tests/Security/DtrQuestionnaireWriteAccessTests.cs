@@ -96,6 +96,26 @@ public class DtrQuestionnaireWriteAccessTests : IClassFixture<FhirTestWebAppFact
     }
 
     [Fact]
+    public async Task ChoAdmin_OfATenantNamedDefault_CannotWriteTheSharedLibrary()
+    {
+        // D-14: "default" is the store key of the read-only library every
+        // tenant sees. A tenant whose id is "default" must not be able to
+        // write there, or its forms would appear in every tenant's search.
+        var token = ChoDevelopmentAuth.UserToken("default", ChoRolePermissions.TenantAdmin);
+
+        var put = await SendAsync(HttpMethod.Put, "/fhir/r4/Questionnaire/q-imaging-mri", token,
+            Body(Form("q-imaging-mri", "Rewritten shared form")));
+        var post = await SendAsync(HttpMethod.Post, "/fhir/r4/Questionnaire", token,
+            Body(Form("q-default-" + Guid.NewGuid().ToString("N")[..6], "New shared form")));
+
+        put.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        post.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var library = await _factory.Services.GetRequiredService<IDtrService>()
+            .GetQuestionnaireAsync("q-imaging-mri", "some-other-tenant");
+        library!.Title.Should().NotBe("Rewritten shared form");
+    }
+
+    [Fact]
     public async Task SmartToken_CanStillReadQuestionnaires()
         => (await SendAsync(HttpMethod.Get, "/fhir/r4/Questionnaire/q-imaging-mri",
                 _factory.IssueToken("user/Questionnaire.read")))
