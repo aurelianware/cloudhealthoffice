@@ -1,6 +1,7 @@
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -290,18 +291,103 @@ public class SlaWatchdogServiceTests
         _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<Authorization>()), Times.Never);
     }
 
+    [Fact]
+    public async Task TenantList_IsCached_AndRefreshedAfterTheInterval()
+    {
+        var auth = CreateAuth(levelOfService: "U", hoursAgo: 10);
+        SetupRepository(auth);
+
+        await RunWatchdog();
+        await RunWatchdog();
+        _repositoryMock.Verify(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()), Times.Once);
+
+        _clock.Advance(SlaWatchdogService.TenantListRefreshInterval);
+        await RunWatchdog();
+        _repositoryMock.Verify(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task OneRecordFailing_DoesNotStopTheRestOfItsTenant()
+    {
+        var first = CreateAuth(levelOfService: "U", hoursAgo: 50);
+        var second = CreateAuth(levelOfService: "U", hoursAgo: 50);
+        _repositoryMock.Setup(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { "tenant-1" });
+        _repositoryMock.Setup(r => r.GetOpenAuthorizationsAsync("tenant-1")).ReturnsAsync(new[] { first, second });
+        SetupRaise(second);
+        _repositoryMock.Setup(r => r.RaiseSlaEscalationAsync(
+                "tenant-1", first.Id, It.IsAny<SlaEscalationLevel>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("transient"));
+
+        var summary = await RunWatchdog();
+
+        second.SlaEscalation.Should().Be(SlaEscalationLevel.Warning);
+        summary.Escalated.Should().Be(1);
+        summary.FailedRecords.Should().Be(1);
+        summary.FailedTenants.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task MongoTenantScoping_IsNotSupported_AndSaysSo()
+    {
+        _settings["MongoDb:UseTenantScoping"] = "true";
+        SetupRepository(CreateAuth(levelOfService: "U", hoursAgo: 100));
+
+        var summary = await RunWatchdog();
+
+        summary.SkippedReason.Should().Contain("UseTenantScoping");
+        _repositoryMock.Verify(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _loggerMock.Verify(l => l.Log(
+            LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TenantScopingOnCosmos_IsIrrelevant()
+    {
+        _settings["Database:Provider"] = "CosmosDb";
+        _settings["MongoDb:UseTenantScoping"] = "true";
+        var auth = CreateAuth(levelOfService: "U", hoursAgo: 50);
+        SetupRepository(auth);
+
+        var summary = await RunWatchdog();
+
+        summary.SkippedReason.Should().BeNull();
+        auth.SlaEscalation.Should().Be(SlaEscalationLevel.Warning);
+    }
+
+    private readonly Dictionary<string, string?> _settings = new();
+    private readonly ManualClock _clock = new();
+    private SlaWatchdogService? _service;
+
     private async Task<SlaWatchdogRunSummary> RunWatchdog()
     {
-        var services = new ServiceCollection();
-        services.AddScoped(_ =>
+        if (_service is null)
         {
-            _scopesCreated++;
-            return _repositoryMock.Object;
-        });
-        var sp = services.BuildServiceProvider();
+            var services = new ServiceCollection();
+            services.AddScoped(_ =>
+            {
+                _scopesCreated++;
+                return _repositoryMock.Object;
+            });
+            var sp = services.BuildServiceProvider();
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(_settings).Build();
 
-        var service = new SlaWatchdogService(sp.GetRequiredService<IServiceScopeFactory>(), _loggerMock.Object);
-        return await service.EvaluateAllAuthorizationsAsync();
+            _service = new SlaWatchdogService(
+                sp.GetRequiredService<IServiceScopeFactory>(), configuration, _loggerMock.Object, _clock);
+        }
+
+        return await _service.EvaluateAllAuthorizationsAsync();
+    }
+
+    /// <summary>Real time plus whatever the test has advanced it by.</summary>
+    private sealed class ManualClock : TimeProvider
+    {
+        private TimeSpan _offset;
+
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UtcNow + _offset;
+
+        public void Advance(TimeSpan by) => _offset += by;
     }
 
     private static Authorization CreateAuth(string? levelOfService, double hoursAgo) => new()

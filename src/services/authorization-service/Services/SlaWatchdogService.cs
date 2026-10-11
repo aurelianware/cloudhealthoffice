@@ -14,12 +14,29 @@ namespace AuthorizationService.Services;
 /// time, passing the tenant EXPLICITLY to every repository call, in a fresh
 /// DI scope per tenant (the repository is Scoped; nothing is captured for the
 /// process lifetime). Modelled on <see cref="PriorAuthorizationRetentionWorker"/>.
-/// One tenant's failure is logged and does not stop the others.
+/// One tenant's failure, or one record's, is logged and does not stop the rest.
+/// </para>
+///
+/// <para>
+/// The tenant list is cached for <see cref="TenantListRefreshInterval"/>:
+/// listing tenants is a cross-partition DISTINCT on Cosmos and a collection
+/// scan on Mongo (D-37), and tenants appear rarely. A new tenant's
+/// authorizations are first evaluated within that interval.
+/// </para>
+///
+/// <para>
+/// Not supported with <c>MongoDb:UseTenantScoping=true</c> (a database per
+/// tenant): with no request the repository sees only the base database, so
+/// the watchdog would silently find nothing. It logs a warning and does
+/// nothing instead (D-38).
 /// </para>
 /// </summary>
 public class SlaWatchdogService : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(15);
+
+    /// <summary>How long a listed set of tenants is reused before it is listed again.</summary>
+    public static readonly TimeSpan TenantListRefreshInterval = TimeSpan.FromHours(1);
 
     // Urgent (LevelOfService == "U") thresholds in hours
     private const double UrgentWarningHours = 48;
@@ -33,17 +50,40 @@ public class SlaWatchdogService : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SlaWatchdogService> _logger;
+    private readonly TimeProvider _clock;
+    private readonly string? _unsupportedReason;
+
+    private IReadOnlyList<string>? _tenants;
+    private DateTimeOffset _tenantsListedAt;
 
     public SlaWatchdogService(
         IServiceScopeFactory scopeFactory,
-        ILogger<SlaWatchdogService> logger)
+        IConfiguration configuration,
+        ILogger<SlaWatchdogService> logger,
+        TimeProvider? clock = null)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _clock = clock ?? TimeProvider.System;
+
+        var cosmos = string.Equals(configuration["Database:Provider"], "CosmosDb", StringComparison.OrdinalIgnoreCase);
+        if (!cosmos && configuration.GetValue("MongoDb:UseTenantScoping", false))
+        {
+            _unsupportedReason =
+                "MongoDb:UseTenantScoping=true is not supported by the SLA watchdog: with no request it can " +
+                "reach only the base database, not each tenant's. No authorization will be escalated (D-38).";
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (_unsupportedReason is not null)
+        {
+            // Say so once, loudly, rather than run every 15 minutes and find nothing.
+            _logger.LogWarning("SLA watchdog disabled: {Reason}", _unsupportedReason);
+            return;
+        }
+
         using var timer = new PeriodicTimer(Interval);
         try
         {
@@ -77,12 +117,14 @@ public class SlaWatchdogService : BackgroundService
     {
         var summary = new SlaWatchdogRunSummary();
 
-        IReadOnlyList<string> tenants;
-        using (var bootScope = _scopeFactory.CreateScope())
+        if (_unsupportedReason is not null)
         {
-            var repository = bootScope.ServiceProvider.GetRequiredService<IAuthorizationRepository>();
-            tenants = await repository.ListTenantIdsAsync(ct);
+            _logger.LogWarning("SLA watchdog disabled: {Reason}", _unsupportedReason);
+            summary.SkippedReason = _unsupportedReason;
+            return summary;
         }
+
+        var tenants = await GetTenantsAsync(ct);
 
         foreach (var tenantId in tenants)
         {
@@ -111,6 +153,19 @@ public class SlaWatchdogService : BackgroundService
         return summary;
     }
 
+    private async Task<IReadOnlyList<string>> GetTenantsAsync(CancellationToken ct)
+    {
+        var now = _clock.GetUtcNow();
+        if (_tenants is not null && now - _tenantsListedAt < TenantListRefreshInterval)
+            return _tenants;
+
+        using var scope = _scopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IAuthorizationRepository>();
+        _tenants = await repository.ListTenantIdsAsync(ct);
+        _tenantsListedAt = now;
+        return _tenants;
+    }
+
     private async Task EvaluateTenantAsync(
         IAuthorizationRepository repository, string tenantId, SlaWatchdogRunSummary summary, CancellationToken ct)
     {
@@ -134,28 +189,50 @@ public class SlaWatchdogService : BackgroundService
 
             summary.Evaluated++;
 
-            var now = DateTime.UtcNow;
-            var slaStart = auth.SlaResumedAt ?? auth.SubmittedDate;
-            var elapsed = (now - slaStart).TotalHours;
-            var isUrgent = auth.LevelOfService == "U";
-            var deadline = isUrgent ? UrgentBreachHours : StandardBreachHours;
-            var remaining = deadline - elapsed;
-
-            var newLevel = ComputeEscalationLevel(elapsed, isUrgent);
-
-            if (newLevel <= auth.SlaEscalation)
-                continue;
-
-            // Conditional on the tenant, the record still being open and its
-            // level still being lower; writes only the escalation fields.
-            if (!await repository.RaiseSlaEscalationAsync(tenantId, auth.Id, newLevel, now, ct))
-                continue;
-
-            summary.Escalated++;
-            _logger.LogWarning(
-                "SLA {Level} for authorization {AuthNumber} (tenant {Tenant}): {HoursElapsed:F1}h elapsed, {HoursRemaining:F1}h remaining",
-                newLevel, SanitizeForLog(auth.AuthorizationNumber), SanitizeForLog(tenantId), elapsed, remaining);
+            try
+            {
+                await EvaluateRecordAsync(repository, tenantId, auth, summary, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // One bad record never stops the rest of the tenant.
+                summary.FailedRecords++;
+                _logger.LogError(ex,
+                    "SLA watchdog evaluation failed for authorization {AuthId} (tenant {Tenant})",
+                    SanitizeForLog(auth.Id), SanitizeForLog(tenantId));
+            }
         }
+    }
+
+    private async Task EvaluateRecordAsync(
+        IAuthorizationRepository repository, string tenantId, Authorization auth,
+        SlaWatchdogRunSummary summary, CancellationToken ct)
+    {
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var slaStart = auth.SlaResumedAt ?? auth.SubmittedDate;
+        var elapsed = (now - slaStart).TotalHours;
+        var isUrgent = auth.LevelOfService == "U";
+        var deadline = isUrgent ? UrgentBreachHours : StandardBreachHours;
+        var remaining = deadline - elapsed;
+
+        var newLevel = ComputeEscalationLevel(elapsed, isUrgent);
+
+        if (newLevel <= auth.SlaEscalation)
+            return;
+
+        // Conditional on the tenant, the record still being open and its
+        // level still being lower; writes only the escalation fields.
+        if (!await repository.RaiseSlaEscalationAsync(tenantId, auth.Id, newLevel, now, ct))
+            return;
+
+        summary.Escalated++;
+        _logger.LogWarning(
+            "SLA {Level} for authorization {AuthNumber} (tenant {Tenant}): {HoursElapsed:F1}h elapsed, {HoursRemaining:F1}h remaining",
+            newLevel, SanitizeForLog(auth.AuthorizationNumber), SanitizeForLog(tenantId), elapsed, remaining);
     }
 
     /// <summary>
@@ -222,4 +299,10 @@ public sealed class SlaWatchdogRunSummary
 
     /// <summary>Escalations recorded.</summary>
     public int Escalated { get; set; }
+
+    /// <summary>Records whose evaluation failed (logged; the rest of the tenant still ran).</summary>
+    public int FailedRecords { get; set; }
+
+    /// <summary>Why the run did nothing at all (an unsupported configuration), or null.</summary>
+    public string? SkippedReason { get; set; }
 }
