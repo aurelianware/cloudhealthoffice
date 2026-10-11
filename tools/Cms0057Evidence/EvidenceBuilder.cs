@@ -52,7 +52,9 @@ public static class EvidenceBuilder
 
             // Replace (product capability) is always emitted first.
             var replaceTests = scenarioTraits.Where(t => t.Backend == ScenarioTrait.ReplaceBackend).ToList();
-            backends.Add(BuildBackend(s.Id, BackendIds.Replace, s.Replace, replaceTests, replaceTests, outcomeByTest));
+            var replaceStatus = s.Replace ?? throw new EvidenceReconciliationException(
+                $"Scenario {s.Id} has no Replace status; apply the status matrix (StatusMatrixResolver) before building evidence.");
+            backends.Add(BuildBackend(s.Id, BackendIds.Replace, replaceStatus, replaceTests, replaceTests, outcomeByTest));
 
             // Augment backends (integration capability), sorted by key. A generic
             // "Augment" test contributes to a backend's display/execution status,

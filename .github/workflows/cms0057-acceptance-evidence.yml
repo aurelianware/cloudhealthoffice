@@ -3,14 +3,16 @@ name: CMS-0057-F Acceptance Evidence
 # Runs the CMS-0057-F acceptance suite and generates versioned, reproducible
 # evidence (JSON + Markdown + HTML) tied to the tested commit. The evidence
 # separates Cloud Health Office product capability (Replace) from external-core
-# integration capability (Augment), derived from the scenario manifest
-# (tests/Cms0057Acceptance.Tests/scenarios.json) — the machine-readable source
-# of truth — not from prose or test names.
+# integration capability (Augment). Replace statuses come from the status table
+# in docs/epa-gap-matrix.md §11 (owner decision Q-1); scenario names and Augment
+# statuses come from tests/Cms0057Acceptance.Tests/scenarios.json.
 #
-# PUBLISH IS PAUSED (owner decision Q-1, docs/epa-gap-matrix.md §6.1 / §7.1):
-# scenario statuses are hand-declared in scenarios.json and several backing
-# tests are tautological, so the public snapshot overclaims. The `evidence` job
-# still runs and uploads artifacts; only the `publish` job below is disabled.
+# PUBLISH IS PAUSED (owner decision Q-1, docs/epa-gap-matrix.md §6.1 / §7.1).
+# Replace statuses now come from docs/epa-gap-matrix.md §11 rather than being
+# hand-declared in scenarios.json, but several backing tests are still
+# tautological and the published snapshot predates the matrix. Publishing stays
+# paused until the owner approves re-enabling it. The `evidence` job still runs
+# and uploads artifacts; only the `publish` job below is disabled.
 # The already-published JSON under src/site/** is intentionally left untouched
 # here; public copy is handled in a separate, owner-approved PR.
 #
@@ -34,6 +36,7 @@ on:
       - 'tools/Cms0057Evidence/**'
       - 'tools/Cms0057Evidence.Tests/**'
       - 'docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md'
+      - 'docs/epa-gap-matrix.md'                   # Replace status table (§11)
       - '.github/workflows/cms0057-acceptance-evidence.yml'
       # Runtime/domain code that can change CMS-0057-F behavior without touching
       # the acceptance project. Kept to services/engines that materially serve a
@@ -57,6 +60,7 @@ on:
       - 'tools/Cms0057Evidence/**'
       - 'tools/Cms0057Evidence.Tests/**'
       - 'docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md'
+      - 'docs/epa-gap-matrix.md'
       - '.github/workflows/cms0057-acceptance-evidence.yml'
       - 'src/services/fhir-service/**'
       - 'src/services/authorization-service/**'
@@ -122,6 +126,7 @@ jobs:
           mkdir -p artifacts/cms0057-evidence artifacts/public
           dotnet run --project tools/Cms0057Evidence -c Debug --no-build -- \
             --manifest tests/Cms0057Acceptance.Tests/scenarios.json \
+            --status-matrix docs/epa-gap-matrix.md \
             --results "$TRX" \
             --test-assembly "$ASM" \
             --output artifacts/cms0057-evidence \
@@ -204,9 +209,10 @@ jobs:
   # the sanitized snapshot into the site tree; that push deploys via Pages.
   #
   # PAUSED (owner decision Q-1, docs/epa-gap-matrix.md §6.1 / §7.1). The leading
-  # `false &&` disables this job unconditionally until the generator derives
-  # scenario statuses from docs/epa-gap-matrix.md and the owner approves
-  # re-enabling it. Re-enable only by removing `false &&` in a reviewed PR.
+  # `false &&` disables this job unconditionally. The generator now derives
+  # Replace statuses from docs/epa-gap-matrix.md §11; the job stays off until
+  # the owner approves re-enabling it. Re-enable only by removing `false &&` in
+  # a reviewed PR.
   publish:
     name: Publish latest validated evidence (paused, Q-1)
     runs-on: ubuntu-latest

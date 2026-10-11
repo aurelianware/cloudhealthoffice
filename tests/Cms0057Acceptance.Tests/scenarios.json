@@ -1,5 +1,5 @@
 {
-  "$comment": "CMS-0057-F acceptance scenario manifest \u2014 the machine-readable SOURCE OF TRUTH for scenario status. The acceptance suite validates its [Trait(\"Scenario\",...)] against this file (see ScenarioManifestTests), and tools/Cms0057Evidence generates versioned evidence from it. Statuses are one of: PASSABLE, PARTIAL, GAP, N/A. 'replace' is Cloud Health Office product capability (Replace mode). 'augment' is external-core integration capability (per backend). Do not invent Facets/HealthEdge results until an integration exists.",
+  "$comment": "CMS-0057-F acceptance scenario manifest. It holds each scenario's id, name, capability and external-core (Augment) status per backend. It does NOT hold the Cloud Health Office (Replace) status: that comes from docs/epa-gap-matrix.md \u00a711, and tools/Cms0057Evidence fails if a scenario here declares 'replace'. The acceptance suite validates its [Trait(\"Scenario\",...)] against this file (see ScenarioManifestTests). Statuses are one of: PASSABLE, PARTIAL, GAP, N/A. Do not invent Facets/HealthEdge results until an integration exists.",
   "schemaVersion": 1,
   "capabilityDefinitions": {
     "PASSABLE": "The repository's defined acceptance scenario is supported by the tested implementation. Not a CMS certification and not by itself production readiness for a specific payer deployment.",
@@ -12,9 +12,6 @@
       "id": "PAS-01",
       "name": "CRD \u2014 is prior authorization required?",
       "capability": "PriorAuthorization",
-      "replace": {
-        "status": "PASSABLE"
-      },
       "augment": {
         "qnxt": {
           "status": "GAP",
@@ -26,9 +23,6 @@
       "id": "PAS-02",
       "name": "DTR \u2014 correct documentation questionnaire",
       "capability": "PriorAuthorization",
-      "replace": {
-        "status": "PASSABLE"
-      },
       "augment": {
         "qnxt": {
           "status": "N/A"
@@ -39,9 +33,6 @@
       "id": "PAS-03",
       "name": "PAS submit \u2014 create prior authorization",
       "capability": "PriorAuthorization",
-      "replace": {
-        "status": "PASSABLE"
-      },
       "augment": {
         "qnxt": {
           "status": "GAP",
@@ -53,10 +44,6 @@
       "id": "PAS-04",
       "name": "PAS inquiry / status",
       "capability": "PriorAuthorization",
-      "replace": {
-        "status": "PASSABLE",
-        "rationale": "The Da Vinci PAS Claim/$inquire operation is served at POST fhir/r4/Claim/$inquire, projecting the SAME authorization record the submit path writes and the rest of Cloud Health Office updates \u2014 no inquiry-specific store and no second status field. The request is a PAS Bundle carrying a Claim (use=preauthorization) whose identifier names the authorization; the response is a Bundle carrying a ClaimResponse on the PAS profile. Every authorization status maps deterministically and totally onto the standards representation (Submitted/InReview -> queued 'pending'; Pended/A4 -> queued 'pended-additional-information' with the X12 306 reviewAction; Approved/A1 -> complete 'approved'; Modified/A2 -> partial 'modified'; Denied/A3 -> complete 'denied' with the coded reason; Expired -> complete 'expired'; Cancelled -> cancelled), so a caller can tell pending from pended-for-information from approved from denied and, since PAS-07, the pended-for-information state is backed by a real CDex request the provider can retrieve and answer. Each inquiry reads live committed state, so a status changed since submission is the status returned. Read-only by contract: the store seam exposes no write method at all, asserted structurally, so an inquiry cannot create a record, move a status, restart a decision clock or trigger a payer submission however often it is repeated. Tenant comes from the authenticated context and must match the record; an authorization number alone is never sufficient \u2014 a corroborating member or provider key must also match, so a guessable tracking id opens nothing. Request-shape defects (no identifier, no corroborating key) return 400 naming what is missing, because they say nothing about what exists; every refusal about a RECORD \u2014 unknown, wrong tenant, not the caller's \u2014 returns one identical 404 OperationOutcome, with the distinguishing category kept in a PHI-free audit line. A structural test pins that classification so a new outcome cannot become distinguishable. The CapabilityStatement advertises $submit and $inquire on Claim, pinned by test to the routes actually served. The controller routes and maps to HTTP only; lifting lookup keys out of the inquiry Claim belongs to the service. Limitations: authorization records carry no optimistic concurrency token, so an inquiry reads last-write-wins committed state rather than a versioned snapshot; and the inquiry is bound to its authorization by the corroborating key rather than the caller's own identity, because PAS is system-to-system here and the repository has no token-subject-to-provider-NPI mapping to bind against \u2014 the caller is audited instead."
-      },
       "augment": {
         "qnxt": {
           "status": "GAP",
@@ -68,9 +55,6 @@
       "id": "PAS-05",
       "name": "PAS specific denial reason",
       "capability": "PriorAuthorization",
-      "replace": {
-        "status": "PASSABLE"
-      },
       "augment": {
         "qnxt": {
           "status": "GAP",
@@ -82,9 +66,6 @@
       "id": "PAS-06",
       "name": "PAS decision timeframe (72h / 7 calendar days)",
       "capability": "PriorAuthorization",
-      "replace": {
-        "status": "PASSABLE"
-      },
       "augment": {
         "qnxt": {
           "status": "N/A"
@@ -95,10 +76,6 @@
       "id": "PAS-07",
       "name": "CDex additional-information exchange",
       "capability": "PriorAuthorization",
-      "replace": {
-        "status": "PASSABLE",
-        "rationale": "The Da Vinci CDex additional-information round trip is implemented end to end on a pended prior authorization, with ONE durable record behind both halves. REQUEST CREATION is driven by the decision, not by a status: PendedAuthorizationRfaiCoordinator raises a request only when the X12 278 review decision is A4 AND the decision names what documentation is wanted, so a generic pend that asks the provider for nothing raises nothing (asserted, as are A1/A2/A3 and plain InReview). The record is rfai-service's existing RfaiCase, extended rather than duplicated - there is no second additional-info aggregate - and it carries the correlation chain tenant -> authorization -> request -> response -> artifact, plus structured requested items (X12 PWK code, LOINC code, service line, diagnosis context, required flag, due date), with free text supplementing the codes rather than replacing them. IDEMPOTENCY is in the primary key: the document id is derived from tenant + authorization + a digest of the decision, so a redelivered A4 event and two workers racing on one decision both address the same document and exactly one conditional insert wins; a replay onto an already-closed cycle is still recognised as a replay. At most one cycle is open per authorization, and a later cycle is a new record with the next sequence - earlier request/response evidence is never overwritten. STANDARDS SURFACE: the outstanding request is retrievable as a FHIR Task on the CDex Task Attachment Request profile at GET fhir/r4/Task/{id} and by search on code, identifier or focus=Claim/{authorizationNumber}, carrying Task.code attachment-request-code, the payer-issued tracking id on Task.identifier, coded Task.input per requested item, purpose-of-use COVAUTH, the A4 decision on Task.reasonCode, the due date on Task.restriction.period.end, and CHO's own state on Task.businessStatus so nothing is lost translating into FHIR's narrower Task.status. RESPONSE: POST fhir/r4/$submit-attachment takes the CDex Parameters payload; a submission is bound to its request by tenant (authenticated context, never the payload), the tracking id, the authorization named in AttachTo, and the provider the request was addressed to - knowing an authorization number attaches nothing. Submission identity is content-derived (tenant + request + tracking id + SHA-256 of the bytes), so a retry records nothing twice while a materially different document is appended as an additional response rather than overwriting the first. Payload policy is enforced before anything is stored and is all-or-nothing per call: content-type allow-list, per-attachment and total size caps, attachment-count cap, caller-supplied URLs refused rather than fetched, titles kept as sanitised metadata, storage keys derived only from server-side values, and a content-scanner seam whose default records scan status Unknown rather than Safe. Bytes go to the platform's existing IClaimAttachmentContentStore; the case record keeps a pointer and a hash, never content. STATE: receiving documentation returns the authorization to REVIEW and never approves it (asserted explicitly); the resume-review announcement is raised only on the transition, a replay does not restart the clock twice, and a decided authorization is not reopened by late documents. $inquire follows the lifecycle - pended-additional-information with the X12 A4 reviewAction before, plain pending after - so it is never left permanently reporting A4 once the data is in. SECURITY: authenticated, tenant from context, and the operation is gated by SmartScopeEnforcementMiddleware on a Task WRITE scope in a user/ or system/ context - a patient-context token is not an acceptable caller for a provider/payer transaction. That middleware previously derived the scope from the resource-type path segment and always demanded .read, so a system-level $operation path went through unenforced and every write under /fhir/r4 (POST Claim/$submit included) was authorized by a read scope; a request is now resolved into the interaction it is, from the path AND the method, with operations classified explicitly and nothing falling through, and smart-auth-service issues the write scopes this needs. Unknown, other-tenant, other-authorization and other-provider all return ONE identical 404, with the distinguishing category kept in a PHI-free audit line; a fully correlated but closed request is told so with a 409. Provider Access consent is deliberately NOT applied - that gate governs a provider reading a member's clinical record, while this is a payer/provider transaction about the submitter's own request - preserving the separation introduced in CONSENT-01. The CapabilityStatement advertises $submit-attachment and the CDex Task profile, pinned by test to the routes actually served. Limitations: the submitter is bound by the tracking id and the corroborating provider NPI rather than by the caller's own identity, because this repository has no token-subject-to-provider-NPI mapping (the same documented limitation as $inquire); the payer makes the request available for retrieval rather than pushing a Task to a provider endpoint, there being no provider FHIR endpoint registry here; fhir-service registers the in-process attachment content store by default, so a deployment must bind a durable IClaimAttachmentContentStore; there is no malware scanner, only the seam; expiry is derived from the due date rather than swept; and there is no outbox, so a failure between recording the decision and raising the request leaves the authorization pended with RFAIIssued false - recoverable, because the retry carries the same correlation key and cannot duplicate."
-      },
       "augment": {
         "qnxt": {
           "status": "N/A"
@@ -109,10 +86,6 @@
       "id": "PAS-08",
       "name": "Drug exclusion from medical PA scope",
       "capability": "PriorAuthorization",
-      "replace": {
-        "status": "PASSABLE",
-        "rationale": "The CHO Replace-mode authorization workflow enforces benefit drug/service exclusions: a request for a plan-excluded drug (or the pharmacy service type, out of the CMS-0057-F medical scope) is recorded as a coded denial and persisted with audit history, rather than following the ordinary approvable path."
-      },
       "augment": {
         "qnxt": {
           "status": "N/A"
@@ -123,9 +96,6 @@
       "id": "PROV-01",
       "name": "Provider Access \u2014 attributed member data pull",
       "capability": "ProviderAccess",
-      "replace": {
-        "status": "PASSABLE"
-      },
       "augment": {
         "qnxt": {
           "status": "GAP",
@@ -137,9 +107,6 @@
       "id": "PROV-02",
       "name": "Provider Access \u2014 attribution enforcement",
       "capability": "ProviderAccess",
-      "replace": {
-        "status": "PASSABLE"
-      },
       "augment": {
         "qnxt": {
           "status": "N/A"
@@ -150,9 +117,6 @@
       "id": "PROV-03",
       "name": "Provider Access \u2014 patient opt-out honored",
       "capability": "ProviderAccess",
-      "replace": {
-        "status": "PASSABLE"
-      },
       "augment": {
         "qnxt": {
           "status": "N/A"
@@ -163,10 +127,6 @@
       "id": "P2P-01",
       "name": "Payer-to-Payer inbound respond",
       "capability": "PayerToPayer",
-      "replace": {
-        "status": "PASSABLE",
-        "rationale": "CHO Replace mode implements inbound Payer-to-Payer respond: a dedicated application service (PayerToPayerExchangeService) deterministically matches the transitioning member within the tenant, enforces the member's authorization via a server-side consent gate (never a caller-supplied value; an Active consent whose purpose is explicitly PayerToPayerExchange \u2014 see P2P-03), and assembles a member-scoped FHIR export (Patient + Coverage + CARIN EOBs) from CHO-owned data with a 5-year lookback and an audit trail. Outbound initiation (P2P-02) and $member-match/concurrent coverage (P2P-04) are separate paths, implemented in their own scenarios."
-      },
       "augment": {
         "qnxt": {
           "status": "GAP",
@@ -178,10 +138,6 @@
       "id": "P2P-02",
       "name": "Payer-to-Payer outbound initiate",
       "capability": "PayerToPayer",
-      "replace": {
-        "status": "PASSABLE",
-        "rationale": "Cloud Health Office Replace mode initiates the outbound exchange as the member\u2019s new payer: a dedicated application service (PayerToPayerOutboundService) resolves the member and the prior-payer coverage context from CHO-owned data (tenant-scoped; overlapping coverages with the target payer refuse rather than guess), resolves the target payer through a trusted, tenant-scoped, fail-closed directory (IPayerToPayerEndpointResolver \u2014 a caller names a payer id, never a URL, and a non-HTTPS entry is rejected, so no caller-controlled request forgery), enforces the member\u2019s Payer-to-Payer consent purpose server-side before anything leaves CHO, and again before the export (see P2P-03), calls the remote Patient/$member-match through a transport seam (IPayerToPayerRemoteClient), requests the member-data export ONLY after a single member resolves, and validates the returned FHIR Bundle for member consistency (single matched Patient; no foreign Patient reference) before stamping it with source-payer Provenance. Outcomes are structured (target payer not configured / not authorized / no match / ambiguous / remote unauthorized / remote unavailable / invalid response), recorded on a durable-shaped exchange record with an idempotency key so a retried transition resumes one exchange, and audited without demographics, payloads, endpoint URLs, or credentials. A validated package is then durably ingested (PayerToPayerPackageIngestionService): resources are classified against the types CHO's FHIR surface actually serves, intra-package references are normalized to CHO's imported identities, and every row is staged under a deterministic import key (tenant + member + source payer + type + source id) before a single-document ledger commit publishes it \u2014 so a replay does not duplicate history, two payers' records are never merged, and a failed ingestion leaves the member's record untouched rather than half-written. Imported data is stored apart from CHO's authoritative member/enrollment/claim stores, so a prior payer's Patient or Coverage can never become CHO-owned, and the exchange reaches Completed only after the commit lands. The USCDI clinical set (Condition, Observation, and the rest) is ingested and served as of PAT-02: it is classified as clinical, gated by a payload validator, and read back through CHO's Patient and Provider Access FHIR APIs from these same committed rows. Resource types CHO still does not serve are named and counted on the exchange and preserved in an archived package rather than ingested or dropped, and a clinical resource the validator refuses is counted and named by reason rather than silently discarded. Live payer onboarding (SMART Backend Services / UDAP client registration, mTLS) remains deployment integration behind the credential-provider seam. "
-      },
       "augment": {
         "qnxt": {
           "status": "GAP",
@@ -193,10 +149,6 @@
       "id": "P2P-03",
       "name": "Payer-to-Payer opt-in enforcement",
       "capability": "PayerToPayer",
-      "replace": {
-        "status": "PASSABLE",
-        "rationale": "Payer-to-Payer authorization is a first-class consent purpose, enforced server-side in both directions. The consent registry carries an explicit purpose-of-use axis (ConsentPurposeOfUse: PayerToPayerExchange, ProviderAccess) orthogonal to the \u00a7164.508 instrument type, aligned with FHIR Consent.provision.purpose; a shared ConsentAuthorizationPolicy is the single answer both the inbound respond (PayerToPayerExchangeService) and the outbound initiation (PayerToPayerOutboundService) evaluate, so neither direction can drift more permissive. An exchange requires an Active consent FOR the Payer-to-Payer purpose that is in force at evaluation time: a Provider Access consent does not authorize it, a consent with no purpose recorded does not authorize it (records predating the axis default to Unspecified, so no history is silently reinterpreted), and Draft, Revoked, expired, and not-yet-effective records each deny with their own reason code. The period is applied by the policy rather than trusted from the stored status, so a lapsed authorization cannot be used in the window before the registry writes the transition. Consent is never accepted from a caller \u2014 no request type on either direction carries one \u2014 and an unreadable registry denies rather than defaulting open. Authorization is re-evaluated at each disclosure boundary: outbound checks before the $member-match (so an unauthorized member\u2019s identity never leaves CHO) and again before the export, and a revocation landing between the two stops the data request. A retry re-asks the registry rather than inheriting the earlier decision. Each exchange and audit record carries the authorizing consent id and a structured reason code, so \u201cwhat specifically allowed this disclosure?\u201d is answerable from durable state without any consent content. The registry in consent-service is authoritative when configured; Demo mode serves the same purpose/status/period records through the same policy. Provider Access enforcement does not yet read the registry \u2014 CONSENT-01 stays PARTIAL for that reason."
-      },
       "augment": {
         "qnxt": {
           "status": "GAP",
@@ -208,10 +160,6 @@
       "id": "P2P-04",
       "name": "Payer-to-Payer member-match / concurrent coverage",
       "capability": "PayerToPayer",
-      "replace": {
-        "status": "PASSABLE",
-        "rationale": "Cloud Health Office Replace mode implements the FHIR Patient/$member-match operation as a dedicated application service (PayerToPayerMemberMatchService): it resolves a transitioning member across payer contexts within the tenant from normalized identity attributes, using a deterministic strong-vs-supporting policy (a strong identifier \u2014 member/subscriber id or SSN \u2014 or the family-name + birth-date pair, with any contradiction failing closed) so zero candidates yield no match, more than one yields ambiguous, and cross-tenant identities are never visible. Concurrent/overlapping coverage is selected deterministically by requested payer/subscriber context and effective date (overlaps without a discriminator refuse rather than guess). The resolved member/coverage context is consumable by the P2P-01 export path. The same resolved context is what the outbound initiation path (P2P-02) uses when interpreting a remote payer's match; Provider Access enforcement through the consent registry (CONSENT-01) remains PARTIAL."
-      },
       "augment": {
         "qnxt": {
           "status": "GAP",
@@ -223,9 +171,6 @@
       "id": "PAT-01",
       "name": "Patient Access \u2014 member claims / CARIN EOB",
       "capability": "PatientAccess",
-      "replace": {
-        "status": "PASSABLE"
-      },
       "augment": {
         "qnxt": {
           "status": "GAP",
@@ -237,10 +182,6 @@
       "id": "PAT-02",
       "name": "Patient Access \u2014 US Core clinical",
       "capability": "PatientAccess",
-      "replace": {
-        "status": "PASSABLE",
-        "rationale": "Cloud Health Office serves the USCDI clinical resource types through the same Patient and Provider Access FHIR surface as the rest of its data, from durable member-scoped storage. The inventory is not a wish list: ClinicalResourceInventory is one table \u2014 AllergyIntolerance, CarePlan, CareTeam, Condition, Device, DiagnosticReport, Goal, Immunization, MedicationDispense, MedicationRequest, Observation, Procedure \u2014 derived from the USCDI clinical data classes this repository already documents as CMS-0057-F obligations, minus the classes CHO discharges elsewhere (Patient demographics, Coverage, CARIN EOB, DocumentReference clinical notes, Provenance as metadata). The SMART scope layer, the Provider Access authorization filter, the Payer-to-Payer import classification, the CapabilityStatement and the controller routes all read that one table, and structural tests pin each of them to it, so a type cannot become reachable through one layer while being forgotten by another. STORAGE: the Payer-to-Payer import store (P2P-02) was PROMOTED into the clinical serving store rather than copied \u2014 the rows Patient and Provider Access read are the rows an exchange committed, one object behind two interfaces, so there is no projection to fall behind, no dual write, and no second place a resource could be stale in. Clinical data therefore stays out of CHO's authoritative member, enrollment, coverage and claim stores by construction. Reads return the version from the most recently COMMITTED exchange, so a staged or failed ingestion is invisible and never displaces a committed version. IDENTITY: a resource is served under the deterministic import identity (SHA-256 of tenant + member + source payer + resource type + source id), so a replay updates in place instead of duplicating, two payers' identically-numbered records are two resources, another tenant's id resolves to nothing, and the URL leaks no member, payer or clinical detail. MEMBER BINDING: tenant and member come from the trusted exchange context, never from the package \u2014 an imported Condition naming another member is filed, and served, under the member CHO resolved, and the served subject element is rewritten to that binding. AUTHORIZATION: Patient Access requires an authenticated patient-context token whose binding is enforced against BOTH member-naming search parameters (patient and subject \u2014 checking only the first would have left the second open) plus the resource's own SMART scope; Provider Access continues to require all four controls from CONSENT-01 (authentication, SMART scope, attribution, active ProviderAccess-purpose consent), because the clinical types are in the same globally-registered filter's governed set and there is exactly one clinical controller. Every store call is keyed on the authorized member, so a resource belonging to anyone else is never selected rather than filtered out afterwards: knowing an opaque id is not authority to read it. Refusals are uniform \u2014 not-yours and not-there return the same 404 \u2014 with the category kept in a PHI-free audit line (tenant, caller, member, resource type, resource id, outcome, count) that has no field for a value, a diagnosis, a medication or a narrative. INGESTION: types the P2P pipeline used to name as unsupported are now classified as clinical and staged like the rest of the member's history; clinical payloads pass a size/nesting/source-id gate first, and a refusal is counted and named rather than dropped. Unsupported handling survives intact for types still outside the inventory, which are named, counted and preserved in the archived package. MIGRATION: clinical data CHO already held from earlier exchanges is re-projected from those archives by a deterministic, replay-safe, tenant-safe, non-destructive backfill (disabled by default, dry-run supported), so no operator has to re-run a prior payer exchange \u2014 impossible once that payer relationship has ended \u2014 to make durable data visible. PROVENANCE: every served resource carries meta.source naming the originating payer and the source resource id, meta.lastUpdated, and a content-hash meta.versionId, so imported data is never indistinguishable from CHO-authored data. Limitations, stated rather than papered over: (1) no US Core profile is claimed \u2014 CHO serves these as valid FHIR R4 and does not re-shape a prior payer's content to satisfy US Core invariants, so no meta.profile and no supportedProfile is declared; (2) search support is read plus the member-scoped searches the requirement needs (_id, patient, and subject where R4 defines it) \u2014 category, code, status and date searches are not implemented and are not advertised; (3) no CHO component authors NATIVE clinical data today, so every served resource is imported \u2014 the source axis exists so native data will coexist rather than overwrite, but it is unexercised; (4) the in-process store is the Demo-mode fallback, and durability needs MongoDB configured, the same posture as the rest of fhir-service."
-      },
       "augment": {
         "qnxt": {
           "status": "N/A"
@@ -251,10 +192,6 @@
       "id": "PAT-03",
       "name": "Patient Access \u2014 PA data (drugs excluded)",
       "capability": "PatientAccess",
-      "replace": {
-        "status": "PASSABLE",
-        "rationale": "Both halves of PAT-03 are satisfied. RETENTION: prior-authorization records have an explicit, testable lifecycle. IPriorAuthorizationRetentionPolicy is a pure rule anchored on the LAST STATUS CHANGE (StatusHistory, falling back to the decision then the submission date \u2014 never LastUpdatedDate, which every write touches, and never a read), so an inquiry can never extend a record's regulatory retention. A record is purge-eligible only when it is BOTH operationally terminal AND past its boundary; Submitted, InReview and Pended are never purged however old their timestamps. The CMS-0057-F minimum of one year is enforced as a floor that configuration cannot go under, and the default is six years, matching the HIPAA posture used for member documents rather than defaulting a destructive job to the bare regulatory minimum. PriorAuthorizationRetentionWorker applies it: a hosted sweeper on the IntegrityProjectionWorker pattern with a scope per tenant, an explicit tenant on every repository call (no ambient HttpContext), bounded batches, cancellation observed between records, disabled by default, and a dry-run mode. Purge is a CONDITIONAL delete predicated on the status the sweep decided against \u2014 Mongo makes it one atomic filtered delete, Cosmos carries the ETag from a re-read \u2014 so a record that reopens between being listed and being purged survives; repeated sweeps are no-ops and an already-purged record is not an error. Deletion is hard: the Authorization document embeds its diagnoses, requested services and attachment metadata, so removing it removes them, and nothing is left behind a soft-delete flag while claiming purge. Tenant is explicit in every query and in the delete predicate; a purge naming the wrong tenant refuses. Audit is aggregate counts plus PHI-free per-record lines (tenant, opaque authorization id, policy version, retention boundary, status) and a cho.authorization.retention.outcomes.total counter dimensioned by outcome, dry-run and tenant. FRESHNESS: the '>= 1 business day' obligation bounds how stale a Patient Access copy may be; CHO keeps no copy. PA state is projected from the authoritative record at read time (PAS-04 $inquire), so the interval between a status change and its visibility is zero and there is nothing for a sync job to update \u2014 the read seam exposes a single lookup and no write, and no cached or replicated PA projection exists to drift. Limitations: purging an authorization does not delete blobs referenced by ClinicalAttachment.FileUrl, and rfai-service RfaiCase records keyed by authorization number have no delete path and are outside this scenario."
-      },
       "augment": {
         "qnxt": {
           "status": "N/A"
@@ -265,10 +202,6 @@
       "id": "SEC-01",
       "name": "SMART on FHIR / OAuth",
       "capability": "Security",
-      "replace": {
-        "status": "PASSABLE",
-        "rationale": "CHO is a production-configurable SMART/OAuth resource server: trust is an explicit, administrator-controlled registry of external OIDC issuers, and Demo mode fails startup on a non-development host so no deployment can silently fall back to the bundled issuer. Per issuer, resolved from the token's exact iss before anything else: signing keys via validated OIDC discovery, audiences, an asymmetric-only algorithm policy (no alg=none, no HMAC), claim mapping, and permitted tenants. Signature, audience, exp/nbf and bounded clock skew are enforced; signing keys rotate on an unknown kid with rate-limited single-flight refresh, survive an IdP outage within a bounded staleness window, and fail closed outside it. Discovery and JWKS retrieval are confined to configured origins, so no request-supplied value can steer a fetch. Caller identity resolves once into subject, client, caller type, patient, tenant and -- only where a trusted issuer is configured to assert it -- provider NPI, which tightens CDex submitter binding from a corroborating key to verified identity. Patient binding covers both patient and subject; a tenant asserted by the token cannot be overridden by a header. LIMITATION: no customer's production IdP is connected in this repository -- every test issuer is synthetic. Connecting one is deployment configuration against docs/architecture/idp-integration-contract.md, not missing product capability."
-      },
       "augment": {
         "qnxt": {
           "status": "N/A"
@@ -279,10 +212,6 @@
       "id": "CONSENT-01",
       "name": "Single consent registry",
       "capability": "Consent",
-      "replace": {
-        "status": "PASSABLE",
-        "rationale": "One registry (consent-service) carries the opt-in/opt-out lifecycle and a purpose-of-use axis, on one aggregate and one state machine rather than separate stores per purpose. BOTH purposes are now enforced server-side through it. Payer-to-Payer (P2P-03) and Provider Access reach their answers through the same IConsentEvaluator and the same pure ConsentAuthorizationPolicy, so neither can drift more permissive than the other and a consent granted for one purpose satisfies nothing for the other. Provider Access authorization is composed by ProviderAccessAuthorizationService and enforced by a GLOBAL MVC filter covering every member-scoped FHIR resource the SMART layer serves (a structural test pins the two inventories together, so a new controller cannot bypass the layer), placed after tenant resolution and before any action body so PHI is never assembled for an unauthorized request. Four independent, mandatory controls: authentication and SMART scope (upstream middleware, not re-implemented), provider/member attribution, and an active ProviderAccess-purpose consent \u2014 each can refuse alone, and the composed decision fails closed. Tenant and member must both match the consent; the tenant comes from the authenticated context. Registry faults, an empty catalog, a missing member context, and an unidentified caller all deny rather than degrading to SMART-plus-attribution. Denials are externally uniform (one 403 OperationOutcome) so a caller cannot distinguish 'not attributed' from 'no consent' from 'no such member' and enumerate the membership; the structured category is kept in the PHI-free audit record instead. Attribution is served from a configured panel catalog: it enforces for real and fails closed, but no live roster/attribution feed from a payer source system is wired up \u2014 that remains engagement integration behind IProviderAttributionSource."
-      },
       "augment": {
         "qnxt": {
           "status": "N/A"
@@ -293,9 +222,6 @@
       "id": "METRICS-01",
       "name": "Prior-authorization public metric set",
       "capability": "Metrics",
-      "replace": {
-        "status": "PASSABLE"
-      },
       "augment": {
         "qnxt": {
           "status": "GAP",

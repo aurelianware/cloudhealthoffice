@@ -30,7 +30,8 @@ public sealed class BackendEvidence
     /// <summary>e.g. "replace.cloudHealthOffice", "augment.qnxt".</summary>
     [JsonPropertyName("backend")] public string Backend { get; init; } = "";
 
-    /// <summary>Declared capability status from the manifest (PASSABLE/PARTIAL/GAP/N/A).</summary>
+    /// <summary>Declared capability status (PASSABLE/PARTIAL/GAP/N/A): Replace from the
+    /// status matrix (docs/epa-gap-matrix.md §11), Augment from the manifest.</summary>
     [JsonPropertyName("declaredStatus")] public string DeclaredStatus { get; init; } = "";
 
     /// <summary>Aggregate outcome of the associated tests: Passed / Failed / NotRun.</summary>

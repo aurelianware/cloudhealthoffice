@@ -18,12 +18,26 @@ public class ManifestLoaderTests
         var path = Temp("""
         { "schemaVersion": 1, "scenarios": [
           { "id": "PAS-03", "name": "submit", "capability": "PriorAuthorization",
-            "replace": { "status": "PASSABLE" },
             "augment": { "qnxt": { "status": "GAP", "rationale": "x" } } } ] }
         """);
         var doc = ManifestLoader.Load(path);
         doc.SchemaVersion.Should().Be(1);
-        doc.Scenarios.Should().ContainSingle().Which.Augment.Should().ContainKey("qnxt");
+        var s = doc.Scenarios.Should().ContainSingle().Subject;
+        s.Augment.Should().ContainKey("qnxt");
+        s.Replace.Should().BeNull("the Replace status is filled from the status matrix, not the manifest");
+    }
+
+    [Fact]
+    public void ManifestDeclaringReplace_Throws()
+    {
+        // The status matrix is the only source of the Replace status; a stale
+        // manifest value must not be silently ignored or allowed to compete.
+        var path = Temp("""
+        { "schemaVersion": 1, "scenarios": [
+          { "id": "PAS-03", "name": "a", "capability": "c", "replace": { "status": "PASSABLE" } } ] }
+        """);
+        var act = () => ManifestLoader.Load(path);
+        act.Should().Throw<ManifestException>().WithMessage("*PAS-03*declares 'replace'*epa-gap-matrix.md*");
     }
 
     [Fact]
@@ -45,8 +59,8 @@ public class ManifestLoaderTests
     {
         var path = Temp("""
         { "schemaVersion": 1, "scenarios": [
-          { "id": "PAS-03", "name": "a", "capability": "c", "replace": { "status": "PASSABLE" } },
-          { "id": "PAS-03", "name": "b", "capability": "c", "replace": { "status": "GAP" } } ] }
+          { "id": "PAS-03", "name": "a", "capability": "c" },
+          { "id": "PAS-03", "name": "b", "capability": "c" } ] }
         """);
         var act = () => ManifestLoader.Load(path);
         act.Should().Throw<ManifestException>().WithMessage("*duplicate scenario id*PAS-03*");
@@ -57,7 +71,7 @@ public class ManifestLoaderTests
     {
         var path = Temp("""
         { "schemaVersion": 1, "scenarios": [
-          { "id": "PAS-03", "name": "a", "capability": "c", "replace": { "status": "MAYBE" } } ] }
+          { "id": "PAS-03", "name": "a", "capability": "c", "augment": { "qnxt": { "status": "MAYBE" } } } ] }
         """);
         var act = () => ManifestLoader.Load(path);
         act.Should().Throw<ManifestException>().WithMessage("*MAYBE*not a valid status*");
@@ -68,7 +82,7 @@ public class ManifestLoaderTests
     {
         var path = Temp("""
         { "schemaVersion": 1, "scenarios": [
-          { "id": "PAS-03", "name": "a", "capability": "c", "replace": { "status": "PASSABLE" },
+          { "id": "PAS-03", "name": "a", "capability": "c",
             "augment": { "mainframe": { "status": "GAP" } } } ] }
         """);
         var act = () => ManifestLoader.Load(path);
@@ -80,7 +94,7 @@ public class ManifestLoaderTests
     {
         var path = Temp("""
         { "schemaVersion": 0, "scenarios": [
-          { "id": "PAS-03", "name": "a", "capability": "c", "replace": { "status": "PASSABLE" } } ] }
+          { "id": "PAS-03", "name": "a", "capability": "c" } ] }
         """);
         var act = () => ManifestLoader.Load(path);
         act.Should().Throw<ManifestException>().WithMessage("*schemaVersion*");
