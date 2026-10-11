@@ -161,9 +161,58 @@ public class SmartScpClaimTests : IClassFixture<FhirTestWebAppFactory>
     [InlineData("system/*.read", "System/*.read")]
     // An empty claim against a non-empty one.
     [InlineData("", "system/*.read")]
+    [InlineData("system/*.read", "")]
+    // An EMPTY JSON ARRAY against a non-empty one, both orderings. The JWT
+    // handler creates no principal claim for `[]`, so the claim's presence is
+    // read from the token payload.
+    [InlineData(EmptyArray, "system/*.read")]
+    [InlineData("system/*.read", EmptyArray)]
     public async Task BothClaims_DifferentSets_AreRefused(string scope, string scp)
-        => (await ExportAsync(Token(scope, extra: Scp(scp))))
+        => (await ExportAsync(TokenWithBoth(scope, scp)))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact]
+    public async Task BothClaims_EmptyArrays_HoldNoScopes()
+        => (await ExportAsync(TokenWithBoth(EmptyArray, EmptyArray)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+    [Fact]
+    public async Task EmptyArrayScope_Only_HoldsNoScopes()
+        => (await ExportAsync(_factory.IssueToken(null,
+                rawPayload: new Dictionary<string, object> { ["scope"] = Array.Empty<string>() })))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+    /// <summary>Marks a claim that is written as an empty JSON array.</summary>
+    private const string EmptyArray = "[]";
+
+    private string TokenWithBoth(string scope, string scp)
+    {
+        var raw = new Dictionary<string, object>();
+        if (scope == EmptyArray) raw["scope"] = Array.Empty<string>();
+        if (scp == EmptyArray) raw["scp"] = Array.Empty<string>();
+        return _factory.IssueToken(scope == EmptyArray ? null : scope,
+            extraClaims: scp == EmptyArray ? [] : [Scp(scp)], rawPayload: raw);
+    }
+
+    // ── /cds-services is outside /fhir/r4: refused at authentication too ─────
+
+    [Fact]
+    public async Task BothClaims_DifferentSets_AreRefused_AtTheCrdHook()
+    {
+        using var client = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/cds-services/cho-order-sign")
+        {
+            Content = new StringContent(
+                "{\"hookInstance\":\"h-1\",\"hook\":\"order-sign\",\"context\":{\"userId\":\"Practitioner/p1\","
+                + "\"patientId\":\"pat-002\",\"draftOrders\":{\"resourceType\":\"Bundle\",\"entry\":[]}}}",
+                Encoding.UTF8, "application/json"),
+        };
+        // Either set alone is a provider grant the hook serves (SmartGapTests).
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer",
+            Token("user/Coverage.read", extra: Scp("user/Coverage.read user/*.read")));
+
+        (await client.SendAsync(request)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 
     [Fact]
     public async Task BothClaims_DifferentSets_RefusedEvenWhereEitherAloneWouldBeAllowed()

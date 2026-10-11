@@ -146,7 +146,8 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
     /// <param name="extraClaims">Additional claims (security tests), e.g. a CHO role a SMART token must not be able to use.</param>
     public string IssueToken(
         string? scopes, string? patientId = null, string? tenantId = "test-tenant",
-        IEnumerable<SecurityClaim>? extraClaims = null, string? issuer = null)
+        IEnumerable<SecurityClaim>? extraClaims = null, string? issuer = null,
+        IReadOnlyDictionary<string, object>? rawPayload = null)
     {
         var claims = new List<SecurityClaim>
         {
@@ -175,6 +176,12 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
             notBefore: DateTime.UtcNow.AddSeconds(-5),
             expires: DateTime.UtcNow.AddMinutes(60),
             signingCredentials: credentials);
+
+        // Raw payload members a claim list cannot express, e.g. an empty
+        // JSON array (D-32: `"scope": []`).
+        if (rawPayload != null)
+            foreach (var (name, value) in rawPayload)
+                token.Payload[name] = value;
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
