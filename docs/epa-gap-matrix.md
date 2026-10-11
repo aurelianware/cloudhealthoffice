@@ -193,7 +193,7 @@ will reference its D-number and update this table.
 | D-27 | Low | Summary approval rate counts pending requests in its denominator. The Cosmos average is truncated to whole days. The Mongo version doesn't compute turnaround. | `AuthorizationRepository.cs:261-321`; `AuthorizationRepositoryMongo.cs:145-149` | Replaced by the metrics work (G-20). | Open |
 | D-28 | Medium | Bulk `$export` reports Complete with count 0 and output URLs that no route serves, which a client would read as success. | `FS/Services/BulkExportService.cs:24-70` | Return 501/OperationOutcome until real (G-34). | Open |
 | D-29 | Medium | The Provider Directory requires authentication; CMS requires it to be public. | `FS/Controllers/ProviderDirectoryController.cs:27` | Public read endpoint. | Open |
-| D-30 | High (honesty) | The CMS-0057-F evidence pipeline publishes hand-declared PASSABLE statuses backed by tautological tests (METRICS-01, PAS-06, PROV-0x, PAT-03, CONSENT-01). | `tests/Cms0057Acceptance.Tests/scenarios.json`; `tools/Cms0057Evidence/EvidenceBuilder.cs:117-125` | **Owner decision (§6.1).** The output is public. | Open |
+| D-30 | High (honesty) | The CMS-0057-F evidence pipeline publishes hand-declared PASSABLE statuses backed by tautological tests (METRICS-01, PAS-06, PROV-0x, PAT-03, CONSENT-01). | `tests/Cms0057Acceptance.Tests/scenarios.json`; `tools/Cms0057Evidence/EvidenceBuilder.cs:117-125` | **Owner decision (§6.1).** The output is public. | Partly fixed (#1292): statuses come from §11; the tautological tests themselves remain; publish paused (#1291). |
 
 ---
 
@@ -391,7 +391,8 @@ only with owner approval because it changes persistence.
   `src/site/insights/cms-0057-f/cms0057-public-evidence.json`. That file
   currently shows **21/21 PASSABLE**.
 - **Where statuses come from.** Each status is **hand-declared** in
-  `tests/Cms0057Acceptance.Tests/scenarios.json`. The generator only checks that
+  `tests/Cms0057Acceptance.Tests/scenarios.json`. *(Superseded by §11 (#1292):
+  Replace statuses now come from this matrix.)* The generator only checks that
   a PASSABLE scenario has at least one passing test with the matching trait. It
   does not check what the test asserts.
 - **Tautological backing tests:**
@@ -654,8 +655,8 @@ Da Vinci IG.
 - no duplicate rows;
 - status is exactly one of `PASSABLE`, `PARTIAL`, `GAP`, `N/A`;
 - matrix refs and justification are not empty;
-- a `PASSABLE` row still needs at least one passing, non-GAP acceptance test
-  tagged with that scenario.
+- a `PASSABLE` row still needs at least one passing, non-GAP, Replace-tagged
+  acceptance test for that scenario.
 
 **Editing.** Keep the table between the two marker comments. Keep the four
 columns in this order. Write a literal pipe in a cell as `\|`. When a fix lands,
@@ -670,19 +671,22 @@ change the row here in the same PR as the code and its test.
 | PAS-04 | PARTIAL | §4.1, D-01, G-01 | `$inquire` logic is implemented and tested, but it cannot find authorization numbers issued by PAS `$submit`. |
 | PAS-05 | PARTIAL | §4.4, D-02, D-10, G-08, G-17 | A denial reason is stored when supplied via REST but is not required, is lost for PAS, and is not carried in `reviewAction`. |
 | PAS-06 | GAP | §4.4, §6.1, D-07, D-08, G-03, G-04, G-18 | The SLA watchdog throws on every run, PAS drops urgency, and no due date is persisted. The backing test asserts label strings only. |
-| PAS-07 | PASSABLE | §2.1, §4.1, G-16 | CDex additional-information exchange is implemented and tested (I+T). Limitation: raised only from reviewer decisions, never from PAS pends. |
-| PAS-08 | PASSABLE | §2.1, §4.4 | Drug and benefit exclusion from CMS-0057-F medical PA scope is implemented and tested (`DrugExclusionEvaluator`, I+T). |
-| PROV-01 | PARTIAL | §4.5, §6.1, G-30, G-33 | The Provider Access pull path exists, but it reads the mock data adapter registered in every environment and carries no PA data. The backing test runs on mock data. |
+| PAS-07 | PASSABLE | §2.1, §4.1, D-09, G-16, G-18 | CDex additional-information exchange is implemented and tested (I+T). Limitations: raised only from reviewer decisions, never from PAS pends; when documents arrive, the resume step these tests exercise restarts the decision clock in full (D-09). |
+| PAS-08 | PASSABLE | §2.1, §4.4, D-01 | Drug and benefit exclusion from CMS-0057-F medical PA scope is implemented and tested (`DrugExclusionEvaluator`, I+T). Limitations: applies to REST-created authorizations only; PAS `$submit` never persists (D-01), so PAS drug requests are never excluded; the exclusion catalog is empty by default. |
+| PROV-01 | GAP | §4.5, §5 T-4, §6.1, G-30, G-33 | Rests on S and M rows: the data source is the mock adapter registered in every environment (§4.5 "Real, tenant-scoped data source", S) and Provider Access PA data is missing (M). The backing test runs on mock data. |
 | PROV-02 | PARTIAL | §4.5, §6.1, G-33 | Attribution is enforced and fails closed, but only from static configured panels. The backing test's "not attributed" case is a nonexistent member id. |
 | PROV-03 | GAP | §4.5, §6.1, D-11, G-09 | Provider Access requires an opt-in consent; CMS-0057-F requires sharing unless the patient opts out. The backing test asserts `Revoked != Active`. |
-| P2P-01 | PARTIAL | §4.5, D-13, G-02, G-30, G-35 | The inbound export path exists, but it uses mock data, excludes PA data, and accepts patient-context tokens for another member's export (D-13). |
+| P2P-01 | GAP | §4.5, §5 T-1/T-4, D-13, G-02, G-30, G-35 | Rests on S and M rows plus an open Critical defect: the export reads the mock adapter registered in every environment (S), Payer-to-Payer PA data is missing (M), and patient-context tokens can export another member's data (D-13). |
 | P2P-02 | PARTIAL | §4.5, §4.6, G-35, G-42 | Outbound initiation is built behind a transport seam; outbound payer credentials are unconfigured by design and PA data is not exchanged. |
 | P2P-03 | PASSABLE | §4.5 | Opt-in consent for Payer-to-Payer is implemented and tested (17 tests, tenant-scoped consent-service). |
 | P2P-04 | PARTIAL | §4.5, G-35 | `$member-match` logic is tested, but it runs over mock data for a single configured tenant and is not declared in the CapabilityStatement. |
-| PAT-01 | PARTIAL | §4.5, §5 T-4, G-30 | The Patient Access claims surface exists, but the data source behind it is a mock adapter registered in every environment that ignores tenant. |
+| PAT-01 | GAP | §4.5, §5 T-4, G-30 | Rests on an S row: the claims/EOB data behind Patient Access comes from the mock adapter registered in every environment, which ignores tenant (§4.5 "Real, tenant-scoped data source", S). |
 | PAT-02 | PARTIAL | §4.5, G-14, G-30 | Clinical resources are served only from Payer-to-Payer imports; no US Core profile is claimed or validated. |
 | PAT-03 | GAP | §4.5, §6.1, G-31 | No API exposes PA data to patients. The backing test asserts that a supported-types list contains "ClaimResponse". |
 | SEC-01 | PARTIAL | §4.6, D-25, G-40, G-41, G-42 | Auth code + PKCE, refresh, scope enforcement and tenant binding are I+T. Launch context in the token response, SMART v2 scopes, `private_key_jwt` and `aud` validation are missing. |
 | CONSENT-01 | PARTIAL | §4.5, §6.1, D-11, G-09 | One consent registry serves both purposes, but Provider Access uses opt-in semantics. The backing test is reflection on constructor parameter types. |
 | METRICS-01 | GAP | §4.4, §6.1, D-27, G-20 | No CMS metric set is computed: only a counts/averages summary exists, with no median, split or annual extract. The backing test checks date arithmetic. |
 <!-- cms0057-evidence-status:end -->
+
+**Totals:** 3 PASSABLE, 10 PARTIAL, 8 GAP, 0 N/A (21 scenarios). The generator
+reports these itself; update this line when a row changes.
