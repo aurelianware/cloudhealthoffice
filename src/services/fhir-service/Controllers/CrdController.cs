@@ -151,11 +151,23 @@ public class CrdController : FhirControllerBase
 
             return Ok(new CrdCardResponse { Cards = result.Cards });
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "CRD hook {HookId} failed after {ElapsedMs}ms",
+            // Fail closed (D-21): a failed evaluation is an UNKNOWN answer, not
+            // a 500 an EHR may simply drop (and so show as "no requirements").
+            // One "could not be determined" card per draft order, at least one.
+            _logger.LogError(ex, "CRD hook {HookId} failed after {ElapsedMs}ms; answering unknown",
                 SanitizeForLog(hookId), sw.ElapsedMilliseconds);
-            return StatusCode(500, new { error = "Internal error processing CRD request" });
+
+            var orders = request.Context?.DraftOrders?.Entry?.Count(e => e.Resource != null) ?? 0;
+            var cards = Enumerable.Range(0, Math.Max(1, orders))
+                .Select(_ => CrdService.BuildRequirementsUnknownCard("the requested service"))
+                .ToList();
+            return Ok(new CrdCardResponse { Cards = cards });
         }
     }
 }

@@ -192,6 +192,94 @@ public class CrdFailClosedTests
         card.Summary.Should().Contain("Prior authorization required");
     }
 
+    // ── Orders with nothing to evaluate (review of #1294) ─────────────────────
+
+    private static CrdHookRequest HookWith(params CrdDraftOrderResource[] resources) => new()
+    {
+        HookInstance = Guid.NewGuid().ToString(),
+        Hook = "order-sign",
+        Context = new CrdHookContext
+        {
+            UserId = "Practitioner/123",
+            PatientId = "pat-001",
+            DraftOrders = new CrdDraftOrders
+            {
+                Entry = resources.Select(r => new CrdDraftOrderEntry { Resource = r }).ToList(),
+            },
+        },
+    };
+
+    [Fact]
+    public async Task TextOnlyServiceRequest_IsUnknown_NotZeroCards()
+    {
+        // A code with text but no coding: nothing can be classified.
+        EngineReturns(PaDecisionOutcome.Pend, "NoRuleMatch");
+        var result = await Service().EvaluateCoverageRequirementsAsync(
+            HookWith(new CrdDraftOrderResource { ResourceType = "ServiceRequest", Code = new CrdCodeableConcept() }),
+            Tenant);
+
+        ShouldBeUnknown(result.Cards.Should().ContainSingle().Subject);
+    }
+
+    [Fact]
+    public async Task MedicationRequestByReference_IsUnknown_NotZeroCards()
+    {
+        // medicationReference instead of medicationCodeableConcept: no code.
+        EngineReturns(PaDecisionOutcome.Pend, "NoRuleMatch");
+        var result = await Service().EvaluateCoverageRequirementsAsync(
+            HookWith(new CrdDraftOrderResource { ResourceType = "MedicationRequest" }), Tenant);
+
+        ShouldBeUnknown(result.Cards.Should().ContainSingle().Subject);
+    }
+
+    [Fact]
+    public async Task MixedOrders_CodedOneIsAnswered_UncodedOneIsUnknown()
+    {
+        EngineReturns(PaDecisionOutcome.Pend, "NoRuleMatch");
+        var result = await Service().EvaluateCoverageRequirementsAsync(
+            HookWith(
+                new CrdDraftOrderResource
+                {
+                    ResourceType = "ServiceRequest",
+                    Code = new CrdCodeableConcept { Coding = [new() { System = CptSystem, Code = "99213", Display = "99213" }] },
+                },
+                new CrdDraftOrderResource { ResourceType = "MedicationRequest" }),
+            Tenant);
+
+        result.Cards.Should().HaveCount(2);
+        result.Cards.Should().ContainSingle(c => c.Summary.Contains(NoAuthSummary));
+        ShouldBeUnknown(result.Cards.Single(c => !c.Summary.Contains(NoAuthSummary)));
+    }
+
+    [Fact]
+    public async Task NoDraftOrders_StillProducesNoCards()
+    {
+        // Nothing was ordered, so there is nothing to answer about.
+        var result = await Service().EvaluateCoverageRequirementsAsync(HookWith(), Tenant);
+        result.Cards.Should().BeEmpty();
+    }
+
+    // ── An evaluation failure is an "unknown" answer, not a 500 ───────────────
+
+    [Fact]
+    public async Task EvaluationThrows_HookAnswersUnknown_Not500()
+    {
+        var crd = new Mock<ICrdService>();
+        crd.Setup(s => s.EvaluateCoverageRequirementsAsync(It.IsAny<CrdHookRequest>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new System.Text.Json.JsonException("terminology answered garbage"));
+        var controller = new global::FhirService.Controllers.CrdController(
+            crd.Object, Options.Create(Config), NullLogger<global::FhirService.Controllers.CrdController>.Instance);
+        var http = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        http.Items["TenantId"] = Tenant;
+        controller.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = http };
+
+        var result = await controller.ExecuteHook("cho-order-select", Hook(CptSystem, "70553"), CancellationToken.None);
+
+        var ok = result.Should().BeOfType<Microsoft.AspNetCore.Mvc.OkObjectResult>().Subject;
+        var card = ok.Value.Should().BeOfType<CrdCardResponse>().Subject.Cards.Should().ContainSingle().Subject;
+        ShouldBeUnknown(card);
+    }
+
     private sealed class ThrowingTerminology : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new(new Handler()) { BaseAddress = new Uri("http://terminology.test/") };
