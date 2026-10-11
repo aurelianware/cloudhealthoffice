@@ -70,6 +70,77 @@ public class AuthorizationAuthenticationTests : IClassFixture<AuthorizationApiFa
         return id;
     }
 
+    // ── claims-service's prior-authorization lookup (#1299 B1, D-04) ──
+
+    /// <summary>
+    /// claims-service validates authorizations with its own service token (an
+    /// examiner's token lacks authorizations:read). authorization-service must
+    /// accept that token for /validate and scope it to the token's tenant.
+    /// </summary>
+    [Fact]
+    public async Task Validate_ClaimsServiceServiceToken_IsAccepted()
+    {
+        var number = "AUTH-SVC-" + Guid.NewGuid().ToString("N")[..8];
+        _repo.GetByAuthorizationNumberAsync(number).Returns(new Authorization
+        {
+            Id = Guid.NewGuid().ToString(),
+            TenantId = Tenant,
+            AuthorizationNumber = number,
+            Status = AuthorizationStatus.Approved,
+            ApprovedServiceDateFrom = DateTime.UtcNow.AddDays(-30),
+            ExpirationDate = DateTime.UtcNow.AddDays(60),
+        });
+        using var client = ClientWithToken(
+            ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("claims-service", Tenant));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
+
+        var response = await client.GetAsync($"/api/authorizations/{number}/validate");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        Assert.True(body.GetProperty("isValid").GetBoolean());
+    }
+
+    /// <summary>Why the lookup cannot forward an examiner's token: it is refused.</summary>
+    [Theory]
+    [InlineData(ChoRolePermissions.ClaimsExaminer)]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor)]
+    public async Task Validate_ExaminerToken_Returns403(string role)
+    {
+        using var client = ClientFor(Tenant, "examiner-1", role);
+
+        var response = await client.GetAsync("/api/authorizations/AUTH-1/validate");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    /// <summary>
+    /// Contract with claims-service (<c>HttpAuthorizationValidationClient.IsServiceNotFound</c>):
+    /// an unknown number is a 404 whose body — plain text or a JSON string —
+    /// reads "Authorization {number} not found". claims-service treats only
+    /// that body as a definitive NotFound (deny, CARC 197); any other 404 pends.
+    /// Changing the body turns unknown numbers into pends, not payments.
+    /// </summary>
+    [Theory]
+    [InlineData("application/json")]
+    [InlineData("text/plain")]
+    public async Task Validate_UnknownNumber_Returns404WithTheNotFoundBody(string accept)
+    {
+        const string number = "AUTH-\"Q\\UOTE\"-404";
+        _repo.GetByAuthorizationNumberAsync(number).Returns((Authorization?)null);
+        using var client = ClientWithToken(
+            ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("claims-service", Tenant));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(accept));
+
+        var response = await client.GetAsync($"/api/authorizations/{Uri.EscapeDataString(number)}/validate");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var raw = await response.Content.ReadAsStringAsync();
+        var text = raw.TrimStart().StartsWith('"') ? JsonSerializer.Deserialize<string>(raw) : raw;
+        Assert.Equal($"Authorization {number} not found", text);
+    }
+
     // ── Authentication and tenant ─────────────────────────────────────
 
     [Fact]

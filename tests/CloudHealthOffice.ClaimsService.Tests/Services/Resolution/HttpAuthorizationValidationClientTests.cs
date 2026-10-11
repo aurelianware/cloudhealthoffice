@@ -81,6 +81,27 @@ public sealed class HttpAuthorizationValidationClientTests
         Assert.Equal(AuthorizationLookupStatus.NotFound, result.Status);
     }
 
+    /// <summary>
+    /// The service answers a JSON string when the client accepts JSON (claims-service
+    /// sends Accept: application/json): escaped characters must still match.
+    /// </summary>
+    [Fact]
+    public async Task ValidateAsync_ServiceNotFoundAsJsonString_WithEscapedCharacters_IsNotFound()
+    {
+        const string number = "AUTH-\"Q\\UOTE\"";
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StringContent(
+                System.Text.Json.JsonSerializer.Serialize($"Authorization {number} not found"),
+                System.Text.Encoding.UTF8, "application/json"),
+        });
+        var sut = CreateClient(handler);
+
+        var result = await sut.ValidateAsync("tenant-1", number, "99213", DateTime.UtcNow, "1234567890");
+
+        Assert.Equal(AuthorizationLookupStatus.NotFound, result.Status);
+    }
+
     /// <summary>A 404 that is not the service's answer (ingress, wrong base address) says nothing about the number.</summary>
     [Fact]
     public async Task ValidateAsync_BareNotFound_IsUnavailable()
