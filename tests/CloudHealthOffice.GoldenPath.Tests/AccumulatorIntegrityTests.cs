@@ -905,6 +905,33 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// #1299 S1: when the recovered lookup answers definitively that the number
+    /// does not exist for the tenant, the bulk re-run's denial (CARC 197) stands,
+    /// and nothing is written to the accumulators.
+    /// </summary>
+    [SkippableFact]
+    public async Task PaUnavailablePend_BulkRerun_DeniesOnADefinitiveNotFound()
+    {
+        _ncciPends = false;
+        _priorAuthCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "99213" };
+        _beforeSubmit = claim => claim.PriorAuthorizationNumber = "AUTH-GOLD-UNKNOWN";
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
+        var pended = await SubmitAndAdjudicateAsync();
+
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.NotFound());
+        var run = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+
+        Assert.Equal(1, run.Denied);
+        var denied = (await Claim(pended.Id))!;
+        Assert.Equal(Claims.ClaimStatus.Denied, denied.Status);
+        Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredCode, denied.AdjudicationResult!.DenialReasonCode);
+        await AssertBalances(0m, 0m);
+        await AssertNoWriteForAsync(pended.Id);
+    }
+
+    /// <summary>
     /// The post-rollout sweep lists finalized claims with no pending entry and no write record
     /// in the store (an old pod dropped the entry), and nothing for a committed claim.
     /// </summary>

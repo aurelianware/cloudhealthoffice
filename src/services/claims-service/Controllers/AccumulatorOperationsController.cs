@@ -60,4 +60,21 @@ public sealed class AccumulatorOperationsController : ControllerBase
         return Ok(await _operations.RerunAccumulatorCommitPendsAsync(
             tenantId, _actor.UserId, Math.Clamp(limit, 1, MaxRerunClaims), HttpContext.RequestAborted));
     }
+
+    /// <summary>
+    /// Re-runs claims pended <c>PAUNAVAIL</c> / <c>PLANUNAVAIL</c> (a prior-
+    /// authorization or benefit-plan lookup had no answer) once those
+    /// services answer again (#1299 S1). The lookup always runs under
+    /// claims-service's own service identity. Each claim passes or denies only
+    /// on a definitive answer; one still without an answer stays pended.
+    /// </summary>
+    [HttpPost("prior-auth-unavailable-pends/rerun")]
+    [ProducesResponseType(typeof(AccumulatorPendRerunResult), StatusCodes.Status200OK)]
+    public async Task<ActionResult<AccumulatorPendRerunResult>> RerunPriorAuthUnavailablePends([FromQuery] int limit = 100)
+    {
+        var tenantId = HttpContext.Items["TenantId"]?.ToString()
+                       ?? throw new InvalidOperationException("TenantId not found in HttpContext.");
+        return Ok(await _operations.RerunPriorAuthUnavailablePendsAsync(
+            tenantId, _actor.UserId, Math.Clamp(limit, 1, MaxRerunClaims), HttpContext.RequestAborted));
+    }
 }
