@@ -100,6 +100,7 @@ public static class EvidenceWriters
         sb.AppendLine("- Evidence reflects the acceptance suite on the tested commit, on synthetic data only.");
         sb.AppendLine("- Declared capability status is separate from test execution status: a passing GAP-assertion test confirms a gap and does not make the scenario PASSABLE.");
         sb.AppendLine("- Integration (Augment) status reflects only backends represented in the manifest; no QNXT/Facets/HealthEdge production integration is claimed.");
+        sb.AppendLine("- Cloud Health Office (Replace) status is read from docs/epa-gap-matrix.md §11; Augment status is declared in the scenario manifest.");
         sb.AppendLine();
         return sb.ToString();
     }
