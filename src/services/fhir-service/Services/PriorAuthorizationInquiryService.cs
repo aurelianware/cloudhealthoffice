@@ -229,7 +229,8 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
 
         if (!string.IsNullOrWhiteSpace(request.MemberReference))
         {
-            if (!MemberMatches(request.MemberReference, record.MemberId))
+            if (!MemberMatches(request.MemberReference, record.MemberId)
+                && !MemberMatches(request.MemberReference, record.PatientReference))
                 return false;
             matched = true;
         }
@@ -248,11 +249,12 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
     }
 
     /// <summary>
-    /// The submit path records the member as the Claim's patient reference
-    /// (<c>Patient/pat-001</c>), while a caller may inquire with either that form
-    /// or the bare id. Both resolve; nothing else does.
+    /// PAS $submit records the member id (from the Bundle's Patient/Coverage)
+    /// and, separately, the submitter's own patient reference
+    /// (<c>Patient/pat-001</c>). An inquiry may name either, the reference with
+    /// or without its <c>Patient/</c> prefix. Nothing else resolves.
     /// </summary>
-    private static bool MemberMatches(string supplied, string stored)
+    private static bool MemberMatches(string supplied, string? stored)
     {
         var a = StripPatientPrefix(supplied.Trim());
         var b = StripPatientPrefix((stored ?? string.Empty).Trim());

@@ -664,6 +664,8 @@ public class PasInquiryTests
                 new PriorAuthorizationInquiryService(new RecordingStore(records)),
                 Microsoft.Extensions.Options.Options.Create(new FhirService.Models.PasAutoAdjudicationConfig()),
                 new Mock<IHttpClientFactory>().Object,
+                // $inquire never writes; a recorder that is ever called fails the test.
+                new Mock<FhirService.Services.Pas.IPasAuthorizationRecorder>(MockBehavior.Strict).Object,
                 AcceptanceContext.Logger<PasController>())
             .WithTenant();
 

@@ -13,6 +13,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
+using CloudHealthOffice.FhirService.Tests.TestSupport;
+using FhirService.Services.Pas;
 
 namespace CloudHealthOffice.FhirService.Tests.Security;
 
@@ -72,40 +74,43 @@ public class PasRuleSetTenantTests : IClassFixture<FhirTestWebAppFactory>
             services.AddSingleton<IPriorAuthRuleEngine>(engine);
             services.RemoveAll<ICms0057ComplianceChecker>();
             services.AddSingleton(compliance.Object);
+
+            // $submit now stores the request before it answers (D-01): stand
+            // in for authorization-service, and keep the gold-card and
+            // provider-verification lookups (now reached, because the
+            // complete bundle names an NPI) off the network.
+            services.RemoveAll<IPasAuthorizationRecorder>();
+            services.AddSingleton<IPasAuthorizationRecorder>(new FakePasAuthorizationRecorder());
+            services.AddHttpClient("AuthorizationService")
+                .ConfigurePrimaryHttpMessageHandler(() => new NotFoundHandler());
+            services.AddHttpClient("ProviderVerificationService")
+                .ConfigurePrimaryHttpMessageHandler(() => new NotFoundHandler());
         }));
         return (host, engine);
     }
 
     /// <summary>
     /// A PAS bundle that reaches the rule engine: a procedure on no auto list,
-    /// no provider NPI (skips the enrollment gate and gold card), no cost.
+    /// no cost. It is now a complete bundle (Patient, Coverage, Practitioner
+    /// with NPI), because $submit refuses a Claim whose referenced resources
+    /// are missing (D-03). The item names its service state (TX): the rule
+    /// engine runs only on a state the request names, never a default (B1).
+    /// The enrollment gate is the factory's passthrough, and the gold-card
+    /// lookup answers 404.
     /// </summary>
     private static string SubmitBundle(string? taggedTenant)
     {
-        var claim = new Hl7.Fhir.Model.Claim
-        {
-            Id = "claim-d12",
-            Status = FinancialResourceStatusCodes.Active,
-            Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
-            Use = ClaimUseCode.Preauthorization,
-            Patient = new ResourceReference("Patient/pat-001"),
-            Created = "2026-10-10",
-            Insurer = new ResourceReference("Organization/cho-payer"),
-            Provider = new ResourceReference { Display = "Test Provider" },
-            Priority = new CodeableConcept("http://terminology.hl7.org/CodeSystem/processpriority", "normal"),
-            Insurance = [new() { Sequence = 1, Focal = true, Coverage = new ResourceReference("Coverage/cov-001") }],
-            Item = [new() { Sequence = 1, ProductOrService = new CodeableConcept("http://www.ama-assn.org/go/cpt", "70553") }],
-        };
-
-        var bundle = new Bundle
-        {
-            Type = Bundle.BundleType.Collection,
-            Entry = [new() { Resource = claim }],
-        };
+        var bundle = PasBundles.Complete(procedureCode: "70553", serviceState: "TX");
         if (taggedTenant != null)
             bundle.Meta = new Meta { Tag = [new Coding("cho:tenant", taggedTenant)] };
 
         return JsonSerializer.Serialize(bundle, FhirJson);
+    }
+
+    private sealed class NotFoundHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
     }
 
     private async Task<HttpResponseMessage> SubmitAsync(WebApplicationFactory<Program> host, string body)

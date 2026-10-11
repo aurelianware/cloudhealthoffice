@@ -73,6 +73,105 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
         return await _repository.CreateAsync(authorization);
     }
 
+    public async Task<Authorization> RecordAutomatedDecisionAsync(
+        Authorization authorization, AutomatedDecision decision, CancellationToken ct = default)
+    {
+        var decidedAt = decision.DecidedAt ?? DateTime.UtcNow;
+
+        // Receipt: the request as it arrived, at the time it arrived. The
+        // decision clock runs from here (SubmittedDate), not from the write.
+        authorization.StatusHistory = new List<AuthorizationStatusChange>
+        {
+            new()
+            {
+                Status = AuthorizationStatus.Submitted,
+                ChangedAt = authorization.SubmittedDate,
+                ChangedBy = authorization.CreatedBy,
+            },
+        };
+
+        // A plan exclusion outranks any automated outcome (PAS-08), exactly as
+        // it does for a REST submission. The caller reads the stored status
+        // back and answers the provider with it.
+        var determination = _exclusionService?.DetermineExclusion(authorization);
+        if (determination is { IsExcluded: true })
+        {
+            authorization.Status = AuthorizationStatus.Denied;
+            authorization.ReviewDecision = "A3";
+            authorization.DenialReasonCode = determination.ReasonCode;
+            authorization.DenialReason = determination.ReasonText;
+            authorization.ReviewedDate = decidedAt;
+            authorization.StatusHistory.Add(new AuthorizationStatusChange
+            {
+                Status = AuthorizationStatus.Denied,
+                ReviewDecision = "A3",
+                Reason = determination.ReasonText,
+                ChangedAt = decidedAt,
+                ChangedBy = authorization.CreatedBy,
+                Source = "benefit-exclusion",
+            });
+            return await _repository.CreateAsync(authorization);
+        }
+
+        string? reason;
+        switch (decision.Outcome)
+        {
+            case AutomatedDecisionOutcome.Approved:
+                authorization.Status = AuthorizationStatus.Approved;
+                authorization.ReviewDecision = "A1";
+                authorization.ApprovedServiceDateFrom = decision.ApprovedServiceDateFrom;
+                authorization.ApprovedServiceDateTo = decision.ApprovedServiceDateTo;
+                authorization.ExpirationDate = decision.ApprovedServiceDateTo;
+                authorization.ReviewedDate = decidedAt;
+                reason = null;
+                break;
+            case AutomatedDecisionOutcome.Denied:
+                authorization.Status = AuthorizationStatus.Denied;
+                authorization.ReviewDecision = "A3";
+                authorization.DenialReasonCode = decision.DenialReasonCode;
+                authorization.DenialReason = decision.DenialReason;
+                authorization.ReviewedDate = decidedAt;
+                reason = decision.DenialReason;
+                break;
+            case AutomatedDecisionOutcome.Pended:
+                authorization.Status = AuthorizationStatus.Pended;
+                authorization.ReviewDecision = "A4";
+                authorization.PendReason = decision.PendReason;
+                reason = decision.PendReason;
+                break;
+            default:
+                throw new ArgumentException("An automated decision needs an outcome.", nameof(decision));
+        }
+
+        authorization.StatusHistory.Add(new AuthorizationStatusChange
+        {
+            Status = authorization.Status,
+            ReviewDecision = authorization.ReviewDecision,
+            Reason = reason,
+            ChangedAt = decidedAt,
+            ChangedBy = authorization.CreatedBy,
+            Source = AutomatedSource(decision),
+        });
+
+        return await _repository.CreateAsync(authorization);
+    }
+
+    /// <summary>
+    /// The decision's history source, stating exactly the inputs the deciding
+    /// path read and nothing else:
+    /// <c>automated:&lt;rule&gt;;lob=&lt;line of business|n/a&gt;;state=&lt;state|none&gt;</c>.
+    /// <c>lob=n/a</c>: no line of business was evaluated (provider exclusion,
+    /// disabled, time budget, undetermined). <c>state=none</c>: no rule read a
+    /// state, whether or not the request named one.
+    /// </summary>
+    internal static string AutomatedSource(AutomatedDecision decision)
+    {
+        var rule = string.IsNullOrWhiteSpace(decision.Rule) ? "automated" : $"automated:{decision.Rule}";
+        var lob = decision.LineOfBusiness?.ToString() ?? "n/a";
+        var state = string.IsNullOrEmpty(decision.StateCode) ? "none" : decision.StateCode;
+        return $"{rule};lob={lob};state={state}";
+    }
+
     public Task<Authorization?> GetByNumberAsync(string authorizationNumber, CancellationToken ct = default)
         => _repository.GetByAuthorizationNumberAsync(authorizationNumber);
 
