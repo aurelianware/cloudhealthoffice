@@ -90,24 +90,36 @@ public sealed class PaRuleRepositoryCosmos : IPaRuleRepository
     public async Task<IReadOnlyList<PaRuleDocument>> GetRulesAsync(
         RuleSetKey key, CancellationToken ct = default)
     {
+        // Written against the stored shape under the shared
+        // CosmosSystemTextJsonSerializer that AddChoDatabase configures: null
+        // properties are OMITTED (so a platform rule has no tenantId field and an
+        // any-program rule no program field), and enums are camelCase STRINGS.
+        // The previous IS_NULL(...) filters and int-bound LOB matched nothing on
+        // that shape, so GetRulesAsync returned zero rules (review of #1294).
+        // NOT IS_DEFINED OR IS_NULL accepts both an omitted and an explicit null.
         var tenantFilter = key.TenantId is null
-            ? "IS_NULL(c.tenantId)"
+            ? "(NOT IS_DEFINED(c.tenantId) OR IS_NULL(c.tenantId))"
             : "c.tenantId = @tenantId";
 
         var programFilter = key.Program is null
-            ? "IS_NULL(c.program)"
+            ? "(NOT IS_DEFINED(c.program) OR IS_NULL(c.program))"
             : "c.program = @program";
 
+        // LOB is bound as the enum value itself: the SDK serializes query
+        // parameters with the client's serializer, so the parameter takes the
+        // same shape as the stored field (a camelCase string under the shared
+        // serializer). No ORDER BY: categories are stored as strings, whose
+        // alphabetical order is not the evaluation band order, and a
+        // multi-property ORDER BY also needs a composite index. Sorted below.
         var query = new QueryDefinition(
             $"SELECT * FROM c " +
             $"WHERE c.stateCode = @stateCode " +
             $"AND c.lob = @lob " +
             $"AND {programFilter} " +
             $"AND {tenantFilter} " +
-            $"AND c.isEnabled = true " +
-            $"ORDER BY c.category, c.priority")
+            $"AND c.isEnabled = true")
             .WithParameter("@stateCode", key.StateCode)
-            .WithParameter("@lob", (int)key.Lob);
+            .WithParameter("@lob", key.Lob);
 
         if (key.Program is not null) query = query.WithParameter("@program", key.Program);
         if (key.TenantId is not null) query = query.WithParameter("@tenantId", key.TenantId);
@@ -126,7 +138,12 @@ public sealed class PaRuleRepositoryCosmos : IPaRuleRepository
             results.AddRange(page);
         }
 
-        return results;
+        // Band (numeric enum order), then priority — the order the engine and
+        // the Mongo repository use.
+        return results
+            .OrderBy(r => (int)r.Category)
+            .ThenBy(r => r.Priority)
+            .ToList();
     }
 
     public async Task UpsertAsync(PaRuleDocument rule, CancellationToken ct = default)
