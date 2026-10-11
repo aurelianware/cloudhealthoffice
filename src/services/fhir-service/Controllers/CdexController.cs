@@ -205,13 +205,8 @@ public sealed class CdexController : FhirControllerBase
     /// </summary>
     private string? CallerId()
     {
-        foreach (var claimType in new[]
-                 {
-                     "sub",
-                     System.Security.Claims.ClaimTypes.NameIdentifier,
-                     "client_id",
-                     "azp",
-                 })
+        // JWT claim names: neither scheme maps inbound claims (D-32).
+        foreach (var claimType in new[] { "sub", "client_id", "azp" })
         {
             var value = User?.FindFirst(claimType)?.Value;
             if (!string.IsNullOrWhiteSpace(value))
