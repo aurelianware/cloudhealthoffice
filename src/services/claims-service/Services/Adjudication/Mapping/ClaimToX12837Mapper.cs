@@ -231,6 +231,7 @@ public static class ClaimToX12837Mapper
         NationalDrugCode = line.NationalDrugCode,
         DrugQuantity = line.DrugQuantity,
         DrugUnitOfMeasure = line.DrugUnitOfMeasure,
+        PriorAuthorizationNumber = line.PriorAuthorizationNumber,
     };
 
     private static string? FormatD8(DateTime? date)

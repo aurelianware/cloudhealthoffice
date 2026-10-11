@@ -199,6 +199,37 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
         await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
     }
 
+    // ── Line-level REF*G1 overrides the claim's (D-05) ────────────────
+
+    [Fact]
+    public async Task LineLevelNumber_OverridesClaimLevelForThatLine()
+    {
+        var (stage, handler) = StageOver(req =>
+            ValidationBody(Uri.UnescapeDataString(req.RequestUri!.AbsolutePath.Split('/')[3]), isValid: true, "Authorization valid"));
+        var ctx = InpatientMedicaid("AUTH-CLAIM", "99223", "27447");
+        ctx.Claim.ClaimLines[1].PriorAuthorizationNumber = "AUTH-LINE";
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Equal(
+            new[] { "/api/authorizations/AUTH-CLAIM/validate", "/api/authorizations/AUTH-LINE/validate" },
+            handler.Requests.Select(r => r.RequestUri!.AbsolutePath));
+    }
+
+    [Fact]
+    public async Task LineWithoutAnyNumber_DeniesEvenWhenAnotherLineHasOne()
+    {
+        var (stage, _) = StageOver(req => ValidationBody("AUTH-LINE", isValid: true, "Authorization valid"));
+        var ctx = InpatientMedicaid(null, "99223", "27447");
+        ctx.Claim.ClaimLines[1].PriorAuthorizationNumber = "AUTH-LINE";
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredReason, ctx.AdjudicationResult.DenialReason);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────
 
     private void AssertPendedPaUnavailable(ClaimAdjudicationStageResult result, ClaimAdjudicationContext ctx)

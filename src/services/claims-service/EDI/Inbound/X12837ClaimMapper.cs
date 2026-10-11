@@ -102,7 +102,11 @@ public static class X12837ClaimMapper
             Status = ClaimStatus.Submitted,
             SubmittedDate = DateTime.UtcNow,
 
-            PriorAuthorizationNumber = source.ClaimHeader.PriorAuthorizationNumber,
+            // 2300 REF*G1; a line's own 2400 REF*G1 is on the line and
+            // overrides this one for that line at adjudication.
+            PriorAuthorizationNumber = string.IsNullOrWhiteSpace(source.ClaimHeader.PriorAuthorizationNumber)
+                ? null
+                : source.ClaimHeader.PriorAuthorizationNumber.Trim(),
             EDI837ControlNumber = source.TransactionControlNumber,
         };
     }
@@ -250,6 +254,9 @@ public static class X12837ClaimMapper
             NationalDrugCode = line.NationalDrugCode,
             DrugQuantity = line.DrugQuantity,
             DrugUnitOfMeasure = line.DrugUnitOfMeasure,
+            PriorAuthorizationNumber = string.IsNullOrWhiteSpace(line.PriorAuthorizationNumber)
+                ? null
+                : line.PriorAuthorizationNumber.Trim(),
         };
     }
 

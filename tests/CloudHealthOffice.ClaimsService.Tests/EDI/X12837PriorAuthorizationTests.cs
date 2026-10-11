@@ -117,4 +117,43 @@ public class X12837PriorAuthorizationTests
 
         Assert.Equal("AUTH-CLAIM-0002", mapped.PriorAuthorizationNumber);
     }
+
+    [Fact]
+    public void Institutional_MapsLineLevelRefG1OntoTheLine()
+    {
+        var mapped = X12837ClaimMapper.Map(Assert.Single(X12837Parser.Parse(Institutional)), "tenant-1");
+
+        Assert.Null(mapped.ClaimLines[0].PriorAuthorizationNumber);
+        Assert.Equal("AUTH-LINE-0002", mapped.ClaimLines[1].PriorAuthorizationNumber);
+    }
+
+    [Fact]
+    public void Professional_MapsLineLevelRefG1OntoTheLine()
+    {
+        var mapped = X12837ClaimMapper.Map(Assert.Single(X12837Parser.Parse(Professional)), "tenant-1");
+
+        Assert.Equal("AUTH-LINE-0001", mapped.ClaimLines[0].PriorAuthorizationNumber);
+        Assert.Null(mapped.ClaimLines[1].PriorAuthorizationNumber);
+    }
+
+    [Fact]
+    public void LineLevelRefG1_SurvivesTheDomainRoundTrip()
+    {
+        var mapped = X12837ClaimMapper.Map(Assert.Single(X12837Parser.Parse(Professional)), "tenant-1");
+
+        var roundTripped = global::ClaimsService.Models.AdapterClaim.From(mapped.ToClaim());
+
+        Assert.Equal("AUTH-CLAIM-0002", roundTripped.PriorAuthorizationNumber);
+        Assert.Equal("AUTH-LINE-0001", roundTripped.ClaimLines[0].PriorAuthorizationNumber);
+    }
+
+    [Fact]
+    public void RefG1OnlyInOtherPayerLoop_IsNotThisPayersAuthorization()
+    {
+        var withoutOwnRefG1 = Institutional.Replace("REF*G1*AUTH-CLAIM-0001~", string.Empty);
+
+        var claim = Assert.Single(X12837Parser.Parse(withoutOwnRefG1));
+
+        Assert.Null(claim.ClaimHeader.PriorAuthorizationNumber);
+    }
 }

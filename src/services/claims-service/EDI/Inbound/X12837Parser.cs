@@ -66,6 +66,8 @@ public static class X12837Parser
         string? placeOfService = null;
         string? frequencyCode = null;
         string? facilityTypeCode = null;
+        // 2300 REF*G1 — prior authorization number for the claim.
+        string? priorAuthorizationNumber = null;
         List<DiagnosisCode> diagnosisCodes = [];
         // Institutional (837I) 2300 detail, reset on CLM/flush.
         string? admissionDate = null;
@@ -200,6 +202,7 @@ public static class X12837Parser
                     PlaceOfServiceCode = placeOfService,
                     FrequencyCode = frequencyCode,
                     FacilityTypeCode = facilityTypeCode,
+                    PriorAuthorizationNumber = priorAuthorizationNumber,
                     DiagnosisCodes = diagnosisCodes.Count > 0 ? [.. diagnosisCodes] : null,
                     // The principal diagnosis is the ABK/BK composite when
                     // present — not blindly the first HI element, which on
@@ -240,6 +243,7 @@ public static class X12837Parser
             placeOfService = null;
             frequencyCode = null;
             facilityTypeCode = null;
+            priorAuthorizationNumber = null;
             diagnosisCodes = [];
             admissionDate = null;
             admissionHour = null;
@@ -366,6 +370,25 @@ public static class X12837Parser
                     }
                     break;
                 }
+
+                case "REF" when claimOpen && currentLine is not null && seg.Element(0) == "G1":
+                    // 2400 REF*G1 — this line's prior authorization number;
+                    // overrides the claim's (2300) for the line.
+                    if (seg.Element(1)?.Trim() is { Length: > 0 } linePriorAuth)
+                    {
+                        currentLine = currentLine with { PriorAuthorizationNumber = linePriorAuth };
+                    }
+                    break;
+
+                case "REF" when claimOpen && currentLine is null && !hlSinceClaim && !InOtherPayerLoop() && seg.Element(0) == "G1":
+                    // 2300 REF*G1 — the claim's prior authorization number.
+                    // A REF*G1 inside 2320/2330 is another payer's (handled
+                    // or skipped above), never this payer's.
+                    if (seg.Element(1)?.Trim() is { Length: > 0 } claimPriorAuth)
+                    {
+                        priorAuthorizationNumber = claimPriorAuth;
+                    }
+                    break;
 
                 case "AMT" when InOtherPayerLoop() && seg.Element(0) == "D":
                     // 2320 AMT*D — payer paid amount.
