@@ -1988,8 +1988,11 @@ public class ClaimRepository : IClaimRepository
         "OR (IS_DEFINED(c.adjudicationResult.denialReason) " +
         "AND NOT IS_NULL(c.adjudicationResult.denialReason) " +
         "AND c.adjudicationResult.denialReason != '') " +
-        "OR (IS_DEFINED(c.adjudicationResult.adjustmentReasons) " +
-        "AND ARRAY_LENGTH(c.adjudicationResult.adjustmentReasons) > 0))";
+        // "Non-empty array" as IS_DEFINED(first element): ARRAY_LENGTH cannot
+        // be evaluated inside a patch FilterPredicate on the Cosmos emulator
+        // (400), which made every approval re-run ending Deny on a Pended
+        // claim throw (#1299). Same meaning for an array.
+        "OR IS_DEFINED(c.adjudicationResult.adjustmentReasons[0]))";
 
     /// <summary>Cosmos patch FilterPredicate for <see cref="IsFinalDisposition"/> — built from <see cref="FinalDispositions"/>; Pended is deliberately absent (re-pending is allowed).</summary>
     private static readonly string FinalDispositionFilterPredicate =
