@@ -149,7 +149,12 @@ public record PaRuleDecision
 /// </summary>
 public class PaRuleDocument
 {
-    /// <summary>Document ID: "{stateCode}:{lob}:{program ?? "any"}:{ruleId}"</summary>
+    /// <summary>
+    /// Document ID, set by the repositories on every write:
+    /// "{stateCode}:{(int)lob}:{program ?? "any"}:{tenantId ?? "platform"}:{ruleId}".
+    /// It is the rule's full identity: a write replaces only the document with
+    /// this id (D-16), so changing a rule's LOB or program writes a new document.
+    /// </summary>
     public string Id                            { get; set; } = string.Empty;
 
     public required string RuleId              { get; set; }

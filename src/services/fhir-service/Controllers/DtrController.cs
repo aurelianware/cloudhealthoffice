@@ -60,9 +60,24 @@ public class DtrController : FhirControllerBase
         return Ok(bundle);
     }
 
+    /// <summary>
+    /// D-14: <c>"default"</c> is the store key of the read-only library every
+    /// tenant's search includes. A tenant whose id is "default" writing there
+    /// would publish its forms to every tenant, so that id is reserved for
+    /// questionnaire writes.
+    /// </summary>
+    private bool IsReservedLibraryTenant
+        => string.Equals(TenantId, DtrService.DefaultLibraryTenant, StringComparison.Ordinal);
+
+    private const string ReservedLibraryMessage =
+        "Tenant id 'default' is reserved for the shared, read-only questionnaire library.";
+
     /// <summary>POST /fhir/r4/Questionnaire — create</summary>
     [HttpPost("Questionnaire")]
-    [FhirAccess(smart: true, cho: "settings:manage")]
+    // CHO administrators only (D-15): a payer's questionnaires are its
+    // documentation rules. SMART callers read them and answer them
+    // (QuestionnaireResponse); they never author them.
+    [FhirAccess(smart: false, cho: "settings:manage")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(Questionnaire), 201)]
@@ -70,6 +85,8 @@ public class DtrController : FhirControllerBase
     public async Task<IActionResult> CreateQuestionnaire(
         [FromBody] Questionnaire questionnaire, CancellationToken ct)
     {
+        if (IsReservedLibraryTenant) return FhirForbidden(ReservedLibraryMessage);
+
         // Validate required fields
         if (questionnaire.Status == null)
             return FhirBadRequest("Questionnaire.status is required");
@@ -90,7 +107,10 @@ public class DtrController : FhirControllerBase
 
     /// <summary>PUT /fhir/r4/Questionnaire/{id} — update</summary>
     [HttpPut("Questionnaire/{id}")]
-    [FhirAccess(smart: true, cho: "settings:manage")]
+    // CHO administrators only (D-15): a payer's questionnaires are its
+    // documentation rules. SMART callers read them and answer them
+    // (QuestionnaireResponse); they never author them.
+    [FhirAccess(smart: false, cho: "settings:manage")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(Questionnaire), 200)]
@@ -99,6 +119,8 @@ public class DtrController : FhirControllerBase
     public async Task<IActionResult> UpdateQuestionnaire(
         string id, [FromBody] Questionnaire questionnaire, CancellationToken ct)
     {
+        if (IsReservedLibraryTenant) return FhirForbidden(ReservedLibraryMessage);
+
         if (questionnaire.Status == null)
             return FhirBadRequest("Questionnaire.status is required");
         if (questionnaire.Item == null || questionnaire.Item.Count == 0)

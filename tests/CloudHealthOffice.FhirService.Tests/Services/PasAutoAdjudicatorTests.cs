@@ -43,7 +43,7 @@ public class PasAutoAdjudicatorTests
         var adjudicator = CreateAdjudicator();
         var claim = CreateClaim("99213");
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
 
         result.HasDecision.Should().BeTrue();
         result.Decision.Should().Be("approved");
@@ -57,7 +57,7 @@ public class PasAutoAdjudicatorTests
         var adjudicator = CreateAdjudicator();
         var claim = CreateClaim("V2020");
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
 
         result.HasDecision.Should().BeTrue();
         result.Decision.Should().Be("denied");
@@ -75,7 +75,7 @@ public class PasAutoAdjudicatorTests
         var claim = CreateClaim("12345"); // not in approve/deny lists
         claim.Provider = new ResourceReference { Identifier = new Identifier { Value = "1234567890" } };
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
 
         result.HasDecision.Should().BeTrue();
         result.Decision.Should().Be("approved");
@@ -93,7 +93,7 @@ public class PasAutoAdjudicatorTests
         claim.Provider = new ResourceReference { Identifier = new Identifier { Value = "9999999999" } };
         claim.Total = new Money { Value = 200m, Currency = Money.Currencies.USD };
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
 
         result.HasDecision.Should().BeTrue();
         result.Decision.Should().Be("approved");
@@ -111,7 +111,7 @@ public class PasAutoAdjudicatorTests
         claim.Provider = new ResourceReference { Identifier = new Identifier { Value = "9999999999" } };
         claim.Total = new Money { Value = 10000m, Currency = Money.Currencies.USD }; // above threshold
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
 
         result.HasDecision.Should().BeFalse();
         result.RuleName.Should().Be("NoRuleMatch");
@@ -138,7 +138,7 @@ public class PasAutoAdjudicatorTests
         claim.Provider = new ResourceReference { Identifier = new Identifier { Value = "1234567890" } };
 
         // Very short timeout — should cancel during gold-card HTTP call
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), 50);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 50);
 
         result.HasDecision.Should().BeFalse();
         result.RuleName.Should().Be("TimeBudgetExceeded");
@@ -151,7 +151,7 @@ public class PasAutoAdjudicatorTests
         var adjudicator = CreateAdjudicator();
         var claim = CreateClaim("99213"); // would normally auto-approve
 
-        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), 12000);
+        var result = await adjudicator.TryDecideAsync(claim, new Bundle(), "test-tenant", 12000);
 
         result.HasDecision.Should().BeFalse();
         result.RuleName.Should().Be("ConfigDisabled");

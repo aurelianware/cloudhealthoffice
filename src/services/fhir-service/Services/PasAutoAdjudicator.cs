@@ -49,6 +49,7 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
     public async Task<PasDecisionResult> TryDecideAsync(
         Claim claim,
         Bundle context,
+        string tenantId,
         int timeoutMs,
         CancellationToken ct = default)
     {
@@ -158,7 +159,10 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
             // and diagnosis requirements by (StateCode, LOB, Program).
             var ruleContext = new PaRuleContext
             {
-                TenantId              = ExtractTenantId(context),
+                // The authenticated tenant, passed in by the controller. The
+                // request bundle's meta.tag is NOT consulted (D-12): it is
+                // caller-controlled and once let tenant A select tenant B's rules.
+                TenantId              = tenantId,
                 StateCode             = stateCode ?? "TX",
                 Lob                   = lob,
                 Program               = ExtractProgram(claim),
@@ -334,10 +338,6 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
         }
         return hasAny ? total : null;
     }
-
-    private static string ExtractTenantId(Bundle context) =>
-        // The CRD CoverageRequirements bundle carries the tenant context header
-        context.Meta?.Tag?.FirstOrDefault(t => t.System == "cho:tenant")?.Code ?? string.Empty;
 
     /// <summary>
     /// Map FHIR-layer PaLineOfBusiness to the enrollment service's LineOfBusiness flags.

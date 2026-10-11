@@ -256,7 +256,13 @@ internal sealed class PriorAuthRuleEngineSeeder : IHostedService
             if (!existingRuleIdsByState.TryGetValue(rule.StateCode, out var existingRuleIds))
             {
                 var existing = await repo.ListAsync(tenantId: null, stateCode: rule.StateCode, ct);
-                existingRuleIds = new HashSet<string>(existing.Select(r => r.RuleId), StringComparer.OrdinalIgnoreCase);
+                // Platform rules only: a tenant's rule with the same RuleId is
+                // an override, not the platform rule, and must not suppress
+                // seeding it (D-16; the benefit-plan seed endpoint already
+                // filters this way).
+                existingRuleIds = new HashSet<string>(
+                    existing.Where(r => r.TenantId is null).Select(r => r.RuleId),
+                    StringComparer.OrdinalIgnoreCase);
                 existingRuleIdsByState[rule.StateCode] = existingRuleIds;
             }
 

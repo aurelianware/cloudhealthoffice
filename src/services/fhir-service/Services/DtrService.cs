@@ -95,8 +95,7 @@ public class DtrService : IDtrService
     public Task<(IReadOnlyList<Questionnaire> Items, int Total)> SearchQuestionnairesAsync(
         QuestionnaireSearchParams search, string tenantId, CancellationToken ct = default)
     {
-        var query = _questionnaires.Values
-            .Where(q => IsAccessible(q, tenantId));
+        var query = VisibleQuestionnaires(tenantId);
 
         if (!string.IsNullOrEmpty(search.Id))
             query = query.Where(q => q.Id == search.Id);
@@ -123,6 +122,7 @@ public class DtrService : IDtrService
     public async Task<Questionnaire> CreateQuestionnaireAsync(
         Questionnaire questionnaire, string tenantId, CancellationToken ct = default)
     {
+        EnsureNotDefaultLibrary(tenantId);
         var id = questionnaire.Id;
         if (string.IsNullOrEmpty(id) || _questionnaires.ContainsKey($"{tenantId}:{id}"))
             id = $"q-{Guid.NewGuid().ToString("N")[..8]}";
@@ -153,6 +153,7 @@ public class DtrService : IDtrService
     public Task<Questionnaire?> UpdateQuestionnaireAsync(
         string id, Questionnaire questionnaire, string tenantId, CancellationToken ct = default)
     {
+        EnsureNotDefaultLibrary(tenantId);
         var key = $"{tenantId}:{id}";
         if (!_questionnaires.ContainsKey(key) && !_questionnaires.ContainsKey($"default:{id}"))
             return Task.FromResult<Questionnaire?>(null);
@@ -301,11 +302,54 @@ public class DtrService : IDtrService
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private bool IsAccessible(Questionnaire q, string tenantId)
+    /// <summary>
+    /// Store key of the read-only default library every tenant sees. Reserved:
+    /// no caller may write under it (D-14).
+    /// </summary>
+    public const string DefaultLibraryTenant = "default";
+
+    /// <summary>
+    /// Defence in depth behind DtrController's 403: the shared library is
+    /// seeded at startup, never written through the API.
+    /// </summary>
+    private static void EnsureNotDefaultLibrary(string tenantId)
     {
-        var id = q.Id;
-        return _questionnaires.ContainsKey($"{tenantId}:{id}") ||
-               _questionnaires.ContainsKey($"default:{id}");
+        if (string.Equals(tenantId, DefaultLibraryTenant, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "The default questionnaire library is read-only; tenant id 'default' is reserved.");
+    }
+
+    /// <summary>
+    /// The questionnaires one tenant may see: its own, plus each entry of the
+    /// read-only default library it has not overridden with its own copy of
+    /// the same id. Selected by the STORE KEY's tenant, never by the
+    /// questionnaire's id: the search used to iterate every tenant's entries
+    /// and keep any whose id the caller could also resolve, so a colliding id
+    /// (another tenant's override of a default, or two tenants choosing the
+    /// same id) served the other tenant's copy (D-14).
+    /// </summary>
+    private IEnumerable<Questionnaire> VisibleQuestionnaires(string tenantId)
+    {
+        var ownPrefix = tenantId + ":";
+        var defaultPrefix = DefaultLibraryTenant + ":";
+        // A FHIR id never contains ':', so requiring a colon-free remainder
+        // also keeps tenant "a" from matching keys of a tenant named "a:b".
+        static bool InScope(string key, string prefix)
+            => key.StartsWith(prefix, StringComparison.Ordinal) && key.IndexOf(':', prefix.Length) < 0;
+
+        var own = _questionnaires
+            .Where(kv => InScope(kv.Key, ownPrefix))
+            .ToDictionary(kv => kv.Key[ownPrefix.Length..], kv => kv.Value, StringComparer.Ordinal);
+
+        if (string.Equals(tenantId, DefaultLibraryTenant, StringComparison.Ordinal))
+            return own.Values;
+
+        var defaults = _questionnaires
+            .Where(kv => InScope(kv.Key, defaultPrefix)
+                         && !own.ContainsKey(kv.Key[defaultPrefix.Length..]))
+            .Select(kv => kv.Value);
+
+        return own.Values.Concat(defaults);
     }
 
     // ── MongoDB serialization helpers ────────────────────────────────────────

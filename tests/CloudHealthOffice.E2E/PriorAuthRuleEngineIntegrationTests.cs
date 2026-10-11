@@ -247,7 +247,8 @@ public class PriorAuthRuleEngineIntegrationTests : IAsyncLifetime
 
         public Task UpsertAsync(PaRuleDocument rule, CancellationToken ct = default)
         {
-            _store.RemoveAll(r => r.RuleId == rule.RuleId && r.StateCode == rule.StateCode);
+            _store.RemoveAll(r => r.RuleId == rule.RuleId && r.StateCode == rule.StateCode
+                && r.Lob == rule.Lob && r.Program == rule.Program && r.TenantId == rule.TenantId);
             _store.Add(rule);
             return Task.CompletedTask;
         }
@@ -257,15 +258,16 @@ public class PriorAuthRuleEngineIntegrationTests : IAsyncLifetime
         {
             foreach (var rule in rules)
             {
-                _store.RemoveAll(r => r.RuleId == rule.RuleId && r.StateCode == rule.StateCode);
+                _store.RemoveAll(r => r.RuleId == rule.RuleId && r.StateCode == rule.StateCode
+                    && r.Lob == rule.Lob && r.Program == rule.Program && r.TenantId == rule.TenantId);
                 _store.Add(rule);
             }
             return Task.CompletedTask;
         }
 
-        public Task DeleteAsync(string ruleId, string stateCode, CancellationToken ct = default)
+        public Task DeleteAsync(string ruleId, string stateCode, string? tenantId, CancellationToken ct = default)
         {
-            _store.RemoveAll(r => r.RuleId == ruleId && r.StateCode == stateCode);
+            _store.RemoveAll(r => r.RuleId == ruleId && r.StateCode == stateCode && r.TenantId == tenantId);
             return Task.CompletedTask;
         }
 
