@@ -88,12 +88,18 @@ else
     // found nothing (D-18).
     if (databaseProvider is null)
     {
-        // Nothing is configured, so AddChoDatabase registered no client. Keep
-        // the host buildable (test hosts substitute the repository) and fail
-        // on first use, as the removed registration did with no endpoint.
-        builder.Services.AddSingleton<CosmosClient>(_ => throw new InvalidOperationException(
+        const string noDatabase =
             "No database is configured. Set MongoDb:ConnectionString, or Database:Provider=CosmosDb " +
-            "with CosmosDb:ConnectionString or CosmosDb:Endpoint and CosmosDb:Key."));
+            "with CosmosDb:ConnectionString or CosmosDb:Endpoint and CosmosDb:Key.";
+
+        // A deployed host refuses to start rather than going Ready and failing
+        // every request.
+        if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing"))
+            throw new InvalidOperationException(noDatabase);
+
+        // Development and test hosts (which substitute the repository) still
+        // build; a real call fails on first use with the same message.
+        builder.Services.AddSingleton<CosmosClient>(_ => throw new InvalidOperationException(noDatabase));
     }
 
     builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepository>();
