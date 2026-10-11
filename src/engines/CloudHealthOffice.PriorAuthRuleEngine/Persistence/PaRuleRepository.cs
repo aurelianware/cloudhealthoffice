@@ -183,17 +183,23 @@ public sealed class PaRuleRepositoryCosmos : IPaRuleRepository
     public async Task<IReadOnlyList<PaRuleDocument>> ListAsync(
         string? tenantId = null, string? stateCode = null, CancellationToken ct = default)
     {
-        var sql    = "SELECT * FROM c WHERE 1=1";
-        var qd     = new QueryDefinition(sql);
-        if (tenantId  is not null) { sql += " AND c.tenantId = @tenantId";   qd = new QueryDefinition(sql).WithParameter("@tenantId",  tenantId); }
-        if (stateCode is not null) { sql += " AND c.stateCode = @stateCode"; qd = new QueryDefinition(sql).WithParameter("@stateCode", stateCode); }
+        // D-17: the SQL text is built first and the parameters bound to the ONE
+        // QueryDefinition that is executed. Previously each filter rebuilt the
+        // definition (dropping the earlier parameter) and the iterator then ran
+        // a fresh, parameterless definition, so any filter failed.
+        var sql = "SELECT * FROM c WHERE 1=1";
+        if (tenantId  is not null) sql += " AND c.tenantId = @tenantId";
+        if (stateCode is not null) sql += " AND c.stateCode = @stateCode";
+
+        var qd = new QueryDefinition(sql);
+        if (tenantId  is not null) qd = qd.WithParameter("@tenantId",  tenantId);
+        if (stateCode is not null) qd = qd.WithParameter("@stateCode", stateCode);
 
         var opts = stateCode is not null
             ? new QueryRequestOptions { PartitionKey = new PartitionKey(stateCode) }
             : new QueryRequestOptions();
 
-        var iterator = _container.GetItemQueryIterator<PaRuleDocument>(
-            new QueryDefinition(sql), requestOptions: opts);
+        var iterator = _container.GetItemQueryIterator<PaRuleDocument>(qd, requestOptions: opts);
 
         var results = new List<PaRuleDocument>();
         while (iterator.HasMoreResults)
