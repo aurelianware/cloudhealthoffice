@@ -51,7 +51,7 @@ Multi-cloud independence, commercial launch readiness, and Kubernetes-native wor
 
 ### v2.0.0 — FHIR Frontier Forge (November 2025)
 
-Complete CMS-0057-F compliance with production-ready FHIR R4 APIs.
+FHIR R4 APIs for CMS-0057-F. CMS-0057-F conformance is in progress — see the [ePA gap matrix](../epa-gap-matrix.md).
 
 | Document | Description |
 |----------|-------------|
@@ -62,7 +62,7 @@ Complete CMS-0057-F compliance with production-ready FHIR R4 APIs.
 - 🔄 **FHIR R4 Integration**: Complete X12 → FHIR transformation
 - 📊 **Config-to-Workflow Generator**: Zero-code payer onboarding
 - 🔐 **Security Hardening**: 9/10 security score
-- ✅ **CMS-0057-F Ready**: 100% compliance
+- **CMS-0057-F**: conformance in progress
 
 ### v1.0.0 — The Sentinel Has Awakened (November 2025)
 

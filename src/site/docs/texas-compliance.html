@@ -439,7 +439,7 @@
         <p>All TX compliance components chain together at claim/authorization time. Here is the end-to-end flow for a Texas Medicaid prior authorization request:</p>
 
         <ol>
-          <li><strong>Request arrives</strong> &mdash; 278 transaction or FHIR PAS <code>$submit</code> operation</li>
+          <li><strong>Request arrives</strong> &mdash; FHIR PAS <code>$submit</code> operation or REST API (X12 278 transactions are planned)</li>
           <li><strong>ProviderVerificationEngine</strong> &mdash; NPI validation, OIG exclusion check, PECOS Medicare enrollment verification</li>
           <li><strong>ProviderEnrollmentService</strong> &mdash; TMHP PEMS enrollment check (active TX Medicaid enrollment required)</li>
           <li><strong>PriorAuthRuleEngine</strong> &mdash; TX seed rules execute in priority order:

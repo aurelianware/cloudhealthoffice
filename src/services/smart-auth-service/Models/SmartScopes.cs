@@ -1,7 +1,8 @@
 namespace SmartAuthService.Models;
 
 /// <summary>
-/// SMART App Launch Framework v2 scope constants.
+/// SMART App Launch scope constants. These are SMART v1-style scopes (e.g. patient/*.read);
+/// SMART v2 scopes (.cruds, .rs, granular ?category=) are not yet supported (see docs/epa-gap-matrix.md §4.6).
 /// https://hl7.org/fhir/smart-app-launch/scopes-and-launch-context.html
 /// </summary>
 public static class SmartScopes

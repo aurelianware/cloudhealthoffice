@@ -2,13 +2,19 @@
 
 # FHIR R4 Integration Guide - CMS-0057-F Eligibility, Claims & Prior Authorization
 
+> **Status (October 2026):** CMS-0057-F conformance is in progress. Much of this guide describes the
+> TypeScript FHIR library and the removed Logic Apps orchestration rather than the running services.
+> Da Vinci CRD/DTR/PAS are in development and not yet conformant, X12 278 bridging is planned, bulk
+> `$export` is a stub, and FHIR reads are served from a mock data adapter. See the
+> [ePA gap matrix](../epa-gap-matrix.md), which is the source of truth for current status.
+
 **Cloud Health Office** - HIPAA-compliant FHIR R4 integration for payer systems
 
 This guide explains how Cloud Health Office maps HIPAA X12 transactions to HL7 FHIR R4 resources to satisfy CMS-0057-F Prior Authorization, CMS-9115-F Patient Access, and related interoperability mandates.
 
 **Comprehensive Coverage:**
 - **Eligibility Verification** (X12 270/271 ↔ FHIR)
-- **Prior Authorization** (X12 278 ↔ FHIR) - CMS-0057-F compliant
+- **Prior Authorization** (FHIR; X12 278 bridging planned) - CMS-0057-F conformance in progress
 - **Da Vinci Implementation Guides** (CRD, DTR, PAS)
 - **Attachment Support** (Binary resources)
 - **SLA Tracking** (72-hour standard, 24-hour urgent)
@@ -55,7 +61,7 @@ This guide explains how Cloud Health Office maps HIPAA X12 transactions to HL7 F
 
 ## Overview
 
-Cloud Health Office provides comprehensive FHIR R4 integration for healthcare payer systems, enabling seamless conversion between traditional X12 EDI transactions and modern FHIR APIs. This implementation now includes full CMS-0057-F support with complete transaction coverage:
+Cloud Health Office provides comprehensive FHIR R4 integration for healthcare payer systems, enabling seamless conversion between traditional X12 EDI transactions and modern FHIR APIs. CMS-0057-F conformance is in progress; the transactions covered are:
 
 ### Supported Transactions
 
@@ -66,13 +72,13 @@ Cloud Health Office provides comprehensive FHIR R4 integration for healthcare pa
 
 ### Provider Access Key Features
 
-✅ **CMS-0057-F Compliant**: Full Prior Authorization Final Rule implementation  
+- **CMS-0057-F**: conformance in progress; Prior Authorization Final Rule implementation is partial  
 ✅ **Standards Compliant**: HIPAA X12 005010 series and HL7 FHIR R4  
 ✅ **CMS Patient Access Ready**: Supports CMS-9115-F final rule requirements  
 ✅ **US Core + Da Vinci**: US Core IG v3.1.1+ and Da Vinci PAS/PDex/CRD/DTR  
 ✅ **Compliance Checker**: Automated validation against CMS rules and timelines  
 ✅ **Azure FHIR Integration**: Profile validation via Azure API for FHIR  
-✅ **Production Ready**: 45 comprehensive tests with 100% pass rate  
+✅ **Tested**: 45 library tests with 100% pass rate (not a production-readiness claim)  
 ✅ **TypeScript Native**: Type-safe implementation with @types/fhir
 
 ---
@@ -81,7 +87,7 @@ Cloud Health Office provides comprehensive FHIR R4 integration for healthcare pa
 
 ### CMS Interoperability and Prior Authorization Final Rule
 
-**CMS-0057-F** (Advancing Interoperability and Improving Prior Authorization Processes) requires payers to implement FHIR-based APIs for prior authorization and patient data exchange. Our implementation provides complete coverage:
+**CMS-0057-F** (Advancing Interoperability and Improving Prior Authorization Processes) requires payers to implement FHIR-based APIs for prior authorization and patient data exchange. Our implementation's coverage of these requirements is in progress (see the [ePA gap matrix](../epa-gap-matrix.md)):
 
 ### CMS-0057-F Requirements
 
@@ -172,7 +178,7 @@ The Patient Access API enables patients to securely access their own health data
 ### Key Features
 
 ✅ **OAuth 2.0 Authentication** - Patient consent via Azure AD for third-party applications  
-✅ **CMS-0057-F Compliant** - Meets all Patient Access API requirements  
+- **CMS-0057-F** - Patient Access API conformance in progress (prior authorization data not yet exposed)  
 ✅ **FHIR R4 Endpoints** - Patient, Claim, Encounter, EOB, CoverageEligibilityResponse  
 ✅ **X12 to FHIR Mapping** - Automated conversion of X12 837 (Claims) and 835 (Remittances)  
 ✅ **PHI Redaction** - Automatic redaction of sensitive health information  
@@ -1532,7 +1538,7 @@ npm test -- --testPathPattern=payer-to-payer --coverage
 
 ### CMS-0057-F Compliance Checklist
 
-- ✅ **Bulk Data Export**: FHIR R4 Bulk Data spec compliant
+- **Bulk Data Export**: library models the FHIR R4 Bulk Data pattern; the service `$export` is a stub today
 - ✅ **Member Consent**: Opt-in consent validation before export
 - ✅ **5-Year History**: Support for `since` parameter (5-year lookback)
 - ✅ **US Core Profiles**: Patient, Claim, EOB use US Core profiles
@@ -2677,9 +2683,9 @@ logFhirAccess('READ', 'Patient', patient.id!, req.user.id);
 
 ---
 
-**Last Updated**: November 2024  
-**Version**: 1.0.0  
-**Status**: Production Ready
+**Last Updated**: November 2024
+**Version**: 1.0.0
+**Status**: In development — CMS-0057-F conformance in progress
 
 ---
 
@@ -3349,7 +3355,8 @@ A: HL7 Da Vinci Project creates FHIR Implementation Guides for value-based care,
 
 **Q: Is Cloud Health Office compliant with Da Vinci IGs?**
 
-A: Yes, our implementation follows:
+A: Not yet. Our implementation is being built against the following IGs, and is not yet conformant
+(see the [ePA gap matrix](../epa-gap-matrix.md)):
 - Da Vinci PAS IG v2.0.1
 - Da Vinci CRD IG v2.0
 - Da Vinci DTR IG v2.0
@@ -3366,11 +3373,13 @@ A:
 
 **Q: What about X12 278 backward compatibility?**
 
-A: Full support maintained:
+A: X12 278 bridging is planned. The goal:
 - Inbound X12 278 mapped to FHIR
 - FHIR responses mapped back to X12 278
 - Existing workflows preserved
 - Gradual migration path
+
+Today only a TypeScript mapping prototype exists; there is no 278 parser or encoder in the services.
 
 **Q: How are attachments handled?**
 
@@ -3442,5 +3451,5 @@ A:
 ---
 
 **Last Updated**: November 2024  
-**Version**: 2.0.0 (Prior Authorization API Added)  
-**Status**: Production Ready
+**Version**: 2.0.0 (Prior Authorization API Added)
+**Status**: In development — CMS-0057-F conformance in progress

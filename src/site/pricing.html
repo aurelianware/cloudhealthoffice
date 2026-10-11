@@ -934,7 +934,7 @@
       <div class="layer-name">Core</div>
       <div class="layer-row">When, if ever, is Cloud Health Office the claims ledger? Only when you choose.</div>
       <div class="layer-row"><strong>Who enters here</strong>MA startups and new-license plans with no legacy platform; small regional Medicaid plans whose existing platform cannot meet new requirements; mid-market commercial plans finishing a Layer 2 journey by turning their legacy core off entirely.</div>
-      <div class="layer-row"><strong>What&rsquo;s included</strong>The full cloud-native CAPS &mdash; 36 services, 9 adjudication and rules engines, Argo-orchestrated adjudication pipeline, EDI ingress and egress (270/271/275/276/277/278/834/837), multi-tenant throughout. Ready for customer-owned validation with honest disclosure of remaining gaps (reference customer, scale testing, portal polish) discussed openly with pilot partners.</div>
+      <div class="layer-row"><strong>What&rsquo;s included</strong>The full cloud-native CAPS &mdash; 36 services, 9 adjudication and rules engines, Argo-orchestrated adjudication pipeline, EDI ingress and egress (270/271/275/276/277/834/837; X12 278 bridging is planned), multi-tenant throughout. Ready for customer-owned validation with honest disclosure of remaining gaps (reference customer, scale testing, portal polish) discussed openly with pilot partners.</div>
       <div class="layer-row"><strong>Commercial shape</strong>Larger engagement, multi-year, priced PMPM. First production deployment terms reflect both the advantage of being first and the cost structure a cloud-native architecture supports.</div>
       <div class="layer-note"><strong>A path, not a completed replacement.</strong> Layer 3 is not a claim that a live QNXT book has already moved, and not a big-bang HealthEdge-style program.</div>
     </div>
@@ -1027,12 +1027,12 @@
 
   <div class="faq-item">
     <div class="faq-q">Which Da Vinci Implementation Guides does CHO conform to?</div>
-    <div class="faq-a">CHO implements C4BB (CARIN Blue Button) for ExplanationOfBenefit profiles, US Core for clinical resources, PDex for payer data exchange, PAS for prior authorization support, DTR for documentation templates, CRD for coverage requirements discovery, and HRex for payer-to-payer member matching. All four required APIs are validated against ONC Inferno test suites.</div>
+    <div class="faq-a">CHO is building toward C4BB (CARIN Blue Button) for ExplanationOfBenefit profiles, US Core for clinical resources, PDex for payer data exchange, PAS for prior authorization support, DTR for documentation templates, CRD for coverage requirements discovery, and HRex for payer-to-payer member matching. Da Vinci CRD, DTR and PAS are in development and not yet conformant. CMS-0057-F conformance is in progress, and no Inferno test kit has been run against CHO yet &mdash; see the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">ePA gap matrix</a> for requirement-by-requirement status.</div>
   </div>
 
   <div class="faq-item">
     <div class="faq-q">How does CHO handle X12 278 alongside FHIR PAS?</div>
-    <div class="faq-a">CHO includes a bidirectional X12 278 ↔ FHIR PAS translation bridge. Prior authorization requests can be submitted via either channel and route to the same processing engine. For augmentation deployments, PA requests are translated to X12 278 and routed into your existing UM workflow — your clinicians don't change how they work.</div>
+    <div class="faq-a">X12 278 bridging is planned. Today CHO accepts prior authorization requests over FHIR PAS (in development) and its REST API; there is no X12 278 parser or encoder yet. The planned bridge translates between X12 278 and FHIR PAS so requests from either channel reach the same processing engine, and for augmentation deployments routes PA requests into your existing UM workflow as X12 278. See the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">ePA gap matrix</a>.</div>
   </div>
 
   <div class="faq-item">
