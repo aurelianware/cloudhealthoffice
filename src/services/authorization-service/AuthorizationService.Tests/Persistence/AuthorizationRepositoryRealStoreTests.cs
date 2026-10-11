@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services.Retention;
@@ -6,6 +7,8 @@ using CloudHealthOffice.Testing.Cosmos;
 using CloudHealthOffice.Testing.Mongo;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.DependencyInjection;
+using MongoDB.Bson;
+using MongoDB.Driver;
 using SharedCosmosSerializer = CloudHealthOffice.Infrastructure.Serialization.CosmosSystemTextJsonSerializer;
 
 namespace AuthorizationService.Tests.Persistence;
@@ -39,7 +42,7 @@ public sealed class AuthorizationCosmosClientRegistrationTests
 /// </summary>
 public abstract class AuthorizationRepositoryRealStoreTestsBase : IAsyncLifetime
 {
-    private static readonly DateTime Base = new(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
+    private protected static readonly DateTime Base = new(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
 
     private protected readonly string TenantA = "ra-" + Guid.NewGuid().ToString("N")[..10];
     private protected readonly string TenantB = "rb-" + Guid.NewGuid().ToString("N")[..10];
@@ -206,6 +209,130 @@ public abstract class AuthorizationRepositoryRealStoreTestsBase : IAsyncLifetime
         read.StatusHistory.Should().ContainSingle().Which.Status.Should().Be(AuthorizationStatus.InReview);
     }
 
+    // ── RaiseSlaEscalationAsync guards (D-07) ────────────────────────────────
+    // Each condition of the conditional write is pinned on the real store, so
+    // dropping the tenant, open or level condition from either repository fails.
+
+    [SkippableFact]
+    public async Task RaiseSlaEscalation_OnOpenRecordBelowTheLevel_Raises()
+    {
+        var auth = await CreateAsync(TenantA, NewAuth(AuthorizationStatus.Submitted));
+        var at = new DateTime(2026, 3, 5, 8, 0, 0, DateTimeKind.Utc);
+
+        (await RaiseAsync(TenantA, auth.Id, SlaEscalationLevel.Warning, at)).Should().BeTrue();
+
+        var stored = await AsTenant(TenantA, r => r.GetByIdAsync(auth.Id));
+        stored!.SlaEscalation.Should().Be(SlaEscalationLevel.Warning);
+        stored.SlaEscalatedAt.Should().Be(at);
+        stored.Status.Should().Be(AuthorizationStatus.Submitted);
+        stored.TenantId.Should().Be(TenantA);
+    }
+
+    [SkippableFact]
+    public async Task RaiseSlaEscalation_ForAnotherTenant_IsRefused()
+    {
+        var auth = await CreateAsync(TenantA, NewAuth(AuthorizationStatus.Submitted));
+
+        (await RaiseAsync(TenantB, auth.Id, SlaEscalationLevel.Breach)).Should().BeFalse();
+
+        var stored = await AsTenant(TenantA, r => r.GetByIdAsync(auth.Id));
+        stored!.SlaEscalation.Should().Be(SlaEscalationLevel.None);
+        stored.SlaEscalatedAt.Should().BeNull();
+        (await AsTenant(TenantB, r => r.GetByIdAsync(auth.Id))).Should().BeNull();
+    }
+
+    [SkippableFact]
+    public async Task RaiseSlaEscalation_OnClosedRecord_IsRefused()
+    {
+        foreach (var status in Enum.GetValues<AuthorizationStatus>().Where(s => !s.IsOpen()))
+        {
+            var auth = await CreateAsync(TenantA, NewAuth(status));
+
+            (await RaiseAsync(TenantA, auth.Id, SlaEscalationLevel.Breach)).Should().BeFalse($"{status} is closed");
+
+            (await AsTenant(TenantA, r => r.GetByIdAsync(auth.Id)))!.SlaEscalation.Should().Be(SlaEscalationLevel.None);
+        }
+    }
+
+    [SkippableFact]
+    public async Task RaiseSlaEscalation_OnRecordClosedAfterBeingListed_IsRefused()
+    {
+        var auth = await CreateAsync(TenantA, NewAuth(AuthorizationStatus.InReview));
+
+        Host.ClearRequestContext();
+        using (var scope = Host.Services.CreateScope())
+        {
+            var listed = await scope.ServiceProvider.GetRequiredService<IAuthorizationRepository>()
+                .GetOpenAuthorizationsAsync(TenantA);
+            listed.Select(a => a.Id).Should().Contain(auth.Id);
+        }
+
+        // A reviewer decides it between the watchdog's list and its write.
+        await AsTenant(TenantA, async r =>
+        {
+            var current = await r.GetByIdAsync(auth.Id);
+            current!.Status = AuthorizationStatus.Approved;
+            return await r.UpdateAsync(current);
+        });
+
+        (await RaiseAsync(TenantA, auth.Id, SlaEscalationLevel.Breach)).Should().BeFalse();
+
+        var stored = await AsTenant(TenantA, r => r.GetByIdAsync(auth.Id));
+        stored!.Status.Should().Be(AuthorizationStatus.Approved);
+        stored.SlaEscalation.Should().Be(SlaEscalationLevel.None);
+    }
+
+    [SkippableFact]
+    public async Task RaiseSlaEscalation_ToAnEqualOrLowerLevel_IsRefused()
+    {
+        var auth = NewAuth(AuthorizationStatus.Pended);
+        auth.SlaEscalation = SlaEscalationLevel.Critical;
+        var escalatedAt = new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc);
+        auth.SlaEscalatedAt = escalatedAt;
+        await CreateAsync(TenantA, auth);
+
+        (await RaiseAsync(TenantA, auth.Id, SlaEscalationLevel.Critical)).Should().BeFalse();
+        (await RaiseAsync(TenantA, auth.Id, SlaEscalationLevel.Warning)).Should().BeFalse();
+
+        var stored = await AsTenant(TenantA, r => r.GetByIdAsync(auth.Id));
+        stored!.SlaEscalation.Should().Be(SlaEscalationLevel.Critical);
+        stored.SlaEscalatedAt.Should().Be(escalatedAt);
+    }
+
+    [SkippableFact]
+    public async Task RaiseSlaEscalation_InParallel_ExactlyOneWins()
+    {
+        var auth = await CreateAsync(TenantA, NewAuth(AuthorizationStatus.Submitted));
+        Host.ClearRequestContext();
+
+        // Each racer in its own scope, as two watchdog replicas would be.
+        var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(async () =>
+        {
+            using var scope = Host.Services.CreateScope();
+            return await scope.ServiceProvider.GetRequiredService<IAuthorizationRepository>()
+                .RaiseSlaEscalationAsync(TenantA, auth.Id, SlaEscalationLevel.Warning, DateTime.UtcNow);
+        })));
+
+        results.Count(r => r).Should().Be(1);
+        (await AsTenant(TenantA, r => r.GetByIdAsync(auth.Id)))!.SlaEscalation.Should().Be(SlaEscalationLevel.Warning);
+    }
+
+    [SkippableFact]
+    public async Task RaiseSlaEscalation_OnMissingRecord_ReturnsFalse()
+    {
+        (await RaiseAsync(TenantA, Guid.NewGuid().ToString(), SlaEscalationLevel.Warning)).Should().BeFalse();
+    }
+
+    /// <summary>The raise exactly as a background caller makes it: explicit tenant, no request.</summary>
+    private protected async Task<bool> RaiseAsync(
+        string tenant, string id, SlaEscalationLevel level, DateTime? at = null)
+    {
+        Host.ClearRequestContext();
+        using var scope = Host.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<IAuthorizationRepository>()
+            .RaiseSlaEscalationAsync(tenant, id, level, at ?? DateTime.UtcNow);
+    }
+
     private protected async Task<Authorization> CreateAsync(string tenant, Authorization auth) =>
         await AsTenant(tenant, r => r.CreateAsync(auth));
 
@@ -244,6 +371,27 @@ public sealed class AuthorizationRepositoryMongoTests(MongoRunnerFixture mongo) 
         Task.FromResult(AuthorizationServiceHost.Mongo(mongo.ConnectionString, _databaseName));
 
     private protected override Task CleanupAsync() => mongo.Client.DropDatabaseAsync(_databaseName);
+
+    /// <summary>
+    /// An escalation sets only its two fields; properties this version does
+    /// not model (a newer pod's, during a rolling deploy) survive.
+    /// </summary>
+    [SkippableFact]
+    public async Task RaiseSlaEscalation_KeepsUnmodelledProperties()
+    {
+        var auth = await CreateAsync(TenantA, NewAuth(AuthorizationStatus.Submitted));
+        var raw = mongo.Client.GetDatabase(_databaseName).GetCollection<BsonDocument>(AuthorizationServiceHost.ContainerName);
+        await raw.UpdateOneAsync(
+            Builders<BsonDocument>.Filter.Eq("_id", auth.Id),
+            Builders<BsonDocument>.Update.Set("patientReference", "Patient/p-123"));
+
+        (await RaiseAsync(TenantA, auth.Id, SlaEscalationLevel.Warning)).Should().BeTrue();
+
+        var doc = await raw.Find(Builders<BsonDocument>.Filter.Eq("_id", auth.Id)).SingleAsync();
+        doc["patientReference"].AsString.Should().Be("Patient/p-123");
+        doc["SlaEscalation"].ToInt32().Should().Be((int)SlaEscalationLevel.Warning);
+        doc["Status"].ToInt32().Should().Be((int)AuthorizationStatus.Submitted);
+    }
 }
 
 /// <summary>The repository suite on Cosmos DB, through the host's own client registration.</summary>
@@ -292,5 +440,53 @@ public sealed class AuthorizationRepositoryCosmosTests(CosmosEmulatorFixture cos
         root.GetProperty("statusHistory")[0].GetProperty("status").GetString().Should().Be("InReview");
         root.TryGetProperty("requestedServiceDateTo", out _).Should().BeFalse("nulls are not stored");
         root.TryGetProperty("Status", out _).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// An escalation writes only its two fields. Properties this version does
+    /// not model (written by a newer pod during a rolling deploy, e.g. #1300's
+    /// <c>patientReference</c> and <c>statusHistory[].source</c>) survive, and
+    /// the patched values are in the same stored form as a full write.
+    /// </summary>
+    [SkippableFact]
+    public async Task RaiseSlaEscalation_KeepsUnmodelledProperties_AndWritesTheStoredForm()
+    {
+        var auth = NewAuth(AuthorizationStatus.Submitted);
+        auth.StatusHistory.Add(new AuthorizationStatusChange { Status = AuthorizationStatus.Submitted, ChangedAt = Base });
+        await CreateAsync(TenantA, auth);
+        var partition = new PartitionKey(TenantA);
+
+        // A newer writer's fields, added behind this version's back.
+        JsonNode node;
+        using (var read = await _container.ReadItemStreamAsync(auth.Id, partition))
+            node = (await JsonNode.ParseAsync(read.Content))!;
+        node["patientReference"] = "Patient/p-123";
+        node["statusHistory"]![0]!["source"] = "pas";
+        using (var write = await _container.ReplaceItemStreamAsync(
+                   new MemoryStream(System.Text.Encoding.UTF8.GetBytes(node.ToJsonString())), auth.Id, partition))
+            write.IsSuccessStatusCode.Should().BeTrue();
+
+        var at = new DateTime(2026, 3, 5, 8, 30, 15, DateTimeKind.Utc);
+        (await RaiseAsync(TenantA, auth.Id, SlaEscalationLevel.Critical, at)).Should().BeTrue();
+
+        using var after = await _container.ReadItemStreamAsync(auth.Id, partition);
+        using var doc = await JsonDocument.ParseAsync(after.Content);
+        var root = doc.RootElement;
+        root.GetProperty("patientReference").GetString().Should().Be("Patient/p-123");
+        root.GetProperty("statusHistory")[0].GetProperty("source").GetString().Should().Be("pas");
+        root.GetProperty("slaEscalation").GetString().Should().Be("Critical", "the property's own converter writes PascalCase");
+        root.GetProperty("slaEscalatedAt").GetString().Should().Be(StoredForm(at));
+        root.GetProperty("status").GetString().Should().Be("submitted");
+
+        // And the repository reads the patched record back.
+        var stored = await AsTenant(TenantA, r => r.GetByIdAsync(auth.Id));
+        stored!.SlaEscalation.Should().Be(SlaEscalationLevel.Critical);
+        stored.SlaEscalatedAt.Should().Be(at);
+    }
+
+    private static string StoredForm(DateTime value)
+    {
+        using var stream = new SharedCosmosSerializer().ToStream(value);
+        return JsonDocument.Parse(stream).RootElement.GetString()!;
     }
 }
