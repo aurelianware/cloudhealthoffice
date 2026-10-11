@@ -5,7 +5,10 @@ try
 {
     var opts = CliOptions.Parse(args);
 
-    var manifest = ManifestLoader.Load(opts.ManifestPath);
+    // Replace statuses come only from the status matrix (docs/epa-gap-matrix.md §11).
+    var manifest = StatusMatrixResolver.Apply(
+        ManifestLoader.Load(opts.ManifestPath),
+        StatusMatrixParser.Load(opts.StatusMatrixPath));
     var trx = TrxParser.Parse(opts.ResultsPath);
     var traits = opts.TestAssemblyPath is null
         ? Array.Empty<ScenarioTrait>()
@@ -48,7 +51,7 @@ catch (CliException ex)
     Console.Error.WriteLine(CliOptions.Usage);
     return 2;
 }
-catch (Exception ex) when (ex is ManifestException or TrxException or EvidenceReconciliationException or FileNotFoundException)
+catch (Exception ex) when (ex is ManifestException or StatusMatrixException or TrxException or EvidenceReconciliationException or FileNotFoundException)
 {
     Console.Error.WriteLine($"::error::{ex.Message}");
     return 2;
@@ -80,6 +83,7 @@ internal sealed class CliException : Exception
 internal sealed class CliOptions
 {
     public string ManifestPath { get; private init; } = "";
+    public string StatusMatrixPath { get; private init; } = StatusMatrixParser.DefaultPath;
     public string ResultsPath { get; private init; } = "";
     public string OutputDir { get; private init; } = "";
     public string? TestAssemblyPath { get; private init; }
@@ -88,12 +92,13 @@ internal sealed class CliOptions
 
     public const string Usage =
         "Usage: Cms0057Evidence --manifest <scenarios.json> --results <results.trx> " +
+        "[--status-matrix <epa-gap-matrix.md> (default: " + StatusMatrixParser.DefaultPath + ")] " +
         "--output <dir> [--test-assembly <Cms0057Acceptance.Tests.dll>] " +
         "[--public-output <public-evidence.json>] [--environment <name>]";
 
     public static CliOptions Parse(string[] args)
     {
-        string? manifest = null, results = null, output = null, testAssembly = null, publicOutput = null, env = null;
+        string? manifest = null, statusMatrix = null, results = null, output = null, testAssembly = null, publicOutput = null, env = null;
         for (var i = 0; i < args.Length; i++)
         {
             string Next(string flag) => i + 1 < args.Length
@@ -102,6 +107,7 @@ internal sealed class CliOptions
             switch (args[i])
             {
                 case "--manifest": manifest = Next("--manifest"); break;
+                case "--status-matrix": statusMatrix = Next("--status-matrix"); break;
                 case "--results": results = Next("--results"); break;
                 case "--output": output = Next("--output"); break;
                 case "--test-assembly": testAssembly = Next("--test-assembly"); break;
@@ -117,6 +123,7 @@ internal sealed class CliOptions
         return new CliOptions
         {
             ManifestPath = manifest,
+            StatusMatrixPath = statusMatrix ?? StatusMatrixParser.DefaultPath,
             ResultsPath = results,
             OutputDir = output,
             TestAssemblyPath = testAssembly,
