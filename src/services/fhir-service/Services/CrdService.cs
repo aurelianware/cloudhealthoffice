@@ -48,34 +48,30 @@ public class CrdService : ICrdService
         {
             var effectiveCode = tc.EffectiveCode;
             var display = tc.TranslatedCoding?.Display ?? tc.OriginalCode.Display ?? effectiveCode;
-            var ruleDecision = await EvaluatePriorAuthRuleAsync(
-                request, tenantId, effectiveCode, ct);
-
-            if (ruleDecision.IsPriorAuthRequired())
+            try
             {
-                cards.Add(BuildAuthRequiredCard(display, ruleDecision));
+                cards.Add(await EvaluateCodeAsync(request, tenantId, classification, effectiveCode, display, ct));
             }
-            else if (ruleDecision?.Outcome is PaDecisionOutcome.Approve)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                cards.Add(BuildAutoApprovedCard(display, ruleDecision));
+                throw;
             }
-            else if (classification.AuthRequiredCodes.Contains(effectiveCode))
+            catch (Exception ex)
             {
-                cards.Add(BuildAuthRequiredCard(display));
-            }
-            else if (classification.DocumentationRequiredCodes.Contains(effectiveCode))
-            {
-                cards.Add(BuildDocumentationRequiredCard(display));
-            }
-            else if (classification.AutoApprovedCodes.Contains(effectiveCode))
-            {
-                cards.Add(BuildAutoApprovedCard(display));
-            }
-            else
-            {
-                cards.Add(BuildNoAuthRequiredCard(display));
+                // One code failing to evaluate is an UNKNOWN answer for that
+                // code, never a missing card or a failed hook (D-21).
+                _logger.LogWarning(ex, "CRD evaluation failed for code {Code}; answering unknown",
+                    SanitizeForLog(effectiveCode));
+                cards.Add(BuildRequirementsUnknownCard(display));
             }
         }
+
+        // A draft order with nothing to classify — text only, or a
+        // MedicationRequest by medicationReference — still gets an answer, and
+        // the only honest one is UNKNOWN. Before, it got no card at all, which
+        // an EHR shows exactly like "no requirements" (D-21).
+        foreach (var uncoded in UncodedOrders(request))
+            cards.Add(BuildRequirementsUnknownCard($"{uncoded} order (no coded service)"));
 
         sw.Stop();
         return new CrdEvaluationResult
@@ -85,6 +81,73 @@ public class CrdService : ICrdService
             TranslationsPerformed = translated.Count(t => t.WasTranslated),
             ElapsedMs = sw.ElapsedMilliseconds,
         };
+    }
+
+    /// <summary>
+    /// CDS Hooks draft-order resource types a card may name. resourceType is
+    /// caller-supplied, so anything else is labelled "Draft" rather than echoed
+    /// into a card the EHR displays. Canonical spelling from this set.
+    /// </summary>
+    private static readonly HashSet<string> KnownOrderTypes = new(StringComparer.Ordinal)
+    {
+        "ServiceRequest", "MedicationRequest", "DeviceRequest", "NutritionOrder",
+        "VisionPrescription", "CommunicationRequest", "Appointment",
+    };
+
+    /// <summary>Order types (known ones by name, others as "Draft") of draft orders with no code to evaluate.</summary>
+    internal static List<string> UncodedOrders(CrdHookRequest request)
+    {
+        var uncoded = new List<string>();
+        foreach (var entry in request.Context?.DraftOrders?.Entry ?? [])
+        {
+            var resource = entry.Resource;
+            if (resource == null) continue;
+            var concept = resource.ResourceType == "MedicationRequest"
+                ? resource.MedicationCodeableConcept
+                : resource.Code;
+            if (concept?.Coding is not { Count: > 0 } || concept.Coding.All(c => string.IsNullOrWhiteSpace(c.Code)))
+                uncoded.Add(KnownOrderTypes.TryGetValue(resource.ResourceType ?? string.Empty, out var known)
+                    ? known
+                    : "Draft");
+        }
+        return uncoded;
+    }
+
+    private async Task<CrdCard> EvaluateCodeAsync(
+        CrdHookRequest request, string tenantId, CrdCodeClassification classification,
+        string effectiveCode, string display, CancellationToken ct)
+    {
+        var ruleDecision = await EvaluatePriorAuthRuleAsync(
+            request, tenantId, effectiveCode, ct);
+
+        // Fail closed (D-21): "no prior authorization needed" only on an
+        // explicit, positive determination. Today that is an explicit
+        // classification listing the code as auto-approved: the tenant's
+        // own classification, or — when the tenant has none — the
+        // deployment-wide CrdConfig.AutoApprovedCodes. Both are an
+        // administrator's explicit statement. Everything else that is not
+        // a "required" answer is UNKNOWN:
+        //   - a code nothing classifies;
+        //   - the rule engine unavailable, no-op, erroring or timing out
+        //     (EvaluatePriorAuthRuleAsync returns null, or a NoOp /
+        //     NoRuleMatch / NoRulesConfigured / RuleError Pend);
+        //   - an engine Approve. CRD calls the engine with a fixed
+        //     TX / Medicaid / STAR context, no diagnoses, no member DOB,
+        //     no provider taxonomy and cost 0, so an Approve here (e.g.
+        //     DiagnosisRequired passing because no diagnosis was sent) is
+        //     not a determination that PA is not required. Until CRD
+        //     derives a real context (rest of D-21), it is not trusted.
+        // A "required" answer from either source still wins: erring toward
+        // requiring authorization is the safe direction.
+        if (ruleDecision.IsPriorAuthRequired())
+            return BuildAuthRequiredCard(display, ruleDecision);
+        if (classification.AuthRequiredCodes.Contains(effectiveCode))
+            return BuildAuthRequiredCard(display);
+        if (classification.DocumentationRequiredCodes.Contains(effectiveCode))
+            return BuildDocumentationRequiredCard(display);
+        if (classification.AutoApprovedCodes.Contains(effectiveCode))
+            return BuildAutoApprovedCard(display);
+        return BuildRequirementsUnknownCard(display);
     }
 
     private async Task<PaRuleDecision?> EvaluatePriorAuthRuleAsync(
@@ -163,6 +226,9 @@ public class CrdService : ICrdService
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
+        // CR/LF removed in the form CodeQL recognises, then any other control
+        // character replaced.
+        value = value.Replace("\r", "").Replace("\n", "");
         var buffer = new System.Text.StringBuilder(value.Length);
         foreach (var ch in value)
         {
@@ -195,7 +261,9 @@ public class CrdService : ICrdService
 
             if (codeableConcept?.Coding != null)
             {
-                codes.AddRange(codeableConcept.Coding);
+                // A blank code classifies nothing; the order is answered once,
+                // as uncoded (UncodedOrders), not also as an "unknown" blank code.
+                codes.AddRange(codeableConcept.Coding.Where(c => !string.IsNullOrWhiteSpace(c.Code)));
             }
         }
 
@@ -352,15 +420,15 @@ public class CrdService : ICrdService
         },
     };
 
-    private static CrdCard BuildAutoApprovedCard(
-        string serviceDisplay,
-        PaRuleDecision? decision = null) => new()
+    /// <summary>
+    /// The ONLY "not required" card: issued when the tenant's classification
+    /// explicitly lists the code as auto-approved.
+    /// </summary>
+    private static CrdCard BuildAutoApprovedCard(string serviceDisplay) => new()
     {
         Uuid = Guid.NewGuid().ToString(),
         Summary = $"No prior authorization needed for {serviceDisplay}",
-        Detail = decision is null
-            ? "This service is auto-approved and does not require prior authorization."
-            : $"This service does not require prior authorization. Rule: {decision.FiringRuleName}.",
+        Detail = "This service is auto-approved and does not require prior authorization.",
         Indicator = "info",
         Source = new CrdCardSource
         {
@@ -373,19 +441,25 @@ public class CrdService : ICrdService
         },
     };
 
-    private static CrdCard BuildNoAuthRequiredCard(string serviceDisplay) => new()
+    /// <summary>
+    /// Fail-closed answer (D-21): CHO could not positively determine the
+    /// coverage requirements. Never phrased as "not required".
+    /// </summary>
+    internal static CrdCard BuildRequirementsUnknownCard(string serviceDisplay) => new()
     {
         Uuid = Guid.NewGuid().ToString(),
-        Summary = $"No prior authorization needed for {serviceDisplay}",
-        Detail = "Based on current benefit configuration, prior authorization is not required.",
-        Indicator = "info",
+        Summary = $"Coverage requirements could not be determined for {serviceDisplay}",
+        Detail = "Cloud Health Office could not determine whether prior authorization is required for this "
+                 + "service. Contact the payer, or submit a prior authorization request for review, before "
+                 + "proceeding. This is not a determination that prior authorization is not required.",
+        Indicator = "warning",
         Source = new CrdCardSource
         {
             Topic = new CrdCoding
             {
                 System = "http://hl7.org/fhir/us/davinci-crd/CodeSystem/temp",
-                Code = "no-auth",
-                Display = "No Authorization Required",
+                Code = "info-needed",
+                Display = "Coverage Requirements Unknown",
             },
         },
     };

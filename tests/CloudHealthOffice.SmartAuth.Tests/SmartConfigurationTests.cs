@@ -51,6 +51,28 @@ public class SmartConfigurationTests
     }
 
     [Fact]
+    public void SmartScopes_SeedsAndRegistersThePayerToPayerScope()
+    {
+        // D-13: fhir-service opens the inbound payer-to-payer operations only to
+        // this exact scope, so it must be seeded (Catalog) and nameable by a
+        // client registration (Registered), like every other scope.
+        SmartScopes.Catalog.Select(c => c.Name).Should().Contain("system/PayerToPayer.read");
+        SmartScopes.Registered.Should().Contain("system/PayerToPayer.read");
+    }
+
+    [Theory]
+    [InlineData("user/Questionnaire.write")]
+    [InlineData("system/Questionnaire.write")]
+    public void SmartScopes_QuestionnaireWrite_IsNotSeededOrRegistrable(string scope)
+    {
+        // D-15: Questionnaire authoring is CHO-admin only. A new registration
+        // cannot name these scopes. (Clients registered earlier keep what they
+        // stored; fhir-service refuses the write whatever the token says.)
+        SmartScopes.Catalog.Select(c => c.Name).Should().NotContain(scope);
+        SmartScopes.Registered.Should().NotContain(scope);
+    }
+
+    [Fact]
     public void SmartClaims_Constants_AreCorrect()
     {
         SmartClaims.Patient.Should().Be("patient");

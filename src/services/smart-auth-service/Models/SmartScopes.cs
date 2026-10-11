@@ -1,7 +1,8 @@
 namespace SmartAuthService.Models;
 
 /// <summary>
-/// SMART App Launch Framework v2 scope constants.
+/// SMART App Launch scope constants. These are SMART v1-style scopes (e.g. patient/*.read);
+/// SMART v2 scopes (.cruds, .rs, granular ?category=) are not yet supported (see docs/epa-gap-matrix.md §4.6).
 /// https://hl7.org/fhir/smart-app-launch/scopes-and-launch-context.html
 /// </summary>
 public static class SmartScopes
@@ -43,9 +44,18 @@ public static class SmartScopes
     public const string SystemEncounterRead = "system/Encounter.read";
     public const string SystemClaimRead = "system/Claim.read";
 
+    /// <summary>
+    /// Payer-to-Payer (CMS-0057-F): the one scope that opens fhir-service's
+    /// inbound <c>PayerToPayer/$member-data-export</c> and
+    /// <c>Patient/$member-match</c>. fhir-service accepts only this exact grant
+    /// for them — <c>system/*.read</c> and <c>system/*.*</c> do not satisfy it —
+    /// so grant it only to another payer's backend client.
+    /// </summary>
+    public const string SystemPayerToPayerRead = "system/PayerToPayer.read";
+
     // ── Write scopes ──────────────────────────────────────────────────────────
     // The FHIR surface serves genuine writes — Da Vinci PAS Claim/$submit, the
-    // CDex $submit-attachment response, DTR questionnaire authoring — and a read
+    // CDex $submit-attachment response, DTR questionnaire responses — and a read
     // scope must not authorize any of them. There is deliberately NO
     // patient-context write scope: every write this server serves is a
     // provider/payer transaction, so a patient-context token is never the right
@@ -64,9 +74,12 @@ public static class SmartScopes
     public const string UserTaskWrite = "user/Task.write";
     public const string SystemTaskWrite = "system/Task.write";
 
-    /// <summary>DTR questionnaire authoring and response capture.</summary>
-    public const string UserQuestionnaireWrite = "user/Questionnaire.write";
-    public const string SystemQuestionnaireWrite = "system/Questionnaire.write";
+    /// <summary>
+    /// DTR response capture. There is deliberately no Questionnaire write
+    /// scope: a payer's questionnaires are authored by CHO administrators
+    /// (settings:manage), and fhir-service refuses SMART Questionnaire writes
+    /// in every context (D-15).
+    /// </summary>
     public const string UserQuestionnaireResponseWrite = "user/QuestionnaireResponse.write";
     public const string SystemQuestionnaireResponseWrite = "system/QuestionnaireResponse.write";
 
@@ -76,7 +89,6 @@ public static class SmartScopes
         UserWildcardWrite, SystemWildcardWrite,
         UserClaimWrite, SystemClaimWrite,
         UserTaskWrite, SystemTaskWrite,
-        UserQuestionnaireWrite, SystemQuestionnaireWrite,
         UserQuestionnaireResponseWrite, SystemQuestionnaireResponseWrite,
     ];
 
@@ -105,9 +117,10 @@ public static class SmartScopes
         (SystemEobRead,          "System: read ExplanationOfBenefit"),
         (SystemEncounterRead,    "System: read Encounter"),
         (SystemClaimRead,        "System: read Claim"),
+        (SystemPayerToPayerRead, "System: Payer-to-Payer member match and data export"),
 
         // Writes. Without these the FHIR surface's write operations —
-        // PAS Claim/$submit, CDex $submit-attachment, DTR authoring — are
+        // PAS Claim/$submit, CDex $submit-attachment, DTR responses — are
         // ungrantable, because a read scope no longer authorizes them.
         (UserWildcardWrite,      "Write all user-level resources"),
         (SystemWildcardWrite,    "Write all system-level resources"),
@@ -115,8 +128,6 @@ public static class SmartScopes
         (SystemClaimWrite,       "System: submit prior authorizations"),
         (UserTaskWrite,          "User: submit attachments and appeals"),
         (SystemTaskWrite,        "System: submit attachments and appeals"),
-        (UserQuestionnaireWrite, "User: author Questionnaires"),
-        (SystemQuestionnaireWrite, "System: author Questionnaires"),
         (UserQuestionnaireResponseWrite, "User: submit QuestionnaireResponses"),
         (SystemQuestionnaireResponseWrite, "System: submit QuestionnaireResponses"),
     ];

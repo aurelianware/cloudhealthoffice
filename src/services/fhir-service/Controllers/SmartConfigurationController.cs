@@ -5,7 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace FhirService.Controllers;
 
 /// <summary>
-/// Serves the SMART App Launch Framework v2 well-known configuration document.
+/// Serves the SMART App Launch well-known configuration document. The server supports SMART v1
+/// scopes only; SMART v2 scopes and launch context in the token response are not yet supported
+/// (see docs/epa-gap-matrix.md §4.6).
 ///
 /// Per SMART IG §3.1, this endpoint MUST be at {fhir-base}/.well-known/smart-configuration
 /// so that SMART clients can discover auth server endpoints from just the FHIR base URL.
@@ -115,8 +117,13 @@ public class SmartConfigurationController : FhirControllerBase
                 "user/Encounter.read",
                 "user/Claim.read",
 
+                // Payer-to-Payer (CMS-0057-F): the ONE scope that opens the inbound
+                // $member-data-export and $member-match. No wildcard satisfies it.
+                "system/PayerToPayer.read",
+
                 // Writes. The FHIR surface serves genuine writes (PAS
-                // Claim/$submit, CDex $submit-attachment, DTR authoring) and a
+                // Claim/$submit, CDex $submit-attachment, DTR responses; Questionnaire
+                // authoring is CHO-admin only and has no SMART scope) and a
                 // read scope does not authorize any of them, so the write scopes
                 // have to be discoverable. There is no patient-context write
                 // scope: every write here is a provider/payer transaction.
@@ -126,8 +133,6 @@ public class SmartConfigurationController : FhirControllerBase
                 "system/Claim.write",
                 "user/Task.write",
                 "system/Task.write",
-                "user/Questionnaire.write",
-                "system/Questionnaire.write",
                 "user/QuestionnaireResponse.write",
                 "system/QuestionnaireResponse.write"
             },

@@ -32,15 +32,25 @@ public interface IPaRuleRepository
     Task<IReadOnlyList<PaRuleDocument>> GetRulesAsync(
         RuleSetKey key, CancellationToken ct = default);
 
-    /// <summary>Upsert a single rule document.</summary>
+    /// <summary>
+    /// Upsert a single rule document. Writes only the document identified by
+    /// the rule's full identity (state, LOB, program, tenant, rule id): a
+    /// tenant's write never reaches another tenant's or the platform's copy of
+    /// the same RuleId (D-16).
+    /// </summary>
     Task UpsertAsync(PaRuleDocument rule, CancellationToken ct = default);
 
-    /// <summary>Bulk upsert — used by the seed data loader.</summary>
+    /// <summary>Bulk upsert — used by the seed data loader. Same scoping as <see cref="UpsertAsync"/>.</summary>
     Task BulkUpsertAsync(
         IEnumerable<PaRuleDocument> rules, CancellationToken ct = default);
 
-    /// <summary>Delete a rule by ID and state code (partition key).</summary>
-    Task DeleteAsync(string ruleId, string stateCode, CancellationToken ct = default);
+    /// <summary>
+    /// Delete a rule by ID and state code (partition key) within ONE scope:
+    /// <paramref name="tenantId"/> names the tenant whose rule is deleted, and
+    /// null means the platform rule. Other tenants' (and, for a tenant delete,
+    /// the platform's) rules with the same RuleId are untouched (D-16).
+    /// </summary>
+    Task DeleteAsync(string ruleId, string stateCode, string? tenantId, CancellationToken ct = default);
 
     /// <summary>List all rules for a tenant — used by the portal admin grid.</summary>
     Task<IReadOnlyList<PaRuleDocument>> ListAsync(
@@ -80,24 +90,36 @@ public sealed class PaRuleRepositoryCosmos : IPaRuleRepository
     public async Task<IReadOnlyList<PaRuleDocument>> GetRulesAsync(
         RuleSetKey key, CancellationToken ct = default)
     {
+        // Written against the stored shape under the shared
+        // CosmosSystemTextJsonSerializer that AddChoDatabase configures: null
+        // properties are OMITTED (so a platform rule has no tenantId field and an
+        // any-program rule no program field), and enums are camelCase STRINGS.
+        // The previous IS_NULL(...) filters and int-bound LOB matched nothing on
+        // that shape, so GetRulesAsync returned zero rules (review of #1294).
+        // NOT IS_DEFINED OR IS_NULL accepts both an omitted and an explicit null.
         var tenantFilter = key.TenantId is null
-            ? "IS_NULL(c.tenantId)"
+            ? "(NOT IS_DEFINED(c.tenantId) OR IS_NULL(c.tenantId))"
             : "c.tenantId = @tenantId";
 
         var programFilter = key.Program is null
-            ? "IS_NULL(c.program)"
+            ? "(NOT IS_DEFINED(c.program) OR IS_NULL(c.program))"
             : "c.program = @program";
 
+        // LOB is bound as the enum value itself: the SDK serializes query
+        // parameters with the client's serializer, so the parameter takes the
+        // same shape as the stored field (a camelCase string under the shared
+        // serializer). No ORDER BY: categories are stored as strings, whose
+        // alphabetical order is not the evaluation band order, and a
+        // multi-property ORDER BY also needs a composite index. Sorted below.
         var query = new QueryDefinition(
             $"SELECT * FROM c " +
             $"WHERE c.stateCode = @stateCode " +
             $"AND c.lob = @lob " +
             $"AND {programFilter} " +
             $"AND {tenantFilter} " +
-            $"AND c.isEnabled = true " +
-            $"ORDER BY c.category, c.priority")
+            $"AND c.isEnabled = true")
             .WithParameter("@stateCode", key.StateCode)
-            .WithParameter("@lob", (int)key.Lob);
+            .WithParameter("@lob", key.Lob);
 
         if (key.Program is not null) query = query.WithParameter("@program", key.Program);
         if (key.TenantId is not null) query = query.WithParameter("@tenantId", key.TenantId);
@@ -116,7 +138,12 @@ public sealed class PaRuleRepositoryCosmos : IPaRuleRepository
             results.AddRange(page);
         }
 
-        return results;
+        // Band (numeric enum order), then priority — the order the engine and
+        // the Mongo repository use.
+        return results
+            .OrderBy(r => (int)r.Category)
+            .ThenBy(r => r.Priority)
+            .ToList();
     }
 
     public async Task UpsertAsync(PaRuleDocument rule, CancellationToken ct = default)
@@ -138,13 +165,20 @@ public sealed class PaRuleRepositoryCosmos : IPaRuleRepository
     }
 
     public async Task DeleteAsync(
-        string ruleId, string stateCode, CancellationToken ct = default)
+        string ruleId, string stateCode, string? tenantId, CancellationToken ct = default)
     {
-        // Id requires full composite — query first
+        // Id requires full composite (LOB and program vary) — query first, but
+        // only within the caller's scope: one tenant, or the platform
+        // (tenantId null/absent). Without the tenant filter this deleted every
+        // tenant's copy of the RuleId (D-16).
+        var tenantFilter = tenantId is null
+            ? "(NOT IS_DEFINED(c.tenantId) OR IS_NULL(c.tenantId))"
+            : "c.tenantId = @tenantId";
         var query = new QueryDefinition(
-            "SELECT c.id FROM c WHERE c.ruleId = @ruleId AND c.stateCode = @stateCode")
+            $"SELECT c.id FROM c WHERE c.ruleId = @ruleId AND c.stateCode = @stateCode AND {tenantFilter}")
             .WithParameter("@ruleId",    ruleId)
             .WithParameter("@stateCode", stateCode);
+        if (tenantId is not null) query = query.WithParameter("@tenantId", tenantId);
 
         var iterator = _container.GetItemQueryIterator<IdOnly>(query,
             requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(stateCode) });
@@ -166,17 +200,23 @@ public sealed class PaRuleRepositoryCosmos : IPaRuleRepository
     public async Task<IReadOnlyList<PaRuleDocument>> ListAsync(
         string? tenantId = null, string? stateCode = null, CancellationToken ct = default)
     {
-        var sql    = "SELECT * FROM c WHERE 1=1";
-        var qd     = new QueryDefinition(sql);
-        if (tenantId  is not null) { sql += " AND c.tenantId = @tenantId";   qd = new QueryDefinition(sql).WithParameter("@tenantId",  tenantId); }
-        if (stateCode is not null) { sql += " AND c.stateCode = @stateCode"; qd = new QueryDefinition(sql).WithParameter("@stateCode", stateCode); }
+        // D-17: the SQL text is built first and the parameters bound to the ONE
+        // QueryDefinition that is executed. Previously each filter rebuilt the
+        // definition (dropping the earlier parameter) and the iterator then ran
+        // a fresh, parameterless definition, so any filter failed.
+        var sql = "SELECT * FROM c WHERE 1=1";
+        if (tenantId  is not null) sql += " AND c.tenantId = @tenantId";
+        if (stateCode is not null) sql += " AND c.stateCode = @stateCode";
+
+        var qd = new QueryDefinition(sql);
+        if (tenantId  is not null) qd = qd.WithParameter("@tenantId",  tenantId);
+        if (stateCode is not null) qd = qd.WithParameter("@stateCode", stateCode);
 
         var opts = stateCode is not null
             ? new QueryRequestOptions { PartitionKey = new PartitionKey(stateCode) }
             : new QueryRequestOptions();
 
-        var iterator = _container.GetItemQueryIterator<PaRuleDocument>(
-            new QueryDefinition(sql), requestOptions: opts);
+        var iterator = _container.GetItemQueryIterator<PaRuleDocument>(qd, requestOptions: opts);
 
         var results = new List<PaRuleDocument>();
         while (iterator.HasMoreResults)
@@ -243,12 +283,27 @@ public sealed class PaRuleRepositoryMongo : IPaRuleRepository
     {
         rule.Id        = MakeId(rule);
         rule.UpdatedAt = DateTime.UtcNow;
-        var filter = Builders<PaRuleDocument>.Filter.And(
-            Builders<PaRuleDocument>.Filter.Eq(r => r.RuleId,    rule.RuleId),
-            Builders<PaRuleDocument>.Filter.Eq(r => r.StateCode, rule.StateCode));
-
-        await _collection.ReplaceOneAsync(filter, rule,
+        await _collection.ReplaceOneAsync(OwnDocument(rule), rule,
             new ReplaceOptions { IsUpsert = true }, ct);
+    }
+
+    /// <summary>
+    /// The one document a write of <paramref name="rule"/> may replace: its
+    /// own composite id, which embeds state, LOB, program, tenant (or
+    /// "platform") and rule id, with the tenant also matched explicitly.
+    ///
+    /// The filter used to be RuleId + StateCode only (D-16), which matched
+    /// another tenant's — or the platform's — document with the same RuleId.
+    /// Mongo's immutable <c>_id</c> turned that into a write error rather than
+    /// a silent overwrite, so a tenant could not override a platform RuleId at
+    /// all, and the write path depended on what other tenants had stored.
+    /// </summary>
+    private static FilterDefinition<PaRuleDocument> OwnDocument(PaRuleDocument rule)
+    {
+        var fb = Builders<PaRuleDocument>.Filter;
+        return fb.And(
+            fb.Eq(r => r.Id, rule.Id),
+            fb.Eq(r => r.TenantId, rule.TenantId));
     }
 
     public async Task BulkUpsertAsync(
@@ -258,10 +313,7 @@ public sealed class PaRuleRepositoryMongo : IPaRuleRepository
         {
             r.Id        = MakeId(r);
             r.UpdatedAt = DateTime.UtcNow;
-            var filter = Builders<PaRuleDocument>.Filter.And(
-                Builders<PaRuleDocument>.Filter.Eq(x => x.RuleId,    r.RuleId),
-                Builders<PaRuleDocument>.Filter.Eq(x => x.StateCode, r.StateCode));
-            return new ReplaceOneModel<PaRuleDocument>(filter, r) { IsUpsert = true };
+            return new ReplaceOneModel<PaRuleDocument>(OwnDocument(r), r) { IsUpsert = true };
         }).ToList();
 
         if (ops.Count > 0)
@@ -271,11 +323,17 @@ public sealed class PaRuleRepositoryMongo : IPaRuleRepository
     private static string MakeId(PaRuleDocument r) =>
         $"{r.StateCode}:{(int)r.Lob}:{r.Program ?? "any"}:{r.TenantId ?? "platform"}:{r.RuleId}";
 
-    public async Task DeleteAsync(string ruleId, string stateCode, CancellationToken ct = default)
+    public async Task DeleteAsync(
+        string ruleId, string stateCode, string? tenantId, CancellationToken ct = default)
     {
-        var filter = Builders<PaRuleDocument>.Filter.And(
-            Builders<PaRuleDocument>.Filter.Eq(r => r.RuleId,    ruleId),
-            Builders<PaRuleDocument>.Filter.Eq(r => r.StateCode, stateCode));
+        // Scoped to one tenant, or to the platform (tenantId null). It used to
+        // delete every tenant's copy of the RuleId in the state (D-16). Many,
+        // not one: the same RuleId may exist per LOB/program within the scope.
+        var fb = Builders<PaRuleDocument>.Filter;
+        var filter = fb.And(
+            fb.Eq(r => r.RuleId,    ruleId),
+            fb.Eq(r => r.StateCode, stateCode),
+            fb.Eq(r => r.TenantId,  tenantId));
         await _collection.DeleteManyAsync(filter, ct);
     }
 
@@ -443,9 +501,10 @@ public sealed class RedisPaRuleRepository : IPaRuleRepository
             await _cache.RemoveAsync(keys, CacheScope.Global, ct);
     }
 
-    public async Task DeleteAsync(string ruleId, string stateCode, CancellationToken ct = default)
+    public async Task DeleteAsync(
+        string ruleId, string stateCode, string? tenantId, CancellationToken ct = default)
     {
-        await _inner.DeleteAsync(ruleId, stateCode, ct);
+        await _inner.DeleteAsync(ruleId, stateCode, tenantId, ct);
         // The cache key cannot be reconstructed from (ruleId, stateCode) alone,
         // so flush every pa-rules:{state}:* key via SCAN. Uses the direct
         // multiplexer because pattern deletion is not exposed on

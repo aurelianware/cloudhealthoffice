@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.PriorAuthRuleEngine.Persistence;
 using CloudHealthOffice.PriorAuthRuleEngine.SeedRules;
@@ -22,8 +23,16 @@ public sealed class PriorAuthRulesController : ControllerBase
 
     /// <summary>
     /// Idempotently seeds platform prior-auth rules used by local validation.
+    ///
+    /// Platform rules are shared: every tenant's PA decisions fall back to
+    /// them. Writing them is therefore a platform act and requires the
+    /// existing <c>platform:admin</c> permission (PlatformAdmin only; the
+    /// reserved <c>platform</c> resource is not covered by <c>*:*</c>).
+    /// Without it the service default (<c>settings:manage</c>) applied, which
+    /// every TenantAdmin holds (T-5).
     /// </summary>
     [HttpPost("seed-platform")]
+    [RequirePermission("platform:admin")]
     [ProducesResponseType(typeof(PriorAuthSeedResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<PriorAuthSeedResponse>> SeedPlatformRules(CancellationToken ct)
     {

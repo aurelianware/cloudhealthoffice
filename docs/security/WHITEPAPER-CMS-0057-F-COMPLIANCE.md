@@ -727,7 +727,7 @@ For regional Medicaid MCOs and small commercial plans, Cloud Health Office offer
 - **Week 3:** Testing and compliance validation
 - **Week 4:** Go-live and staff training
 
-This accelerated path leverages pre-built configurations and managed services to minimize payer IT involvement while maintaining full CMS-0057-F compliance.
+This accelerated path leverages pre-built configurations and managed services to minimize payer IT involvement. CHO's own CMS-0057-F conformance is in progress; see the [ePA gap matrix](../epa-gap-matrix.md).
 
 ---
 

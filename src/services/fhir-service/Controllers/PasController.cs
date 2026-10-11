@@ -125,7 +125,7 @@ public class PasController : FhirControllerBase
             // 3. Auto-adjudicate with time budget
             var timeBudgetMs = _config.MaxResponseMs;
             var decision = await _adjudicator.TryDecideAsync(
-                claim, requestBundle, timeBudgetMs, HttpContext.RequestAborted);
+                claim, requestBundle, TenantId, timeBudgetMs, HttpContext.RequestAborted);
 
             // 4. Build response based on decision.
             // Every outcome — approved, denied and pended alike — gets a tracking

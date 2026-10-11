@@ -2,20 +2,26 @@
 
 # Prior Authorization API - Implementation Summary
 
+> **Status (October 2026):** CMS-0057-F conformance is in progress. This November 2024 summary
+> describes a TypeScript library (`src/fhir/prior-auth-api.ts`, not imported by any service) and the
+> removed Logic Apps orchestration. It overstated what was delivered. Da Vinci CRD/DTR/PAS are in
+> development and not yet conformant, and X12 278 bridging is planned. See the
+> [ePA gap matrix](../epa-gap-matrix.md), which is the source of truth for current status.
+
 **Project**: Cloud Health Office  
 **Feature**: CMS-0057-F Prior Authorization API with Da Vinci IGs  
-**Status**: ✅ Complete and Production Ready  
+**Status**: In development — CMS-0057-F conformance in progress  
 **Date**: November 2024
 
 ---
 
 ## Executive Summary
 
-Cloud Health Office now provides **complete CMS-0057-F compliance** for prior authorization workflows with comprehensive support for Da Vinci FHIR Implementation Guides (CRD, DTR, PAS), X12 278 integration, Azure Logic Apps orchestration, and Clearinghouse clearinghouse connectivity.
+This summary describes the first TypeScript prior authorization library for Cloud Health Office, with models for Da Vinci FHIR Implementation Guides (CRD, DTR, PAS), an X12 278 mapping prototype, Azure Logic Apps orchestration (since removed), and clearinghouse connectivity. CMS-0057-F conformance is in progress.
 
 ### Key Achievement
 
-✅ **Full CMS-0057-F compliance delivered** with production-ready implementation  
+- **CMS-0057-F conformance in progress** (see the [ePA gap matrix](../epa-gap-matrix.md))  
 ✅ **42 comprehensive test cases** with 100% pass rate  
 ✅ **3,522 lines of code and documentation**  
 ✅ **Zero dependencies** = Zero vulnerabilities
@@ -28,15 +34,15 @@ Cloud Health Office now provides **complete CMS-0057-F compliance** for prior au
 
 | Requirement | Status | Implementation |
 |-------------|--------|----------------|
-| **Da Vinci CRD Integration** | ✅ Complete | CDS Hooks with order-select, order-sign, appointment-book, encounter-start |
-| **Da Vinci DTR Integration** | ✅ Complete | Questionnaire/QuestionnaireResponse structures |
-| **Da Vinci PAS Integration** | ✅ Complete | FHIR Claim/ClaimResponse with PAS profiles |
-| **FHIR R4 Compliance** | ✅ Complete | All resources follow FHIR R4 specification |
-| **X12 278 Request Mapping** | ✅ Complete | Bi-directional X12 ↔ FHIR conversion |
-| **X12 278 Response Mapping** | ✅ Complete | Status codes A1, A2, A3, A4, A6 supported |
-| **Azure Logic Apps Orchestration** | ✅ Complete | Service Bus, SFTP, HTTP endpoint patterns |
-| **Provider-Facing Hooks** | ✅ Complete | CDS Hooks for requirements discovery |
-| **SLA Logic (72-hour)** | ✅ Complete | Urgent, standard, expedited timelines |
+| **Da Vinci CRD Integration** | In development | Library models order-select, order-sign, appointment-book, encounter-start; the running CRD service serves order-select and order-sign only. Not yet conformant |
+| **Da Vinci DTR Integration** | In development | Questionnaire/QuestionnaireResponse structures. Not yet conformant |
+| **Da Vinci PAS Integration** | In development | FHIR Claim/ClaimResponse structures; no PAS profile validation. Not yet conformant |
+| **FHIR R4 Compliance** | Partial | FHIR R4 resource shapes; no profile validation |
+| **X12 278 Request Mapping** | Prototype | JSON-object mapper in the TypeScript library, not wired into any service. X12 278 bridging is planned |
+| **X12 278 Response Mapping** | Prototype | Status codes A1, A2, A3, A4, A6 modelled in the library only. X12 278 bridging is planned |
+| **Azure Logic Apps Orchestration** | Removed | Logic Apps were removed (ADR-004) |
+| **Provider-Facing Hooks** | In development | CDS Hooks for requirements discovery |
+| **SLA Logic (72-hour)** | In development | Urgent, standard, expedited timelines modelled; decision timeframe tracking in the services is in development |
 | **Attachment Support** | ✅ Complete | FHIR Binary and DocumentReference |
 | **Error/Compliance Tests** | ✅ Complete | 42 Jest tests with full coverage |
 | **Endpoint Documentation** | ✅ Complete | Comprehensive API guide (24KB) |
@@ -277,7 +283,7 @@ Coverage:    100% of prior-auth-api functions
 1. **POST /api/prior-auth/submit**: Submit new request
 2. **GET /api/prior-auth/status/{authNumber}**: Check status
 3. **POST /api/prior-auth/documentation**: Submit attachments
-4. **POST /api/prior-auth/cancel**: Cancel authorization
+4. **POST /api/prior-auth/cancel**: Cancel authorization (not implemented; no service serves this endpoint)
 
 ### Workflow Pattern
 
@@ -492,17 +498,17 @@ await submitAttachment(authNumber, binary, docRef);
 
 ## Conclusion
 
-The Prior Authorization API implementation delivers **complete CMS-0057-F compliance** with comprehensive support for Da Vinci Implementation Guides, X12 278 integration, Azure Logic Apps orchestration, and production-ready security controls.
+The Prior Authorization API library is a starting point for CMS-0057-F work: models for the Da Vinci Implementation Guides, an X12 278 mapping prototype, Azure Logic Apps orchestration (since removed), and security controls. CMS-0057-F conformance is in progress; see the [ePA gap matrix](../epa-gap-matrix.md).
 
 ### Key Achievements
 
-✅ **Full regulatory compliance** with CMS-0057-F  
-✅ **Da Vinci IGs** implemented (CRD, DTR, PAS)  
+- **CMS-0057-F**: conformance in progress
+- **Da Vinci IGs** (CRD, DTR, PAS): in development, not yet conformant    
 ✅ **42 comprehensive tests** with 100% pass rate  
-✅ **3,522 lines** of production-ready code  
+✅ **3,522 lines** of code  
 ✅ **Zero dependencies** = Zero vulnerabilities  
 ✅ **Complete documentation** with examples  
-✅ **Production ready** for deployment
+- Not production ready: CMS-0057-F conformance in progress
 
 **Cloud Health Office** - The future of payer integration is here.
 
@@ -510,4 +516,4 @@ The Prior Authorization API implementation delivers **complete CMS-0057-F compli
 
 **Version**: 1.0.0  
 **Date**: November 2024  
-**Status**: ✅ Production Ready
+**Status**: In development — CMS-0057-F conformance in progress

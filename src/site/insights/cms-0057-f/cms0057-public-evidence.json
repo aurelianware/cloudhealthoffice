@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
   "evidenceStatus": "validated",
-  "generatedAtUtc": "2026-10-10T20:34:50Z",
-  "commitSha": "3a50827594c2e89ce518715be872abec633ebcfc",
-  "commitShaShort": "3a50827594c2",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/3a50827594c2e89ce518715be872abec633ebcfc",
+  "generatedAtUtc": "2026-10-11T00:46:35Z",
+  "commitSha": "4dc12fc593dda11b5600d742152c7b433636dac2",
+  "commitShaShort": "4dc12fc593dd",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/4dc12fc593dda11b5600d742152c7b433636dac2",
   "testDataClassification": "synthetic",
   "framework": ".NET 8 / xUnit",
   "fhirVersion": "R4",
   "scenarioCount": 21,
   "testSummary": {
-    "passed": 362,
+    "passed": 363,
     "failed": 0,
     "skipped": 0
   },
   "replaceSummary": {
-    "passable": 21,
-    "partial": 0,
-    "gap": 0,
+    "passable": 3,
+    "partial": 10,
+    "gap": 8,
     "na": 0
   },
   "integrations": {
@@ -33,7 +33,7 @@
       "id": "CONSENT-01",
       "name": "Single consent registry",
       "capability": "Consent",
-      "replace": "PASSABLE",
+      "replace": "PARTIAL",
       "integrations": {
         "qnxt": "N/A"
       }
@@ -42,7 +42,7 @@
       "id": "METRICS-01",
       "name": "Prior-authorization public metric set",
       "capability": "Metrics",
-      "replace": "PASSABLE",
+      "replace": "GAP",
       "integrations": {
         "qnxt": "GAP"
       }
@@ -51,7 +51,7 @@
       "id": "P2P-01",
       "name": "Payer-to-Payer inbound respond",
       "capability": "PayerToPayer",
-      "replace": "PASSABLE",
+      "replace": "GAP",
       "integrations": {
         "qnxt": "GAP"
       }
@@ -60,7 +60,7 @@
       "id": "P2P-02",
       "name": "Payer-to-Payer outbound initiate",
       "capability": "PayerToPayer",
-      "replace": "PASSABLE",
+      "replace": "PARTIAL",
       "integrations": {
         "qnxt": "GAP"
       }
@@ -78,7 +78,7 @@
       "id": "P2P-04",
       "name": "Payer-to-Payer member-match / concurrent coverage",
       "capability": "PayerToPayer",
-      "replace": "PASSABLE",
+      "replace": "PARTIAL",
       "integrations": {
         "qnxt": "GAP"
       }
@@ -87,7 +87,7 @@
       "id": "PAS-01",
       "name": "CRD — is prior authorization required?",
       "capability": "PriorAuthorization",
-      "replace": "PASSABLE",
+      "replace": "PARTIAL",
       "integrations": {
         "qnxt": "GAP"
       }
@@ -96,7 +96,7 @@
       "id": "PAS-02",
       "name": "DTR — correct documentation questionnaire",
       "capability": "PriorAuthorization",
-      "replace": "PASSABLE",
+      "replace": "PARTIAL",
       "integrations": {
         "qnxt": "N/A"
       }
@@ -105,7 +105,7 @@
       "id": "PAS-03",
       "name": "PAS submit — create prior authorization",
       "capability": "PriorAuthorization",
-      "replace": "PASSABLE",
+      "replace": "GAP",
       "integrations": {
         "qnxt": "GAP"
       }
@@ -114,7 +114,7 @@
       "id": "PAS-04",
       "name": "PAS inquiry / status",
       "capability": "PriorAuthorization",
-      "replace": "PASSABLE",
+      "replace": "PARTIAL",
       "integrations": {
         "qnxt": "GAP"
       }
@@ -123,7 +123,7 @@
       "id": "PAS-05",
       "name": "PAS specific denial reason",
       "capability": "PriorAuthorization",
-      "replace": "PASSABLE",
+      "replace": "PARTIAL",
       "integrations": {
         "qnxt": "GAP"
       }
@@ -132,7 +132,7 @@
       "id": "PAS-06",
       "name": "PAS decision timeframe (72h / 7 calendar days)",
       "capability": "PriorAuthorization",
-      "replace": "PASSABLE",
+      "replace": "GAP",
       "integrations": {
         "qnxt": "N/A"
       }
@@ -159,7 +159,7 @@
       "id": "PAT-01",
       "name": "Patient Access — member claims / CARIN EOB",
       "capability": "PatientAccess",
-      "replace": "PASSABLE",
+      "replace": "GAP",
       "integrations": {
         "qnxt": "GAP"
       }
@@ -168,7 +168,7 @@
       "id": "PAT-02",
       "name": "Patient Access — US Core clinical",
       "capability": "PatientAccess",
-      "replace": "PASSABLE",
+      "replace": "PARTIAL",
       "integrations": {
         "qnxt": "N/A"
       }
@@ -177,7 +177,7 @@
       "id": "PAT-03",
       "name": "Patient Access — PA data (drugs excluded)",
       "capability": "PatientAccess",
-      "replace": "PASSABLE",
+      "replace": "GAP",
       "integrations": {
         "qnxt": "N/A"
       }
@@ -186,7 +186,7 @@
       "id": "PROV-01",
       "name": "Provider Access — attributed member data pull",
       "capability": "ProviderAccess",
-      "replace": "PASSABLE",
+      "replace": "GAP",
       "integrations": {
         "qnxt": "GAP"
       }
@@ -195,7 +195,7 @@
       "id": "PROV-02",
       "name": "Provider Access — attribution enforcement",
       "capability": "ProviderAccess",
-      "replace": "PASSABLE",
+      "replace": "PARTIAL",
       "integrations": {
         "qnxt": "N/A"
       }
@@ -204,7 +204,7 @@
       "id": "PROV-03",
       "name": "Provider Access — patient opt-out honored",
       "capability": "ProviderAccess",
-      "replace": "PASSABLE",
+      "replace": "GAP",
       "integrations": {
         "qnxt": "N/A"
       }
@@ -213,7 +213,7 @@
       "id": "SEC-01",
       "name": "SMART on FHIR / OAuth",
       "capability": "Security",
-      "replace": "PASSABLE",
+      "replace": "PARTIAL",
       "integrations": {
         "qnxt": "N/A"
       }
