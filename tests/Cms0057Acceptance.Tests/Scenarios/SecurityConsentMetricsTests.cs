@@ -218,7 +218,13 @@ public class SecurityConsentMetricsTests
     // Plain REST follows the method: a GET reads, a POST/PUT writes.
     [InlineData("GET", "/fhir/r4/Patient/pat-001", "user/Patient.read", 200)]
     [InlineData("POST", "/fhir/r4/Questionnaire", "user/Questionnaire.read", 403)]
-    [InlineData("POST", "/fhir/r4/Questionnaire", "user/Questionnaire.write", 200)]
+    [InlineData("POST", "/fhir/r4/QuestionnaireResponse", "user/QuestionnaireResponse.read", 403)]
+    [InlineData("POST", "/fhir/r4/QuestionnaireResponse", "user/QuestionnaireResponse.write", 200)]
+    // Questionnaire AUTHORING is CHO-admin only (D-15): no SMART scope, not
+    // even a write wildcard, gets a Questionnaire write past the middleware.
+    // (This row was 200 before: a provider app could rewrite payer forms.)
+    [InlineData("POST", "/fhir/r4/Questionnaire", "user/Questionnaire.write", 403)]
+    [InlineData("PUT", "/fhir/r4/Questionnaire/q1", "system/*.write", 403)]
     [InlineData("PUT", "/fhir/r4/Questionnaire/q1", "user/*.read", 403)]
     // An operation nobody classified still needs a scope, and a POST to it needs
     // a write one — it does not fall through unenforced.

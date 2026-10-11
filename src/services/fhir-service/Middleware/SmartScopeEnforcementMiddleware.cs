@@ -124,6 +124,23 @@ public class SmartScopeEnforcementMiddleware
         }
 
         var resourceType = interaction.Resource;
+
+        // ── 0. Interactions no SMART context may invoke ──────────────────────
+        // Questionnaire writes (D-15): a payer's questionnaires are authored by
+        // CHO administrators only. No SMART scope, however broad, grants them,
+        // so a provider's EHR app cannot rewrite a tenant's documentation rules.
+        if (interaction.Contexts.Length == 0)
+        {
+            _logger.LogWarning("SMART caller refused a Questionnaire write (CHO administrators only)");
+
+            await WriteFhirError(context, 403,
+                OperationOutcome.IssueSeverity.Error,
+                OperationOutcome.IssueType.Forbidden,
+                "Questionnaire create/update/delete is restricted to CHO administrators; "
+                + "SMART tokens are read-only for Questionnaire.");
+            return;
+        }
+
         // The issuer's mapped patient claim when it has one (CallerIdentityResolver
         // falls back to `patient`), else the conventional `patient` claim.
         var patientClaim = (context.Items[AuthenticatedCaller.HttpContextItemKey] as AuthenticatedCaller)?.PatientId
@@ -351,6 +368,27 @@ public class SmartScopeEnforcementMiddleware
     /// with the access its HTTP method implies.
     /// </summary>
     private static FhirInteraction? ResolveInteraction(HttpRequest request)
+    {
+        var interaction = ResolveScopedInteraction(request);
+
+        // D-15: no SMART context may WRITE a Questionnaire (REST create, update,
+        // delete, or any write-classified operation). $questionnaire-package is
+        // a read and is unaffected. Compared case-insensitively because route
+        // matching is, and Questionnaire is not in KnownResources.
+        if (interaction is not null
+            && interaction.Access == WriteAccess
+            && string.Equals(interaction.Resource, "Questionnaire", StringComparison.OrdinalIgnoreCase))
+        {
+            return interaction with { Contexts = NoSmartContexts };
+        }
+
+        return interaction;
+    }
+
+    /// <summary>No SMART context: the interaction is CHO-caller only.</summary>
+    private static readonly string[] NoSmartContexts = [];
+
+    private static FhirInteraction? ResolveScopedInteraction(HttpRequest request)
     {
         var segments = request.Path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments is not { Length: >= 3 })

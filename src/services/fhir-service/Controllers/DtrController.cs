@@ -62,7 +62,10 @@ public class DtrController : FhirControllerBase
 
     /// <summary>POST /fhir/r4/Questionnaire — create</summary>
     [HttpPost("Questionnaire")]
-    [FhirAccess(smart: true, cho: "settings:manage")]
+    // CHO administrators only (D-15): a payer's questionnaires are its
+    // documentation rules. SMART callers read them and answer them
+    // (QuestionnaireResponse); they never author them.
+    [FhirAccess(smart: false, cho: "settings:manage")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(Questionnaire), 201)]
@@ -90,7 +93,10 @@ public class DtrController : FhirControllerBase
 
     /// <summary>PUT /fhir/r4/Questionnaire/{id} — update</summary>
     [HttpPut("Questionnaire/{id}")]
-    [FhirAccess(smart: true, cho: "settings:manage")]
+    // CHO administrators only (D-15): a payer's questionnaires are its
+    // documentation rules. SMART callers read them and answer them
+    // (QuestionnaireResponse); they never author them.
+    [FhirAccess(smart: false, cho: "settings:manage")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(Questionnaire), 200)]

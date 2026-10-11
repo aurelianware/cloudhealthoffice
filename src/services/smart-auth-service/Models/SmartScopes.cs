@@ -45,7 +45,7 @@ public static class SmartScopes
 
     // ── Write scopes ──────────────────────────────────────────────────────────
     // The FHIR surface serves genuine writes — Da Vinci PAS Claim/$submit, the
-    // CDex $submit-attachment response, DTR questionnaire authoring — and a read
+    // CDex $submit-attachment response, DTR questionnaire responses — and a read
     // scope must not authorize any of them. There is deliberately NO
     // patient-context write scope: every write this server serves is a
     // provider/payer transaction, so a patient-context token is never the right
@@ -64,9 +64,12 @@ public static class SmartScopes
     public const string UserTaskWrite = "user/Task.write";
     public const string SystemTaskWrite = "system/Task.write";
 
-    /// <summary>DTR questionnaire authoring and response capture.</summary>
-    public const string UserQuestionnaireWrite = "user/Questionnaire.write";
-    public const string SystemQuestionnaireWrite = "system/Questionnaire.write";
+    /// <summary>
+    /// DTR response capture. There is deliberately no Questionnaire write
+    /// scope: a payer's questionnaires are authored by CHO administrators
+    /// (settings:manage), and fhir-service refuses SMART Questionnaire writes
+    /// in every context (D-15).
+    /// </summary>
     public const string UserQuestionnaireResponseWrite = "user/QuestionnaireResponse.write";
     public const string SystemQuestionnaireResponseWrite = "system/QuestionnaireResponse.write";
 
@@ -76,7 +79,6 @@ public static class SmartScopes
         UserWildcardWrite, SystemWildcardWrite,
         UserClaimWrite, SystemClaimWrite,
         UserTaskWrite, SystemTaskWrite,
-        UserQuestionnaireWrite, SystemQuestionnaireWrite,
         UserQuestionnaireResponseWrite, SystemQuestionnaireResponseWrite,
     ];
 
@@ -107,7 +109,7 @@ public static class SmartScopes
         (SystemClaimRead,        "System: read Claim"),
 
         // Writes. Without these the FHIR surface's write operations —
-        // PAS Claim/$submit, CDex $submit-attachment, DTR authoring — are
+        // PAS Claim/$submit, CDex $submit-attachment, DTR responses — are
         // ungrantable, because a read scope no longer authorizes them.
         (UserWildcardWrite,      "Write all user-level resources"),
         (SystemWildcardWrite,    "Write all system-level resources"),
@@ -115,8 +117,6 @@ public static class SmartScopes
         (SystemClaimWrite,       "System: submit prior authorizations"),
         (UserTaskWrite,          "User: submit attachments and appeals"),
         (SystemTaskWrite,        "System: submit attachments and appeals"),
-        (UserQuestionnaireWrite, "User: author Questionnaires"),
-        (SystemQuestionnaireWrite, "System: author Questionnaires"),
         (UserQuestionnaireResponseWrite, "User: submit QuestionnaireResponses"),
         (SystemQuestionnaireResponseWrite, "System: submit QuestionnaireResponses"),
     ];
