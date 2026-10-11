@@ -130,6 +130,119 @@ public class SmartAuthToFhirEndToEndTests
         (await response.Content.ReadAsStringAsync()).Should().Contain("registered with Cloud Health Office");
     }
 
+    // ── D-32: every token type smart-auth issues, through fhir-service ────────
+    //
+    // smart-auth-service grants scopes in ONE claim, `scope`, and never `scp`,
+    // so fhir-service's scope/scp consistency rule can never refuse its own
+    // tokens. Each grant type is presented to fhir-service as well.
+
+    private const string ValidNpi = "1234567893";
+
+    /// <summary>The token's scopes, from `scope` only; asserts there is no `scp`.</summary>
+    private static string[] ScopesOf(string accessToken)
+    {
+        var jwt = SmartAuthDriver.Read(accessToken);
+        jwt.Claims.Where(c => c.Type == "scp").Should().BeEmpty("smart-auth-service grants scopes in `scope` only");
+        var scope = jwt.Claims.Where(c => c.Type == "scope").ToList();
+        scope.Should().NotBeEmpty();
+        return scope.SelectMany(c => c.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)).ToArray();
+    }
+
+    [Fact]
+    public async Task MemberToken_CarriesScopeOnly()
+    {
+        var tenant = SmartAuthDriver.NewTenant();
+        var (app, _) = await _smart.RegisterClientAsync(tenant, "patient-app", "openid", "launch/patient", "patient/*.read");
+        var token = await _smart.MemberAccessTokenAsync(await _smart.LinkedMemberAsync(tenant, "pat-001"), app);
+
+        ScopesOf(token).Should().Contain("patient/*.read");
+    }
+
+    [Fact]
+    public async Task RefreshedMemberToken_CarriesScopeOnly_AndIsAcceptedByFhir_BoundToItsPatient()
+    {
+        var tenant = SmartAuthDriver.NewTenant();
+        var (app, _) = await _smart.RegisterClientAsync(tenant, "patient-app", "openid", "offline_access", "launch/patient", "patient/*.read");
+        var browser = await _smart.LinkedMemberAsync(tenant, "pat-001");
+        var outcome = await SmartAuthDriver.AuthorizeAsync(browser, app, "openid offline_access launch/patient patient/*.read");
+        var (status, body) = await _smart.ExchangeCodeAsync(app, outcome);
+        status.Should().Be(HttpStatusCode.OK, body.ToString());
+
+        var (refreshStatus, refreshed) = await _smart.RefreshAsync(app, body.GetProperty("refresh_token").GetString()!);
+        refreshStatus.Should().Be(HttpStatusCode.OK, refreshed.ToString());
+        var token = refreshed.GetProperty("access_token").GetString()!;
+        ScopesOf(token).Should().Contain("patient/*.read");
+
+        using var fhir = await FhirTrustingSmartAuthAsync(confineTo: null);
+        var client = Bearer(fhir, token);
+        (await client.GetAsync("/fhir/r4/Patient/pat-001")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetAsync("/fhir/r4/Patient/pat-002")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ProviderToken_CarriesScopeOnly_AndPassesFhirScopeEnforcement()
+    {
+        var tenant = SmartAuthDriver.NewTenant();
+        var (app, _) = await _smart.RegisterClientAsync(tenant, "provider-app", "openid", "fhirUser", "user/*.read");
+        var provider = await _smart.LinkedProviderAsync(tenant, "prov-e2e", ValidNpi);
+        var outcome = await SmartAuthDriver.AuthorizeAsync(provider, app, "openid fhirUser user/*.read");
+        var (status, body) = await _smart.ExchangeCodeAsync(app, outcome);
+        status.Should().Be(HttpStatusCode.OK, body.ToString());
+        var token = body.GetProperty("access_token").GetString()!;
+        ScopesOf(token).Should().Contain("user/*.read");
+
+        using var fhir = await FhirTrustingSmartAuthAsync(confineTo: null);
+        var response = await Bearer(fhir, token).GetAsync("/fhir/r4/Coverage?patient=pat-001");
+
+        // Authenticated, and the user/*.read grant satisfies the scope check;
+        // what remains is Provider Access attribution, which this provider lacks.
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync()).Should()
+            .Contain("Provider Access is not authorized").And.NotContain("Insufficient scope");
+    }
+
+    [Fact]
+    public async Task EhrLaunchToken_CarriesScopeOnly_AndPassesFhirScopeEnforcement()
+    {
+        var tenant = SmartAuthDriver.NewTenant();
+        var (app, _) = await _smart.RegisterClientAsync(tenant, "provider-app", "openid", "fhirUser", "launch", "launch/patient", "user/*.read");
+        var provider = await _smart.LinkedProviderAsync(tenant, "prov-ehr-e2e", ValidNpi);
+        var launchResp = await _smart.Admin(tenant, CloudHealthOffice.Infrastructure.Security.ChoRolePermissions.MemberServices)
+            .PostAsJsonAsync("/launch", new { patientId = "pat-001", clientId = app, practitionerId = "prov-ehr-e2e" });
+        launchResp.StatusCode.Should().Be(HttpStatusCode.OK, await launchResp.Content.ReadAsStringAsync());
+        var launch = JsonDocument.Parse(await launchResp.Content.ReadAsStringAsync()).RootElement.GetProperty("launch").GetString()!;
+
+        var outcome = await SmartAuthDriver.AuthorizeAsync(provider, app, "openid fhirUser launch user/*.read", launch: launch);
+        outcome.Error.Should().BeNull();
+        var (status, body) = await _smart.ExchangeCodeAsync(app, outcome);
+        status.Should().Be(HttpStatusCode.OK, body.ToString());
+        var token = body.GetProperty("access_token").GetString()!;
+        ScopesOf(token).Should().Contain("user/*.read");
+        SmartAuthDriver.Claim(SmartAuthDriver.Read(token), "patient").Should().Be("pat-001");
+
+        using var fhir = await FhirTrustingSmartAuthAsync(confineTo: null);
+        var response = await Bearer(fhir, token).GetAsync("/fhir/r4/Coverage?patient=pat-001");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync()).Should()
+            .Contain("Provider Access is not authorized").And.NotContain("Insufficient scope");
+    }
+
+    [Fact]
+    public async Task ClientCredentialsTokens_CarryScopeOnly()
+    {
+        var tenant = SmartAuthDriver.NewTenant();
+        var (clientId, secret) = await _smart.RegisterClientAsync(tenant, "backend", "system/*.read");
+        var (_, body) = await _smart.ClientCredentialsAsync(clientId, secret!, "system/*.read");
+        ScopesOf(body.GetProperty("access_token").GetString()!).Should().BeEquivalentTo(["system/*.read"]);
+
+        var (p2pClient, p2pSecret) = await RegisterInDemoTenantAsync("PAYER-E2E-SCOPE");
+        var (_, p2p) = await _smart.ClientCredentialsAsync(p2pClient, p2pSecret, "system/PayerToPayer.read");
+        var p2pToken = p2p.GetProperty("access_token").GetString()!;
+        ScopesOf(p2pToken).Should().BeEquivalentTo(["system/PayerToPayer.read"]);
+        SmartAuthDriver.Claim(SmartAuthDriver.Read(p2pToken), "payer_id").Should().Be("PAYER-E2E-SCOPE");
+    }
+
     private async Task<(string ClientId, string Secret)> RegisterInDemoTenantAsync(string payerId)
     {
         var resp = await _smart.Admin("demo-tenant").PostAsJsonAsync("/api/admin/smart/clients", new
