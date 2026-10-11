@@ -14,6 +14,11 @@
  * unchanged (the existing static values remain as-is until the next
  * test-metrics workflow run produces an artifact).
  *
+ * Markdown targets also get the "across NN test projects" count. It is not in
+ * test-metrics.json, so it is counted here the same way test-metrics.yml
+ * discovers .NET test projects: `find src tests -name '*.Tests.csproj'`,
+ * relative to the current working directory (the repository root in CI).
+ *
  * This script is called by:
  *   - deploy-static-site.yml (before site deployment)
  *   - The site Dockerfile build stage
@@ -53,6 +58,33 @@ if (!totalTests) {
   console.log('No test count available, skipping injection.');
   process.exit(0);
 }
+
+// Same discovery rule as the .NET job in test-metrics.yml:
+//   find src tests -name '*.Tests.csproj'
+function countTestProjects(roots) {
+  let count = 0;
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name.endsWith('.Tests.csproj')) {
+        count++;
+      }
+    }
+  };
+  roots.forEach((root) => walk(path.resolve(root)));
+  return count;
+}
+
+const testProjectCount = countTestProjects(['src', 'tests']);
+console.log('  Test projects (*.Tests.csproj under src/ and tests/): ' + testProjectCount);
 
 const formattedCount = totalTests.toLocaleString('en-US');
 const coverageStr = coveragePct ? `${coveragePct}%` : null;
@@ -138,6 +170,14 @@ for (const target of TARGETS) {
       /(\d{1,3}(?:,\d{3})*)\s+automated\s+tests/g,
       `${formattedCount} automated tests`
     );
+
+    // Replace the project count suffix: "across 51 test projects"
+    if (testProjectCount > 0) {
+      content = content.replace(
+        /\b(across\s+)\d+(\s+test\s+projects)\b/g,
+        `$1${testProjectCount}$2`
+      );
+    }
 
     // Replace coverage in parenthetical: (85.93% coverage)
     if (coverageStr) {
