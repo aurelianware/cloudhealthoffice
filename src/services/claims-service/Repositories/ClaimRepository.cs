@@ -688,7 +688,7 @@ public class ClaimRepository : IClaimRepository
         adjudication is not null
         && (!string.IsNullOrWhiteSpace(adjudication.DenialReasonCode)
             || !string.IsNullOrWhiteSpace(adjudication.DenialReason)
-            || adjudication.AdjustmentReasons.Any());
+            || adjudication.AdjustmentReasons?.Any() == true);
 
     private static bool IsTerminal(ClaimVersionState state) => state switch
     {
