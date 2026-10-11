@@ -39,6 +39,15 @@ public class Authorization
     public string MemberId { get; set; } = string.Empty;
 
     /// <summary>
+    /// The submitter's own reference to the patient (e.g. <c>Patient/pat-001</c>
+    /// from a PAS Bundle), kept so a PAS <c>$inquire</c> that names the patient
+    /// the same way can be matched. Not a member identifier: that is
+    /// <see cref="MemberId"/>. Null for records not created from PAS.
+    /// </summary>
+    [StringLength(200)]
+    public string? PatientReference { get; set; }
+
+    /// <summary>
     /// Coverage ID (links to Coverage Service for eligibility)
     /// </summary>
     [StringLength(50)]
@@ -131,10 +140,13 @@ public class Authorization
     /// Service type code
     /// 278: UM03 (2000E)
     /// 1 = Medical Care, 2 = Surgical, 3 = Consultation, 33 = Chiropractic, 35 = Dental, 47 = Diagnostic Medical, 48 = Chronic Renal Disease, 76 = Dialysis, 86 = Emergency Services, 88 = Pharmacy, 98 = Urgent Care
+    /// Required on the public REST create. Null on a record of a PAS request
+    /// that carried no X12 service type (<c>Claim.item.category</c>): an
+    /// unknown service type is stored as unknown, never guessed.
     /// </summary>
     [Required]
     [StringLength(2)]
-    public string ServiceTypeCode { get; set; } = string.Empty;
+    public string? ServiceTypeCode { get; set; } = string.Empty;
 
     /// <summary>
     /// Level of service
@@ -206,9 +218,11 @@ public class Authorization
 
     /// <summary>
     /// Denial reason code
-    /// 278 Response: HCR segment
+    /// 278 Response: HCR segment. Up to 50 characters so the codes the PAS
+    /// auto-adjudicator emits today (e.g. <c>PROVIDER_EXCLUDED</c>) are stored
+    /// as given; moving them to the X12 HCR03 code set is G-17.
     /// </summary>
-    [StringLength(10)]
+    [StringLength(50)]
     public string? DenialReasonCode { get; set; }
 
     /// <summary>
@@ -377,6 +391,14 @@ public class AuthorizationStatusChange
 
     [JsonPropertyName("changedBy")]
     public string? ChangedBy { get; set; }
+
+    /// <summary>
+    /// What made the change when it was not a person: e.g.
+    /// <c>automated:AutoApproveList</c> for a PAS auto-adjudication rule, or
+    /// <c>benefit-exclusion</c>. Null for a reviewer's decision.
+    /// </summary>
+    [JsonPropertyName("source")]
+    public string? Source { get; set; }
 }
 
 /// <summary>
@@ -431,7 +453,7 @@ public class RequestedService
     /// a FHIR system URI. Optional; absent means a plain procedure code. Used by
     /// benefit drug-exclusion evaluation to normalize the drug/service identity.
     /// </summary>
-    [StringLength(64)]
+    [StringLength(256)]
     public string? ProductOrServiceSystem { get; set; }
 
     /// <summary>

@@ -1,0 +1,191 @@
+using AuthorizationService.Backends;
+using AuthorizationService.Models;
+using AuthorizationService.Repositories;
+using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.AspNetCore.Mvc;
+
+namespace AuthorizationService.Controllers;
+
+/// <summary>
+/// Internal: records a prior-authorization request together with the decision
+/// an automated adjudicator already made on it (D-02). The only caller is
+/// fhir-service's PAS <c>Claim/$submit</c>, which adjudicates synchronously and
+/// must not issue a <c>preAuthRef</c> until the record exists.
+///
+/// This is deliberately NOT <c>POST api/authorizations</c>. The public create
+/// forces Submitted and clears every review-outcome field from the body,
+/// because an external caller must not be able to approve its own request;
+/// that control stays. Here the outcome is accepted because of who is calling:
+/// <list type="bullet">
+///   <item>Only fhir-service's service token is accepted
+///   (<see cref="RequireServiceClientAttribute"/>: the <c>cho.service</c> role
+///   from an issuer trusted to mint it, with <c>sub</c> = <c>azp</c> =
+///   <c>fhir-service</c>). User tokens, whatever their permissions, other
+///   services, workloads and SMART tokens get 401/403.</item>
+///   <item>The tenant is the service token's tenant. fhir-service mints that
+///   token for the tenant of its own authenticated caller.</item>
+///   <item>The record is attributed to the service identity (<c>CreatedBy</c>,
+///   every history entry), and the rule that decided is kept as the history
+///   entry's <c>Source</c>. Nothing in the body names an actor.</item>
+/// </list>
+/// </summary>
+[ApiController]
+[Route("api/internal/authorizations/automated-decisions")]
+[RequireServiceClient(FhirServiceClientId)]
+[ApiExplorerSettings(IgnoreApi = true)]
+[Produces("application/json")]
+public sealed class AutomatedDecisionsController : ControllerBase
+{
+    /// <summary>fhir-service's service client id (token-service registration and <c>ChoAuth:ServiceToken:ClientId</c>).</summary>
+    public const string FhirServiceClientId = "fhir-service";
+
+    /// <summary>How far ahead of this host's clock a caller's timestamps may be.</summary>
+    private static readonly TimeSpan ClockSkew = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// How old a receipt may be. PAS answers synchronously (15 s), so a
+    /// receipt older than this is not a request being recorded now and would
+    /// backdate the decision clock.
+    /// </summary>
+    private static readonly TimeSpan MaxReceiptAge = TimeSpan.FromHours(1);
+
+    private readonly IAuthorizationBackendSelector _backends;
+    private readonly ICurrentActor _actor;
+    private readonly ILogger<AutomatedDecisionsController> _logger;
+
+    public AutomatedDecisionsController(
+        IAuthorizationBackendSelector backends,
+        ICurrentActor actor,
+        ILogger<AutomatedDecisionsController> logger)
+    {
+        _backends = backends;
+        _actor = actor;
+        _logger = logger;
+    }
+
+    [HttpPost]
+    [ProducesResponseType(typeof(Authorization), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<Authorization>> Record([FromBody] AutomatedDecisionRecordRequest request)
+    {
+        var problem = Validate(request, DateTime.UtcNow);
+        if (problem is not null)
+            return ValidationProblem(problem);
+
+        var backend = _backends.Resolve();
+        var number = request.AuthorizationNumber.Trim();
+
+        // Tenant-scoped by the repository (tenant from the token).
+        if (await backend.GetByNumberAsync(number, HttpContext.RequestAborted) is not null)
+        {
+            _logger.LogWarning(
+                "Automated decision refused: authorization {AuthNumber} already exists in tenant {Tenant}",
+                SanitizeForLog(number), SanitizeForLog(_actor.TenantId));
+            return Conflict($"Authorization {number} already exists.");
+        }
+
+        var now = DateTime.UtcNow;
+        var authorization = new Authorization
+        {
+            Id = Guid.NewGuid().ToString(),
+            TenantId = _actor.TenantId,
+            AuthorizationNumber = number,
+            MemberId = request.MemberId.Trim(),
+            PatientReference = request.PatientReference,
+            CoverageId = request.CoverageId,
+            PatientFirstName = request.PatientFirstName.Trim(),
+            PatientLastName = request.PatientLastName.Trim(),
+            PatientDateOfBirth = request.PatientDateOfBirth!.Value,
+            LineOfBusiness = request.LineOfBusiness,
+            RequestingProviderNPI = request.RequestingProviderNPI,
+            RequestingProviderName = request.RequestingProviderName,
+            ServicingProviderNPI = request.ServicingProviderNPI,
+            ServicingProviderName = request.ServicingProviderName,
+            AuthorizationType = AuthorizationType.PreAuthorization,
+            CertificationType = "I",
+            ServiceTypeCode = request.ServiceTypeCode,
+            LevelOfService = request.LevelOfService,
+            RequestedServiceDateFrom = request.RequestedServiceDateFrom!.Value,
+            RequestedServiceDateTo = request.RequestedServiceDateTo,
+            DiagnosisCodes = request.DiagnosisCodes ?? new List<DiagnosisCode>(),
+            // Line-level outcomes are not part of an automated decision yet
+            // (G-07): whatever a line carries is dropped.
+            RequestedServices = request.RequestedServices.Select(s => new RequestedService
+            {
+                ProcedureCode = s.ProcedureCode,
+                ProductOrServiceSystem = s.ProductOrServiceSystem,
+                ProcedureDescription = s.ProcedureDescription,
+                Modifiers = s.Modifiers ?? new List<string>(),
+                RequestedUnits = s.RequestedUnits,
+                UnitType = s.UnitType,
+                PlaceOfServiceCode = s.PlaceOfServiceCode,
+                RevenueCode = s.RevenueCode,
+            }).ToList(),
+            Status = AuthorizationStatus.Submitted,
+            SubmittedDate = request.ReceivedAt!.Value,
+            CreatedDate = now,
+            LastUpdatedDate = now,
+            CreatedBy = _actor.UserId,
+            LastUpdatedBy = _actor.UserId,
+        };
+
+        var stored = await backend.RecordAutomatedDecisionAsync(
+            authorization, request.Decision!, HttpContext.RequestAborted);
+
+        _logger.LogInformation(
+            "Automated decision recorded: authorization {AuthNumber} tenant {Tenant} status {Status} by {Actor}",
+            SanitizeForLog(stored.AuthorizationNumber), SanitizeForLog(stored.TenantId), stored.Status,
+            SanitizeForLog(_actor.UserId));
+
+        return StatusCode(StatusCodes.Status201Created, stored);
+    }
+
+    /// <summary>Checks the attributes cannot express. Null when the request is consistent.</summary>
+    internal static ValidationProblemDetails? Validate(AutomatedDecisionRecordRequest request, DateTime now)
+    {
+        var errors = new Dictionary<string, string[]>();
+        void Add(string key, string message) => errors[key] = [message];
+
+        var decision = request.Decision!;
+        var received = request.ReceivedAt!.Value;
+        var decided = decision.DecidedAt!.Value;
+
+        if (received > now + ClockSkew)
+            Add(nameof(request.ReceivedAt), "ReceivedAt is in the future.");
+        else if (received < now - MaxReceiptAge)
+            Add(nameof(request.ReceivedAt), "ReceivedAt is too old to be recorded as an automated decision.");
+
+        if (decided < received)
+            Add("Decision.DecidedAt", "DecidedAt is before ReceivedAt.");
+        else if (decided > now + ClockSkew)
+            Add("Decision.DecidedAt", "DecidedAt is in the future.");
+
+        if (request.RequestedServiceDateTo < request.RequestedServiceDateFrom)
+            Add(nameof(request.RequestedServiceDateTo), "RequestedServiceDateTo is before RequestedServiceDateFrom.");
+
+        var hasApprovedPeriod = decision.ApprovedServiceDateFrom.HasValue || decision.ApprovedServiceDateTo.HasValue;
+        switch (decision.Outcome)
+        {
+            case AutomatedDecisionOutcome.Approved:
+                if (!decision.ApprovedServiceDateFrom.HasValue)
+                    Add("Decision.ApprovedServiceDateFrom", "An approval needs an approved period.");
+                else if (decision.ApprovedServiceDateTo < decision.ApprovedServiceDateFrom)
+                    Add("Decision.ApprovedServiceDateTo", "ApprovedServiceDateTo is before ApprovedServiceDateFrom.");
+                break;
+            case AutomatedDecisionOutcome.Denied:
+            case AutomatedDecisionOutcome.Pended:
+                if (hasApprovedPeriod)
+                    Add("Decision.ApprovedServiceDateFrom", "Only an approval carries an approved period.");
+                break;
+            default:
+                Add("Decision.Outcome", "Unknown outcome.");
+                break;
+        }
+
+        return errors.Count == 0 ? null : new ValidationProblemDetails(errors);
+    }
+
+    private static string SanitizeForLog(string? value)
+        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+}

@@ -38,6 +38,18 @@ public interface IAuthorizationBackend
     /// <summary>Create/submit a prior authorization and return the persisted record.</summary>
     Task<Authorization> CreateAsync(Authorization authorization, CancellationToken ct = default);
 
+    /// <summary>
+    /// Record a request together with the automated decision already made on
+    /// it (PAS <c>$submit</c>): the request as received, then the decision,
+    /// each with its own status-history entry. <paramref name="authorization"/>
+    /// arrives as the received request (status Submitted, no outcome fields);
+    /// the backend applies <paramref name="decision"/>. Unlike
+    /// <see cref="CreateAsync"/>, which records a request awaiting review, this
+    /// is reachable only by a named service, never by an external caller.
+    /// </summary>
+    Task<Authorization> RecordAutomatedDecisionAsync(
+        Authorization authorization, AutomatedDecision decision, CancellationToken ct = default);
+
     /// <summary>Retrieve a prior authorization by its tracking number.</summary>
     Task<Authorization?> GetByNumberAsync(string authorizationNumber, CancellationToken ct = default);
 
