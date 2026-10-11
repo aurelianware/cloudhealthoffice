@@ -150,7 +150,7 @@ public sealed class BenefitPlanCosmosSerializerTests(CosmosEmulatorFixture cosmo
             expected.Select(r => r.RuleId).OrderBy(x => x),
             listed.Select(r => r.RuleId).OrderBy(x => x));
 
-        var first = expected[0];
+        var first = listed.Single(r => r.RuleId == expected[0].RuleId);
         var raw = await Raw("prior-auth-rules", first.Id, first.StateCode);
         AssertSharedShape(raw);
         Assert.Equal(first.RuleId, raw.GetProperty("ruleId").GetString());
@@ -178,7 +178,7 @@ public sealed class BenefitPlanCosmosSerializerTests(CosmosEmulatorFixture cosmo
         await PaContainer();
         var client = _host.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer", ChoDevelopmentAuth.UserToken(_tenant, ChoRolePermissions.TenantAdmin));
+            "Bearer", ChoDevelopmentAuth.UserToken(_tenant, ChoRolePermissions.PlatformAdmin));
 
         var first = await client.PostAsync("/api/v1/prior-auth-rules/seed-platform", null);
         var firstBody = await first.Content.ReadAsStringAsync();
@@ -202,7 +202,9 @@ public sealed class BenefitPlanCosmosSerializerTests(CosmosEmulatorFixture cosmo
     {
         await PaContainer();
         using var scope = _host.Services.CreateScope();
-        var repo = Resolve<IPaRuleRepository>(scope);
+        // The Cosmos repository itself: the cache decorator's SCAN flush on delete would
+        // dial the test host's unreachable Redis.
+        var repo = Resolve<PaRuleRepositoryCosmos>(scope);
         var rule = new PaRuleDocument
         {
             RuleId = "TEST-001", RuleName = "Tenant override", StateCode = "TX",
@@ -229,7 +231,7 @@ public sealed class BenefitPlanCosmosSerializerTests(CosmosEmulatorFixture cosmo
 
         Assert.Single(await repo.ListAsync(tenantId: _tenant, stateCode: "TX"));
 
-        await repo.DeleteAsync("TEST-001", "TX");
+        await repo.DeleteAsync("TEST-001", "TX", _tenant);
         Assert.Empty(await repo.ListAsync(tenantId: _tenant, stateCode: "TX"));
     }
 
