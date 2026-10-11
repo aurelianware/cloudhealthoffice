@@ -58,7 +58,26 @@ public sealed class CallerIdentityResolver
 
             PatientId = StripPrefix("Patient/",
                 Mapped(principal, map.PatientClaim) ?? FirstNonEmpty(principal, "patient")),
+
+            RegisteredPayerId = issuer.IssuesChoClientRegistrations ? RegisteredPayer(principal) : null,
         };
+    }
+
+    /// <summary>The claim CHO's authorization server mints a backend client's registered payer into.</summary>
+    public const string PayerIdClaim = "payer_id";
+
+    /// <summary>
+    /// The one well-formed <c>payer_id</c> value, or null. Two different values
+    /// are no mapping rather than a choice between them. Same format rule as
+    /// smart-auth-service's registration check.
+    /// </summary>
+    private static string? RegisteredPayer(ClaimsPrincipal principal)
+    {
+        var values = principal.FindAll(PayerIdClaim).Select(c => c.Value).Distinct(StringComparer.Ordinal).ToList();
+        if (values.Count != 1) return null;
+        var value = values[0];
+        if (value.Length is 0 or > 64 || !char.IsAsciiLetterOrDigit(value[0])) return null;
+        return value.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_') ? value : null;
     }
 
     /// <summary>

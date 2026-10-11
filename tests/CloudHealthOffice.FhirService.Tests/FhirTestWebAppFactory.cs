@@ -26,7 +26,17 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
     // Keep the raw RSA so we can dispose it alongside the factory.
     private readonly RSA _rsa;
     private readonly RsaSecurityKey _signingKey;
-    private readonly string _issuer = "https://auth.test.local";
+    private readonly string _issuer = TestIssuer;
+
+    /// <summary>The issuer every test token carries unless a test names another.</summary>
+    public const string TestIssuer = "https://auth.test.local";
+
+    /// <summary>
+    /// Issuers, besides <see cref="TestIssuer"/>, whose tokens (signed with the
+    /// same test key) validate. A subclass adds one to model a second trusted
+    /// identity provider.
+    /// </summary>
+    protected virtual IReadOnlyList<string> AdditionalValidIssuers => [];
 
     public FhirTestWebAppFactory()
     {
@@ -63,6 +73,7 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
                 {
                     ValidateIssuer = true,
                     ValidIssuer = _issuer,
+                    ValidIssuers = [_issuer, .. AdditionalValidIssuers],
                     ValidateAudience = true,
                     ValidAudience = "fhir-api",
                     ValidateLifetime = true,
@@ -131,7 +142,7 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
     /// <param name="extraClaims">Additional claims (security tests), e.g. a CHO role a SMART token must not be able to use.</param>
     public string IssueToken(
         string scopes, string? patientId = null, string? tenantId = "test-tenant",
-        IEnumerable<SecurityClaim>? extraClaims = null)
+        IEnumerable<SecurityClaim>? extraClaims = null, string? issuer = null)
     {
         var claims = new List<SecurityClaim>
         {
@@ -152,7 +163,7 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
 
         var credentials = new SigningCredentials(_signingKey, SecurityAlgorithms.RsaSha256);
         var token = new JwtSecurityToken(
-            issuer: _issuer,
+            issuer: issuer ?? _issuer,
             audience: "fhir-api",
             claims: claims,
             notBefore: DateTime.UtcNow.AddSeconds(-5),

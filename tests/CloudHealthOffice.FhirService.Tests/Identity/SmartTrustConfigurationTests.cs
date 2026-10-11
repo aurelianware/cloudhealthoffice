@@ -173,6 +173,63 @@ public class SmartTrustConfigurationTests
         => ExternalIssuer().EffectiveAlgorithms()
             .Should().BeEquivalentTo(TrustedIssuerOptions.SupportedAlgorithms);
 
+    // ── Registration authority (D-13): exactly one marked issuer ──────────────
+
+    private static TrustedIssuerOptions Authority(string issuer = "https://auth.cloudhealthoffice.com") =>
+        new() { Issuer = issuer, Audiences = ["fhir-api"], IssuesChoClientRegistrations = true };
+
+    [Fact]
+    public void ExternalIssuerMode_WithNoRegistrationAuthority_FailsStartup()
+        => External(ExternalIssuer())
+            .Invoking(o => o.Validate(false))
+            .Should().Throw<SmartTrustValidationException>()
+            .WithMessage("*No SmartAuth:TrustedIssuers entry sets IssuesChoClientRegistrations=true*");
+
+    [Fact]
+    public void ExternalIssuerMode_WithExactlyOneRegistrationAuthority_IsAccepted()
+        => External(Authority(), ExternalIssuer())
+            .Invoking(o => o.Validate(false))
+            .Should().NotThrow();
+
+    [Fact]
+    public void ExternalIssuerMode_WithTwoRegistrationAuthorities_FailsStartup()
+        => External(Authority(), Authority("https://idp.example.com"))
+            .Invoking(o => o.Validate(false))
+            .Should().Throw<SmartTrustValidationException>()
+            .WithMessage("*More than one*IssuesChoClientRegistrations*");
+
+    [Fact]
+    public void TheFlag_IsOffByDefault()
+        => new TrustedIssuerOptions().IssuesChoClientRegistrations.Should().BeFalse();
+
+    [Fact]
+    public void DemoMode_TheLegacyIssuer_IsTheRegistrationAuthority()
+    {
+        var options = new SmartTrustOptions
+        {
+            Mode = SmartTrustMode.Demo,
+            Issuer = "https://auth.cloudhealthoffice.com",
+            Audience = "fhir-api",
+        };
+
+        options.NormalizedIssuers().Single().IssuesChoClientRegistrations.Should().BeTrue();
+        options.Invoking(o => o.Validate(isDevelopmentHost: true)).Should().NotThrow();
+    }
+
+    [Fact]
+    public void DemoMode_WithExplicitTrustedIssuers_StillNeedsExactlyOneMarked()
+    {
+        var options = new SmartTrustOptions
+        {
+            Mode = SmartTrustMode.Demo,
+            TrustedIssuers = [new TrustedIssuerOptions { Issuer = "http://localhost:5000", Audiences = ["fhir-api"], RequireHttpsMetadata = false }],
+        };
+
+        options.Invoking(o => o.Validate(isDevelopmentHost: true))
+            .Should().Throw<SmartTrustValidationException>()
+            .WithMessage("*IssuesChoClientRegistrations*");
+    }
+
     // ── Clock skew ────────────────────────────────────────────────────────────
 
     [Theory]

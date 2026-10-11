@@ -179,6 +179,53 @@ public class PayerToPayerReceivingPayerBindingTests : IClassFixture<PayerToPayer
         _factory.ExportReceivingPayers.Should().NotContain(string.Empty);
     }
 
+    [Fact]
+    public async Task Export_PayerIdFromAnUnmarkedIssuer_IsIgnored_AndTheClientRefused()
+    {
+        // A trusted external IdP whose token carries payer_id — even the very
+        // payer the body names. Only CHO's registration authority is believed
+        // about a client's payer, so this client has no mapping.
+        var token = _factory.IssueToken(P2PScope, patientId: null,
+            extraClaims: [new SecurityClaim("client_id", "external-client"), new SecurityClaim("payer_id", PayerA)],
+            issuer: PayerToPayerWebAppFactory.ExternalIssuer);
+
+        var export = await PostAsync(ExportPath, token, new { receivingPayerId = PayerA, memberId = "pat-002" });
+        var match = await PostAsync(MatchPath, token, new { receivingPayerId = PayerA, memberId = "pat-002" });
+
+        export.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        match.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await export.Content.ReadAsStringAsync()).Should().NotContain("pat-002");
+
+        // The same refusal as a registered client naming another payer.
+        var mismatch = await PostAsync(ExportPath, BackendToken(PayerA), new { receivingPayerId = PayerB, memberId = "pat-002" });
+        (await DiagnosticsAsync(export)).Should().Be(await DiagnosticsAsync(mismatch));
+        (await DiagnosticsAsync(match)).Should().Be(await DiagnosticsAsync(mismatch));
+    }
+
+    [Fact]
+    public async Task Export_ExternalIssuerToken_IsStillAuthenticated_OnlyThePayerIsWithheld()
+    {
+        // Control for the test above: the external issuer's token is valid and
+        // admitted as a backend caller elsewhere (a body-less request reaches
+        // the binding check, not a 401).
+        var token = _factory.IssueToken(P2PScope, patientId: null,
+            extraClaims: [new SecurityClaim("client_id", "external-client")],
+            issuer: PayerToPayerWebAppFactory.ExternalIssuer);
+        var response = await PostAsync(ExportPath, token, new { memberId = "pat-002" });
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await DiagnosticsAsync(response)).Should().Contain("registered with Cloud Health Office",
+            "it got past authentication and the backend-only check, and stopped at the payer binding");
+    }
+
+    [Fact]
+    public async Task Export_TwoDifferentPayerIdClaims_AreNoMapping()
+    {
+        var token = _factory.IssueToken(P2PScope, patientId: null,
+            extraClaims: [new SecurityClaim("client_id", "c"), new SecurityClaim("payer_id", PayerA), new SecurityClaim("payer_id", PayerB)]);
+        (await PostAsync(ExportPath, token, new { receivingPayerId = PayerA, memberId = "pat-002" }))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     // ── $member-match ─────────────────────────────────────────────────────────
 
     [Fact]

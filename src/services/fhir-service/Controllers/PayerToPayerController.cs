@@ -3,6 +3,7 @@ using FhirService.Models.PayerToPayer;
 using FhirService.Services.PayerToPayer;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace FhirService.Controllers;
 
@@ -29,8 +30,13 @@ namespace FhirService.Controllers;
 public sealed class PayerToPayerController : FhirControllerBase
 {
     private readonly IPayerToPayerExchangeService _exchange;
+    private readonly ILogger<PayerToPayerController> _logger;
 
-    public PayerToPayerController(IPayerToPayerExchangeService exchange) => _exchange = exchange;
+    public PayerToPayerController(IPayerToPayerExchangeService exchange, ILogger<PayerToPayerController> logger)
+    {
+        _exchange = exchange;
+        _logger = logger;
+    }
 
     [HttpPost("PayerToPayer/$member-data-export")]
     public async Task<IActionResult> Export(
@@ -43,20 +49,15 @@ public sealed class PayerToPayerController : FhirControllerBase
         if (!IsBackendSystemCaller)
             return FhirForbidden(BackendOnlyMessage);
 
+        // D-13: the receiving payer is the payer the authenticated client is
+        // REGISTERED to (payer_id from CHO's registration authority), never
+        // one the body names. No mapping, or a body naming another payer, is
+        // one fixed refusal given before any member is looked at.
+        if (!TryBindReceivingPayer(body?.ReceivingPayerId, _logger, "export", out var receivingPayerId))
+            return FhirForbidden(PayerBindingMessage);
+
         if (body is null)
             return FhirBadRequest("A Payer-to-Payer export request body is required.");
-
-        // The receiving payer must identify itself so the exchange is auditable
-        // ("which receiving payer"); normalize it so audit/log values are stable.
-        //
-        // NOT YET BOUND to the authenticated client: CHO has no client -> payer
-        // registration today, so this value is still self-declared by the
-        // caller. What the caller cannot do any more is be a member or a
-        // provider app, and the audit's InitiatedBy is now the authenticated
-        // client, not this body value. (D-13 remainder; see the gap matrix.)
-        var receivingPayerId = body.ReceivingPayerId?.Trim();
-        if (string.IsNullOrEmpty(receivingPayerId))
-            return FhirBadRequest("receivingPayerId is required to identify the requesting payer for audit.");
 
         var request = new PayerToPayerExchangeRequest
         {
@@ -87,6 +88,9 @@ public sealed class PayerToPayerController : FhirControllerBase
 
     internal const string BackendOnlyMessage =
         "Payer-to-Payer operations are restricted to payer backend (system) clients.";
+
+    internal const string PayerBindingMessage =
+        "Payer-to-Payer operations require a backend client registered with Cloud Health Office to the receiving payer.";
 }
 
 /// <summary>

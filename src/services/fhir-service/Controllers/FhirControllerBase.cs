@@ -144,6 +144,54 @@ public abstract class FhirControllerBase : ControllerBase
     }
 
     /// <summary>
+    /// The payer the authenticated backend client is registered to act for
+    /// (D-13): the <c>payer_id</c> claim of a token from the ONE trusted issuer
+    /// marked as CHO's client-registration authority, resolved by
+    /// <see cref="FhirService.Services.Identity.CallerIdentityResolver"/>.
+    /// Null for any other issuer (its payer_id is ignored), for a client with
+    /// no registered payer, and for a principal whose issuer did not resolve.
+    /// </summary>
+    protected string? RegisteredPayerId
+        => (HttpContext.Items[FhirService.Services.Identity.AuthenticatedCaller.HttpContextItemKey]
+               as FhirService.Services.Identity.AuthenticatedCaller)?.RegisteredPayerId;
+
+    /// <summary>
+    /// D-13: binds a Payer-to-Payer request's receiving payer to
+    /// <see cref="RegisteredPayerId"/>. False (the caller answers one fixed 403)
+    /// when the client has no registered payer, or when the body names a
+    /// payer other than the registered one. The body value is optional; when
+    /// present it must equal the registered payer exactly. On success
+    /// <paramref name="receivingPayerId"/> is the REGISTERED payer, which is
+    /// what the audit and logs record.
+    /// </summary>
+    protected bool TryBindReceivingPayer(
+        string? namedInBody, ILogger logger, string operation, out string receivingPayerId)
+    {
+        receivingPayerId = string.Empty;
+        var registered = RegisteredPayerId;
+        var client = SanitizeForLog(AuthenticatedActorId ?? "unknown");
+        if (registered is null)
+        {
+            logger.LogWarning(
+                "P2P {Operation} refused: client={Client} has no payer registered with the CHO registration authority",
+                operation, client);
+            return false;
+        }
+
+        var named = namedInBody?.Trim();
+        if (!string.IsNullOrEmpty(named) && !string.Equals(named, registered, StringComparison.Ordinal))
+        {
+            logger.LogWarning(
+                "P2P {Operation} refused: client={Client} registeredPayer={Payer} named a different receiving payer",
+                operation, client, SanitizeForLog(registered));
+            return false;
+        }
+
+        receivingPayerId = registered;
+        return true;
+    }
+
+    /// <summary>
     /// 403 with a FHIR <c>OperationOutcome</c>. Callers pass a FIXED message,
     /// never one built from the request, so a refusal reveals nothing about
     /// the member or resource the request named.
