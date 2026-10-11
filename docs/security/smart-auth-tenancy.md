@@ -61,7 +61,7 @@ about.
 | Authorize with `user/*`, `launch` scope or a `launch` parameter (provider) | An active provider link, and a `provider-app` client of the same tenant. A launch must be registered in the same tenant for the same client. | `sub` = providerId (fhir-service attributes Provider Access by `sub`), `tenant_id`, `fhirUser` = `Practitioner/{providerId}`, `npi`, plus `patient`/`encounter` **only** from the launch |
 | Provider asks for patient scopes with no launch | — | Refused. There is no patient picker. |
 | `system/*` scopes in an interactive flow | — | Refused |
-| client_credentials | A `backend` client registration. Only `system/` scopes are allowed. | `sub` = client_id, `tenant_id` = the registration's tenant |
+| client_credentials | A `backend` client registration. Only `system/` scopes are allowed. `system/PayerToPayer.read` additionally needs the registration's `payerId`. | `sub` = client_id, `tenant_id` = the registration's tenant, `payer_id` = the registration's `payerId` (when set) |
 | Code or refresh exchange | The same binding must still be active and unchanged, and the client must still be registered to the same tenant | Rebuilt from the stored grant |
 
 If the binding is missing, the authorize response is `access_denied` and the
@@ -187,6 +187,7 @@ through a named policy.
 | `POST/GET /api/admin/smart/provider-enrolments`, `DELETE …/{id}` | `providers:write` |
 | `GET /api/admin/smart/provider-users`, `DELETE …/{id}` (revoke) | `providers:write` |
 | `POST/GET /api/admin/smart/clients`, `GET/DELETE …/{clientId}` | `settings:manage` |
+| `PUT /api/admin/smart/clients/{clientId}/payer` (set the payer a backend client acts for) | `settings:manage` |
 | `GET …/{clientId}/approvals[?subject=]`, `DELETE …/{clientId}/approvals/{approvalId}`, `DELETE …/{clientId}/approvals[?subject=]` (withdraw app approvals of the tenant's own client; `404` for another tenant's) | `settings:manage` |
 | `POST /launch` | `members:read` |
 
@@ -201,11 +202,50 @@ through a named policy.
   `clientId` (optional; generated if absent) and `confidential`. A client
   secret is returned once. Redirect URIs must use HTTPS. Plain-HTTP loopback
   addresses are allowed only on a Development host. Scopes must be registered
-  and suitable for the client's kind.
+  and suitable for the client's kind. A `backend` client also takes `payerId`
+  (see "Payer-to-Payer clients" below); it is required when the scopes include
+  `system/PayerToPayer.read`, and refused for interactive apps.
 - Each change writes one audit line on log category
   `CloudHealthOffice.SmartAuth.Audit`, recording the action, tenant, actor and
   target. Token issuance, refusals with a reason code, and code redemptions are
   logged on the same category. Codes and tokens are never logged.
+
+## Payer-to-Payer clients (deploy and operations)
+
+The inbound Payer-to-Payer operations (`PayerToPayer/$member-data-export`,
+`Patient/$member-match`) bind the receiving payer to the calling backend
+client's registration (D-13), never to the request body. What that means for a
+deployment:
+
+- **Every Payer-to-Payer client must be registered with CHO.** That is a
+  `backend` client registration in smart-auth-service with a `payerId`
+  (`POST /api/admin/smart/clients` with `payerId`, or
+  `PUT /api/admin/smart/clients/{clientId}/payer` with `{"payerId": "…"}` for an
+  existing client). `payerId` is 1–64 characters: letters, digits, `.`, `-`,
+  `_`, starting with a letter or digit.
+- **Clients of external identity providers cannot use Payer-to-Payer** until
+  they are registered with CHO and obtain their tokens from smart-auth-service.
+  fhir-service ignores a `payer_id` claim from any issuer other than the one
+  marked `IssuesChoClientRegistrations`, so such a client counts as having no
+  payer and is refused (`403`).
+- **Existing registrations need a payer id.** A backend client registered
+  before this change that holds `system/PayerToPayer.read` has no `payerId`;
+  smart-auth-service refuses it a token for that scope
+  (`payer_to_payer_requires_registered_payer_id` in the audit log) until a
+  tenant administrator sets one with the `PUT` above. Its other system scopes
+  keep working.
+- The payer id cannot be cleared on a client that still holds
+  `system/PayerToPayer.read`, and a tenant administrator can set it only for
+  their own tenant's clients (another tenant's client id is `404`).
+- **A change takes effect on the next token.** Backend clients get no refresh
+  token; access tokens already issued keep the payer they were minted with
+  until they expire (up to 60 minutes with the default
+  `AccessTokenLifetimeMinutes`).
+- **fhir-service must mark exactly one trusted issuer** — smart-auth-service's
+  entry — with `IssuesChoClientRegistrations: true`, or it does not start (see
+  "fhir-service" below and `docs/architecture/smart-oauth-trust.md` §2). Never
+  mark an external IdP: that would let it assert payer ids CHO never
+  registered.
 
 ## Development-only
 
@@ -354,7 +394,7 @@ them.
 
 ## fhir-service
 
-No fhir-service code or configuration was changed. With tokens carrying
+The tenancy change itself changed no fhir-service code or configuration. With tokens carrying
 `tenant_id`:
 
 - fhir-service Development still confines the Demo issuer to `demo-tenant`
@@ -363,11 +403,14 @@ No fhir-service code or configuration was changed. With tokens carrying
   rather than taking a wrong tenant. That fallback can stay. To try other
   tenants against a local fhir-service, remove the `Tenants` entry or list
   those tenants.
-- Production uses `SmartAuth:Mode=ExternalIssuer`. If smart-auth-service is
-  used there, list it as a trusted issuer with `Audiences: ["fhir-api"]`,
-  optionally `Tenants` (the tenants it serves), and optionally
-  `Claims.ProviderNpiClaim: "npi"` so that fhir-service treats the provider's
-  NPI as verified.
+- Production uses `SmartAuth:Mode=ExternalIssuer`. List smart-auth-service as
+  a trusted issuer with `Audiences: ["fhir-api"]` and
+  **`IssuesChoClientRegistrations: true`**, optionally `Tenants` (the tenants it
+  serves), and optionally `Claims.ProviderNpiClaim: "npi"` so that fhir-service
+  treats the provider's NPI as verified. fhir-service refuses to start unless
+  exactly one trusted issuer sets `IssuesChoClientRegistrations`; it believes
+  the `payer_id` claim (Payer-to-Payer) only from that issuer. In Demo mode the
+  legacy `SmartAuth:Issuer` entry is marked automatically.
 - smart-auth-service's issuer is fixed by configuration (see "Issuer" below).
   The trusted issuer entry must be that same value.
 
