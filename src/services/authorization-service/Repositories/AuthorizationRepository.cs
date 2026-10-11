@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Azure.Cosmos;
 using AuthorizationService.Models;
 using AuthorizationService.Services.Retention;
@@ -142,7 +143,8 @@ public class AuthorizationRepository : IAuthorizationRepository
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@authorizationNumber", authorizationNumber);
 
-        var iterator = _container.GetItemQueryIterator<Authorization>(query);
+        var iterator = _container.GetItemQueryIterator<Authorization>(
+            query, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         var results = new List<Authorization>();
 
         while (iterator.HasMoreResults)
@@ -499,10 +501,11 @@ public class AuthorizationRepository : IAuthorizationRepository
 
         try
         {
-            // Read in the tenant's partition and replace with the read's ETag:
-            // only the two escalation fields change, and a record a reviewer
-            // changed in between fails the precondition rather than being
-            // overwritten with the stale copy.
+            // Read in the tenant's partition to check the conditions, then PATCH
+            // only the two escalation fields under the read's ETag. A patch never
+            // rewrites the rest of the document, so properties this version does
+            // not model (a newer pod's, during a rolling deploy) survive, and a
+            // record a reviewer changed in between fails the precondition (412).
             var current = await _container.ReadItemAsync<Authorization>(id, partition, cancellationToken: ct);
             var auth = current.Resource;
 
@@ -514,14 +517,17 @@ public class AuthorizationRepository : IAuthorizationRepository
                 return false;
             }
 
-            auth.SlaEscalation = level;
-            auth.SlaEscalatedAt = escalatedAtUtc;
+            var (storedLevel, storedAt) = StoredEscalationValues(level, escalatedAtUtc);
 
-            await _container.ReplaceItemAsync(
-                auth,
+            await _container.PatchItemAsync<Authorization>(
                 id,
                 partition,
-                new ItemRequestOptions { IfMatchEtag = current.ETag },
+                new[]
+                {
+                    PatchOperation.Set("/slaEscalation", storedLevel),
+                    PatchOperation.Set("/slaEscalatedAt", storedAt),
+                },
+                new PatchItemRequestOptions { IfMatchEtag = current.ETag },
                 ct);
 
             return true;
@@ -532,6 +538,24 @@ public class AuthorizationRepository : IAuthorizationRepository
             // Gone, or changed under us. The next tick re-evaluates.
             return false;
         }
+    }
+
+    /// <summary>
+    /// The escalation fields exactly as a full write stores them: a probe
+    /// <see cref="Authorization"/> goes through the client's own serializer, so
+    /// the property-level enum converter on <c>SlaEscalation</c> ("Warning")
+    /// and the date format apply. The patch carries those JSON values as-is.
+    /// </summary>
+    private (JsonElement Level, JsonElement At) StoredEscalationValues(SlaEscalationLevel level, DateTime at)
+    {
+        var serializer = _container.Database.Client.ClientOptions.Serializer
+                         ?? throw new InvalidOperationException(
+                             "The Cosmos client has no custom serializer; AddChoDatabase registers the shared one.");
+        var probe = new Authorization { SlaEscalation = level, SlaEscalatedAt = at };
+        using var stream = serializer.ToStream(probe);
+        using var document = JsonDocument.Parse(stream);
+        return (document.RootElement.GetProperty("slaEscalation").Clone(),
+                document.RootElement.GetProperty("slaEscalatedAt").Clone());
     }
 
     private static string StatusParameterList(string prefix, int count) =>
