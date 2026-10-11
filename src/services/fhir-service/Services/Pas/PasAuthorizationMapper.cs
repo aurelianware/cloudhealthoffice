@@ -70,6 +70,7 @@ public static class PasAuthorizationMapper
     public const string ProcessPrioritySystem = "http://terminology.hl7.org/CodeSystem/processpriority";
     public const string X12LevelOfServiceSystem = "https://codesystem.x12.org/005010/1338";
     public const string ActPrioritySystem = "http://terminology.hl7.org/CodeSystem/v3-ActPriority";
+    public const string ActPriorityOid = "urn:oid:2.16.840.1.113883.5.7";
     public const string RequestPrioritySystem = "http://hl7.org/fhir/request-priority";
     public const string Icd10CmSystem = "http://hl7.org/fhir/sid/icd-10-cm";
     public const string Icd10System = "http://hl7.org/fhir/sid/icd-10";
@@ -456,6 +457,8 @@ public static class PasAuthorizationMapper
     private static readonly HashSet<string> UrgentValues = new(StringComparer.OrdinalIgnoreCase)
     {
         "stat", "urgent", "expedited", "asap", "U", "03", "emergency", "emergent", "immediate",
+        // ActPriority's urgent / emergency codes are unambiguous outside it too.
+        "UR", "EM",
     };
 
     /// <summary>
@@ -465,8 +468,11 @@ public static class PasAuthorizationMapper
     /// </summary>
     private static readonly HashSet<string> ActPriorityUrgent = new(StringComparer.Ordinal) { "S", "A", "UR", "EM", "CS", "CR" };
 
+    /// <summary>A code system by its canonical URL (the ActPriority OID is ActPriority).</summary>
+    private static string? Canonical(string? system) => system == ActPriorityOid ? ActPrioritySystem : system;
+
     /// <summary>The (system, code) pairs that state urgency in the system they belong to: no warning.</summary>
-    private static bool IsStandardUrgentPair(string? system, string code) => system switch
+    private static bool IsStandardUrgentPair(string? system, string code) => Canonical(system) switch
     {
         ProcessPrioritySystem => code == "stat",
         X12LevelOfServiceSystem => code is "U" or "03",
@@ -476,7 +482,7 @@ public static class PasAuthorizationMapper
     };
 
     /// <summary>Explicit standard values in a known system: <c>E</c>, no warning.</summary>
-    private static bool IsExplicitStandard(string? system, string code) => system switch
+    private static bool IsExplicitStandard(string? system, string code) => Canonical(system) switch
     {
         ProcessPrioritySystem => code is "normal" or "deferred",
         X12LevelOfServiceSystem => code == "E",
@@ -497,9 +503,12 @@ public static class PasAuthorizationMapper
     ///   priority.</item>
     ///   <item>A recognised urgent value (<c>stat</c>, <c>urgent</c>,
     ///   <c>expedited</c>, <c>asap</c>, <c>U</c>, <c>03</c>, <c>emergency</c>,
-    ///   <c>emergent</c>, <c>immediate</c>) is <c>U</c> in any system, or as
-    ///   the concept's text; so are HL7 v3-ActPriority <c>S</c>, <c>A</c>,
-    ///   <c>UR</c>, <c>EM</c>, <c>CS</c>, <c>CR</c>. Outside its standard pair
+    ///   <c>emergent</c>, <c>immediate</c>, <c>UR</c>, <c>EM</c>; matched
+    ///   case-insensitively) is <c>U</c> in any system, or as the concept's
+    ///   text. HL7 v3-ActPriority (by URL or OID <c>2.16.840.1.113883.5.7</c>)
+    ///   <c>S</c>, <c>A</c>, <c>CS</c> and <c>CR</c> are <c>U</c> only in that
+    ///   system: single letters and callback codes are ambiguous elsewhere.
+    ///   Outside its standard pair
     ///   (processpriority <c>stat</c>; X12 1338 <c>U</c>/<c>03</c>;
     ///   request-priority <c>urgent</c>/<c>asap</c>/<c>stat</c>; those
     ///   ActPriority codes) it is reported as a warning.</item>
