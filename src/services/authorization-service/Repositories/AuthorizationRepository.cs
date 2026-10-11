@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Azure.Cosmos;
 using AuthorizationService.Models;
 using AuthorizationService.Services.Retention;
@@ -53,10 +54,41 @@ public interface IAuthorizationRepository
     /// </summary>
     Task<bool> PurgeIfStillEligibleAsync(
         string tenantId, string id, AuthorizationStatus expectedStatus, CancellationToken ct = default);
+
+    // ── SLA watchdog (D-07) ──────────────────────────────────────────────────
+    // Background-callable like the retention methods: the tenant is explicit,
+    // and GetOpenAuthorizationsAsync(tenantId) lists that tenant's open records.
+
+    /// <summary>
+    /// Raises one authorization's SLA escalation to <paramref name="level"/>
+    /// and stamps <paramref name="escalatedAtUtc"/>, ONLY IF it belongs to
+    /// <paramref name="tenantId"/>, is still open and is below that level.
+    /// Writes nothing else, so a reviewer's concurrent change is never
+    /// overwritten. Returns false when the record moved on, was already at or
+    /// above the level, or is gone.
+    /// </summary>
+    Task<bool> RaiseSlaEscalationAsync(
+        string tenantId, string id, SlaEscalationLevel level, DateTime escalatedAtUtc, CancellationToken ct = default);
 }
 
+/// <summary>
+/// Cosmos DB repository. Documents are written by the host's shared
+/// <c>CosmosSystemTextJsonSerializer</c> (registered by <c>AddChoDatabase</c>):
+/// camelCase names, enums as camelCase strings, nulls omitted. Queries
+/// therefore bind enum values as PARAMETERS, so the same serializer writes
+/// them exactly as it stores the property (D-18), and treat a missing
+/// property as null (<c>NOT IS_DEFINED(x) OR IS_NULL(x)</c>), never
+/// <c>x = null</c>.
+/// </summary>
 public class AuthorizationRepository : IAuthorizationRepository
 {
+    // The open/terminal split is defined once (AuthorizationStatusExtensions).
+    private static readonly AuthorizationStatus[] OpenStatuses =
+        Enum.GetValues<AuthorizationStatus>().Where(s => s.IsOpen()).ToArray();
+
+    private static readonly AuthorizationStatus[] TerminalStatuses =
+        Enum.GetValues<AuthorizationStatus>().Where(s => s.IsTerminal()).ToArray();
+
     private readonly Container _container;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<AuthorizationRepository> _logger;
@@ -111,7 +143,8 @@ public class AuthorizationRepository : IAuthorizationRepository
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@authorizationNumber", authorizationNumber);
 
-        var iterator = _container.GetItemQueryIterator<Authorization>(query);
+        var iterator = _container.GetItemQueryIterator<Authorization>(
+            query, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         var results = new List<Authorization>();
 
         while (iterator.HasMoreResults)
@@ -159,20 +192,23 @@ public class AuthorizationRepository : IAuthorizationRepository
 
         if (serviceDateTo.HasValue)
         {
-            conditions.Add("(c.requestedServiceDateTo <= @serviceDateTo OR c.requestedServiceDateTo = null)");
+            // An open-ended request has no stored requestedServiceDateTo (nulls
+            // are omitted), and "x = null" is undefined for a missing property.
+            conditions.Add("(NOT IS_DEFINED(c.requestedServiceDateTo) OR IS_NULL(c.requestedServiceDateTo) "
+                           + "OR c.requestedServiceDateTo <= @serviceDateTo)");
             parameters["@serviceDateTo"] = serviceDateTo.Value;
         }
 
         if (status.HasValue)
         {
             conditions.Add("c.status = @status");
-            parameters["@status"] = status.Value.ToString();
+            parameters["@status"] = status.Value;
         }
 
         if (lineOfBusiness.HasValue)
         {
             conditions.Add("c.lineOfBusiness = @lineOfBusiness");
-            parameters["@lineOfBusiness"] = lineOfBusiness.Value.ToString();
+            parameters["@lineOfBusiness"] = lineOfBusiness.Value;
         }
 
         var queryText = $@"
@@ -187,7 +223,8 @@ public class AuthorizationRepository : IAuthorizationRepository
             queryDef.WithParameter(key, value);
         }
 
-        var iterator = _container.GetItemQueryIterator<Authorization>(queryDef);
+        var iterator = _container.GetItemQueryIterator<Authorization>(
+            queryDef, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
         var results = new List<Authorization>();
 
         while (iterator.HasMoreResults)
@@ -209,118 +246,112 @@ public class AuthorizationRepository : IAuthorizationRepository
         var lobCondition = lineOfBusiness.HasValue
             ? "AND c.lineOfBusiness = @lineOfBusiness"
             : "";
+        var tenantPartition = new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) };
 
-        var queryText = $@"
-            SELECT 
-                COUNT(1) as TotalAuthorizations,
-                SUM(CASE WHEN c.status = 'Approved' THEN 1 ELSE 0 END) as ApprovedAuthorizations,
-                SUM(CASE WHEN c.status = 'Denied' THEN 1 ELSE 0 END) as DeniedAuthorizations,
-                SUM(CASE WHEN c.status = 'Pended' THEN 1 ELSE 0 END) as PendedAuthorizations,
-                SUM(CASE WHEN c.status = 'Modified' THEN 1 ELSE 0 END) as ModifiedAuthorizations
-            FROM c 
-            WHERE c.tenantId = @tenantId 
-            AND c.submittedDate >= @from 
-            AND c.submittedDate <= @to 
-            {lobCondition}";
-
-        var queryDef = new QueryDefinition(queryText)
-            .WithParameter("@tenantId", tenantId)
-            .WithParameter("@from", from)
-            .WithParameter("@to", to);
-
-        if (lineOfBusiness.HasValue)
+        QueryDefinition Query(string text)
         {
-            queryDef.WithParameter("@lineOfBusiness", lineOfBusiness.Value.ToString());
+            var query = new QueryDefinition(text)
+                .WithParameter("@tenantId", tenantId)
+                .WithParameter("@from", from)
+                .WithParameter("@to", to);
+            // Bound as the enum itself, so the serializer writes it in its stored form.
+            if (lineOfBusiness.HasValue)
+                query = query.WithParameter("@lineOfBusiness", lineOfBusiness.Value);
+            return query;
         }
 
-        var iterator = _container.GetItemQueryIterator<dynamic>(queryDef);
-        var summary = new AuthorizationsSummary();
-
-        if (iterator.HasMoreResults)
+        // Counts per status. GROUP BY reads the status back through the same
+        // serializer that stored it, so no status literal appears in the query.
+        var counts = new Dictionary<AuthorizationStatus, int>();
+        var countIterator = _container.GetItemQueryIterator<StatusCountRow>(
+            Query($@"
+                SELECT c.status AS status, COUNT(1) AS n
+                FROM c
+                WHERE c.tenantId = @tenantId
+                AND c.submittedDate >= @from
+                AND c.submittedDate <= @to
+                {lobCondition}
+                GROUP BY c.status"),
+            requestOptions: tenantPartition);
+        while (countIterator.HasMoreResults)
         {
-            var response = await iterator.ReadNextAsync();
-            var result = response.FirstOrDefault();
-
-            if (result != null)
+            foreach (var row in await countIterator.ReadNextAsync())
             {
-                summary.TotalAuthorizations = result.TotalAuthorizations ?? 0;
-                summary.ApprovedAuthorizations = result.ApprovedAuthorizations ?? 0;
-                summary.DeniedAuthorizations = result.DeniedAuthorizations ?? 0;
-                summary.PendedAuthorizations = result.PendedAuthorizations ?? 0;
-                summary.ModifiedAuthorizations = result.ModifiedAuthorizations ?? 0;
-
-                // Calculate approval rate (approved + modified)
-                if (summary.TotalAuthorizations > 0)
-                {
-                    summary.ApprovalRate = (decimal)(summary.ApprovedAuthorizations + summary.ModifiedAuthorizations) /
-                                          summary.TotalAuthorizations * 100;
-                }
+                if (row.Status is { } rowStatus)
+                    counts[rowStatus] = counts.GetValueOrDefault(rowStatus) + row.N;
             }
         }
 
+        int Count(AuthorizationStatus status) => counts.GetValueOrDefault(status);
+
+        var summary = new AuthorizationsSummary
+        {
+            TotalAuthorizations = counts.Values.Sum(),
+            ApprovedAuthorizations = Count(AuthorizationStatus.Approved),
+            DeniedAuthorizations = Count(AuthorizationStatus.Denied),
+            PendedAuthorizations = Count(AuthorizationStatus.Pended),
+            ModifiedAuthorizations = Count(AuthorizationStatus.Modified),
+            ExpiredAuthorizations = Count(AuthorizationStatus.Expired),
+        };
+
+        // Calculate approval rate (approved + modified)
+        if (summary.TotalAuthorizations > 0)
+        {
+            summary.ApprovalRate = (decimal)(summary.ApprovedAuthorizations + summary.ModifiedAuthorizations) /
+                                   summary.TotalAuthorizations * 100;
+        }
+
+        const string reviewed = "IS_DEFINED(c.reviewedDate) AND NOT IS_NULL(c.reviewedDate)";
+
         // AverageReviewDays: raw submission-to-decision time (always from SubmittedDate)
-        var reviewQueryText = $@"
-            SELECT AVG(
-                DateTimeDiff('day', c.submittedDate, c.reviewedDate)
-            ) as AvgDays
+        summary.AverageReviewDays = await AverageAsync(Query($@"
+            SELECT VALUE AVG(DateTimeDiff('day', c.submittedDate, c.reviewedDate))
             FROM c
             WHERE c.tenantId = @tenantId
             AND c.submittedDate >= @from
             AND c.submittedDate <= @to
-            AND c.reviewedDate != null
-            {lobCondition}";
+            AND {reviewed}
+            {lobCondition}"), tenantPartition);
 
-        var reviewQueryDef = new QueryDefinition(reviewQueryText)
-            .WithParameter("@tenantId", tenantId)
-            .WithParameter("@from", from)
-            .WithParameter("@to", to);
-
-        if (lineOfBusiness.HasValue)
-        {
-            reviewQueryDef.WithParameter("@lineOfBusiness", lineOfBusiness.Value.ToString());
-        }
-
-        var reviewIterator = _container.GetItemQueryIterator<dynamic>(reviewQueryDef);
-        if (reviewIterator.HasMoreResults)
-        {
-            var response = await reviewIterator.ReadNextAsync();
-            var result = response.FirstOrDefault();
-            summary.AverageReviewDays = result?.AvgDays ?? 0;
-        }
-
-        // AverageTurnaroundDays: SLA-adjusted time (from SlaResumedAt when RFAI was issued)
-        var turnaroundQueryText = $@"
-            SELECT AVG(
+        // AverageTurnaroundDays: SLA-adjusted time (from SlaResumedAt when RFAI
+        // was issued). A record never resumed has no stored slaResumedAt.
+        summary.AverageTurnaroundDays = await AverageAsync(Query($@"
+            SELECT VALUE AVG(
                 DateTimeDiff('day',
-                    IIF(IS_NULL(c.slaResumedAt), c.submittedDate, c.slaResumedAt),
-                    c.reviewedDate)
-            ) as AvgDays
+                    IIF(IS_DEFINED(c.slaResumedAt) AND NOT IS_NULL(c.slaResumedAt), c.slaResumedAt, c.submittedDate),
+                    c.reviewedDate))
             FROM c
             WHERE c.tenantId = @tenantId
             AND c.submittedDate >= @from
             AND c.submittedDate <= @to
-            AND c.reviewedDate != null
-            {lobCondition}";
-
-        var turnaroundQueryDef = new QueryDefinition(turnaroundQueryText)
-            .WithParameter("@tenantId", tenantId)
-            .WithParameter("@from", from)
-            .WithParameter("@to", to);
-
-        if (lineOfBusiness.HasValue)
-        {
-            turnaroundQueryDef.WithParameter("@lineOfBusiness", lineOfBusiness.Value.ToString());
-        }
-
-        var turnaroundIterator = _container.GetItemQueryIterator<dynamic>(turnaroundQueryDef);
-        if (turnaroundIterator.HasMoreResults)
-        {
-            var response = await turnaroundIterator.ReadNextAsync();
-            var result = response.FirstOrDefault();
-            summary.AverageTurnaroundDays = result?.AvgDays ?? 0;
-        }
+            AND {reviewed}
+            {lobCondition}"), tenantPartition);
 
         return summary;
+    }
+
+    private async Task<decimal> AverageAsync(QueryDefinition query, QueryRequestOptions options)
+    {
+        var iterator = _container.GetItemQueryIterator<double?>(query, requestOptions: options);
+        while (iterator.HasMoreResults)
+        {
+            foreach (var value in await iterator.ReadNextAsync())
+            {
+                if (value is { } average)
+                    return (decimal)average;
+            }
+        }
+
+        // No reviewed authorizations in range: AVG has no value.
+        return 0;
+    }
+
+    /// <summary>One row of the per-status count; read with the container's serializer.</summary>
+    private sealed class StatusCountRow
+    {
+        public AuthorizationStatus? Status { get; set; }
+
+        public int N { get; set; }
     }
 
     // ── Retention (PAT-03) ───────────────────────────────────────────────────
@@ -356,15 +387,15 @@ public class AuthorizationRepository : IAuthorizationRepository
         // subset the store happens to hand back, so a large backlog could be
         // re-scanned indefinitely while the oldest records are never reached.
         // Oldest-first makes each sweep advance.
-        var queryText = @"
+        var queryText = $@"
             SELECT * FROM c
             WHERE c.tenantId = @tenantId
-            AND c.status IN ('Approved', 'Modified', 'Denied', 'Expired', 'Cancelled')
+            AND c.status IN ({StatusParameterList("@terminal", TerminalStatuses.Length)})
             AND c.submittedDate <= @cutoff
             ORDER BY c.submittedDate ASC
             OFFSET 0 LIMIT @limit";
 
-        var queryDef = new QueryDefinition(queryText)
+        var queryDef = WithStatusParameters(new QueryDefinition(queryText), "@terminal", TerminalStatuses)
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@cutoff", anchorCutoffUtc)
             .WithParameter("@limit", limit);
@@ -436,15 +467,19 @@ public class AuthorizationRepository : IAuthorizationRepository
     {
         var effectiveTenantId = tenantId ?? GetTenantId();
 
-        var queryText = @"
+        var queryText = $@"
             SELECT * FROM c
             WHERE c.tenantId = @tenantId
-            AND c.status IN ('Submitted', 'InReview', 'Pended')";
+            AND c.status IN ({StatusParameterList("@open", OpenStatuses.Length)})";
 
-        var queryDef = new QueryDefinition(queryText)
+        var queryDef = WithStatusParameters(new QueryDefinition(queryText), "@open", OpenStatuses)
             .WithParameter("@tenantId", effectiveTenantId);
 
-        var iterator = _container.GetItemQueryIterator<Authorization>(queryDef);
+        // Scoped to the tenant's partition as well as filtered on it, so a
+        // background caller can never read another tenant's records.
+        var iterator = _container.GetItemQueryIterator<Authorization>(
+            queryDef,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(effectiveTenantId) });
         var results = new List<Authorization>();
 
         while (iterator.HasMoreResults)
@@ -454,6 +489,88 @@ public class AuthorizationRepository : IAuthorizationRepository
         }
 
         return results;
+    }
+
+    public async Task<bool> RaiseSlaEscalationAsync(
+        string tenantId, string id, SlaEscalationLevel level, DateTime escalatedAtUtc, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("Tenant is required for an SLA escalation.", nameof(tenantId));
+
+        var partition = new PartitionKey(tenantId);
+
+        try
+        {
+            // Read in the tenant's partition to check the conditions, then PATCH
+            // only the two escalation fields under the read's ETag. A patch never
+            // rewrites the rest of the document, so properties this version does
+            // not model (a newer pod's, during a rolling deploy) survive, and a
+            // record a reviewer changed in between fails the precondition (412).
+            var current = await _container.ReadItemAsync<Authorization>(id, partition, cancellationToken: ct);
+            var auth = current.Resource;
+
+            if (auth is null
+                || !string.Equals(auth.TenantId, tenantId, StringComparison.Ordinal)
+                || !auth.Status.IsOpen()
+                || auth.SlaEscalation >= level)
+            {
+                return false;
+            }
+
+            var (storedLevel, storedAt) = StoredEscalationValues(level, escalatedAtUtc);
+
+            await _container.PatchItemAsync<Authorization>(
+                id,
+                partition,
+                new[]
+                {
+                    PatchOperation.Set("/slaEscalation", storedLevel),
+                    PatchOperation.Set("/slaEscalatedAt", storedAt),
+                },
+                new PatchItemRequestOptions { IfMatchEtag = current.ETag },
+                ct);
+
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.NotFound
+                                              or System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            // Gone, or changed under us. The next tick re-evaluates.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The escalation fields exactly as a full write stores them: a probe
+    /// <see cref="Authorization"/> goes through the client's own serializer, so
+    /// the property-level enum converter on <c>SlaEscalation</c> ("Warning")
+    /// and the date format apply. The patch carries those JSON values as-is.
+    /// </summary>
+    private (JsonElement Level, JsonElement At) StoredEscalationValues(SlaEscalationLevel level, DateTime at)
+    {
+        var serializer = _container.Database.Client.ClientOptions.Serializer
+                         ?? throw new InvalidOperationException(
+                             "The Cosmos client has no custom serializer; AddChoDatabase registers the shared one.");
+        var probe = new Authorization { SlaEscalation = level, SlaEscalatedAt = at };
+        using var stream = serializer.ToStream(probe);
+        using var document = JsonDocument.Parse(stream);
+        return (document.RootElement.GetProperty("slaEscalation").Clone(),
+                document.RootElement.GetProperty("slaEscalatedAt").Clone());
+    }
+
+    private static string StatusParameterList(string prefix, int count) =>
+        string.Join(", ", Enumerable.Range(0, count).Select(i => $"{prefix}{i}"));
+
+    /// <summary>
+    /// Binds each status as the enum itself, so the client's serializer writes
+    /// it in exactly the form it stores <c>status</c> (D-18).
+    /// </summary>
+    private static QueryDefinition WithStatusParameters(
+        QueryDefinition query, string prefix, IReadOnlyList<AuthorizationStatus> statuses)
+    {
+        for (var i = 0; i < statuses.Count; i++)
+            query = query.WithParameter($"{prefix}{i}", statuses[i]);
+        return query;
     }
 
     public async Task<Authorization> CreateAsync(Authorization authorization)
