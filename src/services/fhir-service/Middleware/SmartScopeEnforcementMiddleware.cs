@@ -152,7 +152,9 @@ public class SmartScopeEnforcementMiddleware
         {
             _logger.LogWarning(
                 "SMART scope denied — resource: {Resource}, access: {Access}, scopes: {Scopes}",
-                resourceType, interaction.Access, string.Join(" ", scopes));
+                // Scopes come from the token (`scope` or, since D-32, `scp`)
+                // and the resource from the path: both caller-controlled.
+                SanitizeForLog(resourceType), interaction.Access, SanitizeForLog(string.Join(" ", scopes)));
 
             await WriteFhirError(context, 403,
                 OperationOutcome.IssueSeverity.Error,
@@ -552,7 +554,7 @@ public class SmartScopeEnforcementMiddleware
         => FhirErrorResponse.WriteAsync(context, statusCode, severity, code, diagnostics);
 
     private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "").Replace("\t", " ");
 
     private static string StripPrefix(string prefix, string value)
         => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)

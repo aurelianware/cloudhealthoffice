@@ -77,7 +77,9 @@ their JWT names (no inbound claim mapping) and treats an `scp`-only token exactl
 like a `scope`-only one. A token that carries both must grant the same **set** of
 scopes in each (order, repetition and extra spaces ignored; case-sensitive); if
 the sets differ, the token is refused with 401. CHO never takes their union or
-intersection.
+intersection. A claim that is present but empty (`""` or `[]`) counts as an empty
+set, so it conflicts with a non-empty one. Claim names match case-insensitively
+(`SCP`, `Scope`), as before.
 
 ## 4. Patient context
 
@@ -171,9 +173,18 @@ Configuration only — no product code changes.
 { "Issuer": "https://login.microsoftonline.com/<tenant-guid>/v2.0",
   "Audiences": ["api://cloudhealthoffice"],
   "AllowedAlgorithms": ["RS256"],
-  "Claims": { "TenantClaim": "tid" } }
+  "Claims": { "TenantClaim": "cho_tenant" } }
 ```
 Entra's discovery `issuer` includes the tenant GUID and must match exactly.
+
+`cho_tenant` must carry the **CHO tenant identifier** (§5). Issue it from Entra
+as a custom claim, for example a directory extension attribute or a claims
+mapping policy on the API's app registration. Do **not** map `tid`: it is
+Entra's directory GUID, not a CHO tenant. An issuer confined with `Tenants`
+would then refuse every request, and an unconfined one would act in a tenant
+named by that GUID. This example used `"TenantClaim": "tid"` until D-32.
+Before that fix, fhir-service renamed `tid` on the way in, so the mapping
+silently never resolved.
 
 **Auth0**
 ```jsonc

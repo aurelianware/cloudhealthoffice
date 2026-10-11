@@ -66,6 +66,27 @@ public class SmartScopeClaimsTests
         result.Scopes.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("scope", "scp")]
+    [InlineData("scp", "scope")]
+    [InlineData("SCOPE", "scp")]
+    public void AnEmptyArrayClaim_InThePayload_IsAnEmptySet_AndConflictsWithANonEmptyOne(
+        string emptyInPayload, string nonEmpty)
+    {
+        // `[]` leaves no principal claim; only the payload shows it is there.
+        var principal = Principal((nonEmpty, "system/*.read"));
+        var payload = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { emptyInPayload, nonEmpty };
+
+        SmartScopeClaims.Read(principal).Conflict.Should().BeFalse("without the payload it looks absent");
+        var result = SmartScopeClaims.Read(principal, payload);
+        result.Conflict.Should().BeTrue();
+        result.Scopes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ClaimNames_MatchCaseInsensitively()
+        => SmartScopeClaims.Parse(Principal(("SCP", "system/*.read"))).Should().BeEquivalentTo(["system/*.read"]);
+
     [Fact]
     public void NeitherClaim_GrantsNothing()
     {

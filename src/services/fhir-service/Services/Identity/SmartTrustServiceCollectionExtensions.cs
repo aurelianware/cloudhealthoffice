@@ -92,7 +92,13 @@ public static class SmartTrustServiceCollectionExtensions
                 // any resource handling. Neither the union nor the
                 // intersection is a safe reading of it. Only the claim NAMES
                 // are logged, never their values.
-                if (SmartScopeClaims.Read(context.Principal).Conflict)
+                // The payload's claim names are passed so that an empty JSON
+                // array (which yields no principal claim) still counts as a
+                // present, empty claim.
+                var payloadClaimNames = context.SecurityToken is Microsoft.IdentityModel.JsonWebTokens.JsonWebToken jwtToken
+                    ? SmartScopeClaims.PayloadClaimNames(jwtToken)
+                    : null;
+                if (SmartScopeClaims.Read(context.Principal, payloadClaimNames).Conflict)
                 {
                     context.HttpContext.RequestServices
                         .GetRequiredService<ILoggerFactory>()
