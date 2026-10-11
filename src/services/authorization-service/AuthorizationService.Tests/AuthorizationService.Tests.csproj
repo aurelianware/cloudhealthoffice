@@ -13,11 +13,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="EphemeralMongo" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Moq" />
     <PackageReference Include="xunit" />
+    <PackageReference Include="Xunit.SkippableFact" />
     <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -26,6 +28,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\authorization-service.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\..\..\..\tests\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
+    <!-- Cosmos DB emulator fixture (Category=Cosmos); see tests/Shared/CosmosEmulator. -->
+    <Compile Include="..\..\..\..\tests\Shared\CosmosEmulator\*.cs" Link="Shared\CosmosEmulator\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
