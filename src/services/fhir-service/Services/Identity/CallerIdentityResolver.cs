@@ -67,13 +67,14 @@ public sealed class CallerIdentityResolver
     public const string PayerIdClaim = "payer_id";
 
     /// <summary>
-    /// The one well-formed <c>payer_id</c> value, or null. Two different values
-    /// are no mapping rather than a choice between them. Same format rule as
-    /// smart-auth-service's registration check.
+    /// The well-formed value of exactly one <c>payer_id</c> claim, or null.
+    /// smart-auth-service mints exactly one; a token carrying more (different
+    /// or repeated values) is no mapping rather than a choice between them.
+    /// Same format rule as smart-auth-service's registration check.
     /// </summary>
     private static string? RegisteredPayer(ClaimsPrincipal principal)
     {
-        var values = principal.FindAll(PayerIdClaim).Select(c => c.Value).Distinct(StringComparer.Ordinal).ToList();
+        var values = principal.FindAll(PayerIdClaim).Select(c => c.Value).ToList();
         if (values.Count != 1) return null;
         var value = values[0];
         if (value.Length is 0 or > 64 || !char.IsAsciiLetterOrDigit(value[0])) return null;

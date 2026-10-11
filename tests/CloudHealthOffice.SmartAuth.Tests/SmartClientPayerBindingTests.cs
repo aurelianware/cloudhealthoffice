@@ -174,6 +174,7 @@ public class SmartClientPayerBindingTests
         var (refused, refusal) = await _smart.ClientCredentialsAsync(clientId, "legacy-secret", P2PScope);
         refused.Should().NotBe(HttpStatusCode.OK);
         refusal.TryGetProperty("access_token", out _).Should().BeFalse();
+        refusal.GetProperty("error_description").GetString().Should().Contain("no registered payer id");
 
         // Other system scopes still work, and carry no payer.
         var (ok, other) = await _smart.ClientCredentialsAsync(clientId, "legacy-secret", "system/*.read");
@@ -191,6 +192,33 @@ public class SmartClientPayerBindingTests
         status.Should().Be(HttpStatusCode.OK, body.ToString());
         SmartAuthDriver.Claim(SmartAuthDriver.Read(body.GetProperty("access_token").GetString()!), "payer_id")
             .Should().Be("PAYER-L");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ClearingThePayer_OnAClientHoldingTheP2PScope_IsRefused(string? payerId)
+    {
+        var tenant = SmartAuthDriver.NewTenant();
+        var (clientId, _) = await RegisterPayerClientAsync(tenant, "PAYER-KEEP");
+        var admin = _smart.Admin(tenant);
+
+        var resp = await admin.PutAsJsonAsync($"{ClientsPath}/{clientId}/payer", new { payerId });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await admin.GetFromJsonAsync<JsonElement>($"{ClientsPath}/{clientId}"))
+            .GetProperty("payerId").GetString().Should().Be("PAYER-KEEP");
+    }
+
+    [Fact]
+    public async Task ClearingThePayer_OnAClientWithoutTheP2PScope_IsAllowed()
+    {
+        var tenant = SmartAuthDriver.NewTenant();
+        var (clientId, _) = await RegisterPayerClientAsync(tenant, "PAYER-X", "system/*.read");
+
+        (await _smart.Admin(tenant).PutAsJsonAsync($"{ClientsPath}/{clientId}/payer", new { payerId = (string?)null }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]

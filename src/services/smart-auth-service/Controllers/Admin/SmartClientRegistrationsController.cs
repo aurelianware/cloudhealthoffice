@@ -184,7 +184,8 @@ public sealed class SmartClientRegistrationsController : ControllerBase
         if (!await _store.SetClientPayerIdAsync(_actor.TenantId, clientId, payerId, ct))
             return NotFound();
 
-        _audit.Admin("client-payer-set", _actor.TenantId, _actor.UserId, $"client={clientId} payer={payerId ?? "(none)"}");
+        _audit.Admin("client-payer-set", _actor.TenantId, _actor.UserId,
+            $"client={clientId} previousPayer={binding.PayerId ?? "(none)"} payer={payerId ?? "(none)"}");
         return Ok(await _store.FindClientAsync(clientId, ct));
     }
 

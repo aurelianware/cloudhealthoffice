@@ -246,7 +246,10 @@ public class AuthorizationController : ControllerBase
             if (resolution.Context is not { } context)
             {
                 _audit.TokenRefused(null, request.ClientId, resolution.Refusal!);
-                return ForbidGrant(Errors.UnauthorizedClient, "This client is not registered to a tenant.");
+                return ForbidGrant(Errors.UnauthorizedClient,
+                    resolution.Refusal == SmartTokenContextResolver.PayerToPayerNeedsPayerRefusal
+                        ? "This client has no registered payer id, which system/PayerToPayer.read requires. A tenant administrator must set one."
+                        : "This client is not registered to a tenant.");
             }
 
             _audit.TokenIssued(context.Context, context.TenantId, context.Subject, request.ClientId!);

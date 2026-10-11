@@ -226,6 +226,16 @@ public class PayerToPayerReceivingPayerBindingTests : IClassFixture<PayerToPayer
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task Export_TwoIdenticalPayerIdClaims_AreNoMapping()
+    {
+        // Exactly one payer_id claim, not one distinct value.
+        var token = _factory.IssueToken(P2PScope, patientId: null,
+            extraClaims: [new SecurityClaim("client_id", "c"), new SecurityClaim("payer_id", PayerA), new SecurityClaim("payer_id", PayerA)]);
+        (await PostAsync(ExportPath, token, new { receivingPayerId = PayerA, memberId = "pat-002" }))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     // ── $member-match ─────────────────────────────────────────────────────────
 
     [Fact]

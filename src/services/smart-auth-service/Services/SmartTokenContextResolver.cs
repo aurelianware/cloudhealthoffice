@@ -59,6 +59,9 @@ public sealed class SmartTokenContextResolver
     /// </summary>
     public const string PayerIdClaim = "payer_id";
 
+    /// <summary>Refusal reason: a P2P token asked for by a registration with no payer id.</summary>
+    public const string PayerToPayerNeedsPayerRefusal = "payer_to_payer_requires_registered_payer_id";
+
     private readonly ISmartIdentityStore _store;
     private readonly ILaunchContextStore _launches;
 
@@ -218,7 +221,7 @@ public sealed class SmartTokenContextResolver
         // P2P token until an administrator sets one.
         var payerId = string.IsNullOrWhiteSpace(client.PayerId) ? null : client.PayerId;
         if (payerId == null && scopes.Contains(SmartScopes.SystemPayerToPayerRead))
-            return SmartContextResolution.Refuse("payer_to_payer_requires_registered_payer_id");
+            return SmartContextResolution.Refuse(PayerToPayerNeedsPayerRefusal);
 
         return SmartContextResolution.Grant(
             new SmartTokenContext(SmartCallerContext.Client, client.TenantId, clientId, PayerId: payerId));
