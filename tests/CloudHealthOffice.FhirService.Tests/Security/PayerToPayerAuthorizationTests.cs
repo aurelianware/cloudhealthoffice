@@ -17,7 +17,7 @@ namespace CloudHealthOffice.FhirService.Tests.Security;
 /// "member A" (the caller in the patient-token attack), pat-002 is "member B"
 /// (the victim). Everything else is the shared test host.
 /// </summary>
-public sealed class PayerToPayerWebAppFactory : FhirTestWebAppFactory
+public class PayerToPayerWebAppFactory : FhirTestWebAppFactory
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
