@@ -246,6 +246,23 @@ deployment:
   "fhir-service" below and `docs/architecture/smart-oauth-trust.md` §2). Never
   mark an external IdP: that would let it assert payer ids CHO never
   registered.
+- **Set the flag explicitly on every environment override.** .NET merges
+  configuration lists by index. An environment override such as
+  `SmartAuth__TrustedIssuers__0__Issuer` that points index 0 at a different IdP
+  keeps index 0's `IssuesChoClientRegistrations: true` from `appsettings`, so
+  that IdP would become the registration authority. Whenever you override an
+  entry's `Issuer`, also set `SmartAuth__TrustedIssuers__<n>__IssuesChoClientRegistrations`
+  (`true` or `false`) for that index.
+- **The body's `receivingPayerId` is compared exactly and case-sensitively**
+  with the registered `payerId` (after trimming surrounding whitespace). Register
+  exactly the identifier your counterparties send, or ask them to omit the
+  field; the registered payer is then used.
+- **Rollout order.** Upgrading smart-auth-service first refuses
+  `system/PayerToPayer.read` tokens to registrations without a payer id until
+  one is set. Upgrading fhir-service first refuses every Payer-to-Payer call
+  until callers' tokens carry `payer_id`. Recommended: upgrade
+  smart-auth-service, set `payerId` on every Payer-to-Payer client straight
+  away, then upgrade fhir-service.
 
 ## Development-only
 

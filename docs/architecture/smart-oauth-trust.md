@@ -195,7 +195,9 @@ TOCTOU check that reads as protection without being any.
 
 One resolution per request, into `AuthenticatedCaller`: issuer, subject,
 client id, authorized party, caller type, scopes, and — when the trusted issuer
-maps them — provider NPI, practitioner id, `fhirUser`, patient, tenant.
+maps them — provider NPI, practitioner id, `fhirUser`, patient, tenant; and,
+from the marked registration-authority issuer only, the client's registered
+payer (`payer_id`, see below).
 
 Caller type follows the granted scopes. A token holding both `patient/` and
 `system/` scopes is treated as **patient** context, because patient context is
@@ -348,8 +350,16 @@ synthetic and development-only.
    IdP still has to be configured and validated against.
 2. **Token introspection (RFC 7662) is not implemented.** CHO validates JWTs
    locally. An IdP issuing opaque reference tokens is not supported.
-3. **No dynamic client registration.** Client registration belongs to the
-   external IdP.
+3. **No dynamic client registration.** Interactive and general backend clients
+   are registered at whichever IdP issues their tokens. **Payer-to-Payer backend
+   clients are the exception: they must be registered in smart-auth-service**
+   (a backend client with a `payerId`), because fhir-service believes a
+   client's payer only from the issuer marked `IssuesChoClientRegistrations`
+   (§9). A client registered only at an external IdP cannot use Payer-to-Payer.
+8. **No per-issuer scope allowlist.** Any trusted issuer can mint any scope,
+   including `system/PayerToPayer.read`. Such a client of an unmarked issuer is
+   refused by Payer-to-Payer for want of a registered payer, not for want of the
+   scope.
 4. **Provider identity depends entirely on the IdP.** Where an issuer asserts no
    provider claim, PAS/CDex caller binding remains a corroborating key.
 5. **Cross-origin JWKS requires explicit configuration.** An IdP serving keys
