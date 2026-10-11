@@ -30,6 +30,15 @@ public class ClaimAdjudicationContext
     /// <summary>Plan resolved by <see cref="IBenefitPlanResolver"/> at orchestrator entry.</summary>
     public ResolvedBenefitPlan? ResolvedPlan { get; set; }
 
+    /// <summary>
+    /// The claim names a benefit plan but benefit-plan-service gave no
+    /// definitive answer for it (<see cref="BenefitPlanUnavailableException"/>;
+    /// a definitive 404 is not flagged). The plan's prior-authorization
+    /// flags (G-25) are then unknown: <see cref="Stages.BenefitCalculationStage"/>
+    /// pends <c>PLANUNAVAIL</c> when they could put a line in scope.
+    /// </summary>
+    public bool PlanResolutionFailed { get; set; }
+
     /// <summary>Member resolved by <see cref="IMemberResolver"/> at orchestrator entry.</summary>
     public ResolvedMember? ResolvedMember { get; set; }
 

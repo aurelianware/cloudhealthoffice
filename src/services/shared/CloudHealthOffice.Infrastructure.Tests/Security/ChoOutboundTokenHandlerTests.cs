@@ -289,6 +289,76 @@ public class ChoOutboundTokenHandlerTests
             .Claims.Single(c => c.Type == "azp").Value.Should().Be("claims-service");
     }
 
+    // ── UseChoServiceIdentity ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task ServiceIdentity_InsideAUserRequest_SendsTheServiceToken_NotTheCallers()
+    {
+        var (invoker, capture) = Build(UserContext("tenant-a"), withServiceToken: true);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "http://member-service/api/v1/members").UseChoServiceIdentity();
+        request.Headers.Add("X-Tenant-ID", "tenant-a");
+        await invoker.SendAsync(request, default);
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(capture.Last!.Headers.Authorization!.Parameter);
+        jwt.Claims.Single(c => c.Type == "sub").Value.Should().Be("claims-service");
+        jwt.Claims.Single(c => c.Type == "tenant_id").Value.Should().Be("tenant-a");
+    }
+
+    [Fact]
+    public async Task ServiceIdentity_WithoutANamedTenant_UsesTheCallersTenant()
+    {
+        var (invoker, capture) = Build(UserContext("tenant-a"), withServiceToken: true);
+
+        await invoker.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "http://member-service/api/v1/members").UseChoServiceIdentity(), default);
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(capture.Last!.Headers.Authorization!.Parameter);
+        jwt.Claims.Single(c => c.Type == "tenant_id").Value.Should().Be("tenant-a");
+    }
+
+    [Fact]
+    public async Task ServiceIdentity_ForAnotherTenantThanTheCallers_GetsNoToken()
+    {
+        var (invoker, capture) = Build(UserContext("tenant-a"), withServiceToken: true);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "http://member-service/api/v1/members").UseChoServiceIdentity();
+        request.Headers.Add("X-Tenant-ID", "tenant-b");
+        await invoker.SendAsync(request, default);
+
+        capture.Last!.Headers.Authorization.Should().BeNull();
+    }
+
+    /// <summary>
+    /// #1299 nit: an authenticated caller whose tenant was never resolved gives
+    /// the service identity nothing to check the named tenant against: no token.
+    /// </summary>
+    [Fact]
+    public async Task ServiceIdentity_AuthenticatedCallerWithoutAResolvedTenant_GetsNoToken()
+    {
+        var http = UserContext("tenant-a");
+        http.Items.Remove("TenantId");
+        var (invoker, capture) = Build(http, withServiceToken: true);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "http://member-service/api/v1/members").UseChoServiceIdentity();
+        request.Headers.Add("X-Tenant-ID", "tenant-b");
+        await invoker.SendAsync(request, default);
+
+        capture.Last!.Headers.Authorization.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ServiceIdentity_IsNeverSentToExternalHosts()
+    {
+        var (invoker, capture) = Build(UserContext("tenant-a"), withServiceToken: true);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "https://npiregistry.cms.hhs.gov/api/").UseChoServiceIdentity();
+        request.Headers.Add("X-Tenant-ID", "tenant-a");
+        await invoker.SendAsync(request, default);
+
+        capture.Last!.Headers.Authorization.Should().BeNull();
+    }
+
     [Fact]
     public async Task AnonymousInboundRequest_IsTreatedLikeBackgroundWork()
     {

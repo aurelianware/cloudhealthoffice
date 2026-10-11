@@ -95,6 +95,15 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     /// <summary>Runs once, right after the next commit-accumulators answer and before the caller sees it.</summary>
     private Func<Task>? _afterCommitAnswer;
 
+    /// <summary>Procedure codes the golden plan flags as requiring prior authorization (G-25); none by default.</summary>
+    private IReadOnlySet<string> _priorAuthCodes = new HashSet<string>();
+
+    /// <summary>authorization-service as the claims pipeline reaches it (D-04).</summary>
+    private readonly IAuthorizationValidationClient _authorization = Substitute.For<IAuthorizationValidationClient>();
+
+    /// <summary>Applied to the mapped 837 before it is submitted.</summary>
+    private Action<Claims.AdapterClaim>? _beforeSubmit;
+
     private ClaimFinalizationService _finalization = null!;
     private AccumulatorOperationsService _operations = null!;
 
@@ -182,7 +191,10 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
             .Returns(PlanGuid.ToString());
         var planResolver = Substitute.For<IBenefitPlanResolver>();
         planResolver.GetPlanAsync(Tenant, PlanGuid.ToString(), Arg.Any<CancellationToken>())
-            .Returns(new ResolvedBenefitPlan { Id = PlanGuid.ToString(), PlanGuid = PlanGuid });
+            .Returns(_ => new ResolvedBenefitPlan
+            {
+                Id = PlanGuid.ToString(), PlanGuid = PlanGuid, PriorAuthRequiredProcedureCodes = _priorAuthCodes,
+            });
         var coverageClient = Substitute.For<ICoverageClient>();
         coverageClient.GetCobEntriesAsync(Tenant, Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new List<CobEntry>());
@@ -206,8 +218,9 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
             new PricingStage(
                 new HttpFeeSchedulePricingClient(http, NullLogger<HttpFeeSchedulePricingClient>.Instance),
                 NullLogger<PricingStage>.Instance),
-            new BenefitCalculationStage(_engine, memberResolver, Substitute.For<IAuthorizationValidationClient>(),
-                NullLogger<BenefitCalculationStage>.Instance),
+            new BenefitCalculationStage(_engine, memberResolver, _authorization,
+                NullLogger<BenefitCalculationStage>.Instance,
+                Options.Create(new PriorAuthAdjudicationOptions { UsePlanFlaggedCodes = true })),
             new HookStage("AfterPricing", 350, () => { var hook = _afterPricing; _afterPricing = null; return hook; }),
             new NcciPendStage(() => _ncciPends),
             new PersistenceStage(_claims, NullLogger<PersistenceStage>.Instance),
@@ -234,10 +247,12 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     private async Task<Claims.Claim> SubmitAndAdjudicateAsync()
     {
         var parsed = Assert.Single(X12837Parser.Parse(GoldenInputs.Edi837("01-office-visit")));
+        var mapped = X12837ClaimMapper.Map(parsed, Tenant);
+        _beforeSubmit?.Invoke(mapped);
         var submission = await new ClaimSubmissionService(
                 _submit, Substitute.For<IClaimVersionEventPublisher>(), Substitute.For<IMessageBus>(),
                 NullLogger<ClaimSubmissionService>.Instance)
-            .SubmitAsync(X12837ClaimMapper.Map(parsed, Tenant), Tenant, "submitter", "corr", CancellationToken.None);
+            .SubmitAsync(mapped, Tenant, "submitter", "corr", CancellationToken.None);
         Assert.True(submission.Success);
         var submitted = submission.Claim!;
         await _orchestrator.AdjudicateAsync(
@@ -802,6 +817,156 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         await AssertBalances(100m, 100m);
         await AssertCommittedOnceAsync(pended.Id);
         Assert.Equal(0, (await _operations.RerunAccumulatorCommitPendsAsync(Tenant, "ops-1", 10, CancellationToken.None)).Examined);
+    }
+
+    /// <summary>
+    /// D-04 / Q-9: the plan requires prior authorization for 99213 and authorization-service
+    /// is down. The claim pends PAUNAVAIL before benefit calculation — nothing priced, no
+    /// commit prepared, nothing written. An approval while the lookup still fails is refused
+    /// (the check is retried, never overridden) and writes nothing. Once the lookup answers
+    /// Valid, the approval re-run prices the claim and commits it exactly once.
+    /// </summary>
+    [SkippableFact]
+    public async Task PriorAuthLookupUnavailable_PendsWithNoWrite_ApprovalRetriesTheLookup_ThenCommitsOnce()
+    {
+        _ncciPends = false;
+        _priorAuthCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "99213" };
+        _beforeSubmit = claim => claim.PriorAuthorizationNumber = "AUTH-GOLD-01";
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
+
+        var pended = await SubmitAndAdjudicateAsync();
+
+        Assert.Equal(Claims.ClaimStatus.Pended, pended.Status);
+        Assert.Equal(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, pended.PendDetails!.PendCode);
+        Assert.Null(pended.PendingAccumulatorCommit);
+        Assert.Empty(_calculated);
+        await AssertBalances(0m, 0m);
+        await AssertNoWriteForAsync(pended.Id);
+        await _authorization.Received(1).ValidateAsync(Tenant, "AUTH-GOLD-01", "99213",
+            Arg.Any<DateTime>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+
+        // Still down: the approval is refused and nothing is written.
+        var refused = await ResolveAsync("examiner-1", pended.Id, "Approved");
+        Assert.Equal(409, StatusOf(refused));
+        Assert.Equal(Claims.ClaimStatus.Pended, (await Claim(pended.Id))!.Status);
+        Assert.Empty(_calculated);
+        await AssertBalances(0m, 0m);
+        await AssertNoWriteForAsync(pended.Id);
+
+        // authorization-service answers: the approval re-run prices and commits once.
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.Valid(new AuthorizationValidationResult(
+                "AUTH-GOLD-01", true, "Approved", null, null, null, 1, "Authorization valid")));
+        var approved = await ResolveAsync("examiner-1", pended.Id, "Approved");
+
+        Assert.Equal(200, StatusOf(approved));
+        Assert.Equal(Claims.ClaimStatus.Approved, (await Claim(pended.Id))!.Status);
+        await AssertBalances(100m, 100m);
+        await AssertCommittedOnceAsync(pended.Id);
+    }
+
+    /// <summary>
+    /// #1299 S1: claims pended PAUNAVAIL while authorization-service was down are
+    /// re-run in bulk once it answers, under the service identity (the lookup
+    /// always carries claims-service's token). A run while it is still down
+    /// leaves them pended and writes nothing; once it answers Valid they are
+    /// approved, each committed once; a second run finds nothing to do.
+    /// </summary>
+    [SkippableFact]
+    public async Task PaUnavailablePends_AreApprovedByTheBulkRerun_OnceTheLookupAnswers()
+    {
+        _ncciPends = false;
+        _priorAuthCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "99213" };
+        _beforeSubmit = claim => claim.PriorAuthorizationNumber = "AUTH-GOLD-01";
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
+        var pended = await SubmitAndAdjudicateAsync();
+        Assert.Equal(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, pended.PendDetails!.PendCode);
+
+        var early = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+        Assert.Equal(1, early.StillPended);
+        Assert.Equal(Claims.ClaimStatus.Pended, (await Claim(pended.Id))!.Status);
+        await AssertBalances(0m, 0m);
+        await AssertNoWriteForAsync(pended.Id);
+
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.Valid(new AuthorizationValidationResult(
+                "AUTH-GOLD-01", true, "Approved", null, null, null, 1, "Authorization valid")));
+        var run = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+
+        Assert.Equal(1, run.Approved);
+        var approved = (await Claim(pended.Id))!;
+        Assert.Equal(Claims.ClaimStatus.Approved, approved.Status);
+        Assert.Contains(approved.ExaminerResolutions, r => r.ApproverIds.Single().StartsWith(AccumulatorOperationsService.PriorAuthRerunActorPrefix));
+        await AssertBalances(100m, 100m);
+        await AssertCommittedOnceAsync(pended.Id);
+        Assert.Equal(0, (await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None)).Examined);
+    }
+
+    /// <summary>
+    /// #1299 S1: when the recovered lookup answers definitively that the number
+    /// does not exist for the tenant, the bulk re-run's denial (CARC 197) stands,
+    /// and nothing is written to the accumulators.
+    /// </summary>
+    [SkippableFact]
+    public async Task PaUnavailablePend_BulkRerun_DeniesOnADefinitiveNotFound()
+    {
+        _ncciPends = false;
+        _priorAuthCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "99213" };
+        _beforeSubmit = claim => claim.PriorAuthorizationNumber = "AUTH-GOLD-UNKNOWN";
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
+        var pended = await SubmitAndAdjudicateAsync();
+
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.NotFound());
+        var run = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+
+        Assert.Equal(1, run.Denied);
+        var denied = (await Claim(pended.Id))!;
+        Assert.Equal(Claims.ClaimStatus.Denied, denied.Status);
+        Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredCode, denied.AdjudicationResult!.DenialReasonCode);
+        await AssertBalances(0m, 0m);
+        await AssertNoWriteForAsync(pended.Id);
+    }
+
+    /// <summary>
+    /// #1299 S-B: the bulk re-run's denial carries the terminal reversal, which fences the
+    /// claim id in the accumulator store: a commit for that claim arriving afterwards (a
+    /// stale prepared write) is refused and changes nothing.
+    /// </summary>
+    [SkippableFact]
+    public async Task PaUnavailablePend_BulkDenied_ALateCommitIsRefused()
+    {
+        // A priced claim of the same member: its prepared commit is the template for the
+        // late write, re-addressed to the denied claim.
+        _ncciPends = true;
+        var template = await SubmitAndAdjudicateAsync();
+        Assert.Equal("NCCI", template.PendDetails!.PendCode);
+        var prepared = _calculated[^1].PreparedAccumulatorCommit!;
+
+        _ncciPends = false;
+        _priorAuthCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "99213" };
+        _beforeSubmit = claim => claim.PriorAuthorizationNumber = "AUTH-GOLD-UNKNOWN";
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
+        var pended = await SubmitAndAdjudicateAsync();
+        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+            .ReturnsForAnyArgs(AuthorizationLookupResult.NotFound());
+        var run = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
+        Assert.Equal(1, run.Denied);
+        await AssertFencedAsync(pended.Id);
+
+        var late = await _engine.CommitAccumulatorsAsync(prepared with
+        {
+            CommitId = "late-" + Guid.NewGuid().ToString("N"),
+            ClaimId = pended.Id,
+        });
+
+        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, late.Outcome);
+        await AssertBalances(0m, 0m);
+        await AssertNoWriteForAsync(pended.Id);
     }
 
     /// <summary>

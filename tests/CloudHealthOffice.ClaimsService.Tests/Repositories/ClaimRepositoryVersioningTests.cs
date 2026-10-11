@@ -776,6 +776,56 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
             .Should().BeFalse("zero payment without denial evidence is not enough to reopen a final status");
     }
 
+    /// <summary>
+    /// #1299: the live-row check that replaced the Cosmos repair filter
+    /// predicates (the emulator could not evaluate them). A Pended row is
+    /// never repaired; a row whose lock moved on is never repaired.
+    /// </summary>
+    [Theory]
+    [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 0, "197", null, true)]
+    [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 0, null, null, false)]
+    [InlineData(ClaimStatus.Pended, ClaimStatus.Denied, 0, "197", null, false)]
+    [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 10, "197", null, false)]
+    [InlineData(ClaimStatus.Denied, ClaimStatus.Approved, 150, null, null, true)]
+    [InlineData(ClaimStatus.Denied, ClaimStatus.Approved, 150, "96", null, false)]
+    [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 0, "197", "other-token", false)]
+    [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 0, "197", "my-token", true)]
+    public void IsRepairableContradiction_ChecksTheLiveRow(
+        ClaimStatus rowStatus, ClaimStatus desired, int payerPayment, string? denialCode, string? lockOnRow, bool expected)
+    {
+        var row = new Claim
+        {
+            Status = rowStatus,
+            AdjudicationResult = new AdjudicationResult { PayerPayment = payerPayment, DenialReasonCode = denialCode },
+            ResolutionLock = lockOnRow is null ? null : new ExaminerResolutionLock { Token = lockOnRow },
+        };
+
+        ClaimRepository.IsRepairableContradiction(row, desired, lockOnRow is null ? null : "my-token")
+            .Should().Be(expected);
+    }
+
+    /// <summary>A stored row may deserialize "adjustmentReasons": null; the check must not throw.</summary>
+    [Fact]
+    public void IsRepairableContradiction_NullAdjustmentReasons_DoesNotThrow()
+    {
+        var row = new Claim
+        {
+            Status = ClaimStatus.Approved,
+            AdjudicationResult = new AdjudicationResult { PayerPayment = 0m, AdjustmentReasons = null! },
+        };
+
+        ClaimRepository.IsRepairableContradiction(row, ClaimStatus.Denied, null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsRepairableContradiction_AdjustmentReasonsAreDenialEvidence()
+    {
+        var row = new Claim { Status = ClaimStatus.Approved, AdjudicationResult = new AdjudicationResult { PayerPayment = 0m } };
+        row.AdjudicationResult.AdjustmentReasons.Add(new ClaimAdjustmentReason { GroupCode = "CO", ReasonCode = "50", Amount = 10m });
+
+        ClaimRepository.IsRepairableContradiction(row, ClaimStatus.Denied, null).Should().BeTrue();
+    }
+
     [Fact]
     public async Task UpdateAdjudicationSummaryAsync_onNonPendedClaim_appliesStatusAndData()
     {

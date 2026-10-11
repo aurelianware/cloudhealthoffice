@@ -179,9 +179,21 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
 
         if (!string.IsNullOrWhiteSpace(claim.BenefitPlanId))
         {
-            context.ResolvedPlan = await _planResolver
-                .GetPlanAsync(tenantId, claim.BenefitPlanId!, ct)
-                .ConfigureAwait(false);
+            try
+            {
+                context.ResolvedPlan = await _planResolver
+                    .GetPlanAsync(tenantId, claim.BenefitPlanId!, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (BenefitPlanUnavailableException ex)
+            {
+                // #1299 S2: an outage, not a missing plan. A definitive 404
+                // (null) keeps the pre-existing path; only this is flagged.
+                _logger.LogWarning(ex,
+                    "Benefit plan {PlanId} unavailable for claim {ClaimVersionId}",
+                    SanitizeForLog(claim.BenefitPlanId), SanitizeForLog(claimVersionId));
+                context.PlanResolutionFailed = true;
+            }
         }
         if (!string.IsNullOrWhiteSpace(claim.MemberId))
         {
@@ -240,7 +252,48 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         Stages.CoordinationOfBenefitsStage.CoverageServiceUnavailablePendReason,
         "Coverage-service unavailable",
         Stages.BenefitCalculationStage.DeferredCommitUnsupportedReason,
+        Stages.BenefitCalculationStage.PriorAuthorizationUnavailableReason,
+        Stages.BenefitCalculationStage.PlanUnavailableReason,
     ];
+
+    /// <summary>Pend codes that mean a check could not run (a service unavailable), whatever the reason text.</summary>
+    private static readonly HashSet<string> TransientPendCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        Stages.PricingStage.PricingUnavailablePendCode,
+        Stages.BenefitCalculationStage.PriorAuthorizationUnavailablePendCode,
+        Stages.BenefitCalculationStage.PlanUnavailablePendCode,
+        Stages.BenefitCalculationStage.DeferredCommitUnsupportedPendCode,
+    };
+
+    /// <summary>
+    /// #1299 re-verify B1: did any check on this run fail to give a
+    /// definitive answer? Decided from the run's structured state, not from
+    /// the final reason text: a stage that threw (Reject), a transient pend
+    /// (code or marker, primary or additional), an NCCI engine exception
+    /// (<c>ENGINE_EXCEPTION</c> edit failure), pricing unavailable, or the
+    /// benefit engine answering non-2xx.
+    /// </summary>
+    internal static bool AnyCheckFailed(ClaimAdjudicationContext context)
+    {
+        if (context.StageResults.Any(r => r.Outcome == ClaimAdjudicationOutcome.Reject || IsTransientFailure(r.Reason)))
+            return true;
+        if (context.PricingResult is { PricingUnavailable: true })
+            return true;
+        if (context.BenefitResolutionResult is { Success: false } engine
+            && string.Equals(engine.DenialReasonCode, HttpBenefitCalculationEngineClient.EngineUnavailableDenialCode, StringComparison.Ordinal))
+            return true;
+        if (context.PendDetails is not { } pend)
+            return false;
+        if (TransientPendCodes.Contains(pend.PendCode ?? string.Empty) || IsTransientFailure(pend.PendReason))
+            return true;
+        if ((pend.EditFailures ?? []).Any(f => string.Equals(f.RuleId, "ENGINE_EXCEPTION", StringComparison.Ordinal)))
+            return true;
+        return (pend.AdditionalPendReasons ?? []).Any(entry =>
+        {
+            var (code, reason) = ExaminerApproval.SplitEntry(entry);
+            return (code is not null && TransientPendCodes.Contains(code)) || IsTransientFailure(reason ?? entry);
+        });
+    }
 
     /// <summary>See <see cref="TransientFailureMarkers"/>.</summary>
     internal static bool IsTransientFailure(string? reason) =>
@@ -317,6 +370,14 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             .ToList();
         return new ApprovalReadjudicationResult(outcome, reasons.FirstOrDefault(), reasons)
         {
+            DenialReasonCode = context.AdjudicationResult?.DenialReasonCode,
+            CheckFailed = AnyCheckFailed(context),
+            DenialReason = outcome == ClaimAdjudicationOutcome.Deny
+                ? context.StageResults
+                    .Where(r => r.Outcome == ClaimAdjudicationOutcome.Deny)
+                    .Select(r => $"{r.StageName}: {r.Reason}")
+                    .FirstOrDefault()
+                : null,
             OverriddenPends = context.ExaminerOverrides.ToList(),
             PreparedAccumulatorCommit = outcome == ClaimAdjudicationOutcome.Pass
                 ? context.BenefitResolutionResult?.PreparedAccumulatorCommit
