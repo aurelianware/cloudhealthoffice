@@ -258,6 +258,7 @@ public class PasAuthorizationMapperTests
     private const string ProcessPriority = "http://terminology.hl7.org/CodeSystem/processpriority";
     private const string X12LevelOfService = "https://codesystem.x12.org/005010/1338";
     private const string ActPriority = "http://terminology.hl7.org/CodeSystem/v3-ActPriority";
+    private const string ActPriorityOid = "urn:oid:2.16.840.1.113883.5.7";
     private const string RequestPriority = "http://hl7.org/fhir/request-priority";
 
     // Owner decision 2026-10-11 (§7.1): a recognised urgent value is expedited
@@ -291,6 +292,19 @@ public class PasAuthorizationMapperTests
     [InlineData(ActPriority, "CR", "U", false)]
     [InlineData(ActPriority, "R", "E", false)]
     [InlineData(ActPriority, "EL", "E", false)]
+    // ActPriority by its OID is the same system
+    [InlineData(ActPriorityOid, "EM", "U", false)]
+    [InlineData(ActPriorityOid, "S", "U", false)]
+    [InlineData(ActPriorityOid, "R", "E", false)]
+    // UR and EM say urgent / emergency in any system and any case (warned
+    // outside ActPriority); S, A, CS and CR stay bound to ActPriority
+    [InlineData("http://vendor.example/priority", "EM", "U", true)]
+    [InlineData("http://vendor.example/priority", "UR", "U", true)]
+    [InlineData(ActPriority, "em", "U", true)]
+    [InlineData(ActPriorityOid, "ur", "U", true)]
+    [InlineData(null, "Em", "U", true)]
+    [InlineData("http://vendor.example/priority", "S", "E", true)]
+    [InlineData("http://vendor.example/priority", "CR", "E", true)]
     // FHIR request-priority: routine is explicit standard; the others are urgent
     [InlineData(RequestPriority, "routine", "E", false)]
     [InlineData(RequestPriority, "urgent", "U", false)]
