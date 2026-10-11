@@ -1389,7 +1389,7 @@ public class ClaimsController : ControllerBase
         var summary = new WorkQueueSummary
         {
             NcciEditFailures = pendedClaims.Count(c => PendCode(c) is "NCCI" or "MUE"),
-            MissingAuth = pendedClaims.Count(c => PendCode(c) is "AUTH" or "NOAUTH"),
+            MissingAuth = pendedClaims.Count(c => PendCode(c) is "AUTH" or "NOAUTH" or Services.Adjudication.Stages.BenefitCalculationStage.PriorAuthorizationUnavailablePendCode),
             ProviderNotContracted = pendedClaims.Count(c => PendCode(c) is "OON" or "NOCONTRACT"),
             CobRequired = pendedClaims.Count(c => PendCode(c) is "COB"),
             MedicalReview = pendedClaims.Count(c => PendCode(c) is "MEDREVIEW" or "CLINICAL")
@@ -2008,6 +2008,8 @@ public class ClaimsController : ControllerBase
     {
         "NCCI" or "MUE" => "NCCI Edit Failure",
         "AUTH" or "NOAUTH" => "Missing Authorization",
+        Services.Adjudication.Stages.BenefitCalculationStage.PriorAuthorizationUnavailablePendCode => "Prior Authorization Lookup Unavailable",
+        Services.Adjudication.Stages.BenefitCalculationStage.PlanUnavailablePendCode => "Benefit Plan Unavailable",
         "OON" or "NOCONTRACT" => "Provider Not Contracted",
         "COB" => "COB Required",
         "MEDREVIEW" or "CLINICAL" => "Medical Review",

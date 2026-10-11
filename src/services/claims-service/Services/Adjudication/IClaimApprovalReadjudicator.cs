@@ -140,6 +140,24 @@ public sealed record ApprovalReadjudicationResult(
     public bool ResolutionLockLost { get; init; }
 
     /// <summary>
+    /// On <see cref="ClaimAdjudicationOutcome.Deny"/>: "{stage}: {reason}" of
+    /// the stage that denied (not the first non-passing stage, which may be a
+    /// pend). Null otherwise.
+    /// </summary>
+    public string? DenialReason { get; init; }
+
+    /// <summary>The run's <c>AdjudicationResult.DenialReasonCode</c> (e.g. CARC 197 from the PA check).</summary>
+    public string? DenialReasonCode { get; init; }
+
+    /// <summary>
+    /// A check on this run could not run or gave no definitive answer
+    /// (a transient pend, an NCCI engine exception, pricing unavailable, the
+    /// benefit engine unavailable, a stage that threw), decided from the
+    /// run's structured state. A Deny on such a run is not definitive.
+    /// </summary>
+    public bool CheckFailed { get; init; }
+
+    /// <summary>
     /// On <see cref="ClaimAdjudicationOutcome.Pass"/>: the accumulator write
     /// the re-run's (read-only) benefit calculation prepared. The re-run
     /// commits nothing; the resolver commits this once its lock-fenced final

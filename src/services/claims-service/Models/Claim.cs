@@ -654,6 +654,14 @@ public class ClaimLine
     public string? DrugUnitOfMeasure { get; set; }
 
     /// <summary>
+    /// Line-level prior authorization number; overrides the claim's
+    /// <see cref="Claim.PriorAuthorizationNumber"/> for this line.
+    /// 837P/837I: REF*G1 (2400)
+    /// </summary>
+    [StringLength(50)]
+    public string? PriorAuthorizationNumber { get; set; }
+
+    /// <summary>
     /// MPIP rate multiplier applied to this line's allowed amount during adjudication.
     /// 1.063 if FL SMMC 3.0 enhanced rate applies, null if MPIP was not evaluated.
     /// </summary>

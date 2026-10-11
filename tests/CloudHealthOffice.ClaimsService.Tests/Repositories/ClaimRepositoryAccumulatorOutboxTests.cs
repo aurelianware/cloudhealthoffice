@@ -223,6 +223,73 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
         (await Repo.FindPendedByPendCodeAsync("ACCUMCOMMIT", 10)).Select(c => c.Id).Should().BeEquivalentTo(["P1"]);
     }
 
+    /// <summary>
+    /// #1299 (Cosmos CI): an approval re-run that ends Deny on a Pended claim
+    /// writes its fenced projection; the status write is blocked (a pend is
+    /// never downgraded by the projection) and the contradictory-status repair
+    /// it then attempts must not fail. On Cosmos the repair predicate used
+    /// ARRAY_LENGTH, which the emulator cannot evaluate in a patch filter
+    /// (400), so the whole re-run threw.
+    /// </summary>
+    [SkippableFact]
+    public async Task AFencedDenyProjection_OnAPendedClaim_IsWritten_AndLeavesItPended()
+    {
+        await SeedAsync("PD", ClaimStatus.Pended);
+        (await Repo.TryAcquireResolutionLockAsync(Tenant, "PD", "tok-1", "examiner", DateTime.UtcNow, TimeSpan.FromMinutes(5))).Should().BeTrue();
+
+        var written = await Repo.UpdateAdjudicationProjectionAsync(
+            Tenant, "PD",
+            new AdjudicationResult { DenialReasonCode = "197", DenialReason = "Prior authorization required but not provided" },
+            [], resolvedStatus: ClaimStatus.Denied, requiredResolutionLockToken: "tok-1");
+
+        written.Should().BeTrue();
+        var stored = await StoredAsync("PD");
+        stored.Status.Should().Be(ClaimStatus.Pended);
+        stored.AdjudicationResult!.DenialReasonCode.Should().Be("197");
+    }
+
+    /// <summary>
+    /// #1299 nit: the bulk re-runs take the least recently pended first. A
+    /// re-run that pends again re-stamps PendedAt, so it goes to the back of
+    /// the queue instead of refilling every batch (oldest-submitted-first did).
+    /// </summary>
+    [SkippableFact]
+    public async Task ThePendCodeQuery_ReturnsTheLeastRecentlyPendedFirst()
+    {
+        await SeedAsync("RETRIED", ClaimStatus.Pended);
+        await SeedAsync("WAITING", ClaimStatus.Pended);
+        await Repo.UpdateAdjudicationProjectionAsync(Tenant, "RETRIED", new AdjudicationResult(), [],
+            pendDetails: new PendDetails { PendCode = "PAUNAVAIL", PendReason = "x", PendedAt = Now.AddHours(2) }, isPend: true);
+        await Repo.UpdateAdjudicationProjectionAsync(Tenant, "WAITING", new AdjudicationResult(), [],
+            pendDetails: new PendDetails { PendCode = "PAUNAVAIL", PendReason = "y", PendedAt = Now.AddHours(1) }, isPend: true);
+
+        (await Repo.FindPendedByPendCodeAsync("PAUNAVAIL", 1)).Select(c => c.Id).Should().Equal("WAITING");
+        (await Repo.FindPendedByPendCodeAsync("PAUNAVAIL", 10)).Select(c => c.Id).Should().Equal("WAITING", "RETRIED");
+    }
+
+    /// <summary>
+    /// #1299 re-verify S1: claims with additional pend reasons are left for an
+    /// examiner by the bulk re-runs (Skipped, never re-stamped). They must not
+    /// be returned, or <c>limit</c> of them at the head would fill every batch
+    /// forever and the re-runnable claim behind them would never be reached.
+    /// </summary>
+    [SkippableFact]
+    public async Task ThePendCodeQuery_ExcludesClaimsWithOtherPendReasons()
+    {
+        for (var i = 1; i <= 3; i++)
+        {
+            await SeedAsync("MIXED" + i, ClaimStatus.Pended);
+            var mixed = new PendDetails { PendCode = "PAUNAVAIL", PendReason = "x", PendedAt = Now.AddMinutes(i) };
+            mixed.AdditionalPendReasons.Add("NCCI: bundled pair");
+            await Repo.UpdateAdjudicationProjectionAsync(Tenant, "MIXED" + i, new AdjudicationResult(), [], pendDetails: mixed, isPend: true);
+        }
+        await SeedAsync("ONLY", ClaimStatus.Pended);
+        await Repo.UpdateAdjudicationProjectionAsync(Tenant, "ONLY", new AdjudicationResult(), [],
+            pendDetails: new PendDetails { PendCode = "PAUNAVAIL", PendReason = "y", PendedAt = Now.AddHours(1) }, isPend: true);
+
+        (await Repo.FindPendedByPendCodeAsync("PAUNAVAIL", 2)).Select(c => c.Id).Should().Equal("ONLY");
+    }
+
     [SkippableFact]
     public async Task TheSweepQuery_ReturnsFinalizedClaimsWithNoPendingCommit_InTheWindow()
     {

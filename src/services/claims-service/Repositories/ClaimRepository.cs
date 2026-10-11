@@ -249,7 +249,14 @@ public interface IClaimRepository
     Task<bool> RecordAccumulatorReviewAsync(
         string tenantId, string claimId, AccumulatorClampReview review, CancellationToken ct = default);
 
-    /// <summary>Pended claims of the request tenant whose routing pend code is <paramref name="pendCode"/> (oldest first).</summary>
+    /// <summary>
+    /// Pended claims of the request tenant whose routing pend code is
+    /// <paramref name="pendCode"/> and that carry no other pend reason (those
+    /// are left for an examiner), least recently pended first
+    /// (<see cref="PendDetails.PendedAt"/>). A bulk re-run that pends a claim
+    /// again re-stamps it, so it moves to the back instead of refilling every
+    /// batch (#1299).
+    /// </summary>
     Task<IReadOnlyList<Claim>> FindPendedByPendCodeAsync(string pendCode, int limit, CancellationToken ct = default);
 
     /// <summary>
@@ -681,7 +688,7 @@ public class ClaimRepository : IClaimRepository
         adjudication is not null
         && (!string.IsNullOrWhiteSpace(adjudication.DenialReasonCode)
             || !string.IsNullOrWhiteSpace(adjudication.DenialReason)
-            || adjudication.AdjustmentReasons.Any());
+            || adjudication.AdjustmentReasons?.Any() == true);
 
     private static bool IsTerminal(ClaimVersionState state) => state switch
     {
@@ -1703,17 +1710,28 @@ public class ClaimRepository : IClaimRepository
 
             if (snapshotAllowsRepair || liveEvidenceAllowsRepair)
             {
-                var repairFilter = desiredStatus == ClaimStatus.Denied
-                    ? ContradictoryApprovedRepairFilterPredicate
-                    : ContradictoryDeniedRepairFilterPredicate;
-                var repairOptions = new PatchItemRequestOptions
-                {
-                    FilterPredicate = WithResolutionLockFence(repairFilter, requiredResolutionLockToken),
-                };
+                // The narrow repair is decided on the live row in memory and
+                // written with its ETag (plus the resolution-lock fence), not
+                // with a patch FilterPredicate: the Cosmos emulator could not
+                // evaluate the repair predicate (400 "The filter predicate could
+                // not be evaluated"), which made every approval re-run ending
+                // Deny on a Pended claim throw (#1299). The ETag gives the same
+                // guarantee: the row is patched only as it was when checked.
                 try
                 {
-                    await _container.PatchItemAsync<Claim>(rowId, new PartitionKey(tenantId), statusOps, repairOptions, ct);
-                    return new StatusWriteResult(StatusWriteOutcome.Applied, desiredStatus);
+                    var live = await _container.ReadItemAsync<Claim>(rowId, new PartitionKey(tenantId), cancellationToken: ct);
+                    if (IsRepairableContradiction(live.Resource, desiredStatus, requiredResolutionLockToken))
+                    {
+                        var repairOptions = new PatchItemRequestOptions
+                        {
+                            IfMatchEtag = live.ETag,
+                            FilterPredicate = requiredResolutionLockToken is null
+                                ? null
+                                : $"FROM c WHERE c.resolutionLock.token = '{ResolutionLockTokenLiteral(requiredResolutionLockToken)}'",
+                        };
+                        await _container.PatchItemAsync<Claim>(rowId, new PartitionKey(tenantId), statusOps, repairOptions, ct);
+                        return new StatusWriteResult(StatusWriteOutcome.Applied, desiredStatus);
+                    }
                 }
                 catch (CosmosException repairEx) when (repairEx.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
@@ -1871,7 +1889,10 @@ public class ClaimRepository : IClaimRepository
         var query = new QueryDefinition($@"
             SELECT TOP @limit * FROM c
             WHERE c.tenantId = @tenantId AND {pended} AND c.pendDetails.pendCode = @pendCode
-            ORDER BY c.submittedDate")
+              AND (NOT IS_DEFINED(c.pendDetails.additionalPendReasons)
+                   OR IS_NULL(c.pendDetails.additionalPendReasons)
+                   OR ARRAY_LENGTH(c.pendDetails.additionalPendReasons) = 0)
+            ORDER BY c.pendDetails.pendedAt")
             .WithParameter("@limit", limit)
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@pendCode", pendCode);
@@ -1964,26 +1985,31 @@ public class ClaimRepository : IClaimRepository
     private static readonly string SynchronousWritebackBlockedFilterPredicate =
         BuildStatusNotInFilterPredicate(SynchronousWritebackBlockedStatuses);
 
-    private static readonly string ContradictoryDeniedRepairFilterPredicate =
-        $"FROM c WHERE c.status = '{CosmosStatusLiteral(ClaimStatus.Denied)}' " +
-        "AND IS_DEFINED(c.adjudicationResult) " +
-        "AND c.adjudicationResult.payerPayment > 0 " +
-        "AND (NOT IS_DEFINED(c.adjudicationResult.denialReasonCode) " +
-        "OR IS_NULL(c.adjudicationResult.denialReasonCode) " +
-        "OR c.adjudicationResult.denialReasonCode = '')";
-
-    private static readonly string ContradictoryApprovedRepairFilterPredicate =
-        $"FROM c WHERE c.status = '{CosmosStatusLiteral(ClaimStatus.Approved)}' " +
-        "AND IS_DEFINED(c.adjudicationResult) " +
-        "AND c.adjudicationResult.payerPayment = 0 " +
-        "AND ((IS_DEFINED(c.adjudicationResult.denialReasonCode) " +
-        "AND NOT IS_NULL(c.adjudicationResult.denialReasonCode) " +
-        "AND c.adjudicationResult.denialReasonCode != '') " +
-        "OR (IS_DEFINED(c.adjudicationResult.denialReason) " +
-        "AND NOT IS_NULL(c.adjudicationResult.denialReason) " +
-        "AND c.adjudicationResult.denialReason != '') " +
-        "OR (IS_DEFINED(c.adjudicationResult.adjustmentReasons) " +
-        "AND ARRAY_LENGTH(c.adjudicationResult.adjustmentReasons) > 0))";
+    /// <summary>
+    /// The live-row check of the narrow contradiction repair (formerly two
+    /// patch filter predicates): Denied + paid + no denial code → Approved;
+    /// Approved + unpaid + denial evidence (code, reason or adjustment
+    /// reasons) → Denied. With a resolution lock token, the row must still
+    /// hold that lock.
+    /// </summary>
+    internal static bool IsRepairableContradiction(Claim row, ClaimStatus desiredStatus, string? requiredResolutionLockToken)
+    {
+        if (requiredResolutionLockToken is not null
+            && !string.Equals(row.ResolutionLock?.Token, requiredResolutionLockToken, StringComparison.Ordinal))
+            return false;
+        var adjudication = row.AdjudicationResult;
+        if (adjudication is null) return false;
+        return desiredStatus switch
+        {
+            ClaimStatus.Approved => row.Status == ClaimStatus.Denied
+                                    && adjudication.PayerPayment > 0
+                                    && string.IsNullOrEmpty(adjudication.DenialReasonCode),
+            ClaimStatus.Denied => row.Status == ClaimStatus.Approved
+                                  && adjudication.PayerPayment == 0
+                                  && HasDenialEvidence(adjudication),
+            _ => false,
+        };
+    }
 
     /// <summary>Cosmos patch FilterPredicate for <see cref="IsFinalDisposition"/> — built from <see cref="FinalDispositions"/>; Pended is deliberately absent (re-pending is allowed).</summary>
     private static readonly string FinalDispositionFilterPredicate =

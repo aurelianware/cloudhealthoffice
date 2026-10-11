@@ -14,6 +14,25 @@ public class PasDecisionResult
     public DateTime? EffectiveTo { get; set; }
     public string? RuleName { get; set; }        // Which rule triggered the decision
     public long ElapsedMs { get; set; }
+
+    /// <summary>
+    /// Why a pended request was pended, when a rule says so; recorded as the
+    /// record's pend reason. Null for the clinical-review default.
+    /// </summary>
+    public string? PendReason { get; set; }
+
+    /// <summary>
+    /// The line of business the deciding path evaluated (the record's); null
+    /// when nothing was evaluated (disabled, time budget exceeded).
+    /// </summary>
+    public string? LineOfBusiness { get; set; }
+
+    /// <summary>
+    /// The service state (<c>Claim.item.locationAddress.state</c>) when the
+    /// deciding path read it (the enrollment gate ran or the state rule engine
+    /// was reached); null otherwise, including when the request named none.
+    /// </summary>
+    public string? StateCode { get; set; }
 }
 
 /// <summary>

@@ -40,6 +40,50 @@ public class CachingBenefitPlanResolverTests
         await _inner.Received(2).GetPlanAsync("tenant-1", "p1", Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// #1299 S2: single-flight. The first caller giving up must not cancel the
+    /// shared lookup (or hand its failure) to the callers waiting on it.
+    /// </summary>
+    [Fact]
+    public async Task GetPlan_FirstCallerCancelled_WaiterStillGetsThePlan()
+    {
+        var sut = new CachingBenefitPlanResolver(_inner, _cache);
+        var gate = new TaskCompletionSource();
+        var plan = new ResolvedBenefitPlan { Id = "p1" };
+        _inner.GetPlanAsync("tenant-1", "p1", Arg.Any<CancellationToken>())
+            .Returns(async ci =>
+            {
+                var ct = ci.Arg<CancellationToken>();
+                await gate.Task.WaitAsync(ct);
+                return (ResolvedBenefitPlan?)plan;
+            });
+        using var firstCts = new CancellationTokenSource();
+
+        var first = sut.GetPlanAsync("tenant-1", "p1", firstCts.Token);
+        var waiter = sut.GetPlanAsync("tenant-1", "p1", CancellationToken.None);
+        firstCts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        gate.SetResult();
+
+        Assert.Same(plan, await waiter);
+    }
+
+    /// <summary>A transient failure reaches the caller as such, and is not cached.</summary>
+    [Fact]
+    public async Task GetPlan_Unavailable_PropagatesAndIsNotCached()
+    {
+        var sut = new CachingBenefitPlanResolver(_inner, _cache);
+        var plan = new ResolvedBenefitPlan { Id = "p1" };
+        var calls = 0;
+        _inner.GetPlanAsync("tenant-1", "p1", Arg.Any<CancellationToken>())
+            .Returns(_ => ++calls == 1
+                ? Task.FromException<ResolvedBenefitPlan?>(new BenefitPlanUnavailableException("503"))
+                : Task.FromResult<ResolvedBenefitPlan?>(plan));
+
+        await Assert.ThrowsAsync<BenefitPlanUnavailableException>(() => sut.GetPlanAsync("tenant-1", "p1"));
+        Assert.Same(plan, await sut.GetPlanAsync("tenant-1", "p1"));
+    }
+
     [Fact]
     public async Task GetPlan_DifferentTenants_DoNotShareCacheEntries()
     {

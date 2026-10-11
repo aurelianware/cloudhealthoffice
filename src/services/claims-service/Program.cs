@@ -233,6 +233,12 @@ builder.Services.AddMemoryCache();
 builder.Services.Configure<AdjudicationPipelineOptions>(
     builder.Configuration.GetSection(AdjudicationPipelineOptions.SectionName));
 
+// Prior-authorization scope (G-25). Plan-flagged codes are off by default
+// until line-level authorization decisions (G-07) land: see
+// PriorAuthAdjudicationOptions.UsePlanFlaggedCodes.
+builder.Services.Configure<PriorAuthAdjudicationOptions>(
+    builder.Configuration.GetSection(PriorAuthAdjudicationOptions.SectionName));
+
 // 5.6 enforcement posture (network membership + credentialing). Phase 1
 // is service-wide; per-tenant override deferred to Phase 2 alongside
 // the pipeline options.
@@ -397,8 +403,9 @@ builder.Services.AddScoped<ICoverageResolver>(sp =>
         sp.GetRequiredService<HttpCoverageResolver>(),
         sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
 
-// Prior-authorization validation. The stage treats lookup degradation as
-// "not enough evidence to deny" while honoring known invalid auth responses.
+// Prior-authorization validation (D-04). Only a definitive answer from
+// authorization-service pays or denies; any failed lookup pends the claim
+// PAUNAVAIL (owner decision Q-9).
 builder.Services.AddHttpClient(UpstreamClientNames.AuthorizationService, client =>
 {
     client.BaseAddress = new Uri(

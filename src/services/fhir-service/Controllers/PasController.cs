@@ -5,6 +5,8 @@ using System.Text.RegularExpressions;
 using Hl7.Fhir.Model;
 using FhirService.Models;
 using FhirService.Services;
+using FhirService.Services.Pas;
+using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -25,7 +27,7 @@ public class PasController : FhirControllerBase
     private readonly ICms0057ComplianceChecker _complianceChecker;
     private readonly IPriorAuthorizationInquiryService _inquiry;
     private readonly PasAutoAdjudicationConfig _config;
-    private readonly HttpClient _authServiceClient;
+    private readonly IPasAuthorizationRecorder _recorder;
     private readonly HttpClient _providerVerificationClient;
     private readonly ILogger<PasController> _logger;
 
@@ -36,6 +38,7 @@ public class PasController : FhirControllerBase
         IPriorAuthorizationInquiryService inquiry,
         IOptions<PasAutoAdjudicationConfig> config,
         IHttpClientFactory httpClientFactory,
+        IPasAuthorizationRecorder recorder,
         ILogger<PasController> logger)
     {
         _adjudicator = adjudicator;
@@ -43,7 +46,7 @@ public class PasController : FhirControllerBase
         _complianceChecker = complianceChecker;
         _inquiry = inquiry;
         _config = config.Value;
-        _authServiceClient = httpClientFactory.CreateClient("AuthorizationService");
+        _recorder = recorder;
         _providerVerificationClient = httpClientFactory.CreateClient("ProviderVerificationService");
         _logger = logger;
     }
@@ -59,6 +62,10 @@ public class PasController : FhirControllerBase
     [Produces("application/fhir+json")]
     public async Task<IActionResult> ClaimSubmit([FromBody] Bundle requestBundle)
     {
+        // The decision clock starts when the request arrives (CMS-0057-F), so
+        // receipt is stamped first, before validation and adjudication (D-08),
+        // and stored as the record's SubmittedDate.
+        var receivedAt = DateTime.UtcNow;
         var sw = Stopwatch.StartNew();
 
         try
@@ -74,19 +81,47 @@ public class PasController : FhirControllerBase
             _logger.LogInformation(
                 "PAS $submit received for tenant {TenantId}, claim type {ClaimType}",
                 SanitizeForLog(TenantId),
-                claim.Type?.Coding?.FirstOrDefault()?.Code ?? "unknown");
+                SanitizeForLog(claim.Type?.Coding?.FirstOrDefault()?.Code ?? "unknown"));
 
             // 2. Validate compliance
             var compliance = _complianceChecker.ValidateCompliance(claim);
             if (!compliance.Compliant)
             {
                 var issues = string.Join("; ", compliance.Issues.Select(i => i.Message));
-                _logger.LogWarning("PAS $submit compliance validation failed: {Issues}", issues);
+                _logger.LogWarning("PAS $submit compliance validation failed: {Issues}", SanitizeForLog(issues));
                 return FhirBadRequest($"Claim does not meet CMS-0057-F compliance requirements: {issues}");
             }
 
-            // 2.5 Provider verification pre-check
-            var providerNpi = ExtractProviderNpi(claim);
+            // 2.1 Map the request onto the authorization record BEFORE deciding
+            // anything (D-01, D-03): a request the record cannot hold without
+            // placeholders is refused here, so nothing is decided that cannot
+            // be stored.
+            var mapping = PasAuthorizationMapper.Map(requestBundle, claim, receivedAt);
+
+            // Nonstandard or unrecognised values that were mapped anyway (e.g.
+            // an urgent priority outside its code system). Request values,
+            // so sanitized.
+            foreach (var warning in mapping.Warnings)
+            {
+                _logger.LogWarning(
+                    "PAS $submit for tenant {TenantId}: {Element}: {Warning} (system {System}, code {Code})",
+                    SanitizeForLog(TenantId), SanitizeForLog(warning.Expression), warning.Message,
+                    SanitizeForLog(warning.System ?? "none"), SanitizeForLog(warning.Code));
+            }
+            if (!mapping.IsValid)
+            {
+                _logger.LogWarning(
+                    "PAS $submit refused for tenant {TenantId}: request incomplete at {Elements}",
+                    SanitizeForLog(TenantId),
+                    SanitizeForLog(string.Join(", ", mapping.Errors.Select(e => e.Expression))));
+                RecordMetrics(sw, "rejected", "incomplete-request");
+                return IncompleteRequest(mapping.Errors);
+            }
+            var record = mapping.Request!;
+
+            // 2.5 Provider verification pre-check, on the requesting provider's
+            // NPI as mapped from the Bundle.
+            var providerNpi = record.RequestingProviderNPI;
             if (!string.IsNullOrEmpty(providerNpi))
             {
                 var verificationResult = await CheckProviderVerificationAsync(providerNpi, HttpContext.RequestAborted);
@@ -101,65 +136,51 @@ public class PasController : FhirControllerBase
                                        (string.IsNullOrWhiteSpace(verificationResult.ExclusionSource)
                                            ? string.Empty
                                            : $" Source: {verificationResult.ExclusionSource}"),
-                        RuleName = "provider-exclusion-check",
+                        // A fact about the provider, whatever the plan: no line
+                        // of business or state was evaluated, so none is claimed.
+                        RuleName = ProviderExclusionRule,
                     };
-                    var deniedBundle = _responseBuilder.BuildDeniedResponse(claim, deniedDecision);
-                    await PersistAuthorizationAsync(claim, deniedDecision);
-                    RecordMetrics(sw, "denied", "provider-exclusion-check");
 
                     _logger.LogWarning(
                         "PAS $submit auto-denied: excluded provider NPI {Npi}, source={Source}",
-                        SanitizeForLog(providerNpi), verificationResult.ExclusionSource);
+                        SanitizeForLog(providerNpi), SanitizeForLog(verificationResult.ExclusionSource));
 
-                    return Ok(deniedBundle);
+                    return await RecordAndRespondAsync(claim, record, mapping, deniedDecision, sw);
                 }
 
                 if (verificationResult.IntegrityScore >= 0 && verificationResult.IntegrityScore < 40)
                 {
                     _logger.LogWarning(
                         "PAS $submit: provider NPI {Npi} has low integrity score {Score} ({Rating})",
-                        SanitizeForLog(providerNpi), verificationResult.IntegrityScore, verificationResult.Rating);
+                        SanitizeForLog(providerNpi), verificationResult.IntegrityScore,
+                        SanitizeForLog(verificationResult.Rating));
                 }
             }
 
-            // 3. Auto-adjudicate with time budget
+            // 3. Auto-adjudicate with time budget, on the line of business and
+            // providers the record stores (B1). A line of business the request
+            // does not determine is not guessed: nothing is auto-decided, the
+            // request is pended (A4) and the record says why.
+            if (!TryLineOfBusiness(record.LineOfBusiness, out var lineOfBusiness))
+            {
+                _logger.LogInformation(
+                    "PAS $submit for tenant {TenantId}: line of business undetermined, pended without adjudication",
+                    SanitizeForLog(TenantId));
+                return await RecordAndRespondAsync(claim, record, mapping, new PasDecisionResult
+                {
+                    HasDecision = false,
+                    RuleName = LineOfBusinessUndeterminedRule,
+                    PendReason = LineOfBusinessUndeterminedPendReason,
+                    // Nothing was evaluated: no line of business is claimed.
+                }, sw);
+            }
+
+            var basis = PasDecisionBasis.From(lineOfBusiness, record);
             var timeBudgetMs = _config.MaxResponseMs;
             var decision = await _adjudicator.TryDecideAsync(
-                claim, requestBundle, TenantId, timeBudgetMs, HttpContext.RequestAborted);
+                claim, requestBundle, TenantId, basis, timeBudgetMs, HttpContext.RequestAborted);
 
-            // 4. Build response based on decision.
-            // Every outcome — approved, denied and pended alike — gets a tracking
-            // number BEFORE the response is built, so the preAuthRef the caller
-            // receives is the number persisted and later inquirable. Previously
-            // only approvals carried one and pends persisted a number nobody was
-            // ever told.
-            decision.AuthorizationNumber ??= NewAuthorizationNumber();
-
-            Bundle responseBundle;
-            if (decision.HasDecision && decision.Decision == "approved")
-            {
-                responseBundle = _responseBuilder.BuildApprovedResponse(claim, decision);
-                await PersistAuthorizationAsync(claim, decision);
-                RecordMetrics(sw, "approved", decision.RuleName);
-            }
-            else if (decision.HasDecision && decision.Decision == "denied")
-            {
-                responseBundle = _responseBuilder.BuildDeniedResponse(claim, decision);
-                await PersistAuthorizationAsync(claim, decision);
-                RecordMetrics(sw, "denied", decision.RuleName);
-            }
-            else
-            {
-                responseBundle = _responseBuilder.BuildPendedResponse(claim, decision.AuthorizationNumber);
-                await PersistPendedAuthorizationAsync(claim, decision.AuthorizationNumber);
-                RecordMetrics(sw, "pended", decision.RuleName);
-            }
-
-            _logger.LogInformation(
-                "PAS $submit completed in {ElapsedMs}ms, decision={Decision}, rule={Rule}",
-                sw.ElapsedMilliseconds, decision.Decision ?? "pended", decision.RuleName);
-
-            return Ok(responseBundle);
+            return await RecordAndRespondAsync(claim, record, mapping, decision, sw);
         }
         catch (Exception ex)
         {
@@ -168,6 +189,174 @@ public class PasController : FhirControllerBase
             return FhirUnprocessable($"Internal error processing PAS request: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Stores the request and its decision, then answers with what was STORED.
+    /// Every outcome (approved, denied, pended) gets its tracking number before
+    /// the write, and the response carries it only after the write succeeded:
+    /// a <c>preAuthRef</c> is never issued for a record that does not exist
+    /// (D-01). If the write fails, <c>$submit</c> fails with an
+    /// OperationOutcome and no ClaimResponse.
+    /// </summary>
+    private async Task<IActionResult> RecordAndRespondAsync(
+        Claim claim, PasAuthorizationRecordRequest record, PasMappingResult mapping,
+        PasDecisionResult decision, Stopwatch sw)
+    {
+        decision.AuthorizationNumber ??= NewAuthorizationNumber();
+
+        var outcome = decision.HasDecision && decision.Decision == "approved" ? "Approved"
+            : decision.HasDecision && decision.Decision == "denied" ? "Denied"
+            : "Pended";
+
+        // The approved period is the requested one (D-03); see
+        // PasAuthorizationMapper for the open-ended fallback. An adjudicator
+        // that states its own period is respected.
+        if (outcome == "Approved" && decision.EffectiveFrom is null)
+        {
+            decision.EffectiveFrom = mapping.ApprovedFrom;
+            decision.EffectiveTo ??= mapping.ApprovedTo;
+        }
+
+        record.AuthorizationNumber = decision.AuthorizationNumber;
+        record.Decision = new PasAutomatedDecision
+        {
+            Outcome = outcome,
+            DenialReasonCode = outcome == "Denied" ? decision.DenialReasonCode : null,
+            DenialReason = outcome == "Denied" ? decision.DenialReason : null,
+            PendReason = outcome == "Pended" ? decision.PendReason ?? PendReason : null,
+            ApprovedServiceDateFrom = outcome == "Approved" ? decision.EffectiveFrom : null,
+            ApprovedServiceDateTo = outcome == "Approved" ? decision.EffectiveTo : null,
+            DecidedAt = DateTime.UtcNow,
+            Rule = decision.RuleName is { Length: > 100 } rule ? rule[..100] : decision.RuleName,
+            // Only the basis the deciding path actually used (null = none).
+            // authorization-service refuses a stated LOB that is not the
+            // record's, and a missing one except for the rules that evaluate
+            // none.
+            LineOfBusiness = decision.LineOfBusiness,
+            StateCode = decision.StateCode,
+        };
+
+        var stored = await _recorder.RecordAsync(record, TenantId, HttpContext.RequestAborted);
+        if (!stored.Recorded)
+        {
+            RecordMetrics(sw, "error", "persist-failed");
+            _logger.LogError(
+                "PAS $submit for tenant {TenantId} failed: authorization {AuthNumber} was not stored ({Failure}); "
+                + "no preAuthRef issued",
+                SanitizeForLog(TenantId), SanitizeForLog(decision.AuthorizationNumber), stored.Failure);
+            return NotRecorded(stored.Failure);
+        }
+
+        // The answer is built from the STORED record, never from the decision
+        // sent: the record is what $inquire will return, and it can differ (a
+        // plan exclusion in authorization-service denies a request the
+        // adjudicator approved or pended; a repeat of a stored request returns
+        // the record as stored). A status $submit has no answer for is a
+        // failure, with no preAuthRef.
+        var kept = stored.Stored!;
+        var answer = new PasDecisionResult
+        {
+            AuthorizationNumber = kept.AuthorizationNumber,
+            RuleName = decision.RuleName,
+        };
+        Bundle responseBundle;
+        switch (kept.Status)
+        {
+            case PriorAuthorizationStatus.Approved:
+                answer.HasDecision = true;
+                answer.Decision = "approved";
+                answer.EffectiveFrom = kept.ApprovedServiceDateFrom;
+                answer.EffectiveTo = kept.ApprovedServiceDateTo;
+                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer);
+                break;
+            case PriorAuthorizationStatus.Denied:
+                answer.HasDecision = true;
+                answer.Decision = "denied";
+                answer.DenialReasonCode = kept.DenialReasonCode;
+                answer.DenialReason = kept.DenialReason;
+                if (outcome != "Denied")
+                    answer.RuleName = "benefit-exclusion";
+                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer);
+                break;
+            case PriorAuthorizationStatus.Pended:
+                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber);
+                break;
+            default:
+                RecordMetrics(sw, "error", "unanswerable-stored-status");
+                _logger.LogError(
+                    "PAS $submit for tenant {TenantId}: authorization {AuthNumber} was stored as {Status}, "
+                    + "which $submit cannot answer; no preAuthRef issued",
+                    SanitizeForLog(TenantId), SanitizeForLog(kept.AuthorizationNumber), kept.Status);
+                return NotRecorded(PasRecordFailure.Rejected);
+        }
+
+        var answered = kept.Status.ToString();
+        RecordMetrics(sw, answered.ToLowerInvariant(), answer.RuleName);
+
+        _logger.LogInformation(
+            "PAS $submit completed in {ElapsedMs}ms, authorization={AuthNumber}, decision={Decision}, rule={Rule}",
+            sw.ElapsedMilliseconds, SanitizeForLog(kept.AuthorizationNumber), answered,
+            SanitizeForLog(answer.RuleName));
+
+        return Ok(responseBundle);
+    }
+
+    /// <summary>Recorded on a pended request; the ClaimResponse says the same (queued for review).</summary>
+    private const string PendReason = "Pended for clinical review.";
+
+    /// <summary>The rule an excluded provider's request is denied by, before any adjudication.</summary>
+    public const string ProviderExclusionRule = "provider-exclusion-check";
+
+    /// <summary>The "rule" a request with an undetermined line of business is pended by.</summary>
+    public const string LineOfBusinessUndeterminedRule = "LineOfBusinessUndetermined";
+
+    public const string LineOfBusinessUndeterminedPendReason =
+        "The line of business could not be determined from Coverage.type, so the request was not "
+        + "auto-adjudicated. Pended for review.";
+
+    /// <summary>
+    /// The rule engine's line of business for the record's, or false for
+    /// <c>Unknown</c> (and anything else the engine has no value for).
+    /// </summary>
+    private static bool TryLineOfBusiness(string recorded, out PaLineOfBusiness lineOfBusiness)
+    {
+        lineOfBusiness = default;
+        return !string.Equals(recorded, "Unknown", StringComparison.Ordinal)
+               && Enum.TryParse(recorded, ignoreCase: false, out lineOfBusiness)
+               && Enum.IsDefined(lineOfBusiness)
+               && string.Equals(lineOfBusiness.ToString(), recorded, StringComparison.Ordinal);
+    }
+
+    /// <summary>422 listing every element the request lacks; nothing was decided or stored.</summary>
+    private IActionResult IncompleteRequest(IReadOnlyList<PasMappingError> errors)
+        => StatusCode(422, new OperationOutcome
+        {
+            Issue = errors.Select(e => new OperationOutcome.IssueComponent
+            {
+                Severity = OperationOutcome.IssueSeverity.Error,
+                Code = OperationOutcome.IssueType.Required,
+                Diagnostics = e.Message,
+                Expression = [e.Expression],
+            }).ToList(),
+        });
+
+    /// <summary>The request was valid but could not be stored: 503 when that may pass, 502 otherwise.</summary>
+    private IActionResult NotRecorded(PasRecordFailure failure)
+        => StatusCode(failure == PasRecordFailure.Unavailable ? 503 : 502, new OperationOutcome
+        {
+            Issue =
+            [
+                new OperationOutcome.IssueComponent
+                {
+                    Severity = OperationOutcome.IssueSeverity.Error,
+                    Code = failure == PasRecordFailure.Unavailable
+                        ? OperationOutcome.IssueType.Transient
+                        : OperationOutcome.IssueType.Exception,
+                    Diagnostics = "The prior authorization request could not be recorded, so no decision "
+                                  + "or preAuthRef is issued. Resubmit the request.",
+                },
+            ],
+        });
 
 
     /// <summary>
@@ -319,102 +508,17 @@ public class PasController : FhirControllerBase
     }
 
     /// <summary>
-    /// The authenticated caller, from the validated token. The JWT handler maps
-    /// <c>sub</c> onto NameIdentifier, and backend clients may carry only
-    /// <c>client_id</c>/<c>azp</c>. Never read from a header or the body.
+    /// The authenticated caller, from the validated token: <c>sub</c>, else
+    /// <c>client_id</c>, else <c>azp</c> (backend clients may carry only
+    /// those). JWT claim names only: neither scheme maps inbound claims (D-32),
+    /// so a <c>NameIdentifier</c> claim is not the token's subject. Never read
+    /// from a header or the body.
     /// </summary>
-    private string? CallerId()
-    {
-        foreach (var claimType in new[]
-                 {
-                     "sub",
-                     System.Security.Claims.ClaimTypes.NameIdentifier,
-                     "client_id",
-                     "azp",
-                 })
-        {
-            var value = User?.FindFirst(claimType)?.Value;
-            if (!string.IsNullOrWhiteSpace(value))
-                return value;
-        }
-
-        return null;
-    }
-
-    private async System.Threading.Tasks.Task PersistAuthorizationAsync(Claim claim, PasDecisionResult decision)
-    {
-        try
-        {
-            var authPayload = new
-            {
-                tenantId = TenantId,
-                authorizationNumber = decision.AuthorizationNumber ?? NewAuthorizationNumber(),
-                memberId = claim.Patient?.Reference ?? "",
-                patientFirstName = "PAS",
-                patientLastName = "Patient",
-                patientDateOfBirth = DateTime.UtcNow.AddYears(-30),
-                lineOfBusiness = "Commercial",
-                requestingProviderNPI = claim.Provider?.Identifier?.Value ?? "",
-                authorizationType = "PreAuthorization",
-                serviceTypeCode = claim.Type?.Coding?.FirstOrDefault()?.Code ?? "1",
-                requestedServiceDateFrom = DateTime.UtcNow,
-                status = decision.Decision == "approved" ? "Approved" :
-                         decision.Decision == "denied" ? "Denied" : "Pended",
-                reviewDecision = decision.Decision == "approved" ? "A1" :
-                                 decision.Decision == "denied" ? "A3" : "A4",
-                // Recorded so an inquiry can answer WHY, not just "denied".
-                denialReasonCode = decision.DenialReasonCode,
-                denialReason = decision.DenialReason,
-                // The approved period an inquiry reports as preAuthPeriod.
-                approvedServiceDateFrom = decision.EffectiveFrom,
-                approvedServiceDateTo = decision.EffectiveTo,
-                expirationDate = decision.EffectiveTo,
-                requestedServices = ExtractRequestedServices(claim),
-            };
-
-            await _authServiceClient.PostAsJsonAsync("api/authorizations", authPayload);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to persist PAS authorization — response still returned to caller");
-        }
-    }
-
-    private async System.Threading.Tasks.Task PersistPendedAuthorizationAsync(
-        Claim claim, string? authorizationNumber)
-    {
-        await PersistAuthorizationAsync(claim, new PasDecisionResult
-        {
-            HasDecision = false,
-            Decision = "pended",
-            AuthorizationNumber = authorizationNumber,
-        });
-    }
+    private string? CallerId() => AuthenticatedActorId;
 
     /// <summary>Tracking handle issued at submit and used to inquire later.</summary>
     private static string NewAuthorizationNumber()
         => $"PAS-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
-
-    /// <summary>
-    /// The service lines actually requested, so an inquiry reports the caller's
-    /// own request rather than a placeholder procedure code.
-    /// </summary>
-    private static object[] ExtractRequestedServices(Claim claim)
-    {
-        if (claim.Item is null || claim.Item.Count == 0)
-            return [];
-
-        return claim.Item
-            .Select(i => new
-            {
-                procedureCode = i.ProductOrService?.Coding?.FirstOrDefault()?.Code,
-                procedureDescription = i.ProductOrService?.Coding?.FirstOrDefault()?.Display,
-                requestedUnits = i.Quantity?.Value ?? 1,
-            })
-            .Where(x => !string.IsNullOrWhiteSpace(x.procedureCode))
-            .Cast<object>()
-            .ToArray();
-    }
 
     private static void RecordMetrics(Stopwatch sw, string decision, string? rule)
     {
@@ -505,9 +609,6 @@ public class PasController : FhirControllerBase
     }
 
     // ── Provider verification ────────────────────────────────────────────────
-
-    private static string? ExtractProviderNpi(Claim claim)
-        => claim.Provider?.Identifier?.Value;
 
     private async Task<ProviderVerificationSummary> CheckProviderVerificationAsync(
         string npi, CancellationToken ct)

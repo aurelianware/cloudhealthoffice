@@ -146,7 +146,10 @@ public class PasResponseBuilder
             Type = new CodeableConcept(
                 "http://terminology.hl7.org/CodeSystem/claim-type", "professional"),
             Use = ClaimUseCode.Preauthorization,
-            Patient = new ResourceReference($"Patient/{StripPatientPrefix(authorization.MemberId)}"),
+            // The submitter's own reference when PAS recorded one, so the
+            // response names the patient the way the request did.
+            Patient = new ResourceReference(
+                $"Patient/{StripPatientPrefix(authorization.PatientReference ?? authorization.MemberId)}"),
             Created = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             Insurer = new ResourceReference { Display = "CHO Payer" },
             Outcome = outcome,

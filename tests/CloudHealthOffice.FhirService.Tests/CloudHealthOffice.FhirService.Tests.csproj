@@ -17,12 +17,23 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Moq" />
     <PackageReference Include="Hl7.Fhir.R4" />
+    <!-- PAS persistence seam test: authorization-service runs on a real mongod. -->
+    <PackageReference Include="EphemeralMongo" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Text.Json" />
     <ProjectReference Include="..\..\src\services\fhir-service\fhir-service.csproj" />
+    <!-- Cross-service seam test (PAS $submit → authorization-service → $inquire).
+         Aliased so authorization-service's top-level Program and namespaces do
+         not collide with fhir-service's in this assembly. -->
+    <ProjectReference Include="..\..\src\services\authorization-service\authorization-service.csproj" Aliases="authsvc" />
     <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure.Tests\CloudHealthOffice.Infrastructure.Tests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

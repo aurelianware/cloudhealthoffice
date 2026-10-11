@@ -45,7 +45,7 @@ public sealed class AccumulatorSweepResult
 public sealed class AccumulatorPendRerunItem
 {
     public string ClaimId { get; set; } = string.Empty;
-    /// <summary>Approved, StillPended, Skipped or Failed.</summary>
+    /// <summary>Approved, Denied (PAUNAVAIL re-run only), StillPended, Skipped or Failed.</summary>
     public string Result { get; set; } = string.Empty;
     public string? Detail { get; set; }
 }
@@ -54,6 +54,8 @@ public sealed class AccumulatorPendRerunResult
 {
     public int Examined { get; set; }
     public int Approved { get; set; }
+    /// <summary>PAUNAVAIL / PLANUNAVAIL re-run: the lookup answered definitively and the re-adjudication denied (CARC 197).</summary>
+    public int Denied { get; set; }
     public int StillPended { get; set; }
     public int Skipped { get; set; }
     public int Failed { get; set; }
@@ -74,6 +76,7 @@ public sealed class AccumulatorPendRerunResult
 public sealed class AccumulatorOperationsService
 {
     public const string RerunActorPrefix = "system:accumcommit-rerun";
+    public const string PriorAuthRerunActorPrefix = "system:paunavail-rerun";
     private const int LookupBatch = 500;
 
     private readonly IClaimRepository _claims;
@@ -157,27 +160,106 @@ public sealed class AccumulatorOperationsService
         if (_readjudicator is null) throw new InvalidOperationException("Approval re-adjudication is unavailable.");
         var actor = $"{RerunActorPrefix}:{operatorId}";
         var pended = await _claims.FindPendedByPendCodeAsync(Stages.BenefitCalculationStage.DeferredCommitUnsupportedPendCode, limit, ct);
-        var result = new AccumulatorPendRerunResult { Examined = pended.Count };
-        foreach (var claim in pended)
-        {
-            ct.ThrowIfCancellationRequested();
-            var item = await RerunOneAsync(tenantId, claim, actor, ct);
-            result.Claims.Add(item);
-            switch (item.Result)
-            {
-                case "Approved": result.Approved++; break;
-                case "StillPended": result.StillPended++; break;
-                case "Skipped": result.Skipped++; break;
-                default: result.Failed++; break;
-            }
-        }
+        var result = await RerunAllAsync(tenantId, pended, actor, AccumCommitRerun, ct);
         _logger.LogInformation(
             "AUDIT ACCUMCOMMIT bulk re-run by {Operator} (tenant {TenantId}): {Examined} examined, {Approved} approved, {StillPended} still pended, {Skipped} skipped, {Failed} failed",
             Sanitize(operatorId), Sanitize(tenantId), result.Examined, result.Approved, result.StillPended, result.Skipped, result.Failed);
         return result;
     }
 
-    private async Task<AccumulatorPendRerunItem> RerunOneAsync(string tenantId, Claim claim, string actor, CancellationToken ct)
+    /// <summary>
+    /// Re-runs up to <paramref name="limit"/> claims of the request tenant
+    /// pended only for <see cref="Stages.BenefitCalculationStage.PriorAuthorizationUnavailablePendCode"/>
+    /// or <see cref="Stages.BenefitCalculationStage.PlanUnavailablePendCode"/>
+    /// (#1299 S1), once authorization-service / benefit-plan-service answer
+    /// again. Each is re-adjudicated under its resolution lock exactly as an
+    /// examiner approval would be: the reason is transient, so the lookup is
+    /// repeated (always under claims-service's own service identity), never
+    /// overridden. Passing → finalized Approved with its accumulator commit;
+    /// a definitive NotFound / Invalid answer → the re-run's Deny stands
+    /// (CARC 197, as on first adjudication); still unavailable → stays pended.
+    /// </summary>
+    public async Task<AccumulatorPendRerunResult> RerunPriorAuthUnavailablePendsAsync(
+        string tenantId, string operatorId, int limit, CancellationToken ct)
+    {
+        if (_readjudicator is null) throw new InvalidOperationException("Approval re-adjudication is unavailable.");
+        var actor = $"{PriorAuthRerunActorPrefix}:{operatorId}";
+        var pended = await FairBatchAsync(PriorAuthRerunCodes, limit, ct);
+        var result = await RerunAllAsync(tenantId, pended, actor, PriorAuthRerun, ct);
+        _logger.LogInformation(
+            "AUDIT PAUNAVAIL bulk re-run by {Operator} (tenant {TenantId}): {Examined} examined, {Approved} approved, {Denied} denied, {StillPended} still pended, {Skipped} skipped, {Failed} failed",
+            Sanitize(operatorId), Sanitize(tenantId), result.Examined, result.Approved, result.Denied, result.StillPended, result.Skipped, result.Failed);
+        return result;
+    }
+
+    private static readonly string[] PriorAuthRerunCodes =
+    [
+        Stages.BenefitCalculationStage.PriorAuthorizationUnavailablePendCode,
+        Stages.BenefitCalculationStage.PlanUnavailablePendCode,
+    ];
+
+    /// <summary>
+    /// Up to <paramref name="limit"/> claims across <paramref name="codes"/>,
+    /// taken in turn from each code (least recently pended first within a
+    /// code), so a backlog under one code cannot starve another; a code with
+    /// fewer claims than its share leaves the rest of the batch to the others.
+    /// </summary>
+    private async Task<List<Claim>> FairBatchAsync(IReadOnlyList<string> codes, int limit, CancellationToken ct)
+    {
+        var queues = new List<Queue<Claim>>();
+        foreach (var code in codes)
+            queues.Add(new Queue<Claim>(await _claims.FindPendedByPendCodeAsync(code, limit, ct)));
+
+        var batch = new List<Claim>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        while (batch.Count < limit && queues.Any(q => q.Count > 0))
+        {
+            foreach (var queue in queues)
+            {
+                if (batch.Count >= limit) break;
+                while (queue.Count > 0)
+                {
+                    var next = queue.Dequeue();
+                    if (seen.Add(next.Id)) { batch.Add(next); break; }
+                }
+            }
+        }
+        return batch;
+    }
+
+    /// <summary>What distinguishes one bulk re-run from another.</summary>
+    private sealed record RerunKind(string Name, IReadOnlyList<string> PendCodes, string Reason, bool DenyIsFinal);
+
+    private static readonly RerunKind AccumCommitRerun = new(
+        "ACCUMCOMMIT", [Stages.BenefitCalculationStage.DeferredCommitUnsupportedPendCode],
+        "Re-run after benefit-plan-service upgrade (ACCUMCOMMIT)", DenyIsFinal: false);
+
+    private static readonly RerunKind PriorAuthRerun = new(
+        "PAUNAVAIL", PriorAuthRerunCodes,
+        "Re-run after the prior-authorization / benefit-plan lookup recovered (PAUNAVAIL)", DenyIsFinal: true);
+
+    private async Task<AccumulatorPendRerunResult> RerunAllAsync(
+        string tenantId, IReadOnlyList<Claim> pended, string actor, RerunKind kind, CancellationToken ct)
+    {
+        var result = new AccumulatorPendRerunResult { Examined = pended.Count };
+        foreach (var claim in pended)
+        {
+            ct.ThrowIfCancellationRequested();
+            var item = await RerunOneAsync(tenantId, claim, actor, kind, ct);
+            result.Claims.Add(item);
+            switch (item.Result)
+            {
+                case "Approved": result.Approved++; break;
+                case "Denied": result.Denied++; break;
+                case "StillPended": result.StillPended++; break;
+                case "Skipped": result.Skipped++; break;
+                default: result.Failed++; break;
+            }
+        }
+        return result;
+    }
+
+    private async Task<AccumulatorPendRerunItem> RerunOneAsync(string tenantId, Claim claim, string actor, RerunKind kind, CancellationToken ct)
     {
         AccumulatorPendRerunItem Item(string r, string? d = null) => new() { ClaimId = claim.Id, Result = r, Detail = d };
 
@@ -189,11 +271,18 @@ public sealed class AccumulatorOperationsService
         if (!await _claims.TryAcquireResolutionLockAsync(
                 tenantId, claim.Id, lockToken, actor, now, Controllers.ClaimsController.ResolutionLockDuration, ct))
             return Item("Skipped", "being resolved, or no longer Pended");
+        var failed = false;
+        var stillPended = false;
+        AccumulatorPendRerunItem StillPended(string detail)
+        {
+            stillPended = true;
+            return Item("StillPended", detail);
+        }
         try
         {
             claim = await _claims.GetForAccumulatorOutboxAsync(tenantId, claim.Id, ct) ?? claim;
             if (claim.Status != ClaimStatus.Pended
-                || !string.Equals(claim.PendDetails?.PendCode, Stages.BenefitCalculationStage.DeferredCommitUnsupportedPendCode, StringComparison.Ordinal)
+                || !kind.PendCodes.Contains(claim.PendDetails?.PendCode ?? string.Empty, StringComparer.Ordinal)
                 || claim.PendDetails?.AdditionalPendReasons is { Count: > 0 })
                 return Item("Skipped", "the claim's pends changed");
 
@@ -201,36 +290,58 @@ public sealed class AccumulatorOperationsService
             var rerun = await _readjudicator!.ReadjudicateForApprovalAsync(tenantId, claim.Id, new ExaminerApproval
             {
                 ExaminerId = actor,
-                Reason = "Re-run after benefit-plan-service upgrade (ACCUMCOMMIT)",
+                Reason = kind.Reason,
                 CorrelationId = correlationId,
                 ResolutionLockToken = lockToken,
                 ReviewedPend = claim.PendDetails,
             }, ct);
             if (rerun.ResolutionLockLost)
                 return Item("Failed", "the resolution lock was lost during the re-run");
-            if (rerun.Outcome != ClaimAdjudicationOutcome.Pass)
-                return Item("StillPended", $"{rerun.Outcome}: {rerun.Reason}");
-            if (rerun.PreparedAccumulatorCommit is null)
-                return Item("StillPended", "benefit-plan-service still prepares no accumulator commit");
+            // Owner decision Q-15 (2026-10-11): the re-run denies only on the
+            // PA check's definitive answer (CARC 197 after authorization-
+            // service's NotFound / Invalid), and only when no check on this
+            // run failed (#1299 re-verify B1). The orchestrator decides
+            // "a check failed" from the run's structured state (CheckFailed);
+            // the reason-text markers are a second guard. Any other Deny —
+            // the benefit engine unavailable (999), NCCI in Deny mode, ... —
+            // is left pended for an examiner.
+            var transientFailure = rerun.CheckFailed
+                || (rerun.UnresolvedReasons ?? []).Append(rerun.Reason).Any(ClaimAdjudicationOrchestrator.IsTransientFailure);
+            var definitivePriorAuthDenial = string.Equals(
+                rerun.DenialReasonCode, Stages.BenefitCalculationStage.PriorAuthorizationRequiredCode, StringComparison.Ordinal);
+            var deny = kind.DenyIsFinal && rerun.Outcome == ClaimAdjudicationOutcome.Deny
+                       && definitivePriorAuthDenial && !transientFailure;
+            if (kind.DenyIsFinal && rerun.Outcome == ClaimAdjudicationOutcome.Deny && !deny)
+                return StillPended(transientFailure
+                    ? $"Deny not finalized: a check could not run on this re-run ({rerun.DenialReason ?? rerun.Reason})"
+                    : $"Deny not finalized: not the prior-authorization check's denial ({rerun.DenialReason ?? rerun.Reason}); an examiner resolves it");
+            if (!deny && rerun.Outcome != ClaimAdjudicationOutcome.Pass)
+                return StillPended($"{rerun.Outcome}: {rerun.Reason}");
+            if (!deny && rerun.PreparedAccumulatorCommit is null)
+                return StillPended("benefit-plan-service still prepares no accumulator commit");
 
             // From here the decision is made: finish it whatever the caller does.
+            var disposition = deny ? ClaimStatus.Denied : ClaimStatus.Approved;
             claim = await _claims.GetForAccumulatorOutboxAsync(tenantId, claim.Id, CancellationToken.None) ?? claim;
             var actedAt = DateTime.UtcNow;
             var reviewed = claim.PendDetails;
             claim.LastUpdatedBy = actor;
-            claim.Status = ClaimStatus.Approved;
-            claim.VersionState = ClaimRepository.MapStatusToVersionState(ClaimStatus.Approved);
+            claim.Status = disposition;
+            claim.VersionState = ClaimRepository.MapStatusToVersionState(disposition);
             claim.AdjudicatedDate = actedAt;
             claim.LastUpdatedDate = actedAt;
             claim.PendingExaminerApproval = null;
             claim.ResolutionLock = null;
-            claim.PendingAccumulatorCommit = AccumulatorOutboxItem.ForCommit(rerun.PreparedAccumulatorCommit, actedAt);
-            claim.PendingAccumulatorReversal = null;
+            // As the examiner resolve path: an approval owes its commit; a
+            // denial a terminal reversal that fences the claim id (a claim
+            // pended before the engine ran wrote nothing to reverse).
+            claim.PendingAccumulatorCommit = deny ? null : AccumulatorOutboxItem.ForCommit(rerun.PreparedAccumulatorCommit!, actedAt);
+            claim.PendingAccumulatorReversal = deny ? AccumulatorOutboxItem.ForReversal(claim, actedAt) : null;
             claim.ExaminerResolutions.Add(new ExaminerResolutionRecord
             {
-                Disposition = nameof(ClaimStatus.Approved),
+                Disposition = disposition.ToString(),
                 ApproverIds = [actor],
-                Reason = "Re-run after benefit-plan-service upgrade (ACCUMCOMMIT); nothing overridden",
+                Reason = deny ? $"{kind.Reason}; denied on a definitive answer: {rerun.DenialReason ?? rerun.Reason}" : $"{kind.Reason}; nothing overridden",
                 ApproverReasons = [null],
                 PendFingerprint = PendDetails.ComputeFingerprint(reviewed),
                 ReviewedPends = ExaminerApproval.ReviewedFrom(reviewed).Select(p => $"{p.Code}: {p.Reason}").ToList(),
@@ -241,11 +352,16 @@ public sealed class AccumulatorOperationsService
             var updated = await _claims.UpdateHoldingResolutionLockAsync(claim, lockToken, CancellationToken.None);
             if (updated is null) return Item("Failed", "the final write was refused (lock lost)");
 
-            if (_outbox is not null && updated.PendingAccumulatorCommit is { } entry)
+            var outboxEntry = updated.PendingAccumulatorCommit is { } commitEntry
+                ? (AccumulatorOutboxKind.Commit, commitEntry.Id)
+                : updated.PendingAccumulatorReversal is { } reversalEntry
+                    ? (AccumulatorOutboxKind.Reversal, reversalEntry.Id)
+                    : ((AccumulatorOutboxKind, string)?)null;
+            if (_outbox is not null && outboxEntry is { } entry)
             {
                 try
                 {
-                    await _outbox.ProcessAsync(tenantId, updated.Id, AccumulatorOutboxKind.Commit, entry.Id, CancellationToken.None);
+                    await _outbox.ProcessAsync(tenantId, updated.Id, entry.Item1, entry.Item2, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
@@ -253,19 +369,72 @@ public sealed class AccumulatorOperationsService
                 }
             }
             await _versionEvents.PublishVersionResolvedAsync(
-                updated, nameof(ClaimStatus.Approved), "ACCUMCOMMIT re-run", actor, correlationId, CancellationToken.None);
+                updated, disposition.ToString(), $"{kind.Name} re-run", actor, correlationId, CancellationToken.None);
             await _events.PublishClaimFinalizedAsync(updated, tenantId);
-            return Item("Approved");
+            return deny ? Item("Denied", rerun.DenialReason ?? rerun.Reason) : Item("Approved");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "ACCUMCOMMIT re-run of claim {ClaimId} failed", Sanitize(claim.Id));
-            return Item("Failed", ex.GetType().Name);
+            _logger.LogError(ex, "{Kind} re-run of claim {ClaimId} failed", kind.Name, Sanitize(claim.Id));
+            failed = true;
+            return Item("Failed", Describe(ex));
         }
         finally
         {
+            // #1299 re-verify S1: a run that made no progress (failed, or the
+            // re-run left the claim pended without re-stamping it) moves the
+            // claim to the back of the queue, so it cannot hold the head of
+            // every batch.
+            if (failed || stillPended)
+                await RestampAsync(tenantId, claim.Id, lockToken, now);
             await _claims.ReleaseResolutionLockAsync(tenantId, claim.Id, lockToken, CancellationToken.None);
         }
+    }
+
+    /// <summary>
+    /// Re-stamps <see cref="PendDetails.PendedAt"/> of a still-Pended claim the
+    /// re-run did not re-stamp, under the resolution lock this run holds. Best
+    /// effort: a failure leaves the claim where it was.
+    /// </summary>
+    private async Task RestampAsync(string tenantId, string claimId, string lockToken, DateTime attemptStartedAt)
+    {
+        try
+        {
+            var fresh = await _claims.GetForAccumulatorOutboxAsync(tenantId, claimId, CancellationToken.None);
+            if (fresh is not { Status: ClaimStatus.Pended, PendDetails: { } pend } || pend.PendedAt >= attemptStartedAt)
+                return;
+            pend.PendedAt = DateTime.UtcNow;
+            await _claims.UpdateHoldingResolutionLockAsync(fresh, lockToken, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Claim {ClaimId}: could not move the pend to the back of the re-run queue", Sanitize(claimId));
+        }
+    }
+
+    /// <summary>
+    /// What failed, for the operator's item result: the exception type, a
+    /// store's status codes when it is a Cosmos error, and the claims-service
+    /// frame it came from. No claim data.
+    /// </summary>
+    internal static string Describe(Exception ex)
+    {
+        var where = ex.StackTrace?
+            .Split('\n')
+            .Select(l => l.Trim())
+            .FirstOrDefault(l => l.Contains("ClaimsService.", StringComparison.Ordinal));
+        string what;
+        if (ex is Microsoft.Azure.Cosmos.CosmosException cosmos)
+        {
+            var message = Sanitize(cosmos.Message.Split('\n')[0]);
+            if (message.Length > 300) message = message[..300];
+            what = $"CosmosException {(int)cosmos.StatusCode} {cosmos.StatusCode} (sub-status {cosmos.SubStatusCode}): {message}";
+        }
+        else
+        {
+            what = ex.GetType().Name;
+        }
+        return where is null ? what : $"{what} at {Sanitize(where)}";
     }
 
     private static string Sanitize(string? value) =>

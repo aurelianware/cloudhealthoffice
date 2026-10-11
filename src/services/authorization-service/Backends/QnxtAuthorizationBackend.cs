@@ -43,6 +43,10 @@ public sealed class QnxtAuthorizationBackend : IAuthorizationBackend
     public Task<Authorization> CreateAsync(Authorization authorization, CancellationToken ct = default)
         => throw new NotImplementedException(Todo);
 
+    public Task<Authorization> RecordAutomatedDecisionAsync(
+        Authorization authorization, AutomatedDecision decision, CancellationToken ct = default)
+        => throw new NotImplementedException(Todo);
+
     public Task<Authorization?> GetByNumberAsync(string authorizationNumber, CancellationToken ct = default)
         => throw new NotImplementedException(Todo);
 
