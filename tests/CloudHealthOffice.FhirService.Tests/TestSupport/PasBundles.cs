@@ -30,7 +30,8 @@ internal static class PasBundles
         string servicedStart = "2026-11-02",
         string? servicedEnd = "2026-11-04",
         string coverageTypeCode = "MC",
-        string? serviceTypeCode = "2")
+        string? serviceTypeCode = "2",
+        string? serviceState = null)
     {
         var patient = new Patient
         {
@@ -73,6 +74,10 @@ internal static class PasBundles
                 ? new Date(servicedStart)
                 : new Period { Start = servicedStart, End = servicedEnd },
         };
+        // The service location's state (Claim.item.locationAddress), which the
+        // adjudicator's state-specific rules key on; absent unless asked for.
+        if (serviceState is not null)
+            item.Location = new Address { State = serviceState };
         if (serviceTypeCode is not null)
             item.Category = new CodeableConcept(X12ServiceTypeSystem, serviceTypeCode);
 

@@ -18,6 +18,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using MongoDB.Driver;
 using Moq;
+using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
+using CloudHealthOffice.ProviderEnrollmentService.Models;
+using EnrollmentLob = CloudHealthOffice.ProviderEnrollmentService.Models.LineOfBusiness;
 using StoredAuthorization = authsvc::AuthorizationService.Models.Authorization;
 using StoredStatus = authsvc::AuthorizationService.Models.AuthorizationStatus;
 using StoredLineOfBusiness = authsvc::AuthorizationService.Models.LineOfBusiness;
@@ -198,7 +201,76 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
         stored.StatusHistory.First().ChangedAt.Should().Be(stored.SubmittedDate);
     }
 
+    // ── B1: the stored record states the basis the decision used ─────────
+
+    [Fact]
+    public async Task CommercialCoverage_IsDecidedAsCommercial_NotThroughTheMedicaidEnrollmentGate()
+    {
+        // X12 1032 CI is commercial insurance. The provider is not enrolled in
+        // TX Medicaid (the gate denies anything it is asked about). Deciding
+        // this request as Medicaid would deny it on a basis it does not have,
+        // while the record says Commercial.
+        var claimResponse = await SubmitAsync(WithProviderIdentifier(PasBundles.Complete(
+            procedureCode: PendCode, coverageTypeCode: "CI", serviceState: "TX")));
+        var stored = await StoredAsync(claimResponse.PreAuthRef);
+
+        stored.Should().NotBeNull();
+        stored!.LineOfBusiness.Should().Be(StoredLineOfBusiness.Commercial);
+        _fhirService.Gate.Calls.Should().NotContain(c => c.Lob == EnrollmentLob.Medicaid,
+            "a Commercial request is not decided as Medicaid");
+        claimResponse.Disposition.Should().NotBe("denied");
+        stored.Status.Should().NotBe(StoredStatus.Denied);
+        var decided = stored.StatusHistory.Last();
+        decided.Source.Should().NotContain("EnrollmentGate");
+        decided.Source.Should().Contain("lob=Commercial", "the history states the line of business the decision used");
+        decided.Source.Should().Contain("state=TX");
+    }
+
+    [Fact]
+    public async Task MedicaidCoverage_DeniedByTheEnrollmentGate_RecordsTheBasisItWasDecidedOn()
+    {
+        var claimResponse = await SubmitAsync(WithProviderIdentifier(PasBundles.Complete(
+            procedureCode: PendCode, coverageTypeCode: "MC", serviceState: "TX")));
+        var stored = await StoredAsync(claimResponse.PreAuthRef);
+
+        stored.Should().NotBeNull();
+        _fhirService.Gate.Calls.Should().ContainSingle()
+            .Which.Should().Be((EnrollmentLob.Medicaid, "TX"));
+        stored!.Status.Should().Be(StoredStatus.Denied);
+        stored.LineOfBusiness.Should().Be(StoredLineOfBusiness.Medicaid);
+        stored.StatusHistory.Last().Source.Should().Be("automated:EnrollmentGate;lob=Medicaid;state=TX");
+    }
+
+    [Fact]
+    public async Task UnknownLineOfBusiness_IsPended_NotAutoDecided()
+    {
+        // A Coverage.type no mapping recognises: the line of business cannot
+        // be determined, so no rule may decide on one.
+        var claimResponse = await SubmitAsync(PasBundles.Complete(procedureCode: ApproveCode, coverageTypeCode: "ZZ"));
+        var stored = await StoredAsync(claimResponse.PreAuthRef);
+
+        claimResponse.Disposition.Should().Be("pended");
+        stored.Should().NotBeNull();
+        stored!.LineOfBusiness.Should().Be(StoredLineOfBusiness.Unknown);
+        stored.Status.Should().Be(StoredStatus.Pended);
+        stored.ReviewDecision.Should().Be("A4");
+        stored.PendReason.Should().Contain("line of business");
+        stored.StatusHistory.Last().Source.Should().StartWith("automated:LineOfBusinessUndetermined;lob=Unknown");
+        _fhirService.Adjudicator.StartedAt.Should().BeNull("nothing is auto-decided on an unknown line of business");
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The requesting provider's NPI also on the Claim.provider reference, the
+    /// one place the adjudicator used to read it from, so the request reaches
+    /// the enrollment gate whichever source is used.
+    /// </summary>
+    private static Bundle WithProviderIdentifier(Bundle bundle)
+    {
+        PasBundles.ClaimOf(bundle).Provider.Identifier = new Identifier(PasBundles.NpiSystem, PasBundles.RequestingNpi);
+        return bundle;
+    }
 
     private async Task<ClaimResponse> SubmitAsync(Bundle bundle)
     {
@@ -306,6 +378,8 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
 
         public TimingAdjudicator Adjudicator { get; } = new();
 
+        public RecordingEnrollmentGate Gate { get; } = new();
+
         /// <summary>Every fhir-service → authorization-service exchange, for failure messages.</summary>
         public List<string> Exchanges { get; } = [];
 
@@ -337,6 +411,9 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
                 services.RemoveAll<ICms0057ComplianceChecker>();
                 services.AddSingleton(compliance.Object);
 
+                services.RemoveAll<IEnrollmentDecisionGate>();
+                services.AddSingleton<IEnrollmentDecisionGate>(Gate);
+
                 // Wrap the real adjudicator to see when it ran.
                 services.AddScoped<PasAutoAdjudicator>();
                 services.RemoveAll<IPasAutoAdjudicator>();
@@ -361,6 +438,23 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
             StartedAt = DateTime.UtcNow;
             await Task.Delay(20, ct);
             return await Inner.TryDecideAsync(claim, context, tenantId, timeoutMs, ct);
+        }
+    }
+
+    /// <summary>
+    /// A state Medicaid enrollment gate for a provider enrolled nowhere: it
+    /// denies whatever it is asked about, and records what that was.
+    /// </summary>
+    internal sealed class RecordingEnrollmentGate : IEnrollmentDecisionGate
+    {
+        public List<(EnrollmentLob Lob, string State)> Calls { get; } = [];
+
+        public Task<GateResult> EvaluateAsync(
+            string npi, string taxonomy, string stateCode, DateOnly serviceDate, EnrollmentLob lob,
+            CancellationToken ct = default)
+        {
+            lock (Calls) Calls.Add((lob, stateCode));
+            return Task.FromResult(GateResult.Deny("PEMS-001", "Provider not enrolled in state Medicaid."));
         }
     }
 
