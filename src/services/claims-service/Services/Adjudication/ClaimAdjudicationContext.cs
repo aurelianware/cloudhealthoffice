@@ -31,11 +31,11 @@ public class ClaimAdjudicationContext
     public ResolvedBenefitPlan? ResolvedPlan { get; set; }
 
     /// <summary>
-    /// The claim names a benefit plan but <see cref="IBenefitPlanResolver"/>
-    /// returned nothing for it (benefit-plan-service failed, or the plan is
-    /// unknown), so the plan's prior-authorization requirements (G-25) are
-    /// unknown. <see cref="Stages.BenefitCalculationStage"/> pends rather
-    /// than paying a line the plan may require authorization for (D-04, Q-9).
+    /// The claim names a benefit plan but benefit-plan-service gave no
+    /// definitive answer for it (<see cref="BenefitPlanUnavailableException"/>;
+    /// a definitive 404 is not flagged). The plan's prior-authorization
+    /// flags (G-25) are then unknown: <see cref="Stages.BenefitCalculationStage"/>
+    /// pends <c>PLANUNAVAIL</c> when they could put a line in scope.
     /// </summary>
     public bool PlanResolutionFailed { get; set; }
 

@@ -216,17 +216,18 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         }
 
         // Prior authorization (D-04 / G-12, G-25). A failed lookup never pays
-        // and never denies (owner decision Q-9): it pends before the engine
-        // runs, so nothing is priced and no accumulator commit is prepared.
+        // and never denies (owner decision Q-9): it pends before the benefit
+        // engine runs, so no accumulator commit is prepared.
         var priorAuthorization = await EvaluatePriorAuthorizationAsync(context, ct).ConfigureAwait(false);
 
         if (priorAuthorization.PendReason is { } priorAuthorizationPendReason)
         {
+            var pendCode = priorAuthorization.PendCode ?? PriorAuthorizationUnavailablePendCode;
             if (context.PendDetails is null)
             {
                 context.PendDetails = new PendDetails
                 {
-                    PendCode = PriorAuthorizationUnavailablePendCode,
+                    PendCode = pendCode,
                     PendReason = priorAuthorizationPendReason,
                     PendedAt = DateTime.UtcNow,
                 };
@@ -234,7 +235,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             else
             {
                 context.PendDetails.AdditionalPendReasons.Add(
-                    Truncate($"{PriorAuthorizationUnavailablePendCode}: {priorAuthorizationPendReason}", 500));
+                    Truncate($"{pendCode}: {priorAuthorizationPendReason}", 500));
             }
 
             return ClaimAdjudicationStageResult.Pend(StageName, priorAuthorizationPendReason);
@@ -472,7 +473,12 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     }
 
     /// <summary>What the prior-authorization check decided for this run.</summary>
-    private readonly record struct PriorAuthorizationDecision(string? DenialReason, string? PendReason);
+    private readonly record struct PriorAuthorizationDecision(string? DenialReason, string? PendReason, string? PendCode = null);
+
+    /// <summary>How a PAUNAVAIL / PLANUNAVAIL pend is cleared (#1299 S1): nothing re-runs it automatically.</summary>
+    internal const string TransientPendClearedBy =
+        "nothing re-runs it automatically: it is retried by an examiner approval or the PAUNAVAIL re-run " +
+        "(POST api/claims/admin/accumulators/prior-auth-unavailable-pends/rerun), and passes or denies only on a definitive answer.";
 
     /// <summary>
     /// Checks every line that requires prior authorization (G-25), each
@@ -495,19 +501,26 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     {
         var claim = context.Claim;
 
-        // The plan says which lines require PA (G-25). When the plan could
-        // not be read, that is a failed lookup too: never pay on it.
-        if (context.PlanResolutionFailed && context.ResolvedPlan is null)
+        // With plan-flagged codes in use (G-25, S3), the plan says which lines
+        // need PA. If benefit-plan-service gave no answer for the plan, that
+        // scope is unknown unless the floor already covers every line: pend
+        // PLANUNAVAIL rather than price lines that may need PA (owner
+        // decision 2026-10-11). A definitive 404 is not flagged (main's path).
+        if (_priorAuth.UsePlanFlaggedCodes
+            && context.PlanResolutionFailed
+            && context.ResolvedPlan is null
+            && !IsInpatientMedicaidInstitutional(claim))
         {
             _logger.LogWarning(
-                "Benefit plan not resolved for claim {ClaimVersionId}; its prior-authorization requirements are unknown, pending",
+                "Benefit plan unavailable for claim {ClaimVersionId}; its prior-authorization scope is unknown, pending",
                 SanitizeForLog(context.ClaimVersionId));
             return new PriorAuthorizationDecision(null,
-                $"{PriorAuthorizationUnavailableReason} (the benefit plan's prior-authorization requirements could not be read); " +
-                "the claim is re-adjudicated once benefit-plan-service answers.");
+                $"{PlanUnavailableReason} (benefit-plan-service gave no answer, so which lines need prior authorization " +
+                $"is unknown); {TransientPendClearedBy}",
+                PlanUnavailablePendCode);
         }
 
-        var lines = LinesRequiringPriorAuthorization(claim, context.ResolvedPlan);
+        var lines = LinesRequiringPriorAuthorization(claim, _priorAuth.UsePlanFlaggedCodes ? context.ResolvedPlan : null);
         if (lines.Count == 0)
         {
             return default;
@@ -573,6 +586,9 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                     unavailable.Add($"line {line.LineNumber}: {lookup.Reason ?? "no definitive answer"}");
                     break;
             }
+
+            // Nit 5: the claim pends whatever the remaining lines say.
+            if (unavailable.Count > 0) break;
         }
 
         if (unavailable.Count > 0)
@@ -581,8 +597,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 "Prior-authorization lookup unavailable for claim {ClaimVersionId} ({Count} line(s)); pending, not paying or denying",
                 SanitizeForLog(context.ClaimVersionId),
                 unavailable.Count);
-            var reason = $"{PriorAuthorizationUnavailableReason} ({string.Join("; ", unavailable)}); " +
-                         "the claim is re-adjudicated once authorization-service answers.";
+            var reason = $"{PriorAuthorizationUnavailableReason} ({string.Join("; ", unavailable)}); {TransientPendClearedBy}";
             return new PriorAuthorizationDecision(null, Truncate(reason, 500));
         }
 
@@ -603,7 +618,8 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     ///   <item>every line of an institutional Medicaid inpatient claim (place
     ///   of service 21) — the default scope, unchanged, and kept as a floor
     ///   so plan configuration never stops an existing check;</item>
-    ///   <item>any line whose procedure code the claim's plan flags as
+    ///   <item>when <see cref="PriorAuthAdjudicationOptions.UsePlanFlaggedCodes"/> is on
+    ///   (off by default until G-07), any line whose procedure code the claim's plan flags as
     ///   requiring prior authorization (benefit-plan-service
     ///   <c>benefits[].priorAuthRequired</c> / <c>requiresPriorAuth</c> with
     ///   <c>cptCodes</c>; see <see cref="ResolvedBenefitPlan.PriorAuthRequiredProcedureCodes"/>).</item>

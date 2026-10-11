@@ -11,10 +11,10 @@ namespace ClaimsService.Services.Resolution;
 public interface IBenefitPlanResolver
 {
     /// <summary>
-    /// Returns the plan summary, or <c>null</c> when the plan is missing
-    /// or the call fails. Failure is non-throwing — adjudication degrades
-    /// to a Reject outcome on missing plan rather than blowing up the
-    /// pipeline run.
+    /// Returns the plan summary, or <c>null</c> when benefit-plan-service
+    /// says the plan does not exist (definitive 404). Any other failure
+    /// throws <see cref="BenefitPlanUnavailableException"/>; the orchestrator
+    /// records it as <c>PlanResolutionFailed</c> (#1299 S2).
     /// </summary>
     Task<ResolvedBenefitPlan?> GetPlanAsync(string tenantId, string planId, CancellationToken ct = default);
 }

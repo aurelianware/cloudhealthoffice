@@ -179,10 +179,21 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
 
         if (!string.IsNullOrWhiteSpace(claim.BenefitPlanId))
         {
-            context.ResolvedPlan = await _planResolver
-                .GetPlanAsync(tenantId, claim.BenefitPlanId!, ct)
-                .ConfigureAwait(false);
-            context.PlanResolutionFailed = context.ResolvedPlan is null;
+            try
+            {
+                context.ResolvedPlan = await _planResolver
+                    .GetPlanAsync(tenantId, claim.BenefitPlanId!, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (BenefitPlanUnavailableException ex)
+            {
+                // #1299 S2: an outage, not a missing plan. A definitive 404
+                // (null) keeps the pre-existing path; only this is flagged.
+                _logger.LogWarning(ex,
+                    "Benefit plan {PlanId} unavailable for claim {ClaimVersionId}",
+                    SanitizeForLog(claim.BenefitPlanId), SanitizeForLog(claimVersionId));
+                context.PlanResolutionFailed = true;
+            }
         }
         if (!string.IsNullOrWhiteSpace(claim.MemberId))
         {
@@ -242,6 +253,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         "Coverage-service unavailable",
         Stages.BenefitCalculationStage.DeferredCommitUnsupportedReason,
         Stages.BenefitCalculationStage.PriorAuthorizationUnavailableReason,
+        Stages.BenefitCalculationStage.PlanUnavailableReason,
     ];
 
     /// <summary>See <see cref="TransientFailureMarkers"/>.</summary>

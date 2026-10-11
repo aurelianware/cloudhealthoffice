@@ -233,6 +233,12 @@ builder.Services.AddMemoryCache();
 builder.Services.Configure<AdjudicationPipelineOptions>(
     builder.Configuration.GetSection(AdjudicationPipelineOptions.SectionName));
 
+// Prior-authorization scope (G-25). Plan-flagged codes are off by default
+// until line-level authorization decisions (G-07) land: see
+// PriorAuthAdjudicationOptions.UsePlanFlaggedCodes.
+builder.Services.Configure<PriorAuthAdjudicationOptions>(
+    builder.Configuration.GetSection(PriorAuthAdjudicationOptions.SectionName));
+
 // 5.6 enforcement posture (network membership + credentialing). Phase 1
 // is service-wide; per-tenant override deferred to Phase 2 alongside
 // the pipeline options.
