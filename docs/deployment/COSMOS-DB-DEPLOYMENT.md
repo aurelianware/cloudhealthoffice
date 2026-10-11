@@ -291,24 +291,28 @@ old shape correctly: a PascalCase document has no `id`, its `tenantId` / `stateC
 other filtered properties are undefined to camelCase queries, and numeric enums no longer
 match.
 
-In practice the old client's writes were rejected (400 "Document does not contain an id
-field", or a partition-key mismatch), so most such deployments hold no benefit-plan
-documents at all. Check before deciding anything.
+In practice the old client's writes were rejected: either 400 "Document does not contain
+an id field", or a partition-key mismatch, because the document carried `TenantId` /
+`StateCode` while the container's path is `/tenantId` / `/stateCode`. Old-shape documents
+can therefore exist only in a container that was created with a PascalCase partition-key
+path (`/TenantId`, `/StateCode`); every other old write was refused. Most such deployments
+hold no benefit-plan documents at all. Check before deciding anything.
 
 **Containers involved** (names are the configuration defaults; partition key paths must
-be exactly these, lower camelCase):
+be exactly these, lower camelCase). Several are shared with other services, which already
+use the shared serializer and must keep running against them:
 
-| Container | Written by | Partition key |
+| Container | Written / read by | Partition key |
 |---|---|---|
-| `BenefitPlans` (`CosmosDb:ContainerName`) | BenefitPlanRepository | `/tenantId` |
-| `PlanVersionTransitions` | CosmosPlanVersionTransitionRepository | `/tenantId` |
-| `ServiceCategoryMappings` | ChoServiceCategoryMappingRepository | `/tenantId` |
-| `Accumulators` | BenefitEngine AccumulatorRepositoryCosmos | `/tenantId` |
-| `FeeSchedules`, `ProviderContracts` | FeeScheduleEngine | `/tenantId` |
-| `NcciPairs`, `MueEntries`, `NcciVersion`, `NcciLoadLedger` | NcciEngine (created at startup) | `/tenantId` |
-| `prior-auth-rules` | PriorAuthRuleEngine | `/stateCode` |
-| `enrollment-cache` | ProviderEnrollmentService | `/stateCode` |
-| `enrollment-tenant-config` | ProviderEnrollmentService | `/tenantId` |
+| `BenefitPlans` (`CosmosDb:ContainerName`) | benefit-plan-service (BenefitPlanRepository) | `/tenantId` |
+| `PlanVersionTransitions` | benefit-plan-service | `/tenantId` |
+| `ServiceCategoryMappings` | benefit-plan-service | `/tenantId` |
+| `Accumulators` | benefit-plan-service (BenefitEngine AccumulatorRepositoryCosmos) | `/tenantId` |
+| `FeeSchedules`, `ProviderContracts` | benefit-plan-service (FeeScheduleEngine) | `/tenantId` |
+| `NcciPairs`, `MueEntries`, `NcciVersion`, `NcciLoadLedger` | benefit-plan-service and **claims-service** (NcciEngine; created at startup) | `/tenantId` |
+| `prior-auth-rules` | benefit-plan-service and **fhir-service** (PriorAuthRuleEngine) | `/stateCode` |
+| `enrollment-cache` | benefit-plan-service and **fhir-service** (ProviderEnrollmentService) | `/stateCode` |
+| `enrollment-tenant-config` | benefit-plan-service and **fhir-service** (ProviderEnrollmentService) | `/tenantId` |
 
 A container created with `/TenantId`, `/StateCode` or `/id` must be re-created with the
 path above; Cosmos cannot change a container's partition key.
@@ -321,19 +325,28 @@ SELECT VALUE COUNT(1) FROM c WHERE IS_DEFINED(c.Id) OR IS_DEFINED(c.TenantId) OR
 ```
 
 A non-zero count means documents from before the fix. `SELECT TOP 5 * FROM c WHERE IS_DEFINED(c.Id)`
-shows them.
+shows them, and `SELECT c.id, c.TenantId, c.StateCode FROM c WHERE IS_DEFINED(c.Id) OR IS_DEFINED(c.TenantId) OR IS_DEFINED(c.StateCode)`
+lists their ids and partition key values.
 
 **Option 1: re-seed (preferred when the data can be re-created).**
 
 1. Scale benefit-plan-service to zero.
-2. Delete each container above that holds old documents, and re-create it with the
-   partition key in the table, e.g.
-   `az cosmosdb sql container create -g <rg> -a <account> -d <database> -n BenefitPlans --partition-key-path /tenantId`.
-   The NCCI containers may simply be deleted; the service re-creates them at startup.
-3. Deploy the fixed service and scale it back up. On startup the PA-rule seeder writes the
-   platform prior-auth rules; check the log for `PriorAuthRuleEngine: seeded`.
-4. Call `POST /api/v1/prior-auth-rules/seed-platform` with a token carrying
-   `settings:manage`; it reports `seededRules` (0 if startup already seeded them).
+2. For each container that holds old documents:
+   - **Partition key path correct** (lower camelCase as in the table): delete only the
+     documents the detection query finds, by id and partition key value (Data Explorer, or
+     `DeleteItemAsync` in a one-off script). Do not drop the container: claims-service and
+     fhir-service may be using it.
+   - **Partition key path wrong** (`/TenantId`, `/StateCode`, `/id`): the container has to be
+     dropped and re-created, e.g.
+     `az cosmosdb sql container create -g <rg> -a <account> -d <database> -n BenefitPlans --partition-key-path /tenantId`.
+     For a shared container (NCCI: claims-service; `prior-auth-rules`, `enrollment-*`:
+     fhir-service), scale those services to zero too before dropping it, and back up after
+     step 3. The NCCI containers are re-created by the service at startup.
+3. Deploy the fixed service and scale it (and any service scaled down in step 2) back up. On
+   startup the PA-rule seeder writes the platform prior-auth rules; check the log for
+   `PriorAuthRuleEngine: seeded`.
+4. Call `POST /api/v1/prior-auth-rules/seed-platform` with a PlatformAdmin token
+   (`platform:admin`); it reports `seededRules` (0 if startup already seeded them).
 5. Re-create the tenant data from its source: plans through the benefit-plan API (or the
    tenant-onboarding seed step), fee schedules and contracts through their imports, the
    NCCI quarter through the NCCI load endpoint. Service-category system defaults are
