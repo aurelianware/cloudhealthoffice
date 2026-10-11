@@ -226,6 +226,9 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
         var decided = stored.StatusHistory.Last();
         decided.Source.Should().NotContain("EnrollmentGate");
         decided.Source.Should().Contain("lob=Commercial", "the history states the line of business the decision used");
+        var context = _fhirService.RuleEngine.Contexts.Should().ContainSingle().Subject;
+        context.Lob.Should().Be(PaLineOfBusiness.Commercial, "the rule engine decided on the record's line of business");
+        context.StateCode.Should().Be("TX");
         decided.Source.Should().Contain("state=TX");
     }
 
@@ -256,6 +259,26 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
         stored.Should().NotBeNull();
         stored!.Status.Should().Be(StoredStatus.Approved);
         stored.StatusHistory.Last().Source.Should().Be("automated:AutoApproveList;lob=Commercial;state=none");
+    }
+
+    [Fact]
+    public async Task FactoryNoOpEngine_ItsPend_IsStoredEndToEnd_ClaimingNoBasis()
+    {
+        // The engine registered when no database is configured evaluates
+        // nothing. Its pend reaches authorization-service as NoOp with no LOB
+        // or state, and is accepted and stored as such.
+        await using var host = new FhirServiceHost(_authorizationService, factoryNoOpEngine: true);
+
+        var claimResponse = await SubmitAsync(WithProviderIdentifier(PasBundles.Complete(
+            procedureCode: PendCode, coverageTypeCode: "CI", serviceState: "TX")), host);
+        var stored = await StoredAsync(claimResponse.PreAuthRef, host);
+
+        claimResponse.Disposition.Should().Be("pended");
+        stored.Should().NotBeNull();
+        stored!.Status.Should().Be(StoredStatus.Pended);
+        stored.LineOfBusiness.Should().Be(StoredLineOfBusiness.Commercial);
+        stored.StatusHistory.Last().Source.Should().Be("automated:NoOp;lob=n/a;state=none");
+        host.RuleEngine.Contexts.Should().BeEmpty("this host keeps the factory's NoOp engine");
     }
 
     [Fact]
@@ -290,14 +313,15 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
         return bundle;
     }
 
-    private async Task<ClaimResponse> SubmitAsync(Bundle bundle)
+    private async Task<ClaimResponse> SubmitAsync(Bundle bundle, FhirServiceHost? host = null)
     {
-        using var client = _fhirService.CreateClient();
+        host ??= _fhirService;
+        using var client = host.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/fhir/r4/Claim/$submit")
         {
             Content = new StringContent(JsonSerializer.Serialize(bundle, FhirJson), Encoding.UTF8, "application/fhir+json"),
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _fhirService.SmartToken());
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", host.SmartToken());
 
         var response = await client.SendAsync(request);
         var body = await response.Content.ReadAsStringAsync();
@@ -340,8 +364,9 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
     }
 
     /// <summary>The stored record, read straight from authorization-service's database.</summary>
-    private async Task<StoredAuthorization?> StoredAsync(string authorizationNumber)
+    private async Task<StoredAuthorization?> StoredAsync(string authorizationNumber, FhirServiceHost? host = null)
     {
+        host ??= _fhirService;
         var collection = _mongo.Client.GetDatabase(_databaseName)
             .GetCollection<StoredAuthorization>("Authorizations");
         var stored = await collection
@@ -349,7 +374,7 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
             .FirstOrDefaultAsync();
         stored.Should().NotBeNull(
             "a preAuthRef was issued, so the authorization it names must exist. What crossed the seam:\n{0}",
-            string.Join("\n", _fhirService.Exchanges));
+            string.Join("\n", host.Exchanges));
         return stored;
     }
 
@@ -391,8 +416,16 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
     {
         private readonly AuthorizationServiceHost _authorizationService;
 
-        public FhirServiceHost(AuthorizationServiceHost authorizationService)
-            => _authorizationService = authorizationService;
+        private readonly bool _factoryNoOpEngine;
+
+        /// <param name="factoryNoOpEngine">Keep the factory's NoOp rule engine (evaluates nothing) instead of <see cref="ReviewRuleEngine"/>.</param>
+        public FhirServiceHost(AuthorizationServiceHost authorizationService, bool factoryNoOpEngine = false)
+        {
+            _authorizationService = authorizationService;
+            _factoryNoOpEngine = factoryNoOpEngine;
+        }
+
+        public ReviewRuleEngine RuleEngine { get; } = new();
 
         public TimingAdjudicator Adjudicator { get; } = new();
 
@@ -436,8 +469,11 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
                 // request reaching Rule 5 is decided on its LOB and state. The
                 // factory's NoOp engine evaluates nothing, and its pend
                 // rightly claims no basis.
-                services.RemoveAll<IPriorAuthRuleEngine>();
-                services.AddSingleton<IPriorAuthRuleEngine>(new ReviewRuleEngine());
+                if (!_factoryNoOpEngine)
+                {
+                    services.RemoveAll<IPriorAuthRuleEngine>();
+                    services.AddSingleton<IPriorAuthRuleEngine>(RuleEngine);
+                }
 
                 // Wrap the real adjudicator to see when it ran.
                 services.AddScoped<PasAutoAdjudicator>();
@@ -470,14 +506,20 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
     /// <summary>A rule engine whose rules send everything to clinical review.</summary>
     internal sealed class ReviewRuleEngine : IPriorAuthRuleEngine
     {
+        /// <summary>Every context the engine was asked to evaluate.</summary>
+        public List<PaRuleContext> Contexts { get; } = [];
+
         public Task<PaRuleDecision> EvaluateAsync(PaRuleContext context, CancellationToken ct = default)
-            => Task.FromResult(new PaRuleDecision
+        {
+            lock (Contexts) Contexts.Add(context);
+            return Task.FromResult(new PaRuleDecision
             {
                 Outcome = PaDecisionOutcome.Pend,
                 FiringRuleId = "ClinicalReviewRequired",
                 FiringRuleName = "ClinicalReviewRequired",
                 ResolvedRuleSetKey = $"test/{context.StateCode}/{context.Lob}",
             });
+        }
 
         public Task<IReadOnlyList<PaRuleDocument>> GetApplicableRulesAsync(RuleSetKey key, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<PaRuleDocument>>([]);
