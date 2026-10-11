@@ -1,15 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="t d">
+  <title id="t">CMS-0057-F conformance in progress</title>
+  <desc id="d">Per-API CMS-0057-F status from the Cloud Health Office ePA gap matrix, section 11, as of 2026-10-11: 3 PASSABLE, 10 PARTIAL and 8 GAP of 21 scenarios. Patient Access, Provider Access, Payer-to-Payer, Prior Authorization (PAS) and PA timeframes are GAP; CRD, DTR and SMART on FHIR are PARTIAL; Provider Directory is not scored and has an open defect.</desc>
   <defs>
-    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00ffff"/>
-      <stop offset="100%" stop-color="#00ff88"/>
-    </linearGradient>
     <filter id="glow">
       <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="softGlow">
-      <feGaussianBlur stdDeviation="6" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
@@ -20,132 +14,113 @@
         style="stroke-dasharray: 50 50;" />
 
   <!-- Title -->
-  <text x="600" y="55" font-family="Segoe UI, system-ui, sans-serif" font-size="36" font-weight="900"
-        fill="#ffffff" text-anchor="middle" letter-spacing="1">Cloud Health Office</text>
-  <text x="600" y="90" font-family="Segoe UI, system-ui, sans-serif" font-size="20" font-weight="400"
-        fill="#00ffff" text-anchor="middle" opacity="0.9">FHIR R4 APIs for CMS-0057-F Compliance</text>
+  <text x="600" y="50" font-family="Segoe UI, system-ui, sans-serif" font-size="32" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">Cloud Health Office</text>
+  <text x="600" y="84" font-family="Segoe UI, system-ui, sans-serif" font-size="22" font-weight="700" fill="#00ffff" text-anchor="middle" filter="url(#glow)">CMS-0057-F conformance in progress</text>
+  <text x="600" y="112" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">21 acceptance scenarios: <tspan fill="#00ff88">3 PASSABLE</tspan> · <tspan fill="#ffb020">10 PARTIAL</tspan> · <tspan fill="#ff4d6d">8 GAP</tspan></text>
 
-  <!-- Central shield -->
-  <g transform="translate(600, 330)">
-    <path d="M0 -100 L70 -70 L70 30 C70 80 35 110 0 110 C-35 110 -70 80 -70 30 L-70 -70 Z"
-          fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="2" filter="url(#glow)"/>
-    <text x="0" y="-20" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="700"
-          fill="#ffffff" text-anchor="middle">100%</text>
-    <text x="0" y="2" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="700"
-          fill="#00ffff" text-anchor="middle">CMS-0057-F</text>
-    <text x="0" y="20" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="400"
-          fill="#00ff88" text-anchor="middle">Ready</text>
-    <!-- Checkmark -->
-    <circle cx="0" cy="55" r="16" fill="#00ff88" opacity="0.9"/>
-    <path d="M-7 55 L-2 60 L7 50" fill="none" stroke="#000000" stroke-width="3" stroke-linecap="round"/>
+  <!-- Patient Access API -->
+  <g transform="translate(30, 134)">
+    <rect width="360" height="108" rx="10" fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="1.2" stroke-opacity="0.6"/>
+    <rect x="302" y="12" width="44" height="22" rx="11" fill="rgba(255,77,109,0.12)" stroke="#ff4d6d" stroke-width="1.2"/>
+    <text x="324" y="27" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="800" fill="#ff4d6d" text-anchor="middle" letter-spacing="0.5">GAP</text>
+    <text x="16" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#ffffff">Patient Access API</text>
+    <text x="16" y="52" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#00ffff">PAT-01 GAP · PAT-02 PARTIAL · PAT-03 GAP</text>
+    <text x="16" y="94" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" fill="#b0b0b0">Claims/EOB served from a mock adapter; no PA data exposed</text>
   </g>
 
-  <!-- Prior Authorization (top) -->
-  <g transform="translate(600, 145)">
-    <rect x="-90" y="-25" width="180" height="50" rx="8" fill="rgba(0,255,255,0.08)" stroke="#00ffff" stroke-width="1.5"/>
-    <text x="0" y="-3" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
-          fill="#ffffff" text-anchor="middle">Prior Authorization</text>
-    <text x="0" y="15" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="400"
-          fill="#00ffff" text-anchor="middle">PAS + CDS Hooks</text>
+  <!-- Provider Access API -->
+  <g transform="translate(420, 134)">
+    <rect width="360" height="108" rx="10" fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="1.2" stroke-opacity="0.6"/>
+    <rect x="302" y="12" width="44" height="22" rx="11" fill="rgba(255,77,109,0.12)" stroke="#ff4d6d" stroke-width="1.2"/>
+    <text x="324" y="27" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="800" fill="#ff4d6d" text-anchor="middle" letter-spacing="0.5">GAP</text>
+    <text x="16" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#ffffff">Provider Access API</text>
+    <text x="16" y="52" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#00ffff">PROV-01 GAP · PROV-02 PARTIAL · PROV-03 GAP</text>
+    <text x="16" y="94" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" fill="#b0b0b0">Mock data source; opt-in consent; no PA data</text>
   </g>
 
-  <!-- Patient Access API (left) -->
-  <g transform="translate(250, 270)">
-    <rect x="-100" y="-35" width="200" height="70" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.5"/>
-    <text x="0" y="-10" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
-          fill="#ffffff" text-anchor="middle">Patient Access API</text>
-    <text x="0" y="8" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Patient, Coverage, Claim</text>
-    <text x="0" y="22" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">EOB, Encounter</text>
-    <!-- Checkmark -->
-    <circle cx="75" cy="-20" r="10" fill="#00ff88" opacity="0.9"/>
-    <path d="M70 -20 L73 -17 L80 -24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+  <!-- Payer-to-Payer API -->
+  <g transform="translate(810, 134)">
+    <rect width="360" height="108" rx="10" fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="1.2" stroke-opacity="0.6"/>
+    <rect x="302" y="12" width="44" height="22" rx="11" fill="rgba(255,77,109,0.12)" stroke="#ff4d6d" stroke-width="1.2"/>
+    <text x="324" y="27" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="800" fill="#ff4d6d" text-anchor="middle" letter-spacing="0.5">GAP</text>
+    <text x="16" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#ffffff">Payer-to-Payer API</text>
+    <text x="16" y="52" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#00ffff">P2P-01 GAP · P2P-02 PARTIAL</text>
+    <text x="16" y="68" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#00ffff">P2P-03 PASSABLE · P2P-04 PARTIAL</text>
+    <text x="16" y="94" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" fill="#b0b0b0">Export reads a mock adapter; defect D-13 still open (High)</text>
   </g>
 
-  <!-- Provider Access API (left lower) -->
-  <g transform="translate(250, 390)">
-    <rect x="-100" y="-30" width="200" height="60" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.5"/>
-    <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
-          fill="#ffffff" text-anchor="middle">Provider Access API</text>
-    <text x="0" y="13" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Da Vinci PDex</text>
-    <circle cx="75" cy="-15" r="10" fill="#00ff88" opacity="0.9"/>
-    <path d="M70 -15 L73 -12 L80 -19" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+  <!-- Prior Authorization API (PAS) -->
+  <g transform="translate(30, 256)">
+    <rect width="360" height="108" rx="10" fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="1.2" stroke-opacity="0.6"/>
+    <rect x="302" y="12" width="44" height="22" rx="11" fill="rgba(255,77,109,0.12)" stroke="#ff4d6d" stroke-width="1.2"/>
+    <text x="324" y="27" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="800" fill="#ff4d6d" text-anchor="middle" letter-spacing="0.5">GAP</text>
+    <text x="16" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#ffffff">Prior Authorization API (PAS)</text>
+    <text x="16" y="52" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#00ffff">PAS-03 GAP · PAS-04 PARTIAL</text>
+    <text x="16" y="94" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" fill="#b0b0b0">$submit creates no durable authorization record</text>
   </g>
 
-  <!-- Payer-to-Payer API (right) -->
-  <g transform="translate(950, 270)">
-    <rect x="-100" y="-35" width="200" height="70" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.5"/>
-    <text x="0" y="-10" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
-          fill="#ffffff" text-anchor="middle">Payer-to-Payer API</text>
-    <text x="0" y="8" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">$export</text>
-    <text x="0" y="22" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Da Vinci PAS</text>
-    <circle cx="75" cy="-20" r="10" fill="#00ff88" opacity="0.9"/>
-    <path d="M70 -20 L73 -17 L80 -24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+  <!-- Da Vinci CRD (CDS Hooks) -->
+  <g transform="translate(420, 256)">
+    <rect width="360" height="108" rx="10" fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="1.2" stroke-opacity="0.6"/>
+    <rect x="270" y="12" width="76" height="22" rx="11" fill="rgba(255,176,32,0.12)" stroke="#ffb020" stroke-width="1.2"/>
+    <text x="308" y="27" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="800" fill="#ffb020" text-anchor="middle" letter-spacing="0.5">PARTIAL</text>
+    <text x="16" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#ffffff">Da Vinci CRD (CDS Hooks)</text>
+    <text x="16" y="52" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#00ffff">PAS-01 PARTIAL</text>
+    <text x="16" y="94" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" fill="#b0b0b0">Free-text cards only; no coverage-information extension</text>
   </g>
 
-  <!-- Provider Directory API (right lower) -->
-  <g transform="translate(950, 390)">
-    <rect x="-100" y="-30" width="200" height="60" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.5"/>
-    <text x="0" y="-5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700"
-          fill="#ffffff" text-anchor="middle">Provider Directory API</text>
-    <text x="0" y="13" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Da Vinci DTR</text>
-    <circle cx="75" cy="-15" r="10" fill="#00ff88" opacity="0.9"/>
-    <path d="M70 -15 L73 -12 L80 -19" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+  <!-- Da Vinci DTR -->
+  <g transform="translate(810, 256)">
+    <rect width="360" height="108" rx="10" fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="1.2" stroke-opacity="0.6"/>
+    <rect x="270" y="12" width="76" height="22" rx="11" fill="rgba(255,176,32,0.12)" stroke="#ffb020" stroke-width="1.2"/>
+    <text x="308" y="27" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="800" fill="#ffb020" text-anchor="middle" letter-spacing="0.5">PARTIAL</text>
+    <text x="16" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#ffffff">Da Vinci DTR</text>
+    <text x="16" y="52" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#00ffff">PAS-02 PARTIAL</text>
+    <text x="16" y="94" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" fill="#b0b0b0">Largely in-memory; package returns the Questionnaire only</text>
   </g>
 
-  <!-- Connection lines from APIs to shield -->
-  <g stroke="#00ffff" stroke-width="1" opacity="0.4">
-    <line x1="350" y1="270" x2="540" y2="310"/>
-    <line x1="350" y1="390" x2="540" y2="350"/>
-    <line x1="850" y1="270" x2="660" y2="310"/>
-    <line x1="850" y1="390" x2="660" y2="350"/>
-    <line x1="600" y1="170" x2="600" y2="230"/>
+  <!-- PA timeframes, denials and metrics -->
+  <g transform="translate(30, 378)">
+    <rect width="360" height="108" rx="10" fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="1.2" stroke-opacity="0.6"/>
+    <rect x="302" y="12" width="44" height="22" rx="11" fill="rgba(255,77,109,0.12)" stroke="#ff4d6d" stroke-width="1.2"/>
+    <text x="324" y="27" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="800" fill="#ff4d6d" text-anchor="middle" letter-spacing="0.5">GAP</text>
+    <text x="16" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#ffffff">PA timeframes, denials and metrics</text>
+    <text x="16" y="52" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#00ffff">PAS-05 PARTIAL · PAS-06 GAP · PAS-07 PASSABLE</text>
+    <text x="16" y="68" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#00ffff">PAS-08 PASSABLE · METRICS-01 GAP</text>
+    <text x="16" y="94" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" fill="#b0b0b0">No persisted due dates; no CMS metric set</text>
+  </g>
+
+  <!-- SMART on FHIR and consent -->
+  <g transform="translate(420, 378)">
+    <rect width="360" height="108" rx="10" fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="1.2" stroke-opacity="0.6"/>
+    <rect x="270" y="12" width="76" height="22" rx="11" fill="rgba(255,176,32,0.12)" stroke="#ffb020" stroke-width="1.2"/>
+    <text x="308" y="27" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="800" fill="#ffb020" text-anchor="middle" letter-spacing="0.5">PARTIAL</text>
+    <text x="16" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#ffffff">SMART on FHIR and consent</text>
+    <text x="16" y="52" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#00ffff">SEC-01 PARTIAL · CONSENT-01 PARTIAL</text>
+    <text x="16" y="94" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" fill="#b0b0b0">PKCE and scopes tested; launch context, v2 scopes missing</text>
+  </g>
+
+  <!-- Provider Directory API -->
+  <g transform="translate(810, 378)">
+    <rect width="360" height="108" rx="10" fill="rgba(0,255,255,0.05)" stroke="#00ffff" stroke-width="1.2" stroke-opacity="0.6"/>
+    <rect x="246" y="12" width="100" height="22" rx="11" fill="rgba(176,176,176,0.10)" stroke="#b0b0b0" stroke-width="1.2"/>
+    <text x="296" y="27" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="800" fill="#b0b0b0" text-anchor="middle" letter-spacing="0.5">NOT SCORED</text>
+    <text x="16" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#ffffff">Provider Directory API</text>
+    <text x="16" y="52" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#00ffff">No scenario in gap matrix §11</text>
+    <text x="16" y="94" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" fill="#b0b0b0">Open defect D-29: requires auth; CMS requires it public</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(600, 518)">
+    <text x="0" y="0" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#b0b0b0" text-anchor="middle"><tspan fill="#00ff88" font-weight="700">PASSABLE</tspan> scenario supported by tested code  ·  <tspan fill="#ffb020" font-weight="700">PARTIAL</tspan> some of the requirement met  ·  <tspan fill="#ff4d6d" font-weight="700">GAP</tspan> stub, missing, or a blocking defect</text>
+    <text x="0" y="20" font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#b0b0b0" text-anchor="middle">Each card shows its weakest scenario status; the line under the title lists every scenario. PASSABLE is not CMS certification or Da Vinci IG conformance.</text>
   </g>
 
   <!-- Deadline banner -->
-  <rect x="350" y="480" width="500" height="40" rx="6" fill="rgba(0,255,136,0.08)" stroke="#00ff88" stroke-width="1"/>
-  <text x="600" y="506" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="600"
-        fill="#00ff88" text-anchor="middle">January 2027 Deadline - Complete Nov 2024</text>
+  <rect x="300" y="556" width="600" height="38" rx="6" fill="rgba(255,176,32,0.08)" stroke="#ffb020" stroke-width="1"/>
+  <text x="600" y="580" font-family="Segoe UI, system-ui, sans-serif" font-size="14" font-weight="600" fill="#ffb020" text-anchor="middle">API provisions apply from 1 January 2027 · work in progress</text>
 
-  <!-- Bottom stats -->
-  <g transform="translate(0, 550)">
-    <!-- X12 Transactions -->
-    <g transform="translate(150, 0)">
-      <rect x="-120" y="-15" width="240" height="80" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
-      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700"
-            fill="#00ffff" text-anchor="middle">X12 Transactions</text>
-      <text x="-40" y="25" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">270 ~ Patient</text>
-      <text x="40" y="25" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">837 ~ Claim</text>
-      <text x="-40" y="42" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">277 ~ Patient</text>
-      <text x="40" y="42" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">835 ~ EOB</text>
-      <text x="0" y="58" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">278 ~ Coverage &#x00B7; 275 ~ Encounter</text>
-    </g>
-
-    <!-- FHIR Resources -->
-    <g transform="translate(450, 0)">
-      <rect x="-120" y="-15" width="240" height="80" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
-      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="700"
-            fill="#00ffff" text-anchor="middle">FHIR Resources</text>
-      <text x="0" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Patient, Coverage, Claim, EOB</text>
-      <text x="0" y="45" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">Encounter, Practitioner, Organization</text>
-    </g>
-
-    <!-- Tests -->
-    <g transform="translate(750, 0)">
-      <rect x="-100" y="-15" width="200" height="80" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
-      <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="28" font-weight="900"
-            fill="#00ff88" text-anchor="middle">1,740</text>
-      <text x="0" y="32" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600"
-            fill="#ffffff" text-anchor="middle">Tests Passed</text>
-      <text x="0" y="50" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#b0b0b0" text-anchor="middle">85.93% Coverage</text>
-    </g>
-
-    <!-- Response Time -->
-    <g transform="translate(1020, 0)">
-      <rect x="-90" y="-15" width="180" height="80" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
-      <text x="0" y="10" font-family="Segoe UI, system-ui, sans-serif" font-size="28" font-weight="900"
-            fill="#00ff88" text-anchor="middle">&lt;500ms</text>
-      <text x="0" y="35" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600"
-            fill="#ffffff" text-anchor="middle">Avg Response</text>
-    </g>
-  </g>
+  <!-- Source note -->
+  <text x="600" y="628" font-family="Segoe UI, system-ui, sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle">As of 2026-10-11 · Source: gap matrix (docs/epa-gap-matrix.md, §11)</text>
+  <text x="600" y="650" font-family="Segoe UI, system-ui, sans-serif" font-size="10.5" fill="#b0b0b0" text-anchor="middle">If this graphic and the gap matrix disagree, the gap matrix wins.</text>
 </svg>

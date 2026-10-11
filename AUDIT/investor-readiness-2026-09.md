@@ -555,3 +555,75 @@ answer is much better than the current documentation implies.
 *Findings-only sections: §1, §2, §4, §5. Changes made in this branch are limited to
 those itemised in §3. A clean .NET build was not executed in this environment; CI
 is the gate.*
+
+---
+
+## 7. Audit status (2026-10-11)
+
+*Added 2026-10-11. The sections above are the original 2026-09-18 audit and are
+left as written.*
+
+**Method.** Each finding above was checked against `main` at `57f3399e`. A
+finding is marked **Fixed** only where a merged commit on `main` addresses it,
+and that commit is cited. Commits were read from
+`git log origin/main --since-as-filter=2026-09-01` (squash-merge titles carry
+the PR number); repository state was checked by grep where a finding names a
+file or a count. CMS-0057-F status is taken from `docs/epa-gap-matrix.md`, which
+is the source of truth for it. PR #1301 is this cleanup.
+
+**Totals:** 26 findings — **15 fixed**, **3 partly fixed**, **7 open**, and
+**1 closed without a code change**.
+
+### Fixed
+
+| # | Finding (section) | Fixed by |
+| --- | --- | --- |
+| 1 | `main` red: `NU1605` package downgrade in `benefit-plan-service` (§2.1 A) | [#1173](https://github.com/aurelianware/cloudhealthoffice/pull/1173) |
+| 2 | 35 Dockerfiles defaulting to an unreachable, misspelled ACR (§2.1 B) | [#1173](https://github.com/aurelianware/cloudhealthoffice/pull/1173) |
+| 3 | Five committed datastore credentials in k8s manifests (§2.2) | [#1173](https://github.com/aurelianware/cloudhealthoffice/pull/1173) removed them; [#1184](https://github.com/aurelianware/cloudhealthoffice/pull/1184) made the secret scanner actually detect secrets and added `docs/security/CREDENTIAL-ROTATION.md` |
+| 4 | Grafana guide documented a fixed admin password (§2.2b) | [#1173](https://github.com/aurelianware/cloudhealthoffice/pull/1173) |
+| 5 | Stray source archive at the repo root (§2.3) | [#1173](https://github.com/aurelianware/cloudhealthoffice/pull/1173) |
+| 6 | Per-project package pinning; adopt Central Package Management (§3) | [#1176](https://github.com/aurelianware/cloudhealthoffice/pull/1176) (`Directory.Packages.props`) |
+| 7 | `assessment.html` and `insights.html` overclaims (§4.1) | [#1185](https://github.com/aurelianware/cloudhealthoffice/pull/1185) rewrote `assessment.html`; [#1191](https://github.com/aurelianware/cloudhealthoffice/pull/1191) replaced the `insights.html` "complete logical isolation" line |
+| 8 | Benchmark result stated four ways (§4.2) | [#1174](https://github.com/aurelianware/cloudhealthoffice/pull/1174) |
+| 9 | Injection script did not update "across NN test projects" (§4.2b) | [#1301](https://github.com/aurelianware/cloudhealthoffice/pull/1301) (`scripts/inject-test-metrics.js`, with a jest test) |
+| 10 | README architecture diagram listed 276/277/278 as X12 inputs (§4.3) | [#1185](https://github.com/aurelianware/cloudhealthoffice/pull/1185) (now "837, 834, 270/271") |
+| 11 | Test-project count wrong in `FEATURES.md` (§4.3) | [#1174](https://github.com/aurelianware/cloudhealthoffice/pull/1174) (44 → 55); it drifted again to 51 against 65, corrected and now injected by CI in [#1301](https://github.com/aurelianware/cloudhealthoffice/pull/1301) |
+| 12 | 28 of 35 services wired no authentication (§5) | [#1217](https://github.com/aurelianware/cloudhealthoffice/pull/1217) (CHO token auth across services) |
+| 13 | Tenant fell back to client `X-Tenant-ID` / `default-tenant` (§5) | [#1217](https://github.com/aurelianware/cloudhealthoffice/pull/1217) (shared `TenantMiddleware` takes the tenant from the validated token only; a conflicting header is refused) |
+| 14 | Portal `appsettings.Development.json` carried a literal Mongo credential (§5) | [#1301](https://github.com/aurelianware/cloudhealthoffice/pull/1301) ([#1184](https://github.com/aurelianware/cloudhealthoffice/pull/1184) had renamed it to the `local-dev-only` docker default; it is now a no-credential localhost default overridden by `MongoDB__ConnectionString`) |
+| 15 | Local setup failed on a clean machine (§1 table) | [#1174](https://github.com/aurelianware/cloudhealthoffice/pull/1174) (`deploy-local.sh` shebang, `bootstrap-macos.sh`) |
+
+### Partly fixed
+
+| # | Finding (section) | Done | Still open |
+| --- | --- | --- | --- |
+| 16 | Published coverage and test figures disagree with CI (§4.2b) | [#1174](https://github.com/aurelianware/cloudhealthoffice/pull/1174) wired injection into the live Pages deploy and fixed `FEATURES.md`; [#1301](https://github.com/aurelianware/cloudhealthoffice/pull/1301) removed "85.93% Coverage", "1,740 Tests Passed", "100% Ready" and "Complete Nov 2024" from `src/site/graphics/cms-0057f-compliance.svg` | Stale figures remain in `docs/features/IMPLEMENTATION-SUMMARY.md:251` (">80% coverage"), `docs/features/FHIR-IMPLEMENTATION-SUMMARY.md:147` ("100% (FHIR module)"), `docs/features/WEBSITE-UPDATES-FINAL.md:97`, `docs/features/WEBSITE-PHASE2-COMPLETE.md:155` and `docs/features/UPDATES-SUMMARY.md` ("480+ tests") |
+| 17 | Native `Microsoft.Azure.Cosmos` SDK as a direct dependency vs. the Mongo-wire strategy (§4.4) | [#1177](https://github.com/aurelianware/cloudhealthoffice/pull/1177) made MongoDB the default provider and the native Cosmos SDK opt-in (`Database:Provider=CosmosDb`) | The SDK is still referenced by 31 projects |
+| 18 | Trust-boundary / threat model (§5, §6 item 7) | [#1217](https://github.com/aurelianware/cloudhealthoffice/pull/1217) added threat-model sections in `docs/security/portal-token-service.md` and `docs/security/service-auth-rollout-playbook.md` | No standalone one-page trust-boundary document for diligence |
+
+### Open
+
+| # | Finding (section) | Status |
+| --- | --- | --- |
+| 19 | Rotate the PostgreSQL literal wherever `reference-data-service` ran shared (§1b item 4, §2.2) | Owner action; nothing in the repository can show it was done |
+| 20 | What the Azure subscription hosts (§1b item 1, §4.4) | Unverified; needs the `az` commands in §4.4 |
+| 21 | `reference-data-service` on PostgreSQL, the one non-Mongo store (§4.4) | Unchanged (`Npgsql.EntityFrameworkCore.PostgreSQL`) |
+| 22 | Dead duplicate manifests `infrastructure/k8s/coverage-service-deployment.yaml` and `member-service-deployment.yaml` (§3) | Still present |
+| 23 | Low coverage on the adjudication engines (§4.2b) | No change targeted at it found; not re-measured here |
+| 24 | `NotImplementedException` count (§5) | Standing: 86 occurrences under `src` outside test folders (by grep), against 89 at audit time |
+| 25 | Clean-checkout `docker compose up` transcript and green CI link for the data room (§6 item 8) | Not found in the repository |
+
+### Closed without a code change
+
+| # | Finding (section) | Status |
+| --- | --- | --- |
+| 26 | PR #1104 and PR #1141 still open (§5, §6 item 5) | Both closed unmerged on 2026-09-21 |
+
+**CMS-0057-F, for context.** The September audit did not grade CMS-0057-F.
+`docs/epa-gap-matrix.md` (2026-10-10, updated 2026-10-11) now does: §11 records
+3 PASSABLE, 10 PARTIAL and 8 GAP of 21 scenarios, and §1 rates PAS, CRD and DTR
+"not conformant". Public copy was corrected against it in
+[#1293](https://github.com/aurelianware/cloudhealthoffice/pull/1293), and the
+compliance graphic in [#1301](https://github.com/aurelianware/cloudhealthoffice/pull/1301).
+None of this is a CMS-0057-F conformance claim.

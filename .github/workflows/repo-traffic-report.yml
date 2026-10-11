@@ -9,6 +9,12 @@ name: Weekly Repository Traffic Report
 # One-time setup (see PR notes): create a token that can read traffic and add
 # it as the repository secret TRAFFIC_TOKEN. The default GITHUB_TOKEN cannot
 # read the traffic API.
+#
+# The two tokens are used in separate steps. TRAFFIC_TOKEN only gathers the
+# traffic data (the traffic endpoints need push/admin access). The rolling
+# issue is read and commented on with the workflow's own GITHUB_TOKEN, because
+# the PAT was refused there with 403 "Resource not accessible by personal
+# access token". The report body is handed between the steps as a file.
 
 on:
   schedule:
@@ -23,14 +29,19 @@ permissions:
 jobs:
   traffic-report:
     runs-on: ubuntu-latest
+    # A job-level block replaces the defaults, so list everything the job needs.
+    permissions:
+      issues: write
+      contents: read
     steps:
-      - name: Collect traffic and post rolling issue
+      - name: Collect traffic
         uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.TRAFFIC_TOKEN }}
           script: |
+            const fs = require('fs');
+            const path = require('path');
             const { owner, repo } = context.repo;
-            const ISSUE_TITLE = '📈 Weekly repository traffic';
 
             // --- Pull traffic data (requires push access / TRAFFIC_TOKEN) ---
             const clones = (await github.rest.repos.getClones({ owner, repo })).data;
@@ -72,6 +83,20 @@ jobs:
               '',
               '> Clones are the strongest "someone is evaluating the platform" signal — a clone means someone pulled the repo to run it.',
             ].join('\n');
+
+            fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'traffic-report.md'), body, 'utf8');
+            core.info('Traffic report written for the posting step');
+
+      - name: Post rolling issue
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { owner, repo } = context.repo;
+            const ISSUE_TITLE = '📈 Weekly repository traffic';
+            const body = fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'traffic-report.md'), 'utf8');
 
             // --- Find the rolling issue, comment on it, or create it ---
             const existing = await github.paginate(github.rest.issues.listForRepo, {
