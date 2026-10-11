@@ -271,6 +271,7 @@ public sealed class AccumulatorOperationsService
         if (!await _claims.TryAcquireResolutionLockAsync(
                 tenantId, claim.Id, lockToken, actor, now, Controllers.ClaimsController.ResolutionLockDuration, ct))
             return Item("Skipped", "being resolved, or no longer Pended");
+        AccumulatorPendRerunItem StillPended(string detail) => Item("StillPended", detail);
         try
         {
             claim = await _claims.GetForAccumulatorOutboxAsync(tenantId, claim.Id, ct) ?? claim;
@@ -290,21 +291,28 @@ public sealed class AccumulatorOperationsService
             }, ct);
             if (rerun.ResolutionLockLost)
                 return Item("Failed", "the resolution lock was lost during the re-run");
-            // A definitive answer on the re-run denies (owner decision
-            // 2026-10-11: CARC 197 after authorization-service's NotFound /
-            // Invalid) — but only when no check on this run failed (#1299
-            // S-A): with a PA lookup still unavailable, or a check that threw,
-            // another stage's Deny must not finalize the claim; it stays pended.
-            var transientFailure = (rerun.UnresolvedReasons ?? [])
-                .Append(rerun.Reason)
-                .Any(ClaimAdjudicationOrchestrator.IsTransientFailure);
-            var deny = kind.DenyIsFinal && rerun.Outcome == ClaimAdjudicationOutcome.Deny && !transientFailure;
-            if (kind.DenyIsFinal && rerun.Outcome == ClaimAdjudicationOutcome.Deny && transientFailure)
-                return Item("StillPended", $"Deny not finalized: a check could not run on this re-run ({rerun.DenialReason ?? rerun.Reason})");
+            // Owner decision Q-15 (2026-10-11): the re-run denies only on the
+            // PA check's definitive answer (CARC 197 after authorization-
+            // service's NotFound / Invalid), and only when no check on this
+            // run failed (#1299 re-verify B1). The orchestrator decides
+            // "a check failed" from the run's structured state (CheckFailed);
+            // the reason-text markers are a second guard. Any other Deny —
+            // the benefit engine unavailable (999), NCCI in Deny mode, ... —
+            // is left pended for an examiner.
+            var transientFailure = rerun.CheckFailed
+                || (rerun.UnresolvedReasons ?? []).Append(rerun.Reason).Any(ClaimAdjudicationOrchestrator.IsTransientFailure);
+            var definitivePriorAuthDenial = string.Equals(
+                rerun.DenialReasonCode, Stages.BenefitCalculationStage.PriorAuthorizationRequiredCode, StringComparison.Ordinal);
+            var deny = kind.DenyIsFinal && rerun.Outcome == ClaimAdjudicationOutcome.Deny
+                       && definitivePriorAuthDenial && !transientFailure;
+            if (kind.DenyIsFinal && rerun.Outcome == ClaimAdjudicationOutcome.Deny && !deny)
+                return StillPended(transientFailure
+                    ? $"Deny not finalized: a check could not run on this re-run ({rerun.DenialReason ?? rerun.Reason})"
+                    : $"Deny not finalized: not the prior-authorization check's denial ({rerun.DenialReason ?? rerun.Reason}); an examiner resolves it");
             if (!deny && rerun.Outcome != ClaimAdjudicationOutcome.Pass)
-                return Item("StillPended", $"{rerun.Outcome}: {rerun.Reason}");
+                return StillPended($"{rerun.Outcome}: {rerun.Reason}");
             if (!deny && rerun.PreparedAccumulatorCommit is null)
-                return Item("StillPended", "benefit-plan-service still prepares no accumulator commit");
+                return StillPended("benefit-plan-service still prepares no accumulator commit");
 
             // From here the decision is made: finish it whatever the caller does.
             var disposition = deny ? ClaimStatus.Denied : ClaimStatus.Approved;
