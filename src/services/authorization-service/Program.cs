@@ -1,6 +1,4 @@
-using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Extensions;
-using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using AuthorizationService;
 using AuthorizationService.Consumers;
@@ -81,27 +79,12 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
 }
 else
 {
-    // Use Cosmos DB (Default)
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"];
-        var key = configuration["CosmosDb:Key"];
-        
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
-        
-        var options = new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
-        };
-        
-        return new CosmosClient(endpoint, key, options);
-    });
-
+    // Cosmos DB. The CosmosClient is the one AddChoDatabase registered above,
+    // with the shared CosmosSystemTextJsonSerializer (camelCase, enums as
+    // strings, nulls omitted). Registering another client here would override
+    // it; the service's own copy stored enums as numbers while every query
+    // compared strings, so search, summary, open authorizations and retention
+    // found nothing (D-18).
     builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepository>();
     Console.WriteLine("Using Cosmos DB repository");
 }
