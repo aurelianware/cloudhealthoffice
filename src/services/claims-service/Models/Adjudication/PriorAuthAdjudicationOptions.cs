@@ -19,6 +19,20 @@ public sealed class PriorAuthAdjudicationOptions
     /// lines of claims whose authorization was approved. The default scope —
     /// every line of an institutional Medicaid inpatient (POS 21) claim — is
     /// unaffected by this setting.
+    ///
+    /// <para>
+    /// <b>Prerequisites for turning it on</b> (owner decision 2026-10-11,
+    /// docs/epa-gap-matrix.md §7.1 Q-15), besides G-07:
+    /// <list type="number">
+    ///   <item>D-36 — examiner approval re-runs call coverage-service with the
+    ///   examiner's token, which lacks <c>coverage:read</c>;</item>
+    ///   <item>D-40 — plan lookups (<c>HttpBenefitPlanResolver</c>) forward the
+    ///   caller's token: on an approval re-run every examiner role must hold
+    ///   <c>benefits:read</c> in the stored TenantRole catalogue, or plan lookups
+    ///   must use the service identity (<c>UseChoServiceIdentity</c>). Otherwise
+    ///   every approval re-run of a claim outside the floor pends PLANUNAVAIL.</item>
+    /// </list>
+    /// </para>
     /// </summary>
     public bool UsePlanFlaggedCodes { get; set; }
 }

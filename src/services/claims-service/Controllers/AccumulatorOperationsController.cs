@@ -67,6 +67,10 @@ public sealed class AccumulatorOperationsController : ControllerBase
     /// services answer again (#1299 S1). The lookup always runs under
     /// claims-service's own service identity. Each claim passes or denies only
     /// on a definitive answer; one still without an answer stays pended.
+    /// Denying with CARC 197 after authorization-service's definitive
+    /// "not found" / "invalid" is approved by the owner (2026-10-11, matrix
+    /// §7.1 Q-14); a failed lookup never leads to a denial — a Deny on a run
+    /// where any check could not run is not finalized.
     /// </summary>
     [HttpPost("prior-auth-unavailable-pends/rerun")]
     [ProducesResponseType(typeof(AccumulatorPendRerunResult), StatusCodes.Status200OK)]
