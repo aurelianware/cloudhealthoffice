@@ -22,7 +22,7 @@ public sealed class PriorAuthAdjudicationOptions
     ///
     /// <para>
     /// <b>Prerequisites for turning it on</b> (owner decision 2026-10-11,
-    /// docs/epa-gap-matrix.md §7.1 Q-15), besides G-07:
+    /// docs/epa-gap-matrix.md §7.1 Q-16), besides G-07:
     /// <list type="number">
     ///   <item>D-36 — examiner approval re-runs call coverage-service with the
     ///   examiner's token, which lacks <c>coverage:read</c>;</item>
