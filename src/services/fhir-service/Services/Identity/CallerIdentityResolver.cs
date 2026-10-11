@@ -43,7 +43,8 @@ public sealed class CallerIdentityResolver
         return new AuthenticatedCaller
         {
             Issuer = issuer.Issuer,
-            Subject = FirstNonEmpty(principal, "sub", ClaimTypes.NameIdentifier),
+            // The JWT name: the SMART scheme does not map `sub` (D-32).
+            Subject = FirstNonEmpty(principal, "sub"),
             AuthorizedParty = FirstNonEmpty(principal, "azp"),
             ClientId = Mapped(principal, map.ClientIdClaim)
                        ?? FirstNonEmpty(principal, "client_id", "azp"),
@@ -99,25 +100,13 @@ public sealed class CallerIdentityResolver
     }
 
     /// <summary>
-    /// Scope parsing, matching SmartScopeEnforcementMiddleware exactly: both the
-    /// space-delimited `scope` claim and repeated `scp` claims. Kept identical
-    /// rather than reimplemented — two parsers that drift are two different
-    /// answers to "what may this caller do".
+    /// The granted scopes, by the one shared rule (<see cref="SmartScopeClaims"/>):
+    /// <c>scope</c> or <c>scp</c>, or both when they agree. Empty when they
+    /// disagree (such a token is refused at authentication). The same parser
+    /// SmartScopeEnforcementMiddleware uses — two parsers that drift are two
+    /// different answers to "what may this caller do".
     /// </summary>
-    public static HashSet<string> ParseScopes(ClaimsPrincipal user)
-    {
-        var scopes = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var claim in user.FindAll("scope"))
-            foreach (var value in claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                scopes.Add(value);
-
-        foreach (var claim in user.FindAll("scp"))
-            foreach (var value in claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                scopes.Add(value);
-
-        return scopes;
-    }
+    public static HashSet<string> ParseScopes(ClaimsPrincipal user) => SmartScopeClaims.Parse(user);
 
     private static string? Mapped(ClaimsPrincipal principal, string? claimType)
         => string.IsNullOrWhiteSpace(claimType) ? null : FirstNonEmpty(principal, claimType!);
