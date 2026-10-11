@@ -46,7 +46,7 @@ public class PasProviderVerificationTests
         // Default: auto-adjudicator approves
         _adjudicatorMock
             .Setup(a => a.TryDecideAsync(
-                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PasDecisionResult
             {
                 HasDecision = true,

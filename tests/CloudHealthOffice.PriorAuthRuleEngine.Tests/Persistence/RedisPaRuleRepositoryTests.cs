@@ -178,9 +178,9 @@ public class RedisPaRuleRepositoryTests
                 "test:_global:pa-rules:TX:3:any:platform"
             });
 
-        await _sut.DeleteAsync("TX-STAR-REG-001", "TX");
+        await _sut.DeleteAsync("TX-STAR-REG-001", "TX", "tenant-1");
 
-        await _inner.Received(1).DeleteAsync("TX-STAR-REG-001", "TX", Arg.Any<CancellationToken>());
+        await _inner.Received(1).DeleteAsync("TX-STAR-REG-001", "TX", "tenant-1", Arg.Any<CancellationToken>());
 
         // SCAN pattern is ANCHORED at the guard prefix — no leading wildcard.
         // Copilot flagged the previous "*pa-rules:…" pattern because it
@@ -220,9 +220,9 @@ public class RedisPaRuleRepositoryTests
             Options.Create(new PriorAuthRuleEngineOptions { RuleSetCacheTtl = Ttl }),
             Substitute.For<ILogger<RedisPaRuleRepository>>());
 
-        await sutWithoutMux.DeleteAsync("TX-STAR-REG-001", "TX");
+        await sutWithoutMux.DeleteAsync("TX-STAR-REG-001", "TX", "tenant-1");
 
-        await _inner.Received(1).DeleteAsync("TX-STAR-REG-001", "TX", Arg.Any<CancellationToken>());
+        await _inner.Received(1).DeleteAsync("TX-STAR-REG-001", "TX", "tenant-1", Arg.Any<CancellationToken>());
         // No multiplexer → no SCAN, no KeyDelete, no throw.
     }
 

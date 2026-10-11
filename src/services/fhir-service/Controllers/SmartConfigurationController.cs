@@ -117,8 +117,13 @@ public class SmartConfigurationController : FhirControllerBase
                 "user/Encounter.read",
                 "user/Claim.read",
 
+                // Payer-to-Payer (CMS-0057-F): the ONE scope that opens the inbound
+                // $member-data-export and $member-match. No wildcard satisfies it.
+                "system/PayerToPayer.read",
+
                 // Writes. The FHIR surface serves genuine writes (PAS
-                // Claim/$submit, CDex $submit-attachment, DTR authoring) and a
+                // Claim/$submit, CDex $submit-attachment, DTR responses; Questionnaire
+                // authoring is CHO-admin only and has no SMART scope) and a
                 // read scope does not authorize any of them, so the write scopes
                 // have to be discoverable. There is no patient-context write
                 // scope: every write here is a provider/payer transaction.
@@ -128,8 +133,6 @@ public class SmartConfigurationController : FhirControllerBase
                 "system/Claim.write",
                 "user/Task.write",
                 "system/Task.write",
-                "user/Questionnaire.write",
-                "system/Questionnaire.write",
                 "user/QuestionnaireResponse.write",
                 "system/QuestionnaireResponse.write"
             },
