@@ -39,7 +39,7 @@
   "dependencies": {
     "@azure/identity": "^4.13.3",
     "@azure/openai": "^2.0.0",
-    "@azure/service-bus": "^7.9.5",
+    "@azure/service-bus": "^7.10.0",
     "@azure/storage-blob": "^12.34.0",
     "ajv": "^8.18.0",
     "ajv-formats": "^2.1.1",
@@ -59,7 +59,7 @@
     "@types/jest": "^29.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.43",
-    "@typescript-eslint/eslint-plugin": "^8.71.0",
+    "@typescript-eslint/eslint-plugin": "^8.71.1",
     "@typescript-eslint/parser": "^8.57.1",
     "eslint": "^9.39.5",
     "husky": "^8.0.3",
