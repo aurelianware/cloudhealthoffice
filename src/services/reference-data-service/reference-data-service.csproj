@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <EmbeddedResource Include="Migrations/*.sql" />
     <PackageReference Include="System.Security.Cryptography.Xml" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ReferenceData\CloudHealthOffice.ReferenceData.csproj" />
