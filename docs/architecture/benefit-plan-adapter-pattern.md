@@ -161,3 +161,8 @@ shaped so a future FHIR projection layer can map them onto FHIR
 The CHO adapter today returns the existing model unchanged via the
 mapper; the QNXT/Facets/HealthEdge adapters will populate the same shape
 when implemented.
+
+## See also
+
+- `docs/features/questionnaires/qre-core-admin-adapter-questions.md` —
+  how a per-plan QNXT, Facets or HealthEdge adapter is scoped.

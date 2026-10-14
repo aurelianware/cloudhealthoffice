@@ -9,7 +9,10 @@ namespace BenefitPlanService.Services;
 /// Routing decisions:
 ///   ChoReplace   — CHO adjudicates, result is authoritative
 ///   ChoAugment   — CHO adjudicates in shadow alongside QNXT, QNXT is authoritative
-///   LegacyOnly   — Route to QNXT (ICoreAdminAdapter), CHO does not process
+///   LegacyOnly   — Legacy core (e.g. QNXT) processes; CHO does not. Legacy
+///                  access goes through the per-domain adapters (IClaimAdapter,
+///                  IProviderAdapter, IBenefitPlanAdapter, IIdCardAdapter), which
+///                  are built per engagement from the core admin adapter QRE.
 ///
 /// The router uses a compound key: "{claimType}-{lobName}" to look up
 /// the operating mode (for example, "professional-medicaid"). If no specific
