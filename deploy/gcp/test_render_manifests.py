@@ -57,6 +57,8 @@ def test_managed_secrets_and_autoscalers_are_dropped():
     secrets = {d["metadata"]["name"] for d in docs if d["kind"] == "Secret"}
     assert "attachment-service-secret" not in secrets
     assert "member-document-service-secret" not in secrets
+    assert "provider-verification-service-secrets" not in secrets
+    assert not [d for d in docs if d["kind"] == "Ingress"]
     assert not [d for d in docs if d["kind"] == "HorizontalPodAutoscaler"]
 
 
@@ -85,3 +87,20 @@ def test_ai_examiner_is_off_unless_requested():
 def test_kafka_bootstrap_is_set_on_every_service():
     for name, dep in deployments(render()).items():
         assert env(dep)["Kafka__BootstrapServers"] == "kafka:9092", name
+
+
+def test_each_deployment_is_rendered_once():
+    names = [d["metadata"]["name"] for d in render() if d["kind"] == "Deployment"]
+    assert len(names) == len(set(names)), sorted(n for n in names if names.count(n) > 1)
+
+
+def test_smart_auth_and_fhir_start_without_external_identity():
+    docs = render()
+    config = next(d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "smart-auth-service-config")
+    assert not [k for k in config["data"] if k.startswith("SmartAuth__TrustedProxyNetworks__")]
+    deps = deployments(docs)
+    assert env(deps["smart-auth-service"])["ChoAuth__ServiceToken__ClientId"] == "smart-auth-service"
+    fhir = deps["fhir-service"]["spec"]["template"]["spec"]["containers"][0]
+    for probe in ("livenessProbe", "readinessProbe"):
+        if fhir.get(probe, {}).get("httpGet"):
+            assert fhir[probe]["httpGet"]["path"] == "/health/live"

@@ -140,7 +140,17 @@ fi
 
 # ── MongoDB and Redis ────────────────────────────────────────────────────────
 log "Deploying MongoDB and Redis"
-kubectl apply -f infrastructure/k8s/mongodb-deployment.yaml >/dev/null
+# The manifest sets a 3.5 GB WiredTiger cache but requests 2Gi. Autopilot can
+# hold a pod to its request, so request enough memory for the cache.
+python3 - <<'PY' | kubectl apply -f - >/dev/null
+import sys, yaml
+docs = [d for d in yaml.safe_load_all(open("infrastructure/k8s/mongodb-deployment.yaml")) if d]
+for d in docs:
+    if d.get("kind") == "StatefulSet":
+        for c in d["spec"]["template"]["spec"]["containers"]:
+            c.setdefault("resources", {}).setdefault("requests", {})["memory"] = "5Gi"
+yaml.safe_dump_all(docs, sys.stdout, sort_keys=False)
+PY
 kubectl apply -f infrastructure/k8s/redis-dataprotection.yaml >/dev/null
 kubectl rollout status statefulset/mongodb -n "$NAMESPACE" --timeout=600s >/dev/null \
   && ok "mongodb" || err "MongoDB did not become ready"
@@ -184,10 +194,17 @@ ok "applied $(grep -c '^kind: Deployment' "$rendered") deployments"
   || warn "AI claims examiner off (set ANTHROPIC_API_KEY to enable)"
 
 # ── Wait ─────────────────────────────────────────────────────────────────────
-log "Waiting for rollouts (timeout $ROLLOUT_TIMEOUT each)"
-failed=()
+log "Waiting for rollouts in parallel (timeout $ROLLOUT_TIMEOUT)"
+# Autopilot adds nodes as pods are scheduled, so the first rollout is slow.
+# Waiting in parallel keeps the total close to the slowest service.
+declare -A wait_pids=()
 for dep in $(kubectl get deployments -n "$NAMESPACE" -o jsonpath='{range .items[?(@.spec.replicas>0)]}{.metadata.name}{"\n"}{end}'); do
-  if kubectl rollout status "deployment/$dep" -n "$NAMESPACE" --timeout="$ROLLOUT_TIMEOUT" >/dev/null 2>&1; then
+  kubectl rollout status "deployment/$dep" -n "$NAMESPACE" --timeout="$ROLLOUT_TIMEOUT" >/dev/null 2>&1 &
+  wait_pids[$dep]=$!
+done
+failed=()
+for dep in "${!wait_pids[@]}"; do
+  if wait "${wait_pids[$dep]}"; then
     ok "$dep"
   else
     warn "$dep not ready"

@@ -47,7 +47,6 @@ EXTRA_MANIFESTS = [
     "infrastructure/k8s/sponsor-service-deployment.yaml",
     "infrastructure/k8s/provider-verification-service-deployment.yaml",
     "k8s/idcard-service.yaml",
-    "k8s/member-document-service.yaml",
     "src/portal/CloudHealthOffice.Portal/k8s/portal-deployment.yaml",
 ]
 
@@ -100,11 +99,14 @@ IMAGE_PREFIX = "cloudhealthoffice-"
 MANAGED_SECRETS = {
     "attachment-service-secret",
     "member-document-service-secret",
+    "provider-verification-service-secrets",
 }
 
 # Probe paths scripts/deploy-local.sh patches to /health/live.
 READINESS_TO_LIVE = {"appeals-service", "consent-service", "personal-representative-service"}
-BOTH_PROBES_TO_LIVE = {"encounter-service", "sponsor-service"}
+# fhir-service: its /health includes the SMART issuer-discovery readiness
+# check, which needs an external identity provider the demo doesn't have.
+BOTH_PROBES_TO_LIVE = {"encounter-service", "sponsor-service", "fhir-service"}
 
 # Kept off Development by scripts/deploy-local.sh; run as Testing here.
 TESTING_HOSTS = {"claims-service", "provider-service", "fhir-service"}
@@ -177,7 +179,7 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
     kind = doc.get("kind")
     name = doc.get("metadata", {}).get("name", "")
 
-    if kind == "HorizontalPodAutoscaler":
+    if kind in ("HorizontalPodAutoscaler", "Ingress"):
         return None
     if kind == "Secret" and name in MANAGED_SECRETS:
         return None
@@ -193,6 +195,9 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
                 data[key] = "InMemory"
         if name == "smart-auth-service-config":
             data["SmartAuth__DevMode"] = "true"
+            # Placeholder CIDRs fail parsing at startup; there is no ingress proxy in the demo.
+            for key in [k for k in data if k.startswith("SmartAuth__TrustedProxyNetworks__")]:
+                del data[key]
         return doc
 
     spec = pod_spec(doc)
@@ -252,6 +257,10 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             set_env(container, "Adjudication__Enforcement__AiMode", "BestEffort" if args.ai_examiner else "Disabled")
         if name == "portal":
             set_env(container, "XDG_DATA_HOME", "/tmp")
+        if name == "smart-auth-service":
+            # The only service whose manifest and Development settings name no
+            # service-token client id; the demo token config requires one.
+            set_env(container, "ChoAuth__ServiceToken__ClientId", "smart-auth-service")
 
     return doc
 
