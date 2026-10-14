@@ -91,6 +91,8 @@ BUILT_IMAGES = {
     "trading-partner-service": "src/services/trading-partner-service/Dockerfile",
 }
 
+AKS_TAINT_DOMAIN = "kubernetes.azure.com"
+
 SOURCE_REGISTRIES = ("clouhealthoffice.azurecr.io/", "ghcr.io/aurelianware/")
 IMAGE_PREFIX = "cloudhealthoffice-"
 
@@ -216,9 +218,12 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             replicas = 0
         doc["spec"]["replicas"] = replicas
 
+    # Drop tolerations for AKS node taints (keys in the kubernetes.azure.com
+    # domain, e.g. the spot scale-set taint). Compare the key's domain part
+    # exactly rather than by substring.
     tolerations = [
         t for t in spec.get("tolerations", []) or []
-        if not str(t.get("key", "")).startswith("kubernetes.azure.com/")
+        if str(t.get("key", "")).split("/", 1)[0] != AKS_TAINT_DOMAIN
     ]
     if tolerations:
         spec["tolerations"] = tolerations
