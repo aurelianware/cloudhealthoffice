@@ -1,6 +1,6 @@
 # Cloud Health Office demo environment on Google Cloud.
 #
-# DEMO-GRADE. This provisions a GKE Autopilot cluster, an Artifact Registry
+# DEMO-GRADE. This provisions a GKE cluster (Standard by default, or Autopilot), an Artifact Registry
 # repository and keyless GitHub Actions access. It is not a HIPAA production
 # environment: no Google BAA, CMEK, private cluster or Private Service Connect
 # is configured. Use synthetic data only. See docs/deploy/GCP-DEMO.md.
@@ -59,13 +59,39 @@ resource "google_artifact_registry_repository" "cho" {
 
 # ── Cluster ──────────────────────────────────────────────────────────────────
 
+# Two shapes, chosen by var.autopilot:
+#   - Standard (default): one zonal node on standard persistent disk. Fits a
+#     new billing account's default quotas (12 vCPU, 250 GB SSD, 4 external
+#     IPs), which Google will not raise until the account has billing history.
+#   - Autopilot: regional, scales with the workload; needs roughly 24 vCPU and
+#     500 GB of SSD quota for the full demo.
+# Switching between them replaces the cluster.
+
+locals {
+  cluster_location = var.autopilot ? var.region : var.zone
+}
+
 resource "google_container_cluster" "cho" {
   project  = var.project_id
   name     = var.cluster_name
-  location = var.region
+  location = local.cluster_location
 
-  enable_autopilot    = true
+  enable_autopilot    = var.autopilot
   deletion_protection = var.deletion_protection
+
+  # Standard: the default pool is created with one small node and removed
+  # once the cluster exists; google_container_node_pool.demo holds the nodes.
+  remove_default_node_pool = var.autopilot ? null : true
+  initial_node_count       = var.autopilot ? null : 1
+
+  dynamic "node_config" {
+    for_each = var.autopilot ? [] : [1]
+    content {
+      machine_type = "e2-small"
+      disk_type    = "pd-standard"
+      disk_size_gb = 30
+    }
+  }
 
   release_channel {
     channel = "REGULAR"
@@ -74,6 +100,35 @@ resource "google_container_cluster" "cho" {
   resource_labels = local.labels
 
   depends_on = [google_project_service.required]
+
+  lifecycle {
+    # The default pool's settings only apply at creation.
+    ignore_changes = [node_config]
+  }
+}
+
+resource "google_container_node_pool" "demo" {
+  count = var.autopilot ? 0 : 1
+
+  project    = var.project_id
+  name       = "demo"
+  cluster    = google_container_cluster.cho.name
+  location   = local.cluster_location
+  node_count = var.node_count
+
+  node_config {
+    machine_type = var.node_machine_type
+    # pd-standard counts against the standard-disk quota, not the SSD quota.
+    disk_type    = "pd-standard"
+    disk_size_gb = var.node_disk_size_gb
+    oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+    labels       = local.labels
+  }
+
+  management {
+    auto_repair  = true
+    auto_upgrade = true
+  }
 }
 
 # ── Keyless GitHub Actions access (Workload Identity Federation) ─────────────
@@ -140,7 +195,7 @@ resource "google_project_iam_member" "deployer_gke" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
-# Autopilot nodes pull images with the default compute service account.
+# Nodes pull images with the default compute service account.
 resource "google_artifact_registry_repository_iam_member" "nodes_pull" {
   project    = var.project_id
   location   = google_artifact_registry_repository.cho.location

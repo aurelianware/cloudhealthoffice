@@ -104,3 +104,38 @@ def test_smart_auth_and_fhir_start_without_external_identity():
     for probe in ("livenessProbe", "readinessProbe"):
         if fhir.get(probe, {}).get("httpGet"):
             assert fhir[probe]["httpGet"]["path"] == "/health/live"
+
+
+def test_volumes_use_standard_disk_by_default():
+    docs = render()
+    pvc = next(d for d in docs if d["kind"] == "PersistentVolumeClaim")
+    assert pvc["spec"]["storageClassName"] == "cho-pd-standard"
+    for d in docs:
+        for t in d.get("spec", {}).get("volumeClaimTemplates", []) or []:
+            assert t["spec"]["storageClassName"] == "cho-pd-standard", d["metadata"]["name"]
+
+
+def test_small_profile_fits_one_node():
+    def millicores(v):
+        v = str(v)
+        return int(float(v[:-1])) if v.endswith("m") else int(float(v) * 1000)
+
+    docs = render("--resource-profile", "small", "--claims-replicas", "1", "--benefit-plan-replicas", "1")
+    total = 0
+    for d in docs:
+        if d["kind"] not in ("Deployment", "StatefulSet"):
+            continue
+        for c in d["spec"]["template"]["spec"]["containers"]:
+            total += d["spec"].get("replicas", 1) * millicores(c["resources"]["requests"]["cpu"])
+    # Leaves room on an e2-standard-8 (~7.9 vCPU allocatable) for MongoDB,
+    # Kafka, Redis and GKE system pods.
+    assert total <= 3000, total
+    deps = deployments(docs)
+    assert deps["claims-service"]["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"]["cpu"] == "250m"
+    # Limits are untouched, so services can still burst.
+    assert deps["claims-service"]["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"]["cpu"] == "4000m"
+
+
+def test_default_profile_keeps_manifest_requests():
+    deps = deployments(render())
+    assert deps["claims-service"]["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"]["cpu"] == "1000m"

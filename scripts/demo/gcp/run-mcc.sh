@@ -24,7 +24,7 @@ export KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-none}"
 export CLAIMS="${CLAIMS:-2000}"
 export PARALLELISM="${PARALLELISM:-10}"
 export JOB_TIMEOUT="${JOB_TIMEOUT:-30m}"
-# Autopilot may add a node before a restarted service is ready.
+# Restarted services (and on Autopilot, new nodes) can take a while to be ready.
 export ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-600s}"
 
 exec "$ROOT_DIR/scripts/run-mcc-local-k8s.sh"

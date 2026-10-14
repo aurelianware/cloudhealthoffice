@@ -1,6 +1,6 @@
 # Cloud Health Office demo on Google Cloud (GKE)
 
-This runbook stands up Cloud Health Office on GKE Autopilot, runs a 25-minute demo, and tears it down. The same services that run on Azure AKS run here without an application rewrite. Only the infrastructure, manifests rendering and secrets differ.
+This runbook stands up Cloud Health Office on GKE (a single-node Standard cluster by default, or Autopilot), runs a 25-minute demo, and tears it down. The same services that run on Azure AKS run here without an application rewrite. Only the infrastructure, manifests rendering and secrets differ.
 
 > **Demo-grade.** Synthetic data only. The cluster trusts the repository's public development signing key and has no public ingress; it is reached by `kubectl port-forward`. It is not a HIPAA production environment. See [What this is and isn't](#what-this-is-and-isnt).
 
@@ -12,7 +12,7 @@ flowchart LR
   gha["GitHub Actions<br/>deploy-gcp-gke.yml"]
   subgraph gcp["Google Cloud project"]
     ar["Artifact Registry<br/>cho"]
-    subgraph gke["GKE Autopilot: cho-demo"]
+    subgraph gke["GKE: cho-demo"]
       subgraph ns["namespace cloudhealthoffice"]
         portal["Portal (Blazor)"]
         svc["~36 .NET 8 services<br/>claims, benefit plan, FHIR, ..."]
@@ -64,7 +64,7 @@ flowchart LR
 4. **Connect and check.** On the presenter's laptop:
 
    ```bash
-   gcloud container clusters get-credentials cho-demo --region us-west1 --project YOUR_PROJECT_ID
+   gcloud container clusters get-credentials cho-demo --location us-west1-a --project YOUR_PROJECT_ID   # --location us-west1 for Autopilot
    ./scripts/demo/gcp/port-forward.sh               # leave running in its own terminal
    python3 scripts/demo/gcp/cho_demo.py smoke       # must end "All smoke checks passed."
    ```
@@ -99,7 +99,14 @@ cd infrastructure/gcp
 terraform destroy -var="project_id=YOUR_PROJECT_ID"
 ```
 
-To pause between rehearsals without destroying the setup, scale the workloads to zero (Autopilot bills for running pods, not idle capacity):
+To pause between rehearsals without destroying the setup, scale the node pool to zero. Volumes are kept; Kafka and the services come back when the node does:
+
+```bash
+gcloud container clusters resize cho-demo --node-pool demo --num-nodes 0 --location us-west1-a
+# resume: --num-nodes 1
+```
+
+On Autopilot, which bills for running pods rather than nodes, scale the workloads instead:
 
 ```bash
 kubectl scale deployment --all -n cloudhealthoffice --replicas=0
@@ -109,7 +116,9 @@ kubectl delete -f deploy/gcp/kafka/kafka-cluster.yaml                   # Kafka 
 
 To bring everything back, rerun the deploy workflow with the existing image tag. It recreates Kafka and restores replica counts.
 
-**Cost.** Requested resources total about 12 vCPU and 16 GiB with Kafka and MongoDB: roughly $15 a day while running on Autopilot, plus small storage and image costs. Set the budget alert.
+**Cost.** The default single e2-standard-8 node (8 vCPU, 32 GB) runs about $7 a day including the cluster fee (Google's free tier credits one zonal cluster's management fee), plus about 165 GB of standard disk and image storage. Autopilot with the full resource profile is roughly $15 a day. Set the budget alert.
+
+**Why one node by default.** A new billing account starts with 12 vCPU, 250 GB of SSD and 4 external IPs, and Google declines increases until the account has billing history. The default cluster, the `small` resource profile (lower CPU requests, one replica per service; limits unchanged) and standard persistent disk fit inside those limits. Once quota is raised, set `autopilot = true` (or a larger `node_machine_type` / `node_count`) and deploy with `resource_profile: default` for benchmark runs. The live MCC run in the demo is a small sample either way.
 
 ## What this is and isn't
 
@@ -136,6 +145,6 @@ To bring everything back, rerun the deploy workflow with the existing image tag.
 |---|---|
 | Pod in `CreateContainerConfigError` | A secret or key it references is missing: `kubectl describe pod <pod> -n cloudhealthoffice`. Add it to `scripts/deploy-gke.sh`. |
 | Service crash-loops at startup | `kubectl logs deployment/<name> -n cloudhealthoffice`. A `ChoAuth` error means its host environment or `cho-service-tokens` didn't apply. |
-| Kafka not ready | `kubectl get kafka,kafkanodepool,pods -n kafka`. Autopilot may take a few minutes to add capacity. |
+| Kafka not ready | `kubectl get kafka,kafkanodepool,pods -n kafka`. On Autopilot, capacity can take a few minutes to arrive. On the Standard cluster, `kubectl describe pod` showing `Insufficient cpu` or `memory` means the node is full: deploy with the `small` profile or add a node. |
 | `401` from every API | The token's tenant must match the `X-Tenant-ID` header (`TENANT_ID`, default `demo`). Tokens expire after 12 hours. |
 | Port-forward drops | `port-forward.sh` restarts forwards automatically; rerun it if the terminal closed. |

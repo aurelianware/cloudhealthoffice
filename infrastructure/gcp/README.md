@@ -2,7 +2,7 @@
 
 This Terraform module creates a demo environment for Cloud Health Office on Google Cloud:
 
-- a GKE Autopilot cluster (`cho-demo`, regional)
+- a GKE cluster (`cho-demo`): by default a zonal Standard cluster with one e2-standard-8 node on standard persistent disk, which fits a new billing account's default quotas; set `autopilot = true` for a regional Autopilot cluster once you have about 24 vCPU and 500 GB of SSD quota
 - an Artifact Registry Docker repository (`cho`) for the service images
 - Workload Identity Federation so GitHub Actions can deploy without service account keys, restricted to one repository
 - an optional monthly budget alert
@@ -30,7 +30,7 @@ terraform plan  -var="project_id=YOUR_PROJECT_ID"
 terraform apply -var="project_id=YOUR_PROJECT_ID"
 ```
 
-Optional variables: `region` (default `us-west1`), `cluster_name`, `artifact_repository_id`, `github_repo`, and `billing_account_id` with `monthly_budget_usd` to add a budget alert. The cluster takes about 10 minutes to create.
+Optional variables: `autopilot` (default `false`), `zone` (default `us-west1-a`), `node_machine_type` (default `e2-standard-8`), `node_count`, `node_disk_size_gb`, `region` (default `us-west1`), `cluster_name`, `artifact_repository_id`, `github_repo`, and `billing_account_id` with `monthly_budget_usd` to add a budget alert. The cluster takes about 10 minutes to create.
 
 State is kept locally by default. Keep the `terraform.tfstate` file; you need it to tear the environment down.
 
@@ -44,7 +44,7 @@ Add these to the repository settings (Settings → Secrets and variables → Act
 | Secret | `GCP_DEPLOYER_SERVICE_ACCOUNT` | `terraform output -raw deployer_service_account` |
 | Variable | `GCP_PROJECT_ID` | `terraform output -raw project_id` |
 | Variable | `GKE_CLUSTER` | `terraform output -raw cluster_name` |
-| Variable | `GKE_LOCATION` | `terraform output -raw cluster_location` |
+| Variable | `GKE_LOCATION` | `terraform output -raw cluster_location` (the zone for Standard, the region for Autopilot; update it if you switch) |
 | Variable | `GAR_REPOSITORY` | `terraform output -raw artifact_registry_url` |
 
 Neither secret is a credential. They identify the federation provider and service account; GitHub's short-lived OIDC token is what authenticates.

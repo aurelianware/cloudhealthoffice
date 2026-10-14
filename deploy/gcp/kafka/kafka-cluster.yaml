@@ -22,12 +22,14 @@ spec:
       - id: 0
         type: persistent-claim
         size: 10Gi
-        class: standard-rwo
+        # Standard persistent disk (created by scripts/deploy-gke.sh); keeps
+        # Kafka off the SSD quota.
+        class: cho-pd-standard
         deleteClaim: true
         kraftMetadata: shared
   resources:
     requests:
-      cpu: 500m
+      cpu: 200m
       memory: 2Gi
     limits:
       cpu: "1"
