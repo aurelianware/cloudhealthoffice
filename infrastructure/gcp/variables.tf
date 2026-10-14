@@ -4,13 +4,43 @@ variable "project_id" {
 }
 
 variable "region" {
-  description = "Region for the GKE Autopilot cluster and the Artifact Registry repository."
+  description = "Region for the Artifact Registry repository, and for the cluster when autopilot is true."
   type        = string
   default     = "us-west1"
 }
 
+variable "autopilot" {
+  description = "Use a regional GKE Autopilot cluster instead of a single-node Standard cluster. Autopilot needs about 24 vCPU and 500 GB of SSD quota; new billing accounts get 12 and 250."
+  type        = bool
+  default     = false
+}
+
+variable "zone" {
+  description = "Zone for the Standard cluster (ignored when autopilot is true)."
+  type        = string
+  default     = "us-west1-a"
+}
+
+variable "node_machine_type" {
+  description = "Machine type for the Standard cluster's node pool."
+  type        = string
+  default     = "e2-standard-8"
+}
+
+variable "node_count" {
+  description = "Nodes in the Standard cluster's node pool."
+  type        = number
+  default     = 1
+}
+
+variable "node_disk_size_gb" {
+  description = "Boot disk size (standard persistent disk) for each node."
+  type        = number
+  default     = 100
+}
+
 variable "cluster_name" {
-  description = "Name of the GKE Autopilot cluster."
+  description = "Name of the GKE cluster."
   type        = string
   default     = "cho-demo"
 }

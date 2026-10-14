@@ -1,7 +1,7 @@
 name: Deploy demo to GKE
 
 # Builds every Cloud Health Office image, pushes it to Artifact Registry, and
-# deploys the demo to a GKE Autopilot cluster with scripts/deploy-gke.sh.
+# deploys the demo to the GKE cluster (infrastructure/gcp) with scripts/deploy-gke.sh.
 #
 # Manual only. Demo-grade: synthetic data, no public ingress, development
 # signing keys (see docs/deploy/GCP-DEMO.md). The Azure workflow
@@ -28,6 +28,11 @@ on:
         description: "Enable the advisory AI claims examiner (needs the ANTHROPIC_API_KEY secret)"
         type: boolean
         default: true
+      resource_profile:
+        description: "small fits the single-node Standard cluster; default keeps full CPU requests (Autopilot or a larger cluster)"
+        type: choice
+        options: [small, default]
+        default: small
 
 concurrency:
   group: deploy-gke
@@ -142,6 +147,7 @@ jobs:
       - name: Deploy
         env:
           ENABLE_KAFKA: ${{ inputs.enable_kafka }}
+          RESOURCE_PROFILE: ${{ inputs.resource_profile }}
           ANTHROPIC_API_KEY: ${{ inputs.ai_examiner && secrets.ANTHROPIC_API_KEY || '' }}
         run: ./scripts/deploy-gke.sh
 

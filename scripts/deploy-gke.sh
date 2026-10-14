@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# deploy-gke.sh — Deploy the Cloud Health Office demo to a GKE Autopilot cluster.
+# deploy-gke.sh — Deploy the Cloud Health Office demo to a GKE cluster
+# (the single-node Standard cluster infrastructure/gcp creates by default, or Autopilot).
 #
 # Demo-grade. Synthetic data only. No public ingress: reach it with
 # scripts/demo/gcp/port-forward.sh. See docs/deploy/GCP-DEMO.md.
@@ -16,7 +17,9 @@
 # Optional environment:
 #   ANTHROPIC_API_KEY        Enables the advisory AI claims examiner
 #   ENABLE_KAFKA=true        Set to false to skip Kafka (services fall back to in-process messaging)
-#   CLAIMS_REPLICAS=2  BENEFIT_PLAN_REPLICAS=2
+#   RESOURCE_PROFILE=small   small fits one 8-vCPU node (lower CPU requests, one
+#                            replica each); default keeps the manifests' requests
+#   CLAIMS_REPLICAS  BENEFIT_PLAN_REPLICAS   (1 with the small profile, else 2)
 #   ROLLOUT_TIMEOUT=900s
 
 set -euo pipefail
@@ -28,8 +31,16 @@ STRIMZI_VERSION="0.45.2"
 KAFKA_CLUSTER="cloudhealthoffice-kafka"
 KAFKA_BOOTSTRAP="${KAFKA_CLUSTER}-kafka-bootstrap.${KAFKA_NAMESPACE}.svc:9092"
 ENABLE_KAFKA="${ENABLE_KAFKA:-true}"
-CLAIMS_REPLICAS="${CLAIMS_REPLICAS:-2}"
-BENEFIT_PLAN_REPLICAS="${BENEFIT_PLAN_REPLICAS:-2}"
+RESOURCE_PROFILE="${RESOURCE_PROFILE:-small}"
+case "$RESOURCE_PROFILE" in
+  small) default_replicas=1 ;;
+  default) default_replicas=2 ;;
+  *) echo "RESOURCE_PROFILE must be small or default" >&2; exit 1 ;;
+esac
+CLAIMS_REPLICAS="${CLAIMS_REPLICAS:-$default_replicas}"
+BENEFIT_PLAN_REPLICAS="${BENEFIT_PLAN_REPLICAS:-$default_replicas}"
+# Standard persistent disk: new billing accounts have only 250 GB of SSD quota.
+STORAGE_CLASS="cho-pd-standard"
 ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-900s}"
 MONGO_USER="admin"
 
@@ -56,6 +67,22 @@ ok "context $context, images ${GAR_REPOSITORY}:${IMAGE_TAG}"
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 ok "namespace $NAMESPACE"
+
+kubectl apply -f - >/dev/null <<YAML
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: $STORAGE_CLASS
+  labels:
+    app: cloudhealthoffice
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: pd-standard
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+YAML
+ok "storage class $STORAGE_CLASS (pd-standard)"
 
 # ── Secrets ──────────────────────────────────────────────────────────────────
 # Passwords for the in-cluster databases are generated once and reused on
@@ -140,15 +167,21 @@ fi
 
 # ── MongoDB and Redis ────────────────────────────────────────────────────────
 log "Deploying MongoDB and Redis"
-# The manifest sets a 3.5 GB WiredTiger cache but requests 2Gi. Autopilot can
-# hold a pod to its request, so request enough memory for the cache.
-python3 - <<'PY' | kubectl apply -f - >/dev/null
-import sys, yaml
+# The manifest sets a 3.5 GB WiredTiger cache but requests 2Gi. Request enough
+# memory for the cache, put the data on standard disk, and with the small
+# profile lower the CPU request so everything fits on one node.
+RESOURCE_PROFILE="$RESOURCE_PROFILE" STORAGE_CLASS="$STORAGE_CLASS" python3 - <<'PY' | kubectl apply -f - >/dev/null
+import os, sys, yaml
 docs = [d for d in yaml.safe_load_all(open("infrastructure/k8s/mongodb-deployment.yaml")) if d]
 for d in docs:
     if d.get("kind") == "StatefulSet":
         for c in d["spec"]["template"]["spec"]["containers"]:
-            c.setdefault("resources", {}).setdefault("requests", {})["memory"] = "5Gi"
+            requests = c.setdefault("resources", {}).setdefault("requests", {})
+            requests["memory"] = "5Gi"
+            if os.environ["RESOURCE_PROFILE"] == "small":
+                requests["cpu"] = "250m"
+        for t in d["spec"].get("volumeClaimTemplates", []):
+            t["spec"]["storageClassName"] = os.environ["STORAGE_CLASS"]
 yaml.safe_dump_all(docs, sys.stdout, sort_keys=False)
 PY
 kubectl apply -f infrastructure/k8s/redis-dataprotection.yaml >/dev/null
@@ -183,7 +216,8 @@ kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh --username "$MONGO_USER" --pas
 # ── Services ─────────────────────────────────────────────────────────────────
 log "Rendering and applying service manifests"
 render_args=(--registry "$GAR_REPOSITORY" --tag "$IMAGE_TAG"
-  --claims-replicas "$CLAIMS_REPLICAS" --benefit-plan-replicas "$BENEFIT_PLAN_REPLICAS")
+  --claims-replicas "$CLAIMS_REPLICAS" --benefit-plan-replicas "$BENEFIT_PLAN_REPLICAS"
+  --storage-class "$STORAGE_CLASS" --resource-profile "$RESOURCE_PROFILE")
 [[ -n "$KAFKA_VALUE" ]] && render_args+=(--kafka-bootstrap "$KAFKA_VALUE")
 [[ "$AI_EXAMINER" == true ]] && render_args+=(--ai-examiner)
 rendered="$(mktemp)"
@@ -195,7 +229,7 @@ ok "applied $(grep -c '^kind: Deployment' "$rendered") deployments"
 
 # ── Wait ─────────────────────────────────────────────────────────────────────
 log "Waiting for rollouts in parallel (timeout $ROLLOUT_TIMEOUT)"
-# Autopilot adds nodes as pods are scheduled, so the first rollout is slow.
+# Image pulls (and on Autopilot, new nodes) make the first rollout slow.
 # Waiting in parallel keeps the total close to the slowest service.
 declare -A wait_pids=()
 for dep in $(kubectl get deployments -n "$NAMESPACE" -o jsonpath='{range .items[?(@.spec.replicas>0)]}{.metadata.name}{"\n"}{end}'); do
