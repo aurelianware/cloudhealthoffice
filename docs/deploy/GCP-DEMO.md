@@ -1,0 +1,141 @@
+# Cloud Health Office demo on Google Cloud (GKE)
+
+This runbook stands up Cloud Health Office on GKE Autopilot, runs a 25-minute demo, and tears it down. The same services that run on Azure AKS run here without an application rewrite. Only the infrastructure, manifests rendering and secrets differ.
+
+> **Demo-grade.** Synthetic data only. The cluster trusts the repository's public development signing key and has no public ingress; it is reached by `kubectl port-forward`. It is not a HIPAA production environment. See [What this is and isn't](#what-this-is-and-isnt).
+
+## Architecture
+
+```mermaid
+flowchart LR
+  presenter["Presenter laptop<br/>kubectl port-forward"]
+  gha["GitHub Actions<br/>deploy-gcp-gke.yml"]
+  subgraph gcp["Google Cloud project"]
+    ar["Artifact Registry<br/>cho"]
+    subgraph gke["GKE Autopilot: cho-demo"]
+      subgraph ns["namespace cloudhealthoffice"]
+        portal["Portal (Blazor)"]
+        svc["~36 .NET 8 services<br/>claims, benefit plan, FHIR, ..."]
+        mongo[("MongoDB")]
+        redis[("Redis")]
+      end
+      subgraph kns["namespace kafka"]
+        kafka["Kafka (Strimzi)<br/>3 KRaft brokers"]
+      end
+    end
+  end
+  anthropic["Anthropic API<br/>advisory claims examiner"]
+  gha -- "keyless (Workload Identity Federation)" --> ar
+  gha -- deploy --> gke
+  ar -- images --> gke
+  presenter --> portal
+  presenter --> svc
+  portal --> svc
+  svc --> mongo
+  svc --> redis
+  svc --> kafka
+  svc -. "optional" .-> anthropic
+```
+
+| Piece | Where it is defined |
+|---|---|
+| Cluster, image repository, keyless GitHub access, budget alert | [`infrastructure/gcp/`](../../infrastructure/gcp/README.md) (Terraform) |
+| Build and deploy | [`.github/workflows/deploy-gcp-gke.yml`](../../.github/workflows/deploy-gcp-gke.yml), [`scripts/deploy-gke.sh`](../../scripts/deploy-gke.sh) |
+| GKE-specific manifest changes | [`deploy/gcp/render_manifests.py`](../../deploy/gcp/render_manifests.py) (the service manifests themselves are shared with AKS and local) |
+| Kafka | [`deploy/gcp/kafka/kafka-cluster.yaml`](../../deploy/gcp/kafka/kafka-cluster.yaml), topics from [`infrastructure/kafka/topics.yaml`](../../infrastructure/kafka/topics.yaml) |
+| Demo scripts | [`scripts/demo/gcp/`](../../scripts/demo/gcp/README.md) |
+
+## Set up (once)
+
+1. **Create the infrastructure.** In a dedicated Google Cloud project with billing enabled:
+
+   ```bash
+   cd infrastructure/gcp
+   terraform init
+   terraform apply -var="project_id=YOUR_PROJECT_ID"
+   ```
+
+   Optional: `-var="billing_account_id=XXXXXX-XXXXXX-XXXXXX"` adds a budget alert. The cluster takes about 10 minutes.
+
+2. **Configure GitHub** (Settings → Secrets and variables → Actions) from the Terraform outputs. The table in [`infrastructure/gcp/README.md`](../../infrastructure/gcp/README.md#configure-github) maps each output to a name. Add `ANTHROPIC_API_KEY` as a secret to enable the advisory AI claims examiner.
+
+3. **Deploy.** Actions → **Deploy demo to GKE** → Run workflow. The first run builds 37 images in parallel and takes roughly 20–40 minutes; later runs use the build cache. To redeploy without rebuilding, enter an existing image tag (a commit SHA).
+
+4. **Connect and check.** On the presenter's laptop:
+
+   ```bash
+   gcloud container clusters get-credentials cho-demo --region us-west1 --project YOUR_PROJECT_ID
+   ./scripts/demo/gcp/port-forward.sh               # leave running in its own terminal
+   python3 scripts/demo/gcp/cho_demo.py smoke       # must end "All smoke checks passed."
+   ```
+
+5. **Load demo results.** Run the benchmark once before the demo so the portal has run history, then again live if time allows:
+
+   ```bash
+   GAR_REPOSITORY=<vars.GAR_REPOSITORY> IMAGE_TAG=<deployed tag> ./scripts/demo/gcp/run-mcc.sh
+   ```
+
+## Demo script (25 minutes)
+
+Rehearse twice. Record a backup video of the claim, examiner and benchmark segments, and keep saved output of each command in case the cluster misbehaves.
+
+| Minutes | Segment | Show | Command or URL |
+|---|---|---|---|
+| 0–2 | Frame | Cloud Health Office as the core and data layer under a payer's products. All data is synthetic and labeled. | — |
+| 2–6 | Architecture | Service map, tenant model, events through Kafka, FHIR model, adapters and operating modes. It is running on GKE now. | This page's diagram; `kubectl get pods -n cloudhealthoffice` |
+| 6–7 | How it was built | Multi-agent AI development with scoped tasks, acceptance criteria and independent audits. | — |
+| 7–13 | A claim, live | A paid claim with its adjudication detail, then a pended NCCI claim with the AI examiner's advisory recommendation (disposition, confidence, rationale, citations) and its audit record. The claim status is unchanged; a human decides. | `python3 scripts/demo/gcp/cho_demo.py claims`; portal at http://localhost:8080 |
+| 13–16 | Scale | Million Claim Challenge results in the Mass Adjudication console, plus a small live run. Published full-corpus figures (1,000,000 claims, 155.89 claims/sec, zero dead letters) are local Kubernetes benchmarks, not GKE production capacity. | Portal → Mass Adjudication; `run-mcc.sh` |
+| 16–20 | CMS-0057-F | PAS `$submit` approve, deny and pend; adapter-status labels; the Da Vinci interoperability evidence. | `python3 scripts/demo/gcp/cho_demo.py adapter-status`; `FHIR_URL=http://localhost:5023 TENANT_ID=demo FHIR_TOKEN="$(python3 scripts/demo/gcp/cho_demo.py token)" ./scripts/demo/cms-0057-f-demo.sh`; [`docs/interop/davinci.md`](../interop/davinci.md) |
+| 20–23 | Plugging into a plan's existing core | Tenant configuration, the operating-mode matrix, the core administration adapter QRE and the implementation blueprint. Shown as configuration and documents; legacy-core adapters are built per engagement. | [`docs/features/questionnaires/`](../features/questionnaires/), [`docs/implementation/`](../implementation/) |
+| 23–25 | Where this goes, and the gaps | The gap list below. | — |
+
+## Tear down
+
+Stop all charges when the demo is over:
+
+```bash
+cd infrastructure/gcp
+terraform destroy -var="project_id=YOUR_PROJECT_ID"
+```
+
+To pause between rehearsals without destroying the setup, scale the workloads to zero (Autopilot bills for running pods, not idle capacity):
+
+```bash
+kubectl scale deployment --all -n cloudhealthoffice --replicas=0
+kubectl scale statefulset --all -n cloudhealthoffice --replicas=0      # MongoDB and Postgres keep their volumes
+kubectl delete -f deploy/gcp/kafka/kafka-cluster.yaml                   # Kafka holds no demo state worth keeping
+```
+
+To bring everything back, rerun the deploy workflow with the existing image tag. It recreates Kafka and restores replica counts.
+
+**Cost.** Requested resources total about 12 vCPU and 16 GiB with Kafka and MongoDB: roughly $15 a day while running on Autopilot, plus small storage and image costs. Set the budget alert.
+
+## What this is and isn't
+
+**It is:**
+- Cloud Health Office's services running on Google Cloud with no application code changes. The same manifests drive AKS, local Kubernetes and GKE.
+- Kafka, MongoDB and Redis running in the cluster, with keyless GitHub Actions deploys.
+- Token authentication enforced on every API, using development-signed tokens.
+
+**It isn't:**
+- **A production or HIPAA environment.** Production on Google Cloud would need:
+  - a Google BAA
+  - customer-managed encryption keys
+  - a private cluster with Private Service Connect
+  - asymmetric token signing through token-service (with a Google workload identity path)
+  - Google's managed services for state: Managed Service for Apache Kafka (configuration only, no code change), Cloud Storage behind the document store interface, and Google Secret Manager or HashiCorp Vault (the Vault provider already exists) behind the secret provider interface
+
+  Estimate: about 5–7 engineer-weeks.
+- **A live connection to a legacy core.** QNXT, Facets and HealthEdge adapters are interfaces with stubs, built per engagement. Augment-mode comparison needs that adapter to supply the core's results.
+- **Production capacity evidence.** Benchmarks are reproducible local runs.
+
+## Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| Pod in `CreateContainerConfigError` | A secret or key it references is missing: `kubectl describe pod <pod> -n cloudhealthoffice`. Add it to `scripts/deploy-gke.sh`. |
+| Service crash-loops at startup | `kubectl logs deployment/<name> -n cloudhealthoffice`. A `ChoAuth` error means its host environment or `cho-service-tokens` didn't apply. |
+| Kafka not ready | `kubectl get kafka,kafkanodepool,pods -n kafka`. Autopilot may take a few minutes to add capacity. |
+| `401` from every API | The token's tenant must match the `X-Tenant-ID` header (`TENANT_ID`, default `demo`). Tokens expire after 12 hours. |
+| Port-forward drops | `port-forward.sh` restarts forwards automatically; rerun it if the terminal closed. |
