@@ -157,7 +157,7 @@ if kubectl get deployment -n "$NAMESPACE" claims-service >/dev/null 2>&1; then
   kubectl set env deployment/claims-service \
     -n "$NAMESPACE" \
     "Services__BenefitPlanServiceTimeoutSeconds=${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS}" >/dev/null
-  kubectl rollout status deployment/claims-service -n "$NAMESPACE" --timeout=120s >/dev/null
+  kubectl rollout status deployment/claims-service -n "$NAMESPACE" --timeout="${ROLLOUT_TIMEOUT:-120s}" >/dev/null
 fi
 
 if kubectl get deployment -n "$NAMESPACE" benefit-plan-service >/dev/null 2>&1; then
@@ -165,11 +165,21 @@ if kubectl get deployment -n "$NAMESPACE" benefit-plan-service >/dev/null 2>&1; 
   kubectl set env deployment/benefit-plan-service \
     -n "$NAMESPACE" \
     "ServiceCategoryMapping__AdminWriteEnabled=${SERVICE_CATEGORY_ADMIN_WRITE_ENABLED}" >/dev/null
-  kubectl rollout status deployment/benefit-plan-service -n "$NAMESPACE" --timeout=120s >/dev/null
+  kubectl rollout status deployment/benefit-plan-service -n "$NAMESPACE" --timeout="${ROLLOUT_TIMEOUT:-120s}" >/dev/null
 fi
 
 log "Running ${CLAIMS} claims in namespace ${NAMESPACE} with wait timeout ${JOB_TIMEOUT}"
 kubectl delete job -n "$NAMESPACE" "$JOB_NAME" --ignore-not-found >/dev/null
+
+# CHO APIs require a bearer token. When CHO_BEARER_TOKEN is set (for example by
+# scripts/demo/gcp/run-mcc.sh), the validator sends it; the Job reads it from a
+# Secret so it never appears in the Job spec. Unset keeps the previous behavior.
+if [[ -n "${CHO_BEARER_TOKEN:-}" ]]; then
+  kubectl create secret generic mcc-bearer-token -n "$NAMESPACE" \
+    --from-literal=token="$CHO_BEARER_TOKEN" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+else
+  kubectl delete secret mcc-bearer-token -n "$NAMESPACE" --ignore-not-found >/dev/null
+fi
 kubectl apply -n "$NAMESPACE" -f - <<EOF
 apiVersion: batch/v1
 kind: Job
@@ -184,6 +194,13 @@ spec:
         - name: mcc-platform-validator
           image: ${IMAGE}
           imagePullPolicy: IfNotPresent
+          env:
+            - name: CHO_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: mcc-bearer-token
+                  key: token
+                  optional: true
           args:
             - --claims
             - "${CLAIMS}"
