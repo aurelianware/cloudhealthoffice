@@ -111,6 +111,11 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # Azure.Storage.Blobs 12.30+ requires Azure.Core >= 1.60, which this net8.0
+      # solution cannot take yet (Directory.Packages.props, "Azure.* family").
+      # #1318 broke restore (NU1605) in attachment-service.
+      - dependency-name: "Azure.Storage.Blobs"
+        versions: [">= 12.30.0"]
 
   # ============================================================
   # NuGet — Engines
@@ -149,6 +154,11 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # Azure.Storage.Blobs 12.30+ requires Azure.Core >= 1.60, which this net8.0
+      # solution cannot take yet (Directory.Packages.props, "Azure.* family").
+      # #1318 broke restore (NU1605) in attachment-service.
+      - dependency-name: "Azure.Storage.Blobs"
+        versions: [">= 12.30.0"]
 
   # ============================================================
   # Docker — Base images

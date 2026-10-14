@@ -76,7 +76,7 @@ resource "google_container_cluster" "cho" {
   name     = var.cluster_name
   location = local.cluster_location
 
-  enable_autopilot    = var.autopilot
+  enable_autopilot    = var.autopilot ? true : null # false conflicts with remove_default_node_pool
   deletion_protection = var.deletion_protection
 
   # Standard: the default pool is created with one small node and removed
