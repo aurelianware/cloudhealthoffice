@@ -41,8 +41,12 @@ spec:
           - "no"
           - --maxmemory
           - "3072mb"
+          # noeviction: benefit-plan-service keeps accumulator state here (commit
+          # journal, void/denial fences) and its readiness check fails on any
+          # evicting policy. See docs/architecture/claim-cob-pipeline.md
+          # "Deploy notes (accumulator integrity)".
           - --maxmemory-policy
-          - volatile-lru
+          - noeviction
         ports:
         - containerPort: 6379
         resources:
