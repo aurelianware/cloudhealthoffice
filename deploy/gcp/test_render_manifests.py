@@ -139,3 +139,11 @@ def test_small_profile_fits_one_node():
 def test_default_profile_keeps_manifest_requests():
     deps = deployments(render())
     assert deps["claims-service"]["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"]["cpu"] == "1000m"
+
+
+def test_pricing_api_reads_mongo_from_its_own_section():
+    # Program.cs overwrites MongoDb:* from PricingApi:*, so the connection
+    # string must arrive as PricingApi__MongoConnectionString.
+    names = set(env(deployments(render())["pricing-api"]))
+    assert "PricingApi__MongoConnectionString" in names
+    assert "MongoDb__ConnectionString" not in names

@@ -60,12 +60,15 @@ spec:
             configMapKeyRef:
               name: pricing-api-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: MongoDb__ConnectionString
+        # Program.cs reads PricingApi:MongoConnectionString / DatabaseName and
+        # copies them into MongoDb:*, so MongoDb__* set here would be overwritten
+        # by the appsettings default (mongodb://localhost:27017).
+        - name: PricingApi__MongoConnectionString
           valueFrom:
             secretKeyRef:
               name: database-secret
               key: connectionString
-        - name: MongoDb__DatabaseName
+        - name: PricingApi__DatabaseName
           valueFrom:
             configMapKeyRef:
               name: pricing-api-config
