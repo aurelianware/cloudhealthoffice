@@ -168,7 +168,7 @@ Per-month or per-quarter subscription. Self-serve for small customers (mirrors T
 
 Platform Engagement is the highest-investment product line and the one payers typically evaluate when buying core admin systems. Priced PMPM, relationship-oriented, multi-year contracts, the long-term anchor of customer value.
 
-Platform Engagement engages customers at three layers, each a coherent offering on its own, each containing the previous:
+Platform Engagement engages customers at three layers, each a coherent offering on its own, each containing the previous. What each layer involves for the plan's teams (phases, staffing, gates, risks) is in the [Implementation Blueprint](implementation/IMPLEMENTATION-BLUEPRINT.md), which derives from this document:
 
 ### Layer 1 — Foothold
 
