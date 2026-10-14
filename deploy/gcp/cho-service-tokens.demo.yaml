@@ -1,0 +1,34 @@
+# Demo replacement for infrastructure/k8s/configmaps/cho-service-tokens.yaml.
+#
+# The production version has services fetch their tokens from token-service
+# using Azure workload identity, which does not exist on GKE. For the demo,
+# every service runs as an in-cluster Testing host and trusts the public
+# development issuers in ChoDevelopmentAuth (the same trust the Development
+# appsettings use locally). The signing key below is published in the
+# repository on purpose and is refused on Production and Staging hosts.
+#
+# Consequences, stated plainly:
+#   - Anyone who can reach a service can mint a valid token with this key.
+#     The demo cluster therefore has no public ingress; it is reached through
+#     kubectl port-forward only, and it holds synthetic data only.
+#   - Production deployments use asymmetric keys from token-service instead
+#     (docs/security/portal-token-service.md).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cho-service-tokens
+  namespace: cloudhealthoffice
+data:
+  ChoAuth__Audience: "cho-api"
+  ChoAuth__Issuers__0__Issuer: "cho-portal-dev"
+  ChoAuth__Issuers__0__Kind: "User"
+  ChoAuth__Issuers__0__SymmetricKey: "Q0hPLWRldmVsb3BtZW50LW9ubHktc2lnbmluZy1rZXktZG8tbm90LXVzZS0yMDI2"
+  ChoAuth__Issuers__1__Issuer: "cho-internal-dev"
+  ChoAuth__Issuers__1__Kind: "Service"
+  ChoAuth__Issuers__1__SymmetricKey: "Q0hPLWRldmVsb3BtZW50LW9ubHktc2lnbmluZy1rZXktZG8tbm90LXVzZS0yMDI2"
+  ChoAuth__Issuers__2__Issuer: "cho-workload-dev"
+  ChoAuth__Issuers__2__Kind: "Workload"
+  ChoAuth__Issuers__2__SymmetricKey: "Q0hPLWRldmVsb3BtZW50LW9ubHktc2lnbmluZy1rZXktZG8tbm90LXVzZS0yMDI2"
+  ChoAuth__ServiceToken__Source: "LocalKey"
+  ChoAuth__ServiceToken__Issuer: "cho-internal-dev"
+  ChoAuth__ServiceToken__SymmetricKey: "Q0hPLWRldmVsb3BtZW50LW9ubHktc2lnbmluZy1rZXktZG8tbm90LXVzZS0yMDI2"

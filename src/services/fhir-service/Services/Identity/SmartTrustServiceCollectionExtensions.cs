@@ -29,7 +29,10 @@ public static class SmartTrustServiceCollectionExtensions
         // Fail closed at startup, before the first request. A trust
         // misconfiguration discovered on the first 401 of a production morning
         // is one nobody attributes to configuration.
-        options.Validate(environment.IsDevelopment());
+        // Testing hosts (automated tests, or a deliberate in-cluster demo with
+        // CHO_ALLOW_TESTING_ENVIRONMENT=true) get the same allowance as
+        // Development, consistent with every other development-secret check.
+        options.Validate(ChoTestingEnvironment.AllowsDevelopmentSecrets(environment));
 
         services.AddSingleton(options);
         services.AddSingleton(new TrustedIssuerRegistry(options));
@@ -69,7 +72,7 @@ public static class SmartTrustServiceCollectionExtensions
         // Deliberately no Authority: setting one makes the handler run its own
         // single-issuer discovery and manage its own key cache, which is exactly
         // the per-issuer behaviour SmartSigningKeyRing owns.
-        jwt.RequireHttpsMetadata = !environment.IsDevelopment();
+        jwt.RequireHttpsMetadata = !ChoTestingEnvironment.AllowsDevelopmentSecrets(environment);
 
         // D-32: claims arrive under their JWT names, as on the CHO scheme.
         // With the handler's default inbound mapping, `scp` was renamed to the
