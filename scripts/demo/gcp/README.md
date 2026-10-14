@@ -20,7 +20,7 @@ public development signing key, so it is reached only through port-forward.
 Typical sequence, after the deploy workflow has run:
 
 ```bash
-gcloud container clusters get-credentials cho-demo --region us-west1 --project YOUR_PROJECT_ID
+gcloud container clusters get-credentials cho-demo --location us-west1-a --project YOUR_PROJECT_ID   # us-west1 for Autopilot
 ./scripts/demo/gcp/port-forward.sh          # leave running in its own terminal
 python3 scripts/demo/gcp/cho_demo.py smoke
 GAR_REPOSITORY=... IMAGE_TAG=... ./scripts/demo/gcp/run-mcc.sh

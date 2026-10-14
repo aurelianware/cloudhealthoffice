@@ -3,12 +3,15 @@
 
 Reads the same per-service manifests the local deploy (scripts/deploy-local.sh)
 applies and writes one multi-document YAML stream to stdout with the changes a
-GKE Autopilot demo needs. The source manifests are not modified, so the Azure
+GKE demo needs. The source manifests are not modified, so the Azure
 and local paths are unaffected.
 
 What it changes:
   - Images built by the GKE workflow are pointed at Artifact Registry.
-  - Azure-only storage (azurefile-csi, ReadWriteMany) becomes GKE's standard-rwo.
+  - Azure-only storage (azurefile-csi, ReadWriteMany) and GKE's SSD-backed
+    standard-rwo become --storage-class (default cho-pd-standard, a
+    standard-disk class scripts/deploy-gke.sh creates; new billing accounts
+    have only 250 GB of SSD quota).
   - The Azure spot-node toleration is removed.
   - HorizontalPodAutoscalers and Secrets this deploy creates itself are dropped.
   - Services run as Development hosts, as the local deploy runs them, except
@@ -21,6 +24,9 @@ What it changes:
     reached by port-forward.
   - Every service loads the demo cho-service-tokens ConfigMap.
   - Replicas are set to 1 (claims-service and benefit-plan-service configurable).
+  - --resource-profile small lowers CPU requests so every service fits on one
+    8-vCPU node. Limits and memory requests are unchanged, so services can
+    still burst; use the default profile for benchmark runs on a larger cluster.
   - Kafka and messaging settings, probe paths and per-service settings that
     scripts/deploy-local.sh patches after applying are set here up front.
 
@@ -28,7 +34,7 @@ Usage:
   render_manifests.py --registry REGION-docker.pkg.dev/PROJECT/cho --tag SHA \
       --kafka-bootstrap cloudhealthoffice-kafka-kafka-bootstrap.kafka.svc:9092 \
       [--ai-examiner] [--claims-replicas 2] [--benefit-plan-replicas 2] \
-      [--list-images]
+      [--storage-class cho-pd-standard] [--resource-profile small] [--list-images]
 """
 
 from __future__ import annotations
@@ -124,6 +130,19 @@ DEMO_ENV = {
 }
 
 
+# --resource-profile small: CPU request per container, in millicores.
+SMALL_CPU_REQUEST_M = 50
+SMALL_CPU_REQUEST_OVERRIDES_M = {"claims-service": 250}
+
+DEFAULT_STORAGE_CLASS = "cho-pd-standard"
+REPLACED_STORAGE_CLASSES = {"azurefile-csi", "azurefile", "managed-csi", "managed-csi-premium", "standard-rwo"}
+
+
+def cpu_millicores(value) -> int:
+    text = str(value)
+    return int(float(text[:-1])) if text.endswith("m") else int(float(text) * 1000)
+
+
 def host_environment(service: str) -> str:
     return "Testing" if service in TESTING_HOSTS else "Development"
 
@@ -163,10 +182,10 @@ def pod_spec(doc: dict) -> dict | None:
     return None
 
 
-def fix_storage(doc: dict) -> None:
+def fix_storage(doc: dict, storage_class: str) -> None:
     def fix(spec: dict) -> None:
-        if spec.get("storageClassName") in ("azurefile-csi", "managed-csi", "managed-csi-premium", "azurefile"):
-            spec["storageClassName"] = "standard-rwo"
+        if spec.get("storageClassName", "standard-rwo") in REPLACED_STORAGE_CLASSES:
+            spec["storageClassName"] = storage_class
         modes = spec.get("accessModes")
         if modes and "ReadWriteMany" in modes:
             spec["accessModes"] = ["ReadWriteOnce"]
@@ -186,7 +205,7 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
     if kind == "Secret" and name in MANAGED_SECRETS:
         return None
 
-    fix_storage(doc)
+    fix_storage(doc, args.storage_class)
 
     if kind == "ConfigMap":
         data = doc.get("data") or {}
@@ -258,6 +277,12 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
                 if container.get(probe, {}).get("httpGet"):
                     container[probe]["httpGet"]["path"] = "/health/live"
 
+        if args.resource_profile == "small":
+            requests = container.setdefault("resources", {}).setdefault("requests", {})
+            target = SMALL_CPU_REQUEST_OVERRIDES_M.get(name, SMALL_CPU_REQUEST_M)
+            if "cpu" not in requests or cpu_millicores(requests["cpu"]) > target:
+                requests["cpu"] = f"{target}m"
+
         if name == "claims-service":
             set_env(container, "Adjudication__Enforcement__AiMode", "BestEffort" if args.ai_examiner else "Disabled")
         if name == "portal":
@@ -278,6 +303,10 @@ def main() -> int:
     parser.add_argument("--ai-examiner", action="store_true", help="Run the AI claims examiner (needs ANTHROPIC_API_KEY)")
     parser.add_argument("--claims-replicas", type=int, default=2)
     parser.add_argument("--benefit-plan-replicas", type=int, default=2)
+    parser.add_argument("--storage-class", default=DEFAULT_STORAGE_CLASS,
+                        help="StorageClass for the services' volumes (default: %(default)s)")
+    parser.add_argument("--resource-profile", choices=("default", "small"), default="default",
+                        help="small lowers CPU requests to fit one 8-vCPU node")
     parser.add_argument("--list-images", action="store_true", help="Print 'name dockerfile' for each image to build, then exit")
     args = parser.parse_args()
 
