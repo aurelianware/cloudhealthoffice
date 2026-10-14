@@ -156,7 +156,7 @@ Discrepancies are logged at Warning level and included in the `AdjudicationRespo
 
 1. Set target claim type to `augment` in tenant config
 2. Both CHO and QNXT process claims; QNXT result is authoritative
-3. Monitor discrepancy rate on the Blazor portal dashboard
+3. Monitor the discrepancy rate. Discrepancies are returned in `AdjudicationResponse.Discrepancies` and logged at Warning level; a portal dashboard is not built yet. The core's result must be supplied by the per-engagement adapter (today `AdjudicationController` passes `legacyResult: null`, so no comparison runs until that adapter exists)
 4. Investigate and resolve systematic differences
 5. Target: <1% discrepancy rate sustained over 30 days
 
@@ -181,7 +181,13 @@ Repeat for each claim type / LOB combination:
 
 When all claim types route through CHO in Replace mode:
 
-1. Remove `ICoreAdminAdapter` for the tenant
+1. Switch the tenant's per-domain adapters (`claimsPlatform`, `providerPlatform`, `benefitPlanPlatform`, `idCardPlatform`) to `cho`
 2. CHO becomes system of record
 3. Enable 835 ERA generation via payment-service
 4. Enable encounter submission via EncounterEngine
+
+---
+
+## Scoping a migration
+
+Each tenant's starting and target mode per domain and claim type is captured in the [core administration adapter QRE](../features/questionnaires/qre-core-admin-adapter-questions.md). The phases, plan staffing and decision gates are in the [Implementation Blueprint](../implementation/IMPLEMENTATION-BLUEPRINT.md).

@@ -193,6 +193,8 @@ shape when implemented.
 
 ## See also
 
+- `docs/features/questionnaires/qre-core-admin-adapter-questions.md` —
+  how a per-plan QNXT, Facets or HealthEdge adapter is scoped.
 - `docs/architecture/benefit-plan-adapter-pattern.md` — sibling pattern,
   same shape.
 - `docs/architecture/provider-versioning.md` — version chain identity
