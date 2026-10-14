@@ -44,6 +44,15 @@ FHIR_URL = os.environ.get("FHIR_URL", "http://localhost:5023")
 PORTAL_URL = os.environ.get("PORTAL_URL", "http://localhost:8080")
 
 
+# ClaimStatus (claims-service Models/Claim.cs); the API serializes it as a number.
+CLAIM_STATUS = {1: "Submitted", 2: "Received", 3: "InAdjudication", 4: "Pended", 5: "Approved",
+                6: "Denied", 7: "Paid", 8: "Voided", 9: "PartiallyPaid"}
+
+
+def status_name(value) -> str:
+    return CLAIM_STATUS.get(value, str(value)) if isinstance(value, int) else str(value)
+
+
 def b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
@@ -127,17 +136,18 @@ def cmd_adapter_status(_args) -> int:
 def cmd_claims(_args) -> int:
     token = mint_token()
 
-    heading("A paid claim")
-    status, _, paid = request("GET", f"{CLAIMS_URL}/api/claims/search?status=Paid&pageSize=1", token)
+    # Adjudication ends at Approved or Denied; Paid comes later, with remittance.
+    heading("An approved claim")
+    status, _, paid = request("GET", f"{CLAIMS_URL}/api/claims/search?status=Approved&pageSize=1", token)
     if status != 200 or not paid:
-        print(f"  no paid claim found (HTTP {status}). Run scripts/demo/gcp/run-mcc.sh first.")
+        print(f"  no approved claim found (HTTP {status}). Run scripts/demo/gcp/run-mcc.sh first.")
     else:
         claim = paid[0]
-        print(f"  claim {claim.get('claimNumber') or claim.get('id')}  member {claim.get('memberId')}  status {claim.get('status')}")
+        print(f"  claim {claim.get('claimNumber') or claim.get('id')}  member {claim.get('memberId')}  status {status_name(claim.get('status'))}")
         result = claim.get("adjudicationResult") or {}
-        print(f"  billed {money(claim.get('totalBilledAmount'))}  allowed {money(result.get('allowedAmount'))}"
-              f"  plan paid {money(result.get('planPayment') or result.get('paidAmount'))}"
-              f"  member owes {money(result.get('memberResponsibility'))}")
+        print(f"  billed {money(claim.get('totalChargeAmount'))}  allowed {money(result.get('allowedAmount'))}"
+              f"  plan pays {money(result.get('payerPayment'))}"
+              f"  member owes {money(result.get('patientResponsibility'))}")
         status, _, detail = request("GET", f"{CLAIMS_URL}/api/claims/{claim['id']}/adjudication-detail", token)
         if status == 200 and isinstance(detail, dict):
             print("  adjudication detail:")
@@ -151,7 +161,9 @@ def cmd_claims(_args) -> int:
     ncci = [i for i in items if "NCCI" in json.dumps(i).upper()] or items
     item = ncci[0]
     claim_id = item.get("claimId")
-    print(f"  claim {claim_id}  pend {item.get('pendCode') or item.get('reason') or ''}")
+    print(f"  claim {claim_id}  pend {item.get('queueReasonCode', '')} {item.get('queueReason', '')}".rstrip())
+    for reason in item.get("pendReasons") or []:
+        print(f"    - {reason}")
     status, _, audit = request("GET", f"{CLAIMS_URL}/api/claims/{claim_id}/ai-examination/audit", token)
     if status == 200 and audit:
         latest = audit[-1] if isinstance(audit, list) else audit
@@ -161,7 +173,7 @@ def cmd_claims(_args) -> int:
         print(f"  no AI examination recorded (HTTP {status}). Is the examiner enabled (ANTHROPIC_API_KEY)?")
     status, _, claim = request("GET", f"{CLAIMS_URL}/api/claims/{claim_id}", token)
     if status == 200 and isinstance(claim, dict):
-        print(f"  claim status is still {claim.get('status')}: the recommendation never changes a claim; an examiner decides.")
+        print(f"  claim status is still {status_name(claim.get('status'))}: the recommendation never changes a claim; an examiner decides.")
     return 0
 
 

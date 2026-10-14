@@ -157,7 +157,7 @@ if kubectl get deployment -n "$NAMESPACE" claims-service >/dev/null 2>&1; then
   kubectl set env deployment/claims-service \
     -n "$NAMESPACE" \
     "Services__BenefitPlanServiceTimeoutSeconds=${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS}" >/dev/null
-  kubectl rollout status deployment/claims-service -n "$NAMESPACE" --timeout=120s >/dev/null
+  kubectl rollout status deployment/claims-service -n "$NAMESPACE" --timeout="${ROLLOUT_TIMEOUT:-120s}" >/dev/null
 fi
 
 if kubectl get deployment -n "$NAMESPACE" benefit-plan-service >/dev/null 2>&1; then
@@ -165,7 +165,7 @@ if kubectl get deployment -n "$NAMESPACE" benefit-plan-service >/dev/null 2>&1; 
   kubectl set env deployment/benefit-plan-service \
     -n "$NAMESPACE" \
     "ServiceCategoryMapping__AdminWriteEnabled=${SERVICE_CATEGORY_ADMIN_WRITE_ENABLED}" >/dev/null
-  kubectl rollout status deployment/benefit-plan-service -n "$NAMESPACE" --timeout=120s >/dev/null
+  kubectl rollout status deployment/benefit-plan-service -n "$NAMESPACE" --timeout="${ROLLOUT_TIMEOUT:-120s}" >/dev/null
 fi
 
 log "Running ${CLAIMS} claims in namespace ${NAMESPACE} with wait timeout ${JOB_TIMEOUT}"
