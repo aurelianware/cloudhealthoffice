@@ -161,6 +161,11 @@ concern in capability 5.3.
 4. Update the tenant `claimsPlatform.platform` config to the new
    value for any tenant that should use it.
 
+The vendor adapter for a given plan is scoped from the
+[core administration adapter QRE](../features/questionnaires/qre-core-admin-adapter-questions.md),
+which captures the plan's core platform, version, access method (for
+example QXI, FXI, database views or extracts) and configuration.
+
 ## Testing
 
 The adapter tests live at `tests/CloudHealthOffice.ClaimsService.Tests/Adapters/`:
