@@ -36,6 +36,15 @@ using var http = new HttpClient
 http.DefaultRequestHeaders.Add("X-Tenant-ID", options.TenantId);
 http.DefaultRequestHeaders.Add("X-Correlation-Id", $"mcc-validation-{Guid.NewGuid():N}");
 
+// CHO APIs require a bearer token. The token's tenant must match --tenant.
+// Unset keeps the previous behavior (header-only requests).
+var bearerToken = Environment.GetEnvironmentVariable("CHO_BEARER_TOKEN");
+if (!string.IsNullOrWhiteSpace(bearerToken))
+{
+    http.DefaultRequestHeaders.Authorization =
+        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearerToken.Trim());
+}
+
 Console.WriteLine("Million Claim Challenge - Platform Validator");
 Console.WriteLine($"  Tenant:      {options.TenantId}");
 Console.WriteLine($"  Claims URL:  {options.ClaimsUrl}");

@@ -170,6 +170,16 @@ fi
 
 log "Running ${CLAIMS} claims in namespace ${NAMESPACE} with wait timeout ${JOB_TIMEOUT}"
 kubectl delete job -n "$NAMESPACE" "$JOB_NAME" --ignore-not-found >/dev/null
+
+# CHO APIs require a bearer token. When CHO_BEARER_TOKEN is set (for example by
+# scripts/demo/gcp/run-mcc.sh), the validator sends it; the Job reads it from a
+# Secret so it never appears in the Job spec. Unset keeps the previous behavior.
+if [[ -n "${CHO_BEARER_TOKEN:-}" ]]; then
+  kubectl create secret generic mcc-bearer-token -n "$NAMESPACE" \
+    --from-literal=token="$CHO_BEARER_TOKEN" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+else
+  kubectl delete secret mcc-bearer-token -n "$NAMESPACE" --ignore-not-found >/dev/null
+fi
 kubectl apply -n "$NAMESPACE" -f - <<EOF
 apiVersion: batch/v1
 kind: Job
@@ -184,6 +194,13 @@ spec:
         - name: mcc-platform-validator
           image: ${IMAGE}
           imagePullPolicy: IfNotPresent
+          env:
+            - name: CHO_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: mcc-bearer-token
+                  key: token
+                  optional: true
           args:
             - --claims
             - "${CLAIMS}"
