@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Text.Json;
 using Microsoft.IdentityModel.Tokens;
 
@@ -32,7 +33,7 @@ public sealed class HttpIssuerMetadataFetcher : IIssuerMetadataFetcher
     public HttpIssuerMetadataFetcher(IHttpClientFactory httpClientFactory, IHostEnvironment environment)
     {
         _httpClientFactory = httpClientFactory;
-        _isDevelopmentHost = environment.IsDevelopment();
+        _isDevelopmentHost = ChoTestingEnvironment.AllowsDevelopmentSecrets(environment);
     }
 
     public async Task<IssuerMetadata> FetchAsync(

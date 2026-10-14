@@ -1,0 +1,150 @@
+name: Deploy demo to GKE
+
+# Builds every Cloud Health Office image, pushes it to Artifact Registry, and
+# deploys the demo to a GKE Autopilot cluster with scripts/deploy-gke.sh.
+#
+# Manual only. Demo-grade: synthetic data, no public ingress, development
+# signing keys (see docs/deploy/GCP-DEMO.md). The Azure workflow
+# (deploy-azure-aks.yml) is separate and unaffected.
+#
+# One-time setup: run infrastructure/gcp (Terraform), then add these settings
+# (infrastructure/gcp/README.md maps each to a Terraform output):
+#   secrets   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOYER_SERVICE_ACCOUNT
+#             ANTHROPIC_API_KEY (optional, enables the advisory AI claims examiner)
+#   variables GCP_PROJECT_ID, GKE_CLUSTER, GKE_LOCATION, GAR_REPOSITORY
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Deploy an existing image tag and skip the build (blank = build this commit)"
+        required: false
+        default: ""
+      enable_kafka:
+        description: "Run Kafka in the cluster (Strimzi)"
+        type: boolean
+        default: true
+      ai_examiner:
+        description: "Enable the advisory AI claims examiner (needs the ANTHROPIC_API_KEY secret)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy-gke
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+  GKE_LOCATION: ${{ vars.GKE_LOCATION }}
+  IMAGE_TAG: ${{ inputs.image_tag != '' && inputs.image_tag || github.sha }}
+
+jobs:
+  plan:
+    name: Check settings and list images
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.images.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check required settings
+        run: |
+          missing=()
+          for v in GAR_REPOSITORY GCP_PROJECT_ID GKE_CLUSTER GKE_LOCATION; do
+            [[ -n "${!v}" ]] || missing+=("vars.$v")
+          done
+          [[ -n "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ]] || missing+=("secrets.GCP_WORKLOAD_IDENTITY_PROVIDER")
+          [[ -n "${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}" ]] || missing+=("secrets.GCP_DEPLOYER_SERVICE_ACCOUNT")
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing settings: ${missing[*]}. See infrastructure/gcp/README.md."
+            exit 1
+          fi
+
+      - name: List images to build
+        id: images
+        run: |
+          pip install --quiet pyyaml
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json, subprocess
+          lines = subprocess.run(["python3", "deploy/gcp/render_manifests.py", "--list-images"],
+                                 check=True, capture_output=True, text=True).stdout.split("\n")
+          include = [{"name": n, "dockerfile": f} for n, f in (l.split() for l in lines if l.strip())]
+          include.append({"name": "mcc-platform-validator", "dockerfile": "src/tools/mcc-platform-validator/Dockerfile"})
+          print("matrix=" + json.dumps({"include": include}))
+          EOF
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: plan
+    if: ${{ inputs.image_tag == '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GAR_REPOSITORY%%/*}" --quiet
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          build-args: REGISTRY=mcr.microsoft.com
+          push: true
+          tags: ${{ env.GAR_REPOSITORY }}/cloudhealthoffice-${{ matrix.name }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=gke-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=gke-${{ matrix.name }}
+
+  deploy:
+    name: Deploy to GKE
+    needs: [plan, build]
+    if: ${{ always() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_LOCATION }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: Deploy
+        env:
+          ENABLE_KAFKA: ${{ inputs.enable_kafka }}
+          ANTHROPIC_API_KEY: ${{ inputs.ai_examiner && secrets.ANTHROPIC_API_KEY || '' }}
+        run: ./scripts/deploy-gke.sh
+
+      - name: Pod status
+        if: always()
+        run: kubectl get pods -n cloudhealthoffice -o wide; kubectl get pods -n kafka
