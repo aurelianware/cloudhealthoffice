@@ -59,7 +59,7 @@ Both bugs were in manifests shared with the local and Azure deployments. A clean
 
 After those two fixes, a redeploy from the existing image tag finished in under two minutes. Every deployment reported ready: 35 platform services plus Redis, alongside MongoDB, Postgres and a three-broker Kafka cluster, on one 8-vCPU node in us-west1. No application code changed to get there. The code changes were to manifests and package pins that were wrong everywhere, not just on Google Cloud.
 
-Ready means each service's own readiness checks passed. They cover its database, cache and message bus connections, and for benefit-plan-service the accumulator integrity rule described above. The scripted end-to-end smoke test and the demo walkthrough of claims, FHIR adapter labels and the portal come next.
+Ready means each service's own readiness checks passed. They cover its database, cache and message bus connections, and for benefit-plan-service the accumulator integrity rule described above. Readiness is the cluster's opinion, so a scripted smoke test then checked from outside, over port-forward from a laptop. All ten checks passed: claims, benefit-plan and FHIR services live; the FHIR adapter reporting its data as synthetic; the FHIR CapabilityStatement; FHIR responses carrying adapter labels; the claims API rejecting a request with no token (401) and accepting a signed development token; and the portal answering.
 
 ## What Part One does not show
 

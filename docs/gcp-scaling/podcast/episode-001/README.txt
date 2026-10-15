@@ -3,7 +3,7 @@
 - Episode title: Part One — Same Code, Different Cloud
 - Source article: article.txt
 - Published article: /insights/gcp-scaling/part-1-same-code-different-cloud
-- Status: draft (pending author review and the end-to-end smoke test)
+- Status: draft (pending author review; smoke test passed 10/10 on 2026-10-14)
 
 ## Summary
 
@@ -31,6 +31,7 @@ Walls, in order:
    - benefit-plan-service never became ready: its accumulator-integrity readiness check requires
      Redis maxmemory-policy noeviction, and the shared manifest said volatile-lru.
 6. Redeploy: all 35 services plus Redis ready (MongoDB, Postgres and Kafka already up).
+7. scripts/demo/gcp/cho_demo.py smoke over port-forward: 10 of 10 checks passed.
 
 Scope: portability, not scale. No GCP throughput numbers are claimed.
 
