@@ -29,10 +29,13 @@ public static class DenialAccumulatorReversal
         IAccumulatorCommitLookup? lookup, ILogger logger, CancellationToken ct)
     {
         if (!Guid.TryParse(claim.BenefitPlanId, out var planId)) return null;
+        // The commit this reversal takes back: the one still queued, else the
+        // last one queued. Unknown (legacy) → the sentinel, a blind reversal.
+        var commitId = claim.PendingAccumulatorCommit?.Id ?? claim.LatestAccumulatorCommitId;
         if (sourceStatus == ClaimStatus.Approved)
-            return AccumulatorOutboxItem.ForReversal(claim, now, terminal: false);
+            return AccumulatorOutboxItem.ForReversal(claim, now, terminal: false, commitId);
         if (lookup is null)
-            return AccumulatorOutboxItem.ForReversal(claim, now, terminal: false);
+            return AccumulatorOutboxItem.ForReversal(claim, now, terminal: false, commitId);
 
         try
         {
@@ -42,7 +45,7 @@ public static class DenialAccumulatorReversal
                     claim.ServiceDateFrom.Year.ToString(System.Globalization.CultureInfo.InvariantCulture))],
                 ct);
             return recorded.TryGetValue(claim.Id, out var has) && has
-                ? AccumulatorOutboxItem.ForReversal(claim, now, terminal: false)
+                ? AccumulatorOutboxItem.ForReversal(claim, now, terminal: false, commitId)
                 : null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
@@ -50,7 +53,7 @@ public static class DenialAccumulatorReversal
             logger.LogWarning(ex,
                 "Accumulator lookup for denied claim {ClaimId} failed; queuing a non-terminal reversal (a no-op if nothing was written)",
                 claim.Id.Replace("\r", "").Replace("\n", ""));
-            return AccumulatorOutboxItem.ForReversal(claim, now, terminal: false);
+            return AccumulatorOutboxItem.ForReversal(claim, now, terminal: false, commitId);
         }
     }
 }

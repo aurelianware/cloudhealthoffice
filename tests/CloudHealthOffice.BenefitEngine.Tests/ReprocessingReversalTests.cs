@@ -75,13 +75,17 @@ public class ReprocessingReversalTests
             => Task.FromResult<IReadOnlyList<ServiceCategoryMapping>>(Array.Empty<ServiceCategoryMapping>());
     }
 
+    private Task<AccumulatorReversalOutcome> ReverseForDeny(string claimId, string? commitId) =>
+        _engine.ReverseClaimForReprocessingAsync("MBR-1", "MBR-1", Plan.Id, ServiceDate, claimId, commitId);
+
     [Fact]
-    public async Task PayDenyPay_NonTerminalReversal_ThenRecommit_CountsOnce()
+    public async Task PayDenyPay_CommitScopedReversal_ThenRecommit_CountsOnce()
     {
-        Assert.Equal(AccumulatorCommitOutcome.Committed, (await _engine.CommitAccumulatorsAsync(Commit("C1"))).Outcome);
+        var first = Commit("C1");
+        Assert.Equal(AccumulatorCommitOutcome.Committed, (await _engine.CommitAccumulatorsAsync(first)).Outcome);
         Assert.Equal(100m, await DeductibleAsync());
 
-        await _engine.ReverseClaimForReprocessingAsync("MBR-1", "MBR-1", Plan.Id, ServiceDate, "C1");
+        Assert.Equal(AccumulatorReversalOutcome.Reversed, await ReverseForDeny("C1", first.CommitId));
         Assert.Equal(0m, await DeductibleAsync());
         Assert.DoesNotContain("C1", (await IndividualDocAsync())!.ReversedClaimIds);
 
@@ -92,10 +96,55 @@ public class ReprocessingReversalTests
         Assert.Equal(100m, await DeductibleAsync());
     }
 
+    /// <summary>Interleaving: the Deny's reversal is dispatched after the re-Pay commit landed — a no-op.</summary>
+    [Fact]
+    public async Task StaleReversal_AfterTheRePayCommit_IsSuperseded()
+    {
+        var first = Commit("C3");
+        await _engine.CommitAccumulatorsAsync(first);
+        var second = Commit("C3");
+        Assert.Equal(AccumulatorCommitOutcome.Committed, (await _engine.CommitAccumulatorsAsync(second)).Outcome);
+
+        Assert.Equal(AccumulatorReversalOutcome.Superseded, await ReverseForDeny("C3", first.CommitId));
+
+        Assert.Equal(100m, await DeductibleAsync());
+        Assert.Equal(AccumulatorCommitOutcome.AlreadyCommitted, (await _engine.CommitAccumulatorsAsync(second)).Outcome);
+    }
+
+    /// <summary>Interleaving: the Pay commit is dispatched after the Deny's reversal — refused, nothing counted; a newer commit is not.</summary>
+    [Fact]
+    public async Task LateCommit_AfterTheDenyReversal_IsRefused_ANewerCommitIsNot()
+    {
+        var inFlight = Commit("C4");
+        Assert.Equal(AccumulatorReversalOutcome.Reversed, await ReverseForDeny("C4", inFlight.CommitId));
+
+        Assert.Equal(AccumulatorCommitOutcome.RefusedCommitReversed, (await _engine.CommitAccumulatorsAsync(inFlight)).Outcome);
+        Assert.Equal(0m, await DeductibleAsync());
+
+        Assert.Equal(AccumulatorCommitOutcome.Committed, (await _engine.CommitAccumulatorsAsync(Commit("C4"))).Outcome);
+        Assert.Equal(100m, await DeductibleAsync());
+    }
+
+    /// <summary>Legacy sentinel: the commit is unknown — a blind reversal, nothing fenced.</summary>
+    [Fact]
+    public async Task LegacyUnknownCommit_ReversesBlind_FencesNothing()
+    {
+        var legacy = Commit("C5");
+        await _engine.CommitAccumulatorsAsync(legacy);
+
+        Assert.Equal(AccumulatorReversalOutcome.Reversed, await ReverseForDeny("C5", null));
+
+        Assert.Equal(0m, await DeductibleAsync());
+        var doc = (await IndividualDocAsync())!;
+        Assert.Empty(doc.ReversedCommitIds);
+        Assert.DoesNotContain("C5", doc.ReversedClaimIds);
+        Assert.Equal(AccumulatorCommitOutcome.Committed, (await _engine.CommitAccumulatorsAsync(Commit("C5"))).Outcome);
+    }
+
     [Fact]
     public async Task NonTerminalReversal_OfANeverCommittedClaim_ChangesNothing()
     {
-        await _engine.ReverseClaimForReprocessingAsync("MBR-1", "MBR-1", Plan.Id, ServiceDate, "NEVER");
+        await ReverseForDeny("NEVER", null);
 
         Assert.Equal(0m, await DeductibleAsync());
         Assert.DoesNotContain("NEVER", (await IndividualDocAsync())?.ReversedClaimIds ?? []);
@@ -104,8 +153,9 @@ public class ReprocessingReversalTests
     [Fact]
     public async Task VoidAfterRecommit_IsStillTerminal()
     {
-        await _engine.CommitAccumulatorsAsync(Commit("C2"));
-        await _engine.ReverseClaimForReprocessingAsync("MBR-1", "MBR-1", Plan.Id, ServiceDate, "C2");
+        var first = Commit("C2");
+        await _engine.CommitAccumulatorsAsync(first);
+        await ReverseForDeny("C2", first.CommitId);
         await _engine.CommitAccumulatorsAsync(Commit("C2"));
         Assert.Equal(100m, await DeductibleAsync());
 

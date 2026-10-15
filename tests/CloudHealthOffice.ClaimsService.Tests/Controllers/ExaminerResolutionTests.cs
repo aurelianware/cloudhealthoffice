@@ -535,7 +535,7 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
                 && c.PendingAccumulatorCommit == null),
             Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _engine.DidNotReceiveWithAnyArgs().ReverseClaimAsync(default!, default!, default, default, default!, default);
-        await _engine.DidNotReceiveWithAnyArgs().ReverseClaimForReprocessingAsync(default!, default!, default, default, default!, default);
+        await _engine.DidNotReceiveWithAnyArgs().ReverseClaimForReprocessingAsync(default!, default!, default, default, default!, default, default);
         await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
     }
 
@@ -551,6 +551,7 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
         var claim = Pended("claim-pay-deny", "NCCI", "bundled pair");
         claim.Status = ClaimStatus.Approved;
         claim.VersionState = ClaimVersionState.Adjudicated;
+        claim.LatestAccumulatorCommitId = "commit-pay-1";
         OutboxReadsTheSavedClaim();
 
         var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer), claim,
@@ -564,11 +565,12 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
                     && c.PendingAccumulatorReversal != null
                     && c.PendingAccumulatorReversal.Reversal!.ClaimId == "claim-pay-deny"
                     && !c.PendingAccumulatorReversal.Reversal.Terminal
+                    && c.PendingAccumulatorReversal.Reversal.CommitId == "commit-pay-1"
                     && c.PendingAccumulatorCommit == null),
                 Arg.Any<string>(), Arg.Any<CancellationToken>());
             _engine.ReverseClaimForReprocessingAsync(
                 "MEM-9", "MEM-9", Guid.Parse(claim.BenefitPlanId!), DateOnly.FromDateTime(claim.ServiceDateFrom),
-                claim.Id, Arg.Any<CancellationToken>());
+                claim.Id, "commit-pay-1", Arg.Any<CancellationToken>());
             _repo.CompleteAccumulatorOutboxAsync("test-tenant", "claim-pay-deny", AccumulatorOutboxKind.Reversal,
                 Arg.Any<string>(), null, Arg.Any<CancellationToken>());
         });

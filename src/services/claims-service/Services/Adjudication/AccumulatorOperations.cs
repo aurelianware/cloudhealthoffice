@@ -343,6 +343,8 @@ public sealed class AccumulatorOperationsService
             // reprocessable, so nothing is fenced.
             claim.PendingAccumulatorCommit = deny ? null : AccumulatorOutboxItem.ForCommit(rerun.PreparedAccumulatorCommit!, actedAt);
             claim.PendingAccumulatorReversal = denialReversal;
+            if (claim.PendingAccumulatorCommit is { } queuedCommit)
+                claim.LatestAccumulatorCommitId = queuedCommit.Id;
             claim.ExaminerResolutions.Add(new ExaminerResolutionRecord
             {
                 Disposition = disposition.ToString(),

@@ -1630,7 +1630,10 @@ public class ClaimRepository : IClaimRepository
         // The accumulator outbox entry lands with the status that finalizes
         // the claim (same patch, same predicate), or not at all.
         if (pendingAccumulatorCommit is not null)
+        {
             statusOps.Add(PatchOperation.Set("/pendingAccumulatorCommit", pendingAccumulatorCommit));
+            statusOps.Add(PatchOperation.Set("/latestAccumulatorCommitId", pendingAccumulatorCommit.Id));
+        }
         var options = new PatchItemRequestOptions
         {
             FilterPredicate = WithResolutionLockFence(SynchronousWritebackBlockedFilterPredicate, requiredResolutionLockToken),

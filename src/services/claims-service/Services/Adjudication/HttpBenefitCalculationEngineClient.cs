@@ -142,20 +142,22 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
         Guid benefitPlanId, DateOnly serviceDate,
         string originalClaimId,
         CancellationToken ct = default) =>
-        ReverseAsync(memberId, subscriberId, benefitPlanId, serviceDate, originalClaimId, terminal: true, ct);
+        ReverseAsync(memberId, subscriberId, benefitPlanId, serviceDate, originalClaimId, terminal: true, commitId: null, ct);
 
-    public Task ReverseClaimForReprocessingAsync(
+    public Task<AccumulatorReversalOutcome> ReverseClaimForReprocessingAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, DateOnly serviceDate,
         string originalClaimId,
+        string? commitId,
         CancellationToken ct = default) =>
-        ReverseAsync(memberId, subscriberId, benefitPlanId, serviceDate, originalClaimId, terminal: false, ct);
+        ReverseAsync(memberId, subscriberId, benefitPlanId, serviceDate, originalClaimId, terminal: false, commitId, ct);
 
-    private async Task ReverseAsync(
+    private async Task<AccumulatorReversalOutcome> ReverseAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, DateOnly serviceDate,
         string originalClaimId,
         bool terminal,
+        string? commitId,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(memberId))
@@ -174,6 +176,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
             ServiceDate = serviceDate,
             OriginalClaimId = originalClaimId,
             Terminal = terminal,
+            CommitId = commitId,
         };
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ReversePath)
@@ -207,9 +210,22 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
                 $"for original claim {originalClaimId}", null, response.StatusCode);
         }
 
+        var outcome = AccumulatorReversalOutcome.Reversed;
+        if (!terminal && response.StatusCode == System.Net.HttpStatusCode.OK)
+        {
+            var body = await response.Content.ReadFromJsonAsync<ReverseClaimResponse>(JsonOptions, ct).ConfigureAwait(false);
+            outcome = body?.Outcome ?? AccumulatorReversalOutcome.Reversed;
+        }
+
         _logger.LogInformation(
-            "Reversed accumulator impact for original claim {OriginalClaimId} (member {MemberId}, plan {PlanId})",
-            SanitizeForLog(originalClaimId), SanitizeForLog(memberId), benefitPlanId);
+            "Reversal for original claim {OriginalClaimId} (member {MemberId}, plan {PlanId}, terminal {Terminal}): {Outcome}",
+            SanitizeForLog(originalClaimId), SanitizeForLog(memberId), benefitPlanId, terminal, outcome);
+        return outcome;
+    }
+
+    private sealed class ReverseClaimResponse
+    {
+        public AccumulatorReversalOutcome Outcome { get; set; }
     }
 
     /// <summary>
@@ -324,6 +340,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
         public DateOnly ServiceDate { get; set; }
         public string OriginalClaimId { get; set; } = string.Empty;
         public bool Terminal { get; set; } = true;
+        public string? CommitId { get; set; }
     }
 
     /// <summary>

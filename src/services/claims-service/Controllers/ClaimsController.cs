@@ -1690,6 +1690,12 @@ public class ClaimsController : ControllerBase
                 ? AccumulatorOutboxItem.ForCommit(accumulatorCommit, actedAt)
                 : null;
             claim.PendingAccumulatorReversal = denialReversal;
+            // Re-Pay: the new commit is the claim's commit from now on. Any
+            // reversal still queued for an older commit was cancelled above
+            // in this same lock-fenced (ETag) write; one already in flight
+            // is commit-scoped, so it can only be a no-op against this one.
+            if (claim.PendingAccumulatorCommit is { } queuedCommit)
+                claim.LatestAccumulatorCommitId = queuedCommit.Id;
             claim.ExaminerResolutions.Add(new ExaminerResolutionRecord
             {
                 Disposition = disposition.ToString(),

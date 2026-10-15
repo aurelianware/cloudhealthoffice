@@ -311,6 +311,27 @@ public enum AccumulatorCommitOutcome
     /// before this commit arrived; nothing was written.
     /// </summary>
     RefusedClaimReversed,
+
+    /// <summary>
+    /// This commit id was reversed by a commit-scoped (non-terminal)
+    /// reversal before it arrived — the claim was moved to Deny while this
+    /// commit was in flight; nothing was written. A newer commit of the same
+    /// claim (it went back to Pay) is not affected. Not an error: drop it.
+    /// </summary>
+    RefusedCommitReversed,
+}
+
+/// <summary>Result of a commit-scoped (non-terminal) reversal.</summary>
+public enum AccumulatorReversalOutcome
+{
+    /// <summary>The named commit (or, with no commit named, whatever the claim held) was reversed — or had not landed yet and is now fenced.</summary>
+    Reversed,
+
+    /// <summary>
+    /// A newer commit of the claim is applied (it went back to Pay and
+    /// re-committed): the reversal is stale and changed nothing.
+    /// </summary>
+    Superseded,
 }
 
 /// <summary>

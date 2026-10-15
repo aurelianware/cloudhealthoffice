@@ -135,14 +135,19 @@ public class HttpBenefitCalculationEngineClientReverseTests
     public async Task ReverseClaimForReprocessingAsync_PostsTerminalFalse()
     {
         _tenantContext.TenantId.Returns("tenant-x");
-        _handler.RespondWith(new HttpResponseMessage(HttpStatusCode.NoContent));
+        _handler.RespondWith(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"outcome\":\"Superseded\"}", System.Text.Encoding.UTF8, "application/json"),
+        });
 
-        await CreateClient().ReverseClaimForReprocessingAsync(
-            "m1", "sub-1", Guid.Parse("11111111-1111-1111-1111-111111111111"), new DateOnly(2026, 5, 1), "claim-99");
+        var outcome = await CreateClient().ReverseClaimForReprocessingAsync(
+            "m1", "sub-1", Guid.Parse("11111111-1111-1111-1111-111111111111"), new DateOnly(2026, 5, 1), "claim-99", "commit-7");
 
+        Assert.Equal(CloudHealthOffice.BenefitEngine.Models.AccumulatorReversalOutcome.Superseded, outcome);
         Assert.Equal("/api/v1/adjudication/reverse-claim", _handler.LastRequest!.RequestUri!.AbsolutePath);
         var doc = JsonDocument.Parse(_handler.LastBodyJson!);
         Assert.False(doc.RootElement.GetProperty("terminal").GetBoolean());
+        Assert.Equal("commit-7", doc.RootElement.GetProperty("commitId").GetString());
         Assert.Equal("claim-99", doc.RootElement.GetProperty("originalClaimId").GetString());
     }
 

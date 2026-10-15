@@ -86,6 +86,18 @@ tells the provider; only then is it final.
   is always queued; from Pended / Deny only if the store reports a write for
   the claim (`accumulator-commits/lookup`), else nothing. `Deny` → `Denied`
   adds nothing. Voids and replacements keep the terminal (fencing) reversal.
+  The reversal is commit-scoped (compare-and-reverse): it names the claim's
+  `LatestAccumulatorCommitId` (recorded whenever a commit is queued) and
+  takes it back only while that commit is the applied one — if the claim went
+  back to Pay and a newer commit landed, it is a no-op (`Superseded`). It
+  also fences that commit id (Cho `ReversedCommitIds`, Redis
+  `__fence:commit:{id}`), so the same commit arriving late is refused
+  (`RefusedCommitReversed`, dropped by the outbox) while a newer one is not.
+  A re-Pay write cancels a still-queued reversal in the same lock-fenced
+  write. Claims whose commit is unknown (legacy) carry the sentinel
+  `unknown` and reverse blind, as before. The outbox re-reads the claim at
+  dispatch, so a queued commit on a claim now Deny / Denied / Voided is
+  dropped.
 - `PartiallyPaid` (= 9) is legacy: never assigned (adjudication never set
   it), still read as payable and, via `VersionState=Paid`, finalized. The
   portal derives "Paid with line denials" from the lines instead.

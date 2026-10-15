@@ -76,10 +76,11 @@ public interface IBenefitCalculationEngine
     /// (<see cref="IAccumulatorService.ReverseAsync"/>). Idempotent; a claim
     /// with nothing applied reverses nothing.
     /// </summary>
-    Task ReverseClaimForReprocessingAsync(
+    Task<AccumulatorReversalOutcome> ReverseClaimForReprocessingAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, DateOnly serviceDate,
         string originalClaimId,
+        string? commitId,
         CancellationToken ct = default);
 
     /// <summary>
@@ -531,10 +532,11 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             memberId, subscriberId, benefitPlanId, planYear, originalClaimId, ct);
     }
 
-    public async Task ReverseClaimForReprocessingAsync(
+    public async Task<AccumulatorReversalOutcome> ReverseClaimForReprocessingAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, DateOnly serviceDate,
         string originalClaimId,
+        string? commitId,
         CancellationToken ct = default)
     {
         var plan = await _planProvider.GetPlanAsync(benefitPlanId, ct);
@@ -542,7 +544,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         {
             _logger.LogWarning("Cannot reverse claim {ClaimId}: plan {PlanId} not found",
                 originalClaimId, benefitPlanId);
-            return;
+            return AccumulatorReversalOutcome.Reversed;
         }
 
         var planYear = DeterminePlanYear(serviceDate, plan);
@@ -551,8 +553,8 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             "Reversing accumulators (non-terminal, claim may re-commit) for claim {ClaimId}, member {MemberId}, plan year {PlanYear}",
             originalClaimId, memberId, planYear);
 
-        await _accumulatorService.ReverseAsync(
-            memberId, subscriberId, benefitPlanId, planYear, originalClaimId, ct);
+        return await _accumulatorService.ReverseCommitAsync(
+            memberId, subscriberId, benefitPlanId, planYear, originalClaimId, commitId, ct);
     }
 
     // ═══════════════════════════════════════════════════════════════════

@@ -690,7 +690,9 @@ public class ClaimRepositoryMongo : IClaimRepository
         // The accumulator outbox entry lands with the status that finalizes
         // the claim, or not at all.
         if (pendingAccumulatorCommit is not null)
-            statusUpdate = statusUpdate.Set(c => c.PendingAccumulatorCommit, pendingAccumulatorCommit);
+            statusUpdate = statusUpdate
+                .Set(c => c.PendingAccumulatorCommit, pendingAccumulatorCommit)
+                .Set(c => c.LatestAccumulatorCommitId, pendingAccumulatorCommit.Id);
 
         var result = await _collection.UpdateOneAsync(statusFilter, statusUpdate, cancellationToken: ct);
         if (result.MatchedCount > 0)

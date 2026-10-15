@@ -440,6 +440,105 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         await AssertBalances(100m, 100m);
     }
 
+    // ── commit-scoped reversals: deterministic interleavings ──────────────
+
+    /// <summary>
+    /// Pay (commit X applied) → Deny, whose reversal of X is saved but not yet driven → back
+    /// to Pay (commit Y). The re-Pay write cancels the queued reversal; the copy already in
+    /// flight, dispatched after Y landed, is a no-op (Superseded): Y stays counted once.
+    /// </summary>
+    [SkippableFact]
+    public async Task Interleaving_DenyReversalDispatchedAfterTheRePayCommit_IsANoOp()
+    {
+        _ncciPends = false;
+        var paid = await SubmitAndAdjudicateAsync();
+        var commitX = _calculated[^1].PreparedAccumulatorCommit!.CommitId;
+        Assert.Equal(commitX, (await Claim(paid.Id))!.LatestAccumulatorCommitId);
+        await AssertBalances(100m, 100m);
+
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-1", paid.Id, "Denied", withOutbox: false)));
+        var inFlight = (await Claim(paid.Id))!.PendingAccumulatorReversal!.Reversal!;
+        Assert.False(inFlight.Terminal);
+        Assert.Equal(commitX, inFlight.CommitId);
+        await AssertBalances(100m, 100m); // not driven yet
+
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-2", paid.Id, "Approved")));
+        var repaid = (await Claim(paid.Id))!;
+        Assert.Null(repaid.PendingAccumulatorReversal); // cancelled with the Pay write
+        var commitY = repaid.LatestAccumulatorCommitId;
+        Assert.NotEqual(commitX, commitY);
+        await AssertBalances(100m, 100m);
+
+        var outcome = await _engine.ReverseClaimForReprocessingAsync(inFlight.MemberId, inFlight.SubscriberId,
+            Guid.Parse(inFlight.BenefitPlanId), DateOnly.FromDateTime(inFlight.ServiceDate), inFlight.ClaimId, inFlight.CommitId);
+
+        Assert.Equal(AccumulatorReversalOutcome.Superseded, outcome);
+        await AssertBalances(100m, 100m);
+        await AssertCommittedOnceAsync(paid.Id);
+        Assert.Equal(0, await _dispatcher.RunOnceAsync(CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Pay with commit X still queued (benefit-plan-service down) → Deny. The Deny write
+    /// cancels the queued commit and queues the reversal of X; the reversal lands first and
+    /// fences X. A copy of commit X still in flight, arriving afterwards, is refused and counts
+    /// nothing; the claim can still go back to Pay with a new commit.
+    /// </summary>
+    [SkippableFact]
+    public async Task Interleaving_PayCommitDispatchedAfterTheDeny_IsDropped()
+    {
+        _ncciPends = false;
+        _accumulatorWritesDown = true;
+        var paid = await SubmitAndAdjudicateAsync();
+        var commitX = _calculated[^1].PreparedAccumulatorCommit!;
+        Assert.Equal(commitX.CommitId, (await Claim(paid.Id))!.PendingAccumulatorCommit!.Id);
+        _accumulatorWritesDown = false;
+
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-1", paid.Id, "Denied")));
+        var denied = (await Claim(paid.Id))!;
+        Assert.Equal(Claims.ClaimStatus.Deny, denied.Status);
+        Assert.Null(denied.PendingAccumulatorCommit);
+        Assert.Null(denied.PendingAccumulatorReversal); // driven: X fenced, nothing to take back
+
+        var late = await _engine.CommitAccumulatorsAsync(commitX);
+
+        Assert.Equal(AccumulatorCommitOutcome.RefusedCommitReversed, late.Outcome);
+        await AssertBalances(0m, 0m);
+        await AssertNotFencedAsync(paid.Id);
+
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-2", paid.Id, "Approved")));
+        await AssertBalances(100m, 100m);
+        await AssertCommittedOnceAsync(paid.Id);
+    }
+
+    /// <summary>
+    /// Legacy sentinel: a claim whose commit is unknown (written before commits were
+    /// recorded on the claim) is denied — the reversal names no commit and is blind, as
+    /// before: it takes back what the claim holds and fences nothing.
+    /// </summary>
+    [SkippableFact]
+    public async Task Interleaving_LegacyUnknownCommit_DenyReversesBlind()
+    {
+        Skip.If(!UndoesLegacyWrites,
+            "The Redis store kept no journal for writes made before deferred commits: its lookup cannot report them.");
+        var pended = await SubmitAndAdjudicateAsync();
+        var legacy = _calculated[0].PreparedAccumulatorCommit!;
+        await AssertBalances(0m, 0m);
+        await _accumulators.ApplyUpdatesAsync(legacy.MemberId, legacy.SubscriberId, legacy.BenefitPlanId, legacy.PlanYear,
+            pended.Id, legacy.Updates);
+        await AssertBalances(100m, 100m);
+
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-1", pended.Id, "Denied", withOutbox: false)));
+        var order = (await Claim(pended.Id))!.PendingAccumulatorReversal!.Reversal!;
+        Assert.Equal(Claims.AccumulatorReversalOrder.UnknownCommit, order.CommitId);
+        Assert.Null(order.EngineCommitId);
+
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        Assert.Equal(1, await _dispatcher.RunOnceAsync(CancellationToken.None));
+        await AssertBalances(0m, 0m);
+        await AssertNotFencedAsync(pended.Id);
+    }
+
     /// <summary>
     /// Deny → Denied: the payment run's $0 remittance finalizes the denial and does nothing
     /// to the accumulators — the reversal already happened when the claim was denied.

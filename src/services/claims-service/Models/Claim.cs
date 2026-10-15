@@ -337,6 +337,15 @@ public class Claim
     public AccumulatorOutboxItem? PendingAccumulatorCommit { get; set; }
 
     /// <summary>
+    /// The commit id of the last accumulator commit queued for this claim
+    /// (written with the status that queued it; kept after the outbox clears
+    /// <see cref="PendingAccumulatorCommit"/>). A move to Deny reverses
+    /// exactly this commit (commit-scoped, non-terminal). Null for claims
+    /// committed before the field existed (the reversal is then blind).
+    /// </summary>
+    public string? LatestAccumulatorCommitId { get; set; }
+
+    /// <summary>
     /// Accumulator outbox: the terminal reversal (fence) an examiner's denial
     /// owes, written with the denial's lock-fenced final write and driven the
     /// same way.
@@ -1521,7 +1530,7 @@ public class AccumulatorOutboxItem
     /// id) unless <paramref name="terminal"/> is false; null when its plan id
     /// is not a GUID (nothing to reverse).
     /// </summary>
-    public static AccumulatorOutboxItem? ForReversal(Claim claim, DateTime now, bool terminal = true) =>
+    public static AccumulatorOutboxItem? ForReversal(Claim claim, DateTime now, bool terminal = true, string? commitId = null) =>
         Guid.TryParse(claim.BenefitPlanId, out _)
             ? new AccumulatorOutboxItem
             {
@@ -1534,6 +1543,7 @@ public class AccumulatorOutboxItem
                     BenefitPlanId = claim.BenefitPlanId!,
                     ServiceDate = claim.ServiceDateFrom,
                     Terminal = terminal,
+                    CommitId = terminal ? null : commitId ?? AccumulatorReversalOrder.UnknownCommit,
                 },
                 CreatedAt = now,
                 NextAttemptAt = now + InlineGrace,
@@ -1561,6 +1571,21 @@ public class AccumulatorReversalOrder
     /// reprocessed back to Pay and commit again.
     /// </summary>
     public bool Terminal { get; set; } = true;
+
+    /// <summary>
+    /// Non-terminal only: the commit this reversal takes back
+    /// (compare-and-reverse — a newer commit makes it a no-op), or
+    /// <see cref="UnknownCommit"/> when the claim's commit is not known
+    /// (legacy data): the reversal is then blind, as before.
+    /// </summary>
+    public string? CommitId { get; set; }
+
+    /// <summary>Sentinel <see cref="CommitId"/>: the commit is not known (legacy).</summary>
+    public const string UnknownCommit = "unknown";
+
+    /// <summary>The commit id to send to the engine (null for <see cref="UnknownCommit"/>).</summary>
+    public string? EngineCommitId =>
+        string.IsNullOrWhiteSpace(CommitId) || CommitId == UnknownCommit ? null : CommitId;
 }
 
 /// <summary>See <see cref="Claim.AccumulatorClampReview"/>.</summary>

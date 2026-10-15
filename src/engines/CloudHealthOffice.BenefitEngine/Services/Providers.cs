@@ -121,6 +121,27 @@ public interface IAccumulatorService
         string claimId,
         CancellationToken ct = default)
         => ReverseAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, ct);
+
+    /// <summary>
+    /// Commit-scoped, non-terminal reversal (a Pay claim moved to Deny before
+    /// the payment cycle): compare-and-reverse. With <paramref name="commitId"/>
+    /// the claim's contribution is reversed only while it is that commit —
+    /// if a newer commit of the claim is applied (it went back to Pay) this
+    /// is <see cref="Models.AccumulatorReversalOutcome.Superseded"/> and
+    /// changes nothing — and the commit id is fenced, so that commit arriving
+    /// late is refused while a newer one is not. With no commit id (legacy
+    /// data, the commit is unknown) it reverses whatever the claim holds,
+    /// unfenced. The default (stores without a per-claim journal) reverses.
+    /// </summary>
+    async Task<Models.AccumulatorReversalOutcome> ReverseCommitAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId, string? commitId,
+        CancellationToken ct = default)
+    {
+        await ReverseAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, ct);
+        return Models.AccumulatorReversalOutcome.Reversed;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════

@@ -934,13 +934,17 @@ public class AdjudicationController : ControllerBase
         }
         else
         {
-            await _benefitEngine.ReverseClaimForReprocessingAsync(
+            // Commit-scoped: reverses only while CommitId is the claim's
+            // applied commit (Superseded otherwise) and fences that commit id.
+            var outcome = await _benefitEngine.ReverseClaimForReprocessingAsync(
                 request.MemberId,
                 request.SubscriberId ?? string.Empty,
                 request.BenefitPlanId,
                 request.ServiceDate,
                 request.OriginalClaimId,
+                string.IsNullOrWhiteSpace(request.CommitId) ? null : request.CommitId,
                 ct);
+            return Ok(new ReverseClaimResponse { Outcome = outcome });
         }
 
         return NoContent();
@@ -1660,4 +1664,17 @@ public class ReverseClaimRequest
     /// payment cycle, then reprocessed).
     /// </summary>
     public bool Terminal { get; set; } = true;
+
+    /// <summary>
+    /// Non-terminal only: the commit being reversed (compare-and-reverse).
+    /// Null / empty: unknown (legacy) — reverse whatever the claim holds.
+    /// </summary>
+    public string? CommitId { get; set; }
+}
+
+/// <summary>Response of a non-terminal <c>POST /api/v1/adjudication/reverse-claim</c>.</summary>
+public class ReverseClaimResponse
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AccumulatorReversalOutcome Outcome { get; set; }
 }
