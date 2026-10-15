@@ -51,6 +51,13 @@ public class SyntheticFeeScheduleLine
     /// <summary>CPT/HCPCS/CDT procedure code.</summary>
     public string ProcedureCode { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional UB-04 revenue code. A line with a revenue code and a blank
+    /// <see cref="ProcedureCode"/> prices revenue-code-only institutional lines
+    /// (FeeScheduleEngine FeeScheduleLine.RevenueCode).
+    /// </summary>
+    public string? RevenueCode { get; set; }
+
     /// <summary>Optional modifier qualifier (26, TC, etc.).</summary>
     public string? Modifier { get; set; }
 

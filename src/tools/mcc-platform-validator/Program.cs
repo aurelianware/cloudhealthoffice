@@ -102,6 +102,7 @@ var validationPlanBusinessId = await MeasureLifecycleValuePhaseAsync(
     {
         var planId = await CreateValidationPlanAsync(http, options, validationPlanId, json);
         await SeedValidationPlanServiceCategoryOverridesAsync(http, options, validationPlanId, json);
+        await SeedValidationPlanDefaultFeeScheduleAsync(http, options, validationPlanId, json);
         return planId;
     });
 
@@ -1012,6 +1013,38 @@ static async Task SeedValidationPlanServiceCategoryOverridesAsync(
     Console.WriteLine(
         "seeded: MCC validation plan-specific service-category overrides " +
         "(Office Visit, Behavioral Health, Behavioral Health carve-out exclusion)");
+}
+
+// The validation plan's default fee schedule. MCC providers have no contract in the
+// fee-schedule engine, so without a plan default every line falls back to billed
+// charges and the pipeline's PricingStage pends the claim NOCONTRACT. Revenue-code
+// lines price institutional claims; the CPT/CDT lines are the benchmark's existing
+// flat amounts. PUT is an idempotent replace per tenant + plan.
+static async Task SeedValidationPlanDefaultFeeScheduleAsync(
+    HttpClient http,
+    ValidatorOptions options,
+    Guid validationPlanId,
+    JsonSerializerOptions json)
+{
+    var payload = MccPlanDefaultFeeSchedule.BuildPayload();
+    using var response = await http.PutAsJsonAsync(
+        $"{options.BenefitUrl}{MccPlanDefaultFeeSchedule.Path(validationPlanId)}",
+        payload,
+        json);
+    if (!response.IsSuccessStatusCode)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        throw new InvalidOperationException(
+            "validation plan default fee schedule seed failed: " +
+            $"{(int)response.StatusCode} {body}. " +
+            "The MCC validator needs benefit-plan-service PUT /api/v1/plans/{planId}/default-fee-schedule " +
+            "(settings:manage) so uncontracted claim lines price instead of pending NOCONTRACT.");
+    }
+
+    var revenueLines = payload.Lines.Count(l => l.RevenueCode is not null);
+    Console.WriteLine(
+        $"seeded: validation plan default fee schedule ({payload.Lines.Count - revenueLines:N0} procedure-code lines, " +
+        $"{revenueLines:N0} revenue-code lines)");
 }
 
 static async Task CreateServiceCategoryMappingAsync(
@@ -2867,7 +2900,7 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
             modifiers = line.Modifiers,
             diagnosisPointers = line.DiagnosisPointers.Count == 0 ? new List<int> { 1 } : line.DiagnosisPointers,
             units = line.Units <= 0 ? 1 : line.Units,
-            chargeAmount = line.ChargeAmount,
+            chargeAmount = MccPlanDefaultFeeSchedule.LineChargeTotal(line),
             serviceDateFrom = line.ServiceDate,
             serviceDateTo = line.ServiceEndDate ?? line.ServiceDate,
             placeOfServiceCode = line.PlaceOfService ?? claim.PlaceOfService,
@@ -2940,7 +2973,7 @@ static async Task<(AdjudicationResponseDto Response, string RawBody)> Adjudicate
             modifiers = line.Modifiers,
             revenueCode = line.RevenueCode,
             placeOfService = line.PlaceOfService ?? claim.PlaceOfService,
-            billedAmount = line.ChargeAmount,
+            billedAmount = MccPlanDefaultFeeSchedule.LineChargeTotal(line),
             units = line.Units <= 0 ? 1 : line.Units,
             diagnosisCodes = DiagnosisCodesForLine(claim, line)
         })

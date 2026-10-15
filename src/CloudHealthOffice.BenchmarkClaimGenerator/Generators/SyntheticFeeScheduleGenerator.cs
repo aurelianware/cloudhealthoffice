@@ -26,6 +26,142 @@ public static class SyntheticFeeScheduleGenerator
         };
     }
 
+    /// <summary>Fee schedule id of <see cref="GeneratePlanDefaultSchedule"/>.</summary>
+    public const string PlanDefaultFeeScheduleId = "FS-PLAN-DEFAULT";
+
+    /// <summary>
+    /// Flat synthetic rates for every UB-04 revenue code the institutional generator can
+    /// emit (<see cref="ReferenceData.RevenueCodeSets"/>), keyed by the four-digit code.
+    /// The rate is per unit: the FeeScheduleEngine prices a flat-rate line as rate × units.
+    ///
+    /// <para>
+    /// Room and board (01xx accommodation, 019x SNF levels) is a per-diem: the generator
+    /// bills those lines with units = length of stay, so the rate is a daily rate. Every
+    /// other code is billed one unit per line, so its rate is a per-service (per-line) amount.
+    /// </para>
+    ///
+    /// <para>
+    /// Each rate is set below the institutional generator's minimum per-unit charge for
+    /// every claim sub-type that bills the code (inpatient/stop-loss $2,500 / $8,000,
+    /// emergency $800, observation $500, SNF $400, outpatient $300 — see
+    /// <c>InstitutionalClaimGenerator.GetChargeForSubType</c>), so a line's allowed
+    /// amount never exceeds its billed charge and no line needs a negative contractual
+    /// adjustment. The amounts are synthetic and illustrative, not a real payer's rates.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyDictionary<string, decimal> RevenueCodeRates { get; } =
+        new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Accommodation — per day (inpatient only)
+            ["0110"] = 2200m, // room and board, private
+            ["0120"] = 1800m, // room and board, semi-private
+            ["0150"] = 2400m, // room and board (generator: ICU)
+            ["0200"] = 2450m, // intensive care, general (one unit per line)
+
+            // Inpatient-only ancillary — per line
+            ["0370"] = 900m,  // anesthesia
+            ["0390"] = 750m,  // blood and blood products
+            ["0710"] = 2000m, // operating room
+            ["0720"] = 800m,  // recovery room
+
+            // Ancillary shared with outpatient claims — per line (outpatient minimum charge $300)
+            ["0250"] = 150m,  // pharmacy, general
+            ["0260"] = 180m,  // IV therapy
+            ["0270"] = 90m,   // medical/surgical supplies
+            ["0300"] = 120m,  // laboratory, clinical
+            ["0320"] = 250m,  // radiology, diagnostic
+            ["0350"] = 290m,  // CT scan
+            ["0360"] = 280m,  // OR services (outpatient)
+            ["0450"] = 275m,  // emergency room, general (also billed on outpatient claims)
+            ["0510"] = 160m,  // clinic, general
+            ["0636"] = 140m,  // drugs requiring detailed coding
+
+            // Emergency-only — per visit (emergency minimum charge $800)
+            ["0451"] = 450m,  // ER, EMTALA screening
+            ["0452"] = 600m,  // ER, beyond EMTALA screening
+
+            // Observation — per line (observation minimum charge $500)
+            ["0762"] = 450m,  // observation room
+
+            // Skilled nursing — SNF levels per day, therapies per line (SNF minimum charge $400)
+            ["0191"] = 380m,  // SNF subacute care, per day
+            ["0192"] = 340m,  // SNF level II, per day
+            ["0193"] = 300m,  // SNF level III, per day
+            ["0420"] = 150m,  // physical therapy
+            ["0430"] = 150m,  // occupational therapy
+            ["0440"] = 160m,  // speech-language pathology
+        };
+
+    /// <summary>
+    /// The plan-default per-unit rate for a revenue code (<see cref="RevenueCodeRates"/>),
+    /// matched on the four-digit form ("120" = "0120"); null when the code has no rate.
+    /// </summary>
+    public static decimal? RevenueCodeRate(string? revenueCode)
+        => !string.IsNullOrWhiteSpace(revenueCode)
+           && RevenueCodeRates.TryGetValue(revenueCode.Trim().PadLeft(4, '0'), out var rate)
+            ? rate
+            : null;
+
+    /// <summary>
+    /// The benchmark's plan-default fee schedule: a flat-rate ("Custom") schedule a
+    /// benefit plan falls back to when the provider has no contracted schedule. It
+    /// carries the procedure-code coverage of the Medicaid schedule (CPT/HCPCS/CDT flat
+    /// amounts, same rates and multiple procedure indicators) plus one line per
+    /// revenue code in <see cref="RevenueCodeRates"/> with a blank procedure code, which
+    /// prices revenue-code-only institutional lines. Flat rates only — no
+    /// percent-of-Medicare (there is no Medicare reference for revenue codes).
+    /// Deterministic: the same effective date always yields the same lines in the same order.
+    /// </summary>
+    public static SyntheticFeeSchedule GeneratePlanDefaultSchedule(DateTime? effectiveDate = null)
+    {
+        var effDate = effectiveDate ?? new DateTime(2024, 1, 1);
+        var schedule = new SyntheticFeeSchedule
+        {
+            FeeScheduleId = PlanDefaultFeeScheduleId,
+            Name = "MCC Plan Default Fee Schedule",
+            Type = "Custom",
+            EffectiveDate = effDate,
+        };
+
+        foreach (var line in GenerateMedicaidFeeSchedule(effDate).Lines)
+        {
+            schedule.Lines.Add(new SyntheticFeeScheduleLine
+            {
+                ProcedureCode = line.ProcedureCode,
+                Modifier = line.Modifier,
+                AllowedAmount = line.AllowedAmount,
+                RateType = "FlatRate",
+                EffectiveDate = effDate,
+                MaxUnitsPerDay = line.MaxUnitsPerDay,
+                BilateralAdjustmentApplies = line.BilateralAdjustmentApplies,
+                MultipleProcedureIndicator = line.MultipleProcedureIndicator,
+            });
+        }
+
+        // Procedure codes the benchmark bills that the Medicaid schedule does not carry:
+        // 69436 (bilateral generator set) and 99283 (MCC validator's uncovered-service
+        // fixture, which must reach the benefit check rather than pend for no rate).
+        // Flat amounts at about 60% of the generator's base charge, like the schedule above.
+        schedule.Lines.Add(CreateLine("69436", 1080m, effDate));
+        schedule.Lines.Add(CreateLine("99283", 95m, effDate));
+
+        foreach (var (code, rate) in RevenueCodeRates.OrderBy(r => r.Key, StringComparer.Ordinal))
+        {
+            schedule.Lines.Add(new SyntheticFeeScheduleLine
+            {
+                ProcedureCode = string.Empty,
+                RevenueCode = code,
+                AllowedAmount = rate,
+                RateType = "FlatRate",
+                EffectiveDate = effDate,
+                // Revenue-code lines are facility charges, not MPFS services.
+                MultipleProcedureIndicator = 9,
+            });
+        }
+
+        return schedule;
+    }
+
     /// <summary>
     /// Medicaid Fee Schedule — based on TMPPM rates (~60-75% of Medicare RBRVS).
     /// </summary>
@@ -322,6 +458,7 @@ public static class SyntheticFeeScheduleGenerator
         ["27447"] = 2, ["27130"] = 2, ["47562"] = 2, ["49505"] = 2, ["29881"] = 2,
         ["64721"] = 2, ["66984"] = 2, ["23412"] = 2, ["44970"] = 2, ["50590"] = 2,
         ["28296"] = 2, ["15002"] = 2, ["22612"] = 2, ["33533"] = 2, ["35301"] = 2,
+        ["69436"] = 2,
 
         // Behavioral health / screening / pathology — no multiple procedure adjustment
         ["90834"] = 0, ["90837"] = 0, ["90791"] = 0, ["90847"] = 0, ["90853"] = 0,

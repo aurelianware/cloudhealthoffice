@@ -165,52 +165,64 @@ public class InstitutionalClaimGenerator : IClaimGenerator
         return revCode.StartsWith("01") || revCode.StartsWith("019");
     }
 
+    /// <summary>
+    /// A line's expected allowed amount: the plan-default revenue-code rate
+    /// (<see cref="SyntheticFeeScheduleGenerator.RevenueCodeRates"/>, the schedule the MCC
+    /// validator seeds as the validation plan's default) × units, which is how the
+    /// FeeScheduleEngine prices a flat-rate revenue-code line for a provider with no
+    /// contract. Lines are revenue-code-only (no DRG schedule is seeded), so a DRG on
+    /// the claim does not change the allowed amount. A code with no rate keeps the
+    /// earlier 60%-of-charges estimate.
+    /// </summary>
+    internal static decimal ExpectedLineAllowed(ClaimLine line)
+    {
+        var rate = SyntheticFeeScheduleGenerator.RevenueCodeRate(line.RevenueCode);
+        return rate is { } perUnit
+            ? Math.Round(perUnit * line.Units, 2)
+            : Math.Round(line.ChargeAmount * line.Units * 0.60m, 2);
+    }
+
     private static ExpectedOutcome ComputeExpectedOutcome(SyntheticClaim claim, string subType, Random random)
     {
-        decimal totalAllowed;
         decimal copay = 0m;
         decimal coinsuranceRate = 0.20m;
         decimal deductible = 0m;
 
+        // Allowed amounts follow the seeded plan-default fee schedule. The cost-share
+        // terms below are generator estimates, not the validation plan's benefits, so
+        // paid / member liability are illustrative and the MCC validator does not score
+        // plain institutional claims on them.
         if (subType is "inpatient" or "stoploss" && claim.DrgCode != null)
         {
-            // DRG flat rate pricing for v1
-            totalAllowed = subType == "stoploss"
-                ? claim.TotalCharges * 0.85m  // Outlier pays higher ratio
-                : claim.TotalCharges * 0.55m;
             copay = 350m;
+            // Kept even though only the deductible uses it: the draw is part of the
+            // seeded random sequence, so removing it would change every later claim.
             deductible = random.Next(100) < 40 ? 500m : 0m;
         }
         else if (subType == "emergency")
         {
-            totalAllowed = claim.TotalCharges * 0.70m;
             copay = 150m;
         }
-        else if (subType == "skillednursing")
+        else if (subType != "skillednursing")
         {
-            totalAllowed = claim.TotalCharges * 0.60m;
-            coinsuranceRate = 0.20m;
-        }
-        else
-        {
-            totalAllowed = claim.TotalCharges * 0.60m;
             copay = 75m;
         }
 
-        totalAllowed = Math.Round(totalAllowed, 2);
+        var lineAllowedAmounts = claim.Lines.ToDictionary(l => l.LineNumber, ExpectedLineAllowed);
+        var totalAllowed = lineAllowedAmounts.Values.Sum();
         var coinsurance = Math.Round(totalAllowed * coinsuranceRate, 2);
         var paid = Math.Max(0, totalAllowed - copay - deductible - coinsurance);
         var memberLiability = copay + deductible + coinsurance;
 
         var lineOutcomes = claim.Lines.Select(l =>
         {
-            var lineAllowed = Math.Round(l.ChargeAmount * l.Units * 0.60m, 2);
+            var lineAllowed = lineAllowedAmounts[l.LineNumber];
             return new LineOutcome
             {
                 LineNumber = l.LineNumber,
                 Disposition = "Paid",
                 AllowedAmount = lineAllowed,
-                PaidAmount = Math.Round(lineAllowed * 0.80m, 2),
+                PaidAmount = Math.Round(lineAllowed * (1m - coinsuranceRate), 2),
                 ReasonCode = null
             };
         }).ToList();
