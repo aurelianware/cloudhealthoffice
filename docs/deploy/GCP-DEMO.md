@@ -61,7 +61,7 @@ flowchart LR
 
 3. **Deploy.** Every merge to `main` deploys automatically (docs-only changes are skipped). To deploy by hand: Actions → **Deploy demo to GKE** → Run workflow. The first run builds 37 images in parallel and takes roughly 20–40 minutes; later runs use the build cache. To redeploy without rebuilding, enter an existing image tag (a commit SHA). Merges that land while a deploy is running queue behind it, and only the newest one deploys.
    - **Pause automatic deploys** (for example before a live demo, since a deploy restarts pods): set the repository variable `GKE_AUTO_DEPLOY` to `false`. Delete it or set it to `true` to resume. Manual runs work either way.
-   - **AI claims examiner.** On for automatic runs, and for manual runs unless you untick `ai_examiner`. When it's on, the deploy fails if the `ANTHROPIC_API_KEY` secret is missing, and after rollout the examiner makes one real call to Claude with its own settings. The deploy fails, with the API's reason, if that call doesn't succeed (revoked or mistyped key, no credit, retired model). The demo data isn't reset by a deploy.
+   - **AI claims examiner.** On for automatic runs, and for manual runs unless you untick `ai_examiner`. When it's on, the deploy fails if the `ANTHROPIC_API_KEY` secret is missing, and after rollout the examiner makes one real call to Claude with its own settings. The deploy fails, with the API's reason, if that call doesn't succeed (revoked or mistyped key, no credit, retired model). A deploy doesn't reset the demo data; `scripts/demo/gcp/reset-demo.sh --yes` clears the demo tenant's claims activity before a fresh `run-mcc.sh` load.
 
 4. **Connect and check.** On the presenter's laptop:
 
