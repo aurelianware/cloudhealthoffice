@@ -133,6 +133,7 @@ declare -A SERVICES=(
   [premium-billing-service]="src/services/premium-billing-service/Dockerfile"
   [risk-adjustment-service]="src/services/risk-adjustment-service/Dockerfile"
   [rfai-service]="src/services/rfai-service/Dockerfile"
+  [work-management-service]="src/services/work-management-service/Dockerfile"
   [idcard-service]="src/services/idcard-service/Dockerfile"
   [member-document-service]="src/services/member-document-service/Dockerfile"
   [personal-representative-service]="src/services/personal-representative-service/Dockerfile"

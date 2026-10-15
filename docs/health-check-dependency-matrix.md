@@ -33,6 +33,7 @@ Each service exposes three standard health check endpoints via `CloudHealthOffic
 | reference-data-service     |         |           |       |                                | PostgreSQL (NpgSql health check)     |
 | trading-partner-service    | X       | X         |       |                                | EDI trading partners                 |
 | tenant-service             | X       | X         |       |                                | SaaS tenant management               |
+| work-management-service    | X       | X         |       |                                | Work queues, Get Next, leases (in-memory store in Development only) |
 
 > **Note:** Most services support both MongoDB and Cosmos DB. The health check auto-detects which database is configured — only the active datastore is checked at runtime.
 

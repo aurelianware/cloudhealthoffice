@@ -55,6 +55,7 @@ SERVICES=(
   premium-billing-service
   appeals-service
   rfai-service
+  work-management-service
   claims-scrubbing-service
 )
 
