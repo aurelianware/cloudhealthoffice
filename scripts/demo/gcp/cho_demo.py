@@ -11,6 +11,8 @@ scripts/demo/gcp/port-forward.sh opens.
   cho_demo.py smoke                 End-to-end checks; exits non-zero on any failure
   cho_demo.py claims                Narrate a paid claim and a pended claim with its AI examination
   cho_demo.py adapter-status        Show the FHIR adapter labels (demo / hybrid / live)
+  cho_demo.py seed-auths            Load a CMS-0057-F prior-authorization scenario for the
+                                    portal's CMS-0057-F Console (needs port-forward's 5006)
 
 The token is signed with the public development key in ChoDevelopmentAuth.
 It is accepted only by Development and Testing hosts, which is how the demo
@@ -44,6 +46,7 @@ TENANT = os.environ.get("TENANT_ID", "demo")
 CLAIMS_URL = os.environ.get("CLAIMS_URL", "http://localhost:5001")
 BENEFIT_URL = os.environ.get("BENEFIT_URL", "http://localhost:5002")
 FHIR_URL = os.environ.get("FHIR_URL", "http://localhost:5023")
+AUTH_URL = os.environ.get("AUTH_URL", "http://localhost:5006")
 PORTAL_URL = os.environ.get("PORTAL_URL", "http://localhost:8080")
 
 
@@ -182,6 +185,134 @@ def cmd_claims(_args) -> int:
     return 0
 
 
+# ── CMS-0057-F prior-authorization scenario ─────────────────────────────────
+
+# (number suffix, level of service, status, hours since submission, decided after hours,
+#  decided by: None = reviewer / "automated:<rule>", reason, denial code)
+_OPEN = [
+    ("E01", "U", "Submitted", 5, None),      # expedited, fresh
+    ("E02", "U", "InReview", 20, None),
+    ("E03", "U", "InReview", 52, None),      # past two-thirds: warning
+    ("E04", "U", "Pended", 66, None),        # critical
+    ("E05", "U", "Pended", 78, None),        # past the 72-hour deadline
+    ("S01", "E", "Submitted", 18, None),     # standard, fresh
+    ("S02", "E", "InReview", 50, None),
+    ("S03", "E", "InReview", 90, None),
+    ("S04", "E", "Pended", 132, None),       # warning (past 5 days)
+    ("S05", "E", "Pended", 150, None),       # critical
+    ("S06", "E", "InReview", 180, None),     # past the 7-day deadline
+]
+
+_DECIDED = [
+    # recent decisions (days ago, level, status, hours to decide, decided by, reason, code)
+    (1, "E", "Approved", 0.1, "automated:AutoApproveList", "Service is on the plan's auto-approve list", None),
+    (1, "U", "Approved", 0.08, "automated:AutoApproveList", "Service is on the plan's auto-approve list", None),
+    (2, "E", "Approved", 41, None, "Meets InterQual criteria for outpatient MRI", None),
+    (3, "U", "Approved", 30, None, "Meets criteria; expedited per treating physician attestation", None),
+    (4, "E", "Modified", 70, None, "Approved 6 of 12 requested PT visits; reassess after 6", None),
+    (5, "E", "Denied", 96, None, "Conservative therapy not documented for 6 weeks", "N350"),
+    (6, "U", "Denied", 80, None, "Clinical criteria not met for inpatient level of care", "N386"),
+    (8, "E", "Approved", 190, None, "Approved after additional records received", None),
+    (9, "E", "Denied", 0.2, "benefit-exclusion", "Cosmetic procedure excluded from the benefit plan", "N130"),
+    (12, "E", "Approved", 26, None, "Meets criteria", None),
+    (15, "U", "Approved", 12, None, "Meets criteria", None),
+    (20, "E", "Approved", 0.1, "automated:AutoApproveList", "Service is on the plan's auto-approve list", None),
+]
+
+_MEMBERS = [("MBR001", "Jane", "Doe"), ("MBR002", "Luis", "Garcia"), ("MBR003", "Aisha", "Khan"),
+            ("MBR004", "Tom", "Nguyen"), ("MBR005", "Grace", "Okafor")]
+_SERVICES = [("72148", "MRI lumbar spine w/o contrast"), ("97110", "Therapeutic exercise"),
+             ("29881", "Knee arthroscopy/meniscectomy"), ("99223", "Initial hospital care"),
+             ("E0601", "CPAP device"), ("15823", "Blepharoplasty")]
+
+
+def _iso(dt) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def build_cms0057_fixtures(now=None, seasonal_count: int = 36) -> list[dict]:
+    """Synthetic prior authorizations that exercise the CMS-0057-F console.
+
+    Open requests at every point of the 72-hour and 7-day clocks, recent
+    decisions by reviewers and automated rules (some late), and older decisions
+    across the year so the public metrics have a full period. Dates are
+    relative to now, so re-running refreshes them (numbers are stable, and
+    dev-seed updates by number).
+    """
+    import datetime as _dt
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    fixtures = []
+
+    def base(number: str, i: int, level: str, status: str, submitted) -> dict:
+        member = _MEMBERS[i % len(_MEMBERS)]
+        code, description = _SERVICES[i % len(_SERVICES)]
+        return {
+            "authorizationNumber": f"CMS0057-{number}",
+            "memberId": member[0], "patientFirstName": member[1], "patientLastName": member[2],
+            "patientDateOfBirth": "1980-04-12T00:00:00Z",
+            "lineOfBusiness": "Medicaid", "authorizationType": "PreAuthorization",
+            "requestingProviderNPI": "1234567893", "requestingProviderName": "Lakeside Orthopedics",
+            "serviceTypeCode": "1", "levelOfService": level,
+            "requestedServiceDateFrom": _iso(submitted + _dt.timedelta(days=10)),
+            "requestedServices": [{"procedureCode": code, "procedureDescription": description, "requestedUnits": 1}],
+            "diagnosisCodes": [{"code": "M54.50", "codeQualifier": "BK", "description": "Low back pain"}],
+            "status": status, "submittedDate": _iso(submitted), "createdDate": _iso(submitted),
+        }
+
+    for i, (number, level, status, hours_open, _) in enumerate(_OPEN):
+        fixtures.append(base(number, i, level, status, now - _dt.timedelta(hours=hours_open)))
+
+    def decided(number: str, i: int, level: str, status: str, decided_at, hours, by, reason, code) -> dict:
+        submitted = decided_at - _dt.timedelta(hours=hours)
+        fx = base(number, i, level, status, submitted)
+        fx["reviewedDate"] = _iso(decided_at)
+        # 278 HCR01: A1 certified, A3 not certified, A6 modified.
+        hcr = {"Approved": "A1", "Denied": "A3", "Modified": "A6"}[status]
+        fx["reviewDecision"] = hcr
+        if by is None:
+            fx["reviewerName"] = "Dr. Priya Raman, MD"
+        if status == "Denied":
+            fx["denialReason"] = reason
+            fx["denialReasonCode"] = code
+        fx["statusHistory"] = [
+            {"status": "Submitted", "changedAt": _iso(submitted), "changedBy": "provider-portal"},
+            {"status": status, "reviewDecision": hcr, "reason": reason, "changedAt": _iso(decided_at),
+             "changedBy": "system" if by else "dr.raman", "source": by},
+        ]
+        return fx
+
+    for i, (days_ago, level, status, hours, by, reason, code) in enumerate(_DECIDED):
+        fixtures.append(decided(f"D{i + 1:02d}", i, level, status, now - _dt.timedelta(days=days_ago), hours, by, reason, code))
+
+    # Older decisions spread across the year to date, so the metrics cover a period.
+    start = _dt.datetime(now.year, 1, 5, 9, tzinfo=_dt.timezone.utc)
+    span = max((now - _dt.timedelta(days=25) - start).total_seconds(), 0)
+    for k in range(seasonal_count):
+        decided_at = start + _dt.timedelta(seconds=span * k / max(seasonal_count - 1, 1))
+        level = "U" if k % 4 == 0 else "E"
+        status = ("Denied" if k % 6 == 0 else "Modified" if k % 9 == 0 else "Approved")
+        hours = (6 + (k * 7) % 60) if level == "U" else (12 + (k * 23) % 150)
+        by = "automated:AutoApproveList" if k % 5 == 0 and status == "Approved" else None
+        reason = {"Denied": "Clinical criteria not met", "Modified": "Approved a reduced number of units"}.get(status, "Meets criteria")
+        fixtures.append(decided(f"H{k + 1:02d}", k, level, status, decided_at, hours if not by else 0.1, by, reason,
+                                "N350" if status == "Denied" else None))
+    return fixtures
+
+
+def cmd_seed_auths(_args) -> int:
+    fixtures = build_cms0057_fixtures()
+    status, _, body = request("POST", f"{AUTH_URL}/api/authorizations/dev-seed", mint_token(), {"authorizations": fixtures})
+    if status != 200:
+        print(f"dev-seed returned HTTP {status}: {str(body)[:500]}")
+        if status == 0:
+            print("Is scripts/demo/gcp/port-forward.sh running? It forwards authorization-service to localhost:5006.")
+        return 1
+    print(f"Seeded {len(fixtures)} prior authorizations for tenant '{TENANT}' "
+          f"({body.get('created')} created, {body.get('updated')} updated).")
+    print("Open the portal: Compliance → CMS-0057-F Console.")
+    return 0
+
+
 def cmd_smoke(_args) -> int:
     token = mint_token()
     failures = []
@@ -235,6 +366,7 @@ def main() -> int:
     sub.add_parser("smoke").set_defaults(func=cmd_smoke)
     sub.add_parser("claims").set_defaults(func=cmd_claims)
     sub.add_parser("adapter-status").set_defaults(func=cmd_adapter_status)
+    sub.add_parser("seed-auths").set_defaults(func=cmd_seed_auths)
     args = parser.parse_args()
     return args.func(args)
 

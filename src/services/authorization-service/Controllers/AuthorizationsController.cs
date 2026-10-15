@@ -6,6 +6,7 @@ using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services;
 using AuthorizationService.Services.Rfai;
+using AuthorizationService.Services.Cms0057;
 using CloudHealthOffice.Infrastructure.Security;
 
 namespace AuthorizationService.Controllers;
@@ -626,6 +627,50 @@ public class AuthorizationsController : ControllerBase
 
         var summary = await _authorizationRepository.GetAuthorizationsSummaryAsync(fromDate, toDate, lineOfBusiness);
         return Ok(summary);
+    }
+
+    /// <summary>
+    /// CMS-0057-F public-reporting metrics for requests submitted in the period
+    /// (default: the current calendar year to date): approved and denied
+    /// percentages and average and median decision time, for standard and
+    /// expedited requests, plus the metrics the data can't support yet.
+    /// </summary>
+    [HttpGet("cms-0057/metrics")]
+    [ProducesResponseType(typeof(Cms0057Metrics), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<Cms0057Metrics>> GetCms0057Metrics(
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] LineOfBusiness? lineOfBusiness = null)
+    {
+        var now = DateTime.UtcNow;
+        var fromDate = from ?? new DateTime(now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var toDate = to ?? now;
+        if (fromDate > toDate)
+            return BadRequest(new { error = "from must be on or before to" });
+
+        var authorizations = await _authorizationRepository.ListActivityBetweenAsync(fromDate, toDate);
+        return Ok(Cms0057Reporting.ComputeMetrics(authorizations, fromDate, toDate, lineOfBusiness));
+    }
+
+    /// <summary>
+    /// The most recent prior-authorization decisions (default: last 30 days, up
+    /// to 100): decision time against the 72-hour or 7-day timeframe, whether an
+    /// automated rule or a reviewer decided, and the reason.
+    /// </summary>
+    [HttpGet("cms-0057/decisions")]
+    [ProducesResponseType(typeof(IEnumerable<Cms0057Decision>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<Cms0057Decision>>> GetCms0057Decisions(
+        [FromQuery] int days = 30,
+        [FromQuery] int limit = 100)
+    {
+        days = Math.Clamp(days, 1, 366);
+        limit = Math.Clamp(limit, 1, 500);
+        var now = DateTime.UtcNow;
+        var since = now.AddDays(-days);
+
+        var authorizations = await _authorizationRepository.ListActivityBetweenAsync(since, now);
+        return Ok(Cms0057Reporting.RecentDecisions(authorizations, since, limit));
     }
 
     /// <summary>

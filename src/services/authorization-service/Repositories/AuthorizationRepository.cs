@@ -20,6 +20,11 @@ public interface IAuthorizationRepository
         int pageSize);
     Task<AuthorizationsSummary> GetAuthorizationsSummaryAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness);
     Task<IEnumerable<Authorization>> GetOpenAuthorizationsAsync(string? tenantId = null);
+    /// <summary>
+    /// The current tenant's authorizations submitted or decided in [from, to],
+    /// for CMS-0057-F reporting (metrics and the recent-decision list).
+    /// </summary>
+    Task<IEnumerable<Authorization>> ListActivityBetweenAsync(DateTime from, DateTime to);
     Task<Authorization> CreateAsync(Authorization authorization);
     Task<Authorization> UpdateAsync(Authorization authorization);
     Task DeleteAsync(string id);
@@ -488,6 +493,30 @@ public class AuthorizationRepository : IAuthorizationRepository
             results.AddRange(response);
         }
 
+        return results;
+    }
+
+    public async Task<IEnumerable<Authorization>> ListActivityBetweenAsync(DateTime from, DateTime to)
+    {
+        var tenantId = GetTenantId();
+        var queryDef = new QueryDefinition(@"
+            SELECT * FROM c
+            WHERE c.tenantId = @tenantId
+            AND ((c.submittedDate >= @from AND c.submittedDate <= @to)
+              OR (IS_DEFINED(c.reviewedDate) AND NOT IS_NULL(c.reviewedDate)
+                  AND c.reviewedDate >= @from AND c.reviewedDate <= @to))")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@from", from)
+            .WithParameter("@to", to);
+
+        var iterator = _container.GetItemQueryIterator<Authorization>(
+            queryDef,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        var results = new List<Authorization>();
+        while (iterator.HasMoreResults)
+        {
+            results.AddRange(await iterator.ReadNextAsync());
+        }
         return results;
     }
 

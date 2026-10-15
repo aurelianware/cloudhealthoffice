@@ -164,6 +164,13 @@ internal sealed class InMemoryAuthorizationRepository : IAuthorizationRepository
         return Task.FromResult(q.Select(Clone).AsEnumerable());
     }
 
+    public Task<IEnumerable<Authorization>> ListActivityBetweenAsync(DateTime from, DateTime to) =>
+        Task.FromResult(_store
+            .Where(a => (a.SubmittedDate >= from && a.SubmittedDate <= to)
+                || (a.ReviewedDate >= from && a.ReviewedDate <= to))
+            .Select(Clone)
+            .AsEnumerable());
+
     public Task<AuthorizationsSummary> GetAuthorizationsSummaryAsync(
         DateTime from, DateTime to, LineOfBusiness? lineOfBusiness)
     {
