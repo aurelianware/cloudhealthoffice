@@ -112,74 +112,144 @@ public class AppealsServiceTests
         handler.CapturedUrls[0].Should().Contain("/appeals/summary");
     }
 
-    [Fact]
-    public async Task SearchAppealsAsync_WhenApiReturns200_DeserializesAppealList()
-    {
-        var json = JsonSerializer.Serialize(new[]
-        {
-            new { appealId = "APL-1", memberName = "John Doe", memberId = "MBR-1",
-                  appealType = "Medical", originalDecisionId = "DEC-1",
-                  originalDecision = "Denied", originalDenialReason = "Not medically necessary",
-                  status = "Open", isExpedited = true, filedDate = "2025-03-01",
-                  dueDate = "2025-03-15", daysRemaining = 10,
-                  assignedReviewer = "Dr. Smith", complianceStatus = "On Track" }
-        }, JsonOpts);
+    // appeals-service wire shapes: list routes return { "items": [Appeal] },
+    // GET /appeals/{id} returns a bare Appeal, and enums may arrive as numbers.
 
-        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+    private static object WireAppeal(object? appealType = null, object? status = null,
+        string? targetResponseDate = "2099-01-01T00:00:00Z", bool isOverdue = false) => new
+    {
+        id = "doc-1", appealNumber = "APL-2026-0001", claimId = "clm-doc-1", claimNumber = "CLM-1",
+        memberId = "MBR001", patientName = "Jane Doe",
+        denialReasonCode = "CO-50", denialReason = "Not medically necessary",
+        appealType = appealType ?? 1, status = status ?? 3,
+        appealReason = "New clinical evidence", isUrgent = true,
+        submittedDate = "2026-10-01T00:00:00Z", targetResponseDate, isOverdue,
+        assignedReviewerId = "reviewer-7",
+        notes = new[] { new { createdAt = "2026-10-02T00:00:00Z", createdBy = "examiner", noteText = "Records requested" } },
+        attachments = new[] { new { attachmentId = "att-1", fileName = "notes.pdf",
+            attachmentTypeDescription = "Clinical notes", attachmentTypeCode = "09", uploadedAt = "2026-10-02T00:00:00Z" } }
+    };
+
+    private static string ListJson(params object[] items) => JsonSerializer.Serialize(new { items }, JsonOpts);
+
+    [Fact]
+    public async Task SearchAppealsAsync_ParsesItemsEnvelopeAndNumericEnums()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, ListJson(WireAppeal()));
+        var sut = CreateService(new HttpClient(handler));
+
         var result = await sut.SearchAppealsAsync();
 
         result.Should().HaveCount(1);
-        result[0].AppealType.Should().Be("Medical");
-        result[0].IsExpedited.Should().BeTrue();
-        result[0].OriginalDenialReason.Should().Be("Not medically necessary");
+        var a = result[0];
+        a.Id.Should().Be("doc-1");
+        a.AppealId.Should().Be("APL-2026-0001");
+        a.MemberName.Should().Be("Jane Doe");
+        a.AppealType.Should().Be("Reconsideration");
+        a.Status.Should().Be("InReview");
+        a.IsExpedited.Should().BeTrue();
+        a.OriginalDecisionId.Should().Be("CLM-1");
+        a.OriginalDenialReason.Should().Be("CO-50 — Not medically necessary");
+        a.AssignedReviewer.Should().Be("reviewer-7");
+        a.ComplianceStatus.Should().Be("On track");
+        handler.CapturedUrls[0].Should().Contain("/appeals/search");
     }
 
     [Fact]
-    public async Task SearchAppealsAsync_WithFilters_BuildsQueryString()
+    public async Task SearchAppealsAsync_AcceptsStringEnums()
     {
-        var handler = new FakeHandler(HttpStatusCode.OK, "[]");
+        var json = ListJson(WireAppeal(appealType: "ExternalReview", status: "Closed"));
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var a = (await sut.SearchAppealsAsync())[0];
+
+        a.AppealType.Should().Be("ExternalReview");
+        a.Status.Should().Be("Closed");
+        a.ComplianceStatus.Should().Be("Closed");
+    }
+
+    [Fact]
+    public async Task SearchAppealsAsync_OverdueAndMissingDeadline_SetCompliance()
+    {
+        var json = ListJson(WireAppeal(isOverdue: true), WireAppeal(targetResponseDate: null));
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var result = await sut.SearchAppealsAsync();
+
+        result[0].ComplianceStatus.Should().Be("Overdue");
+        result[1].ComplianceStatus.Should().Be("No deadline set");
+        result[1].DaysRemaining.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SearchAppealsAsync_ByMemberId_UsesSearchRoute()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, ListJson());
         var sut = CreateService(new HttpClient(handler));
 
-        await sut.SearchAppealsAsync(memberId: "MBR-1", originalClaimId: "CLM-1");
+        await sut.SearchAppealsAsync(memberId: "MBR-1");
 
-        var url = handler.CapturedUrls[0];
-        url.Should().Contain("memberId=MBR-1");
-        url.Should().Contain("originalClaimId=CLM-1");
+        handler.CapturedUrls[0].Should().EndWith("/appeals/search?memberId=MBR-1");
     }
 
     [Fact]
-    public async Task GetAppealByIdAsync_WhenApiReturns200_DeserializesDetailsWithTimeline()
+    public async Task SearchAppealsAsync_ByOriginalClaimId_UsesClaimRoute()
     {
-        var json = JsonSerializer.Serialize(new
-        {
-            appealId = "APL-1", memberName = "John Doe", memberId = "MBR-1",
-            appealType = "Medical", originalDecisionId = "DEC-1",
-            originalDecision = "Denied", originalDenialReason = "Not medically necessary",
-            appealReason = "New clinical evidence", status = "Under Review",
-            isExpedited = false, filedDate = "2025-03-01", dueDate = "2025-04-01",
-            daysRemaining = 25, assignedReviewer = "Dr. Jones", complianceStatus = "On Track",
-            finalDecision = "", finalDecisionNotes = "",
-            documents = new[]
-            {
-                new { documentId = "DOC-1", documentName = "Clinical Notes",
-                      documentType = "ClinicalNote", uploadedDate = "2025-03-02", uploadedBy = "admin" }
-            },
-            timeline = new[]
-            {
-                new { eventDate = "2025-03-01", eventType = "Filed", description = "Appeal filed", performedBy = "System" }
-            }
-        }, JsonOpts);
+        var handler = new FakeHandler(HttpStatusCode.OK, ListJson(WireAppeal()));
+        var sut = CreateService(new HttpClient(handler));
 
+        var result = await sut.SearchAppealsAsync(originalClaimId: "CLM-1");
+
+        result.Should().HaveCount(1);
+        handler.CapturedUrls[0].Should().EndWith("/appeals/claim/CLM-1");
+    }
+
+    [Fact]
+    public async Task SearchAppealsAsync_ByAppealNumber_UsesNumberRoute()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, JsonSerializer.Serialize(WireAppeal(), JsonOpts));
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.SearchAppealsAsync(appealId: "APL-2026-0001");
+
+        result.Should().ContainSingle().Which.AppealId.Should().Be("APL-2026-0001");
+        handler.CapturedUrls[0].Should().EndWith("/appeals/number/APL-2026-0001");
+    }
+
+    [Fact]
+    public async Task SearchAppealsAsync_ByUnknownAppealNumber_ReturnsEmpty()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.NotFound)));
+        var result = await sut.SearchAppealsAsync(appealId: "APL-NONE");
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetAppealByIdAsync_MapsAttachmentsNotesAndDecision()
+    {
+        var json = JsonSerializer.Serialize(WireAppeal(), JsonOpts).TrimEnd('}')
+            + ",\"decision\":{\"decisionType\":2,\"decisionReason\":\"Criteria not met\",\"decisionDate\":\"2026-10-05T00:00:00Z\"}}";
         var handler = new FakeHandler(HttpStatusCode.OK, json);
         var sut = CreateService(new HttpClient(handler));
 
-        var result = await sut.GetAppealByIdAsync("APL-1");
+        var result = await sut.GetAppealByIdAsync("doc-1");
 
         result.Should().NotBeNull();
         result!.AppealReason.Should().Be("New clinical evidence");
-        result.Documents.Should().HaveCount(1);
-        result.Timeline.Should().HaveCount(1);
-        handler.CapturedUrls[0].Should().Contain("/appeals/APL-1");
+        result.FinalDecision.Should().Be("Denied");
+        result.FinalDecisionNotes.Should().Be("Criteria not met");
+        result.Documents.Should().ContainSingle().Which.DocumentName.Should().Be("notes.pdf");
+        result.Timeline.Select(t => t.EventType).Should().Equal("Filed", "Note");
+        result.Timeline[1].Description.Should().Be("Records requested");
+        handler.CapturedUrls[0].Should().EndWith("/appeals/doc-1");
+    }
+
+    [Fact]
+    public async Task GetAppealByIdAsync_WhenNotFound_ReturnsNull()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.NotFound)));
+        var result = await sut.GetAppealByIdAsync("APL-NONE");
+        result.Should().BeNull();
     }
 
     [Fact]

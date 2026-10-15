@@ -2882,6 +2882,8 @@ public class AppealsSummary
 
 public class AppealSummary
 {
+    /// <summary>appeals-service document id, used to fetch details. <see cref="AppealId"/> is the display number.</summary>
+    public string Id { get; set; } = string.Empty;
     public string AppealId { get; set; } = string.Empty;
     public string MemberName { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;
