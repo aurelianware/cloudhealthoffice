@@ -46,6 +46,18 @@ public class FeeSchedule
     public DateTime? TermDate { get; set; }
 
     /// <summary>
+    /// The benefit plan (its id, as claims carry it) this schedule is the
+    /// default for: <c>IFeeScheduleRepository.GetDefaultForPlanAsync</c>
+    /// returns it for lines whose provider has no contracted schedule.
+    /// Null = not a plan default. Stored as <c>defaultForPlanId</c> in both
+    /// stores (the Mongo and Cosmos default-schedule queries filter on it).
+    /// </summary>
+    [JsonPropertyName("defaultForPlanId")]
+    [BsonElement("defaultForPlanId")]
+    [BsonIgnoreIfNull]
+    public string? DefaultForPlanId { get; set; }
+
+    /// <summary>
     /// CMS locality code for MPFS schedules (e.g. "01" = Alabama).
     /// Determines which GPCI values apply for RVU calculation.
     /// </summary>

@@ -58,7 +58,7 @@ public class FeeScheduleRepositoryMongo : IFeeScheduleRepository, IProviderContr
     {
         var filter = Builders<FeeSchedule>.Filter.And(
             Builders<FeeSchedule>.Filter.Eq(x => x.TenantId, tenantId),
-            Builders<FeeSchedule>.Filter.Eq("defaultForPlanId", planId),
+            Builders<FeeSchedule>.Filter.Eq(x => x.DefaultForPlanId, planId),
             Builders<FeeSchedule>.Filter.Lte(x => x.EffectiveDate, serviceDate),
             Builders<FeeSchedule>.Filter.Or(
                 Builders<FeeSchedule>.Filter.Eq(x => x.TermDate, null),
