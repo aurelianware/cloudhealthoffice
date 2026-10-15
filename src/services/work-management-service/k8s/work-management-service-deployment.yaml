@@ -1,0 +1,139 @@
+# Workload identity for work-management-service: its user-assigned managed identity, federated to
+# system:serviceaccount:cloudhealthoffice:work-management-service-sa. token-service issues this service's
+# CHO service tokens to that identity only (ServiceTokens:ServiceClients); the service holds
+# no signing key. See docs/security/portal-token-service.md ("Service tokens").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: work-management-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<WORK_MANAGEMENT_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: work-management-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  CosmosDb__DatabaseName: "CloudHealthOffice"
+  MongoDb__DatabaseName: "CloudHealthOffice"
+  Services__ClaimsService: "http://claims-service.cloudhealthoffice"
+  Kafka__ClientId: "work-management-service"
+  Kafka__ClaimWork__GroupId: "work-management-service.claims-work"
+  # Leases and the periodic reconcile (docs/architecture/work-management.md).
+  # Reconcile is automatic: on exactly when Kafka__BootstrapServers is empty.
+  WorkManagement__LeaseMinutes: "30"
+  WorkManagement__Reconcile__IntervalMinutes: "2"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: work-management-service
+  namespace: cloudhealthoffice
+  labels:
+    app: work-management-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: work-management-service
+  template:
+    metadata:
+      labels:
+        azure.workload.identity/use: "true"
+        app: work-management-service
+        tier: backend
+    spec:
+      serviceAccountName: work-management-service-sa
+      containers:
+      - name: work-management-service
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-work-management-service:latest
+        imagePullPolicy: Always
+        envFrom:
+        # Source=TokenService, token-service URL and Entra scope (shared by all services).
+        - configMapRef:
+            name: cho-service-tokens
+        - configMapRef:
+            name: work-management-service-config
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ChoAuth__ServiceToken__ClientId
+          value: "work-management-service"
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
+              optional: true
+        - name: CosmosDb__Endpoint
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: endpoint
+        - name: CosmosDb__Key
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: key
+        - name: Kafka__BootstrapServers
+          valueFrom:
+            secretKeyRef:
+              name: kafka-secret
+              key: bootstrapServers
+              optional: true
+        - name: Kafka__SaslUsername
+          valueFrom:
+            secretKeyRef:
+              name: kafka-secret
+              key: saslUsername
+              optional: true
+        - name: Kafka__SaslPassword
+          valueFrom:
+            secretKeyRef:
+              name: kafka-secret
+              key: saslPassword
+              optional: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: work-management-service
+  namespace: cloudhealthoffice
+  labels:
+    app: work-management-service
+spec:
+  type: ClusterIP
+  selector:
+    app: work-management-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
