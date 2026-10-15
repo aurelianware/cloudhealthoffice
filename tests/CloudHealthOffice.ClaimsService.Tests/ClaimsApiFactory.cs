@@ -57,6 +57,9 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     public IMassAdjudicationRunRepository MassAdjudicationRunRepository { get; } = Substitute.For<IMassAdjudicationRunRepository>();
     public IClaimAcknowledgmentService AcknowledgmentService { get; } = Substitute.For<IClaimAcknowledgmentService>();
     public IAiExaminationAuditRepository AuditRepository { get; } = Substitute.For<IAiExaminationAuditRepository>();
+
+    /// <summary>Claim notes, kept in memory so the notes endpoints can be exercised end to end.</summary>
+    public InMemoryClaimNoteRepository NoteRepository { get; } = new();
     public IClaimSubmissionService SubmissionService { get; } = Substitute.For<IClaimSubmissionService>();
     public IClaimAdapter ClaimAdapter { get; } = CreateChoStubAdapter();
     public IClaimVersionEventPublisher VersionEventPublisher { get; } = Substitute.For<IClaimVersionEventPublisher>();
@@ -127,6 +130,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                          || d.ServiceType == typeof(IProviderService)
                          || d.ServiceType == typeof(ITenantComplianceConfigService)
                          || d.ServiceType == typeof(IAiExaminationAuditRepository)
+                         || d.ServiceType == typeof(IClaimNoteRepository)
                          || d.ServiceType == typeof(IClaimSubmissionService)
                          || d.ServiceType == typeof(IClaimFinalizationService)
                          || d.ServiceType == typeof(IClaimAdjustmentService)
@@ -206,6 +210,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(Substitute.For<IProviderService>());
             services.AddSingleton(Substitute.For<ITenantComplianceConfigService>());
             services.AddSingleton(AuditRepository);
+            services.AddSingleton<IClaimNoteRepository>(NoteRepository);
             services.AddSingleton(VersionEventPublisher);
             foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IClaimWorkEventPublisher)).ToList())
                 services.Remove(descriptor);

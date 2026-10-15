@@ -52,6 +52,7 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/claims/search"] = (Kind.NoStatusChange, "read"),
             ["PUT api/claims/{id}/ai-examination"] = (Kind.NoStatusChange, "advisory AI recommendation"),
             ["POST api/claims/{id}/ai-examination/agreement"] = (Kind.NoStatusChange, "examiner feedback on the AI recommendation"),
+            ["POST api/claims/{claimId}/notes"] = (Kind.NoStatusChange, "appends a reviewer note; never touches the claim"),
             ["POST api/claims/work-queue/{claimId}/assign"] = (Kind.NoStatusChange, "work-queue assignment"),
             ["POST api/claims/work-queue/{claimId}/accumulator-adjustment/resolve"] = (Kind.NoStatusChange, "clears an accumulator clamp review"),
             ["POST api/mass-adjudication/runs"] = (Kind.NoStatusChange, "stores a run summary"),

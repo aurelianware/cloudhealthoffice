@@ -627,31 +627,66 @@
         }
 
         <!-- Notes Section -->
-        <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudPaper Class="pa-4 mb-4" Elevation="1" data-testid="claim-notes">
             <MudText Typo="Typo.h6" GutterBottom="true">
                 <MudIcon Icon="@Icons.Material.Filled.Notes" Class="mr-2" />
-                Notes & Comments
+                Notes
             </MudText>
             <MudDivider Class="my-3" />
             @if (!string.IsNullOrEmpty(_claim.ClaimNotes))
             {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">From the claim submission</MudText>
                 <MudText Typo="Typo.body2" Class="mb-3">@_claim.ClaimNotes</MudText>
             }
-            @if (_claim.IsEditable)
+            @if (_notesError is not null)
             {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">@_notesError</MudAlert>
+            }
+            else if (_notes.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3" data-testid="claim-notes-empty">No notes on this claim yet.</MudText>
+            }
+            else
+            {
+                <MudStack Spacing="2" Class="mb-3">
+                    @foreach (var note in _notes)
+                    {
+                        <MudPaper Outlined="true" Class="pa-3" data-testid="claim-note">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                                <MudChip T="string" Size="Size.Small" Color="@NoteColor(note.Category)" data-testid="claim-note-category">@ClaimNoteCategory.Label(note.Category)</MudChip>
+                                <MudText Typo="Typo.caption"><strong>@note.Author</strong> · @note.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@note.Text</MudText>
+                        </MudPaper>
+                    }
+                </MudStack>
+            }
+            @if (_canAddNotes)
+            {
+                <MudSelect T="string" @bind-Value="_noteCategory" Label="Category" Variant="Variant.Outlined" Dense="true" Class="mt-2" Style="max-width: 240px;" data-testid="claim-note-category-select">
+                    @foreach (var (value, label) in ClaimNoteCategory.All)
+                    {
+                        <MudSelectItem T="string" Value="@value">@label</MudSelectItem>
+                    }
+                </MudSelect>
                 <MudTextField @bind-Value="_noteInput"
-                             Label="Add Internal Note"
+                             Label="Add a note"
                              Variant="Variant.Outlined"
                              Multiline="true"
                              Lines="3"
-                             Placeholder="Add internal notes for the claims examiner"
+                             MaxLength="ClaimNoteCategory.MaxLength"
+                             Placeholder="Why you decided, who you called, what the next person needs to know"
                              Class="mt-3" />
-                <MudButton Variant="Variant.Filled"
-                          Color="Color.Primary"
-                          OnClick="AddNoteAsync"
-                          Class="mt-2">
-                    Add Note
-                </MudButton>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Primary"
+                              OnClick="AddNoteAsync"
+                              Disabled="@(_savingNote || string.IsNullOrWhiteSpace(_noteInput))"
+                              data-testid="add-note">
+                        Add Note
+                    </MudButton>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Notes can't be edited or deleted once added.</MudText>
+                </MudStack>
             }
         </MudPaper>
 
@@ -1017,6 +1052,11 @@
     private AdjudicationTransparencyData? _adjudicationData;
     private List<BreadcrumbItem> _breadcrumbItems = new();
     private string _noteInput = string.Empty;
+    private string _noteCategory = ClaimNoteCategory.Internal;
+    private List<ClaimNoteView> _notes = new();
+    private string? _notesError;
+    private bool _savingNote;
+    private bool _canAddNotes;
     private string? _serviceError;
     private bool _exportingEob;
     private string BackHref => string.IsNullOrWhiteSpace(FromRun)
@@ -1054,6 +1094,7 @@
         // Load adjudication data in background (fire-and-forget, non-blocking)
         _ = LoadAdjudicationDataAsync(claimId);
         _ = LoadDuplicateMatchesAsync(claimId);
+        _ = LoadNotesAsync(claimId);
     }
 
     // Everything that belongs to one claim. Cleared when ClaimId changes so
@@ -1067,6 +1108,9 @@
         _loadingAdjudication = false;
         _duplicateMatches = new();
         _noteInput = string.Empty;
+        _noteCategory = ClaimNoteCategory.Internal;
+        _notes = new();
+        _notesError = null;
         _serviceError = null;
     }
 
@@ -1473,22 +1517,64 @@
         }
     }
 
-    private async Task AddNoteAsync()
+    private async Task LoadNotesAsync(string claimId)
     {
-        if (string.IsNullOrWhiteSpace(_noteInput) || _claim == null) return;
-
         try
         {
-            // TODO: Implement note adding
-            Snackbar.Add("Note added successfully", Severity.Success);
-            _noteInput = string.Empty;
-            await LoadClaimDetails();
+            await UserContextService.GetCurrentUserAsync();
+            var canAdd = UserContextService.HasPermission("claims:work");
+            var notes = await ClaimsService.GetClaimNotesAsync(_claim?.ClaimId is { Length: > 0 } id ? id : claimId);
+            if (IsCurrentClaim(claimId))
+            {
+                _canAddNotes = canAdd;
+                _notes = notes ?? new();
+                _notesError = null;
+                await InvokeAsync(StateHasChanged);
+            }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error adding note: {ex.Message}", Severity.Error);
+            if (IsCurrentClaim(claimId))
+            {
+                _notesError = $"Notes couldn't be loaded: {ex.Message}";
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
+
+    private async Task AddNoteAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_noteInput) || _claim == null || _savingNote) return;
+
+        var claimId = _loadedClaimId;
+        _savingNote = true;
+        try
+        {
+            var note = await ClaimsService.AddClaimNoteAsync(_claim.ClaimId, _noteCategory, _noteInput.Trim());
+            if (claimId is not null && IsCurrentClaim(claimId))
+            {
+                _notes.Add(note);
+                _noteInput = string.Empty;
+                Snackbar.Add("Note added", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _savingNote = false;
+        }
+    }
+
+    private static Color NoteColor(string? category) => category switch
+    {
+        ClaimNoteCategory.Decision => Color.Primary,
+        ClaimNoteCategory.ProviderContact or ClaimNoteCategory.MemberContact => Color.Info,
+        ClaimNoteCategory.HandOff => Color.Warning,
+        _ => Color.Default,
+    };
 }
 
 <!-- Dialog Components -->
