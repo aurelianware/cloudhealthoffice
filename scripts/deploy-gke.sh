@@ -28,7 +28,7 @@
 #   CLAIMS_REPLICAS  BENEFIT_PLAN_REPLICAS   (1 with the small profile, else 2)
 #   ROLLOUT_TIMEOUT=900s
 
-set -euo pipefail
+set -Eeuo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 NAMESPACE="cloudhealthoffice"
@@ -52,8 +52,14 @@ MONGO_USER="admin"
 
 log()  { echo -e "\n\033[1;36m▶ $*\033[0m"; }
 ok()   { echo "  ✓ $*"; }
-warn() { echo "  ⚠ $*"; }
-err()  { echo "  ✗ $*" >&2; exit 1; }
+# In GitHub Actions, warnings and errors also become run annotations, so the
+# reason a deploy failed shows on the run summary without opening the log.
+gha() { [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::$1::${2//$'\n'/%0A}"; return 0; }
+warn() { echo "  ⚠ $*"; gha warning "$*"; }
+err()  { echo "  ✗ $*" >&2; gha error "$*"; exit 1; }
+# Any other command that fails under set -e: name the line and command.
+# shellcheck disable=SC2154  # rc is assigned inside the trap string
+trap 'rc=$?; gha error "deploy-gke.sh failed at line $LINENO (exit $rc): $BASH_COMMAND"' ERR
 
 # ── Preflight ────────────────────────────────────────────────────────────────
 log "Preflight checks"
@@ -269,9 +275,8 @@ done
 kubectl get pods -n "$NAMESPACE" -o wide
 if (( ${#failed[@]} > 0 )); then
   echo
-  warn "Not ready: ${failed[*]}"
   echo "  Inspect with: kubectl describe deployment/<name> -n $NAMESPACE; kubectl logs deployment/<name> -n $NAMESPACE"
-  exit 1
+  err "Not ready after $ROLLOUT_TIMEOUT: ${failed[*]}"
 fi
 
 # ── AI examiner live check ───────────────────────────────────────────────────
