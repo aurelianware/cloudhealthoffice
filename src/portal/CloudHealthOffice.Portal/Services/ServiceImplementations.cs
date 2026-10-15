@@ -3685,13 +3685,30 @@ public class AppealsService : IAppealsService
         var baseUrl = _configuration["Services:AppealsService"];
         try
         {
-            var queryParts = new List<string>();
-            if (!string.IsNullOrEmpty(appealId)) queryParts.Add($"appealId={Uri.EscapeDataString(appealId)}");
-            if (!string.IsNullOrEmpty(memberId)) queryParts.Add($"memberId={Uri.EscapeDataString(memberId)}");
-            if (!string.IsNullOrEmpty(originalClaimId)) queryParts.Add($"originalClaimId={Uri.EscapeDataString(originalClaimId)}");
-            var query = string.Join("&", queryParts);
-            var results = await _httpClient.GetFromJsonAsync<List<AppealSummary>>($"{baseUrl}/appeals/search?{query}");
-            return results ?? new();
+            // appeals-service has no free-text search: an appeal number and an
+            // original claim id each have their own route; member search goes
+            // through /appeals/search. List routes return { "items": [...] }.
+            List<AppealWire> wires;
+            if (!string.IsNullOrWhiteSpace(appealId))
+            {
+                var one = await GetWireOrNullAsync($"{baseUrl}/appeals/number/{Uri.EscapeDataString(appealId)}");
+                wires = one is null ? new() : new() { one };
+            }
+            else if (!string.IsNullOrWhiteSpace(originalClaimId))
+            {
+                var list = await _httpClient.GetFromJsonAsync<AppealListWire>(
+                    $"{baseUrl}/appeals/claim/{Uri.EscapeDataString(originalClaimId)}");
+                wires = list?.Items ?? new();
+            }
+            else
+            {
+                var query = string.IsNullOrWhiteSpace(memberId) ? string.Empty : $"memberId={Uri.EscapeDataString(memberId)}";
+                var list = await _httpClient.GetFromJsonAsync<AppealListWire>($"{baseUrl}/appeals/search?{query}");
+                wires = list?.Items ?? new();
+            }
+
+            var now = DateTime.UtcNow;
+            return wires.Select(w => AppealWireMapper.ToSummary(w, now)).ToList();
         }
         catch (HttpRequestException ex)
         {
@@ -3705,13 +3722,22 @@ public class AppealsService : IAppealsService
         var baseUrl = _configuration["Services:AppealsService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<AppealDetails>($"{baseUrl}/appeals/{Uri.EscapeDataString(appealId)}");
+            var wire = await GetWireOrNullAsync($"{baseUrl}/appeals/{Uri.EscapeDataString(appealId)}");
+            return wire is null ? null : AppealWireMapper.ToDetails(wire, DateTime.UtcNow);
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "Appeals Service");
             throw new ServiceUnavailableException("Appeals Service", ex);
         }
+    }
+
+    private async Task<AppealWire?> GetWireOrNullAsync(string url)
+    {
+        using var response = await _httpClient.GetAsync(url);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AppealWire>();
     }
 }
 
