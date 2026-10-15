@@ -237,10 +237,32 @@ render_args=(--registry "$GAR_REPOSITORY" --tag "$IMAGE_TAG"
 [[ "$AI_EXAMINER" == true ]] && render_args+=(--ai-examiner)
 rendered="$(mktemp)"
 python3 deploy/gcp/render_manifests.py "${render_args[@]}" > "$rendered"
-if ! apply_out="$(kubectl apply -n "$NAMESPACE" -f "$rendered" 2>&1)"; then
+apply_rendered() { apply_out="$(kubectl apply -n "$NAMESPACE" -f "$rendered" 2>&1)"; }
+apply_failed() {
   # Name what the API server rejected, not just that apply failed.
   apply_errors="$(grep -viE ' (created|configured|unchanged)$' <<<"$apply_out" | head -10)"
   err "kubectl apply of the service manifests failed:"$'\n'"${apply_errors:-$apply_out}"
+}
+if ! apply_rendered; then
+  # An object changed outside this script (kubectl set env / edit, e.g. while
+  # tuning a benchmark) can make the three-way merge produce an invalid object,
+  # such as an env var with both value and valueFrom. Replace those objects
+  # with the rendered manifest outright, then apply again.
+  mapfile -t invalid < <(grep -oE '^The [A-Za-z]+ "[^"]+" is invalid' <<<"$apply_out" | sed -E 's/^The ([A-Za-z]+) "([^"]+)".*/\1 \2/' | sort -u)
+  (( ${#invalid[@]} > 0 )) || apply_failed
+  for obj in "${invalid[@]}"; do
+    read -r obj_kind obj_name <<<"$obj"
+    warn "$obj_kind/$obj_name differs from its manifest (changed outside this deploy); replacing it"
+    if ! replace_out="$(OBJ_KIND="$obj_kind" OBJ_NAME="$obj_name" python3 -c '
+import os, sys, yaml
+for doc in yaml.safe_load_all(open(sys.argv[1])):
+    if doc and doc.get("kind") == os.environ["OBJ_KIND"] and doc["metadata"]["name"] == os.environ["OBJ_NAME"]:
+        print(yaml.safe_dump(doc, sort_keys=False))
+' "$rendered" | kubectl replace --save-config -n "$NAMESPACE" -f - 2>&1)"; then
+      err "Replacing $obj_kind/$obj_name failed: $replace_out"
+    fi
+  done
+  apply_rendered || apply_failed
 fi
 ok "applied $(grep -c '^kind: Deployment' "$rendered") deployments"
 [[ "$AI_EXAMINER" == true ]] && ok "AI claims examiner enabled (advisory only)" \
