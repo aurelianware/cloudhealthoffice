@@ -9,6 +9,7 @@
 #   claims-service        http://localhost:5001   (swagger: /swagger)
 #   benefit-plan-service  http://localhost:5002
 #   fhir-service          http://localhost:5023   (/fhir/r4/adapter-status)
+#   authorization-service http://localhost:5006   (cho_demo.py seed-auths)
 
 set -euo pipefail
 NAMESPACE="${NAMESPACE:-cloudhealthoffice}"
@@ -18,6 +19,7 @@ forwards=(
   "claims-service 5001"
   "benefit-plan-service 5002"
   "fhir-service 5023"
+  "authorization-service 5006"
 )
 
 pids=()
