@@ -425,6 +425,48 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
     }
 
     [Fact]
+    public async Task Adjudicate_BilledChargesFallback_Returns422PendInsteadOfPayingBilled()
+    {
+        // No contracted or plan-default rate: the engine falls back to billed
+        // charges. Same rule as claims-service PricingStage (NOCONTRACT pend).
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+        SetupRateResult(allowedAmount: 200m, rateSource: RateSource.BilledCharges);
+        SetupBenefitResult();
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", MakeAdjudicationRequest());
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = body.RootElement;
+        Assert.Equal("PRICING_UNRESOLVED", root.GetProperty("error").GetString());
+        var line = Assert.Single(root.GetProperty("lines").EnumerateArray());
+        Assert.Contains("billed charges", line.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task Adjudicate_IsADryRun_SendsProspectiveModeToTheBenefitEngine()
+    {
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+        SetupRateResult(allowedAmount: 150m);
+        SetupBenefitResult(allowedAmount: 150m);
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", MakeAdjudicationRequest());
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var sent = _factory.BenefitEngine.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(IBenefitCalculationEngine.CalculateWithModeAsync))
+            .Select(c => (BenefitResolutionRequest)c.GetArguments()[0]!)
+            .Last();
+        Assert.Equal(AdjudicationExecutionMode.Prospective, sent.ExecutionMode);
+    }
+
+    [Fact]
     public async Task Adjudicate_InstitutionalClaim_PassesDrgLengthOfStayRevenueCodeAndBillTypeToPricing()
     {
         SetupNewPipelineDefaults();
@@ -631,7 +673,8 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
     /// real fee schedule engine (case rate $12,000 allocated across lines by
     /// billed charges) and the real benefit engine takes the claim-level
     /// inpatient path — one $250 inpatient copay, not 3 × $250, deductible
-    /// once, accumulators written once — with original billed charges kept.
+    /// once — with original billed charges kept. /adjudicate is a dry run:
+    /// no accumulator is written (the claims-service pipeline owns that).
     /// </summary>
     [Fact]
     public async Task Adjudicate_InstitutionalDrgStay_RealEngines_CostSharesOncePerStay()
@@ -661,7 +704,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         Assert.Equal(result.Totals.MemberResponsibility, result.Lines.Sum(l => l.MemberResponsibility));
         Assert.All(result.Lines, l => Assert.True(l.ContractualAdjustment >= 0m));
 
-        await accumulators.ReceivedWithAnyArgs(1).ApplyUpdatesAsync(
+        await accumulators.DidNotReceiveWithAnyArgs().ApplyUpdatesAsync(
             default!, default!, default, default!, default!, default!, default);
     }
 
