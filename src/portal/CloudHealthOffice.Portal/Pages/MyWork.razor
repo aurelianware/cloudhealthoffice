@@ -1,0 +1,195 @@
+@page "/my-work"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject IWorkManagementService WorkManagement
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<PageTitle>My Work - Cloud Health Office</PageTitle>
+
+@*
+    My Work: one inbox for every kind of operational work (claims pends in
+    phase 1). Get Next leases the highest-priority item of the user's queues
+    and opens it in its own screen (a claim opens in claim detail); the lease
+    tells colleagues who is working it. The claim's own resolution lock stays
+    the hard guard on the decision.
+*@
+<PermissionGate Permission="workqueue:work" RoleName="ClaimsExaminer">
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Inbox" Class="mr-2" />
+        My Work
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        Pull the most urgent item from your queues, work it in its own screen, and come back for the next.
+    </MudText>
+
+    @if (_serviceError != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true"
+                  CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
+    }
+
+    <MudPaper Elevation="2" Class="pa-6 mb-6 d-flex flex-column align-center">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                   Disabled="_pulling" OnClick="GetNext"
+                   Style="min-width: 260px; min-height: 64px; font-size: 1.25rem;"
+                   data-testid="get-next">
+            @(_pulling ? "Finding your next item…" : "Get Next")
+        </MudButton>
+        @if (_nothingToWork)
+        {
+            <MudAlert Severity="Severity.Success" Variant="Variant.Text" Class="mt-4" data-testid="get-next-empty">
+                You're all caught up — nothing is waiting in your queues right now. Check back shortly, or ask your
+                supervisor to add you to another queue.
+            </MudAlert>
+        }
+    </MudPaper>
+
+    <MudText Typo="Typo.h5" Class="mb-2">Items I'm holding</MudText>
+    <MudTable Items="@_mine" Dense="true" Hover="true" Elevation="2" Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh>Item</MudTh>
+            <MudTh>Queue</MudTh>
+            <MudTh>Priority</MudTh>
+            <MudTh>Due</MudTh>
+            <MudTh>Lease</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Item">
+                <MudLink Href="@context.OpenUrl" Typo="Typo.body2">@context.WorkType @context.DisplayNumber</MudLink>
+                @if (!string.IsNullOrWhiteSpace(context.Attributes.PrimaryPendCode))
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">@context.Attributes.PrimaryPendCode</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Queue">@(context.QueueName ?? "Unrouted")</MudTd>
+            <MudTd DataLabel="Priority">
+                <MudTooltip Text="@context.PriorityReason">
+                    <MudText Typo="Typo.body2">@context.PriorityScore.ToString("0.#")</MudText>
+                </MudTooltip>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" data-testid="priority-reason">@context.PriorityReason</MudText>
+            </MudTd>
+            <MudTd DataLabel="Due">
+                @if (context.DueAt is { } due)
+                {
+                    <MudText Typo="Typo.body2" Color="@(due < DateTime.UtcNow ? Color.Error : Color.Default)">@due.ToLocalTime().ToString("MM/dd/yyyy")</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Lease">
+                @if (context.LeaseExpiresAt is { } until)
+                {
+                    <MudText Typo="Typo.body2" Color="@(context.LeaseActive ? Color.Default : Color.Warning)">
+                        @(context.LeaseActive ? "until " : "expired ")@until.ToLocalTime().ToString("t")
+                    </MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+                    <MudButton Color="Color.Primary" OnClick="@(() => NavigationManager.NavigateTo(context.OpenUrl))">Open</MudButton>
+                    <MudButton OnClick="@(() => Renew(context))">Renew</MudButton>
+                    <MudButton Color="Color.Warning" OnClick="@(() => Release(context))">Release</MudButton>
+                </MudButtonGroup>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="pa-4">You are not holding any work. Press Get Next to start.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private List<WorkItemView> _mine = new();
+    private bool _loading = true;
+    private bool _pulling;
+    private bool _nothingToWork;
+    private string? _serviceError;
+
+    protected override async Task OnInitializedAsync() => await LoadMine();
+
+    private async Task LoadMine()
+    {
+        _loading = true;
+        try
+        {
+            _mine = await WorkManagement.GetMineAsync();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        catch (WorkManagementRefusedException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task GetNext()
+    {
+        _pulling = true;
+        _nothingToWork = false;
+        try
+        {
+            var next = await WorkManagement.GetNextAsync();
+            if (next is null)
+            {
+                _nothingToWork = true;
+                return;
+            }
+            if (next.Resumed)
+                Snackbar.Add($"You are still holding {next.Item.DisplayNumber}; finish or release it first.", Severity.Info);
+            NavigationManager.NavigateTo(string.IsNullOrWhiteSpace(next.OpenUrl) ? next.Item.OpenUrl : next.OpenUrl);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        catch (WorkManagementRefusedException ex)
+        {
+            _serviceError = ex.Message;
+        }
+        finally
+        {
+            _pulling = false;
+        }
+    }
+
+    private async Task Renew(WorkItemView item)
+    {
+        try
+        {
+            var renewed = await WorkManagement.RenewAsync(item.Id);
+            item.LeaseExpiresAt = renewed.LeaseExpiresAt;
+            item.LeaseActive = true;
+            Snackbar.Add($"Lease on {item.DisplayNumber} renewed.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is ServiceUnavailableException or WorkManagementRefusedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            await LoadMine();
+        }
+    }
+
+    private async Task Release(WorkItemView item)
+    {
+        try
+        {
+            await WorkManagement.ReleaseAsync(item.Id);
+            _mine.Remove(item);
+            Snackbar.Add($"{item.DisplayNumber} returned to its queue.", Severity.Info);
+        }
+        catch (Exception ex) when (ex is ServiceUnavailableException or WorkManagementRefusedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            await LoadMine();
+        }
+    }
+}

@@ -120,6 +120,13 @@
                     <!-- OPERATIONS — expanded by default, where users spend 90% of time -->
                     <MudNavGroup Title="Operations" Icon="@Icons.Material.Filled.Speed" Expanded="true"
                                  Style="border-left: 3px solid transparent;">
+                        @if (_canWork)
+                        {
+                            <MudNavLink Href="/my-work" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inbox"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                My Work
+                            </MudNavLink>
+                        }
                         <MudNavLink Href="/dashboard" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                             Dashboard
@@ -314,6 +321,13 @@
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                             Correspondence
                         </MudNavLink>
+                        @if (_canAdminWork)
+                        {
+                            <MudNavLink Href="/admin/work-management" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                Work Management
+                            </MudNavLink>
+                        }
                         @if (_isTenantAdmin)
                         {
                             <MudNavLink Href="/settings/users" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts"
@@ -428,6 +442,9 @@
     // rate configs are contract data (contracts:read, the page's gate).
     private bool _canReadSponsors;
     private bool _canReadContracts;
+    // Work management: My Work (pull) and its configuration (work-management-service).
+    private bool _canWork;
+    private bool _canAdminWork;
     private bool _tenantLoadComplete;
     private List<TenantSubscription> _availableTenants = new();
 
@@ -461,6 +478,8 @@
             _canReadSponsors = userContext != null
                 && (UserContextService.HasPermission("enrollment:read") || UserContextService.HasPermission("billing:read"));
             _canReadContracts = userContext != null && UserContextService.HasPermission("contracts:read");
+            _canWork = userContext != null && UserContextService.HasPermission("workqueue:work");
+            _canAdminWork = userContext != null && UserContextService.HasPermission("workqueue:admin");
         }
         catch (Exception ex)
         {
