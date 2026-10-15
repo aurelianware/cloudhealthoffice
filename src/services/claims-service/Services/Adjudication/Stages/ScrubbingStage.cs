@@ -89,9 +89,7 @@ public sealed class ScrubbingStage : IClaimAdjudicationStage
                 ex, "MAPPER_EXCEPTION",
                 $"Scrubbing mapper threw: {ex.GetType().Name}");
             activity?.SetTag("scrubbing.decision", ScrubbingDecision.RejectStructural.ToString());
-            return ClaimAdjudicationStageResult.Reject(
-                StageName,
-                $"Scrubbing mapper threw: {ex.GetType().Name}");
+            return RejectUnprocessable(context, $"Scrubbing mapper threw: {ex.GetType().Name}");
         }
 
         EngineModels.ClaimsScrubResponse response;
@@ -165,7 +163,7 @@ public sealed class ScrubbingStage : IClaimAdjudicationStage
                 "ScrubbingStage rejected claim {ClaimVersionId}: {Errors} errors, {Warnings} warnings",
                 SanitizeForLog(context.ClaimVersionId), errors.Count, warnings.Count);
 
-            return ClaimAdjudicationStageResult.Reject(StageName, reason);
+            return RejectUnprocessable(context, reason);
         }
 
         if (warnings.Count > 0)
@@ -215,6 +213,21 @@ public sealed class ScrubbingStage : IClaimAdjudicationStage
             },
             EngineStatus = "rejected",
         };
+
+    /// <summary>
+    /// A scrubbing Reject is an unprocessable claim: CO-16 (claim lacks
+    /// information / submission error) + RARC MA130 (unprocessable — correct
+    /// and submit a new claim), so the 835 has a CARC to report.
+    /// </summary>
+    private static ClaimAdjudicationStageResult RejectUnprocessable(ClaimAdjudicationContext context, string reason)
+    {
+        AdjudicationDenialCodes.Apply(
+            context,
+            AdjudicationDenialCodes.ClaimLacksInformationCarc,
+            reason,
+            AdjudicationDenialCodes.UnprocessableClaimRarc);
+        return ClaimAdjudicationStageResult.Reject(StageName, reason);
+    }
 
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");

@@ -297,4 +297,47 @@ public class Era835ClaimPaymentBuilderTests
         Assert.Equal(260m, cp.ClaimAdjustments.Single(a => a.ReasonCode == "50").Amount);
         Assert.Equal(300m, cp.ClaimAdjustments.Sum(a => a.Amount));
     }
+
+    /// <summary>
+    /// A claim the claims-service pipeline denied before benefit calculation
+    /// (scrubbing reject CO-16/MA130, out-of-network CO-242, COB CO-22/MA04,
+    /// NCCI MUE CO-151/N115) carries only the claim-level DenialReasonCode
+    /// and RemarkCodes, and no line pricing: the 835 reports the CARC in the
+    /// header CAS for the full charge and the RARC in MOA.
+    /// </summary>
+    [Theory]
+    [InlineData("16", "MA130")]
+    [InlineData("242", null)]
+    [InlineData("22", "MA04")]
+    [InlineData("151", "N115")]
+    public void Pipeline_denial_code_reaches_the_835_CAS_and_MOA(string carc, string? rarc)
+    {
+        var claim = new ClaimDto
+        {
+            Id = "d3", ClaimNumber = "CLM-D3", BillingProviderNPI = "NPI-A", MemberId = "M1",
+            Status = ClaimStatus.Denied, TotalChargeAmount = 150m,
+            AdjudicationResult = new ClaimAdjudicationDto
+            {
+                PayerPayment = 0m, DenialReasonCode = carc, DenialReason = "pipeline denial",
+                RemarkCodes = rarc is null ? new List<string>() : new List<string> { rarc },
+            },
+            ServiceLines = new List<ClaimServiceLineDto>
+            {
+                new() { LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 150m, Units = 1 },
+            },
+        };
+
+        var cp = Era835ClaimPaymentBuilder.Build(claim, denied: true, Mapper);
+        var segments = 0;
+        var loop = Era835ClaimLoops.BuildClaimLoop(cp, ref segments);
+
+        Assert.Equal("4", cp.ClaimStatusCode);
+        var cas = Assert.Single(cp.ClaimAdjustments);
+        Assert.Equal(("CO", carc, 150m), (cas.GroupCode, cas.ReasonCode, cas.Amount));
+        Assert.Contains($"CAS*CO*{carc}*150.00", loop);
+        if (rarc is null)
+            Assert.DoesNotContain("MOA*", loop);
+        else
+            Assert.Contains($"MOA***{rarc}", loop);
+    }
 }
