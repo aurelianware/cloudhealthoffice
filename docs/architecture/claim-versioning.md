@@ -56,6 +56,57 @@ from the legacy `ClaimStatus` (see hydration table below). This keeps
 the existing 22 controller endpoints and the accumulator-service Kafka
 contract working without a data migration.
 
+## Claim lifecycle: Pay / Deny before Paid / Denied
+
+Modeled on QNXT's PAY/PAID and DENY/DENIED (owner-approved product
+decision). An adjudicated outcome stays editable until the payment cycle
+tells the provider; only then is it final.
+
+| Phase | `ClaimStatus` (portal label) | `VersionState` | Editable? |
+| --- | --- | --- | --- |
+| Adjudicated, not yet remitted | `Pended`, `Approved` ("Pay"), `Deny` (= 10) | `Submitted` (Pended), `Adjudicated` (Pay / Deny) | Yes — reprocess, examiner resolve / override (`POST work-queue/{id}/resolve`, `/override`) |
+| Finalized by the payment cycle (835 sent) | `Paid`, `Denied` | `Paid`, `Denied` (terminal) | No — only an adjustment (new version, `POST /api/v1/claims/{id}/adjustments`) or, for Paid, a void / reversal |
+| Corrected / reversed | `Voided` (and any row `Adjusted`) | `Voided`, `Adjusted` (terminal) | No |
+
+- The pipeline's Deny / Reject persists `Deny`, never `Denied`
+  (`PersistenceStage`). Pass persists `Approved`.
+- The payment run remits `Approved` claims (paid) and `Deny` claims ($0,
+  CLP02 = 4) in its 835s, then finalizes each through
+  `POST /api/claims/{id}/remittance` (`ClaimFinalizationService.FinalizeAsync`):
+  `Approved` → `Paid`, `Deny` + $0 → `Denied`. A $0 remittance on an
+  already-`Denied` claim is an idempotent 200; a paid remittance on
+  `Deny` / `Denied` is 422.
+- A resolve / override of a finalized claim (`Paid`, `Denied`, `Voided`,
+  `Adjusted`) is 422 with a pointer to the adjustment / void path. An
+  examiner's "Denied" disposition writes `Deny`.
+- Accumulators: a move to `Deny` takes back what the claim contributed with a
+  NON-terminal reversal (`reverse-claim` with `terminal: false` →
+  `IAccumulatorService.ReverseAsync`, no fence), so a claim reprocessed back
+  to Pay commits again (new commit id) and counts once. From Pay the reversal
+  is always queued; from Pended / Deny only if the store reports a write for
+  the claim (`accumulator-commits/lookup`), else nothing. `Deny` → `Denied`
+  adds nothing. Voids and replacements keep the terminal (fencing) reversal.
+  The reversal is commit-scoped (compare-and-reverse): it names the claim's
+  `LatestAccumulatorCommitId` (recorded whenever a commit is queued) and
+  takes it back only while that commit is the applied one — if the claim went
+  back to Pay and a newer commit landed, it is a no-op (`Superseded`). It
+  also fences that commit id (Cho `ReversedCommitIds`, Redis
+  `__fence:commit:{id}`), so the same commit arriving late is refused
+  (`RefusedCommitReversed`, dropped by the outbox) while a newer one is not.
+  A re-Pay write cancels a still-queued reversal in the same lock-fenced
+  write. Claims whose commit is unknown (legacy) carry the sentinel
+  `unknown` and reverse blind, as before. The outbox re-reads the claim at
+  dispatch, so a queued commit on a claim now Deny / Denied / Voided is
+  dropped.
+- `PartiallyPaid` (= 9) is legacy: never assigned (adjudication never set
+  it), still read as payable and, via `VersionState=Paid`, finalized. The
+  portal derives "Paid with line denials" from the lines instead.
+- `ClaimStatusSemantics` (claims-service) answers "denied in either
+  phase", "payable", "finalized", "reprocessable" so call sites don't
+  compare to individual statuses.
+- Existing rows: `Denied` claims set at adjudication before `Deny` existed
+  are moved by the opt-in backfill (docs/operations/CLAIM-DENY-STATUS-BACKFILL.md).
+
 ## State machine
 
 ```
@@ -75,7 +126,7 @@ contract working without a data migration.
                                                                   ┌────────────┐
                                                                   │  Adjusted  │
                                                                   └────────────┘
-                                              │ deny
+                                Adjudicated (Deny) │ $0 remittance (835 sent)
                                               ▼
                                           ┌──────────┐
                                           │  Denied  │
@@ -92,13 +143,15 @@ contract working without a data migration.
   `ClaimStatus` sub-states `Submitted`, `Received`, `InAdjudication`, and
   `Pended` (Pended is a transient pipeline-stage outcome captured by
   `PendDetails`, not a version transition).
-- **Adjudicated** — adjudication has run. The `ClaimStatus.Approved`
-  operational sub-state lives here (awaits payment). Re-adjudication is
-  permitted via `UpdateAdjudicationProjectionAsync` without rolling a
-  new version.
+- **Adjudicated** — adjudication has run, the payment cycle has not
+  finalized it. The `ClaimStatus.Approved` ("Pay") and `ClaimStatus.Deny`
+  operational sub-states live here (await the payment run).
+  Re-adjudication is permitted via `UpdateAdjudicationProjectionAsync`
+  without rolling a new version.
 - **Paid** — terminal for paid claims. The `ClaimStatus.PartiallyPaid`
   operational sub-state lives here too.
-- **Denied** — terminal for denied claims (no payment).
+- **Denied** — terminal: the denial was finalized by the payment cycle
+  (its 835 went out; `Deny` → `Denied` on the $0 remittance).
 - **Adjusted** — terminal for the predecessor of an adjustment chain.
   `SupersededByVersionId` points at the replacement version.
 - **Voided** — terminal for reversed/cancelled claims. Every void
@@ -118,7 +171,7 @@ at the old row and marks the old row `Adjusted`.
 | Legacy `ClaimStatus`                                  | Hydrated `ClaimVersionState` |
 | ----------------------------------------------------- | ---------------------------- |
 | `Submitted`, `Received`, `InAdjudication`, `Pended`   | `Submitted`                  |
-| `Approved`                                            | `Adjudicated`                |
+| `Approved` ("Pay"), `Deny`                            | `Adjudicated`                |
 | `Paid`, `PartiallyPaid`                               | `Paid`                       |
 | `Denied`                                              | `Denied`                     |
 | `Voided`                                              | `Voided`                     |

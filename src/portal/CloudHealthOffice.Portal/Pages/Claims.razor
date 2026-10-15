@@ -113,14 +113,10 @@
                           T="string"
                           AnchorOrigin="Origin.BottomCenter"
                           Clearable="true">
-                    <MudSelectItem Value="@("Submitted")">Submitted</MudSelectItem>
-                    <MudSelectItem Value="@("Received")">Received</MudSelectItem>
-                    <MudSelectItem Value="@("InAdjudication")">In Adjudication</MudSelectItem>
-                    <MudSelectItem Value="@("Pended")">Pended</MudSelectItem>
-                    <MudSelectItem Value="@("Approved")">Approved</MudSelectItem>
-                    <MudSelectItem Value="@("Denied")">Denied</MudSelectItem>
-                    <MudSelectItem Value="@("Paid")">Paid</MudSelectItem>
-                    <MudSelectItem Value="@("PartiallyPaid")">Partially Paid</MudSelectItem>
+                    @foreach (var (value, label) in ClaimStatusDisplay.FilterOptions)
+                    {
+                        <MudSelectItem Value="@value">@label</MudSelectItem>
+                    }
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="4">
@@ -348,8 +344,9 @@
                         <MudTd DataLabel="Status">
                             <MudChip Size="Size.Small"
                                     Color="@GetStatusColor(context.Status)"
-                                    Variant="Variant.Filled">
-                                @context.Status
+                                    Variant="Variant.Filled"
+                                    title="@ClaimStatusDisplay.PhaseHint(context.Status)">
+                                @ClaimStatusDisplay.Label(context.Status)
                             </MudChip>
                         </MudTd>
                         <MudTd DataLabel="Days">
@@ -571,13 +568,5 @@
     private static string ShortId(string value)
         => string.IsNullOrWhiteSpace(value) ? "run" : value[..Math.Min(8, value.Length)];
 
-    private Color GetStatusColor(string status) => status switch
-    {
-        "Approved" or "Paid" or "PartiallyPaid" => Color.Success,
-        "Denied" => Color.Error,
-        "Pended" => Color.Warning,
-        "InAdjudication" or "Received" => Color.Info,
-        "Submitted" => Color.Default,
-        _ => Color.Default
-    };
+    private Color GetStatusColor(string status) => ClaimStatusDisplay.Color(status);
 }

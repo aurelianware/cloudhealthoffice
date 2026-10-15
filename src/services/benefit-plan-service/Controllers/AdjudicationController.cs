@@ -919,13 +919,33 @@ public class AdjudicationController : ControllerBase
             request.BenefitPlanId,
             request.ServiceDate);
 
-        await _benefitEngine.ReverseClaimAsync(
-            request.MemberId,
-            request.SubscriberId ?? string.Empty,
-            request.BenefitPlanId,
-            request.ServiceDate,
-            request.OriginalClaimId,
-            ct);
+        // Terminal (the default): a void, a superseded version — the claim id
+        // is fenced. Non-terminal: a Pay claim moved to Deny before the
+        // payment cycle, which may be reprocessed back to Pay and commit again.
+        if (request.Terminal)
+        {
+            await _benefitEngine.ReverseClaimAsync(
+                request.MemberId,
+                request.SubscriberId ?? string.Empty,
+                request.BenefitPlanId,
+                request.ServiceDate,
+                request.OriginalClaimId,
+                ct);
+        }
+        else
+        {
+            // Commit-scoped: reverses only while CommitId is the claim's
+            // applied commit (Superseded otherwise) and fences that commit id.
+            var outcome = await _benefitEngine.ReverseClaimForReprocessingAsync(
+                request.MemberId,
+                request.SubscriberId ?? string.Empty,
+                request.BenefitPlanId,
+                request.ServiceDate,
+                request.OriginalClaimId,
+                string.IsNullOrWhiteSpace(request.CommitId) ? null : request.CommitId,
+                ct);
+            return Ok(new ReverseClaimResponse { Outcome = outcome });
+        }
 
         return NoContent();
     }
@@ -1636,4 +1656,25 @@ public class ReverseClaimRequest
     public Guid BenefitPlanId { get; set; }
     public DateOnly ServiceDate { get; set; }
     public string OriginalClaimId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Default true (and when absent, as from older callers): fence the claim
+    /// id so a later commit of it is refused (void / replacement). False:
+    /// reverse only — the claim may commit again (Pay → Deny before the
+    /// payment cycle, then reprocessed).
+    /// </summary>
+    public bool Terminal { get; set; } = true;
+
+    /// <summary>
+    /// Non-terminal only: the commit being reversed (compare-and-reverse).
+    /// Null / empty: unknown (legacy) — reverse whatever the claim holds.
+    /// </summary>
+    public string? CommitId { get; set; }
+}
+
+/// <summary>Response of a non-terminal <c>POST /api/v1/adjudication/reverse-claim</c>.</summary>
+public class ReverseClaimResponse
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AccumulatorReversalOutcome Outcome { get; set; }
 }

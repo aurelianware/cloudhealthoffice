@@ -508,6 +508,7 @@ public sealed class FlexibleClaimStatusJsonConverter : JsonConverter<string>
                 7 => "Paid",
                 8 => "Voided",
                 9 => "PartiallyPaid",
+                10 => "Deny",
                 _ => value.ToString()
             },
             JsonTokenType.Number => reader.GetDouble().ToString(System.Globalization.CultureInfo.InvariantCulture),

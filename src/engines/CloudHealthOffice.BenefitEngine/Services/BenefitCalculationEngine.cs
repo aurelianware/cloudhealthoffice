@@ -68,6 +68,22 @@ public interface IBenefitCalculationEngine
         CancellationToken ct = default);
 
     /// <summary>
+    /// Reverse the accumulator impact of a claim that may apply again: an
+    /// adjudicated Pay claim moved to Deny before the payment cycle (still
+    /// reprocessable). NOT terminal: the claim id is not fenced, so a later
+    /// commit of it (the claim reprocessed back to Pay, a new commit id) is
+    /// accepted and counted once
+    /// (<see cref="IAccumulatorService.ReverseAsync"/>). Idempotent; a claim
+    /// with nothing applied reverses nothing.
+    /// </summary>
+    Task<AccumulatorReversalOutcome> ReverseClaimForReprocessingAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, DateOnly serviceDate,
+        string originalClaimId,
+        string? commitId,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Writes the accumulator updates a Prospective pricing prepared
     /// (<see cref="BenefitResolutionResult.PreparedAccumulatorCommit"/>), once
     /// the claim is finally adjudicated. Idempotent on the commit id; refused
@@ -514,6 +530,31 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         await _accumulatorService.ReverseTerminallyAsync(
             memberId, subscriberId, benefitPlanId, planYear, originalClaimId, ct);
+    }
+
+    public async Task<AccumulatorReversalOutcome> ReverseClaimForReprocessingAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, DateOnly serviceDate,
+        string originalClaimId,
+        string? commitId,
+        CancellationToken ct = default)
+    {
+        var plan = await _planProvider.GetPlanAsync(benefitPlanId, ct);
+        if (plan is null)
+        {
+            _logger.LogWarning("Cannot reverse claim {ClaimId}: plan {PlanId} not found",
+                SanitizeForLog(originalClaimId), benefitPlanId);
+            return AccumulatorReversalOutcome.Reversed;
+        }
+
+        var planYear = DeterminePlanYear(serviceDate, plan);
+
+        _logger.LogInformation(
+            "Reversing accumulators (non-terminal, claim may re-commit) for claim {ClaimId}, member {MemberId}, plan year {PlanYear}",
+            SanitizeForLog(originalClaimId), SanitizeForLog(memberId), SanitizeForLog(planYear));
+
+        return await _accumulatorService.ReverseCommitAsync(
+            memberId, subscriberId, benefitPlanId, planYear, originalClaimId, commitId, ct);
     }
 
     // ═══════════════════════════════════════════════════════════════════

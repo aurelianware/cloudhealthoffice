@@ -430,12 +430,9 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             return false;
         }
 
-        if (claim.Status is ClaimStatus.Approved
-            or ClaimStatus.Denied
-            or ClaimStatus.Paid
-            or ClaimStatus.PartiallyPaid
-            or ClaimStatus.Pended
-            or ClaimStatus.Voided)
+        if (ClaimStatusSemantics.IsPayOutcome(claim.Status)
+            || ClaimStatusSemantics.IsDenied(claim.Status)
+            || claim.Status is ClaimStatus.Pended or ClaimStatus.Voided)
         {
             return true;
         }

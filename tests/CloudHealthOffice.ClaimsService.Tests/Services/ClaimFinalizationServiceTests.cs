@@ -216,4 +216,101 @@ public class ClaimFinalizationServiceTests
 
         Assert.Equal("EXISTING-CTRL", result.Claim!.EDI835ControlNumber);
     }
+
+    // ── Pay/Deny lifecycle: the payment cycle finalizes Deny → Denied ──
+
+    private static Claim DenyClaim(string id = "d1")
+    {
+        var claim = ApprovedClaim(id);
+        claim.Status = ClaimStatus.Deny;
+        claim.VersionState = ClaimVersionState.Adjudicated;
+        claim.AdjudicationResult = new AdjudicationResult
+        {
+            PayerPayment = 0m,
+            DenialReasonCode = "197",
+            DenialReason = "Prior authorization required",
+        };
+        return claim;
+    }
+
+    private static ClaimFinalizationRequest ZeroRequest(string trace = "PR-0001-D1") => new()
+    {
+        CheckNumber = trace,
+        PaymentDate = new DateTime(2026, 5, 4, 0, 0, 0, DateTimeKind.Utc),
+        PayerPayment = 0m,
+        PaymentRunId = "run-1",
+        EraEnvelopeId = "env-1",
+        EdiControlNumber = "PR-0001",
+    };
+
+    [Fact]
+    public async Task FinalizeAsync_DenyClaim_ZeroRemittance_TransitionsToDenied()
+    {
+        var claim = DenyClaim();
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+        _repo.UpdateAsync(Arg.Any<Claim>()).Returns(call => call.Arg<Claim>());
+
+        var result = await CreateService().FinalizeAsync(claim.Id, ZeroRequest(), "t1", "payment-run", "corr");
+
+        Assert.Equal(ClaimFinalizationOutcome.Finalized, result.Outcome);
+        Assert.Equal(ClaimStatus.Denied, result.Claim!.Status);
+        Assert.Equal(ClaimVersionState.Denied, result.Claim.VersionState);
+        Assert.Equal("PR-0001-D1", result.Claim.AdjudicationResult!.CheckNumber);
+        Assert.Equal(0m, result.Claim.AdjudicationResult.PayerPayment);
+        Assert.Equal("197", result.Claim.AdjudicationResult.DenialReasonCode);
+        Assert.Equal("PR-0001", result.Claim.EDI835ControlNumber);
+        Assert.Null(result.Claim.PaidDate);
+
+        await _versionPublisher.Received(1).PublishVersionDeniedAsync(
+            Arg.Is<Claim>(c => c.Status == ClaimStatus.Denied), "Prior authorization required", "payment-run", "corr", Arg.Any<CancellationToken>());
+        await _versionPublisher.DidNotReceiveWithAnyArgs().PublishVersionPaidAsync(default!, default, default, default);
+        await _kafkaPublisher.Received(1).PublishClaimFinalizedAsync(
+            Arg.Is<Claim>(c => c.Status == ClaimStatus.Denied), "t1", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_DenyClaim_PaidRemittance_IsInvalidSourceState()
+    {
+        var claim = DenyClaim();
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+
+        var result = await CreateService().FinalizeAsync(claim.Id, Request(), "t1", null, null);
+
+        Assert.Equal(ClaimFinalizationOutcome.InvalidSourceState, result.Outcome);
+        Assert.Equal(ClaimStatus.Deny, claim.Status);
+        await _repo.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
+    }
+
+    [Theory]
+    [InlineData("PR-0001-D1")]
+    [InlineData("PR-0002-DF")]
+    public async Task FinalizeAsync_AlreadyDenied_ZeroRemittance_IsIdempotentNoOp(string trace)
+    {
+        var claim = DenyClaim();
+        claim.Status = ClaimStatus.Denied;
+        claim.VersionState = ClaimVersionState.Denied;
+        claim.AdjudicationResult!.CheckNumber = "PR-0001-D1";
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+
+        var result = await CreateService().FinalizeAsync(claim.Id, ZeroRequest(trace), "t1", null, null);
+
+        Assert.Equal(ClaimFinalizationOutcome.AlreadyFinalized, result.Outcome);
+        await _repo.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
+        await _versionPublisher.DidNotReceiveWithAnyArgs().PublishVersionDeniedAsync(default!, default, default, default, default);
+        await _kafkaPublisher.DidNotReceiveWithAnyArgs().PublishClaimFinalizedAsync(default!, default!, default);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_AlreadyDenied_PaidRemittance_IsInvalidSourceState()
+    {
+        var claim = DenyClaim();
+        claim.Status = ClaimStatus.Denied;
+        claim.VersionState = ClaimVersionState.Denied;
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+
+        var result = await CreateService().FinalizeAsync(claim.Id, Request(), "t1", null, null);
+
+        Assert.Equal(ClaimFinalizationOutcome.InvalidSourceState, result.Outcome);
+        Assert.Contains("adjustment", result.Message);
+    }
 }

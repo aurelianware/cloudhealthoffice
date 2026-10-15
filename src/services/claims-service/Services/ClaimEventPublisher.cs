@@ -236,8 +236,12 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
 
         var status = claim.Status switch
         {
+            // External labels are unchanged by the Pay/Deny lifecycle: the
+            // adjudicated outcome (Pay / Deny) and its finalized form (Paid /
+            // Denied) publish the same label, so consumers (accumulator-
+            // service skips "Denied") see one disposition per outcome.
             ClaimStatus.Paid or ClaimStatus.Approved or ClaimStatus.PartiallyPaid => "Paid",
-            ClaimStatus.Denied => "Denied",
+            ClaimStatus.Deny or ClaimStatus.Denied => "Denied",
             ClaimStatus.Voided => "Reversed",
             _ => claim.Status.ToString()
         };

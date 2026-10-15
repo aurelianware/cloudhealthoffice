@@ -311,7 +311,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         {
             TotalClaims = claims.Count,
             ApprovedClaims = claims.Count(c => c.Status.ToString() == "Approved"),
-            DeniedClaims = claims.Count(c => c.Status.ToString() == "Denied"),
+            DeniedClaims = claims.Count(c => ClaimStatusSemantics.IsDenied(c.Status)),
             PendedClaims = claims.Count(c => c.Status.ToString() == "Pended"),
             PaidClaims = claims.Count(c => c.Status.ToString() == "Paid"),
             TotalChargeAmount = claims.Sum(c => c.TotalChargeAmount),
@@ -690,7 +690,9 @@ public class ClaimRepositoryMongo : IClaimRepository
         // The accumulator outbox entry lands with the status that finalizes
         // the claim, or not at all.
         if (pendingAccumulatorCommit is not null)
-            statusUpdate = statusUpdate.Set(c => c.PendingAccumulatorCommit, pendingAccumulatorCommit);
+            statusUpdate = statusUpdate
+                .Set(c => c.PendingAccumulatorCommit, pendingAccumulatorCommit)
+                .Set(c => c.LatestAccumulatorCommitId, pendingAccumulatorCommit.Id);
 
         var result = await _collection.UpdateOneAsync(statusFilter, statusUpdate, cancellationToken: ct);
         if (result.MatchedCount > 0)
@@ -713,7 +715,7 @@ public class ClaimRepositoryMongo : IClaimRepository
 
         if (snapshotAllowsRepair || liveEvidenceAllowsRepair)
         {
-            var repairEvidenceFilter = desiredStatus == ClaimStatus.Denied
+            var repairEvidenceFilter = desiredStatus == ClaimStatus.Deny
                 ? b.And(
                     b.Eq(c => c.Status, ClaimStatus.Approved),
                     b.Eq(c => c.AdjudicationResult!.PayerPayment, 0m),
@@ -726,7 +728,7 @@ public class ClaimRepositoryMongo : IClaimRepository
                             b.Ne(c => c.AdjudicationResult!.DenialReason, string.Empty)),
                         b.SizeGt(c => c.AdjudicationResult!.AdjustmentReasons, 0)))
                 : b.And(
-                    b.Eq(c => c.Status, ClaimStatus.Denied),
+                    b.Eq(c => c.Status, ClaimStatus.Deny),
                     b.Gt(c => c.AdjudicationResult!.PayerPayment, 0m),
                     b.Or(
                         b.Eq(c => c.AdjudicationResult!.DenialReasonCode, null),
@@ -782,6 +784,9 @@ public class ClaimRepositoryMongo : IClaimRepository
             builder.Or(
                 builder.In(c => c.Status, finalizedStatuses),
                 builder.In(c => c.VersionState, finalizedVersionStates)),
+            // A Deny claim is VersionState Adjudicated (non-final) but writes
+            // no accumulators: denials (either phase) and voids never count.
+            builder.Nin(c => c.Status, new[] { ClaimStatus.Deny, ClaimStatus.Denied, ClaimStatus.Voided }),
             builder.Ne(c => c.AdjudicationResult, null)
         );
 
@@ -924,6 +929,37 @@ public class ClaimRepositoryMongo : IClaimRepository
         return (await _collection.Find(filter).SortBy(c => c.PendDetails!.PendedAt).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
     }
 
+    /// <summary>The store-side part of <see cref="ClaimRepository.IsLegacyUnremittedDenied"/>.</summary>
+    private static FilterDefinition<Claim> LegacyUnremittedDeniedFilter(FilterDefinitionBuilder<Claim> b) => b.And(
+        b.Eq(c => c.Status, ClaimStatus.Denied),
+        b.Or(b.In(c => c.VersionState, new[] { ClaimVersionState.Denied, ClaimVersionState.Unknown }), b.Exists(c => c.VersionState, false)),
+        b.Or(b.Eq(c => c.AdjudicationResult!.CheckNumber, null), b.Eq(c => c.AdjudicationResult!.CheckNumber, string.Empty)),
+        b.Eq(c => c.AdjudicationResult!.PaymentDate, null),
+        b.Or(b.Eq(c => c.EDI835ControlNumber, null), b.Eq(c => c.EDI835ControlNumber, string.Empty)),
+        b.Eq(c => c.SupersededAt, null));
+
+    public async Task<IReadOnlyList<Claim>> FindLegacyUnremittedDeniedAsync(int limit, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(b.Eq(c => c.TenantId, GetTenantId()), LegacyUnremittedDeniedFilter(b));
+        return (await _collection.Find(filter).Limit(limit).ToListAsync(ct))
+            .Select(Hydrate)
+            .Where(ClaimRepository.IsLegacyUnremittedDenied)
+            .ToList();
+    }
+
+    public async Task<bool> TryReopenLegacyDeniedAsync(string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, claimId), LegacyUnremittedDeniedFilter(b));
+        var update = Builders<Claim>.Update
+            .Set(c => c.Status, ClaimStatus.Deny)
+            .Set(c => c.VersionState, ClaimVersionState.Adjudicated)
+            .Set(c => c.LastUpdatedDate, DateTime.UtcNow);
+        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.ModifiedCount == 1;
+    }
+
     public async Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default)
     {
@@ -997,7 +1033,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         var filter = b.And(
             b.Eq(c => c.TenantId, tenantId),
             b.Eq(c => c.Id, claimId),
-            b.Eq(c => c.Status, ClaimStatus.Pended),
+            b.In(c => c.Status, ClaimStatusSemantics.ReprocessableStatuses),
             b.Or(
                 b.Eq(c => c.ResolutionLock, null),
                 b.Lt(c => c.ResolutionLock!.ExpiresAt, now)));
@@ -1030,7 +1066,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         var filter = b.And(
             b.Eq(c => c.TenantId, tenantId),
             b.Eq(c => c.Id, claimId),
-            b.Eq(c => c.Status, ClaimStatus.Pended),
+            b.In(c => c.Status, ClaimStatusSemantics.ReprocessableStatuses),
             b.Eq(c => c.ResolutionLock!.Token, token),
             b.Gt(c => c.ResolutionLock!.ExpiresAt, now));
         return await _collection.CountDocumentsAsync(filter, new CountOptions { Limit = 1 }, ct) > 0;
@@ -1093,7 +1129,7 @@ public class ClaimRepositoryMongo : IClaimRepository
             b.Gte(c => c.ServiceDateTo, serviceDateFrom),
             b.Ne(c => c.Id, excludeClaimVersionId),
             b.Ne(c => c.ClaimVersionId, excludeClaimVersionId),
-            b.Nin(c => c.Status, new[] { ClaimStatus.Denied, ClaimStatus.Voided }),
+            b.Nin(c => c.Status, new[] { ClaimStatus.Deny, ClaimStatus.Denied, ClaimStatus.Voided }),
             b.Nin(c => c.VersionState, new[]
             {
                 ClaimVersionState.Draft,

@@ -103,6 +103,14 @@ public class AccumulatorDocument
     public List<string> ReversedClaimIds { get; set; } = [];
 
     /// <summary>
+    /// Commit ids reversed by a commit-scoped, non-terminal reversal (a Pay
+    /// claim moved to Deny). A later <c>CommitAsync</c> of exactly one of
+    /// these commit ids (a write that was in flight when the claim was
+    /// denied) is refused; a newer commit of the same claim is not.
+    /// </summary>
+    public List<string> ReversedCommitIds { get; set; } = [];
+
+    /// <summary>
     /// ETag from the last Cosmos read/write. Not persisted in the document body —
     /// populated from ItemResponse.ETag after every Cosmos operation.
     /// Used as IfMatchEtag on subsequent writes for optimistic concurrency.

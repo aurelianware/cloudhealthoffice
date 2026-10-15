@@ -4,7 +4,8 @@ using ClaimsService.Repositories;
 namespace ClaimsService.Services;
 
 /// <summary>
-/// Owns the Adjudicated → Paid transition (5.10) and the Paid/Adjusted →
+/// Owns the payment-cycle finalize — Adjudicated → Paid (Pay / Approved) and
+/// Adjudicated → Denied (Deny, at $0) (5.10) — and the Paid/Adjusted →
 /// Voided transition (5.12a, invoked by 5.12b ReversalRun) for a claim
 /// version. The canonical 5.10 finalize path: payment-service issues a
 /// <c>POST /api/claims/{id}/remittance</c> per claim during PaymentRun
@@ -64,9 +65,9 @@ public interface IClaimFinalizationService
 /// </summary>
 public enum ClaimFinalizationOutcome
 {
-    /// <summary>Claim transitioned from Approved/PartiallyPaid → Paid; ClaimVersionPaid emitted; ClaimFinalized re-emitted.</summary>
+    /// <summary>Claim transitioned Approved/PartiallyPaid → Paid (ClaimVersionPaid) or Deny → Denied (ClaimVersionDenied); ClaimFinalized re-emitted.</summary>
     Finalized = 1,
-    /// <summary>Claim already in Paid state with the same CheckNumber; no-op; no event re-emit.</summary>
+    /// <summary>Claim already Paid with the same CheckNumber, or already Denied ($0); no-op; no event re-emit.</summary>
     AlreadyFinalized = 2,
     /// <summary>Claim already in Paid state with a different CheckNumber; controller maps to 409 Conflict.</summary>
     Conflict = 3,
@@ -239,28 +240,70 @@ public class ClaimFinalizationService : IClaimFinalizationService
                 $"Claim already paid under check {existingCheck}; cannot re-finalize with {request.CheckNumber}");
         }
 
-        // Source-state validation — Phase 1 only supports
-        // Approved/PartiallyPaid → Paid. Other transitions are deferred
-        // to 5.12 (Adjustment Workflow).
-        if (claim.Status is not (ClaimStatus.Approved or ClaimStatus.PartiallyPaid))
+        // A denial's finalize carries no money: the 835 remits it at $0.
+        var zeroPay = (request.PayerPayment ?? 0m) == 0m;
+
+        // Already-finalized denial: a $0 remittance (a retry, or a second
+        // 835 trace) is an idempotent no-op — Denied is terminal and nothing
+        // is paid, so there is no check to conflict with. A paid remittance
+        // on a denial is refused.
+        if (claim.Status == ClaimStatus.Denied)
+        {
+            if (zeroPay)
+            {
+                _logger.LogInformation(
+                    "Claim {ClaimId} already finalized as Denied; $0 remittance {Check} is an idempotent no-op",
+                    Sanitize(claim.Id), Sanitize(request.CheckNumber));
+                return ClaimFinalizationResult.AlreadyFinalized(claim);
+            }
+            return ClaimFinalizationResult.InvalidSourceState(
+                claim,
+                $"Claim is Denied (finalized); a denial is remitted at 0.00, not {request.PayerPayment:F2}. " +
+                "Correct it with an adjustment (POST /api/v1/claims/{id}/adjustments).");
+        }
+
+        // Source-state validation: the payment cycle finalizes the two
+        // adjudicated outcomes — Pay (Approved, legacy PartiallyPaid) → Paid
+        // and Deny → Denied (only at $0). Other transitions go through the
+        // adjustment workflow (5.12) or a void.
+        var deny = claim.Status == ClaimStatus.Deny;
+        if (deny && !zeroPay)
         {
             _logger.LogWarning(
-                "Claim {ClaimId} cannot finalize from {Status}; only Approved/PartiallyPaid → Paid supported",
+                "Claim {ClaimId} is Deny; refusing a paid remittance of {Amount}",
+                Sanitize(claim.Id), request.PayerPayment);
+            return ClaimFinalizationResult.InvalidSourceState(
+                claim,
+                $"Claim is Deny; a denial is remitted at 0.00, not {request.PayerPayment:F2}. " +
+                "To pay it, reprocess or resolve it to Pay first.");
+        }
+        if (!deny && !ClaimStatusSemantics.IsPayable(claim.Status))
+        {
+            _logger.LogWarning(
+                "Claim {ClaimId} cannot finalize from {Status}; only Approved/PartiallyPaid → Paid and Deny → Denied supported",
                 Sanitize(claim.Id), claim.Status);
             return ClaimFinalizationResult.InvalidSourceState(
                 claim,
-                $"Claim must be Approved or PartiallyPaid to finalize; current status is {claim.Status}");
+                $"Claim must be Approved (Pay), PartiallyPaid or Deny to finalize; current status is {claim.Status}");
         }
 
-        // Apply the Paid transition. Both Status (legacy operational
-        // sub-state) and VersionState (5.1a chain) advance together; the
-        // version stream is the audit-trail surface, the legacy Status
-        // field is what the existing 22 controller endpoints and the
-        // Kafka claims.finalized.v1 consumers read.
+        // Apply the finalize. Both Status (legacy operational sub-state) and
+        // VersionState (5.1a chain) advance together; the version stream is
+        // the audit-trail surface, the legacy Status field is what the
+        // existing controller endpoints and the Kafka claims.finalized.v1
+        // consumers read.
         var now = DateTime.UtcNow;
-        claim.Status = ClaimStatus.Paid;
-        claim.VersionState = ClaimVersionState.Paid;
-        claim.PaidDate = now;
+        if (deny)
+        {
+            claim.Status = ClaimStatus.Denied;
+            claim.VersionState = ClaimVersionState.Denied;
+        }
+        else
+        {
+            claim.Status = ClaimStatus.Paid;
+            claim.VersionState = ClaimVersionState.Paid;
+            claim.PaidDate = now;
+        }
         claim.LastUpdatedDate = now;
         claim.LastUpdatedBy = actorId;
 
@@ -285,13 +328,17 @@ public class ClaimFinalizationService : IClaimFinalizationService
         // publisher itself — the claim DB is truth, not the bus.
         try
         {
-            await _versionEventPublisher.PublishVersionPaidAsync(updated, actorId, correlationId, ct);
+            if (deny)
+                await _versionEventPublisher.PublishVersionDeniedAsync(
+                    updated, updated.AdjudicationResult?.DenialReason, actorId, correlationId, ct);
+            else
+                await _versionEventPublisher.PublishVersionPaidAsync(updated, actorId, correlationId, ct);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "Failed to publish ClaimVersionPaid for claim {ClaimId}; claim already persisted",
-                Sanitize(updated.Id));
+                "Failed to publish {Event} for claim {ClaimId}; claim already persisted",
+                deny ? "ClaimVersionDenied" : "ClaimVersionPaid", Sanitize(updated.Id));
         }
 
         await _kafkaEventPublisher.PublishClaimFinalizedAsync(updated, tenantId, ct);

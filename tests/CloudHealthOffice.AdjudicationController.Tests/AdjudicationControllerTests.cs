@@ -2031,4 +2031,39 @@ public class AdjudicationControllerCommitAccumulatorsTests : IClassFixture<Adjud
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         await _factory.BenefitEngine.DidNotReceiveWithAnyArgs().CommitAccumulatorsAsync(default!, default);
     }
+    /// <summary>
+    /// reverse-claim: terminal by default (void / replacement — older callers send no flag);
+    /// terminal=false (a Pay claim moved to Deny before the payment cycle) reverses without
+    /// fencing, so the claim can commit again.
+    /// </summary>
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task ReverseClaim_TerminalFlag_PicksTheEngineReversal(bool? terminal, bool expectTerminal)
+    {
+        _factory.BenefitEngine.ClearReceivedCalls();
+        object body = terminal is null
+            ? new { memberId = "m1", subscriberId = "m1", benefitPlanId = PlanId, serviceDate = "2026-04-15", originalClaimId = "claim-9" }
+            : new { memberId = "m1", subscriberId = "m1", benefitPlanId = PlanId, serviceDate = "2026-04-15", originalClaimId = "claim-9", terminal, commitId = "commit-1" };
+
+        _factory.BenefitEngine.ReverseClaimForReprocessingAsync(default!, default!, default, default, default!, default, default)
+            .ReturnsForAnyArgs(AccumulatorReversalOutcome.Superseded);
+
+        var response = await CreateClient().PostAsJsonAsync("/api/v1/adjudication/reverse-claim", body);
+
+        Assert.Equal(expectTerminal ? HttpStatusCode.NoContent : HttpStatusCode.OK, response.StatusCode);
+        if (!expectTerminal)
+            Assert.Contains("Superseded", await response.Content.ReadAsStringAsync());
+        if (expectTerminal)
+        {
+            await _factory.BenefitEngine.Received(1).ReverseClaimAsync("m1", "m1", PlanId, new DateOnly(2026, 4, 15), "claim-9", Arg.Any<CancellationToken>());
+            await _factory.BenefitEngine.DidNotReceiveWithAnyArgs().ReverseClaimForReprocessingAsync(default!, default!, default, default, default!, default, default);
+        }
+        else
+        {
+            await _factory.BenefitEngine.Received(1).ReverseClaimForReprocessingAsync("m1", "m1", PlanId, new DateOnly(2026, 4, 15), "claim-9", "commit-1", Arg.Any<CancellationToken>());
+            await _factory.BenefitEngine.DidNotReceiveWithAnyArgs().ReverseClaimAsync(default!, default!, default, default, default!, default);
+        }
+    }
 }

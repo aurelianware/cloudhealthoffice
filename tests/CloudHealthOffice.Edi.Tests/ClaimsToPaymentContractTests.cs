@@ -88,6 +88,7 @@ public class ClaimsToPaymentContractTests
     [Theory]
     [InlineData(Claims.ClaimStatus.Approved, PayModels.ClaimStatus.Approved)]
     [InlineData(Claims.ClaimStatus.Pended, PayModels.ClaimStatus.Pended)]
+    [InlineData(Claims.ClaimStatus.Deny, PayModels.ClaimStatus.Deny)]
     [InlineData(Claims.ClaimStatus.Denied, PayModels.ClaimStatus.Denied)]
     [InlineData(Claims.ClaimStatus.Paid, PayModels.ClaimStatus.Paid)]
     [InlineData(Claims.ClaimStatus.Voided, PayModels.ClaimStatus.Voided)]

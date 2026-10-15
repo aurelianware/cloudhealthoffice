@@ -352,7 +352,7 @@ public class PaymentPipelineAuthTests : IClassFixture<PaymentPipelineFactory>
         // After approval, claims-service is asked with payment-service's own
         // service token for the run's tenant, never the approver's token.
         // Two searches: Approved claims to pay, Denied claims to remit.
-        Assert.Equal(new[] { "?status=5&pageSize=5000", "?status=6&pageSize=5000" },
+        Assert.Equal(new[] { "?status=5&pageSize=5000", "?status=10&pageSize=5000", "?status=6&pageSize=5000" },
             _f.Claims.Requests.Select(r => r.RequestUri!.Query));
         foreach (var search in _f.Claims.Requests)
         {

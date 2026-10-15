@@ -116,12 +116,13 @@ public class AdjudicationPendPersistenceEndToEndTests
     }
 
     [Fact]
-    public async Task Ncci_deny_mode_orchestrator_run_persists_Denied_status_not_Pended()
+    public async Task Ncci_deny_mode_orchestrator_run_persists_Deny_status_not_Pended()
     {
         // Deny outweighs Pend in the resolved outcome even though NCCI still
         // populates PendDetails as an audit-trail snapshot — the claim must
         // NOT be left in ClaimStatus.Pended. Async terminal outcomes should
-        // still become observable, so Deny projects to ClaimStatus.Denied.
+        // still become observable, so Deny projects to ClaimStatus.Deny (non-final:
+        // the payment run finalizes it to Denied).
         SetupAdapterReturningClaim(BuildBundledPairClaim());
 
         var state = new FakeClaimState();
@@ -134,7 +135,7 @@ public class AdjudicationPendPersistenceEndToEndTests
         await orch.AdjudicateAsync(BuildSubmittedMessage("ver-persist-ncci-deny"), BuildMessageContext("ver-persist-ncci-deny"), CancellationToken.None);
 
         Assert.NotEqual(ClaimStatus.Pended, state.Status);
-        Assert.Equal(ClaimStatus.Denied, state.Status);
+        Assert.Equal(ClaimStatus.Deny, state.Status);
     }
 
     [Fact]

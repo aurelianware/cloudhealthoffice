@@ -21,7 +21,7 @@ using ScrubServices = CloudHealthOffice.ClaimsScrubEngine.Services;
 namespace CloudHealthOffice.ClaimsService.Tests.Services.Adjudication.Stages;
 
 /// <summary>
-/// Audit finding: a Deny/Reject persists as <see cref="ClaimStatus.Denied"/>,
+/// Audit finding: a Deny/Reject persists as <see cref="ClaimStatus.Deny"/> (finalized to Denied by the payment run),
 /// and the 835 can only remit a denial that carries a CARC. Every built-in
 /// stage path that denies or rejects must set
 /// <see cref="AdjudicationResult.DenialReasonCode"/> itself (the
@@ -305,7 +305,7 @@ public class DenialCarcCoverageTests
             Arg.Any<CancellationToken>(),
             Arg.Any<PendDetails?>(),
             Arg.Any<bool>(),
-            Arg.Is<ClaimStatus?>(s => s == ClaimStatus.Denied),
+            Arg.Is<ClaimStatus?>(s => s == ClaimStatus.Deny),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<AccumulatorOutboxItem?>());
         var warning = Assert.Single(logger.Entries, e => e.Level == LogLevel.Warning);
         Assert.Contains("SomeNewStage", warning.Message);

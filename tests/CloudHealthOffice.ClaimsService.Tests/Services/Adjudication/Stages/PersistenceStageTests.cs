@@ -145,7 +145,7 @@ public class PersistenceStageTests
             Arg.Any<CancellationToken>(),
             Arg.Any<PendDetails?>(),
             Arg.Is<bool>(isPend => !isPend),
-            Arg.Is<ClaimStatus?>(status => status == ClaimStatus.Denied));
+            Arg.Is<ClaimStatus?>(status => status == ClaimStatus.Deny));
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public class PersistenceStageTests
             Arg.Any<CancellationToken>(),
             Arg.Any<PendDetails?>(),
             Arg.Is<bool>(isPend => !isPend),
-            Arg.Is<ClaimStatus?>(status => status == ClaimStatus.Denied));
+            Arg.Is<ClaimStatus?>(status => status == ClaimStatus.Deny));
     }
 
     // ── PR #1278 follow-up 1: the approval re-run's write is fenced ──

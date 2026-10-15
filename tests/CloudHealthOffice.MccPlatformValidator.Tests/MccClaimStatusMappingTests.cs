@@ -10,6 +10,7 @@ public class MccClaimStatusMappingTests
     [InlineData(7, ClaimValidationOutcome.Paid)]
     [InlineData(9, ClaimValidationOutcome.Paid)]
     [InlineData(6, ClaimValidationOutcome.BusinessDenial)]
+    [InlineData(10, ClaimValidationOutcome.BusinessDenial)] // Deny: adjudicated, awaiting the 835
     [InlineData(8, ClaimValidationOutcome.BusinessDenial)]
     public void ToValidationOutcome_maps_terminal_claim_statuses_to_validator_outcomes(
         int persistedStatus,

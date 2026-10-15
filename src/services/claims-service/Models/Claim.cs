@@ -352,6 +352,15 @@ public class Claim
     public AccumulatorOutboxItem? PendingAccumulatorCommit { get; set; }
 
     /// <summary>
+    /// The commit id of the last accumulator commit queued for this claim
+    /// (written with the status that queued it; kept after the outbox clears
+    /// <see cref="PendingAccumulatorCommit"/>). A move to Deny reverses
+    /// exactly this commit (commit-scoped, non-terminal). Null for claims
+    /// committed before the field existed (the reversal is then blind).
+    /// </summary>
+    public string? LatestAccumulatorCommitId { get; set; }
+
+    /// <summary>
     /// Accumulator outbox: the terminal reversal (fence) an examiner's denial
     /// owes, written with the denial's lock-fenced final write and driven the
     /// same way.
@@ -1233,8 +1242,24 @@ public enum ClaimType
 }
 
 /// <summary>
-/// Claim status (lifecycle)
-/// Updated by 277 claim status transactions
+/// Claim status (lifecycle). Values are persisted and on the wire (numbers in
+/// claims-service JSON, camelCase strings in Cosmos): append, never renumber.
+///
+/// <para>Lifecycle (modeled on QNXT PAY/PAID, DENY/DENIED — see
+/// docs/architecture/claim-versioning.md and
+/// <see cref="ClaimStatusSemantics"/>):</para>
+/// <list type="table">
+///   <item><term>Adjudicated, not yet remitted</term><description>
+///     <see cref="Pended"/>, <see cref="Approved"/> ("Pay"),
+///     <see cref="Deny"/>: editable — reprocess, examiner resolve /
+///     override.</description></item>
+///   <item><term>Finalized by the payment cycle (835 sent)</term><description>
+///     <see cref="Paid"/>, <see cref="Denied"/>: not editable — only an
+///     adjustment (new version) or a void / reversal.</description></item>
+///   <item><term>Corrected / reversed</term><description>
+///     <see cref="Voided"/> (and <c>VersionState=Adjusted</c>): not
+///     editable.</description></item>
+/// </list>
 /// </summary>
 public enum ClaimStatus
 {
@@ -1260,19 +1285,24 @@ public enum ClaimStatus
     Pended = 4,
 
     /// <summary>
-    /// Approved (adjudication complete, payment authorized)
+    /// "Pay" — adjudicated payable, awaiting the payment cycle. Not final:
+    /// it can still be reprocessed or resolved by an examiner. The payment
+    /// run's finalize (POST {id}/remittance) moves it to <see cref="Paid"/>.
+    /// The enum name is kept for wire / persisted compatibility; the portal
+    /// labels it "Pay".
     /// </summary>
     Approved = 5,
 
     /// <summary>
-    /// Denied (adjudication complete, no payment)
-    /// 277 status code 4
+    /// Denied — FINALIZED: the denial went out on an 835 (the payment run's
+    /// $0 remittance finalized a <see cref="Deny"/>). Terminal: only an
+    /// adjustment or a void changes it. 277 STC F2 / 4.
     /// </summary>
     Denied = 6,
 
     /// <summary>
-    /// Paid (835 remittance processed)
-    /// 277 status code 2
+    /// Paid — FINALIZED by the payment run (835 remittance processed).
+    /// 277 status code 2.
     /// </summary>
     Paid = 7,
 
@@ -1282,9 +1312,22 @@ public enum ClaimStatus
     Voided = 8,
 
     /// <summary>
-    /// Partially paid (some lines approved, some denied)
+    /// LEGACY — no longer assigned. Was meant as "some lines approved, some
+    /// denied" but adjudication never set it; a claim with line denials is
+    /// <see cref="Approved"/> / <see cref="Paid"/> and its lines carry the
+    /// denials. Kept (persisted rows may hold it) and still read as payable
+    /// and, via <c>VersionState=Paid</c>, finalized, exactly as before.
     /// </summary>
-    PartiallyPaid = 9
+    PartiallyPaid = 9,
+
+    /// <summary>
+    /// "Deny" — adjudicated denied, awaiting the payment cycle (not yet on an
+    /// 835). Not final: it can be reprocessed or resolved by an examiner, so
+    /// a wrong denial is fixed before the provider is told. The payment run
+    /// remits it ($0, CLP02 = 4) and its finalize moves it to
+    /// <see cref="Denied"/>.
+    /// </summary>
+    Deny = 10
 }
 
 /// <summary>
@@ -1497,8 +1540,12 @@ public class AccumulatorOutboxItem
 
     public static long ToMs(DateTime utc) => new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
 
-    /// <summary>The terminal reversal of <paramref name="claim"/>; null when its plan id is not a GUID (nothing to reverse).</summary>
-    public static AccumulatorOutboxItem? ForReversal(Claim claim, DateTime now) =>
+    /// <summary>
+    /// The reversal of <paramref name="claim"/> — terminal (fences the claim
+    /// id) unless <paramref name="terminal"/> is false; null when its plan id
+    /// is not a GUID (nothing to reverse).
+    /// </summary>
+    public static AccumulatorOutboxItem? ForReversal(Claim claim, DateTime now, bool terminal = true, string? commitId = null) =>
         Guid.TryParse(claim.BenefitPlanId, out _)
             ? new AccumulatorOutboxItem
             {
@@ -1510,6 +1557,8 @@ public class AccumulatorOutboxItem
                     SubscriberId = string.IsNullOrWhiteSpace(claim.SubscriberId) ? claim.MemberId : claim.SubscriberId!,
                     BenefitPlanId = claim.BenefitPlanId!,
                     ServiceDate = claim.ServiceDateFrom,
+                    Terminal = terminal,
+                    CommitId = terminal ? null : commitId ?? AccumulatorReversalOrder.UnknownCommit,
                 },
                 CreatedAt = now,
                 NextAttemptAt = now + InlineGrace,
@@ -1528,6 +1577,30 @@ public class AccumulatorReversalOrder
     public string SubscriberId { get; set; } = string.Empty;
     public string BenefitPlanId { get; set; } = string.Empty;
     public DateTime ServiceDate { get; set; }
+
+    /// <summary>
+    /// True (the default, and for orders persisted before the field existed):
+    /// a terminal reversal that fences the claim id (void, examiner denial of
+    /// a pended claim before the Pay/Deny lifecycle). False: reverse only —
+    /// a Pay claim moved to Deny before the payment cycle, which may be
+    /// reprocessed back to Pay and commit again.
+    /// </summary>
+    public bool Terminal { get; set; } = true;
+
+    /// <summary>
+    /// Non-terminal only: the commit this reversal takes back
+    /// (compare-and-reverse — a newer commit makes it a no-op), or
+    /// <see cref="UnknownCommit"/> when the claim's commit is not known
+    /// (legacy data): the reversal is then blind, as before.
+    /// </summary>
+    public string? CommitId { get; set; }
+
+    /// <summary>Sentinel <see cref="CommitId"/>: the commit is not known (legacy).</summary>
+    public const string UnknownCommit = "unknown";
+
+    /// <summary>The commit id to send to the engine (null for <see cref="UnknownCommit"/>).</summary>
+    public string? EngineCommitId =>
+        string.IsNullOrWhiteSpace(CommitId) || CommitId == UnknownCommit ? null : CommitId;
 }
 
 /// <summary>See <see cref="Claim.AccumulatorClampReview"/>.</summary>

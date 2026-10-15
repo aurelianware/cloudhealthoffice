@@ -254,6 +254,63 @@ public class RedisAccumulatorService : IAccumulatorService
     /// claim id is fenced in each hash (<c>__fence:{claimId}</c>), in the same
     /// script — a <see cref="CommitAsync"/> of it that arrives later is refused.
     /// </summary>
+    /// <summary>
+    /// Commit-scoped, non-terminal reversal (see the interface): per hash, a
+    /// newer journalled commit of the claim makes it Superseded (nothing
+    /// changes); otherwise the hash is invalidated as by
+    /// <see cref="ReverseAsync"/> and the commit id fenced
+    /// (<c>__fence:commit:{commitId}</c>, kept by invalidations like every
+    /// fence), in the same script. A journal written by a rebuild names no
+    /// commit, so it cannot be compared: that hash is invalidated (always
+    /// safe — the rebuild counts the claim from claims-service's status).
+    /// </summary>
+    public async Task<AccumulatorReversalOutcome> ReverseCommitAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId, string? commitId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(commitId))
+        {
+            await ReverseAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, ct);
+            return AccumulatorReversalOutcome.Reversed;
+        }
+        var db = _redis.GetDatabase();
+        var args = new RedisValue[] { claimId, commitId, (long)DefaultKeyTtl.TotalSeconds, NewGeneration() };
+        var outcomes = await Task.WhenAll(
+            db.ScriptEvaluateAsync(ReverseCommitScript,
+                new RedisKey[] { MakeKey(memberId, AccumulatorScope.Individual, benefitPlanId, planYear) }, args),
+            db.ScriptEvaluateAsync(ReverseCommitScript,
+                new RedisKey[] { MakeKey(subscriberId, AccumulatorScope.Family, benefitPlanId, planYear) }, args));
+        var superseded = outcomes.Any(o => o.ToString() == "SUPERSEDED");
+        _logger.LogInformation(
+            "Commit-scoped reversal of commit {CommitId} for claim {ClaimId}: {Outcome}",
+            SanitizeForLog(commitId), SanitizeForLog(claimId), superseded ? "superseded" : "reversed");
+        return superseded ? AccumulatorReversalOutcome.Superseded : AccumulatorReversalOutcome.Reversed;
+    }
+
+    /// <summary>KEYS[1] the hash. ARGV: claim id, commit id, TTL seconds, a fresh generation. Returns SUPERSEDED or REVERSED.</summary>
+    private const string ReverseCommitScript = @"
+local key = KEYS[1]
+local own = redis.call('HGET', key, '__commit:' .. ARGV[1])
+if own then
+  local sep = string.find(own, '|', 1, true)
+  local applied = own
+  if sep then applied = string.sub(own, 1, sep - 1) end
+  if applied ~= ARGV[2] and applied ~= 'rebuild' then return 'SUPERSEDED' end
+end
+local fences = {}
+for _, f in ipairs(redis.call('HKEYS', key)) do
+  if string.sub(f, 1, 8) == '__fence:' then table.insert(fences, f) end
+end
+table.insert(fences, '__fence:commit:' .. ARGV[2])
+redis.call('DEL', key)
+for _, f in ipairs(fences) do redis.call('HSET', key, f, '1') end
+redis.call('HSET', key, '__gen', ARGV[4])
+redis.call('EXPIRE', key, ARGV[3])
+return 'REVERSED'
+";
+
     public async Task ReverseTerminallyAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, string planYear,
@@ -362,6 +419,13 @@ public class RedisAccumulatorService : IAccumulatorService
             CommitKeyAsync(MakeKey(commit.SubscriberId, AccumulatorScope.Family, commit.BenefitPlanId, commit.PlanYear),
                 commit.Updates.Where(u => u.Scope == AccumulatorScope.Family).ToList()));
 
+        if (outcomes.Any(o => o.Outcome == "REFUSED_COMMIT"))
+        {
+            _logger.LogInformation(
+                "Commit {CommitId} for claim {ClaimId} refused: that commit was reversed (the claim was denied while it was in flight)",
+                SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId));
+            return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedCommitReversed);
+        }
         if (outcomes.Any(o => o.Outcome == "REFUSED"))
         {
             _logger.LogWarning(
@@ -527,6 +591,7 @@ local key = KEYS[1]
 local claim = ARGV[1]
 local commitId = ARGV[2]
 if redis.call('HEXISTS', key, '__fence:' .. claim) == 1 then return 'REFUSED' end
+if redis.call('HEXISTS', key, '__fence:commit:' .. commitId) == 1 then return 'REFUSED_COMMIT' end
 local own = redis.call('HGET', key, '__commit:' .. claim)
 if own then
   local sep = string.find(own, '|', 1, true)

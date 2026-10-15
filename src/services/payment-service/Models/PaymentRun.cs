@@ -196,9 +196,20 @@ public class PaymentRun
     /// zero-pay claim (CLP02 = 4, CLP04 = 0, CAS with its denial CARC, MOA with
     /// its RARCs). No payment or reservation is created for them. A denied
     /// claim is remitted once: one already listed in a (non-reversal) 835, or
-    /// with a payment, is not remitted again.
+    /// with a payment, is not remitted again. A claims-service <c>Deny</c>
+    /// claim is then finalized to <c>Denied</c> by a $0 remittance
+    /// (POST /api/claims/{id}/remittance), as an Approved claim is finalized
+    /// to Paid.
     /// </summary>
     public List<string> RemittedDeniedClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Deny claims in an 835 whose $0 finalize (Deny → Denied) claims-service
+    /// has not confirmed yet. They are never remitted again; the finalize is
+    /// retried by POST /api/paymentruns/{id}/finalize and by any later run
+    /// that still sees the claim as Deny.
+    /// </summary>
+    public List<string> PendingDenialFinalizeClaimIds { get; set; } = new();
 
     /// <summary>
     /// Denied claims not remitted because claims-service returned them without
@@ -361,10 +372,14 @@ public class PaymentRunCriteria
     public int? MaxClaimsPerPayment { get; set; }
 
     /// <summary>
-    /// Also remit denied claims (claims-service status Denied) that have not
-    /// been remitted yet, as zero-pay claims in the run's 835s. Default true:
-    /// providers must receive a remittance for denials. The same criteria
-    /// (dates, provider, amounts, include/exclude lists) select them.
+    /// Also remit adjudicated denials (claims-service status Deny) that have
+    /// not been remitted yet, as zero-pay claims in the run's 835s, and
+    /// finalize them to Denied. Default true: providers must receive a
+    /// remittance for denials. The same criteria (dates, provider, amounts,
+    /// include/exclude lists) select them. Legacy rows already Denied (set at
+    /// adjudication before the Deny status existed) and never in an 835 are
+    /// remitted once too unless <c>PaymentRuns:RemitLegacyDeniedClaims</c> is
+    /// false (turn it off once the DenyStatusBackfill migration has run).
     /// </summary>
     public bool IncludeDeniedClaims { get; set; } = true;
 }
@@ -385,7 +400,14 @@ public enum ClaimStatus
     Denied = 6,
     Paid = 7,
     Voided = 8,
-    PartiallyPaid = 9
+    /// <summary>Legacy; claims-service no longer assigns it.</summary>
+    PartiallyPaid = 9,
+    /// <summary>
+    /// Adjudicated denied, not yet remitted (claims-service <c>Deny</c>). A
+    /// payment run remits it at $0 and its finalize moves it to
+    /// <see cref="Denied"/> (finalized).
+    /// </summary>
+    Deny = 10
 }
 
 /// <summary>

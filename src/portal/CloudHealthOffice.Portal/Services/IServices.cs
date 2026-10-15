@@ -1216,6 +1216,21 @@ public class ClaimServiceLine
         set => _adjustments = value ?? new();
     }
     public string? LineStatus { get; set; }
+
+    /// <summary>The line carries an adjudication result (claims-service <c>adjudicationResult</c>).</summary>
+    [JsonIgnore]
+    public bool IsAdjudicated { get; private set; }
+
+    /// <summary>
+    /// The line was denied: its status says so, or it was adjudicated to
+    /// nothing allowed, paid or owed by the member on a billed charge.
+    /// Derived for display ("Paid with line denials"), never a claim status.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsDenied =>
+        string.Equals(LineStatus, "Denied", StringComparison.OrdinalIgnoreCase)
+        || (IsAdjudicated && ChargeAmount > 0 && AllowedAmount == 0 && PaidAmount == 0 && PatientResponsibility == 0);
+
     [JsonPropertyName("adjudicationResult")]
     public ClaimLineAdjudicationProjection? AdjudicationResult
     {
@@ -1226,6 +1241,7 @@ public class ClaimServiceLine
                 return;
             }
 
+            IsAdjudicated = true;
             AllowedAmount = value.AllowedAmount;
             PaidAmount = value.PaidAmount;
             PatientResponsibility = value.PatientResponsibility;
@@ -1305,7 +1321,7 @@ public class ClaimSearchRequest
     public string? ClaimType { get; set; } // Professional, Institutional
     public DateTime? ServiceDateFrom { get; set; }
     public DateTime? ServiceDateTo { get; set; }
-    public string? Status { get; set; } // Submitted, Received, InAdjudication, Pended, Approved, Denied, Paid, Voided, PartiallyPaid
+    public string? Status { get; set; } // Submitted, Received, InAdjudication, Pended, Approved (Pay), Deny, Paid, Denied, Voided, PartiallyPaid (legacy)
     public string? AuthorizationNumber { get; set; }
     public int PageNumber { get; set; } = 1;
     public int PageSize { get; set; } = 25;
@@ -1350,8 +1366,8 @@ public class ClaimSearchResult
         TotalChargeAmount = Claims.Sum(c => c.TotalChargeAmount);
         TotalAllowedAmount = Claims.Sum(c => c.AllowedAmount);
         TotalPaidAmount = Claims.Sum(c => c.PaidAmount);
-        ApprovedCount = Claims.Count(c => c.Status is "Approved" or "Paid" or "PartiallyPaid" or "Partially Paid");
-        DeniedCount = Claims.Count(c => c.Status == "Denied");
+        ApprovedCount = Claims.Count(c => ClaimStatusDisplay.IsPayOutcome(c.Status));
+        DeniedCount = Claims.Count(c => ClaimStatusDisplay.IsDenied(c.Status));
         PendingCount = Claims.Count(c => c.Status is "Pended" or "Pending" or "InAdjudication" or "In Adjudication" or "Submitted" or "Received");
         TotalsArePageScoped = true;
     }

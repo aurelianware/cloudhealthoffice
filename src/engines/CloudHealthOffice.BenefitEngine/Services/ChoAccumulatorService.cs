@@ -175,6 +175,68 @@ internal class ChoAccumulatorService : IAccumulatorService
                 benefitPlanId, planYear, claimId, ct));
     }
 
+    public async Task<AccumulatorReversalOutcome> ReverseCommitAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId, string? commitId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(commitId))
+        {
+            await ReverseAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, ct);
+            return AccumulatorReversalOutcome.Reversed;
+        }
+        var tenantId = _tenantContext.TenantId;
+        var outcomes = await Task.WhenAll(
+            ReverseCommitDocAsync(tenantId, memberId, AccumulatorScope.Individual, benefitPlanId, planYear, claimId, commitId, ct),
+            ReverseCommitDocAsync(tenantId, subscriberId, AccumulatorScope.Family, benefitPlanId, planYear, claimId, commitId, ct));
+        // A document the claim never wrote (e.g. family, for an
+        // individual-only commit) answers null: it does not decide.
+        return outcomes.Contains(AccumulatorReversalOutcome.Superseded)
+               && !outcomes.Contains(AccumulatorReversalOutcome.Reversed)
+            ? AccumulatorReversalOutcome.Superseded
+            : AccumulatorReversalOutcome.Reversed;
+    }
+
+    /// <summary>
+    /// One document's part of <see cref="ReverseCommitAsync"/>, one versioned
+    /// write: a newer applied commit of the claim makes it Superseded (no
+    /// write); otherwise the claim's transaction of that commit (or a legacy
+    /// one without a commit id) is reversed and the commit id fenced.
+    /// </summary>
+    private async Task<AccumulatorReversalOutcome?> ReverseCommitDocAsync(
+        string tenantId, string ownerId, AccumulatorScope scope,
+        Guid benefitPlanId, string planYear,
+        string claimId, string commitId, CancellationToken ct)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            var doc = await _repository.GetAsync(tenantId, ownerId, scope, benefitPlanId, planYear, ct)
+                      ?? CreateEmptyDocument(tenantId, ownerId, scope, benefitPlanId, planYear);
+            var tx = doc.Transactions.FirstOrDefault(t => t.ClaimId == claimId && !t.IsReversed);
+            if (tx?.CommitId is { Length: > 0 } applied && !string.Equals(applied, commitId, StringComparison.Ordinal))
+            {
+                _logger.LogInformation(
+                    "Reversal of commit {CommitId} for claim {ClaimId} superseded on {DocId}: commit {Applied} is applied",
+                    SanitizeForLog(commitId), SanitizeForLog(claimId), SanitizeForLog(doc.Id), SanitizeForLog(applied));
+                return AccumulatorReversalOutcome.Superseded;
+            }
+            var fence = !doc.ReversedCommitIds.Contains(commitId);
+            if (tx is null && !fence) return null;
+            if (tx is not null) ReverseTransaction(doc, tx);
+            if (fence) doc.ReversedCommitIds.Add(commitId);
+            try
+            {
+                await _repository.UpsertAsync(doc, ct);
+                return tx is null ? null : AccumulatorReversalOutcome.Reversed;
+            }
+            catch (OptimisticConcurrencyException)
+            {
+                if (attempt >= MaxConcurrencyRetries - 1) throw;
+            }
+        }
+    }
+
     public async Task ReverseTerminallyAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, string planYear,
@@ -217,6 +279,13 @@ internal class ChoAccumulatorService : IAccumulatorService
             CommitDocAsync(tenantId, commit.SubscriberId, AccumulatorScope.Family, commit, replaced,
                 commit.Updates.Where(u => u.Scope == AccumulatorScope.Family).ToList(), ct));
 
+        if (outcomes.Any(o => o.Outcome == AccumulatorCommitOutcome.RefusedCommitReversed))
+        {
+            _logger.LogInformation(
+                "Commit {CommitId} for claim {ClaimId} refused: that commit was reversed (the claim was denied while it was in flight)",
+                SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId));
+            return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedCommitReversed);
+        }
         if (outcomes.Any(o => o.Outcome == AccumulatorCommitOutcome.RefusedClaimReversed))
         {
             _logger.LogWarning(
@@ -418,6 +487,8 @@ internal class ChoAccumulatorService : IAccumulatorService
 
             if (doc.ReversedClaimIds.Contains(commit.ClaimId))
                 return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedClaimReversed);
+            if (doc.ReversedCommitIds.Contains(commit.CommitId))
+                return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedCommitReversed);
 
             var own = doc.Transactions.FirstOrDefault(t => t.ClaimId == commit.ClaimId && !t.IsReversed);
             if (own is not null && string.Equals(own.CommitId, commit.CommitId, StringComparison.Ordinal))
