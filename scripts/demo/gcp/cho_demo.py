@@ -5,6 +5,9 @@ Standard library only. Talks to the services through the local ports that
 scripts/demo/gcp/port-forward.sh opens.
 
   cho_demo.py token                 Print a development user token for the demo tenant
+  cho_demo.py token --platform-admin
+                                    Same, plus PlatformAdmin (needed by the MCC validator,
+                                    which seeds platform prior-auth rules)
   cho_demo.py smoke                 End-to-end checks; exits non-zero on any failure
   cho_demo.py claims                Narrate a paid claim and a pended claim with its AI examination
   cho_demo.py adapter-status        Show the FHIR adapter labels (demo / hybrid / live)
@@ -57,7 +60,7 @@ def b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
 
-def mint_token(tenant: str = TENANT, hours: float = 12) -> str:
+def mint_token(tenant: str = TENANT, hours: float = 12, platform_admin: bool = False) -> str:
     now = int(time.time())
     header = {"alg": "HS256", "typ": "JWT"}
     payload = {
@@ -65,8 +68,10 @@ def mint_token(tenant: str = TENANT, hours: float = 12) -> str:
         "aud": AUDIENCE,
         "sub": f"demo-user-{tenant}",
         "tenant_id": tenant,
-        "roles": ROLES,
-        "permissions": PERMISSIONS,
+        # platform:admin is reserved and not covered by *:* (ChoRolePermissions);
+        # only PlatformAdmin holds it.
+        "roles": ROLES + (["PlatformAdmin"] if platform_admin else []),
+        "permissions": PERMISSIONS + (["platform:admin"] if platform_admin else []),
         "name": "Demo Presenter",
         "jti": uuid.uuid4().hex,
         "iat": now,
@@ -111,8 +116,8 @@ def money(value) -> str:
 
 # ── commands ─────────────────────────────────────────────────────────────────
 
-def cmd_token(_args) -> int:
-    print(mint_token())
+def cmd_token(args) -> int:
+    print(mint_token(platform_admin=args.platform_admin))
     return 0
 
 
@@ -223,7 +228,10 @@ def cmd_smoke(_args) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("token").set_defaults(func=cmd_token)
+    token = sub.add_parser("token")
+    token.add_argument("--platform-admin", action="store_true",
+                       help="include PlatformAdmin (platform:admin), e.g. for the MCC validator")
+    token.set_defaults(func=cmd_token)
     sub.add_parser("smoke").set_defaults(func=cmd_smoke)
     sub.add_parser("claims").set_defaults(func=cmd_claims)
     sub.add_parser("adapter-status").set_defaults(func=cmd_adapter_status)
