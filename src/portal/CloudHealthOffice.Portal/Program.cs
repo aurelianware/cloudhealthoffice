@@ -257,6 +257,7 @@ if (!builder.Environment.IsDevelopment())
 
 // Register tenant context service (must be before other services that depend on it)
 builder.Services.AddScoped<ITenantContextService, TenantContextService>();
+builder.Services.AddScoped<ISearchCriteriaPolicy, SearchCriteriaPolicy>();
 
 // Register user context service for RBAC
 builder.Services.AddScoped<IUserContextService, UserContextService>();
