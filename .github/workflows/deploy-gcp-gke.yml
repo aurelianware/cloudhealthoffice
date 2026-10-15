@@ -11,6 +11,8 @@ name: Deploy demo to GKE
 # (infrastructure/gcp/README.md maps each to a Terraform output):
 #   secrets   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOYER_SERVICE_ACCOUNT
 #             ANTHROPIC_API_KEY (optional, enables the advisory AI claims examiner)
+#             CLOUDFLARE_TUNNEL_TOKEN (optional, runs the Cloudflare Tunnel connector;
+#               see docs/deploy/GCP-PUBLIC-HOSTING-PLAN.md before setting it)
 #   variables GCP_PROJECT_ID, GKE_CLUSTER, GKE_LOCATION, GAR_REPOSITORY
 
 on:
@@ -149,6 +151,7 @@ jobs:
           ENABLE_KAFKA: ${{ inputs.enable_kafka }}
           RESOURCE_PROFILE: ${{ inputs.resource_profile }}
           ANTHROPIC_API_KEY: ${{ inputs.ai_examiner && secrets.ANTHROPIC_API_KEY || '' }}
+          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
         run: ./scripts/deploy-gke.sh
 
       - name: Pod status

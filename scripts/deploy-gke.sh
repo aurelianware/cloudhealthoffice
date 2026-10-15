@@ -16,6 +16,8 @@
 #
 # Optional environment:
 #   ANTHROPIC_API_KEY        Enables the advisory AI claims examiner
+#   CLOUDFLARE_TUNNEL_TOKEN  Runs a Cloudflare Tunnel connector (deploy/gcp/cloudflare) so the
+#                            demo is reachable at a Cloudflare Access-protected hostname
 #   ENABLE_KAFKA=true        Set to false to skip Kafka (services fall back to in-process messaging)
 #   RESOURCE_PROFILE=small   small fits one 8-vCPU node (lower CPU requests, one
 #                            replica each); default keeps the manifests' requests
@@ -226,6 +228,17 @@ kubectl apply -n "$NAMESPACE" -f "$rendered" >/dev/null
 ok "applied $(grep -c '^kind: Deployment' "$rendered") deployments"
 [[ "$AI_EXAMINER" == true ]] && ok "AI claims examiner enabled (advisory only)" \
   || warn "AI claims examiner off (set ANTHROPIC_API_KEY to enable)"
+
+# ── Cloudflare Tunnel (optional) ─────────────────────────────────────────────
+if [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
+  log "Cloudflare Tunnel"
+  upsert_secret cloudflare-tunnel-token token="$CLOUDFLARE_TUNNEL_TOKEN"
+  kubectl apply -f deploy/gcp/cloudflare/cloudflared.yaml >/dev/null
+  ok "cloudflared applied; protect every tunnel hostname with Cloudflare Access (docs/deploy/GCP-PUBLIC-HOSTING-PLAN.md)"
+else
+  kubectl delete deployment cloudflared -n "$NAMESPACE" --ignore-not-found >/dev/null
+  warn "Cloudflare Tunnel off (set CLOUDFLARE_TUNNEL_TOKEN to enable); reach the demo with port-forward"
+fi
 
 # ── Wait ─────────────────────────────────────────────────────────────────────
 log "Waiting for rollouts in parallel (timeout $ROLLOUT_TIMEOUT)"
