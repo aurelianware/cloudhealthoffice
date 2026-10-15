@@ -550,7 +550,11 @@ public class ClaimsController : ControllerBase
         {
             if (statusUpdate.Status == ClaimStatus.Received)
             {
-                claim.ReceivedDate = DateTime.UtcNow;
+                // The payer receipt date is stamped once, at intake
+                // (ClaimSubmissionService); a later status write must not
+                // move the timely-filing / prompt-pay clock. Only a row that
+                // predates intake stamping gets one here.
+                claim.ReceivedDate ??= DateTime.UtcNow;
             }
 
             if (!string.IsNullOrEmpty(statusUpdate.Notes))

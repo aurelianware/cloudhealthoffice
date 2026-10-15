@@ -45,6 +45,7 @@ public class ValidationRuleEngineTests
         public ClaimHeader? ClaimHeader;
         public List<ServiceLine>? ServiceLines;
         public decimal? TotalClaimedAmount;
+        public string? TransactionDate;
 
         public TestClaimBuilder(string serviceDate) => _serviceDate = serviceDate;
 
@@ -80,7 +81,7 @@ public class ValidationRuleEngineTests
                 ClaimType = ClaimType,
                 TransactionControlNumber = "000000001",
                 InterchangeControlNumber = "000000001",
-                TransactionDate = _serviceDate,
+                TransactionDate = TransactionDate ?? _serviceDate,
                 Submitter = new ClaimSubmitter
                 {
                     Name = "Test Submitter",
@@ -398,6 +399,50 @@ public class ValidationRuleEngineTests
 
         Assert.NotNull(dateResult);
         Assert.False(dateResult.Passed);
+    }
+
+    // Timely filing (DL002): measured from when the scrub runs (claim intake /
+    // adjudication), never from a date the submitter put on the transaction.
+    [Theory]
+    [InlineData(30, true)]
+    [InlineData(364, true)]
+    [InlineData(400, false)]
+    public async Task Timely_filing_flags_service_dates_past_the_filing_limit(int serviceDaysAgo, bool expectPass)
+    {
+        var serviceDate = GetRecentDateString(serviceDaysAgo);
+        var claim = CreateTestClaim(b =>
+        {
+            b.ServiceLines =
+            [
+                new ServiceLine { LineNumber = 1, ProcedureCode = "99213", ServiceDate = serviceDate, ChargeAmount = 150.00m, Units = 1 },
+            ];
+            b.TotalClaimedAmount = 150.00m;
+        });
+
+        var result = await _engine.ValidateClaimAsync(claim);
+        var filing = result.Results.Single(r => r.RuleId == "DL002");
+
+        Assert.Equal(expectPass, filing.Passed);
+    }
+
+    [Fact]
+    public async Task Timely_filing_is_not_rescued_by_a_backdated_submitter_transaction_date()
+    {
+        var serviceDate = GetRecentDateString(400);
+        var claim = CreateTestClaim(b =>
+        {
+            b.ServiceLines =
+            [
+                new ServiceLine { LineNumber = 1, ProcedureCode = "99213", ServiceDate = serviceDate, ChargeAmount = 150.00m, Units = 1 },
+            ];
+            b.TotalClaimedAmount = 150.00m;
+            // BHT04 claiming the claim was created ten days after service.
+            b.TransactionDate = GetRecentDateString(390);
+        });
+
+        var result = await _engine.ValidateClaimAsync(claim);
+
+        Assert.False(result.Results.Single(r => r.RuleId == "DL002").Passed);
     }
 
     [Fact]

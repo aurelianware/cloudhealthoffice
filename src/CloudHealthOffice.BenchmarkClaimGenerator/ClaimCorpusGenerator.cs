@@ -55,10 +55,14 @@ public class ClaimCorpusGenerator
             SingleReader = true
         });
 
-        var professionalGen = new ProfessionalClaimGenerator(_refData);
-        var institutionalGen = new InstitutionalClaimGenerator(_refData);
-        var dentalGen = new DentalClaimGenerator(_refData);
-        var edgeCaseGen = new EdgeCaseClaimGenerator(_refData);
+        // Resolve the reference date once so every generator in the run shares
+        // it (a run that crosses UTC midnight must not anchor half its claims
+        // to one day and half to the next).
+        var referenceDate = ClaimDateAnchor.Resolve(profile.ReferenceDate);
+        var professionalGen = new ProfessionalClaimGenerator(_refData, referenceDate);
+        var institutionalGen = new InstitutionalClaimGenerator(_refData, referenceDate);
+        var dentalGen = new DentalClaimGenerator(_refData, referenceDate);
+        var edgeCaseGen = new EdgeCaseClaimGenerator(_refData, referenceDate);
 
         // Start producer tasks
         var producers = new List<Task>
@@ -120,7 +124,8 @@ public class ClaimCorpusGenerator
             DentalCount = dentalCount,
             EdgeCaseCount = edgeCaseCount,
             ElapsedTime = stopwatch.Elapsed,
-            Seed = profile.Seed
+            Seed = profile.Seed,
+            ReferenceDate = referenceDate
         };
 
         _logger.LogInformation(
@@ -400,6 +405,12 @@ public class CorpusResult
 
     /// <summary>Random seed used for this generation run.</summary>
     public int Seed { get; set; }
+
+    /// <summary>
+    /// "As of" date the corpus was anchored to: no claim date is after it.
+    /// Seed + reference date together reproduce the corpus.
+    /// </summary>
+    public DateTime ReferenceDate { get; set; }
 }
 
 /// <summary>
