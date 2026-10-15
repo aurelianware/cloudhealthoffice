@@ -543,7 +543,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         if (plan is null)
         {
             _logger.LogWarning("Cannot reverse claim {ClaimId}: plan {PlanId} not found",
-                originalClaimId, benefitPlanId);
+                SanitizeForLog(originalClaimId), benefitPlanId);
             return AccumulatorReversalOutcome.Reversed;
         }
 
@@ -551,7 +551,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         _logger.LogInformation(
             "Reversing accumulators (non-terminal, claim may re-commit) for claim {ClaimId}, member {MemberId}, plan year {PlanYear}",
-            originalClaimId, memberId, planYear);
+            SanitizeForLog(originalClaimId), SanitizeForLog(memberId), SanitizeForLog(planYear));
 
         return await _accumulatorService.ReverseCommitAsync(
             memberId, subscriberId, benefitPlanId, planYear, originalClaimId, commitId, ct);
