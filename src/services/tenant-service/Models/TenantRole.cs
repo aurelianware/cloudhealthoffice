@@ -69,7 +69,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
-            "claims:read", "claims:work", "claims:override-request",
+            "claims:read", "claims:work", "claims:override-request", "claims:note",
             "workqueue:read", "workqueue:work",
             "members:read", "accumulators:read", "providers:read"
         }
@@ -83,11 +83,11 @@ public static class StandardRoles
         Permissions = new List<string>
         {
             // ClaimsExaminer permissions
-            "claims:read", "claims:work", "claims:override-request",
+            "claims:read", "claims:work", "claims:override-request", "claims:note",
             "workqueue:read", "workqueue:work",
             "members:read", "accumulators:read", "providers:read",
             // Supervisor-specific permissions
-            "claims:override-approve", "workqueue:assign", "workqueue:reassign",
+            "claims:override-approve", "claims:override-edit", "workqueue:assign", "workqueue:reassign",
             "workqueue:admin",
             "reports:claims", "claims:void", "claims:adjust",
             "encounters:read", "encounters:write"
@@ -102,7 +102,7 @@ public static class StandardRoles
         Permissions = new List<string>
         {
             "members:read", "members:search", "accumulators:read",
-            "eligibility:check", "claims:read", "coverage:read",
+            "eligibility:check", "claims:read", "claims:note", "coverage:read",
             "authorizations:read", "providers:read",
             "payer-to-payer:initiate"
         }

@@ -12,7 +12,8 @@ public sealed record UpheldEditLineDenial(
     decimal LineUnits,
     string Carc,
     string? Rarc,
-    string EditKey)
+    string EditKey,
+    string Group = "CO")
 {
     public bool IsFullLine => DeniedUnits >= LineUnits;
 
@@ -51,16 +52,23 @@ public static class EditDispositionApplier
     public static IReadOnlyList<UpheldEditLineDenial> LineDenials(ClaimAdjudicationContext context)
     {
         var approval = context.ExaminerApproval;
-        if (approval is null || approval.EditDispositions.Count == 0) return [];
+        if (approval is null || (approval.EditDispositions.Count == 0 && approval.ManualLineDenials.Count == 0)) return [];
 
         var upheld = approval.EditDispositions
             .Where(d => d.Decision == EditDecision.Uphold)
             .Select(d => d.EditKey)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (upheld.Count == 0) return [];
 
         var lines = context.Claim.ClaimLines.ToDictionary(l => l.LineNumber);
         var denials = new List<UpheldEditLineDenial>();
+
+        foreach (var manual in approval.ManualLineDenials)
+        {
+            if (!lines.TryGetValue(manual.LineNumber, out var line)) continue;
+            var units = Math.Min(line.Units, manual.Units ?? line.Units);
+            denials.Add(new(manual.LineNumber, units, line.Units, manual.Carc, manual.Rarc,
+                $"MANUAL|{manual.GroupCode}-{manual.Carc}", manual.GroupCode));
+        }
         var pend = approval.ReviewedPend;
 
         foreach (var edit in pend?.EditFailures ?? [])
@@ -177,7 +185,7 @@ public static class EditDispositionApplier
 
             reasons.Insert(0, new ClaimAdjustmentReason
             {
-                GroupCode = "CO",
+                GroupCode = denial.Group,
                 ReasonCode = denial.Carc,
                 RemarkCode = denial.Rarc,
                 Amount = deniedCharge,

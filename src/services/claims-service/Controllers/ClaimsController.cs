@@ -42,6 +42,12 @@ public class ClaimsController : ControllerBase
     /// </summary>
     private readonly IClaimWorkEventPublisher? _workEvents;
 
+    /// <summary>Which edits a reviewer may override (claim-review-workbench §2.3).</summary>
+    private readonly EditOverridePolicy _editOverridePolicy;
+
+    /// <summary>Override reasons and manual denials are also written as Decision notes. Optional.</summary>
+    private readonly IClaimNoteRepository? _claimNotes;
+
     public ClaimsController(
         IClaimRepository claimRepository,
         IMassAdjudicationRunRepository massAdjudicationRunRepository,
@@ -60,9 +66,13 @@ public class ClaimsController : ControllerBase
         CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine? benefitEngine = null,
         IAccumulatorOutboxProcessor? accumulatorOutbox = null,
         IAccumulatorCommitLookup? accumulatorCommitLookup = null,
-        IClaimWorkEventPublisher? workEvents = null)
+        IClaimWorkEventPublisher? workEvents = null,
+        EditOverridePolicy? editOverridePolicy = null,
+        IClaimNoteRepository? claimNotes = null)
     {
         _workEvents = workEvents;
+        _editOverridePolicy = editOverridePolicy ?? EditOverridePolicy.Default;
+        _claimNotes = claimNotes;
         _accumulatorOutbox = accumulatorOutbox;
         _accumulatorCommitLookup = accumulatorCommitLookup;
         _approvalReadjudicator = approvalReadjudicator;
@@ -187,7 +197,156 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>The acting user or service, from the validated token only.</summary>
-    private string ResolveActorId() => _actor.UserId;
+/// <summary>
+    /// Validates the reviewer's edit decisions and manual line denials
+    /// against the pend they reviewed and the override policy, and fills in
+    /// every undecided edit as upheld (uphold by default). Returns a refusal
+    /// when anything is invalid or not permitted.
+    /// </summary>
+    private (IReadOnlyList<EditDisposition> Dispositions, IReadOnlyList<ManualLineDenial> Denials, ActionResult? Refusal)
+        BuildEditDecisions(Claim claim, ResolvePendedClaimRequest request, ClaimStatus disposition, string examinerUserId, string tenantId)
+    {
+        if (request.EditDecisions is null && request.LineDenials is null)
+            return ([], [], null);
+        if (disposition != ClaimStatus.Approved)
+            return ([], [], BadRequest("editDecisions and lineDenials apply only to an approval."));
+
+        var now = DateTime.UtcNow;
+        var edits = ClaimEditCatalog.Edits(claim.PendDetails);
+        var byKey = edits.ToDictionary(e => e.EditKey, StringComparer.OrdinalIgnoreCase);
+        var decided = new Dictionary<string, EditDisposition>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var d in request.EditDecisions ?? [])
+        {
+            if (!byKey.TryGetValue(d.EditKey ?? string.Empty, out var edit))
+                return ([], [], BadRequest($"Edit '{d.EditKey}' is not on this claim's pend."));
+            if (decided.ContainsKey(edit.EditKey))
+                return ([], [], BadRequest($"Edit '{d.EditKey}' is decided more than once."));
+            if (!Enum.TryParse<EditDecision>(d.Decision, ignoreCase: true, out var decision))
+                return ([], [], BadRequest($"decision for '{d.EditKey}' must be Uphold or Override."));
+
+            string? level = null;
+            if (decision == EditDecision.Override)
+            {
+                var rule = _editOverridePolicy.RuleFor(tenantId, claim.LineOfBusiness, edit.Category);
+                if (rule.Level == OverrideLevel.Never)
+                {
+                    return ([], [], Problem(statusCode: StatusCodes.Status403Forbidden,
+                        title: "Edit can't be overridden",
+                        detail: $"{rule.Description}: the policy allows upholding it only ({edit.EditKey})."));
+                }
+                if (rule.Level == OverrideLevel.Supervisor && !_actor.HasPermission(ClaimsPermissions.OverrideEdit))
+                {
+                    return ([], [], Problem(statusCode: StatusCodes.Status403Forbidden,
+                        title: "Override needs a supervisor",
+                        detail: $"{rule.Description}: overriding it needs {ClaimsPermissions.OverrideEdit} ({edit.EditKey})."));
+                }
+                if ((rule.RequiresReason || rule.RequiresDocumentation) && string.IsNullOrWhiteSpace(d.Reason))
+                    return ([], [], BadRequest($"Overriding '{edit.EditKey}' needs a reason."));
+                level = rule.Level.ToString();
+            }
+
+            decided[edit.EditKey] = new EditDisposition
+            {
+                EditKey = edit.EditKey,
+                EditType = edit.EditType,
+                RuleId = edit.RuleId,
+                LineNumbers = edit.LineNumbers.ToList(),
+                Decision = decision,
+                Reason = string.IsNullOrWhiteSpace(d.Reason) ? null : d.Reason.Trim(),
+                PolicyLevel = level,
+                DecidedBy = examinerUserId,
+                DecidedAt = now,
+            };
+        }
+
+        // Uphold by default: every edit the reviewer didn't touch stands, and
+        // the record says a person looked at it.
+        var dispositions = edits.Select(e => decided.TryGetValue(e.EditKey, out var explicitDecision)
+            ? explicitDecision
+            : new EditDisposition
+            {
+                EditKey = e.EditKey,
+                EditType = e.EditType,
+                RuleId = e.RuleId,
+                LineNumbers = e.LineNumbers.ToList(),
+                Decision = EditDecision.Uphold,
+                UpheldByDefault = true,
+                DecidedBy = examinerUserId,
+                DecidedAt = now,
+            }).ToList();
+
+        var denials = new List<ManualLineDenial>();
+        foreach (var l in request.LineDenials ?? [])
+        {
+            var line = claim.ClaimLines.FirstOrDefault(cl => cl.LineNumber == l.LineNumber);
+            if (line is null)
+                return ([], [], BadRequest($"Line {l.LineNumber} is not on this claim."));
+            if (denials.Any(x => x.LineNumber == l.LineNumber))
+                return ([], [], BadRequest($"Line {l.LineNumber} is denied more than once."));
+            if (ReviewerDenialReasons.Find(l.GroupCode, l.Carc) is null)
+                return ([], [], BadRequest($"{l.GroupCode}-{l.Carc} is not a reviewer denial reason; use one of: " +
+                    string.Join(", ", ReviewerDenialReasons.All.Select(r => $"{r.GroupCode}-{r.Carc}"))));
+            if (string.IsNullOrWhiteSpace(l.Reason))
+                return ([], [], BadRequest($"Denying line {l.LineNumber} needs a reason."));
+            if (l.Units is { } units && (units <= 0 || units > line.Units))
+                return ([], [], BadRequest($"Units denied on line {l.LineNumber} must be between 0 and {line.Units}."));
+
+            denials.Add(new ManualLineDenial
+            {
+                LineNumber = l.LineNumber,
+                Units = l.Units,
+                GroupCode = l.GroupCode.Trim().ToUpperInvariant(),
+                Carc = l.Carc.Trim(),
+                Rarc = string.IsNullOrWhiteSpace(l.Rarc) ? null : l.Rarc.Trim(),
+                Reason = l.Reason.Trim(),
+                DecidedBy = examinerUserId,
+                DecidedAt = now,
+            });
+        }
+
+        return (dispositions, denials, null);
+    }
+
+    /// <summary>
+    /// Override reasons and manual denials double as Decision notes, so the
+    /// claim's notes tell the story without opening the audit. Best effort:
+    /// the decision is already recorded on the claim.
+    /// </summary>
+    private async Task WriteDecisionNotesAsync(
+        Claim claim, IReadOnlyList<EditDisposition> dispositions, IReadOnlyList<ManualLineDenial> denials,
+        string examinerUserId, string tenantId)
+    {
+        if (_claimNotes is null) return;
+        var texts = dispositions
+            .Where(d => d.Decision == EditDecision.Override)
+            .Select(d => $"Overrode {d.RuleId} on line {string.Join(", ", d.LineNumbers)}: {d.Reason}")
+            .Concat(denials.Select(d =>
+                $"Denied line {d.LineNumber}{(d.Units is { } u ? $" ({u} unit(s))" : "")} with {d.GroupCode}-{d.Carc}: {d.Reason}"));
+        foreach (var text in texts)
+        {
+            try
+            {
+                await _claimNotes.AppendAsync(new ClaimNote
+                {
+                    TenantId = tenantId,
+                    ClaimId = claim.Id,
+                    ClaimNumber = claim.ClaimNumber,
+                    Category = ClaimNoteCategories.Decision,
+                    Text = text,
+                    AuthorId = examinerUserId,
+                    AuthorName = _actor.DisplayName,
+                    CreatedAt = DateTime.UtcNow,
+                }, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not write a Decision note on claim {ClaimId}", claim.Id);
+            }
+        }
+    }
+
+        private string ResolveActorId() => _actor.UserId;
 
     private string? ResolveCorrelationId()
     {
@@ -1521,6 +1680,12 @@ public class ClaimsController : ControllerBase
             return PendsChanged(claim);
         }
 
+        // Edit-level decisions: validated against the pend and the override
+        // policy before anything happens.
+        var (editDispositions, manualDenials, editRefusal) =
+            BuildEditDecisions(claim, request, disposition, examinerUserId, tenantId);
+        if (editRefusal is not null) return editRefusal;
+
         // payerSequence: checked, never clamped.
         if (request.PayerSequence is int sequence)
         {
@@ -1671,6 +1836,8 @@ public class ClaimsController : ControllerBase
                         PayerSequence = request.PayerSequence,
                         PayerOrderOverrideAuthorized = canOverride && hasReason,
                         ReviewedPend = reviewedPend,
+                        EditDispositions = editDispositions,
+                        ManualLineDenials = manualDenials,
                     },
                     HttpContext.RequestAborted);
 
@@ -1757,6 +1924,8 @@ public class ClaimsController : ControllerBase
                 ReviewedPends = ExaminerApproval.ReviewedFrom(reviewedPend)
                     .Select(p => $"{p.Code}: {p.Reason}").ToList(),
                 OverriddenPends = overridden.ToList(),
+                EditDispositions = editDispositions.ToList(),
+                ManualLineDenials = manualDenials.ToList(),
                 RequestedAt = firstRequestedAt,
                 ResolvedAt = actedAt,
             });
@@ -1778,6 +1947,8 @@ public class ClaimsController : ControllerBase
             // over cannot finalize, and nothing is published.
             var updated = await _claimRepository.UpdateHoldingResolutionLockAsync(claim, lockToken, CancellationToken.None);
             if (updated is null) return LostLock(claimId);
+
+            await WriteDecisionNotesAsync(updated, editDispositions, manualDenials, examinerUserId, tenantId);
 
             // The decision is final (lock cleared: no other resolver can take
             // the claim now). Drive its accumulator outbox entry at once; a
@@ -2063,9 +2234,44 @@ public class OverrideClaimRequest
     public string? PendFingerprint { get; set; }
 }
 
+public class EditDecisionRequest
+{
+    public string EditKey { get; set; } = string.Empty;
+
+    /// <summary>Uphold or Override.</summary>
+    public string Decision { get; set; } = string.Empty;
+
+    /// <summary>Required for an override (the policy may require it for every override).</summary>
+    public string? Reason { get; set; }
+}
+
+public class ManualLineDenialRequest
+{
+    public int LineNumber { get; set; }
+
+    /// <summary>Units denied; omit to deny the whole line.</summary>
+    public decimal? Units { get; set; }
+
+    public string GroupCode { get; set; } = "CO";
+    public string Carc { get; set; } = string.Empty;
+    public string? Rarc { get; set; }
+    public string Reason { get; set; } = string.Empty;
+}
+
 public class ResolvePendedClaimRequest
 {
     public string Disposition { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Edit-level decisions (workbench step 2). When present (even empty), the
+    /// approval is edit-level: every edit on the pend not listed here is
+    /// upheld at Finish. When absent, the approval is whole-claim, as before.
+    /// </summary>
+    public List<EditDecisionRequest>? EditDecisions { get; set; }
+
+    /// <summary>Lines the reviewer denies on their own judgment.</summary>
+    public List<ManualLineDenialRequest>? LineDenials { get; set; }
+
     public string? Reason { get; set; }
     public string? AiExaminerAgreement { get; set; }
 

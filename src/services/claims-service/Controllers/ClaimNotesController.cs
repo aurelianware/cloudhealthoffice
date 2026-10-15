@@ -7,8 +7,8 @@ namespace ClaimsService.Controllers;
 
 /// <summary>
 /// Notes a reviewer writes on a claim. Append-only: there is no edit or
-/// delete. Reads need claims:read and writes claims:work (the service
-/// defaults). The author and time are taken from the caller's token and the
+/// delete. Reads need claims:read; writes need claims:note (claims staff
+/// and member services). The author and time are taken from the caller's token and the
 /// server clock; the body carries only the category and text.
 /// </summary>
 [ApiController]
@@ -46,6 +46,7 @@ public class ClaimNotesController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(ClaimsPermissions.Note)]
     [ProducesResponseType(typeof(ClaimNote), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
