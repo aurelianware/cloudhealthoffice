@@ -149,7 +149,7 @@
               LoadingProgressColor="Color.Primary"
               SortLabel="Sort By">
         <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.ClaimId)">Claim ID</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.DisplayClaimNumber)">Claim</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.MemberName)">Member</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.ProviderName)">Provider</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.ServiceDate)">Service Date</MudTableSortLabel></MudTh>
@@ -163,7 +163,7 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Claim ID">
-                <MudLink Href="@($"/claims/{context.ClaimId}")" Typo="Typo.body2">@context.ClaimId</MudLink>
+                <MudLink Href="@($"/claims/{Uri.EscapeDataString(context.ClaimId)}")" Typo="Typo.body2" Style="white-space: nowrap;">@context.DisplayClaimNumber</MudLink>
             </MudTd>
             <MudTd DataLabel="Member">
                 <MudText Typo="Typo.body2">@context.MemberName</MudText>

@@ -909,6 +909,9 @@ public class ClaimSummary
     }
 
     public string ClaimNumber { get; set; } = string.Empty;
+
+    [JsonIgnore]
+    public string DisplayClaimNumber => string.IsNullOrWhiteSpace(ClaimNumber) ? ClaimId : ClaimNumber;
     public string MemberName { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;
     public string ProviderName { get; set; } = string.Empty;
@@ -2762,6 +2765,11 @@ public class WorkQueueSummary
 public class WorkQueueItem
 {
     public string ClaimId { get; set; } = string.Empty;
+
+    /// <summary>Human-readable claim number. <see cref="ClaimId"/> stays the route key.</summary>
+    public string ClaimNumber { get; set; } = string.Empty;
+
+    public string DisplayClaimNumber => string.IsNullOrWhiteSpace(ClaimNumber) ? ClaimId : ClaimNumber;
 
     /// <summary>Fingerprint of the pends shown; sent back with an approval.</summary>
     public string? PendFingerprint { get; set; }

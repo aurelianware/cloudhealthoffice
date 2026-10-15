@@ -1428,6 +1428,7 @@ public class ClaimsController : ControllerBase
             return new WorkQueueItem
             {
                 ClaimId = c.Id,
+                ClaimNumber = c.ClaimNumber ?? string.Empty,
                 MemberName = c.SubscriberLastName != null ? $"{c.SubscriberFirstName} {c.SubscriberLastName}" : c.MemberId,
                 MemberId = c.MemberId,
                 ProviderName = c.BillingProviderName ?? c.BillingProviderNPI,
@@ -2064,6 +2065,9 @@ public class WorkQueueSummary
 public class WorkQueueItem
 {
     public string ClaimId { get; set; } = string.Empty;
+
+    /// <summary>Human-readable claim number for display; <see cref="ClaimId"/> stays the route key.</summary>
+    public string ClaimNumber { get; set; } = string.Empty;
     public string MemberName { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;
     public string ProviderName { get; set; } = string.Empty;
