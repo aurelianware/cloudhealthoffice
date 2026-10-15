@@ -31,22 +31,7 @@
                   CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
     }
 
-    <MudPaper Elevation="2" Class="pa-6 mb-6 d-flex flex-column align-center">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
-                   StartIcon="@Icons.Material.Filled.PlayArrow"
-                   Disabled="_pulling" OnClick="GetNext"
-                   Style="min-width: 260px; min-height: 64px; font-size: 1.25rem;"
-                   data-testid="get-next">
-            @(_pulling ? "Finding your next item…" : "Get Next")
-        </MudButton>
-        @if (_nothingToWork)
-        {
-            <MudAlert Severity="Severity.Success" Variant="Variant.Text" Class="mt-4" data-testid="get-next-empty">
-                You're all caught up — nothing is waiting in your queues right now. Check back shortly, or ask your
-                supervisor to add you to another queue.
-            </MudAlert>
-        }
-    </MudPaper>
+    <GetNextCard />
 
     <MudText Typo="Typo.h5" Class="mb-2">Items I'm holding</MudText>
     <MudTable Items="@_mine" Dense="true" Hover="true" Elevation="2" Loading="_loading" LoadingProgressColor="Color.Primary">
@@ -105,8 +90,6 @@
 @code {
     private List<WorkItemView> _mine = new();
     private bool _loading = true;
-    private bool _pulling;
-    private bool _nothingToWork;
     private string? _serviceError;
 
     protected override async Task OnInitializedAsync() => await LoadMine();
@@ -129,36 +112,6 @@
         finally
         {
             _loading = false;
-        }
-    }
-
-    private async Task GetNext()
-    {
-        _pulling = true;
-        _nothingToWork = false;
-        try
-        {
-            var next = await WorkManagement.GetNextAsync();
-            if (next is null)
-            {
-                _nothingToWork = true;
-                return;
-            }
-            if (next.Resumed)
-                Snackbar.Add($"You are still holding {next.Item.DisplayNumber}; finish or release it first.", Severity.Info);
-            NavigationManager.NavigateTo(string.IsNullOrWhiteSpace(next.OpenUrl) ? next.Item.OpenUrl : next.OpenUrl);
-        }
-        catch (ServiceUnavailableException ex)
-        {
-            _serviceError = ex.Message;
-        }
-        catch (WorkManagementRefusedException ex)
-        {
-            _serviceError = ex.Message;
-        }
-        finally
-        {
-            _pulling = false;
         }
     }
 
