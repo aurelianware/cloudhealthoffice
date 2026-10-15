@@ -76,6 +76,63 @@ public class DenialCarcCoverageTests
             Assert.Contains(rarc, ctx.AdjudicationResult.RemarkCodes);
     }
 
+    public static TheoryData<string> OutageScenarioNames()
+    {
+        var data = new TheoryData<string>();
+        foreach (var s in OutageScenarios()) data.Add(s.Name);
+        return data;
+    }
+
+    /// <summary>
+    /// An engine that could not run is not a decision: these paths pend
+    /// (SVCUNAVAIL, retried on re-run) and carry no denial code at all.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(OutageScenarioNames))]
+    public async Task Engine_outages_pend_without_a_denial_code(string name)
+    {
+        var scenario = OutageScenarios().Single(s => s.Name == name);
+
+        var (result, ctx) = await scenario.Run();
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.True(string.IsNullOrWhiteSpace(ctx.AdjudicationResult.DenialReasonCode),
+            $"{name}: an outage must not carry a denial code");
+    }
+
+    private static IEnumerable<Scenario> OutageScenarios()
+    {
+        yield return new Scenario("Scrubbing engine threw", ClaimAdjudicationOutcome.Pend, "", null, async () =>
+        {
+            var engine = Substitute.For<ScrubServices.IClaimRoutingService>();
+            engine.ScrubAndRouteAsync(Arg.Any<ScrubModels.ClaimsScrubRequest>(), Arg.Any<CancellationToken>())
+                .ThrowsAsync(new InvalidOperationException("down"));
+            var ctx = NewContext();
+            var r = await new ScrubbingStage(engine, NullLogger<ScrubbingStage>.Instance).ExecuteAsync(ctx, default);
+            return (r, ctx);
+        });
+
+        yield return new Scenario("Benefit engine threw", ClaimAdjudicationOutcome.Pend, "", null, async () =>
+        {
+            var stage = NewBenefitStage(out var engine);
+            engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+                .Throws(new InvalidOperationException("engine down"));
+            var ctx = NewBenefitContext();
+            var r = await stage.ExecuteAsync(ctx, default);
+            return (r, ctx);
+        });
+
+        yield return new Scenario("NCCI engine threw (Deny mode)", ClaimAdjudicationOutcome.Pend, "", null, async () =>
+        {
+            var stage = NewNcciStage(out var engine);
+            engine.ScrubAsync(Arg.Any<NcciModels.NcciScrubRequest>(), Arg.Any<CancellationToken>())
+                .ThrowsAsync(new InvalidOperationException("down"));
+            var ctx = NewContext();
+            var r = await stage.ExecuteAsync(ctx, default);
+            return (r, ctx);
+        });
+    }
+
     private static IEnumerable<Scenario> Scenarios()
     {
         // ── Scrubbing ───────────────────────────────────────────────
@@ -84,15 +141,6 @@ public class DenialCarcCoverageTests
             var engine = Substitute.For<ScrubServices.IClaimRoutingService>();
             engine.ScrubAndRouteAsync(Arg.Any<ScrubModels.ClaimsScrubRequest>(), Arg.Any<CancellationToken>())
                 .Returns(ScrubResponseWithError());
-            var ctx = NewContext();
-            var r = await new ScrubbingStage(engine, NullLogger<ScrubbingStage>.Instance).ExecuteAsync(ctx, default);
-            return (r, ctx);
-        });
-        yield return new Scenario("Scrubbing engine threw", ClaimAdjudicationOutcome.Reject, "16", "MA130", async () =>
-        {
-            var engine = Substitute.For<ScrubServices.IClaimRoutingService>();
-            engine.ScrubAndRouteAsync(Arg.Any<ScrubModels.ClaimsScrubRequest>(), Arg.Any<CancellationToken>())
-                .ThrowsAsync(new InvalidOperationException("down"));
             var ctx = NewContext();
             var r = await new ScrubbingStage(engine, NullLogger<ScrubbingStage>.Instance).ExecuteAsync(ctx, default);
             return (r, ctx);
@@ -146,15 +194,6 @@ public class DenialCarcCoverageTests
         {
             var ctx = NewContext(c => c.BenefitPlanId = "not-a-guid");
             var r = await NewBenefitStage(out _).ExecuteAsync(ctx, default);
-            return (r, ctx);
-        });
-        yield return new Scenario("Benefit engine threw", ClaimAdjudicationOutcome.Reject, "16", "MA130", async () =>
-        {
-            var stage = NewBenefitStage(out var engine);
-            engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
-                .Throws(new InvalidOperationException("engine down"));
-            var ctx = NewBenefitContext();
-            var r = await stage.ExecuteAsync(ctx, default);
             return (r, ctx);
         });
         yield return new Scenario("Benefit engine denial without a code", ClaimAdjudicationOutcome.Deny, "96", "N130", async () =>
@@ -218,15 +257,6 @@ public class DenialCarcCoverageTests
                     EditType = NcciModels.NcciEditType.NcciPair, RuleId = "NE001", Message = "bundled",
                     Column1Code = "99213", Column2Code = "99214", AffectedLineNumbers = new List<int> { 1 },
                 }));
-            var ctx = NewContext();
-            var r = await stage.ExecuteAsync(ctx, default);
-            return (r, ctx);
-        });
-        yield return new Scenario("NCCI engine threw (Deny mode)", ClaimAdjudicationOutcome.Deny, "236", null, async () =>
-        {
-            var stage = NewNcciStage(out var engine);
-            engine.ScrubAsync(Arg.Any<NcciModels.NcciScrubRequest>(), Arg.Any<CancellationToken>())
-                .ThrowsAsync(new InvalidOperationException("down"));
             var ctx = NewContext();
             var r = await stage.ExecuteAsync(ctx, default);
             return (r, ctx);
