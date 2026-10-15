@@ -15,7 +15,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 [[ -n "${GAR_REPOSITORY:-}" ]] || { echo "GAR_REPOSITORY is required" >&2; exit 1; }
 [[ -n "${IMAGE_TAG:-}" ]] || { echo "IMAGE_TAG is required" >&2; exit 1; }
 
-CHO_BEARER_TOKEN="$(TENANT_ID="${TENANT:-demo}" python3 "$ROOT_DIR/scripts/demo/gcp/cho_demo.py" token)"
+# The validator seeds platform prior-auth rules (POST
+# /api/v1/prior-auth-rules/seed-platform), which requires platform:admin.
+CHO_BEARER_TOKEN="$(TENANT_ID="${TENANT:-demo}" python3 "$ROOT_DIR/scripts/demo/gcp/cho_demo.py" token --platform-admin)"
 export CHO_BEARER_TOKEN
 
 export IMAGE="${GAR_REPOSITORY}/cloudhealthoffice-mcc-platform-validator:${IMAGE_TAG}"
