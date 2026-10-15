@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="660" viewBox="0 0 1200 660" role="img" aria-labelledby="gka-title gka-desc">
+  <title id="gka-title">Cloud Health Office on Google Kubernetes Engine</title>
+  <desc id="gka-desc">GitHub Actions authenticates to Google Cloud with Workload Identity Federation, with no stored keys, and pushes service images to Artifact Registry. A single-zone GKE cluster with one e2-standard-8 node runs 35 platform services grouped by domain, a three-broker Kafka cluster under Strimzi, and MongoDB, Redis and Postgres on standard persistent disk. Access is by port-forward only, with synthetic data.</desc>
+  <defs>
+    <marker id="gkaArr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0 0 L9 3.5 L0 7" fill="#00ffff" opacity="0.8"/></marker>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
+    .h { font-size: 15px; font-weight: 800; fill: #ffffff; }
+    .s { font-size: 12.5px; fill: #8b949e; }
+    .k { font-size: 11px; font-weight: 700; letter-spacing: 1.6px; fill: #00ff88; }
+    .svc { font-size: 12px; fill: #c9d1d9; }
+    .box { fill: #0d1117; stroke: rgba(0,255,255,0.35); stroke-width: 1.2; }
+    .grp { fill: #0b1219; stroke: rgba(0,255,255,0.18); stroke-width: 1; }
+    .data { fill: #0d1310; stroke: rgba(0,255,136,0.4); stroke-width: 1.2; }
+    .ln { stroke: #00ffff; stroke-width: 1.6; opacity: 0.75; fill: none; }
+  </style>
+
+  <rect width="1200" height="660" fill="#000000"/>
+  <text x="600" y="42" text-anchor="middle" font-size="26" font-weight="900" fill="#ffffff">Same code, different cloud</text>
+  <text x="600" y="66" text-anchor="middle" font-size="14" fill="#00ffff">The repository's manifests and images, rendered for GKE — no application rewrite</text>
+
+  <!-- Delivery lane -->
+  <text x="40" y="112" class="k">DELIVERY</text>
+  <rect x="40" y="124" width="200" height="74" rx="8" class="box"/>
+  <text x="58" y="152" class="h">GitHub Actions</text>
+  <text x="58" y="174" class="s">Build, push and deploy</text>
+
+  <rect x="290" y="124" width="230" height="74" rx="8" class="box"/>
+  <text x="308" y="152" class="h">Workload Identity Fed.</text>
+  <text x="308" y="174" class="s">OIDC, this repo only, no keys</text>
+
+  <rect x="570" y="124" width="200" height="74" rx="8" class="box"/>
+  <text x="588" y="152" class="h">Artifact Registry</text>
+  <text x="588" y="174" class="s">us-west1 · keeps last 5</text>
+
+  <rect x="820" y="124" width="340" height="74" rx="8" class="box"/>
+  <text x="838" y="152" class="h">Terraform</text>
+  <text x="838" y="174" class="s">Cluster, registry, identity, budget alert</text>
+
+  <path class="ln" d="M240 161 H286" marker-end="url(#gkaArr)"/>
+  <path class="ln" d="M520 161 H566" marker-end="url(#gkaArr)"/>
+  <path class="ln" d="M670 198 V246" marker-end="url(#gkaArr)"/>
+
+  <!-- Cluster -->
+  <rect x="40" y="250" width="1120" height="356" rx="12" fill="none" stroke="#00ffff" stroke-opacity="0.55" stroke-width="1.6" stroke-dasharray="6 5"/>
+  <text x="60" y="278" class="k">GKE · cho-demo · us-west1-a · one e2-standard-8 node (8 vCPU, 32 GB)</text>
+
+  <!-- Service groups -->
+  <g>
+    <rect x="60" y="294" width="250" height="132" rx="8" class="grp"/>
+    <text x="76" y="318" class="h">Claims</text>
+    <text x="76" y="342" class="svc">claims · claims-examiner (AI)</text>
+    <text x="76" y="362" class="svc">pricing-api · reference-data</text>
+    <text x="76" y="382" class="svc">appeals · rfai · attachment</text>
+    <text x="76" y="402" class="svc">authorization (prior auth)</text>
+
+    <rect x="326" y="294" width="250" height="132" rx="8" class="grp"/>
+    <text x="342" y="318" class="h">Members &amp; benefits</text>
+    <text x="342" y="342" class="svc">member · enrollment-import (834)</text>
+    <text x="342" y="362" class="svc">eligibility · coverage · sponsor</text>
+    <text x="342" y="382" class="svc">benefit-plan · accumulator</text>
+    <text x="342" y="402" class="svc">idcard · member-document</text>
+
+    <rect x="592" y="294" width="250" height="132" rx="8" class="grp"/>
+    <text x="608" y="318" class="h">Interoperability</text>
+    <text x="608" y="342" class="svc">fhir (CMS-0057-F APIs)</text>
+    <text x="608" y="362" class="svc">smart-auth · consent</text>
+    <text x="608" y="382" class="svc">personal-representative</text>
+    <text x="608" y="402" class="svc">trading-partner · terminology</text>
+
+    <rect x="858" y="294" width="282" height="132" rx="8" class="grp"/>
+    <text x="874" y="318" class="h">Providers, finance, risk</text>
+    <text x="874" y="342" class="svc">provider · provider-contracts</text>
+    <text x="874" y="362" class="svc">provider-verification · payment · ar</text>
+    <text x="874" y="382" class="svc">premium-billing · capitation · tenant</text>
+    <text x="874" y="402" class="svc">encounter · risk-adjustment · portal</text>
+  </g>
+
+  <!-- Messaging + data -->
+  <rect x="60" y="446" width="516" height="62" rx="8" class="box"/>
+  <text x="76" y="472" class="h">Kafka · Strimzi operator</text>
+  <text x="76" y="494" class="s">Three KRaft brokers · the repository's topic definitions apply unchanged</text>
+
+  <rect x="592" y="446" width="548" height="62" rx="8" class="box"/>
+  <text x="608" y="472" class="h">Readiness gates</text>
+  <text x="608" y="494" class="s">Each service checks its own database, cache and bus before taking traffic</text>
+
+  <rect x="60" y="526" width="340" height="62" rx="8" class="data"/>
+  <text x="76" y="552" class="h">MongoDB</text>
+  <text x="76" y="574" class="s">Claims, members, plans · synthetic tenant</text>
+
+  <rect x="416" y="526" width="350" height="62" rx="8" class="data"/>
+  <text x="432" y="552" class="h">Redis · noeviction</text>
+  <text x="432" y="574" class="s">Accumulator journal must never be evicted</text>
+
+  <rect x="782" y="526" width="358" height="62" rx="8" class="data"/>
+  <text x="798" y="552" class="h">Postgres · standard persistent disk</text>
+  <text x="798" y="574" class="s">All volumes off the SSD quota</text>
+
+  <text x="600" y="636" text-anchor="middle" class="s">No public ingress: reached by port-forward. Synthetic data only. Demo-grade — no BAA, CMEK or private cluster.</text>
+</svg>

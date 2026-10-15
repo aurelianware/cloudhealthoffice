@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="430" viewBox="0 0 1200 430" role="img" aria-labelledby="gcr-title gcr-desc">
+  <title id="gcr-title">CPU reserved by the platform, before and after the small profile</title>
+  <desc id="gcr-desc">Horizontal bar chart. With the manifests' default requests, the platform's services plus Kafka, MongoDB and Redis reserve about 10.0 vCPU, more than the roughly 7.9 vCPU allocatable on one e2-standard-8 node. With the small profile they reserve about 3.1 vCPU. The new account's quota is 12 vCPU in total. GKE system pods are not included.</desc>
+  <style>
+    text { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
+    .lbl { font-size: 15px; font-weight: 700; fill: #ffffff; }
+    .sub { font-size: 12.5px; fill: #8b949e; }
+    .val { font-size: 15px; font-weight: 800; fill: #ffffff; font-variant-numeric: tabular-nums; }
+    .tick { font-size: 12px; fill: #8b949e; font-variant-numeric: tabular-nums; }
+    .grid { stroke: rgba(139,148,158,0.18); stroke-width: 1; }
+    .ref { stroke: #c9d1d9; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .reftxt { font-size: 12.5px; fill: #c9d1d9; }
+    .bar { fill: #0e8fa3; }
+  </style>
+  <rect width="1200" height="430" fill="#000000"/>
+  <text x="600" y="42" text-anchor="middle" font-size="24" font-weight="900" fill="#ffffff">Fitting the platform on one node</text>
+  <text x="600" y="66" text-anchor="middle" font-size="14" fill="#00ffff">CPU reserved (Kubernetes requests), all services plus Kafka, MongoDB and Redis</text>
+
+  <!-- grid: x = 300 + vCPU * 66.667 -->
+  <g>
+    <line class="grid" x1="300" y1="110" x2="300" y2="330"/>
+    <line class="grid" x1="433.3" y1="110" x2="433.3" y2="330"/>
+    <line class="grid" x1="566.7" y1="110" x2="566.7" y2="330"/>
+    <line class="grid" x1="700" y1="110" x2="700" y2="330"/>
+    <line class="grid" x1="833.3" y1="110" x2="833.3" y2="330"/>
+    <line class="grid" x1="966.7" y1="110" x2="966.7" y2="330"/>
+    <line class="grid" x1="1100" y1="110" x2="1100" y2="330"/>
+    <text class="tick" x="300" y="352" text-anchor="middle">0</text>
+    <text class="tick" x="433.3" y="352" text-anchor="middle">2</text>
+    <text class="tick" x="566.7" y="352" text-anchor="middle">4</text>
+    <text class="tick" x="700" y="352" text-anchor="middle">6</text>
+    <text class="tick" x="833.3" y="352" text-anchor="middle">8</text>
+    <text class="tick" x="966.7" y="352" text-anchor="middle">10</text>
+    <text class="tick" x="1100" y="352" text-anchor="middle">12 vCPU</text>
+  </g>
+
+  <!-- bars: square at baseline, 4px rounded data end -->
+  <text class="lbl" x="40" y="168">Manifest defaults</text>
+  <text class="sub" x="40" y="188">Two replicas of claims and benefits</text>
+  <path class="bar" d="M300 150 H962.7 a4 4 0 0 1 4 4 V190 a4 4 0 0 1 -4 4 H300 Z"/>
+  <text class="val" x="978" y="178">10.0</text>
+
+  <text class="lbl" x="40" y="262">Small profile</text>
+  <text class="sub" x="40" y="282">CPU requests capped, limits unchanged</text>
+  <path class="bar" d="M300 244 H502.7 a4 4 0 0 1 4 4 V284 a4 4 0 0 1 -4 4 H300 Z"/>
+  <text class="val" x="518" y="272">3.1</text>
+
+  <!-- reference lines -->
+  <line class="ref" x1="826.7" y1="118" x2="826.7" y2="322"/>
+  <text class="reftxt" x="818" y="122" text-anchor="end">One node allocatable ≈ 7.9</text>
+  <line class="ref" x1="1100" y1="118" x2="1100" y2="322" stroke-dasharray="2 4"/>
+  <text class="reftxt" x="1092" y="315" text-anchor="end">New-account quota 12</text>
+
+  <text x="600" y="400" text-anchor="middle" class="sub">Requests are what the scheduler reserves, not what services use; idle services use far less. GKE system pods not included.</text>
+</svg>
