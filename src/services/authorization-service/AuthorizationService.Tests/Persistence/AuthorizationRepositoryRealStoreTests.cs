@@ -350,6 +350,29 @@ public abstract class AuthorizationRepositoryRealStoreTestsBase : IAsyncLifetime
         }
     }
 
+    [SkippableFact]
+    public async Task ListActivityBetween_FindsSubmittedOrDecidedInTheWindow_ForTheTenantOnly()
+    {
+        // Submitted in the window, still open.
+        var submitted = await CreateAsync(TenantA, NewAuth(AuthorizationStatus.Submitted));
+        // Submitted before the window, decided inside it.
+        var decidedLate = NewAuth(AuthorizationStatus.Approved);
+        decidedLate.SubmittedDate = Base.AddDays(-20);
+        decidedLate.ReviewedDate = Base.AddDays(1);
+        decidedLate = await CreateAsync(TenantA, decidedLate);
+        // Submitted and decided before the window.
+        var old = NewAuth(AuthorizationStatus.Denied);
+        old.SubmittedDate = Base.AddDays(-30);
+        old.ReviewedDate = Base.AddDays(-25);
+        await CreateAsync(TenantA, old);
+        // Same window, other tenant.
+        await CreateAsync(TenantB, NewAuth(AuthorizationStatus.Submitted));
+
+        var found = await AsTenant(TenantA, r => r.ListActivityBetweenAsync(Base.AddDays(-1), Base.AddDays(2)));
+
+        found.Select(a => a.Id).Should().BeEquivalentTo(new[] { submitted.Id, decidedLate.Id });
+    }
+
     private protected static Authorization NewAuth(
         AuthorizationStatus status, LineOfBusiness lineOfBusiness = LineOfBusiness.Medicaid)
     {

@@ -1,0 +1,342 @@
+@page "/compliance/cms-0057f"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject ICms0057Service Cms0057
+@inject IDialogService DialogService
+
+<PageTitle>CMS-0057-F Console - Cloud Health Office</PageTitle>
+
+@*
+    The CMS-0057-F view of prior authorization: every open request against its
+    72-hour (expedited) or 7-day (standard) decision deadline, recent decisions
+    with who or what decided and why, and the metrics the rule requires payers
+    to publish each year. Read-only; decisions are made in Authorizations.
+*@
+<PermissionGate Permission="authorizations:read" RoleName="UMCoordinator">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-1" Wrap="Wrap.Wrap">
+        <MudText Typo="Typo.h3">
+            <MudIcon Icon="@Icons.Material.Filled.Policy" Class="mr-2" />
+            CMS-0057-F Console
+        </MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudSelect T="string" Label="Reporting period" Dense="true" Variant="Variant.Outlined"
+                       Value="_period" ValueChanged="PeriodChanged" Style="min-width: 220px;"
+                       data-testid="period">
+                <MudSelectItem Value="@("ytd")">This year to date</MudSelectItem>
+                <MudSelectItem Value="@("90")">Last 90 days</MudSelectItem>
+                <MudSelectItem Value="@("30")">Last 30 days</MudSelectItem>
+                <MudSelectItem Value="@("last-year")">Last calendar year</MudSelectItem>
+            </MudSelect>
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Disabled="_loading"
+                           aria-label="Refresh" data-testid="refresh" />
+        </MudStack>
+    </MudStack>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        Prior authorization against the CMS Interoperability and Prior Authorization final rule: decisions within
+        72 hours for expedited and 7 calendar days for standard requests, and the metrics payers must publish.
+    </MudText>
+
+    @if (_error != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" data-testid="error">@_error</MudAlert>
+    }
+
+    @if (_loading && _metrics == null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    <MudGrid Class="mb-6">
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" data-testid="kpi-open">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Open requests</MudText>
+                <MudText Typo="Typo.h4">@_clocks.Count</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @_clocks.Count(c => c.Expedited) expedited · @_clocks.Count(c => !c.Expedited) standard
+                </MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" data-testid="kpi-at-risk">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Due soon</MudText>
+                <MudText Typo="Typo.h4" Color="@(AtRisk > 0 ? Color.Warning : Color.Default)">@AtRisk</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">past two-thirds of their timeframe</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" data-testid="kpi-overdue">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Past deadline</MudText>
+                <MudText Typo="Typo.h4" Color="@(Overdue > 0 ? Color.Error : Color.Success)">@Overdue</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">open and out of time</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" data-testid="kpi-on-time">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Decided on time</MudText>
+                <MudText Typo="Typo.h4">@Pct(OnTimePercent)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @(_metrics?.DecidedRequests ?? 0) decided in the period · @Pct(AutomatedPercent) automated
+                </MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+        <MudTabPanel Text="Decision clocks" Icon="@Icons.Material.Filled.Timer" BadgeData="@(Overdue > 0 ? Overdue : null)" BadgeColor="Color.Error">
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                Every open request, most urgent first. The clock starts at submission, or restarts when requested
+                documentation arrives.
+            </MudText>
+            <MudTable Items="@_clocks" Dense="true" Hover="true" Elevation="0" Loading="_loading" data-testid="clocks">
+                <HeaderContent>
+                    <MudTh>Authorization</MudTh>
+                    <MudTh>Member</MudTh>
+                    <MudTh>Request type</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Decision due</MudTh>
+                    <MudTh Style="min-width: 220px;">Time left</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Authorization">
+                        <MudLink OnClick="@(() => OpenAsync(context.Id))" Style="font-family: monospace;">@context.AuthorizationNumber</MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Member">@context.MemberId</MudTd>
+                    <MudTd DataLabel="Request type">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                 Color="@(context.Expedited ? Color.Secondary : Color.Default)">@context.RequestType</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Status">@context.Status</MudTd>
+                    <MudTd DataLabel="Decision due">@context.SlaDeadline.ToLocalTime().ToString("MMM d, h:mm tt")</MudTd>
+                    <MudTd DataLabel="Time left">
+                        <MudText Typo="Typo.body2" Color="@ClockColor(context)" Style="font-weight: 600;">
+                            @Remaining(context.HoursRemaining)
+                        </MudText>
+                        <MudProgressLinear Value="@Math.Min(100, Math.Max(0, context.PercentConsumed))"
+                                           Color="@ClockColor(context)" Rounded="true" Size="Size.Small" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">No open prior authorization requests.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Recent decisions" Icon="@Icons.Material.Filled.Gavel">
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                Decisions from the last 30 days, newest first: how long each took against its timeframe, who or which
+                rule decided, and the reason given.
+            </MudText>
+            <MudTable Items="@_decisions" Dense="true" Hover="true" Elevation="0" Loading="_loading" data-testid="decisions">
+                <HeaderContent>
+                    <MudTh>Authorization</MudTh>
+                    <MudTh>Member</MudTh>
+                    <MudTh>Request type</MudTh>
+                    <MudTh>Outcome</MudTh>
+                    <MudTh>Decided by</MudTh>
+                    <MudTh>Decision time</MudTh>
+                    <MudTh>Reason</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Authorization">
+                        <MudLink OnClick="@(() => OpenAsync(context.Id))" Style="font-family: monospace;">@context.AuthorizationNumber</MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Member">@context.MemberId</MudTd>
+                    <MudTd DataLabel="Request type">@context.RequestType</MudTd>
+                    <MudTd DataLabel="Outcome">
+                        <MudChip T="string" Size="Size.Small" Color="@OutcomeColor(context.Status)">@context.Outcome</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Decided by">
+                        @if (context.Automated)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                        }
+                        @context.Decider
+                    </MudTd>
+                    <MudTd DataLabel="Decision time">
+                        <MudText Typo="Typo.body2" Color="@(context.WithinTimeframe ? Color.Default : Color.Error)">
+                            @Duration(context.DecisionHours) of @Timeframe(context.TimeframeHours)
+                            @if (!context.WithinTimeframe)
+                            {
+                                <span> (late)</span>
+                            }
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Reason">
+                        @context.Reason
+                        @if (!string.IsNullOrEmpty(context.DenialReasonCode))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Code @context.DenialReasonCode</MudText>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">No prior authorization decisions in the last 30 days.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Public metrics" Icon="@Icons.Material.Filled.Assessment">
+            @if (_metrics != null)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                    The metrics CMS-0057-F requires payers to publish each year by March 31, for requests submitted
+                    @_metrics.From.ToLocalTime().ToString("MMM d, yyyy") – @_metrics.To.ToLocalTime().ToString("MMM d, yyyy").
+                    Percentages are of decided requests; approved with changes counts as approved.
+                </MudText>
+                <MudSimpleTable Dense="true" Elevation="0" Bordered="true" data-testid="metrics">
+                    <thead>
+                        <tr><th>Metric</th><th>Standard (7 days)</th><th>Expedited (72 hours)</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Requests submitted</td><td>@_metrics.Standard.Requests</td><td>@_metrics.Expedited.Requests</td></tr>
+                        <tr><td>Approved</td><td>@Pct(_metrics.Standard.ApprovedPercent)</td><td>@Pct(_metrics.Expedited.ApprovedPercent)</td></tr>
+                        <tr><td>Denied</td><td>@Pct(_metrics.Standard.DeniedPercent)</td><td>@Pct(_metrics.Expedited.DeniedPercent)</td></tr>
+                        <tr><td>Average time to decision</td><td>@Duration(_metrics.Standard.AverageDecisionHours)</td><td>@Duration(_metrics.Expedited.AverageDecisionHours)</td></tr>
+                        <tr><td>Median time to decision</td><td>@Duration(_metrics.Standard.MedianDecisionHours)</td><td>@Duration(_metrics.Expedited.MedianDecisionHours)</td></tr>
+                        <tr><td>Decided within the timeframe</td><td>@Pct(_metrics.Standard.DecidedWithinTimeframePercent)</td><td>@Pct(_metrics.Expedited.DecidedWithinTimeframePercent)</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+
+                @if (_metrics.NotYetTracked.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4" data-testid="not-tracked">
+                        <MudText Typo="Typo.subtitle2">Required metrics not computed yet</MudText>
+                        @foreach (var gap in _metrics.NotYetTracked)
+                        {
+                            <MudText Typo="Typo.body2"><b>@gap.Metric</b>: @gap.Reason</MudText>
+                        }
+                    </MudAlert>
+                }
+            }
+            else if (!_loading)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Metrics are unavailable.</MudText>
+            }
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private List<PriorAuthClock> _clocks = new();
+    private List<PriorAuthDecision> _decisions = new();
+    private PriorAuthMetrics? _metrics;
+    private bool _loading;
+    private string? _error;
+    private string _period = "ytd";
+
+    private int AtRisk => _clocks.Count(c => !c.Breached && c.EscalationLevel is "Warning" or "Critical");
+    private int Overdue => _clocks.Count(c => c.Breached);
+
+    private double? OnTimePercent
+    {
+        get
+        {
+            if (_metrics == null) return null;
+            var decided = _metrics.Standard.Decided + _metrics.Expedited.Decided;
+            return decided == 0
+                ? null
+                : Math.Round(100.0 * (_metrics.Standard.DecidedWithinTimeframe + _metrics.Expedited.DecidedWithinTimeframe) / decided, 1);
+        }
+    }
+
+    private double? AutomatedPercent =>
+        _metrics is { DecidedRequests: > 0 }
+            ? Math.Round(100.0 * _metrics.AutomatedDecisions / _metrics.DecidedRequests, 1)
+            : null;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task PeriodChanged(string period)
+    {
+        _period = period;
+        await LoadAsync();
+    }
+
+    private (DateTime From, DateTime To) Period()
+    {
+        var now = DateTime.UtcNow;
+        return _period switch
+        {
+            "90" => (now.AddDays(-90), now),
+            "30" => (now.AddDays(-30), now),
+            "last-year" => (new DateTime(now.Year - 1, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                            new DateTime(now.Year - 1, 12, 31, 23, 59, 59, DateTimeKind.Utc)),
+            _ => (new DateTime(now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc), now),
+        };
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var (from, to) = Period();
+            var clocks = Cms0057.GetDecisionClocksAsync();
+            var decisions = Cms0057.GetRecentDecisionsAsync();
+            var metrics = Cms0057.GetMetricsAsync(from, to);
+            await Task.WhenAll(clocks, decisions, metrics);
+            _clocks = clocks.Result.OrderBy(c => c.HoursRemaining).ToList();
+            _decisions = decisions.Result;
+            _metrics = metrics.Result;
+        }
+        catch (ServiceUnavailableException)
+        {
+            _error = "The authorization service is unavailable right now. Try again in a moment.";
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            _error = "You don't have permission to view prior authorization data.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenAsync(string id)
+    {
+        var parameters = new DialogParameters { { "AuthorizationId", id } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true };
+        await DialogService.ShowAsync<AuthorizationDetailsDialog>("Authorization Details", parameters, options);
+    }
+
+    private static Color ClockColor(PriorAuthClock clock) => clock.Breached
+        ? Color.Error
+        : clock.EscalationLevel switch
+        {
+            "Critical" => Color.Error,
+            "Warning" => Color.Warning,
+            _ => Color.Success,
+        };
+
+    private static Color OutcomeColor(string status) => status switch
+    {
+        "Approved" => Color.Success,
+        "Modified" => Color.Info,
+        "Denied" => Color.Error,
+        _ => Color.Default,
+    };
+
+    public static string Pct(double? value) => value is null ? "—" : $"{value:0.#}%";
+
+    /// <summary>Hours as "3.5 h" under two days, else "4 d 6 h".</summary>
+    public static string Duration(double? hours)
+    {
+        if (hours is null) return "—";
+        var h = hours.Value;
+        if (h < 48) return $"{h:0.#} h";
+        var days = (int)(h / 24);
+        var rest = (int)Math.Round(h - days * 24);
+        return rest == 0 ? $"{days} d" : $"{days} d {rest} h";
+    }
+
+    /// <summary>The rule's timeframes as it states them: 72 hours, 7 days.</summary>
+    public static string Timeframe(double hours) => hours % 24 == 0 && hours > 72 ? $"{hours / 24:0} days" : $"{hours:0.#} h";
+
+    public static string Remaining(double hoursRemaining) =>
+        hoursRemaining < 0 ? $"Overdue by {Duration(-hoursRemaining)}" : $"{Duration(hoursRemaining)} left";
+}
