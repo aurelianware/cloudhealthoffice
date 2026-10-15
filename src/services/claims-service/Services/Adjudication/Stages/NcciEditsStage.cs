@@ -142,7 +142,7 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
                 return ClaimAdjudicationStageResult.Pend(
                     StageName, $"NCCI engine threw: {ex.GetType().Name}; pended (an outage is never denied)");
             }
-            return BuildModeDrivenResult(activity, hasFailures: true);
+            return BuildModeDrivenResult(context, activity, hasFailures: true);
         }
 
         activity?.SetTag("ncci.engine_status", "success");
@@ -157,7 +157,7 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
         }
 
         ApplyFailureSnapshots(context, engineResult.EditFailures);
-        return BuildModeDrivenResult(activity, hasFailures: true);
+        return BuildModeDrivenResult(context, activity, hasFailures: true);
     }
 
     private void ApplyFailureSnapshots(
@@ -224,15 +224,16 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
         };
     }
 
-    private ClaimAdjudicationStageResult BuildModeDrivenResult(Activity? activity, bool hasFailures)
+    private ClaimAdjudicationStageResult BuildModeDrivenResult(
+        ClaimAdjudicationContext context, Activity? activity, bool hasFailures)
     {
         switch (_options.NcciMode)
         {
             case NcciEnforcementMode.Deny:
                 activity?.SetTag("ncci.outcome", "deny");
-                return ClaimAdjudicationStageResult.Deny(
-                    StageName,
-                    BuildResultReason("denied for NCCI/MUE failure"));
+                var denyReason = BuildResultReason("denied for NCCI/MUE failure");
+                ApplyDenialCode(context, denyReason);
+                return ClaimAdjudicationStageResult.Deny(StageName, denyReason);
 
             case NcciEnforcementMode.SoftValidation:
                 activity?.SetTag("ncci.outcome", "softvalidation");
@@ -248,6 +249,27 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
     }
 
     private static string BuildResultReason(string prefix) => prefix;
+
+    /// <summary>
+    /// Claim-level CARC for an NCCI/MUE Deny: the first edit failure's
+    /// engine-suggested CARC/RARC (97 or B20 + N519 for PTP edits, 151 + N115
+    /// for MUE) — the same codes the 835 puts on the affected lines — else
+    /// CARC 236 (NCCI incompatible procedure) when no failure suggested one
+    /// (e.g. the NCCI engine threw in Deny mode). The per-line CAS still
+    /// comes from each failure's own suggestion.
+    /// </summary>
+    internal static void ApplyDenialCode(ClaimAdjudicationContext context, string reason)
+    {
+        var suggested = context.PendDetails?.EditFailures?
+            .FirstOrDefault(f => !string.IsNullOrWhiteSpace(f.SuggestedCarc));
+        if (suggested is not null)
+        {
+            AdjudicationDenialCodes.Apply(context, suggested.SuggestedCarc!, reason, suggested.SuggestedRarc);
+            return;
+        }
+
+        AdjudicationDenialCodes.Apply(context, AdjudicationDenialCodes.NcciIncompatibleCarc, reason);
+    }
 
     /// <summary>
     /// Pend code routes the work queue. If only MUE failures fire ⇒

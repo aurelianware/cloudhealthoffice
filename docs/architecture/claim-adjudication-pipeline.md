@@ -493,6 +493,37 @@ always enabled regardless.
 | Orchestrator resolves `Pend`, but claim is already `Approved`/`Denied`/`Paid`/`PartiallyPaid`/`Voided` | `ClaimRepository.IsFinalDisposition` guard (D9a) skips the `/status` patch; `AdjudicationResult`/`PendDetails` still project for audit purposes. |
 | Argo workflow's `update-claim-step` runs after an async-orchestrator pend | Guarded by D9b: synchronous write-back preserves the persisted `Pended` status while still saving adjudication summary/audit data. |
 
+## Denial reason codes (every Deny/Reject carries a CARC)
+
+A Deny or Reject persists as `ClaimStatus.Denied`, and payment-service only
+remits a denial that carries a CARC (see
+[`claim-remittance-generation.md`](./claim-remittance-generation.md)). The
+stage that denies sets `AdjudicationResult.DenialReasonCode` (bare code, no
+group prefix; the 835 reports it as `CO`) and, where a RARC applies, adds it
+to `AdjudicationResult.RemarkCodes` (835 MOA/MIA). Constants live in
+`AdjudicationDenialCodes`.
+
+| Path | CARC | RARC |
+|---|---|---|
+| Scrubbing structural error / mapper or engine threw (Reject) | 16 | MA130 |
+| NetworkCredentialing missing billing NPI (Reject) | 16 | N257 |
+| NetworkCredentialing membership deny (OON, no tier, unverifiable) | 242 | — |
+| NetworkCredentialing credentialing deny | B7 | — |
+| ProviderIntegrity exclusion | gate's code, else B7 | — |
+| Duplicate | 18 | — |
+| BenefitCalculation missing / non-GUID plan id, engine threw (Reject) | 16 | MA130 |
+| BenefitCalculation eligibility / prior auth | 27 / 197 | — |
+| BenefitCalculation engine denial | engine's CARC, else 96 | N130 when defaulted |
+| NcciEdits Deny mode | first edit's suggested CARC (97/B20, 151), else 236 | edit's RARC (N519, N115) |
+| CoordinationOfBenefits missing member id (Reject) | 16 | N382 |
+| CoordinationOfBenefits Deny mode (other payer primary) | 22 | MA04 |
+
+**Safety net.** If a Deny/Reject still reaches `PersistenceStage` without a
+code (a new stage, or the orchestrator's catch-all Reject for a stage that
+threw), it assigns CO-16 + MA130 for a Reject (unprocessable; resubmit) or
+CO-96 + N130 for a Deny (non-covered; no claim about a specific cause), and
+logs a warning naming the stage. Only codes change, never the outcome.
+
 ## Replacement contract for stub stages
 
 Capabilities 5.4 / 5.6 / 5.7 / 5.8 / 5.9 each ship a real stage that:

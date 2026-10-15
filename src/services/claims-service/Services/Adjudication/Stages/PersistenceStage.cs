@@ -63,6 +63,8 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
         var isPend = resolvedOutcome == ClaimAdjudicationOutcome.Pend;
         var resolvedStatus = MapOutcomeToStatus(resolvedOutcome);
 
+        EnsureDenialCode(context, resolvedOutcome);
+
         // Later stages (e.g. NCCI) replace PendDetails wholesale; re-attach
         // DuplicateClaimStage's findings so the duplicate evidence survives.
         if (context.DuplicateFindings.Count > 0
@@ -137,6 +139,51 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
             // MaxDeliveryCount.
             throw;
         }
+    }
+
+    /// <summary>
+    /// Safety net: a Deny/Reject persists as <see cref="ClaimStatus.Denied"/>,
+    /// and the 835 (payment-service <c>CarcRarcMappingService</c>) can only
+    /// remit a denial that carries a CARC — a denied claim without one is
+    /// excluded from the payment run. Every built-in denying stage sets its
+    /// own code; if one reached persistence without (a new stage, or the
+    /// orchestrator's catch-all Reject for a stage that threw) this assigns
+    /// the documented default and logs a warning naming the stage so the gap
+    /// is fixed at its source:
+    /// <list type="bullet">
+    ///   <item><description>Reject → CO-16 + MA130 (claim unprocessable;
+    ///     correct and resubmit) — <see cref="AdjudicationDenialCodes.DefaultRejectCarc"/>.</description></item>
+    ///   <item><description>Deny → CO-96 + N130 (non-covered; consult plan
+    ///     benefits) — <see cref="AdjudicationDenialCodes.DefaultDenyCarc"/>.</description></item>
+    /// </list>
+    /// Only codes are assigned; the outcome / status is unchanged.
+    /// </summary>
+    internal void EnsureDenialCode(ClaimAdjudicationContext context, ClaimAdjudicationOutcome resolvedOutcome)
+    {
+        if (resolvedOutcome is not (ClaimAdjudicationOutcome.Deny or ClaimAdjudicationOutcome.Reject))
+            return;
+        if (!string.IsNullOrWhiteSpace(context.AdjudicationResult.DenialReasonCode))
+            return;
+
+        var deciding = context.StageResults.FirstOrDefault(r => r.Outcome == resolvedOutcome);
+        var (carc, rarc) = resolvedOutcome == ClaimAdjudicationOutcome.Reject
+            ? (AdjudicationDenialCodes.DefaultRejectCarc, AdjudicationDenialCodes.DefaultRejectRarc)
+            : (AdjudicationDenialCodes.DefaultDenyCarc, AdjudicationDenialCodes.DefaultDenyRarc);
+
+        _logger.LogWarning(
+            "Stage {Stage} produced {Outcome} for claim {ClaimVersionId} without a denial reason code; " +
+            "assigning default CARC {Carc} / RARC {Rarc}",
+            deciding?.StageName ?? "unknown",
+            resolvedOutcome,
+            SanitizeForLog(context.ClaimVersionId),
+            carc,
+            rarc);
+
+        AdjudicationDenialCodes.Apply(
+            context,
+            carc,
+            context.AdjudicationResult.DenialReason ?? deciding?.Reason,
+            rarc);
     }
 
     private static string SanitizeForLog(string? value) =>

@@ -148,16 +148,14 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
         if (string.IsNullOrWhiteSpace(claim.BenefitPlanId))
         {
-            return ClaimAdjudicationStageResult.Reject(
-                StageName,
+            return RejectUnprocessable(context,
                 "Claim is missing BenefitPlanId; benefit calculation cannot run.");
         }
 
         var planGuid = ResolvePlanGuid(context.ResolvedPlan, claim.BenefitPlanId);
         if (planGuid is null)
         {
-            return ClaimAdjudicationStageResult.Reject(
-                StageName,
+            return RejectUnprocessable(context,
                 $"BenefitPlanId '{claim.BenefitPlanId}' is not a GUID and benefit-plan-service did not resolve a Guid id.");
         }
 
@@ -357,6 +355,18 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
         if (!result.Success)
         {
+            // The engine's own CARC (16, 96, 204, ...) was copied by
+            // ApplyToContext. An engine denial without one gets CO-96 + N130
+            // (non-covered; consult plan benefits) so the 835 still has a CARC.
+            if (string.IsNullOrWhiteSpace(context.AdjudicationResult.DenialReasonCode))
+            {
+                AdjudicationDenialCodes.Apply(
+                    context,
+                    AdjudicationDenialCodes.NonCoveredCarc,
+                    result.DenialReasonDescription ?? "Benefit denied",
+                    AdjudicationDenialCodes.ConsultPlanBenefitsRarc);
+            }
+
             return ClaimAdjudicationStageResult.Deny(
                 StageName,
                 result.DenialReasonDescription ?? result.DenialReasonCode ?? "Benefit denied");
@@ -1201,6 +1211,20 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     }
 
     private static string NormalizeTier(NetworkTier tier) => tier.ToString();
+
+    /// <summary>
+    /// A benefit-calculation Reject (no usable plan id, or the engine threw)
+    /// is an unprocessable claim: CO-16 + MA130, so the 835 has a CARC.
+    /// </summary>
+    private static ClaimAdjudicationStageResult RejectUnprocessable(ClaimAdjudicationContext context, string reason)
+    {
+        AdjudicationDenialCodes.Apply(
+            context,
+            AdjudicationDenialCodes.ClaimLacksInformationCarc,
+            reason,
+            AdjudicationDenialCodes.UnprocessableClaimRarc);
+        return ClaimAdjudicationStageResult.Reject(StageName, reason);
+    }
 
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
