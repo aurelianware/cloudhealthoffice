@@ -235,6 +235,35 @@ public class ClaimsAuthenticationTests : IClassFixture<ClaimsApiFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    /// <summary>
+    /// The generic status endpoint never sets an adjudicated outcome or a
+    /// payment status — the adjudication pipeline, the work queue and
+    /// remittance own those. Rejected with 422 before any write, even for a
+    /// supervisor.
+    /// </summary>
+    [Theory]
+    [InlineData(ClaimStatus.Approved, "work-queue")]
+    [InlineData(ClaimStatus.Denied, "work-queue")]
+    [InlineData(ClaimStatus.Pended, "work-queue")]
+    [InlineData(ClaimStatus.Paid, "remittance")]
+    [InlineData(ClaimStatus.PartiallyPaid, "remittance")]
+    public async Task GenericStatusEndpoint_RejectsOutcomeStatuses(ClaimStatus status, string pointsTo)
+    {
+        var claim = StubClaim(ClaimStatus.InAdjudication);
+        _factory.ClaimRepository.ClearReceivedCalls();
+
+        var response = await Supervisor().PutAsJsonAsync($"/api/claims/{claim.Id}/status", new { status = (int)status });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains(pointsTo, body);
+        Assert.Contains("/void", body);
+        await _factory.ClaimRepository.DidNotReceive().TryTransitionStatusAsync(
+            Arg.Any<string>(), claim.Id, Arg.Any<ClaimStatus>(), Arg.Any<CancellationToken>());
+        await _factory.ClaimRepository.DidNotReceive().UpdateAsync(Arg.Is<Claim>(c => c.Id == claim.Id));
+        Assert.Equal(ClaimStatus.InAdjudication, claim.Status);
+    }
+
     [Fact]
     public async Task Adjustment_RequiresClaimsAdjust()
     {

@@ -205,33 +205,11 @@ public class FlAhcaWorkflowTests
         Assert.Equal(1.063m, multiplier);
         Assert.True(rateResult.GetProperty("enhancedRateApplies").GetBoolean());
 
-        // Submit adjudication with line-level results
-        var adjudication = new
-        {
-            allowedAmount = 120.00m,
-            deductibleAmount = 0m,
-            coinsuranceAmount = 0m,
-            copayAmount = 0m,
-            patientResponsibility = 0m,
-            payerPayment = 120.00m,
-            adjustmentReasons = Array.Empty<object>(),
-            remarkCodes = Array.Empty<string>()
-        };
-
-        var adjResponse = await _fixture.ClaimsClient.PutAsJsonAsync(
-            $"/api/claims/{claimId19}/adjudication", adjudication, Json);
-
-        Assert.True(
-            adjResponse.StatusCode is HttpStatusCode.OK,
-            $"Adjudication failed: {adjResponse.StatusCode} — {await adjResponse.Content.ReadAsStringAsync()}");
-
-        // Verify claim was adjudicated — fetch it back
-        var getClaimResponse = await _fixture.ClaimsClient.GetAsync($"/api/claims/{claimId19}");
-        Assert.Equal(HttpStatusCode.OK, getClaimResponse.StatusCode);
-
-        var adjudicatedClaim = await getClaimResponse.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.True(adjudicatedClaim.TryGetProperty("adjudicatedDate", out var adjDate));
-        Assert.NotEqual(JsonValueKind.Null, adjDate.ValueKind);
+        // The adjudication pipeline (claims-service consumer → orchestrator →
+        // PersistenceStage) is the only writer of the outcome: wait for the
+        // submitted claim to reach a terminal status and assert what it persisted.
+        var adjudicatedClaim = await WaitForPipelineOutcomeAsync(claimId19);
+        AssertPersistedPipelineOutcome(adjudicatedClaim, claimId19);
 
         // Check MPIP multiplier applied on claim lines (if the enhancer ran)
         if (adjudicatedClaim.TryGetProperty("claimLines", out var claimLines))
@@ -376,26 +354,9 @@ public class FlAhcaWorkflowTests
         var created22 = await submit22.Content.ReadFromJsonAsync<JsonElement>(Json);
         var claimId22 = created22.GetProperty("id").GetString()!;
 
-        // Adjudicate claim for age 22
-        var adj22 = new
-        {
-            allowedAmount = 120.00m,
-            deductibleAmount = 0m,
-            coinsuranceAmount = 0m,
-            copayAmount = 0m,
-            patientResponsibility = 0m,
-            payerPayment = 120.00m,
-            adjustmentReasons = Array.Empty<object>(),
-            remarkCodes = Array.Empty<string>()
-        };
-
-        var adjResponse22 = await _fixture.ClaimsClient.PutAsJsonAsync(
-            $"/api/claims/{claimId22}/adjudication", adj22, Json);
-        Assert.Equal(HttpStatusCode.OK, adjResponse22.StatusCode);
-
-        // Verify no MPIP enhancement on claim lines
-        var getClaim22 = await _fixture.ClaimsClient.GetAsync($"/api/claims/{claimId22}");
-        var adjClaim22 = await getClaim22.Content.ReadFromJsonAsync<JsonElement>(Json);
+        // Wait for the pipeline's persisted outcome (no MPIP enhancement for age 22)
+        var adjClaim22 = await WaitForPipelineOutcomeAsync(claimId22);
+        AssertPersistedPipelineOutcome(adjClaim22, claimId22);
 
         if (adjClaim22.TryGetProperty("claimLines", out var lines22))
         {
@@ -433,6 +394,84 @@ public class FlAhcaWorkflowTests
         Assert.True(summary.TryGetProperty("pending", out _), "Summary should have pending count");
         Assert.True(summary.TryGetProperty("accepted", out _), "Summary should have accepted count");
         Assert.True(summary.TryGetProperty("deadlineWarning", out _), "Summary should have warning count");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PIPELINE OUTCOME HELPERS
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static readonly TimeSpan PipelineOutcomeTimeout = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Polls <c>GET /api/claims/{id}</c> until the adjudication pipeline has
+    /// persisted a terminal outcome (Pended, Approved, Denied, Paid,
+    /// PartiallyPaid or Voided) — the same submit-and-observe contract the
+    /// MCC validator's Service Bus-only mode uses.
+    /// </summary>
+    private async Task<JsonElement> WaitForPipelineOutcomeAsync(string claimId)
+    {
+        var deadline = DateTime.UtcNow + PipelineOutcomeTimeout;
+        string? lastStatus = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            using var response = await _fixture.ClaimsClient.GetAsync($"/api/claims/{claimId}");
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var claim = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+                lastStatus = ReadStatus(claim);
+                if (lastStatus is not null && TerminalStatuses.Contains(lastStatus))
+                {
+                    return claim;
+                }
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+
+        throw new TimeoutException(
+            $"Claim {claimId} did not reach a terminal adjudication status within {PipelineOutcomeTimeout.TotalSeconds:N0}s " +
+            $"(last status: {lastStatus ?? "unknown"}). Is the claims-service adjudication consumer running?");
+    }
+
+    private static readonly HashSet<string> TerminalStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        nameof(ClaimStatus.Pended), nameof(ClaimStatus.Approved), nameof(ClaimStatus.Denied),
+        nameof(ClaimStatus.Paid), nameof(ClaimStatus.PartiallyPaid), nameof(ClaimStatus.Voided),
+    };
+
+    /// <summary>The claim's status by name, whether serialized as a string or as the enum number.</summary>
+    private static string? ReadStatus(JsonElement claim)
+    {
+        if (!claim.TryGetProperty("status", out var status)) return null;
+        return status.ValueKind switch
+        {
+            JsonValueKind.String => status.GetString(),
+            JsonValueKind.Number when Enum.IsDefined(typeof(ClaimStatus), status.GetInt32()) =>
+                ((ClaimStatus)status.GetInt32()).ToString(),
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// The pipeline persisted an adjudication result, and an Approved claim
+    /// carries a payer payment while a Denied one carries none.
+    /// </summary>
+    private static void AssertPersistedPipelineOutcome(JsonElement claim, string claimId)
+    {
+        var status = ReadStatus(claim);
+        Assert.True(
+            claim.TryGetProperty("adjudicationResult", out var result) && result.ValueKind == JsonValueKind.Object,
+            $"Claim {claimId} reached {status} without a persisted adjudication result");
+
+        if (string.Equals(status, nameof(ClaimStatus.Approved), StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.True(result.GetProperty("payerPayment").GetDecimal() > 0m,
+                $"Approved claim {claimId} should carry a payer payment");
+        }
+        else if (string.Equals(status, nameof(ClaimStatus.Denied), StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.Equal(0m, result.GetProperty("payerPayment").GetDecimal());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════

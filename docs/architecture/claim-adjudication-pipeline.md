@@ -262,19 +262,18 @@ Fixed as follows:
 2. `isPend` and `PendDetails` are passed to
    `UpdateAdjudicationProjectionAsync`. `isPend=false` is a **pure no-op**
    on `/status` — Pass/Deny/Reject outcomes never touch it, exactly as
-   before this fix. Status transitions for those outcomes remain owned by
-   other write paths (`UpdateAdjudicationSummaryAsync`, the Argo
-   workflow's `update-claim-step`, or `ClaimsController.PendClaim`), not
-   this bypass method — this fix does not add terminal-status writes here.
+   before this fix. (Later, the `resolvedStatus` parameter made this
+   projection the writer of Pass/Deny/Reject statuses too — see D9c: the
+   pipeline is now the only writer of an adjudicated outcome.)
 3. **Precedence rule** (documented here — the source of truth, not just
    the PR that introduced it): when `isPend` is true, the repository ALSO
    patches `/status` to `ClaimStatus.Pended`, *unless* the claim's current
    `Status` is already a later-stage disposition — `Approved`, `Denied`,
    `Paid`, `PartiallyPaid`, or `Voided` (`ClaimRepository.IsFinalDisposition`,
    shared by both the Cosmos and Mongo repositories). This guards against
-   downgrading a claim that another write path — most plausibly the Argo
-   workflow's synchronous `update-claim-step`, or an examiner's
-   work-queue override — finalized before this async projection landed.
+   downgrading a claim that another write path — remittance, a void, or
+   an examiner's work-queue override — finalized before this async
+   projection landed.
    `Pended` is deliberately **not** in that list: re-pending an
    already-`Pended` claim (a re-adjudication run that refreshes
    `PendDetails`, e.g. a different edit-failure set) is allowed.
@@ -326,6 +325,42 @@ Fixed as follows:
 This guard is intentionally not a human pend-resolution path. Explicit
 examiner override remains owned by `POST work-queue/{id}/override` so a
 generic workflow write-back cannot accidentally resolve a pend.
+
+> **Superseded by D9c.** The synchronous write-back endpoints D9b guarded
+> (`PUT /api/claims/{id}/adjudication`, `PUT /api/claims/{id}/adjudication-summary`,
+> `PUT /api/claims/{id}/pend`) and `UpdateAdjudicationSummaryAsync` /
+> `AdjudicationSummaryWriteResponse` no longer exist. The guard itself
+> (`BlocksSynchronousWriteback`) still backs `TryTransitionStatusAsync`
+> and the pipeline's resolved-status projection.
+
+#### D9c — The pipeline is the only writer of an adjudicated outcome
+
+The Service Bus / in-memory consumer → `ClaimAdjudicationOrchestrator` →
+`PersistenceStage` (`UpdateAdjudicationProjectionAsync`) is the only path
+that sets a claim's adjudicated outcome (`Approved`, `Denied`, `Pended`
+and the `AdjudicationResult` behind them). The retired Argo workflow's
+write-back side doors were removed:
+
+| Removed | Was | Use instead |
+|---------|-----|-------------|
+| `PUT /api/claims/{id}/adjudication` | Full-document replace of `AdjudicationResult` + Approved/Denied | Submit the claim and let the pipeline adjudicate it |
+| `PUT /api/claims/{id}/adjudication-summary` | MCC validator's summary write-back | Submit and poll `GET /api/claims/{id}` (validator `--servicebus-only`) |
+| `PUT /api/claims/{id}/pend` | Raw Pended + `PendDetails` replace | The pipeline's pend stages |
+
+`PUT /api/claims/{id}/status` now accepts only operational statuses
+(`Received`, `InAdjudication`, and `Voided` with `claims:void`); it
+answers **422** for `Approved`, `Denied`, `Pended`, `Paid` and
+`PartiallyPaid`, pointing to the work queue
+(`POST /api/claims/work-queue/{id}/resolve` / `/override`, which re-run
+the pipeline), remittance (`POST /api/claims/{id}/remittance`,
+`/inbound-remittance`) or `POST /api/claims/{id}/void`.
+
+The legitimate post-adjudication writers are remittance / finalize, void,
+adjustments (`POST /api/v1/claims/{id}/adjustments`), work-queue
+resolve / override, the accumulator pend re-runs and inbound remittance.
+`ClaimOutcomeWriterRouteGuardTests` enumerates every mutating
+claims-service route by reflection and fails until a new one is added to
+its reviewed allow-list.
 
 ### D10 — Resolution clients are cached HTTP clients
 

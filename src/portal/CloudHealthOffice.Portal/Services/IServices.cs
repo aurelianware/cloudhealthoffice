@@ -20,7 +20,6 @@ public interface IClaimsService
         string? validationStatus = null,
         string? paymentStatus = null);
     Task<string> SubmitClaimAsync(SubmitClaimRequest request);
-    Task UpdateClaimStatusAsync(string claimId, string status, string? notes = null);
     Task<bool> TryRecordAiExaminerAgreementAsync(
         string claimId,
         string agreement,

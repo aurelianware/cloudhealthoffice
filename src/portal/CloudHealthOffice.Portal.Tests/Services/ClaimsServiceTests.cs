@@ -114,17 +114,6 @@ public class ClaimsServiceTests
         ex.ServiceName.Should().Be("Claims Service");
     }
 
-    // ── UpdateClaimStatusAsync ──
-
-    [Fact]
-    public async Task UpdateClaimStatusAsync_WhenApiFails_ThrowsServiceUnavailableException()
-    {
-        var sut = CreateService();
-        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
-            () => sut.UpdateClaimStatusAsync("CLM-2026-00001", "Denied"));
-        ex.ServiceName.Should().Be("Claims Service");
-    }
-
     // ── GetAdjudicationDataAsync ──
 
     [Fact]
@@ -943,31 +932,6 @@ public class ClaimsServiceTests
 
         result.Claims.Should().BeEmpty();
         result.TotalCount.Should().Be(0);
-    }
-
-    // ── UpdateClaimStatusAsync ──
-
-    [Fact]
-    public async Task UpdateClaimStatusAsync_WhenApiReturns200_CompletesWithoutException()
-    {
-        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
-        var sut = CreateService(new HttpClient(handler));
-
-        var act = () => sut.UpdateClaimStatusAsync("CLM-001", "Denied", "Insufficient documentation");
-
-        await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
-    public async Task UpdateClaimStatusAsync_VerifyUrlContainsClaimId()
-    {
-        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
-        var sut = CreateService(new HttpClient(handler));
-
-        await sut.UpdateClaimStatusAsync("CLM-5050", "Approved");
-
-        handler.CapturedUrls.Should().ContainSingle()
-            .Which.Should().Contain("/claims/CLM-5050/status");
     }
 
     // ── GetAdjudicationDataAsync ──

@@ -280,7 +280,6 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
             Substitute.For<IMassAdjudicationRunRepository>(),
             Substitute.For<IAiExaminationAuditRepository>(),
             Substitute.For<IClaimAcknowledgmentService>(),
-            Substitute.For<IMpipAdjudicationEnhancer>(),
             Substitute.For<IClaimEventPublisher>(),
             Substitute.For<IClaimVersionEventPublisher>(),
             Substitute.For<IClaimVersionEventReader>(),

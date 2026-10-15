@@ -202,7 +202,7 @@ See [OPERATING-MODE.md](OPERATING-MODE.md) for full details.
 
 ## AI Claims Examiner (pended claims)
 
-When the NcciEngine returns edit failures (HTTP 422), the update-claim step routes the claim to the pend queue (`PUT /api/claims/{id}/pend`), which publishes a `claims.pended.v1` Kafka event. The `claims-examiner-service` consumes this event and produces an AI advisory recommendation.
+When an adjudication stage pends a claim (NCCI/MUE edit failures today), the claims-service pipeline persists `Pended` + `PendDetails` and its AI-examination stage publishes a `claims.pended.v1` event. The `claims-examiner-service` consumes this event and produces an AI advisory recommendation.
 
 **v1 scope:**
 

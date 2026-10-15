@@ -8,7 +8,7 @@ Run Cloud Health Office locally and take a claim all the way through adjudicatio
 2. Seed NCCI/MUE edits
 3. Create a benefit plan
 4. Submit a claim
-5. Adjudicate it (NCCI check → fee schedule → cost sharing)
+5. Watch the adjudication pipeline adjudicate it (NCCI check → fee schedule → cost sharing)
 6. Run a payment batch and generate an 835 ERA
 7. Download the raw X12 835 file
 
@@ -129,31 +129,36 @@ echo "Plan ID: $PLAN_ID"
 
 ## 5. Submit a claim
 
-Submit an 837P-equivalent claim — an office visit (CPT 99213) at POS 11:
+Submit an 837P-equivalent claim — an office visit (CPT 99213) at POS 11.
+Submitting is all you do: the claims-service adjudication pipeline
+(consumer → `ClaimAdjudicationOrchestrator` → `PersistenceStage`) picks the
+claim up and is the only thing that sets its adjudicated outcome.
 
 ```bash
-CLAIM=$(curl -s -X POST http://localhost:5001/api/claims \
-  -H "X-Tenant-ID: $TENANT" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "claimNumber": "LOCAL-TEST-001",
-    "memberId": "MBR001",
-    "subscriberId": "SUB001",
-    "providerNpi": "1234567890",
-    "serviceDate": "2025-06-15T00:00:00Z",
-    "diagnosisCodes": ["Z00.00"],
-    "serviceLines": [
-      {
-        "procedureCode": "99213",
-        "placeOfServiceCode": "11",
-        "billedAmount": 175.00,
-        "units": 1,
-        "diagnosisCodes": ["Z00.00"]
-      }
-    ],
-    "totalBilledAmount": 175.00,
-    "status": "Submitted"
-  }')
+submit_claim() {   # submit_claim <claimNumber> <claimLines JSON> <totalCharge>
+  curl -s -X POST http://localhost:5001/api/claims \
+    -H "X-Tenant-ID: $TENANT" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"claimNumber\": \"$1\",
+      \"memberId\": \"MBR001\",
+      \"subscriberId\": \"SUB001\",
+      \"benefitPlanId\": \"$PLAN_ID\",
+      \"billingProviderNPI\": \"1234567890\",
+      \"placeOfServiceCode\": \"11\",
+      \"serviceDateFrom\": \"2025-06-15T00:00:00Z\",
+      \"serviceDateTo\": \"2025-06-15T00:00:00Z\",
+      \"diagnosisCodes\": [{ \"code\": \"Z00.00\", \"pointerNumber\": 1 }],
+      \"claimLines\": $2,
+      \"totalChargeAmount\": $3
+    }"
+}
+
+CLAIM=$(submit_claim LOCAL-TEST-001 '[
+  { "lineNumber": 1, "procedureCode": "99213", "placeOfServiceCode": "11", "chargeAmount": 175.00,
+    "units": 1, "diagnosisPointers": [1],
+    "serviceDateFrom": "2025-06-15T00:00:00Z", "serviceDateTo": "2025-06-15T00:00:00Z" }
+]' 175.00)
 
 echo $CLAIM | jq .
 
@@ -163,75 +168,76 @@ echo "Claim ID: $CLAIM_ID"
 
 ---
 
-## 6. Adjudicate the claim
+## 6. Wait for the adjudication outcome
 
-Call the combined adjudication endpoint. This runs in order:
+Poll the claim until the pipeline has persisted a terminal status —
+`Pended` (4), `Approved` (5), `Denied` (6), `Paid` (7), `Voided` (8) or
+`PartiallyPaid` (9). The pipeline runs, in order:
 
 1. **NCCI/MUE edit check** — CPT 99213 has no NCCI conflicts, passes
 2. **Fee schedule lookup** — no local fee schedule seeded, falls back to billed charges ($175)
 3. **Benefit calculation** — POS 11 resolves to service type "98" (Professional Visit); $30 copay applies, deductible not consumed
 
 ```bash
-ADJ=$(curl -s -X POST http://localhost:5002/api/v1/adjudication/adjudicate \
-  -H "X-Tenant-ID: $TENANT" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"claimId\": \"$CLAIM_ID\",
-    \"memberId\": \"MBR001\",
-    \"subscriberId\": \"SUB001\",
-    \"benefitPlanId\": \"$PLAN_ID\",
-    \"serviceDate\": \"2025-06-15\",
-    \"providerNpi\": \"1234567890\",
-    \"networkTier\": \"InNetwork\",
-    \"lines\": [
-      {
-        \"lineNumber\": 1,
-        \"procedureCode\": \"99213\",
-        \"placeOfService\": \"11\",
-        \"billedAmount\": 175.00,
-        \"units\": 1,
-        \"diagnosisCodes\": [\"Z00.00\"]
-      }
-    ]
-  }")
+wait_for_outcome() {   # wait_for_outcome <claimId>
+  for i in $(seq 1 60); do
+    STATUS=$(curl -s "http://localhost:5001/api/claims/$1" -H "X-Tenant-ID: $TENANT" | jq -r '.status // empty')
+    case "$STATUS" in
+      4|5|6|7|8|9|Pended|Approved|Denied|Paid|Voided|PartiallyPaid) break ;;
+    esac
+    sleep 1
+  done
+  curl -s "http://localhost:5001/api/claims/$1" -H "X-Tenant-ID: $TENANT" \
+    | jq '{id, status, pendCode: .pendDetails.pendCode, adjudicationResult: (.adjudicationResult | {allowedAmount, patientResponsibility, payerPayment, denialReasonCode})}'
+}
 
-echo $ADJ | jq .
+wait_for_outcome "$CLAIM_ID"
 ```
 
 **Expected result:**
 
 ```json
 {
-  "claimId": "<uuid>",
-  "success": true,
-  "totals": {
-    "billedAmount": 175.00,
+  "id": "<uuid>",
+  "status": 5,
+  "pendCode": null,
+  "adjudicationResult": {
     "allowedAmount": 175.00,
-    "contractualAdjustment": 0.00,
-    "deductibleAmount": 0.00,
-    "copayAmount": 30.00,
-    "coinsuranceAmount": 0.00,
-    "memberResponsibility": 30.00,
-    "planPayment": 145.00
+    "patientResponsibility": 30.00,
+    "payerPayment": 145.00,
+    "denialReasonCode": null
   }
 }
 ```
 
+There is no endpoint that writes an adjudication result onto a claim: to
+change a pended claim's outcome use the work queue
+(`POST /api/claims/work-queue/{id}/resolve` or `/override`, which re-run the
+pipeline); payment status comes from remittance; voids go through
+`POST /api/claims/{id}/void`.
+
 ---
 
-## 7. Update the claim with adjudication results
+## 7. (Optional) What-if estimate
+
+To price the same services without creating or changing a claim, ask the
+benefit-plan service for a read-only estimate:
 
 ```bash
-curl -s -X PUT "http://localhost:5001/api/claims/$CLAIM_ID/adjudication" \
+curl -s -X POST http://localhost:5002/api/v1/adjudication/estimate \
   -H "X-Tenant-ID: $TENANT" \
   -H "Content-Type: application/json" \
-  -d '{
-    "status": "Adjudicated",
-    "allowedAmount": 175.00,
-    "memberLiability": 30.00,
-    "planPayment": 145.00,
-    "adjudicationDate": "2025-06-15T12:00:00Z"
-  }' | jq .
+  -d "{
+    \"memberId\": \"MBR001\",
+    \"subscriberId\": \"SUB001\",
+    \"benefitPlanId\": \"$PLAN_ID\",
+    \"providerNpi\": \"1234567890\",
+    \"serviceDate\": \"2025-06-15\",
+    \"networkTier\": \"InNetwork\",
+    \"lines\": [
+      { \"lineNumber\": 1, \"procedureCode\": \"99213\", \"placeOfService\": \"11\", \"chargeAmount\": 175.00, \"units\": 1 }
+    ]
+  }" | jq .
 ```
 
 ---
@@ -245,36 +251,17 @@ curl -s "http://localhost:5001/api/claims/search?status=5&pageSize=5" \
   -H "X-Tenant-ID: $TENANT" | jq 'map({id, claimNumber, status})'
 ```
 
-If the result is empty (`[]`), create and approve a quick test claim first:
+If the result is empty (`[]`), submit a quick test claim and wait for the
+pipeline to approve it (uses the helpers from steps 5 and 6):
 
 ```bash
-CLAIM=$(curl -s -X POST http://localhost:5001/api/claims \
-  -H "X-Tenant-ID: $TENANT" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "claimNumber": "LOCAL-PAY-001",
-    "memberId": "MBR001",
-    "subscriberId": "SUB001",
-    "providerNpi": "1234567890",
-    "serviceDate": "2025-06-15T00:00:00Z",
-    "serviceLines": [
-      {
-        "procedureCode": "99213",
-        "placeOfServiceCode": "11",
-        "billedAmount": 175.00,
-        "units": 1
-      }
-    ],
-    "totalBilledAmount": 175.00,
-    "status": "Submitted"
-  }')
+CLAIM_ID=$(submit_claim LOCAL-PAY-001 '[
+  { "lineNumber": 1, "procedureCode": "99213", "placeOfServiceCode": "11", "chargeAmount": 175.00,
+    "units": 1, "diagnosisPointers": [1],
+    "serviceDateFrom": "2025-06-15T00:00:00Z", "serviceDateTo": "2025-06-15T00:00:00Z" }
+]' 175.00 | jq -r '.id')
 
-CLAIM_ID=$(echo "$CLAIM" | jq -r '.id')
-
-curl -s -X PUT "http://localhost:5001/api/claims/$CLAIM_ID/status" \
-  -H "X-Tenant-ID: $TENANT" \
-  -H "Content-Type: application/json" \
-  -d '{"status":5}' | jq '{id, status}'
+wait_for_outcome "$CLAIM_ID"
 ```
 
 Execute a payment run that picks up all adjudicated claims and generates 835 EDI for each:
@@ -415,7 +402,7 @@ curl -s -X POST http://localhost:5006/api/payments \
 
 - `400 TenantId field is required`: ensure you're on latest code where tenant comes from `X-Tenant-ID`; if not, include `"tenantId":"$TENANT"` in payload as temporary fallback.
 - `404` on `/api/payments/{id}/835`: verify `PAYMENT_ID` is non-empty and was created under the same tenant header.
-- `500` during payment run execution: confirm claims-service has adjudicated claims and `PUT /api/claims/{id}/adjudication` completed first.
+- `500` during payment run execution: confirm claims-service has adjudicated claims — the claim from step 6 must have reached `Approved` (5) before the payment run.
 - Intermittent failures right after `docker compose --profile core --profile finance up -d`: wait for health checks to pass (`curl http://localhost:5006/health`) before running API calls.
 
 ---
@@ -442,25 +429,19 @@ Explore all endpoints interactively:
 
 ## Test NCCI edit failure
 
-CPT 11040 (debridement) is column 1 to CPT 97597 (selective debridement). Submitting them together triggers an NCCI bundling edit and returns HTTP 422:
+CPT 11040 (debridement) is column 1 to CPT 97597 (selective debridement). Submitting them together triggers an NCCI bundling edit, and the pipeline pends the claim for review:
 
 ```bash
-curl -s -X POST http://localhost:5002/api/v1/adjudication/adjudicate \
-  -H "X-Tenant-ID: $TENANT" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"claimId\": \"ncci-test-001\",
-    \"memberId\": \"MBR001\",
-    \"subscriberId\": \"SUB001\",
-    \"benefitPlanId\": \"$PLAN_ID\",
-    \"serviceDate\": \"2025-06-15\",
-    \"providerNpi\": \"1234567890\",
-    \"networkTier\": \"InNetwork\",
-    \"lines\": [
-      { \"lineNumber\": 1, \"procedureCode\": \"11040\", \"placeOfService\": \"11\", \"billedAmount\": 200.00, \"units\": 1 },
-      { \"lineNumber\": 2, \"procedureCode\": \"97597\", \"placeOfService\": \"11\", \"billedAmount\": 150.00, \"units\": 1 }
-    ]
-  }" | jq '{status: .error, message: .message}'
+NCCI_CLAIM_ID=$(submit_claim NCCI-TEST-001 '[
+  { "lineNumber": 1, "procedureCode": "11040", "placeOfServiceCode": "11", "chargeAmount": 200.00,
+    "units": 1, "diagnosisPointers": [1],
+    "serviceDateFrom": "2025-06-15T00:00:00Z", "serviceDateTo": "2025-06-15T00:00:00Z" },
+  { "lineNumber": 2, "procedureCode": "97597", "placeOfServiceCode": "11", "chargeAmount": 150.00,
+    "units": 1, "diagnosisPointers": [1],
+    "serviceDateFrom": "2025-06-15T00:00:00Z", "serviceDateTo": "2025-06-15T00:00:00Z" }
+]' 350.00 | jq -r '.id')
+
+wait_for_outcome "$NCCI_CLAIM_ID"   # expect status 4 (Pended) with an NCCI pend code
 ```
 
 ---
