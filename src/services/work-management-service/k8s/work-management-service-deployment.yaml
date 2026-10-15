@@ -23,9 +23,14 @@ data:
   Kafka__ClientId: "work-management-service"
   Kafka__ClaimWork__GroupId: "work-management-service.claims-work"
   # Leases and the periodic reconcile (docs/architecture/work-management.md).
-  # Reconcile is automatic: on exactly when Kafka__BootstrapServers is empty.
+  # Reconcile alone would be automatic (on exactly when Kafka__BootstrapServers
+  # is empty). It is forced on here because claims-service's manifest does not
+  # wire Kafka yet, so in AKS claims.work.v1 may not be produced even when this
+  # service can consume it. Turn it off (or lengthen the interval) once
+  # claims-service publishes to the same Kafka.
   WorkManagement__LeaseMinutes: "30"
-  WorkManagement__Reconcile__IntervalMinutes: "2"
+  WorkManagement__Reconcile__Enabled: "true"
+  WorkManagement__Reconcile__IntervalMinutes: "5"
 ---
 apiVersion: apps/v1
 kind: Deployment

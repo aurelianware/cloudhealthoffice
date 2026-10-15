@@ -238,7 +238,9 @@ in-memory. CHO's in-memory `IMessageBus` is process-local, so it could never
 carry events across services; that is why claim work events ride Kafka and why
 reconcile is the fallback. `WorkManagement:Reconcile:Enabled` forces it on or
 off; `IntervalMinutes` (2), `PageSize` (500), `Tenants` (reconciled besides the
-tenants already known). The **GKE demo** (Kafka on by default) also turns the
+tenants already known). The AKS manifest forces it on (every 5 minutes) because
+claims-service's own manifest does not wire `Kafka__BootstrapServers` yet, so
+work events may not be produced there; turn it off once claims-service publishes. The **GKE demo** (Kafka on by default) also turns the
 periodic reconcile on for tenant `demo` (`deploy/gcp/render_manifests.py`): it
 picks up claims pended before the service started (seeded data) and repairs
 anything lost.
