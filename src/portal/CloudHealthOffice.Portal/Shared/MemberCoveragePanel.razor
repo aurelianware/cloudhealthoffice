@@ -1,0 +1,356 @@
+@* Coverage & benefits as of a date — the everyday coverage view for payer
+   staff on the member record. Each piece (coverage, plan details, PCP,
+   accumulators) is fetched independently; a failing call shows
+   "unavailable" for its piece and never blanks the rest of the panel.
+   Payer staff read this instead of sending a 270 — the 270/271 Eligibility
+   Simulator is for trading-partner testing. *@
+@using CloudHealthOffice.Portal.Services
+@inject ICoverageService CoverageService
+@inject IMemberService MemberService
+@inject IBenefitPlanService BenefitPlanService
+
+<div data-testid="coverage-panel">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+        <MudText Typo="Typo.h6">Coverage &amp; benefits</MudText>
+        <div style="max-width: 200px;">
+            <MudDatePicker Date="_asOf" DateChanged="OnAsOfChanged" Label="As of"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </div>
+    </MudStack>
+
+    @* ── Coverage status ── *@
+    @if (_loadingCoverage)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    }
+    else if (_coverageError)
+    {
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-4" data-testid="coverage-unavailable">
+            Coverage unavailable &mdash; the coverage service could not be reached.
+        </MudAlert>
+    }
+    else
+    {
+        var inForce = InForceOn(_asOf);
+        <MudAlert Severity="@(inForce.Any() ? Severity.Success : Severity.Error)" Class="mb-4" data-testid="coverage-status">
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
+                @if (inForce.Any())
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mr-1" />
+                    <span>ACTIVE COVERAGE on @AsOfText</span>
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Class="mr-1" />
+                    <span>NO ACTIVE COVERAGE on @AsOfText</span>
+                }
+            </MudText>
+        </MudAlert>
+
+        @foreach (var coverage in inForce.Any() ? inForce : MostRecent())
+        {
+            <MudSimpleTable Dense="true" Class="mb-4" data-testid="coverage-row">
+                <tbody>
+                    <tr>
+                        <td style="width: 40%;"><strong>Plan</strong></td>
+                        <td>
+                            @(coverage.PlanName ?? "—")
+                            @if (!string.IsNullOrEmpty(coverage.PlanId))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-family: monospace; display: inline;" Class="ml-2">@coverage.PlanId</MudText>
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Group</strong></td>
+                        <td>@(coverage.GroupNumber ?? "—")</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Line of business</strong></td>
+                        <td>@FormatLob(coverage.LineOfBusiness, _benefitView?.LineOfBusiness)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Coverage level</strong></td>
+                        <td>@(coverage.CoverageLevel ?? "—")</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Status</strong></td>
+                        <td>@coverage.StatusText</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Effective</strong></td>
+                        <td>@coverage.EffectiveDate.ToString("MM/dd/yyyy")</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Termination</strong></td>
+                        <td>@(coverage.TerminationDate?.ToString("MM/dd/yyyy") ?? "Open-ended")</td>
+                    </tr>
+                </tbody>
+            </MudSimpleTable>
+        }
+
+        @if (!_coverages.Any())
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">No coverage records on file.</MudText>
+        }
+    }
+
+    <MudGrid>
+        @* ── Network / plan type ── *@
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Network</MudText>
+            @if (_loadingBenefitView)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            }
+            else if (_benefitViewError)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Warning" data-testid="plan-unavailable">Plan details unavailable</MudText>
+            }
+            else if (_benefitView != null)
+            {
+                <MudText Typo="Typo.body2">
+                    @(string.IsNullOrEmpty(_benefitView.PlanType) ? "—" : _benefitView.PlanType)
+                    @if (!string.IsNullOrEmpty(_benefitView.MetalLevel))
+                    {
+                        <span> &middot; @_benefitView.MetalLevel</span>
+                    }
+                    @if (!string.IsNullOrEmpty(_benefitView.Payer))
+                    {
+                        <span> &middot; @_benefitView.Payer</span>
+                    }
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">—</MudText>
+            }
+        </MudItem>
+
+        @* ── PCP ── *@
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Primary care physician</MudText>
+            @if (_loadingPcp)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            }
+            else if (_pcpError)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Warning" data-testid="pcp-unavailable">PCP unavailable</MudText>
+            }
+            else if (_pcp != null && !string.IsNullOrEmpty(_pcp.ProviderName))
+            {
+                <MudText Typo="Typo.body2" data-testid="pcp-name">@_pcp.ProviderName</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    NPI @(_pcp.NPI)@(string.IsNullOrEmpty(_pcp.NetworkStatus) ? "" : $" · {_pcp.NetworkStatus}")
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No PCP assigned</MudText>
+            }
+        </MudItem>
+    </MudGrid>
+
+    @* ── Accumulators ── *@
+    <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Deductible &amp; out-of-pocket</MudText>
+    @if (_loadingAccumulators)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_accumulatorsError || _accumulators == null)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Warning" data-testid="accumulators-unavailable">Accumulators unavailable</MudText>
+    }
+    else
+    {
+        @if (_accumulators.PlanYearStart != default)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2" Style="display: block;">
+                Plan year @_accumulators.PlanYearStart.ToString("MM/dd/yyyy") &ndash; @_accumulators.PlanYearEnd.ToString("MM/dd/yyyy")
+                @if (_asOf.HasValue && (_asOf.Value.Date < _accumulators.PlanYearStart.Date || _asOf.Value.Date > _accumulators.PlanYearEnd.Date))
+                {
+                    <span> (current plan year; the as-of date falls outside it)</span>
+                }
+            </MudText>
+        }
+        <MudSimpleTable Dense="true" data-testid="accumulators">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th style="text-align: right;">Individual</th>
+                    <th style="text-align: right;">Family</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Deductible</strong></td>
+                    <td style="text-align: right;">@UsedOf(_accumulators.IndividualDeductibleUsed, Max(_accumulators.IndividualDeductibleLimit, _benefitView?.CostSharing.IndividualDeductible))</td>
+                    <td style="text-align: right;">@UsedOf(_accumulators.FamilyDeductibleUsed, Max(_accumulators.FamilyDeductibleLimit, _benefitView?.CostSharing.FamilyDeductible))</td>
+                </tr>
+                <tr>
+                    <td><strong>Out-of-pocket</strong></td>
+                    <td style="text-align: right;">@UsedOf(_accumulators.IndividualOopUsed, Max(_accumulators.IndividualOopLimit, _benefitView?.CostSharing.IndividualOutOfPocketMax))</td>
+                    <td style="text-align: right;">@UsedOf(_accumulators.FamilyOopUsed, Max(_accumulators.FamilyOopLimit, _benefitView?.CostSharing.FamilyOutOfPocketMax))</td>
+                </tr>
+            </tbody>
+        </MudSimpleTable>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string MemberId { get; set; } = string.Empty;
+
+    /// <summary>Initial as-of date; defaults to today.</summary>
+    [Parameter]
+    public DateTime? AsOf { get; set; }
+
+    private DateTime? _asOf;
+    private List<Coverage> _coverages = new();
+    private MemberBenefitView? _benefitView;
+    private MemberPcp? _pcp;
+    private MemberAccumulators? _accumulators;
+
+    private bool _loadingCoverage = true, _loadingBenefitView, _loadingPcp = true, _loadingAccumulators = true;
+    private bool _coverageError, _benefitViewError, _pcpError, _accumulatorsError;
+
+    private string AsOfText => (_asOf ?? DateTime.Today).ToString("MM/dd/yyyy");
+
+    protected override async Task OnInitializedAsync()
+    {
+        _asOf = (AsOf ?? DateTime.Today).Date;
+        // Independent loads: one failing never blocks the others.
+        await Task.WhenAll(LoadCoverageAndPlanAsync(), LoadPcpAsync(), LoadAccumulatorsAsync());
+    }
+
+    private async Task OnAsOfChanged(DateTime? date)
+    {
+        _asOf = (date ?? DateTime.Today).Date;
+        await LoadBenefitViewAsync();
+    }
+
+    private async Task LoadCoverageAndPlanAsync()
+    {
+        try
+        {
+            _coverages = await CoverageService.GetCoverageByMemberIdAsync(MemberId) ?? new();
+        }
+        catch
+        {
+            _coverageError = true;
+            _coverages = new();
+        }
+        finally
+        {
+            _loadingCoverage = false;
+        }
+        await InvokeAsync(StateHasChanged);
+        await LoadBenefitViewAsync();
+    }
+
+    private async Task LoadBenefitViewAsync()
+    {
+        var planId = InForceOn(_asOf).Select(c => c.PlanId).FirstOrDefault(p => !string.IsNullOrEmpty(p));
+        _benefitViewError = false;
+        if (planId == null)
+        {
+            _benefitView = null;
+            return;
+        }
+
+        _loadingBenefitView = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            _benefitView = await BenefitPlanService.GetMemberViewAsync(planId, (_asOf ?? DateTime.Today).Date);
+        }
+        catch
+        {
+            _benefitView = null;
+            _benefitViewError = true;
+        }
+        finally
+        {
+            _loadingBenefitView = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadPcpAsync()
+    {
+        try
+        {
+            _pcp = await MemberService.GetMemberPcpAsync(MemberId);
+        }
+        catch (Exception ex) when (IsNotFound(ex))
+        {
+            _pcp = null; // no PCP assigned
+        }
+        catch
+        {
+            _pcpError = true;
+        }
+        finally
+        {
+            _loadingPcp = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadAccumulatorsAsync()
+    {
+        try
+        {
+            _accumulators = await MemberService.GetAccumulatorsAsync(MemberId);
+        }
+        catch
+        {
+            _accumulatorsError = true;
+        }
+        finally
+        {
+            _loadingAccumulators = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Coverage in force on the date: effective on or before it, not
+    /// terminated before it, and not Pending/Suspended. Status alone is not
+    /// used so a past as-of date still shows since-terminated coverage.
+    /// </summary>
+    private List<Coverage> InForceOn(DateTime? asOf)
+    {
+        var date = (asOf ?? DateTime.Today).Date;
+        return _coverages
+            .Where(c => c.Status is not (2 or 4)
+                        && c.EffectiveDate.Date <= date
+                        && (c.TerminationDate == null || c.TerminationDate.Value.Date >= date))
+            .OrderByDescending(c => c.EffectiveDate)
+            .ToList();
+    }
+
+    private IEnumerable<Coverage> MostRecent() =>
+        _coverages.OrderByDescending(c => c.EffectiveDate).Take(1);
+
+    private static bool IsNotFound(Exception ex) =>
+        (ex as HttpRequestException ?? ex.InnerException as HttpRequestException)?.StatusCode == System.Net.HttpStatusCode.NotFound;
+
+    private static decimal Max(decimal accumulatorLimit, decimal? planLimit) =>
+        accumulatorLimit > 0 ? accumulatorLimit : planLimit ?? 0;
+
+    private static string UsedOf(decimal used, decimal max) =>
+        max > 0 ? $"{used:C} of {max:C}" : used > 0 ? $"{used:C} used" : "—";
+
+    private static string FormatLob(int lob, string? fallback) => lob switch
+    {
+        1 => "Commercial",
+        2 => "Medicare",
+        3 => "Medicaid",
+        4 => "Exchange",
+        5 => "TRICARE",
+        6 => "VA",
+        _ => string.IsNullOrEmpty(fallback) ? "—" : fallback
+    };
+}

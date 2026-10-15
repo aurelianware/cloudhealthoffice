@@ -1,20 +1,26 @@
 @page "/eligibility"
+@page "/eligibility-simulator"
 @using Microsoft.AspNetCore.Authorization
 @using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
 @inject IEligibilityService EligibilityService
 @inject IMemberService MemberService
 
-<PageTitle>Eligibility Verification - Cloud Health Office</PageTitle>
+<PageTitle>270/271 Eligibility Simulator - Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="eligibility:check" RoleName="MemberServices">
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Class="mr-2" />
-        Real-Time Eligibility Verification
+        270/271 Eligibility Simulator
     </MudText>
-    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
-        270/271 EDI Transaction - Check member coverage and benefits
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-2">
+        Shows exactly what a provider or clearinghouse would receive in a 271 for a given 270 request.
+        Use it for EDI and trading-partner testing and troubleshooting.
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-6">
+        Looking up a member's coverage for a call or a claim? Open the member on
+        <MudLink Href="/members" Typo="Typo.body2">Members</MudLink>; the Coverage &amp; Benefits tab is the everyday view.
     </MudText>
 
     @if (_serviceError != null)
@@ -27,22 +33,77 @@
             <MudCard Elevation="2">
                 <MudCardHeader>
                     <CardHeaderContent>
-                        <MudText Typo="Typo.h6">Member Information</MudText>
+                        <MudText Typo="Typo.h6">270 Request &mdash; Subscriber</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Search by Member ID, Member ID + name, or Last Name + First Name + Date of Birth.
+                        </MudText>
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudForm @ref="_form">
-                        <MudTextField @bind-Value="_request.SubscriberId" Label="Member ID" Required="true"
-                                      Immediate="true" Variant="Variant.Outlined" Class="mb-3" />
+                    <MudAutocomplete T="MemberSummary"
+                                     Value="_pickedMember"
+                                     ValueChanged="OnMemberPicked"
+                                     SearchFunc="SearchMembers"
+                                     Label="Find member (optional)"
+                                     Placeholder="Search by name or ID to fill the request"
+                                     ToStringFunc="@(m => m == null ? null : $"{m.FirstName} {m.LastName} ({m.MemberId})")"
+                                     Variant="Variant.Outlined"
+                                     ResetValueOnEmptyText="true"
+                                     AnchorOrigin="Origin.BottomCenter"
+                                     MaxItems="10"
+                                     Class="mb-3">
+                        <ItemTemplate>
+                            <div>
+                                <MudText Typo="Typo.body2">@context.FirstName @context.LastName</MudText>
+                                <MudText Typo="Typo.caption">ID: @context.MemberId | DOB: @context.DateOfBirth.ToString("MM/dd/yyyy")</MudText>
+                            </div>
+                        </ItemTemplate>
+                    </MudAutocomplete>
 
-                        <MudTextField @bind-Value="_request.FirstName" Label="First Name"
-                                      Variant="Variant.Outlined" Class="mb-3" />
+                    <MudForm @ref="_form">
+                        <MudTextField @bind-Value="_request.SubscriberId" Label="Member ID"
+                                      HelperText="Optional when Last Name + First Name + Date of Birth are given"
+                                      Immediate="true" Variant="Variant.Outlined" Class="mb-3"
+                                      UserAttributes="@(new Dictionary<string, object> { ["data-testid"] = "subscriber-id" })" />
 
                         <MudTextField @bind-Value="_request.LastName" Label="Last Name"
-                                      Variant="Variant.Outlined" Class="mb-3" />
+                                      Immediate="true" Variant="Variant.Outlined" Class="mb-3"
+                                      UserAttributes="@(new Dictionary<string, object> { ["data-testid"] = "last-name" })" />
 
-                        <MudDatePicker @bind-Date="_serviceDate" Label="Service Date"
+                        <MudTextField @bind-Value="_request.FirstName" Label="First Name"
+                                      Immediate="true" Variant="Variant.Outlined" Class="mb-3"
+                                      UserAttributes="@(new Dictionary<string, object> { ["data-testid"] = "first-name" })" />
+
+                        <MudDatePicker @bind-Date="_request.DateOfBirth" Label="Date of Birth"
+                                       Editable="true" Placeholder="MM/DD/YYYY" DateFormat="MM/dd/yyyy"
+                                       Variant="Variant.Outlined" Class="mb-3"
+                                       UserAttributes="@(new Dictionary<string, object> { ["data-testid"] = "dob" })" />
+
+                        <MudDatePicker @bind-Date="_request.ServiceDate" Label="Service Date"
                                        Variant="Variant.Outlined" Class="mb-3" />
+
+                        @if (_validationError != null)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3" data-testid="criteria-error">@_validationError</MudAlert>
+                        }
+
+                        @if (_candidates.Count > 1)
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2" data-testid="ambiguous-matches">
+                                @_candidates.Count members match that name and date of birth. Pick one to send the 270.
+                            </MudAlert>
+                            <div class="mb-3">
+                                @foreach (var candidate in _candidates)
+                                {
+                                    <MudButton Variant="Variant.Text" Color="Color.Primary" FullWidth="true"
+                                               Style="justify-content: flex-start; text-transform: none;"
+                                               OnClick="@(() => PickCandidate(candidate))"
+                                               data-testid="@($"candidate-{candidate.MemberId}")">
+                                        @candidate.FirstName @candidate.LastName &middot; @candidate.MemberId &middot; DOB @candidate.DateOfBirth.ToString("MM/dd/yyyy")
+                                    </MudButton>
+                                }
+                            </div>
+                        }
 
                         <MudSelect @bind-Value="_request.ServiceType" Label="Service Type"
                                    Variant="Variant.Outlined" Class="mb-3">
@@ -56,7 +117,8 @@
 
                         <MudButton Variant="Variant.Filled" Color="Color.Primary"
                                    DisableElevation="true" FullWidth="true"
-                                   OnClick="CheckEligibility" Disabled="@_checking">
+                                   OnClick="CheckEligibility" Disabled="@_checking"
+                                   data-testid="send-270">
                             @if (_checking)
                             {
                                 <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
@@ -65,7 +127,7 @@
                             else
                             {
                                 <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-2" />
-                                <span>Verify Eligibility</span>
+                                <span>Send 270</span>
                             }
                         </MudButton>
                     </MudForm>
@@ -319,7 +381,7 @@
             {
                 <MudPaper Elevation="0" Class="d-flex align-center justify-center" Style="height: 400px;">
                     <MudText Typo="Typo.body1" Color="Color.Secondary">
-                        Enter member information to check eligibility
+                        Enter a 270 request to see the 271 response
                     </MudText>
                 </MudPaper>
             }
@@ -332,28 +394,116 @@
     private MudForm? _form;
     private bool _checking = false;
     private string? _serviceError;
-    private DateTime? _serviceDate = DateTime.Today;
-    private EligibilityRequest _request = new();
+    private string? _validationError;
+    private Eligibility270Criteria _request = new();
     private EligibilityResponse? _response;
+    private MemberSummary? _pickedMember;
+    private List<MemberSummary> _candidates = new();
+
+    private async Task<IEnumerable<MemberSummary>> SearchMembers(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return new List<MemberSummary>();
+
+        try
+        {
+            return await MemberService.SearchMembersAsync(value);
+        }
+        catch
+        {
+            return new List<MemberSummary>();
+        }
+    }
+
+    private Task OnMemberPicked(MemberSummary? member)
+    {
+        _pickedMember = member;
+        if (member != null)
+        {
+            FillFrom(member);
+        }
+        return Task.CompletedTask;
+    }
+
+    private void FillFrom(MemberSummary member)
+    {
+        _request.SubscriberId = member.MemberId;
+        _request.FirstName = member.FirstName;
+        _request.LastName = member.LastName;
+        _request.DateOfBirth = member.DateOfBirth == default ? null : member.DateOfBirth.Date;
+        _validationError = null;
+    }
+
+    private async Task PickCandidate(MemberSummary candidate)
+    {
+        _candidates = new();
+        FillFrom(candidate);
+        await SendInquiryAsync(candidate.MemberId);
+    }
 
     private async Task CheckEligibility()
     {
-        await _form!.Validate();
-        if (!_form.IsValid) return;
+        _candidates = new();
+        _validationError = EligibilitySimulator.Validate(_request);
+        if (_validationError != null)
+        {
+            _response = null;
+            return;
+        }
 
+        if (_request.HasId)
+        {
+            await SendInquiryAsync(_request.SubscriberId.Trim());
+            return;
+        }
+
+        // Name + DOB without an ID. eligibility-service keys its coverage
+        // lookup on SubscriberId, so resolve the member here first.
+        _checking = true;
+        _response = null;
+        MemberSummary? resolved;
+        try
+        {
+            var resolution = await EligibilitySimulator.ResolveByNameAndDobAsync(
+                MemberService, _request.FirstName, _request.LastName, _request.DateOfBirth!.Value);
+            switch (resolution.Status)
+            {
+                case MemberResolutionStatus.NotFound:
+                    _response = EligibilitySimulator.SubscriberNotFound();
+                    return;
+                case MemberResolutionStatus.Ambiguous:
+                    _candidates = resolution.Candidates.ToList();
+                    return;
+            }
+            resolved = resolution.Member;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = $"Member search is currently unavailable: {ex.Message}";
+            return;
+        }
+        catch (Exception ex)
+        {
+            _serviceError = $"An error occurred searching for the member: {ex.Message}";
+            return;
+        }
+        finally
+        {
+            _checking = false;
+        }
+
+        await SendInquiryAsync(resolved!.MemberId);
+    }
+
+    private async Task SendInquiryAsync(string subscriberId)
+    {
         _checking = true;
         _response = null;
 
         try
         {
-            _response = await EligibilityService.CheckEligibilityAsync(new
-            {
-                subscriberId = _request.SubscriberId,
-                firstName = _request.FirstName,
-                lastName = _request.LastName,
-                serviceDate = _serviceDate,
-                serviceType = _request.ServiceType
-            });
+            _response = await EligibilityService.CheckEligibilityAsync(
+                EligibilitySimulator.BuildInquiry(_request, subscriberId));
         }
         catch (ServiceUnavailableException ex)
         {
@@ -427,12 +577,4 @@
         "exchange" => Color.Warning,
         _ => Color.Default
     };
-
-    public class EligibilityRequest
-    {
-        public string SubscriberId { get; set; } = string.Empty;
-        public string FirstName { get; set; } = string.Empty;
-        public string LastName { get; set; } = string.Empty;
-        public string ServiceType { get; set; } = "30";
-    }
 }

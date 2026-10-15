@@ -56,6 +56,11 @@
 
             <MudTabs Elevation="0" ApplyEffectsToContainer="true" PanelClass="pt-4"
                      @bind-ActivePanelIndex="_activeTab">
+                <!-- Coverage & Benefits — the everyday coverage view (default tab) -->
+                <MudTabPanel Text="Coverage & Benefits" Icon="@Icons.Material.Filled.VerifiedUser">
+                    <MemberCoveragePanel MemberId="@MemberId" />
+                </MudTabPanel>
+
                 <!-- Personal Information Tab -->
                 <MudTabPanel Text="Personal Info" Icon="@Icons.Material.Filled.Person">
                     <MudGrid>
