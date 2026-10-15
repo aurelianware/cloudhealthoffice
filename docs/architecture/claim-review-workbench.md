@@ -127,7 +127,51 @@ Each entry shows type, source, received date and who added it, and opens in a vi
    - **Back to a person** for a decision. This is the default.
    - **Auto-deny** with CARC 252 (*additional information required*) / RARC N706 (*missing documentation*), when the tenant turns it on.
 
-**Prompt pay:** state prompt-pay clocks usually stop while a properly requested RFAI is outstanding, but not in every state. The tenant's state setting decides, and the console shows which rule applies.
+**Prompt pay:** whether and how an RFAI moves the prompt-pay clock depends on the line of business and state: reset, pause or extend. See §3.3.
+
+### 3.3 Clean date and prompt-pay interest
+
+**The clean date is the day the plan has everything it needs from the provider to pay the claim.** It records whose turn it is, not when the plan gets around to it. Internal pends, examiner queues, the plan's own medical review, pricing vendor delays and payer-initiated COB investigation **never** move it.
+
+**CHO records events and derives dates.** It doesn't store a hand-maintained date. The events are:
+- received (front door: clearinghouse or portal receipt, mailroom stamp);
+- information requested (what, when, how);
+- information received;
+- corrected claim received.
+
+The clean date and the prompt-pay due date are computed from those events by the rule for the claim's line of business and state. The rules differ in *how* a request affects the clock:
+
+| Model | Rule | Example |
+|---|---|---|
+| Reset | Clean date = the date the requested information arrives. | Medicaid's clean-claim definition: processable "without obtaining additional information from the provider" (42 CFR 447.45). |
+| Pause | The clock stops while waiting and resumes on receipt. | ERISA post-service claims: 30 days, plus 15 with notice; the claimant gets 45 days to respond, and the wait doesn't count. |
+| Extend | The claim stays clean. One specific request, made within 30 days, moves the deadline to the later of the original date or 15 days after the attachment arrives. | Texas HMOs, Tex. Ins. Code § 843.3385. |
+
+**Guardrails:**
+- A request made after the rule's window, or a second request where only one is allowed, doesn't move the clock. The screen says so before the reviewer sends it.
+- Interest on a claim reprocessed after a plan error runs from the original clean date.
+
+**On screen:** the claim header shows the received date, the clean date and the due date, with the reason in one line:
+
+> Due Nov 14. Received Oct 15. Records requested Oct 20, received Oct 30. Texas: the later of the original due date or 15 days after the records.
+
+An **at-risk queue** lists claims approaching their due date.
+
+**Interest rules are dated configuration, not one rate:**
+- **Applies to:** line of business, state, provider type, paper or electronic.
+- **Starts:** a number of days after the clean or received date.
+- **Method:** daily simple interest, per month or part of a month, or a penalty formula.
+- **Rate:** fixed, or a named series with dated values.
+- **Optional:** a minimum amount and a payment split.
+
+Examples:
+- **Medicare and MA:** the Treasury prompt-payment rate, 4.125% for January–June 2026, reset every January 1 and July 1.
+- **Arizona Medicaid (AHCCCS ACOM 203):** hospital claims pay 1% a month or part of a month from day 61; other claims pay 10% a year, prorated daily, from day 46.
+- **Texas HMOs (§ 843.342):** a penalty on billed minus contracted, plus 18% a year from day 91. Part of an institutional provider's penalty goes to the state.
+
+CHO ships rule packs, and tenants and provider contracts can override them. Interest is computed at payment and paid on the 835 as claim-level interest (AMT*I). Reference data already holds a per-state prompt-pay window and penalty rate; this extends it.
+
+**Attachments standard:** the plan's requests and the provider's responses use the X12 277 RFAI (006020X313) and the 275 (006020X314) adopted by CMS-0053-F. Compliance is required by May 26, 2028. Fax, portal and FHIR responses go through the same matching (see [document-store.md](document-store.md) §4).
 
 ## 4. What a reviewer may edit
 
