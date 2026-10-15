@@ -373,6 +373,21 @@ if (!useLocalDemoAuth)
 
 var app = builder.Build();
 
+// Containers usually run without LANG, so .NET falls back to the invariant
+// culture and currency renders as "¤0". Pin one display culture for every
+// request and Blazor circuit (Portal:Culture, default en-US). A single
+// supported culture keeps a browser's Accept-Language from changing the
+// currency a payer's amounts are shown in.
+var portalCulture = PortalCulture.Resolve(app.Configuration["Portal:Culture"]);
+System.Globalization.CultureInfo.DefaultThreadCurrentCulture = portalCulture;
+System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = portalCulture;
+app.UseRequestLocalization(new Microsoft.AspNetCore.Builder.RequestLocalizationOptions
+{
+    DefaultRequestCulture = new Microsoft.AspNetCore.Localization.RequestCulture(portalCulture),
+    SupportedCultures = new[] { portalCulture },
+    SupportedUICultures = new[] { portalCulture },
+});
+
 // Use forwarded headers FIRST (before any other middleware)
 app.UseForwardedHeaders();
 
