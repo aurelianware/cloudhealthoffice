@@ -139,7 +139,7 @@ public class ScrubbingStageTests
     }
 
     [Fact]
-    public async Task Engine_throwing_returns_Reject_with_structured_error()
+    public async Task Engine_throwing_pends_transient_not_reject()
     {
         _engine.ScrubAndRouteAsync(Arg.Any<EngineModels.ClaimsScrubRequest>(), Arg.Any<CancellationToken>())
             .Returns<EngineModels.ClaimsScrubResponse>(_ => throw new InvalidOperationException("engine boom"));
@@ -149,14 +149,15 @@ public class ScrubbingStageTests
 
         var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
 
-        // Decision 12 — catch in stage; produce structured outcome
-        // rather than letting the orchestrator's safety-net Reject
-        // produce an opaque "stage threw" result.
-        Assert.Equal(ClaimAdjudicationOutcome.Reject, result.Outcome);
-        Assert.Equal(ScrubbingDecision.RejectStructural, ctx.ScrubbingResult!.Decision);
-        Assert.Single(ctx.ScrubbingResult.Errors);
-        Assert.Equal("ENGINE_EXCEPTION", ctx.ScrubbingResult.Errors[0].RuleId);
+        // An engine failure is an outage, not a structural finding: the
+        // claim pends SVCUNAVAIL (retried on re-run), never Reject → Denied,
+        // and the rest of the optional pipeline is skipped.
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.False(result.Continue);
+        Assert.Null(ctx.ScrubbingResult);
+        Assert.Equal(ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode, ctx.PendDetails!.PendCode);
         Assert.Contains("InvalidOperationException", result.Reason);
+        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
     }
 
     [Fact]

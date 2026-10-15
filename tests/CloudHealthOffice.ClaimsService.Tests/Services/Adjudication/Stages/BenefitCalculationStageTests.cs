@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http;
 using ClaimsService.Models;
 using ClaimsService.Models.Adjudication;
 using ClaimsService.Services.Adjudication;
@@ -235,7 +237,7 @@ public partial class BenefitCalculationStageTests
     }
 
     [Fact]
-    public async Task Execute_EngineThrows_RejectsWithoutPropagating()
+    public async Task Execute_EngineThrows_PendsTransientWithoutPropagating()
     {
         var claim = BuildClaim(Guid.NewGuid().ToString());
         var ctx = new ClaimAdjudicationContext
@@ -252,8 +254,9 @@ public partial class BenefitCalculationStageTests
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
 
-        Assert.Equal(ClaimAdjudicationOutcome.Reject, result.Outcome);
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
         Assert.Contains("InvalidOperationException", result.Reason);
+        Assert.Equal(ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode, ctx.PendDetails!.PendCode);
     }
 
     [Fact]
@@ -283,6 +286,82 @@ public partial class BenefitCalculationStageTests
         Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
         Assert.False(result.Continue);
         Assert.Equal("Non-covered service", result.Reason);
+    }
+
+    /// <summary>
+    /// benefit-plan-service answering 5xx is an outage: the real HTTP client
+    /// returns its "no answer" result (code 999) and the stage pends
+    /// SVCUNAVAIL instead of denying; the approval re-run sees a failed check.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task Execute_BenefitClient5xx_PendsTransient_NotDenied(HttpStatusCode status)
+    {
+        var factory = Substitute.For<IHttpClientFactory>();
+        factory.CreateClient(HttpBenefitCalculationEngineClient.HttpClientName).Returns(_ =>
+            new HttpClient(new StatusHandler(status)) { BaseAddress = new Uri("http://benefit-plan-service:8080") });
+        var client = new HttpBenefitCalculationEngineClient(
+            factory, Substitute.For<Microsoft.AspNetCore.Http.IHttpContextAccessor>(),
+            Substitute.For<IAdjudicationTenantContext>(), NullLogger<HttpBenefitCalculationEngineClient>.Instance);
+        var sut = new BenefitCalculationStage(
+            client, _memberResolver, _authorizationValidationClient, NullLogger<BenefitCalculationStage>.Instance);
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+        };
+
+        var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode, ctx.PendDetails!.PendCode);
+        Assert.Contains($"HTTP {(int)status}", ctx.PendDetails.PendReason);
+        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
+        Assert.True(ClaimAdjudicationOrchestrator.AnyCheckFailed(ctx));
+        // No denial is stamped on the adjudication result.
+        Assert.Null(ctx.AdjudicationResult.DenialReasonCode);
+    }
+
+    /// <summary>A genuine benefit denial (not the engine's 999 "no answer") still denies.</summary>
+    [Fact]
+    public async Task Execute_GenuineBenefitDenial_StillDenies_NoTransientPend()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+        };
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new BenefitResolutionResult
+            {
+                PreparedAccumulatorCommit = Prepared,
+                Success = false,
+                DenialReasonCode = "204",
+                DenialReasonDescription = "Service not covered under the member's benefit plan",
+                Totals = new ClaimTotals(),
+            });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        Assert.Null(ctx.PendDetails);
+        Assert.Equal("204", ctx.AdjudicationResult.DenialReasonCode);
+        Assert.False(ClaimAdjudicationOrchestrator.AnyCheckFailed(ctx));
+    }
+
+    private sealed class StatusHandler(HttpStatusCode status) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+            Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent("upstream error") });
     }
 
     [Fact]

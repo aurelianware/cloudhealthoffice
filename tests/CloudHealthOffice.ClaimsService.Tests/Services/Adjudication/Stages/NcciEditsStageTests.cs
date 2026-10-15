@@ -230,7 +230,7 @@ public class NcciEditsStageTests
     }
 
     [Fact]
-    public async Task Engine_throws_in_Deny_mode_routes_to_Deny()
+    public async Task Engine_throws_in_Deny_mode_pends_never_denies()
     {
         _engine.ScrubAsync(Arg.Any<EngineModels.NcciScrubRequest>(), Arg.Any<CancellationToken>())
             .Throws(new InvalidOperationException("repository unavailable"));
@@ -240,8 +240,10 @@ public class NcciEditsStageTests
 
         var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
 
-        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
-        Assert.False(result.Continue);
+        // Deny mode denies edit findings; an engine outage pends (transient).
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
+        Assert.Equal("ENGINE_EXCEPTION", ctx.PendDetails!.EditFailures[0].RuleId);
     }
 
     [Fact]
