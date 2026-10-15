@@ -45,16 +45,20 @@
                     <MudGrid>
                         <MudItem xs="6">
                             <MudText Color="Color.Secondary">Status</MudText>
-                            <MudChip Size="Size.Large" 
+                            <MudChip Size="Size.Large"
                                     Color="@GetStatusColor(_claim.Status)"
                                     Variant="Variant.Filled"
                                     Class="mt-2">
-                                @_claim.Status
+                                @ClaimStatusDisplay.Label(_claim.Status, _claim.ServiceLines)
                             </MudChip>
+                            @if (ClaimStatusDisplay.PhaseHint(_claim.Status) is { } phase)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1" data-testid="claim-phase-hint">@phase</MudText>
+                            }
                         </MudItem>
                         <MudItem xs="6">
                             <MudText Color="Color.Secondary">Claim Type</MudText>
-                            <MudChip Size="Size.Large" 
+                            <MudChip Size="Size.Large"
                                     Color="@(_claim.ClaimType == "Professional" ? Color.Info : Color.Warning)"
                                     Variant="Variant.Filled"
                                     Class="mt-2">
@@ -68,28 +72,46 @@
                     @if (CanResolvePendedClaim)
                     {
                         <MudStack Spacing="2">
-                            <MudButton Variant="Variant.Filled" 
+                            @if (!string.Equals(_claim.Status, "Pended", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                    Not yet remitted: an examiner can still change this decision before the payment cycle.
+                                </MudText>
+                            }
+                            <MudButton Variant="Variant.Filled"
                                       Color="Color.Success"
                                       FullWidth="true"
                                       StartIcon="@Icons.Material.Filled.CheckCircle"
                                       OnClick="@(() => ApproveClaimAsync())">
-                                Approve
+                                Pay
                             </MudButton>
-                            <MudButton Variant="Variant.Filled" 
+                            <MudButton Variant="Variant.Filled"
                                       Color="Color.Error"
                                       FullWidth="true"
                                       StartIcon="@Icons.Material.Filled.Cancel"
                                       OnClick="@(() => DenyClaimAsync())">
                                 Deny
                             </MudButton>
-                            <MudButton Variant="Variant.Outlined" 
-                                      Color="Color.Warning"
-                                      FullWidth="true"
-                                      StartIcon="@Icons.Material.Filled.Undo"
-                                      OnClick="@(() => ReversalFlowAsync())"
-                                      Disabled="!_claim.CanReverse">
-                                Initiate Reversal
-                            </MudButton>
+                        </MudStack>
+                    }
+                    else if (ClaimStatusDisplay.IsFinalized(_claim.Status))
+                    {
+                        <MudStack Spacing="2">
+                            <MudAlert Severity="Severity.Info">
+                                @(ClaimStatusDisplay.IsReversible(_claim.Status)
+                                    ? "Finalized by the payment cycle: correct it with an adjustment, or reverse it."
+                                    : "Finalized: correct it with an adjustment.")
+                            </MudAlert>
+                            @if (ClaimStatusDisplay.IsReversible(_claim.Status))
+                            {
+                                <MudButton Variant="Variant.Outlined"
+                                          Color="Color.Warning"
+                                          FullWidth="true"
+                                          StartIcon="@Icons.Material.Filled.Undo"
+                                          OnClick="@(() => ReversalFlowAsync())">
+                                    Initiate Reversal
+                                </MudButton>
+                            }
                         </MudStack>
                     }
                     else
@@ -163,7 +185,7 @@
                                      Variant="Variant.Filled"
                                      Size="Size.Large"
                                      Class="my-2">
-                                @_claim.Status
+                                @ClaimStatusDisplay.Label(_claim.Status, _claim.ServiceLines)
                             </MudChip>
                             @if (_claim.AdjudicatedDate.HasValue)
                             {
@@ -1131,20 +1153,12 @@
         }
     }
 
-    private Color GetStatusColor(string status) => status switch
-    {
-        "Approved" or "Paid" or "PartiallyPaid" => Color.Success,
-        "Denied" => Color.Error,
-        "Pended" => Color.Warning,
-        "InAdjudication" or "Received" => Color.Info,
-        "Submitted" => Color.Default,
-        _ => Color.Default
-    };
+    private Color GetStatusColor(string status) => ClaimStatusDisplay.Color(status);
 
     private Color GetLineStatusColor(string? status) => status switch
     {
         "Approved" or "Paid" => Color.Success,
-        "Denied" => Color.Error,
+        "Denied" or "Deny" => Color.Error,
         "Pended" or "Review" => Color.Warning,
         _ => Color.Default
     };
@@ -1320,13 +1334,12 @@
         }
     }
 
-    private bool CanResolvePendedClaim =>
-        string.Equals(_claim?.Status, "Pended", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Pended, Pay or Deny: not yet remitted, so an examiner may still resolve it (Pay / Deny).</summary>
+    private bool CanResolvePendedClaim => ClaimStatusDisplay.IsReprocessable(_claim?.Status);
 
     private bool HasExaminerDispositionRecord =>
         _claim?.PendDetails is not null
-        && (_claim.Status.Equals("Approved", StringComparison.OrdinalIgnoreCase)
-            || _claim.Status.Equals("Denied", StringComparison.OrdinalIgnoreCase));
+        && (ClaimStatusDisplay.IsPayOutcome(_claim.Status) || ClaimStatusDisplay.IsDenied(_claim.Status));
 
     private async Task<ClaimResolutionResult> ResolvePendedClaimAsync(string disposition, string reason, int? payerSequence = null)
     {

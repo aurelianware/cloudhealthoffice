@@ -296,6 +296,7 @@ internal sealed record ClaimStateSnapshot(
             "7" or "Paid" => "Paid",
             "8" or "Voided" => "Voided",
             "9" or "PartiallyPaid" => "PartiallyPaid",
+            "10" or "Deny" => "Deny",
             null => "Unknown",
             var other => other
         };

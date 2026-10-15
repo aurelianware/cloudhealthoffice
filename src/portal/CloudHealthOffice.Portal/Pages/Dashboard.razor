@@ -819,8 +819,8 @@
 
     private Color GetStatusColor(string status) => status switch
     {
-        "Approved" => Color.Success,
-        "Denied" => Color.Error,
+        "Approved" or "Pay" or "Paid" => Color.Success,
+        "Denied" or "Deny" => Color.Error,
         "Pending" => Color.Warning,
         "Review Required" => Color.Info,
         _ => Color.Default
