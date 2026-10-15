@@ -162,9 +162,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          # The canonical 36-service list. MUST stay in sync with
+          # The canonical 37-service list. MUST stay in sync with
           # .github/paths-filter.yml (per-service filter names) and with
-          # deploy-azure-aks.yml's matrix (33 entries; this list adds
+          # deploy-azure-aks.yml's matrix (34 entries; this list adds
           # idcard-service and provider-verification-service which are
           # PR-validated but not yet deploy-targeted, and
           # provider-eligibility-api, which deploys to Container Apps via
@@ -212,7 +212,8 @@ jobs:
             {"service":"smart-auth-service"},
             {"service":"sponsor-service"},
             {"service":"tenant-service"},
-            {"service":"trading-partner-service"}
+            {"service":"trading-partner-service"},
+            {"service":"work-management-service"}
           ]'
 
           # Decide selective vs validate-all. Validate-all means a meta
@@ -225,7 +226,7 @@ jobs:
 
             # Build a human-readable reason string for the diagnostic echo.
             # Future debuggers reading the workflow log should be able to
-            # answer "why did this PR fan out to 36 builds?" by skimming
+            # answer "why did this PR fan out to 37 builds?" by skimming
             # this single line, instead of cross-referencing the dorny
             # output table against the meta-filter names.
             TRIGGER_REASON=""

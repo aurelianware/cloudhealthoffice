@@ -24,14 +24,14 @@
 #     containerized, so a "build" filter would never have a matching
 #     Dockerfile to invoke.
 #
-# Service set: 36 services = 33 currently in deploy-azure-aks.yml's matrix
+# Service set: 37 services = 34 currently in deploy-azure-aks.yml's matrix
 # plus idcard-service and provider-verification-service (both already
 # PR-validated by docker-build.yml today; preserved here so δ3 doesn't
 # regress existing coverage). Both services have a separate doc-gap on
 # main: they build but don't deploy. That's a pre-existing condition, not
 # a δ3 concern.
 #
-# provider-eligibility-api is the 36th: it is not an AKS service. It deploys
+# provider-eligibility-api is the 37th: it is not an AKS service. It deploys
 # into the CloudDentalOffice Container Apps environment through
 # infrastructure/azure/provider-eligibility-container-app.bicep.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +75,7 @@ smart-auth-service:            ['src/services/smart-auth-service/**']
 sponsor-service:               ['src/services/sponsor-service/**']
 tenant-service:                ['src/services/tenant-service/**']
 trading-partner-service:       ['src/services/trading-partner-service/**']
+work-management-service:       ['src/services/work-management-service/**']
 
 # ── Meta filters (any match → validate ALL services) ────────────────────────
 # shared-libs: src/services/shared/ contains CloudHealthOffice.Infrastructure,

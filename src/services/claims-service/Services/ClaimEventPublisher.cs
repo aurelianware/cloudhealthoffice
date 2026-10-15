@@ -31,10 +31,13 @@ public interface IClaimEventPublisher
     Task PublishClaimFinalizedAsync(Claim claim, string tenantId, CancellationToken ct = default);
 }
 
-public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncDisposable
+public class ClaimEventPublisher : IClaimEventPublisher, IClaimWorkEventPublisher, IHostedService, IAsyncDisposable
 {
     public const string ClaimPendedTopic = "claims.pended.v1";
     public const string ClaimFinalizedTopic = "claims.finalized.v1";
+
+    /// <summary>Claim work needed / resolved, consumed by work-management-service.</summary>
+    public const string ClaimWorkTopic = ClaimWorkEventTopics.Topic;
 
     private readonly ILogger<ClaimEventPublisher> _logger;
     private readonly IConfiguration _configuration;
@@ -200,6 +203,49 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error publishing ClaimFinalizedEvent for claim {ClaimId}", claim.Id);
+        }
+    }
+
+    public Task PublishWorkNeededAsync(Claim claim, string tenantId, string? actorId, CancellationToken ct = default) =>
+        PublishWorkAsync(ClaimWorkEvents.Needed(claim, tenantId, actorId), ct);
+
+    public Task PublishWorkResolvedAsync(Claim claim, string tenantId, string resolution, string? actorId, CancellationToken ct = default) =>
+        PublishWorkAsync(ClaimWorkEvents.Resolved(claim, tenantId, resolution, actorId), ct);
+
+    /// <summary>
+    /// Same degraded-mode posture as the other claim events: never throws.
+    /// work-management-service reconciles against claims-service, so a lost
+    /// event is repaired rather than leaving a stale work item forever.
+    /// </summary>
+    private async Task PublishWorkAsync(ClaimWorkEvent evt, CancellationToken ct)
+    {
+        if (!_available || _producer == null)
+        {
+            _logger.LogDebug("Kafka producer unavailable; skipping {EventType} for claim {ClaimId}", evt.EventType, evt.ClaimId);
+            return;
+        }
+
+        var message = new Message<string, string>
+        {
+            Key = evt.ClaimId,
+            Value = JsonSerializer.Serialize(evt, JsonOptions),
+            Headers = new Headers
+            {
+                { "tenant-id", Encoding.UTF8.GetBytes(evt.TenantId) },
+                { "event-type", Encoding.UTF8.GetBytes(evt.EventType) },
+                { "event-version", Encoding.UTF8.GetBytes(evt.EventVersion) }
+            }
+        };
+
+        try
+        {
+            await _producer.ProduceAsync(ClaimWorkTopic, message, ct);
+            _logger.LogInformation("Published {EventType} for claim {ClaimId} to {Topic}", evt.EventType, evt.ClaimId, ClaimWorkTopic);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish {EventType} for claim {ClaimId}; work-management reconcile repairs it",
+                evt.EventType, evt.ClaimId);
         }
     }
 

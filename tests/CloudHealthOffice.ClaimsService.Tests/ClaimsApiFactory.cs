@@ -61,6 +61,9 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     public IClaimAdapter ClaimAdapter { get; } = CreateChoStubAdapter();
     public IClaimVersionEventPublisher VersionEventPublisher { get; } = Substitute.For<IClaimVersionEventPublisher>();
     public IClaimVersionEventReader VersionEventReader { get; } = Substitute.For<IClaimVersionEventReader>();
+
+    /// <summary>Work-management notifications (claims.work.v1), asserted by the work-transition tests.</summary>
+    public IClaimWorkEventPublisher WorkEventPublisher { get; } = Substitute.For<IClaimWorkEventPublisher>();
     public IClaimFinalizationService FinalizationService { get; } = Substitute.For<IClaimFinalizationService>();
     public IClaimAdjustmentRepository AdjustmentRepository { get; } = Substitute.For<IClaimAdjustmentRepository>();
     public IClaimAdjustmentService AdjustmentService { get; } = Substitute.For<IClaimAdjustmentService>();
@@ -204,6 +207,9 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(Substitute.For<ITenantComplianceConfigService>());
             services.AddSingleton(AuditRepository);
             services.AddSingleton(VersionEventPublisher);
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IClaimWorkEventPublisher)).ToList())
+                services.Remove(descriptor);
+            services.AddSingleton(WorkEventPublisher);
             services.AddSingleton(VersionEventReader);
             VersionEventReader
                 .GetAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())

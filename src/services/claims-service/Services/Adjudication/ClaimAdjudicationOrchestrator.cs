@@ -30,6 +30,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     private readonly AdjudicationPipelineOptions _options;
     private readonly ILogger<ClaimAdjudicationOrchestrator> _logger;
     private readonly IAccumulatorOutboxProcessor? _outbox;
+    private readonly IClaimWorkEventPublisher? _workEvents;
 
     public ClaimAdjudicationOrchestrator(
         ClaimAdapterFactory adapterFactory,
@@ -43,9 +44,11 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         IClaimAdjustmentService adjustmentService,
         IOptions<AdjudicationPipelineOptions> options,
         ILogger<ClaimAdjudicationOrchestrator> logger,
-        IAccumulatorOutboxProcessor? outbox = null)
+        IAccumulatorOutboxProcessor? outbox = null,
+        IClaimWorkEventPublisher? workEvents = null)
     {
         _outbox = outbox;
+        _workEvents = workEvents;
         _adapterFactory = adapterFactory;
         _planResolver = planResolver;
         _memberResolver = memberResolver;
@@ -722,7 +725,35 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                 SanitizeForLog(context.ClaimVersionId));
         }
 
-        // 3) Adjustment lifecycle callback (5.12b Premise A — orchestrator
+        // 3) Work management: a run that ends Pended (a first adjudication, or
+        //    an approval re-run that found a new pend) means an examiner must
+        //    work the claim. Any other outcome is not a work transition here:
+        //    a first adjudication that passes or denies was never work, and an
+        //    approval re-run that passes is finalized (and its work resolved)
+        //    by the resolver after its own fenced write. Never blocks or fails
+        //    adjudication (work-management reconciles drift).
+        if (finalOutcome == ClaimAdjudicationOutcome.Pend && _workEvents is not null)
+        {
+            try
+            {
+                var pended = context.Claim.ToClaim();
+                pended.Status = ClaimStatus.Pended;
+                pended.AdjudicationResult = context.AdjudicationResult;
+                if (context.PendDetails is not null)
+                    pended.PendDetails = context.PendDetails;
+                await _workEvents
+                    .PublishWorkNeededAsync(pended, context.TenantId, context.ActorId, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Work-needed emission failed for claim {ClaimVersionId}; work-management reconcile repairs it",
+                    SanitizeForLog(context.ClaimVersionId));
+            }
+        }
+
+        // 4) Adjustment lifecycle callback (5.12b Premise A — orchestrator
         //    -finalize callback). If the new version is the
         //    NewClaimId of an in-flight ClaimAdjustment, transition the
         //    adjustment from AwaitingReadjudication to PendingReversal

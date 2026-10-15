@@ -147,3 +147,30 @@ def test_pricing_api_reads_mongo_from_its_own_section():
     names = set(env(deployments(render())["pricing-api"]))
     assert "PricingApi__MongoConnectionString" in names
     assert "MongoDb__ConnectionString" not in names
+
+
+def test_work_management_service_is_built_and_deployed():
+    root = SCRIPT.parents[2]
+    listed = subprocess.run([sys.executable, str(SCRIPT), "--list-images"],
+                            check=True, capture_output=True, text=True).stdout.split("\n")
+    assert "work-management-service src/services/work-management-service/Dockerfile" in listed
+    assert (root / "src/services/work-management-service/Dockerfile").is_file()
+
+    docs = render()
+    dep = deployments(docs)["work-management-service"]
+    container = dep["spec"]["template"]["spec"]["containers"][0]
+    assert container["image"] == f"{REGISTRY}/cloudhealthoffice-work-management-service:abc123"
+    assert env(dep)["ASPNETCORE_ENVIRONMENT"] == "Development"
+    assert env(dep)["Kafka__BootstrapServers"] == "kafka:9092"
+    # The demo reconciles periodically even with Kafka (seeded pends, lost events).
+    assert env(dep)["WorkManagement__Reconcile__Enabled"] == "true"
+    assert env(dep)["WorkManagement__Reconcile__Tenants__0"] == "demo"
+    service = next(d for d in docs if d["kind"] == "Service" and d["metadata"]["name"] == "work-management-service")
+    assert service["spec"]["ports"][0]["port"] == 80
+    assert service["spec"]["ports"][0]["targetPort"] == 8080
+
+
+def test_portal_knows_the_work_management_service():
+    docs = render()
+    config = next(d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "portal-config")
+    assert config["data"]["Services__WorkManagementService"] == "http://work-management-service.cloudhealthoffice/api/v1"

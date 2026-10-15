@@ -189,6 +189,9 @@ builder.Services.AddScoped<IMpipAdjudicationEnhancer, MpipAdjudicationEnhancer>(
 // remain functional.
 builder.Services.AddSingleton<ClaimEventPublisher>();
 builder.Services.AddSingleton<IClaimEventPublisher>(sp => sp.GetRequiredService<ClaimEventPublisher>());
+// Work needed / resolved for work-management-service (claims.work.v1), on the
+// same producer. Publishing never blocks or fails a claim write.
+builder.Services.AddSingleton<IClaimWorkEventPublisher>(sp => sp.GetRequiredService<ClaimEventPublisher>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ClaimEventPublisher>());
 
 // Claim adapter pattern (5.2 — tenant-routed claims backends). Cache is

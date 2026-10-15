@@ -88,6 +88,7 @@ updates:
       - "/src/services/sponsor-service"
       - "/src/services/tenant-service"
       - "/src/services/trading-partner-service"
+      - "/src/services/work-management-service"
       - "/src/services/provider-verification-service"
       - "/src/services/shared/CloudHealthOffice.Infrastructure"
     schedule:

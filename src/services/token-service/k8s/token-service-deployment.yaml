@@ -154,7 +154,8 @@ data:
       { "clientId": "sponsor-service", "objectId": "<SPONSOR_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
       { "clientId": "tenant-service", "objectId": "<TENANT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
       { "clientId": "terminology-service", "objectId": "<TERMINOLOGY_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
-      { "clientId": "trading-partner-service", "objectId": "<TRADING_PARTNER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" }
+      { "clientId": "trading-partner-service", "objectId": "<TRADING_PARTNER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "work-management-service", "objectId": "<WORK_MANAGEMENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" }
     ]
 ---
 apiVersion: apps/v1
