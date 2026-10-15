@@ -330,6 +330,49 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<List<ClaimNoteView>> GetClaimNotesAsync(string claimId)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<ClaimNoteView>>(
+                       $"{baseUrl}/claims/{Uri.EscapeDataString(claimId)}/notes", JsonOptions)
+                   ?? new List<ClaimNoteView>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
+    public async Task<ClaimNoteView> AddClaimNoteAsync(string claimId, string category, string text)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.PostAsJsonAsync(
+                $"{baseUrl}/claims/{Uri.EscapeDataString(claimId)}/notes", new { category, text }, JsonOptions);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var detail = await response.Content.ReadAsStringAsync();
+            throw new InvalidOperationException(response.StatusCode == System.Net.HttpStatusCode.Forbidden
+                ? "You don't have permission to add notes to claims."
+                : $"The note wasn't saved ({(int)response.StatusCode}): {detail.Trim('"')}");
+        }
+
+        return await response.Content.ReadFromJsonAsync<ClaimNoteView>(JsonOptions)
+               ?? throw new InvalidOperationException("The note wasn't saved: empty response.");
+    }
+
     private string GetClaimsServiceRootUrl()
     {
         var baseUrl = (_configuration["Services:ClaimsService"] ?? string.Empty).TrimEnd('/');

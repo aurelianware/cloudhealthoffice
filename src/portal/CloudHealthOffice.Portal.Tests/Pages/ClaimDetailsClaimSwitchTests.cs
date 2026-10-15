@@ -21,7 +21,8 @@ public class ClaimDetailsClaimSwitchTests : TestContext
         Services.AddMudServices();
         Services.AddSingleton(_claims.Object);
         Services.AddSingleton(Mock.Of<IWorkQueueService>());
-        Services.AddSingleton(Mock.Of<IUserContextService>());
+        // An examiner: may add notes (claims:work).
+        Services.AddSingleton(Mock.Of<IUserContextService>(u => u.HasPermission("claims:work") == true));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         _claims.Setup(c => c.GetClaimByIdAsync(It.IsAny<string>()))

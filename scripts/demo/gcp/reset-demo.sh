@@ -9,7 +9,7 @@
 #   ./scripts/demo/gcp/reset-demo.sh --tenant other --yes
 #
 # Clears, for that tenant only:
-#   claims and adjudication: Claims, AiExaminationAudit, MassAdjudicationRuns,
+#   claims and adjudication: Claims, ClaimNotes, AiExaminationAudit, MassAdjudicationRuns,
 #     MassAdjudicationClaimResults, claim-import-transactions
 #   accumulators: Accumulators, AccumulatorEvents, AccumulatorSnapshots,
 #     AccumulatorProcessedClaims, and the Redis accumulator hashes (accum:<tenant>:*)
@@ -58,7 +58,7 @@ kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh --quiet \
 const tenant = '$TENANT';
 const apply = $APPLY;
 const targets = [
-  'Claims', 'AiExaminationAudit', 'MassAdjudicationRuns', 'MassAdjudicationClaimResults', 'claim-import-transactions',
+  'Claims', 'ClaimNotes', 'AiExaminationAudit', 'MassAdjudicationRuns', 'MassAdjudicationClaimResults', 'claim-import-transactions',
   'Accumulators', 'AccumulatorEvents', 'AccumulatorSnapshots', 'AccumulatorProcessedClaims',
   'Payments', 'PaymentRuns', 'PaymentClaimReservations', 'PaymentReservationAudit', 'EraEnvelopes', 'ReversalRuns', 'ProviderReceivables',
   'WorkItems', 'WorkAudit', 'Appeals', 'AppealEvents', 'RfaiCases',

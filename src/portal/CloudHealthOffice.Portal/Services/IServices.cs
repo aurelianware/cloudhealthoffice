@@ -41,6 +41,55 @@ public interface IClaimsService
     /// counts and links out — the full grid stays on /claims.
     /// </summary>
     Task<EobSearchResponse> SearchClaimsByMemberAsync(string memberId, MemberClaimsFilter filter);
+
+    /// <summary>The claim's notes, oldest first (claims-service <c>GET /claims/{id}/notes</c>).</summary>
+    Task<List<ClaimNoteView>> GetClaimNotesAsync(string claimId);
+
+    /// <summary>
+    /// Append a note. Notes can't be edited or deleted; the author and time
+    /// are set by claims-service from the caller's token.
+    /// </summary>
+    Task<ClaimNoteView> AddClaimNoteAsync(string claimId, string category, string text);
+}
+
+/// <summary>A note a reviewer wrote on a claim.</summary>
+public sealed class ClaimNoteView
+{
+    public string Id { get; set; } = string.Empty;
+    public string ClaimId { get; set; } = string.Empty;
+    public string Category { get; set; } = ClaimNoteCategory.Internal;
+    public string Text { get; set; } = string.Empty;
+    public string AuthorId { get; set; } = string.Empty;
+    public string? AuthorName { get; set; }
+    public DateTime CreatedAt { get; set; }
+
+    public string Author => string.IsNullOrWhiteSpace(AuthorName) ? AuthorId : AuthorName!;
+}
+
+/// <summary>The note categories claims-service accepts, with their display labels.</summary>
+public static class ClaimNoteCategory
+{
+    public const string Decision = "Decision";
+    public const string ProviderContact = "ProviderContact";
+    public const string MemberContact = "MemberContact";
+    public const string HandOff = "HandOff";
+    public const string Internal = "Internal";
+
+    public static readonly IReadOnlyList<(string Value, string Label)> All =
+    [
+        (Internal, "Internal"),
+        (Decision, "Decision"),
+        (ProviderContact, "Provider contact"),
+        (MemberContact, "Member contact"),
+        (HandOff, "Hand-off"),
+    ];
+
+    public static string Label(string? category) =>
+        All.FirstOrDefault(c => string.Equals(c.Value, category, StringComparison.OrdinalIgnoreCase)).Label
+        ?? category ?? Internal;
+
+    /// <summary>The longest note claims-service accepts.</summary>
+    public const int MaxLength = 4000;
 }
 
 /// <summary>
