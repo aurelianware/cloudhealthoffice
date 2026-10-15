@@ -169,7 +169,7 @@ public sealed class InMemoryWorkStore : IWorkStore
     public Task<IReadOnlyList<WorkAuditEvent>> ListAuditAsync(string tenantId, string workItemId, CancellationToken ct = default) =>
         Locked<IReadOnlyList<WorkAuditEvent>>(() => _audit
             .Where(a => a.TenantId == tenantId && a.WorkItemId == workItemId)
-            .OrderBy(a => a.At)
+            .OrderBy(a => a.At).ThenBy(a => a.Seq)
             .Select(Clone)
             .ToList());
 }

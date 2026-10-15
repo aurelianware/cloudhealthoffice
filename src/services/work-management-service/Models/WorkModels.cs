@@ -316,4 +316,27 @@ public class WorkAuditEvent
     public string? QueueId { get; set; }
     public string? Detail { get; set; }
     public DateTime At { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Tie-breaker for events with the same <see cref="At"/> (same millisecond, or a
+    /// fixed clock): monotonic within a process, assigned when the event is created,
+    /// so a work item's history reads in the order it happened.
+    /// </summary>
+    public long Seq { get; set; } = AuditSequence.Next();
+}
+
+/// <summary>Monotonic, time-based sequence for <see cref="WorkAuditEvent.Seq"/>.</summary>
+public static class AuditSequence
+{
+    private static long _last;
+
+    public static long Next()
+    {
+        while (true)
+        {
+            var last = Interlocked.Read(ref _last);
+            var next = Math.Max(last + 1, DateTime.UtcNow.Ticks);
+            if (Interlocked.CompareExchange(ref _last, next, last) == last) return next;
+        }
+    }
 }

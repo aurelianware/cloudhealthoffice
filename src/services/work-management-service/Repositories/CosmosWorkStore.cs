@@ -311,6 +311,6 @@ public sealed class CosmosWorkStore : IWorkStore
     {
         var query = new QueryDefinition("SELECT * FROM c WHERE c.tenantId = @t AND c.workItemId = @w")
             .WithParameter("@t", tenantId).WithParameter("@w", workItemId);
-        return (await QueryAsync<WorkAuditEvent>(_audit, query, tenantId, ct)).OrderBy(a => a.At).ToList();
+        return (await QueryAsync<WorkAuditEvent>(_audit, query, tenantId, ct)).OrderBy(a => a.At).ThenBy(a => a.Seq).ToList();
     }
 }

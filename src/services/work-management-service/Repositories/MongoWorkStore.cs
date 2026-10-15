@@ -226,5 +226,5 @@ public sealed class MongoWorkStore : IWorkStore
         _audit.InsertOneAsync(evt, cancellationToken: ct);
 
     public async Task<IReadOnlyList<WorkAuditEvent>> ListAuditAsync(string tenantId, string workItemId, CancellationToken ct = default) =>
-        await _audit.Find(a => a.TenantId == tenantId && a.WorkItemId == workItemId).SortBy(a => a.At).ToListAsync(ct);
+        await _audit.Find(a => a.TenantId == tenantId && a.WorkItemId == workItemId).SortBy(a => a.At).ThenBy(a => a.Seq).ToListAsync(ct);
 }

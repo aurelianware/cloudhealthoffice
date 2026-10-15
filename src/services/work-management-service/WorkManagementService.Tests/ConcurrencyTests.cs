@@ -85,6 +85,9 @@ public class InMemoryConcurrencyTests
     [Fact]
     public Task ConditionalLease_HasExactlyOneWinner() =>
         GetNextConcurrency.ConditionalLease_HasExactlyOneWinner(new InMemoryWorkStore());
+
+    [Fact]
+    public Task Store_RoundTrips_QueriesAndCounts() => StoreContract.Exercise(new InMemoryWorkStore());
 }
 
 /// <summary>The same guarantees against a real mongod (ReplaceOne filtered on version).</summary>
@@ -219,5 +222,12 @@ public static class StoreContract
         (await store.ListAuditAsync(t, leased.Item.Id)).Select(a => a.Action)
             .Should().ContainInOrder(WorkAuditActions.Created, WorkAuditActions.Leased);
         (await store.GetItemAsync("tenant-b", WorkTestKit.ItemId("small"))).Should().BeNull("tenant isolation");
+
+        // Events stamped with the same instant still read back in the order they were written.
+        var at = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var actions = Enumerable.Range(0, 8).Select(i => $"step-{i}").ToList();
+        foreach (var action in actions)
+            await store.AppendAuditAsync(new WorkAuditEvent { TenantId = t, WorkItemId = "tie", Action = action, Actor = "test", At = at });
+        (await store.ListAuditAsync(t, "tie")).Select(a => a.Action).Should().Equal(actions);
     }
 }
