@@ -123,6 +123,9 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     /// <summary>The store fences <paramref name="claimId"/> (reversed terminally).</summary>
     protected abstract Task AssertFencedAsync(string claimId);
 
+    /// <summary>The store does not fence <paramref name="claimId"/> (a later commit of it is accepted).</summary>
+    protected abstract Task AssertNotFencedAsync(string claimId);
+
     /// <summary>
     /// A write made before deferred commits (a direct Production apply) can be undone by a
     /// later commit. True for the journalled Mongo / Cosmos store; the Redis store kept no
@@ -291,7 +294,8 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
             NullLogger<ClaimsController>.Instance,
             _orchestrator,
             _engine,
-            withOutbox ? _outbox : null);
+            withOutbox ? _outbox : null,
+            _engine);
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantId"] = Tenant;
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
@@ -372,11 +376,12 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// The pended claim is denied: nothing was applied, so nothing is reversed — and the claim
-    /// id is fenced, so the write the pended pricing prepared can never be committed later.
+    /// The pended claim is denied: nothing was applied, so no reversal is queued at all, and
+    /// the claim id is not fenced — Deny is reprocessable until the payment cycle, and a later
+    /// approval commits it exactly once.
     /// </summary>
     [SkippableFact]
-    public async Task NcciPendedClaim_Denied_LeavesNothing_AndALateCommitIsRefused()
+    public async Task NcciPendedClaim_Denied_QueuesNothing_ThenReprocessedToPay_CommitsOnce()
     {
         var pended = await SubmitAndAdjudicateAsync();
 
@@ -386,13 +391,101 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         var after = (await Claim(pended.Id))!;
         Assert.Equal(Claims.ClaimStatus.Deny, after.Status);
         Assert.Null(after.PendingAccumulatorReversal);
+        Assert.Null(after.PendingAccumulatorCommit);
         await AssertBalances(0m, 0m);
         await AssertNoWriteForAsync(pended.Id);
-        await AssertFencedAsync(pended.Id);
+        await AssertNotFencedAsync(pended.Id);
 
-        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed,
-            (await _engine.CommitAccumulatorsAsync(_calculated[0].PreparedAccumulatorCommit!)).Outcome);
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-2", pended.Id, "Approved")));
+        Assert.Equal(Claims.ClaimStatus.Approved, (await Claim(pended.Id))!.Status);
+        await AssertBalances(100m, 100m);
+        await AssertCommittedOnceAsync(pended.Id);
+    }
+
+    // ── Pay → Deny → Pay: the non-terminal reversal ───────────────────────
+
+    /// <summary>
+    /// A Pay claim whose commit was applied is denied before the payment cycle: its
+    /// contribution is reversed now (balances back to zero) without a fence. Reprocessed back
+    /// to Pay, its new commit (a new commit id) is accepted — no refusal, no clamp review —
+    /// and counted once.
+    /// </summary>
+    [SkippableFact]
+    public async Task PayCommitted_Deny_ReversesNow_ThenPayAgain_CommitsOnce()
+    {
+        _ncciPends = false;
+        var paid = await SubmitAndAdjudicateAsync();
+        Assert.Equal(Claims.ClaimStatus.Approved, paid.Status);
+        await AssertBalances(100m, 100m);
+        var firstCommitId = _calculated[^1].PreparedAccumulatorCommit!.CommitId;
+
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-1", paid.Id, "Denied")));
+
+        var denied = (await Claim(paid.Id))!;
+        Assert.Equal(Claims.ClaimStatus.Deny, denied.Status);
+        Assert.Null(denied.PendingAccumulatorReversal); // driven at once and cleared
         await AssertBalances(0m, 0m);
+        await AssertNotFencedAsync(paid.Id);
+
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-2", paid.Id, "Approved")));
+
+        var repaid = (await Claim(paid.Id))!;
+        Assert.Equal(Claims.ClaimStatus.Approved, repaid.Status);
+        Assert.Null(repaid.PendingAccumulatorCommit);
+        Assert.Null(repaid.AccumulatorClampReview);
+        Assert.NotEqual(firstCommitId, _calculated[^1].PreparedAccumulatorCommit!.CommitId);
+        await AssertBalances(100m, 100m);
+        await AssertCommittedOnceAsync(paid.Id);
+        Assert.Equal(0, await _dispatcher.RunOnceAsync(CancellationToken.None));
+        await AssertBalances(100m, 100m);
+    }
+
+    /// <summary>
+    /// Deny → Denied: the payment run's $0 remittance finalizes the denial and does nothing
+    /// to the accumulators — the reversal already happened when the claim was denied.
+    /// </summary>
+    [SkippableFact]
+    public async Task PayCommitted_Deny_ThenFinalizedDenied_StaysReversed()
+    {
+        _ncciPends = false;
+        var paid = await SubmitAndAdjudicateAsync();
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-1", paid.Id, "Denied")));
+        await AssertBalances(0m, 0m);
+
+        var finalized = await _finalization.FinalizeAsync(paid.Id,
+            new ClaimFinalizationRequest { CheckNumber = "PR-1-D1", PayerPayment = 0m }, Tenant, "payment-service", null);
+
+        Assert.Equal(ClaimFinalizationOutcome.Finalized, finalized.Outcome);
+        var stored = (await Claim(paid.Id))!;
+        Assert.Equal(Claims.ClaimStatus.Denied, stored.Status);
+        Assert.Equal(Claims.ClaimVersionState.Denied, stored.VersionState);
+        Assert.Null(stored.PendingAccumulatorReversal);
+        Assert.Null(stored.PendingAccumulatorCommit);
+        Assert.Equal(0, await _dispatcher.RunOnceAsync(CancellationToken.None));
+        await AssertBalances(0m, 0m);
+    }
+
+    /// <summary>
+    /// Pay → Deny → Pay, then paid and voided: the void's terminal reversal takes back the
+    /// second commit and fences the claim id, exactly as for a claim never denied.
+    /// </summary>
+    [SkippableFact]
+    public async Task DenyThenPay_ThenPaidAndVoided_ReversesTerminally()
+    {
+        _ncciPends = false;
+        var paid = await SubmitAndAdjudicateAsync();
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-1", paid.Id, "Denied")));
+        Assert.Equal(200, StatusOf(await ResolveAsync("examiner-2", paid.Id, "Approved")));
+        await AssertBalances(100m, 100m);
+        Assert.Equal(ClaimFinalizationOutcome.Finalized, (await _finalization.FinalizeAsync(paid.Id,
+            new ClaimFinalizationRequest { CheckNumber = "CHK-2", PayerPayment = 0m }, Tenant, "payment-service", null)).Outcome);
+
+        var voided = await _finalization.VoidAsync(paid.Id, new ClaimVoidRequest { Reason = "duplicate" }, Tenant, "operator", null);
+
+        Assert.Equal(Claims.ClaimStatus.Voided, voided.Claim!.Status);
+        Assert.Null((await Claim(paid.Id))!.PendingAccumulatorReversal);
+        await AssertBalances(0m, 0m);
+        await AssertFencedAsync(paid.Id);
     }
 
     /// <summary>
@@ -404,8 +497,10 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     [InlineData("Denied", 0)]
     public async Task ClaimPendedBeforeTheChange_WithAccumulatorsWritten_IsReplacedOrReversed(string disposition, int expected)
     {
-        Skip.If(!UndoesLegacyWrites && disposition == "Approved",
-            "The Redis store kept no journal for writes made before deferred commits (deploy notes).");
+        Skip.If(!UndoesLegacyWrites,
+            "The Redis store kept no journal for writes made before deferred commits (deploy notes): its lookup " +
+            "cannot report them, so a denial queues no reversal; the cache drops them on its next rebuild " +
+            "(claims-service's accumulator totals exclude Deny / Denied).");
         var pended = await SubmitAndAdjudicateAsync();
         var legacy = _calculated[0].PreparedAccumulatorCommit!;
         await AssertBalances(0m, 0m); // warm the cache, as pricing does before a Production write
@@ -447,14 +542,14 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         Assert.Equal(Claims.ClaimStatus.Deny, final.Status);
         Assert.Equal("Deny", Assert.Single(final.ExaminerResolutions).Disposition);
         Assert.Null(final.PendingAccumulatorCommit);
+        Assert.Null(final.PendingAccumulatorReversal); // a pended claim contributed nothing
         await AssertBalances(0m, 0m);
         Assert.Equal(0m, await Balance(AccumulatorType.FamilyDeductible, AccumulatorScope.Family));
-        await AssertFencedAsync(pended.Id);
-
-        // A's prepared write (from its re-run) cannot land now either.
-        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed,
-            (await _engine.CommitAccumulatorsAsync(_calculated[^1].PreparedAccumulatorCommit!)).Outcome);
+        // A's prepared write never reached the claim (its final write was refused), so
+        // nothing can drive it; Deny is reprocessable, so the claim id is not fenced.
+        Assert.Equal(0, await _dispatcher.RunOnceAsync(CancellationToken.None));
         await AssertBalances(0m, 0m);
+        await AssertNotFencedAsync(pended.Id);
     }
 
     /// <summary>
@@ -571,6 +666,8 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     [SkippableFact]
     public async Task DenialReversal_FailsThenIsRedrivenByTheDispatcher()
     {
+        Skip.If(!UndoesLegacyWrites,
+            "The Redis store kept no journal for writes made before deferred commits: its lookup cannot report them.");
         var pended = await SubmitAndAdjudicateAsync();
         var legacy = _calculated[0].PreparedAccumulatorCommit!;
         await AssertBalances(0m, 0m);
@@ -590,7 +687,8 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         Assert.Equal(1, await _dispatcher.RunOnceAsync(CancellationToken.None));
         Assert.Null((await Claim(pended.Id))!.PendingAccumulatorReversal);
         await AssertBalances(0m, 0m);
-        await AssertFencedAsync(pended.Id);
+        // Non-terminal: Deny stays reprocessable.
+        await AssertNotFencedAsync(pended.Id);
     }
 
     // ── clamp at write time ───────────────────────────────────────────────
@@ -931,12 +1029,13 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// #1299 S-B: the bulk re-run's denial carries the terminal reversal, which fences the
-    /// claim id in the accumulator store: a commit for that claim arriving afterwards (a
-    /// stale prepared write) is refused and changes nothing.
+    /// #1299 S-B, under the Pay/Deny lifecycle: the bulk re-run's denial of a pended claim
+    /// (which wrote nothing) queues no reversal and fences nothing — Deny is reprocessable. A
+    /// stale prepared commit can only reach the store through the claim's outbox, which drops
+    /// a commit on a denied claim (claims-service tests).
     /// </summary>
     [SkippableFact]
-    public async Task PaUnavailablePend_BulkDenied_ALateCommitIsRefused()
+    public async Task PaUnavailablePend_BulkDenied_QueuesNothing_AndIsNotFenced()
     {
         // A priced claim of the same member: its prepared commit is the template for the
         // late write, re-addressed to the denied claim.
@@ -955,15 +1054,11 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
             .ReturnsForAnyArgs(AuthorizationLookupResult.NotFound());
         var run = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
         Assert.Equal(1, run.Denied);
-        await AssertFencedAsync(pended.Id);
-
-        var late = await _engine.CommitAccumulatorsAsync(prepared with
-        {
-            CommitId = "late-" + Guid.NewGuid().ToString("N"),
-            ClaimId = pended.Id,
-        });
-
-        Assert.Equal(AccumulatorCommitOutcome.RefusedClaimReversed, late.Outcome);
+        Assert.NotNull(prepared);
+        var denied = (await Claim(pended.Id))!;
+        Assert.Equal(Claims.ClaimStatus.Deny, denied.Status);
+        Assert.Null(denied.PendingAccumulatorReversal);
+        await AssertNotFencedAsync(pended.Id);
         await AssertBalances(0m, 0m);
         await AssertNoWriteForAsync(pended.Id);
     }
@@ -1060,6 +1155,9 @@ public abstract class AccumulatorIntegrityChoTests : AccumulatorIntegrityTests
     protected override async Task AssertFencedAsync(string claimId) =>
         Assert.All((await AccumulatorDocumentsAsync()).Where(d => d.Scope == "Individual"),
             d => Assert.Contains(claimId, d.ReversedClaimIds));
+
+    protected override async Task AssertNotFencedAsync(string claimId) =>
+        Assert.All(await AccumulatorDocumentsAsync(), d => Assert.DoesNotContain(claimId, d.ReversedClaimIds));
 }
 
 /// <summary><see cref="AccumulatorIntegrityTests"/> on MongoDB: <see cref="ClaimRepositoryMongo"/> and <see cref="AccumulatorRepositoryMongo"/>.</summary>
@@ -1225,6 +1323,9 @@ public sealed class AccumulatorIntegrityRedisTests(MongoRunnerFixture mongo, Red
 
     protected override async Task AssertFencedAsync(string claimId) =>
         Assert.True(await _connection.GetDatabase().HashExistsAsync(IndividualKey, "__fence:" + claimId));
+
+    protected override async Task AssertNotFencedAsync(string claimId) =>
+        Assert.False(await _connection.GetDatabase().HashExistsAsync(IndividualKey, "__fence:" + claimId));
 
     public override async Task DisposeAsync()
     {

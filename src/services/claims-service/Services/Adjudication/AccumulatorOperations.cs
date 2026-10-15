@@ -326,6 +326,9 @@ public sealed class AccumulatorOperationsService
             var disposition = deny ? ClaimStatus.Deny : ClaimStatus.Approved;
             claim = await _claims.GetForAccumulatorOutboxAsync(tenantId, claim.Id, CancellationToken.None) ?? claim;
             var actedAt = DateTime.UtcNow;
+            var denialReversal = deny
+                ? await DenialAccumulatorReversal.ForDenialAsync(claim, claim.Status, actedAt, _lookup, _logger, CancellationToken.None)
+                : null;
             var reviewed = claim.PendDetails;
             claim.LastUpdatedBy = actor;
             claim.Status = disposition;
@@ -335,10 +338,11 @@ public sealed class AccumulatorOperationsService
             claim.PendingExaminerApproval = null;
             claim.ResolutionLock = null;
             // As the examiner resolve path: an approval owes its commit; a
-            // denial a terminal reversal that fences the claim id (a claim
-            // pended before the engine ran wrote nothing to reverse).
+            // denial a non-terminal reversal only if the claim contributed
+            // (a pended claim normally wrote nothing); Deny stays
+            // reprocessable, so nothing is fenced.
             claim.PendingAccumulatorCommit = deny ? null : AccumulatorOutboxItem.ForCommit(rerun.PreparedAccumulatorCommit!, actedAt);
-            claim.PendingAccumulatorReversal = deny ? AccumulatorOutboxItem.ForReversal(claim, actedAt) : null;
+            claim.PendingAccumulatorReversal = denialReversal;
             claim.ExaminerResolutions.Add(new ExaminerResolutionRecord
             {
                 Disposition = disposition.ToString(),

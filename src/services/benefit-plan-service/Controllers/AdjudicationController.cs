@@ -919,13 +919,29 @@ public class AdjudicationController : ControllerBase
             request.BenefitPlanId,
             request.ServiceDate);
 
-        await _benefitEngine.ReverseClaimAsync(
-            request.MemberId,
-            request.SubscriberId ?? string.Empty,
-            request.BenefitPlanId,
-            request.ServiceDate,
-            request.OriginalClaimId,
-            ct);
+        // Terminal (the default): a void, a superseded version — the claim id
+        // is fenced. Non-terminal: a Pay claim moved to Deny before the
+        // payment cycle, which may be reprocessed back to Pay and commit again.
+        if (request.Terminal)
+        {
+            await _benefitEngine.ReverseClaimAsync(
+                request.MemberId,
+                request.SubscriberId ?? string.Empty,
+                request.BenefitPlanId,
+                request.ServiceDate,
+                request.OriginalClaimId,
+                ct);
+        }
+        else
+        {
+            await _benefitEngine.ReverseClaimForReprocessingAsync(
+                request.MemberId,
+                request.SubscriberId ?? string.Empty,
+                request.BenefitPlanId,
+                request.ServiceDate,
+                request.OriginalClaimId,
+                ct);
+        }
 
         return NoContent();
     }
@@ -1636,4 +1652,12 @@ public class ReverseClaimRequest
     public Guid BenefitPlanId { get; set; }
     public DateOnly ServiceDate { get; set; }
     public string OriginalClaimId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Default true (and when absent, as from older callers): fence the claim
+    /// id so a later commit of it is refused (void / replacement). False:
+    /// reverse only — the claim may commit again (Pay → Deny before the
+    /// payment cycle, then reprocessed).
+    /// </summary>
+    public bool Terminal { get; set; } = true;
 }

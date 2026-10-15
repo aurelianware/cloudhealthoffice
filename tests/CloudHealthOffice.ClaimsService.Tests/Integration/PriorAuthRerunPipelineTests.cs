@@ -176,7 +176,15 @@ public sealed class PriorAuthRerunPipelineTests
             NullLogger<ClaimAdjudicationOrchestrator>.Instance);
         return new AccumulatorOperationsService(
             _claims, Substitute.For<IClaimVersionEventPublisher>(), Substitute.For<IClaimEventPublisher>(),
-            NullLogger<AccumulatorOperationsService>.Instance, orchestrator);
+            NullLogger<AccumulatorOperationsService>.Instance, orchestrator, lookup: NothingRecorded());
+    }
+
+    private static IAccumulatorCommitLookup NothingRecorded()
+    {
+        var lookup = Substitute.For<IAccumulatorCommitLookup>();
+        lookup.LookupCommitRecordsAsync(Arg.Any<IReadOnlyList<AccumulatorCommitLookupItem>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, bool>());
+        return lookup;
     }
 
     private async Task AssertStaysPended(AccumulatorOperationsService operations)
@@ -233,7 +241,7 @@ public sealed class PriorAuthRerunPipelineTests
 
         Assert.Equal(1, run.Denied);
         await _claims.Received(1).UpdateHoldingResolutionLockAsync(
-            Arg.Is<Claim>(c => c.Status == ClaimStatus.Deny && c.VersionState == ClaimVersionState.Adjudicated && c.PendingAccumulatorReversal != null),
+            Arg.Is<Claim>(c => c.Status == ClaimStatus.Deny && c.VersionState == ClaimVersionState.Adjudicated && c.PendingAccumulatorReversal == null),
             Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 

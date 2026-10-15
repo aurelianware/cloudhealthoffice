@@ -517,7 +517,7 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
     /// after it — never before the denial is final.
     /// </summary>
     [Fact]
-    public async Task Deny_SavesTheReversalWithTheFinalWrite_ThenDrivesIt()
+    public async Task Deny_OfAPendedClaim_QueuesNoReversal()
     {
         var claim = Pended("claim-deny", "NCCI", "bundled pair");
         OutboxReadsTheSavedClaim();
@@ -526,22 +526,53 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
             new { disposition = "Denied", reason = "bundled" });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        // A pended claim never committed; Deny stays reprocessable: nothing to
+        // reverse, nothing fenced.
+        await _repo.Received(1).UpdateHoldingResolutionLockAsync(
+            Arg.Is<Claim>(c => c.Status == ClaimStatus.Deny
+                && c.VersionState == ClaimVersionState.Adjudicated
+                && c.PendingAccumulatorReversal == null
+                && c.PendingAccumulatorCommit == null),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _engine.DidNotReceiveWithAnyArgs().ReverseClaimAsync(default!, default!, default, default, default!, default);
+        await _engine.DidNotReceiveWithAnyArgs().ReverseClaimForReprocessingAsync(default!, default!, default, default, default!, default);
+        await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
+    }
+
+    /// <summary>
+    /// A Pay claim (its commit applied) denied before the payment cycle: its
+    /// contribution is reversed now, NON-terminally — saved with the final
+    /// write, then driven through the engine's reprocessing reversal (no
+    /// fence), so the claim can return to Pay and commit again.
+    /// </summary>
+    [Fact]
+    public async Task Deny_OfAPayClaim_SavesANonTerminalReversal_ThenDrivesIt()
+    {
+        var claim = Pended("claim-pay-deny", "NCCI", "bundled pair");
+        claim.Status = ClaimStatus.Approved;
+        claim.VersionState = ClaimVersionState.Adjudicated;
+        OutboxReadsTheSavedClaim();
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer), claim,
+            new { disposition = "Deny", reason = "documentation not received" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Received.InOrder(() =>
         {
             _repo.UpdateHoldingResolutionLockAsync(
                 Arg.Is<Claim>(c => c.Status == ClaimStatus.Deny
-                    && c.VersionState == ClaimVersionState.Adjudicated
                     && c.PendingAccumulatorReversal != null
-                    && c.PendingAccumulatorReversal.Reversal!.ClaimId == "claim-deny"
+                    && c.PendingAccumulatorReversal.Reversal!.ClaimId == "claim-pay-deny"
+                    && !c.PendingAccumulatorReversal.Reversal.Terminal
                     && c.PendingAccumulatorCommit == null),
                 Arg.Any<string>(), Arg.Any<CancellationToken>());
-            _engine.ReverseClaimAsync(
+            _engine.ReverseClaimForReprocessingAsync(
                 "MEM-9", "MEM-9", Guid.Parse(claim.BenefitPlanId!), DateOnly.FromDateTime(claim.ServiceDateFrom),
                 claim.Id, Arg.Any<CancellationToken>());
-            _repo.CompleteAccumulatorOutboxAsync("test-tenant", "claim-deny", AccumulatorOutboxKind.Reversal,
+            _repo.CompleteAccumulatorOutboxAsync("test-tenant", "claim-pay-deny", AccumulatorOutboxKind.Reversal,
                 Arg.Any<string>(), null, Arg.Any<CancellationToken>());
         });
-        await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
+        await _engine.DidNotReceiveWithAnyArgs().ReverseClaimAsync(default!, default!, default, default, default!, default);
     }
 
     /// <summary>The denial's final write is refused (lock taken over): nothing is reversed or fenced.</summary>

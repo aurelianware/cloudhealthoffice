@@ -50,9 +50,11 @@ public class ClaimsController : ControllerBase
         ILogger<ClaimsController> logger,
         IClaimApprovalReadjudicator? approvalReadjudicator = null,
         CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine? benefitEngine = null,
-        IAccumulatorOutboxProcessor? accumulatorOutbox = null)
+        IAccumulatorOutboxProcessor? accumulatorOutbox = null,
+        IAccumulatorCommitLookup? accumulatorCommitLookup = null)
     {
         _accumulatorOutbox = accumulatorOutbox;
+        _accumulatorCommitLookup = accumulatorCommitLookup;
         _approvalReadjudicator = approvalReadjudicator;
         _benefitEngine = benefitEngine;
         _claimRepository = claimRepository;
@@ -1523,6 +1525,9 @@ public class ClaimsController : ControllerBase
         {
             claim = await _claimRepository.GetByIdAsync(claimId) ?? claim;
             if (RefuseUnresolvable(claim) is { } lockedRefusal) return lockedRefusal;
+            // The phase the claim is resolved from: a Pay claim may already
+            // have committed accumulators that a denial must take back.
+            var sourceStatus = claim.Status;
             var reviewedPend = claim.PendDetails;
             var fingerprint = PendDetails.ComputeFingerprint(reviewedPend);
             if (!string.IsNullOrWhiteSpace(request.PendFingerprint)
@@ -1659,6 +1664,10 @@ public class ClaimsController : ControllerBase
             // From here the decision is made: finish it even if the caller
             // goes away (L9).
             var actedAt = DateTime.UtcNow;
+            var denialReversal = disposition == ClaimStatus.Deny
+                ? await DenialAccumulatorReversal.ForDenialAsync(
+                    claim, sourceStatus, actedAt, _accumulatorCommitLookup, _logger, CancellationToken.None)
+                : null;
             claim.LastUpdatedBy = examinerUserId;
             claim.Status = disposition;
             claim.VersionState = ClaimRepository.MapStatusToVersionState(disposition);
@@ -1667,19 +1676,20 @@ public class ClaimsController : ControllerBase
             claim.PendingExaminerApproval = null;
             claim.ResolutionLock = null;
             // Accumulator outbox, written by the same lock-fenced write that
-            // makes the decision final (and only if it lands): an approval
-            // owes the commit its re-run prepared; a denial owes a terminal
-            // reversal — it reverses what a claim pended before deferred
-            // commits wrote (a claim pended since wrote nothing) and fences
-            // the claim id in the store. Neither happens before the claim is
-            // final, so a denial whose final write is refused fences nothing
-            // and a later approval's commit is not refused.
+            // makes the decision (and only if it lands): an approval owes the
+            // commit its re-run prepared (it replaces the claim's own earlier
+            // contribution in the store, so it counts once). A denial owes a
+            // NON-terminal reversal of what the claim contributed, or nothing
+            // if it contributed nothing (DenialAccumulatorReversal): Deny is
+            // not final, so the claim may be reprocessed back to Pay and commit
+            // again (a terminal reversal would fence the claim id and refuse
+            // that commit). Any reversal still pending is dropped by an
+            // approval: the new commit takes back the claim's own earlier
+            // contribution itself.
             claim.PendingAccumulatorCommit = disposition == ClaimStatus.Approved && accumulatorCommit is not null
                 ? AccumulatorOutboxItem.ForCommit(accumulatorCommit, actedAt)
                 : null;
-            claim.PendingAccumulatorReversal = disposition == ClaimStatus.Deny
-                ? AccumulatorOutboxItem.ForReversal(claim, actedAt)
-                : null;
+            claim.PendingAccumulatorReversal = denialReversal;
             claim.ExaminerResolutions.Add(new ExaminerResolutionRecord
             {
                 Disposition = disposition.ToString(),
@@ -1813,6 +1823,8 @@ public class ClaimsController : ControllerBase
     /// The claim still holds this resolution lock, unexpired, and is still
     /// Pended (read now, immediately before a side effect).
     /// </summary>
+    private readonly IAccumulatorCommitLookup? _accumulatorCommitLookup;
+
     private Task<bool> HoldsResolutionLockAsync(string claimId, string lockToken) =>
         _claimRepository.HoldsResolutionLockAsync(GetTenantId(), claimId, lockToken, DateTime.UtcNow, CancellationToken.None);
 

@@ -85,6 +85,21 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
             : null;
         context.PendingAccumulatorCommit = pendingCommit;
 
+        // An examiner re-run of an adjudicated, not-yet-remitted claim (Pay /
+        // Deny) that does not pass is refused by the resolver: the claim stays
+        // exactly as it was (its adjudication result and status are not
+        // overwritten by the refused attempt). A pended claim's re-run still
+        // projects (it refreshes the pends the examiner sees).
+        if (context.ExaminerApproval is not null
+            && resolvedOutcome != ClaimAdjudicationOutcome.Pass
+            && ClaimStatusSemantics.IsAdjudicatedNotFinalized(context.Claim.Status))
+        {
+            _logger.LogInformation(
+                "Examiner re-run of {Status} claim {ClaimVersionId} resolved {Outcome}; not persisted (the resolver refuses it)",
+                context.Claim.Status, SanitizeForLog(context.ClaimVersionId), resolvedOutcome);
+            return ClaimAdjudicationStageResult.Pass(StageName);
+        }
+
         try
         {
             var written = await _repository
@@ -96,7 +111,10 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
                     ct,
                     pendDetails: context.PendDetails,
                     isPend: isPend,
-                    resolvedStatus: resolvedStatus,
+                    // An examiner re-run never writes the status: the
+                    // resolver's lock-fenced final write decides it (with the
+                    // accumulator outbox entry that goes with it).
+                    resolvedStatus: context.ExaminerApproval is null ? resolvedStatus : null,
                     resolvedBenefitPlanId: context.Claim.BenefitPlanId,
                     requiredResolutionLockToken: context.ExaminerApproval?.ResolutionLockToken,
                     pendingAccumulatorCommit: pendingCommit)

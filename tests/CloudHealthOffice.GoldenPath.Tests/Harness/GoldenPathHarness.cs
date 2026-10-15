@@ -476,8 +476,12 @@ internal sealed class GoldenPathHarness
                 {
                     // AdjudicationController.ReverseClaim.
                     var reverse = (await request.Content!.ReadFromJsonAsync<BenefitPlanService.Controllers.ReverseClaimRequest>(Wire.BenefitPlanService, ct))!;
-                    await engine.ReverseClaimAsync(reverse.MemberId, reverse.SubscriberId ?? string.Empty,
-                        reverse.BenefitPlanId, reverse.ServiceDate, reverse.OriginalClaimId, ct);
+                    if (reverse.Terminal)
+                        await engine.ReverseClaimAsync(reverse.MemberId, reverse.SubscriberId ?? string.Empty,
+                            reverse.BenefitPlanId, reverse.ServiceDate, reverse.OriginalClaimId, ct);
+                    else
+                        await engine.ReverseClaimForReprocessingAsync(reverse.MemberId, reverse.SubscriberId ?? string.Empty,
+                            reverse.BenefitPlanId, reverse.ServiceDate, reverse.OriginalClaimId, ct);
                     return new HttpResponseMessage(HttpStatusCode.NoContent);
                 }
                 case "/api/v1/adjudication/accumulator-commits/lookup":

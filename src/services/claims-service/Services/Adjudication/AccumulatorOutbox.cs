@@ -228,9 +228,16 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
     private async Task<AccumulatorOutboxResult> ReverseAsync(AccumulatorOutboxItem item, CancellationToken ct)
     {
         var order = item.Reversal ?? throw new InvalidOperationException($"Outbox entry {item.Id} holds no reversal.");
-        await _engine.ReverseClaimAsync(
-            order.MemberId, order.SubscriberId, Guid.Parse(order.BenefitPlanId),
-            DateOnly.FromDateTime(order.ServiceDate), order.ClaimId, ct);
+        if (order.Terminal)
+            await _engine.ReverseClaimAsync(
+                order.MemberId, order.SubscriberId, Guid.Parse(order.BenefitPlanId),
+                DateOnly.FromDateTime(order.ServiceDate), order.ClaimId, ct);
+        else
+            // A Pay claim moved to Deny: reverse, but don't fence — it may be
+            // reprocessed back to Pay and commit again.
+            await _engine.ReverseClaimForReprocessingAsync(
+                order.MemberId, order.SubscriberId, Guid.Parse(order.BenefitPlanId),
+                DateOnly.FromDateTime(order.ServiceDate), order.ClaimId, ct);
         await _claims.CompleteAccumulatorOutboxAsync(
             _tenantContext.TenantId!, order.ClaimId, AccumulatorOutboxKind.Reversal, item.Id, ct: CancellationToken.None);
         return AccumulatorOutboxResult.Reversed;

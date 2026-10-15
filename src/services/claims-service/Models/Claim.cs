@@ -1516,8 +1516,12 @@ public class AccumulatorOutboxItem
 
     public static long ToMs(DateTime utc) => new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
 
-    /// <summary>The terminal reversal of <paramref name="claim"/>; null when its plan id is not a GUID (nothing to reverse).</summary>
-    public static AccumulatorOutboxItem? ForReversal(Claim claim, DateTime now) =>
+    /// <summary>
+    /// The reversal of <paramref name="claim"/> — terminal (fences the claim
+    /// id) unless <paramref name="terminal"/> is false; null when its plan id
+    /// is not a GUID (nothing to reverse).
+    /// </summary>
+    public static AccumulatorOutboxItem? ForReversal(Claim claim, DateTime now, bool terminal = true) =>
         Guid.TryParse(claim.BenefitPlanId, out _)
             ? new AccumulatorOutboxItem
             {
@@ -1529,6 +1533,7 @@ public class AccumulatorOutboxItem
                     SubscriberId = string.IsNullOrWhiteSpace(claim.SubscriberId) ? claim.MemberId : claim.SubscriberId!,
                     BenefitPlanId = claim.BenefitPlanId!,
                     ServiceDate = claim.ServiceDateFrom,
+                    Terminal = terminal,
                 },
                 CreatedAt = now,
                 NextAttemptAt = now + InlineGrace,
@@ -1547,6 +1552,15 @@ public class AccumulatorReversalOrder
     public string SubscriberId { get; set; } = string.Empty;
     public string BenefitPlanId { get; set; } = string.Empty;
     public DateTime ServiceDate { get; set; }
+
+    /// <summary>
+    /// True (the default, and for orders persisted before the field existed):
+    /// a terminal reversal that fences the claim id (void, examiner denial of
+    /// a pended claim before the Pay/Deny lifecycle). False: reverse only —
+    /// a Pay claim moved to Deny before the payment cycle, which may be
+    /// reprocessed back to Pay and commit again.
+    /// </summary>
+    public bool Terminal { get; set; } = true;
 }
 
 /// <summary>See <see cref="Claim.AccumulatorClampReview"/>.</summary>

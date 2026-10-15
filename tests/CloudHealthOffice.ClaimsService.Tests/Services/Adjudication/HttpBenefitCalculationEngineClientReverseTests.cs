@@ -127,6 +127,23 @@ public class HttpBenefitCalculationEngineClientReverseTests
         Assert.Equal("m1", doc.RootElement.GetProperty("memberId").GetString());
         Assert.Equal("sub-1", doc.RootElement.GetProperty("subscriberId").GetString());
         Assert.Equal("claim-99", doc.RootElement.GetProperty("originalClaimId").GetString());
+        Assert.True(doc.RootElement.GetProperty("terminal").GetBoolean());
+    }
+
+    /// <summary>A Pay claim moved to Deny: the reversal asks for terminal=false (no fence).</summary>
+    [Fact]
+    public async Task ReverseClaimForReprocessingAsync_PostsTerminalFalse()
+    {
+        _tenantContext.TenantId.Returns("tenant-x");
+        _handler.RespondWith(new HttpResponseMessage(HttpStatusCode.NoContent));
+
+        await CreateClient().ReverseClaimForReprocessingAsync(
+            "m1", "sub-1", Guid.Parse("11111111-1111-1111-1111-111111111111"), new DateOnly(2026, 5, 1), "claim-99");
+
+        Assert.Equal("/api/v1/adjudication/reverse-claim", _handler.LastRequest!.RequestUri!.AbsolutePath);
+        var doc = JsonDocument.Parse(_handler.LastBodyJson!);
+        Assert.False(doc.RootElement.GetProperty("terminal").GetBoolean());
+        Assert.Equal("claim-99", doc.RootElement.GetProperty("originalClaimId").GetString());
     }
 
     [Fact]

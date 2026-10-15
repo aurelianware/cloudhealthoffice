@@ -137,11 +137,26 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
             "result production.");
     }
 
-    public async Task ReverseClaimAsync(
+    public Task ReverseClaimAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, DateOnly serviceDate,
         string originalClaimId,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        ReverseAsync(memberId, subscriberId, benefitPlanId, serviceDate, originalClaimId, terminal: true, ct);
+
+    public Task ReverseClaimForReprocessingAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, DateOnly serviceDate,
+        string originalClaimId,
+        CancellationToken ct = default) =>
+        ReverseAsync(memberId, subscriberId, benefitPlanId, serviceDate, originalClaimId, terminal: false, ct);
+
+    private async Task ReverseAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, DateOnly serviceDate,
+        string originalClaimId,
+        bool terminal,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(memberId))
             throw new ArgumentException("memberId is required", nameof(memberId));
@@ -158,6 +173,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
             BenefitPlanId = benefitPlanId,
             ServiceDate = serviceDate,
             OriginalClaimId = originalClaimId,
+            Terminal = terminal,
         };
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ReversePath)
@@ -307,6 +323,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
         public Guid BenefitPlanId { get; set; }
         public DateOnly ServiceDate { get; set; }
         public string OriginalClaimId { get; set; } = string.Empty;
+        public bool Terminal { get; set; } = true;
     }
 
     /// <summary>

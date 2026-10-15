@@ -79,6 +79,13 @@ tells the provider; only then is it final.
 - A resolve / override of a finalized claim (`Paid`, `Denied`, `Voided`,
   `Adjusted`) is 422 with a pointer to the adjustment / void path. An
   examiner's "Denied" disposition writes `Deny`.
+- Accumulators: a move to `Deny` takes back what the claim contributed with a
+  NON-terminal reversal (`reverse-claim` with `terminal: false` →
+  `IAccumulatorService.ReverseAsync`, no fence), so a claim reprocessed back
+  to Pay commits again (new commit id) and counts once. From Pay the reversal
+  is always queued; from Pended / Deny only if the store reports a write for
+  the claim (`accumulator-commits/lookup`), else nothing. `Deny` → `Denied`
+  adds nothing. Voids and replacements keep the terminal (fencing) reversal.
 - `PartiallyPaid` (= 9) is legacy: never assigned (adjudication never set
   it), still read as payable and, via `VersionState=Paid`, finalized. The
   portal derives "Paid with line denials" from the lines instead.
