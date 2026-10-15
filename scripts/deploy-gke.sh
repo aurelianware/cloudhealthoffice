@@ -237,7 +237,11 @@ render_args=(--registry "$GAR_REPOSITORY" --tag "$IMAGE_TAG"
 [[ "$AI_EXAMINER" == true ]] && render_args+=(--ai-examiner)
 rendered="$(mktemp)"
 python3 deploy/gcp/render_manifests.py "${render_args[@]}" > "$rendered"
-kubectl apply -n "$NAMESPACE" -f "$rendered" >/dev/null
+if ! apply_out="$(kubectl apply -n "$NAMESPACE" -f "$rendered" 2>&1)"; then
+  # Name what the API server rejected, not just that apply failed.
+  apply_errors="$(grep -viE ' (created|configured|unchanged)$' <<<"$apply_out" | head -10)"
+  err "kubectl apply of the service manifests failed:"$'\n'"${apply_errors:-$apply_out}"
+fi
 ok "applied $(grep -c '^kind: Deployment' "$rendered") deployments"
 [[ "$AI_EXAMINER" == true ]] && ok "AI claims examiner enabled (advisory only)" \
   || warn "AI claims examiner off (set ANTHROPIC_API_KEY to enable)"
