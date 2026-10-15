@@ -73,8 +73,9 @@ public sealed class RunConcurrencyTests : IDisposable
 
         Assert.Single(responses, r => r.StatusCode == HttpStatusCode.OK);
         Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Conflict);
-        // The executing run searches twice (Approved claims, Denied claims); the other run never searches.
-        Assert.Equal(2, _host.Claims.Calls.Count(c => c.Path == "/api/claims/search"));
+        // The executing run searches three times (Approved claims, Deny claims,
+        // legacy never-remitted Denied claims); the other run never searches.
+        Assert.Equal(3, _host.Claims.Calls.Count(c => c.Path == "/api/claims/search"));
         Assert.Single(PaymentsFor("clm-1"));
         Assert.Equal(1, _host.Claims.Get("clm-1").FinalizeCount);
     }

@@ -616,9 +616,15 @@ public class PaymentRunServiceBatchedTests
         {
             if (req.Method == HttpMethod.Get && req.RequestUri!.AbsolutePath.StartsWith("/api/claims/search"))
             {
-                var list = req.RequestUri.Query.Contains("status=6") ? denied : approved;
+                // status=10: Deny (adjudicated denials); status=6: legacy Denied rows.
+                var query = req.RequestUri.Query;
+                var list = query.Contains("status=10") ? denied.Where(c => c.Status == ClaimStatus.Deny)
+                    : query.Contains("status=6") ? denied.Where(c => c.Status == ClaimStatus.Denied)
+                    : approved;
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(list.ToList()) };
             }
+            if (req.Method == HttpMethod.Post && FailFinalizeFor.Any(id => req.RequestUri!.AbsolutePath == $"/api/claims/{id}/remittance"))
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
             return new HttpResponseMessage(HttpStatusCode.OK);
         };
     }
@@ -647,10 +653,21 @@ public class PaymentRunServiceBatchedTests
         new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance),
         new CarcRarcMappingService(NullLogger<CarcRarcMappingService>.Instance));
 
-    private static ClaimDto Denied(string id, string npi = "NPI-A", string? carc = "50", params string[] rarcs) => new()
+    /// <summary>Claim ids whose $0 finalize POST answers 503 (SetupClaimsResponse(approved, denied)).</summary>
+    private HashSet<string> FailFinalizeFor { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>An adjudicated denial (claims-service Deny: not yet remitted).</summary>
+    private static ClaimDto Denied(string id, string npi = "NPI-A", string? carc = "50", params string[] rarcs) =>
+        DeniedWithStatus(id, ClaimStatus.Deny, npi, carc, rarcs);
+
+    /// <summary>A legacy row Denied at adjudication (before the Deny status existed).</summary>
+    private static ClaimDto LegacyDenied(string id, string npi = "NPI-A") =>
+        DeniedWithStatus(id, ClaimStatus.Denied, npi, "50");
+
+    private static ClaimDto DeniedWithStatus(string id, ClaimStatus status, string npi = "NPI-A", string? carc = "50", params string[] rarcs) => new()
     {
         Id = id, ClaimNumber = "CLM-" + id, BillingProviderNPI = npi, TotalChargeAmount = 200m, MemberId = "m-" + id,
-        Status = ClaimStatus.Denied,
+        Status = status,
         AdjudicationResult = new ClaimAdjudicationDto
         {
             PayerPayment = 0m, DenialReasonCode = carc, DenialReason = "Not medically necessary", RemarkCodes = rarcs.ToList()
@@ -677,7 +694,7 @@ public class PaymentRunServiceBatchedTests
         LoopOf(segments, patientControlNumber).Where(s => s[0] == "SVC").ToList();
 
     [Fact]
-    public async Task ExecutePaymentRunAsync_Denial_RemittedAsZeroPayClaim_InSameEnvelope_NoPaymentNoReservationNoFinalize()
+    public async Task ExecutePaymentRunAsync_Denial_RemittedAsZeroPayClaim_InSameEnvelope_NoPaymentNoReservation_FinalizedAtZero()
     {
         var run = PendingRun();
         _runRepo.GetByIdAsync(run.Id).Returns(run);
@@ -693,8 +710,15 @@ public class PaymentRunServiceBatchedTests
         Assert.Equal(80m, result.TotalPaymentAmount);
         Assert.DoesNotContain(payments.SelectMany(p => p.ClaimPayments), cp => cp.ClaimId == "d1");
         Assert.DoesNotContain(_reservations.All, r => r.ClaimId == "d1");
-        Assert.DoesNotContain(_claimsHandler.RecordedRequests, r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath.Contains("/d1/"));
-        Assert.Contains(_claimsHandler.RecordedRequests, r => r.Uri.Query.Contains("status=6"));
+        Assert.Contains(_claimsHandler.RecordedRequests, r => r.Uri.Query.Contains("status=10"));
+        // After the 835 is persisted the Deny claim is finalized to Denied by a
+        // $0 remittance carrying the denial's 835 trace (TRN02) and envelope.
+        var finalize = Assert.Single(_claimsHandler.RecordedRequests,
+            r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath == "/api/claims/d1/remittance");
+        Assert.Contains("\"paymentAmount\":0", finalize.Body);
+        Assert.Contains($"\"checkNumber\":\"{Assert.Single(payments).CheckNumber}\"", finalize.Body);
+        Assert.Contains("\"eraEnvelopeId\":\"env-TP-A\"", finalize.Body);
+        Assert.Empty(result.PendingDenialFinalizeClaimIds);
 
         var envelope = Assert.Single(envelopes);
         Assert.Equal(new[] { "c1", "d1" }, envelope.ClaimIds);
@@ -792,6 +816,112 @@ public class PaymentRunServiceBatchedTests
             Arg.Is<IReadOnlyCollection<string>>(ids => ids.Contains("d-old") && ids.Contains("d-new")), false);
     }
 
+    /// <summary>
+    /// A Deny claim an earlier 835 remitted, whose $0 finalize did not land
+    /// (claims-service still says Deny), is never remitted again — this run
+    /// only finalizes it, with a finalize-only trace.
+    /// </summary>
+    [Fact]
+    public async Task ExecutePaymentRunAsync_DenyAlreadyIn835_NotRemittedAgain_OnlyFinalized()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(Array.Empty<ClaimDto>(), new[] { Denied("d-stuck") });
+        var (envelopes, _) = SetupRealGenerator();
+        _envelopeRepo.GetClaimIdsWithEnvelopeAsync(Arg.Any<IReadOnlyCollection<string>>(), false)
+            .Returns(new List<string> { "d-stuck" });
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Empty(result.RemittedDeniedClaimIds);
+        Assert.Empty(envelopes);
+        var finalize = Assert.Single(_claimsHandler.RecordedRequests,
+            r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath == "/api/claims/d-stuck/remittance");
+        Assert.Contains("\"paymentAmount\":0", finalize.Body);
+        Assert.Contains("\"checkNumber\":\"PR-20260501-A1B2-DF\"", finalize.Body);
+        Assert.Empty(result.PendingDenialFinalizeClaimIds);
+    }
+
+    /// <summary>
+    /// Legacy Denied rows (Denied at adjudication, before Deny existed) never
+    /// in an 835 are remitted once, but get no finalize call (already final);
+    /// one already in an 835 is never remitted again.
+    /// </summary>
+    [Fact]
+    public async Task ExecutePaymentRunAsync_LegacyDenied_RemittedOnceWithoutFinalize_NeverReRemitted()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(Array.Empty<ClaimDto>(), new[] { LegacyDenied("legacy-new"), LegacyDenied("legacy-remitted"), Denied("d1") });
+        var (envelopes, _) = SetupRealGenerator();
+        _envelopeRepo.GetClaimIdsWithEnvelopeAsync(Arg.Any<IReadOnlyCollection<string>>(), false)
+            .Returns(new List<string> { "legacy-remitted" });
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(new[] { "d1", "legacy-new" }, result.RemittedDeniedClaimIds.OrderBy(x => x, StringComparer.Ordinal));
+        Assert.Equal(new[] { "d1", "legacy-new" }, Assert.Single(envelopes).ClaimIds.OrderBy(x => x, StringComparer.Ordinal));
+        var posts = _claimsHandler.RecordedRequests.Where(r => r.Method == HttpMethod.Post).Select(r => r.Uri.AbsolutePath).ToList();
+        Assert.Equal(new[] { "/api/claims/d1/remittance" }, posts);
+    }
+
+    /// <summary>Once the backfill has run, operators turn the legacy path off: no Denied search at all.</summary>
+    [Fact]
+    public async Task ExecutePaymentRunAsync_RemitLegacyDeniedOff_SearchesDenyOnly()
+    {
+        var config = new ConfigurationBuilder()
+            .AddConfiguration(_configuration)
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["PaymentRuns:RemitLegacyDeniedClaims"] = "false" })
+            .Build();
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(Array.Empty<ClaimDto>(), new[] { LegacyDenied("legacy-new"), Denied("d1") });
+        var (envelopes, _) = SetupRealGenerator();
+        var service = new PaymentRunService(
+            _paymentRepo, _runRepo, new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance),
+            new CarcRarcMappingService(NullLogger<CarcRarcMappingService>.Instance), _envelopeRepo, _tpClient, _httpFactory,
+            NullLogger<PaymentRunService>.Instance, config, _actor, _actor.SeparationOfDuties(), _reservations);
+
+        var result = await service.ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(new[] { "d1" }, result.RemittedDeniedClaimIds);
+        Assert.DoesNotContain(_claimsHandler.RecordedRequests, r => r.Uri.Query.Contains("status=6"));
+    }
+
+    /// <summary>
+    /// A $0 finalize that fails leaves the claim Deny with its 835 sent: it is
+    /// listed (never remitted again) and POST {run}/finalize retries it.
+    /// </summary>
+    [Fact]
+    public async Task ExecutePaymentRunAsync_DenialFinalizeFails_Listed_ThenRetriedByRetryFinalize()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        FailFinalizeFor.Add("d1");
+        SetupClaimsResponse(Array.Empty<ClaimDto>(), new[] { Denied("d1"), Denied("d2") });
+        SetupRealGenerator();
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(PaymentRunStatus.Completed, result.Status);
+        Assert.Equal(new[] { "d1", "d2" }, result.RemittedDeniedClaimIds);
+        Assert.Equal(new[] { "d1" }, result.PendingDenialFinalizeClaimIds);
+        Assert.Contains(result.Errors, e => e.Contains("d1") && e.Contains("not remitted again"));
+
+        FailFinalizeFor.Clear();
+        result.ExecutedBy = "approver-b";
+        _runRepo.GetByIdAsync(run.Id).Returns(result);
+        var retried = await CreateRealService().RetryFinalizeAsync(run.Id);
+
+        Assert.Empty(retried.PendingDenialFinalizeClaimIds);
+        Assert.Equal(2, _claimsHandler.RecordedRequests.Count(
+            r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath == "/api/claims/d1/remittance"));
+    }
+
     [Fact]
     public async Task ExecutePaymentRunAsync_DenialWithoutReason_NotRemitted_Listed()
     {
@@ -845,6 +975,7 @@ public class PaymentRunServiceBatchedTests
         Assert.Empty(result.RemittedDeniedClaimIds);
         Assert.Empty(envelopes);
         Assert.DoesNotContain(_claimsHandler.RecordedRequests, r => r.Uri.Query.Contains("status=6"));
+        Assert.DoesNotContain(_claimsHandler.RecordedRequests, r => r.Uri.Query.Contains("status=10"));
     }
 
     [Fact]
