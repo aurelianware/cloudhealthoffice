@@ -310,15 +310,33 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         }
         catch (Exception ex)
         {
+            // An engine outage is not a benefit decision: pend, never deny.
             _logger.LogError(ex,
-                "Benefit calculation engine threw for claim {ClaimVersionId}",
-                SanitizeForLog(context.ClaimVersionId));
-            return ClaimAdjudicationStageResult.Reject(
-                StageName,
-                $"Benefit calculation engine threw: {ex.GetType().Name}");
+                "Benefit calculation engine threw for claim {ClaimVersionId}; pending {PendCode}",
+                SanitizeForLog(context.ClaimVersionId), ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode);
+            var threwReason = $"{ClaimAdjudicationOrchestrator.ServiceUnavailableReason}: benefit calculation engine threw " +
+                              $"{ex.GetType().Name}; {TransientPendClearedByApproval}";
+            ClaimAdjudicationOrchestrator.RecordServiceUnavailablePend(context, threwReason);
+            return ClaimAdjudicationStageResult.Pend(StageName, threwReason);
         }
 
         context.BenefitResolutionResult = result;
+
+        // The client's "no answer" result (non-2xx or an empty body, code
+        // 999) is an outage, not a denial: pend so the check is retried.
+        // Kept on BenefitResolutionResult so AnyCheckFailed sees it.
+        if (!result.Success
+            && string.Equals(result.DenialReasonCode, HttpBenefitCalculationEngineClient.EngineUnavailableDenialCode, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "Benefit calculation engine gave no answer for claim {ClaimVersionId}; pending {PendCode}",
+                SanitizeForLog(context.ClaimVersionId), ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode);
+            var unavailableReason = $"{ClaimAdjudicationOrchestrator.ServiceUnavailableReason}: " +
+                                    $"{result.DenialReasonDescription ?? "benefit calculation engine gave no answer."} " +
+                                    TransientPendClearedByApproval;
+            ClaimAdjudicationOrchestrator.RecordServiceUnavailablePend(context, unavailableReason);
+            return ClaimAdjudicationStageResult.Pend(StageName, unavailableReason);
+        }
 
         // The engine could not produce a balanced result (e.g. a per-stay
         // allocation allowing a line more than it billed). It wrote no
@@ -479,6 +497,10 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     internal const string TransientPendClearedBy =
         "nothing re-runs it automatically: it is retried by an examiner approval or the PAUNAVAIL re-run " +
         "(POST api/claims/admin/accumulators/prior-auth-unavailable-pends/rerun), and passes or denies only on a definitive answer.";
+
+    /// <summary>How a SVCUNAVAIL pend is cleared: the approval re-run retries the check.</summary>
+    internal const string TransientPendClearedByApproval =
+        "retried on an examiner approval re-run, which passes or denies only on a definitive answer.";
 
     /// <summary>
     /// Checks every line that requires prior authorization (G-25), each

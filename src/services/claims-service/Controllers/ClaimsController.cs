@@ -2011,6 +2011,7 @@ public class ClaimsController : ControllerBase
         "AUTH" or "NOAUTH" => "Missing Authorization",
         Services.Adjudication.Stages.BenefitCalculationStage.PriorAuthorizationUnavailablePendCode => "Prior Authorization Lookup Unavailable",
         Services.Adjudication.Stages.BenefitCalculationStage.PlanUnavailablePendCode => "Benefit Plan Unavailable",
+        Services.Adjudication.ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode => "Service Unavailable",
         "OON" or "NOCONTRACT" => "Provider Not Contracted",
         "COB" => "COB Required",
         "MEDREVIEW" or "CLINICAL" => "Medical Review",

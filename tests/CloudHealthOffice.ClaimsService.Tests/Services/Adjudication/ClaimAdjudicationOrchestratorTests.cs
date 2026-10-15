@@ -107,7 +107,7 @@ public class ClaimAdjudicationOrchestratorTests
     }
 
     [Fact]
-    public async Task Adjudicate_StageThrows_TreatedAsRejectAndPipelineContinuesToPersistence()
+    public async Task Adjudicate_StageThrows_TreatedAsPendAndPipelineContinuesToPersistence()
     {
         var executed = new List<string>();
         var stages = new IClaimAdjudicationStage[]
@@ -122,6 +122,83 @@ public class ClaimAdjudicationOrchestratorTests
         await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
 
         Assert.Equal(new[] { "Scrubbing", "Persistence" }, executed);
+    }
+
+    /// <summary>
+    /// A non-required stage that throws is an outage, not a decision: the
+    /// claim is persisted Pended (SVCUNAVAIL, stage named in the reason),
+    /// never Denied, and the approval re-run counts it as a failed check.
+    /// </summary>
+    [Fact]
+    public async Task Adjudicate_StageThrows_PersistsPendedWithTransientCode_NotDenied()
+    {
+        SetupAdapterReturningClaim();
+        ClaimStatus? persisted = null;
+        PendDetails? persistedPend = null;
+        var claims = Substitute.For<global::ClaimsService.Repositories.IClaimRepository>();
+        claims.UpdateAdjudicationProjectionAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<AdjudicationResult>(),
+                Arg.Any<IReadOnlyList<LineAdjudicationResult>>(), Arg.Any<CancellationToken>(),
+                Arg.Any<PendDetails?>(), Arg.Any<bool>(), Arg.Any<ClaimStatus?>(), Arg.Any<string?>(),
+                Arg.Any<string?>())
+            .Returns(ci =>
+            {
+                persistedPend = ci.ArgAt<PendDetails?>(5);
+                persisted = ci.ArgAt<ClaimStatus?>(7);
+                return true;
+            });
+        string? outcome = null;
+        _messageBus
+            .When(b => b.SendAsync(
+                Arg.Any<string>(), Arg.Any<ClaimVersionAdjudicatedMessage>(), Arg.Any<SendOptions?>(), Arg.Any<CancellationToken>()))
+            .Do(ci => outcome = ci.Arg<ClaimVersionAdjudicatedMessage>().Outcome);
+        var executed = new List<string>();
+        var orch = BuildOrchestrator(
+        [
+            new RecordingStage(NetworkCredentialingStage.StageName, 200, isRequired: false, executed,
+                _ => throw new HttpRequestException("provider-service down")),
+            new RecordingStage(BenefitCalculationStage.StageName, 300, isRequired: false, executed),
+            new PersistenceStage(claims, NullLogger<PersistenceStage>.Instance),
+        ]);
+
+        await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+
+        Assert.Equal(ClaimStatus.Pended, persisted);
+        Assert.Equal(ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode, persistedPend?.PendCode);
+        Assert.Contains(NetworkCredentialingStage.StageName, persistedPend?.PendReason);
+        Assert.Contains("HttpRequestException", persistedPend?.PendReason);
+        Assert.Equal("Pend", outcome);
+        // Later optional stages are skipped: nothing prices on the missing check.
+        Assert.Equal(new[] { NetworkCredentialingStage.StageName }, executed);
+    }
+
+    /// <summary>
+    /// The examiner approval never overrides a SVCUNAVAIL pend: the re-run
+    /// retries the check, and the claim stays pended while it still fails.
+    /// </summary>
+    [Fact]
+    public async Task ApprovalRerun_StageStillThrows_StaysPended_AndReportsACheckFailed()
+    {
+        SetupAdapterReturningClaim();
+        var reviewed = new PendDetails
+        {
+            PendCode = ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode,
+            PendReason = $"{ClaimAdjudicationOrchestrator.ServiceUnavailableReason}: {ScrubbingStage.StageName} threw HttpRequestException; " +
+                         "retried on an examiner approval re-run",
+        };
+        var orch = BuildOrchestrator(
+        [
+            new RecordingStage(ScrubbingStage.StageName, 100, isRequired: false, [],
+                _ => throw new HttpRequestException("still down")),
+            new RecordingStage("Persistence", 999, isRequired: true, []),
+        ]);
+
+        var rerun = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1",
+            new ExaminerApproval { ExaminerId = "examiner-1", ReviewedPend = reviewed }, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, rerun.Outcome);
+        Assert.True(rerun.CheckFailed);
+        Assert.Empty(rerun.OverriddenPends);
     }
 
     [Fact]

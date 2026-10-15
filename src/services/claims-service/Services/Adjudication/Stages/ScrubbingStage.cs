@@ -107,16 +107,24 @@ public sealed class ScrubbingStage : IClaimAdjudicationStage
         }
         catch (Exception ex)
         {
+            // The engine failing is not a finding on the claim: pend (never
+            // reject → deny) so a re-run scrubs it. No decision is recorded
+            // and later optional stages are skipped (nothing prices an
+            // unscrubbed claim).
             _logger.LogError(ex,
-                "Scrubbing engine threw for claim {ClaimVersionId}; treating as Reject",
-                SanitizeForLog(context.ClaimVersionId));
-            context.ScrubbingResult = BuildExceptionOutcome(
-                ex, "ENGINE_EXCEPTION",
-                $"Scrubbing engine threw: {ex.GetType().Name}");
-            activity?.SetTag("scrubbing.decision", ScrubbingDecision.RejectStructural.ToString());
-            return ClaimAdjudicationStageResult.Reject(
-                StageName,
-                $"Scrubbing engine threw: {ex.GetType().Name}");
+                "Scrubbing engine threw for claim {ClaimVersionId}; pending {PendCode}",
+                SanitizeForLog(context.ClaimVersionId), ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode);
+            var reason = $"{ClaimAdjudicationOrchestrator.ServiceUnavailableReason}: scrubbing engine threw " +
+                         $"{ex.GetType().Name}; {BenefitCalculationStage.TransientPendClearedByApproval}";
+            ClaimAdjudicationOrchestrator.RecordServiceUnavailablePend(context, reason);
+            activity?.SetTag("scrubbing.decision", "Pend");
+            return new ClaimAdjudicationStageResult
+            {
+                StageName = StageName,
+                Continue = false,
+                Outcome = ClaimAdjudicationOutcome.Pend,
+                Reason = reason,
+            };
         }
 
         var validation = response.Result;

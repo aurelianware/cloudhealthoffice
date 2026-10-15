@@ -254,11 +254,48 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         Stages.BenefitCalculationStage.DeferredCommitUnsupportedReason,
         Stages.BenefitCalculationStage.PriorAuthorizationUnavailableReason,
         Stages.BenefitCalculationStage.PlanUnavailableReason,
+        ServiceUnavailableReason,
     ];
+
+    /// <summary>
+    /// <see cref="PendDetails.PendCode"/> for a claim pended because a check
+    /// could not run: a stage threw, or a dependency (scrubbing engine,
+    /// benefit-plan-service) errored or was unreachable. An outage is never a
+    /// denial: the claim pends, an examiner approval never overrides it, and
+    /// the approval re-run retries the check (passes or denies only on a
+    /// definitive answer).
+    /// </summary>
+    public const string ServiceUnavailablePendCode = "SVCUNAVAIL";
+
+    /// <summary>Leading text of every <see cref="ServiceUnavailablePendCode"/> pend reason (a transient marker).</summary>
+    public const string ServiceUnavailableReason = "Dependency unavailable";
+
+    /// <summary>
+    /// Records a <see cref="ServiceUnavailablePendCode"/> pend on the context:
+    /// the claim's pend when it has none, else an additional reason (every
+    /// pend is kept, so the persisted pend names this one).
+    /// </summary>
+    internal static void RecordServiceUnavailablePend(ClaimAdjudicationContext context, string reason)
+    {
+        if (reason.Length > 500) reason = reason[..500];
+        if (context.PendDetails is null)
+        {
+            context.PendDetails = new PendDetails
+            {
+                PendCode = ServiceUnavailablePendCode,
+                PendReason = reason,
+                PendedAt = DateTime.UtcNow,
+            };
+            return;
+        }
+        var entry = $"{ServiceUnavailablePendCode}: {reason}";
+        context.PendDetails.AdditionalPendReasons.Add(entry.Length > 500 ? entry[..500] : entry);
+    }
 
     /// <summary>Pend codes that mean a check could not run (a service unavailable), whatever the reason text.</summary>
     private static readonly HashSet<string> TransientPendCodes = new(StringComparer.OrdinalIgnoreCase)
     {
+        ServiceUnavailablePendCode,
         Stages.PricingStage.PricingUnavailablePendCode,
         Stages.BenefitCalculationStage.PriorAuthorizationUnavailablePendCode,
         Stages.BenefitCalculationStage.PlanUnavailablePendCode,
@@ -455,11 +492,23 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             }
             catch (Exception ex) when (!stage.IsRequired)
             {
+                // A check that could not run is not a decision: pend (never
+                // deny) so an examiner approval or a re-run retries it. Later
+                // optional stages are skipped, as before, so nothing prices
+                // on the missing check.
                 _logger.LogError(ex,
-                    "Stage {Stage} threw for claim {ClaimVersionId}; treating as Reject",
-                    stage.Name, SanitizeForLog(context.ClaimVersionId));
-                result = ClaimAdjudicationStageResult.Reject(
-                    stage.Name, $"{stage.Name} threw: {ex.GetType().Name}");
+                    "Stage {Stage} threw for claim {ClaimVersionId}; pending {PendCode}",
+                    stage.Name, SanitizeForLog(context.ClaimVersionId), ServiceUnavailablePendCode);
+                var reason = $"{ServiceUnavailableReason}: {stage.Name} threw {ex.GetType().Name}; " +
+                             "retried on an examiner approval re-run";
+                RecordServiceUnavailablePend(context, reason);
+                result = new ClaimAdjudicationStageResult
+                {
+                    StageName = stage.Name,
+                    Continue = false,
+                    Outcome = ClaimAdjudicationOutcome.Pend,
+                    Reason = reason,
+                };
             }
 
             if (result.Outcome == ClaimAdjudicationOutcome.Pend)

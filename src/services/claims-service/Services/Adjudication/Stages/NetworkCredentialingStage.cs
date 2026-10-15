@@ -181,6 +181,19 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
             .OrderBy(t => t.TierLevel)
             .ToList();
 
+        if (resolvableTiers.Count == 0 && context.PlanResolutionFailed && context.ResolvedPlan is null)
+        {
+            // benefit-plan-service gave no answer for the plan, so its tiers
+            // are unknown: an outage, not "no in-network tier" — pend.
+            return ApplyNetworkMode(
+                context,
+                EnforcementDecision.Pend,
+                reason: $"{providerRole}: {MembershipUnavailableReason} ({BenefitCalculationStage.PlanUnavailableReason}).",
+                serviceDate,
+                networkId: null,
+                tier: null);
+        }
+
         if (resolvableTiers.Count == 0)
         {
             // No resolvable in-network tiers → out-of-network by default.
@@ -245,9 +258,12 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
 
         if (degraded)
         {
+            // An unavailable lookup is not an out-of-network finding: under
+            // FailClosed the claim is not paid without verification, so it
+            // pends (retried on re-run) rather than denying.
             return ApplyNetworkMode(
                 context,
-                EnforcementDecision.Deny,
+                EnforcementDecision.Pend,
                 reason: $"{providerRole}: {MembershipUnavailableReason}",
                 serviceDate,
                 networkId: null,
@@ -287,8 +303,9 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
 
         if (snapshot is null)
         {
+            // Unavailable, not unapproved: pend (never deny) under FailClosed.
             return ApplyCredentialingMode(
-                EnforcementDecision.Deny,
+                EnforcementDecision.Pend,
                 reason: $"{providerRole}: {CredentialingUnavailableReason}",
                 serviceDate);
         }
