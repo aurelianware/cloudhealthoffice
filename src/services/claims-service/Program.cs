@@ -50,6 +50,7 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddScoped<IClaimRepository, ClaimRepositoryMongo>();
     builder.Services.AddHostedService<ClaimIndexInitializer>();
     builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryMongo>();
+    builder.Services.AddScoped<IClaimNoteRepository, ClaimNoteRepositoryMongo>();
     builder.Services.AddScoped<IMassAdjudicationRunRepository, MassAdjudicationRunRepositoryMongo>();
     builder.Services.AddScoped<IClaimImportTransactionRepository, ClaimImportTransactionRepositoryMongo>();
     builder.Services.AddHostedService<MassAdjudicationRunIndexInitializer>();
@@ -85,6 +86,7 @@ else
 
     builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
     builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryCosmos>();
+    builder.Services.AddScoped<IClaimNoteRepository, ClaimNoteRepositoryCosmos>();
     builder.Services.AddSingleton<IMassAdjudicationRunRepository, InMemoryMassAdjudicationRunRepository>();
     builder.Services.AddSingleton<IClaimImportTransactionRepository, InMemoryClaimImportTransactionRepository>();
 
