@@ -270,40 +270,49 @@
         }
 
         <!-- Financial Summary Cards -->
-        <MudGrid Class="mb-4">
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="1">
-                    <MudCardContent>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Charges</MudText>
-                        <MudText Typo="Typo.h5" Class="mt-2">@_claim.TotalChargeAmount.ToString("C")</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="1">
-                    <MudCardContent>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Allowed Amount</MudText>
-                        <MudText Typo="Typo.h5" Class="mt-2">@_claim.AllowedAmount.ToString("C")</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="1">
-                    <MudCardContent>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Payer Payment</MudText>
-                        <MudText Typo="Typo.h5" Class="mt-2" Color="Color.Success">@_claim.PaidAmount.ToString("C")</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="1">
-                    <MudCardContent>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Patient Responsibility</MudText>
-                        <MudText Typo="Typo.h5" Class="mt-2" Color="Color.Warning">@_claim.PatientResponsibility.ToString("C")</MudText>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-        </MudGrid>
+        var aboveAllowed = ClaimMoneySummary.AboveAllowed(_claim);
+        <div class="mb-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Charges</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2">@_claim.TotalChargeAmount.ToString("C")</MudText>
+                </MudCardContent>
+            </MudCard>
+            <MudCard Elevation="1" data-testid="money-above-allowed">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" data-testid="money-above-allowed-label">@aboveAllowed.Label</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2" data-testid="money-above-allowed-amount">@(aboveAllowed.Amount is { } gap ? gap.ToString("C") : "—")</MudText>
+                    <MudChip T="string" Size="Size.Small" Class="ml-0 mt-1"
+                             Color="@(aboveAllowed.Network switch { ClaimNetwork.InNetwork => Color.Success, ClaimNetwork.Unknown => Color.Default, _ => Color.Warning })"
+                             data-testid="money-network">@aboveAllowed.NetworkLabel</MudChip>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="display: block;" data-testid="money-above-allowed-explanation">@aboveAllowed.Explanation</MudText>
+                </MudCardContent>
+            </MudCard>
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Allowed Amount</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2">@_claim.AllowedAmount.ToString("C")</MudText>
+                </MudCardContent>
+            </MudCard>
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Payer Payment</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2" Color="Color.Success">@_claim.PaidAmount.ToString("C")</MudText>
+                </MudCardContent>
+            </MudCard>
+            <MudCard Elevation="1">
+                <MudCardContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Patient Responsibility</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2" Color="Color.Warning">@_claim.PatientResponsibility.ToString("C")</MudText>
+                </MudCardContent>
+            </MudCard>
+        </div>
+        @if (string.Equals(_claim.Status, "Pended", StringComparison.OrdinalIgnoreCase) && aboveAllowed.Amount is not null)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-4" Style="display: block; margin-top: -8px;" data-testid="money-pended-note">
+                Amounts are before review: they change if the reviewer denies or overrides an edit.
+            </MudText>
+        }
 
         <!-- Tabbed Detail Sections -->
         <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4">

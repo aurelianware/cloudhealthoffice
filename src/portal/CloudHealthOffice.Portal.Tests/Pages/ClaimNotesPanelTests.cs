@@ -110,6 +110,25 @@ public class ClaimNotesPanelTests : TestContext
         cut.FindAll("[data-testid=claim-note]").Should().BeEmpty();
     }
 
+    [Fact]
+    public void Money_row_explains_the_gap_between_billed_and_allowed()
+    {
+        CanWork(false);
+        _claims.Setup(c => c.GetClaimNotesAsync("A")).ReturnsAsync(new List<ClaimNoteView>());
+        _claims.Setup(c => c.GetClaimByIdAsync("A")).ReturnsAsync(new ClaimDetails
+        {
+            ClaimId = "A", ClaimNumber = "CLM-A", Status = "Pended", NetworkTier = "InNetwork",
+            TotalChargeAmount = 12963m, AllowedAmount = 5285m, PaidAmount = 5165m, PatientResponsibility = 120m,
+        });
+
+        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A"));
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=money-above-allowed-amount]").TextContent.Should().Contain("7,678.00"));
+        cut.Find("[data-testid=money-above-allowed-label]").TextContent.Should().Be("Contractual adjustment");
+        cut.Find("[data-testid=money-network]").TextContent.Should().Contain("In-network");
+        cut.Find("[data-testid=money-pended-note]").TextContent.Should().Contain("before review");
+    }
+
     [Theory]
     [InlineData("ProviderContact", "Provider contact")]
     [InlineData("HandOff", "Hand-off")]
