@@ -20,6 +20,14 @@ public sealed class WorkManagementOptions
     public ReconcileOptions Reconcile { get; set; } = new();
 
     /// <summary>
+    /// Users given a primary membership in every claim queue of a tenant that
+    /// has no memberships for them yet, checked when this process first uses
+    /// the tenant. For demo environments, so the presenter can press Get Next
+    /// without setting up queues first; leave empty in real deployments.
+    /// </summary>
+    public List<string> SeedMemberUserIds { get; set; } = new();
+
+    /// <summary>
     /// Re-score open items this often (priority is deadline- and age-driven, so
     /// it rises while an item waits). 0 disables.
     /// </summary>
