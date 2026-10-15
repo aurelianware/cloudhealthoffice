@@ -641,61 +641,6 @@ public class ClaimRepositoryMongo : IClaimRepository
         return true;
     }
 
-    public async Task<StatusWriteResult> UpdateAdjudicationSummaryAsync(
-        string tenantId,
-        string claimVersionId,
-        AdjudicationResult adjudicationResult,
-        ClaimStatus status,
-        CancellationToken ct = default)
-    {
-        var b = Builders<Claim>.Filter;
-
-        var chainFilter = b.Or(
-            b.Eq(c => c.ClaimVersionId, claimVersionId),
-            b.And(
-                b.Or(b.Eq(c => c.ClaimVersionId, string.Empty), b.Eq(c => c.ClaimVersionId, (string?)null)),
-                b.Eq(c => c.Id, claimVersionId)));
-
-        var filter = b.And(
-            b.Eq(c => c.TenantId, tenantId),
-            chainFilter,
-            b.Ne(c => c.VersionState, ClaimVersionState.Draft));
-        var now = DateTime.UtcNow;
-
-        // Residual-race fix — financial/audit data (AdjudicationResult, dates)
-        // persists by chain/id even if async adjudication already finalized
-        // the row. Only Status + VersionState are guarded, in a separate
-        // conditional update — see TryPatchStatusAsync.
-        var summaryUpdate = Builders<Claim>.Update
-            .Set(c => c.AdjudicationResult, adjudicationResult)
-            .Set(c => c.AdjudicatedDate, now)
-            .Set(c => c.LastUpdatedDate, now);
-
-        var options = new FindOneAndUpdateOptions<Claim>
-        {
-            Sort = Builders<Claim>.Sort.Descending(c => c.VersionNumber),
-            Projection = Builders<Claim>.Projection
-                .Include(c => c.Id)
-                .Include(c => c.Status),
-            ReturnDocument = ReturnDocument.Before,
-        };
-
-        var preWriteHead = await _collection.FindOneAndUpdateAsync(filter, summaryUpdate, options, ct);
-        if (preWriteHead is null)
-        {
-            return StatusWriteResult.NotFoundResult;
-        }
-
-        return await TryPatchStatusAsync(
-            tenantId,
-            preWriteHead.Id,
-            status,
-            ClaimVersionState.Adjudicated,
-            ct,
-            adjudicationResult,
-            preWriteHead.Status);
-    }
-
     public Task<StatusWriteResult> TryTransitionStatusAsync(
         string tenantId,
         string claimId,
@@ -704,8 +649,9 @@ public class ClaimRepositoryMongo : IClaimRepository
         TryPatchStatusAsync(tenantId, claimId, desiredStatus, ClaimRepository.MapStatusToVersionState(desiredStatus), ct);
 
     /// <summary>
-    /// Shared atomic status write behind <see cref="UpdateAdjudicationSummaryAsync"/>
-    /// and <see cref="TryTransitionStatusAsync"/>. The precedence guard
+    /// Shared atomic status write behind <see cref="TryTransitionStatusAsync"/>
+    /// and the pipeline's resolved-status projection
+    /// (<see cref="UpdateAdjudicationProjectionAsync"/>). The precedence guard
     /// (<see cref="ClaimRepository.BlocksSynchronousWriteback"/>) is encoded
     /// directly in the update filter's <c>$nin</c> clause, so MongoDB
     /// evaluates it against the document's live state at the moment the

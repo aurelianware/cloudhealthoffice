@@ -309,32 +309,41 @@ pause
 # ==========================================================================
 step "Adjudicate Claim — NCCI Edits, Fee Schedule, Benefits"
 
-narrate "Running full adjudication pipeline:"
+narrate "The claims-service adjudication pipeline picked the submitted claim up:"
 narrate "  1. NCCI/MUE pre-payment edits"
 narrate "  2. Fee schedule rate resolution"
 narrate "  3. Benefit calculation (deductible, copay, coinsurance)"
 narrate "  4. Accumulator updates"
+narrate "It is the only writer of the claim's outcome, so the demo observes the"
+narrate "persisted result instead of calling an adjudication endpoint itself."
+narrate "GET ${CLAIMS_URL}/api/claims/${CLAIM_ID} (polling until terminal)"
 echo ""
 
-# Build adjudication request with actual claim ID
-ADJ_PAYLOAD=$(cat "${FIXTURES_DIR}/adjudication-request.json" | sed "s/__CLAIM_ID__/${CLAIM_ID}/g")
+ADJ_STATUS=""
+HTTP_CODE=""
+BODY=""
+for _ in $(seq 1 60); do
+  RESPONSE=$(curl -s -w "\n%{http_code}" \
+    -X GET "${CLAIMS_URL}/api/claims/${CLAIM_ID}" \
+    -H "X-Tenant-ID: ${TENANT_ID}")
+  HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+  BODY=$(echo "$RESPONSE" | sed '$d')
+  ADJ_STATUS=$(echo "$BODY" | jq -r '.status // empty' 2>/dev/null || echo "")
+  case "$ADJ_STATUS" in
+    4|5|6|7|8|9|Pended|Approved|Denied|Paid|Voided|PartiallyPaid) break ;;
+  esac
+  sleep 1
+done
 
-narrate "POST ${BENEFIT_PLAN_URL}/api/v1/adjudication/adjudicate"
-echo ""
+show_response "$HTTP_CODE" "$(echo "$BODY" | jq '{id, claimNumber, status, adjudicationResult}' 2>/dev/null || echo "$BODY")"
+check_response "Adjudication (persisted pipeline outcome)" "$HTTP_CODE"
 
-RESPONSE=$(curl -s -w "\n%{http_code}" \
-  -X POST "${BENEFIT_PLAN_URL}/api/v1/adjudication/adjudicate" \
-  -H "Content-Type: application/json" \
-  -H "X-Tenant-ID: ${TENANT_ID}" \
-  -d "$ADJ_PAYLOAD")
-
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | sed '$d')
-
-show_response "$HTTP_CODE" "$BODY"
-check_response "Adjudication" "$HTTP_CODE"
-
-narrate "Adjudication complete. Plan payment and member responsibility calculated."
+case "$ADJ_STATUS" in
+  4|5|6|7|8|9|Pended|Approved|Denied|Paid|Voided|PartiallyPaid)
+    narrate "Adjudication complete (status ${ADJ_STATUS}). Plan payment and member responsibility calculated." ;;
+  *)
+    narrate "Claim had not reached a terminal status within 60s (last status: ${ADJ_STATUS:-unknown})." ;;
+esac
 pause
 
 # ==========================================================================

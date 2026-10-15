@@ -698,9 +698,9 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // Residual-race fix — UpdateAdjudicationSummaryAsync / TryTransitionStatusAsync
-    // never overwrite a persisted Pended (or already-final) status. Financial/
-    // audit data still persists even when the status transition is suppressed.
+    // Residual-race fix — TryTransitionStatusAsync (and the pipeline's
+    // resolved-status projection) never overwrite a persisted Pended (or
+    // already-final) status.
     // ═══════════════════════════════════════════════════════════════════
 
     [Theory]
@@ -827,151 +827,6 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UpdateAdjudicationSummaryAsync_onNonPendedClaim_appliesStatusAndData()
-    {
-        // Regression: the unguarded, normal case is byte-identical to
-        // pre-fix behavior.
-        await _repo.CreateAsync(BuildVersion("chain-summary-normal", "row-1", n: 1, ClaimVersionState.Submitted));
-
-        var result = await _repo.UpdateAdjudicationSummaryAsync(
-            Tenant, "chain-summary-normal",
-            new AdjudicationResult { AllowedAmount = 80m, PayerPayment = 64m },
-            ClaimStatus.Approved);
-
-        result.Outcome.Should().Be(StatusWriteOutcome.Applied);
-        result.PersistedStatus.Should().Be(ClaimStatus.Approved);
-
-        var reread = await _repo.GetVersionAsync("chain-summary-normal", "row-1");
-        reread!.Status.Should().Be(ClaimStatus.Approved);
-        reread.VersionState.Should().Be(ClaimVersionState.Adjudicated);
-        reread.AdjudicationResult!.PayerPayment.Should().Be(64m);
-    }
-
-    [Fact]
-    public async Task UpdateAdjudicationSummaryAsync_onAlreadyPendedClaim_suppressesStatus_butPersistsFinancialData()
-    {
-        // Headline scenario (docs/architecture/claim-adjudication-pipeline.md
-        // D9b): the async orchestrator pended the claim; this method's
-        // caller (the validator's own synchronous write-back, racing its own
-        // request chain) must not stomp it back to Denied/Approved/
-        // InAdjudication — but the adjudication totals it computed are still
-        // real data and must not be dropped.
-        var head = BuildVersion("chain-summary-pended", "row-1", n: 1, ClaimVersionState.Submitted);
-        head.Status = ClaimStatus.Pended;
-        head.PendDetails = new PendDetails { PendCode = "COB", PendReason = "async orchestrator pend" };
-        await _repo.CreateAsync(head);
-
-        var result = await _repo.UpdateAdjudicationSummaryAsync(
-            Tenant, "chain-summary-pended",
-            new AdjudicationResult { AllowedAmount = 80m, PayerPayment = 64m, DenialReasonCode = null },
-            ClaimStatus.Approved);
-
-        result.Outcome.Should().Be(StatusWriteOutcome.Suppressed);
-        result.PersistedStatus.Should().Be(ClaimStatus.Pended);
-
-        var reread = await _repo.GetVersionAsync("chain-summary-pended", "row-1");
-        reread!.Status.Should().Be(ClaimStatus.Pended, "a synchronous write-back must never overwrite a persisted pend");
-        reread.PendDetails!.PendCode.Should().Be("COB", "the original pend reason survives untouched");
-        reread.AdjudicationResult.Should().NotBeNull("financial/audit data persists even when the status transition is suppressed");
-        reread.AdjudicationResult!.PayerPayment.Should().Be(64m);
-        reread.AdjudicationResult.AllowedAmount.Should().Be(80m);
-    }
-
-    [Fact]
-    public async Task UpdateAdjudicationSummaryAsync_onAlreadyFinalDeniedClaim_repairsPaidSummaryStatus()
-    {
-        var head = BuildVersion("chain-summary-final", "row-1", n: 1, ClaimVersionState.Denied);
-        head.Status = ClaimStatus.Denied;
-        head.AdjudicationResult = new AdjudicationResult
-        {
-            AllowedAmount = 0m,
-            PayerPayment = 0m,
-            DenialReasonCode = "96",
-            DenialReason = "Non-covered charge"
-        };
-        await _repo.CreateAsync(head);
-        await _repo.CreateAsync(BuildVersion("chain-summary-final", "row-2", n: 2, ClaimVersionState.Draft));
-
-        var result = await _repo.UpdateAdjudicationSummaryAsync(
-            Tenant, "chain-summary-final",
-            new AdjudicationResult { AllowedAmount = 50m, PayerPayment = 50m },
-            ClaimStatus.Approved);
-
-        result.Outcome.Should().Be(StatusWriteOutcome.Applied);
-        result.PersistedStatus.Should().Be(ClaimStatus.Approved);
-
-        var reread = await _repo.GetVersionAsync("chain-summary-final", "row-1");
-        reread!.Status.Should().Be(ClaimStatus.Approved, "a paid summary must not leave a denied lifecycle status behind");
-        reread.VersionState.Should().Be(ClaimVersionState.Adjudicated);
-        reread.AdjudicationResult!.PayerPayment.Should().Be(50m);
-        reread.AdjudicatedDate.Should().NotBeNull();
-
-        var draft = await _repo.GetVersionAsync("chain-summary-final", "row-2");
-        draft!.AdjudicationResult.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task UpdateAdjudicationSummaryAsync_onDeniedWithoutDenialEvidence_repairsPaidSummaryStatus()
-    {
-        var head = BuildVersion("chain-summary-repair", "row-1", n: 1, ClaimVersionState.Denied);
-        head.Status = ClaimStatus.Denied;
-        head.AdjudicationResult = null;
-        await _repo.CreateAsync(head);
-
-        var result = await _repo.UpdateAdjudicationSummaryAsync(
-            Tenant, "chain-summary-repair",
-            new AdjudicationResult { AllowedAmount = 180m, PatientResponsibility = 30m, PayerPayment = 150m },
-            ClaimStatus.Approved);
-
-        result.Outcome.Should().Be(StatusWriteOutcome.Applied);
-        result.PersistedStatus.Should().Be(ClaimStatus.Approved);
-
-        var reread = await _repo.GetVersionAsync("chain-summary-repair", "row-1");
-        reread!.Status.Should().Be(ClaimStatus.Approved);
-        reread.VersionState.Should().Be(ClaimVersionState.Adjudicated);
-        reread.AdjudicationResult!.PayerPayment.Should().Be(150m);
-        reread.AdjudicationResult.DenialReasonCode.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task UpdateAdjudicationSummaryAsync_onApprovedWithDenialEvidence_repairsDeniedSummaryStatus()
-    {
-        var head = BuildVersion("chain-summary-denial-repair", "row-1", n: 1, ClaimVersionState.Adjudicated);
-        head.Status = ClaimStatus.Approved;
-        head.AdjudicationResult = new AdjudicationResult { PayerPayment = 125m };
-        await _repo.CreateAsync(head);
-
-        var result = await _repo.UpdateAdjudicationSummaryAsync(
-            Tenant, "chain-summary-denial-repair",
-            new AdjudicationResult
-            {
-                PayerPayment = 0m,
-                DenialReasonCode = "197",
-                DenialReason = "Prior authorization required"
-            },
-            ClaimStatus.Denied);
-
-        result.Outcome.Should().Be(StatusWriteOutcome.Applied);
-        result.PersistedStatus.Should().Be(ClaimStatus.Denied);
-
-        var reread = await _repo.GetVersionAsync("chain-summary-denial-repair", "row-1");
-        reread!.Status.Should().Be(ClaimStatus.Denied);
-        reread.VersionState.Should().Be(ClaimVersionState.Adjudicated);
-        reread.AdjudicationResult!.PayerPayment.Should().Be(0m);
-        reread.AdjudicationResult.DenialReasonCode.Should().Be("197");
-    }
-
-    [Fact]
-    public async Task UpdateAdjudicationSummaryAsync_forUnknownClaim_returnsNotFound()
-    {
-        var result = await _repo.UpdateAdjudicationSummaryAsync(
-            Tenant, "no-such-chain", new AdjudicationResult(), ClaimStatus.Approved);
-
-        result.Outcome.Should().Be(StatusWriteOutcome.NotFound);
-        result.PersistedStatus.Should().BeNull();
-    }
-
-    [Fact]
     public async Task TryTransitionStatusAsync_onNonPendedClaim_appliesStatus()
     {
         var doc = await _repo.CreateAsync(Sample("row-status-normal"));
@@ -987,10 +842,8 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     [Fact]
     public async Task TryTransitionStatusAsync_onAlreadyPendedClaim_suppressesTransition()
     {
-        // Backs both PUT /{id}/adjudication and PUT /{id}/status — both are
-        // called by the Argo workflow's synchronous finalize step, which can
-        // race the async orchestrator's own Pend projection for the same
-        // claim exactly like the validator's write-back does.
+        // Backs PUT /{id}/status, which can race the async orchestrator's
+        // own Pend projection for the same claim.
         var doc = Sample("row-status-pended");
         doc.Status = ClaimStatus.Pended;
         await _repo.CreateAsync(doc);
@@ -1008,67 +861,5 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     {
         var result = await _repo.TryTransitionStatusAsync(Tenant, "no-such-row", ClaimStatus.Approved);
         result.Outcome.Should().Be(StatusWriteOutcome.NotFound);
-    }
-
-    [Fact]
-    public async Task ConcurrentPendProjectionAndSummaryWriteback_trueRace_neverCorrupts_neverLosesFinancialData()
-    {
-        // True-race test (task requirement: "the guard must hold under a
-        // true race, not just sequential ordering"). Fire the async
-        // orchestrator's Pend projection and the validator's synchronous
-        // write-back concurrently via Task.WhenAll — not sequentially — so
-        // whichever backend actually interleaves the two writes exercises
-        // the conditional-update primitive, not a C# if-check against a
-        // stale read.
-        //
-        // What this test does NOT assert: that Pend always wins. With two
-        // independently-conditional writers (each guard evaluated against
-        // "current status" at ITS OWN commit instant, not a shared lock),
-        // genuine concurrency has two legitimate outcomes depending on which
-        // writer's status commit physically lands first:
-        //   - Pended: the projection's status write commits while status is
-        //     still non-final, and the write-back's own guard then sees
-        //     Pended and correctly defers (the headline scenario from
-        //     docs/architecture/claim-adjudication-pipeline.md D9b).
-        //   - Approved: the write-back's status write commits first while
-        //     status is still non-final, and the projection's own guard
-        //     then sees Approved (IsFinalDisposition) and correctly defers
-        //     — this is the SAME precedence the "writeback-then-pend"
-        //     sequential test pins as existing #844 behavior, just reached
-        //     via interleaving instead of full sequencing.
-        // Both are correct, race-consistent outcomes; which one occurs on a
-        // given run depends on OS/runtime task scheduling and is not
-        // something a test should pin (an embedded single-node Mongo
-        // instance tends to serialize the two tasks' operations fairly
-        // consistently in practice, so don't assert on the distribution —
-        // only on per-iteration safety). What would be an actual bug — and
-        // what this test guards against — is a THIRD outcome: a status that
-        // isn't either of the two conditionally-written values (corruption),
-        // or a row with no AdjudicationResult at all (a lost write).
-        for (var i = 0; i < 20; i++)
-        {
-            var chainKey = $"chain-race-{i}";
-            await _repo.CreateAsync(BuildVersion(chainKey, $"row-race-{i}", n: 1, ClaimVersionState.Submitted));
-
-            var pendTask = _repo.UpdateAdjudicationProjectionAsync(
-                Tenant, chainKey,
-                new AdjudicationResult { AllowedAmount = 0m },
-                Array.Empty<LineAdjudicationResult>(),
-                pendDetails: new PendDetails { PendCode = "COB", PendReason = "race pend" },
-                isPend: true);
-
-            var writebackTask = _repo.UpdateAdjudicationSummaryAsync(
-                Tenant, chainKey,
-                new AdjudicationResult { AllowedAmount = 80m, PayerPayment = 64m },
-                ClaimStatus.Approved);
-
-            await Task.WhenAll(pendTask, writebackTask);
-
-            var reread = await _repo.GetVersionAsync(chainKey, $"row-race-{i}");
-            reread!.Status.Should().BeOneOf(
-                new[] { ClaimStatus.Pended, ClaimStatus.Approved },
-                $"iteration {i}: only these two outcomes are valid under a true race — anything else is corruption");
-            reread.AdjudicationResult.Should().NotBeNull($"iteration {i}: financial data must never be lost to the race");
-        }
     }
 }

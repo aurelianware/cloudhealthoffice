@@ -19,7 +19,7 @@ The claims-examiner-service is an AI-powered advisory service that produces reco
 ```
 claims-service                 claims-examiner-service
      │                                │
-     │ PUT /api/claims/{id}/pend      │
+     │ adjudication pipeline pends    │
      │ publishes claims.pended.v1     │
      │ ─────────────────────────────► │
      │              Kafka             │

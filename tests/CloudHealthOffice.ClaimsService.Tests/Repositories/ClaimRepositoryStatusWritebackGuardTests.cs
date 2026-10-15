@@ -15,16 +15,15 @@ namespace CloudHealthOffice.ClaimsService.Tests.Repositories;
 /// <summary>
 /// Residual-race fix — Cosmos-side coverage for the atomic status-write
 /// primitive backing <c>TryTransitionStatusAsync</c> (used by
-/// <c>PUT /{id}/adjudication</c> and <c>PUT /{id}/status</c>) and, via the
-/// same shared private helper, <c>UpdateAdjudicationSummaryAsync</c>'s status
-/// half.
+/// <c>PUT /{id}/status</c>) and, via the same shared private helper, the
+/// adjudication pipeline's resolved-status projection.
 ///
 /// <para>
 /// Contract-level coverage (no Cosmos Emulator — mirrors
 /// <see cref="ClaimRepositoryPartitionKeyTests"/>'s established pattern for
 /// this repository). <c>TryTransitionStatusAsync</c> operates on a single row
-/// by direct id (no version-chain query, unlike <c>UpdateAdjudicationSummaryAsync</c>'s
-/// chain lookup, which resolves through a private nested query-result type
+/// by direct id (no version-chain query, unlike the projection's chain
+/// lookup, which resolves through a private nested query-result type
 /// that isn't reachable from a mocked <see cref="Container"/> in this test
 /// project) — so it's the cleanest place to verify the actual Cosmos
 /// conditional-patch wiring: that a blocked status is expressed as a patch

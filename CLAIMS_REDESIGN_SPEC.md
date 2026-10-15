@@ -198,6 +198,13 @@ User clicks Approve/Deny/Reverse button
   ↓ UI updates with new status and audit trail entry
 ```
 
+> **Superseded.** `UpdateClaimStatusAsync` was never wired to a page and has
+> been removed. `PUT /api/claims/{id}/status` no longer sets Approved, Denied,
+> Pended, Paid or PartiallyPaid (422): outcomes come only from the adjudication
+> pipeline, pended claims are acted on through the work queue
+> (`POST /api/claims/work-queue/{id}/resolve` / `/override`), payments through
+> remittance, and voids through `POST /api/claims/{id}/void`.
+
 ## Search Criteria & Filtering
 
 ### Available Filters

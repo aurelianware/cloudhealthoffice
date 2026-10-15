@@ -106,82 +106,71 @@ ok "Benefit plan created: $PLAN_ID"
 echo
 
 # ── 3. Submit a claim ─────────────────────────────────────────────────────────
+# Submission is the only input: the claims-service adjudication pipeline
+# (consumer → ClaimAdjudicationOrchestrator → PersistenceStage) picks the
+# claim up and is the only writer of its adjudicated outcome.
 log "Submitting test claim..."
 CLAIM_RESPONSE=$(curl -sf -X POST "$CLAIMS_URL/api/claims" \
   -H "X-Tenant-ID: $TENANT_ID" \
   -H "Content-Type: application/json" \
-  -d '{
-    "claimNumber": "LOCAL-TEST-001",
-    "memberId": "MBR001",
-    "subscriberId": "SUB001",
-    "providerNpi": "1234567890",
-    "serviceDate": "2025-06-15T00:00:00Z",
-    "diagnosisCodes": ["Z00.00"],
-    "serviceLines": [
+  -d "{
+    \"claimNumber\": \"LOCAL-TEST-001\",
+    \"memberId\": \"MBR001\",
+    \"subscriberId\": \"SUB001\",
+    \"benefitPlanId\": \"$PLAN_ID\",
+    \"billingProviderNPI\": \"1234567890\",
+    \"placeOfServiceCode\": \"11\",
+    \"serviceDateFrom\": \"2025-06-15T00:00:00Z\",
+    \"serviceDateTo\": \"2025-06-15T00:00:00Z\",
+    \"diagnosisCodes\": [{ \"code\": \"Z00.00\", \"pointerNumber\": 1 }],
+    \"claimLines\": [
       {
-        "procedureCode": "99213",
-        "placeOfServiceCode": "11",
-        "billedAmount": 175.00,
-        "units": 1,
-        "diagnosisCodes": ["Z00.00"]
+        \"lineNumber\": 1,
+        \"procedureCode\": \"99213\",
+        \"placeOfServiceCode\": \"11\",
+        \"chargeAmount\": 175.00,
+        \"units\": 1,
+        \"diagnosisPointers\": [1],
+        \"serviceDateFrom\": \"2025-06-15T00:00:00Z\",
+        \"serviceDateTo\": \"2025-06-15T00:00:00Z\"
       }
     ],
-    "totalBilledAmount": 175.00,
-    "status": "Submitted"
-  }') || err "Claim submission failed"
+    \"totalChargeAmount\": 175.00
+  }") || err "Claim submission failed"
 
 CLAIM_ID=$(echo "$CLAIM_RESPONSE" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 [[ -n "$CLAIM_ID" ]] || err "Could not extract claim ID from response: $CLAIM_RESPONSE"
 ok "Claim submitted: $CLAIM_ID"
 echo
 
-# ── 4. Adjudicate the claim ───────────────────────────────────────────────────
-log "Adjudicating claim against benefit plan $PLAN_ID..."
-ADJ_RESPONSE=$(curl -sf -X POST "$BENEFIT_URL/api/v1/adjudication/adjudicate" \
-  -H "X-Tenant-ID: $TENANT_ID" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"claimId\": \"$CLAIM_ID\",
-    \"memberId\": \"MBR001\",
-    \"subscriberId\": \"SUB001\",
-    \"benefitPlanId\": \"$PLAN_ID\",
-    \"serviceDate\": \"2025-06-15\",
-    \"providerNpi\": \"1234567890\",
-    \"networkTier\": \"InNetwork\",
-    \"lines\": [
-      {
-        \"lineNumber\": 1,
-        \"procedureCode\": \"99213\",
-        \"placeOfService\": \"11\",
-        \"billedAmount\": 175.00,
-        \"units\": 1,
-        \"diagnosisCodes\": [\"Z00.00\"]
-      }
-    ]
-  }") || err "Adjudication failed"
+# ── 4. Wait for the adjudication pipeline's persisted outcome ────────────────
+# Poll GET /api/claims/{id} until the claim reaches a terminal status
+# (Pended=4, Approved=5, Denied=6, Paid=7, Voided=8, PartiallyPaid=9 — the
+# status may serialize as the enum number or its name).
+log "Waiting for the adjudication pipeline to adjudicate $CLAIM_ID..."
+STATUS=""
+CLAIM_JSON=""
+for i in $(seq 1 60); do
+  CLAIM_JSON=$(curl -sf "$CLAIMS_URL/api/claims/$CLAIM_ID" -H "X-Tenant-ID: $TENANT_ID" || true)
+  STATUS=$(echo "$CLAIM_JSON" | grep -o '"status":"\{0,1\}[A-Za-z0-9]*' | head -1 | sed 's/"status":"\{0,1\}//')
+  case "$STATUS" in
+    4|5|6|7|8|9|Pended|Approved|Denied|Paid|Voided|PartiallyPaid) break ;;
+  esac
+  if [[ $i -eq 60 ]]; then
+    err "Claim $CLAIM_ID did not reach a terminal status within 60s (last status: ${STATUS:-unknown}). Is the claims-service adjudication consumer running?"
+  fi
+  sleep 1
+done
 
-ok "Adjudication result:"
-echo "$ADJ_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$ADJ_RESPONSE"
-echo
+case "$STATUS" in
+  4) STATUS="Pended" ;; 5) STATUS="Approved" ;; 6) STATUS="Denied" ;;
+  7) STATUS="Paid" ;; 8) STATUS="Voided" ;; 9) STATUS="PartiallyPaid" ;;
+esac
+ok "Pipeline outcome: $STATUS"
 
-# ── 5. Update claim with adjudication result ──────────────────────────────────
-PLAN_PAYMENT=$(echo "$ADJ_RESPONSE" | grep -o '"planPayment":[0-9.]*' | head -1 | cut -d: -f2)
-MEMBER_RESP=$(echo "$ADJ_RESPONSE" | grep -o '"memberResponsibility":[0-9.]*' | head -1 | cut -d: -f2)
-ALLOWED=$(echo "$ADJ_RESPONSE" | grep -o '"allowedAmount":[0-9.]*' | head -1 | cut -d: -f2)
-
-log "Updating claim status to Adjudicated..."
-curl -sf -X PUT "$CLAIMS_URL/api/claims/$CLAIM_ID/adjudication" \
-  -H "X-Tenant-ID: $TENANT_ID" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"status\": \"Adjudicated\",
-    \"allowedAmount\": ${ALLOWED:-175.00},
-    \"memberLiability\": ${MEMBER_RESP:-30.00},
-    \"planPayment\": ${PLAN_PAYMENT:-145.00},
-    \"adjudicationDate\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
-  }" > /dev/null || err "Claim update failed"
-
-ok "Claim updated to Adjudicated"
+ALLOWED=$(echo "$CLAIM_JSON" | grep -o '"allowedAmount":[0-9.]*' | head -1 | cut -d: -f2)
+PLAN_PAYMENT=$(echo "$CLAIM_JSON" | grep -o '"payerPayment":[0-9.]*' | head -1 | cut -d: -f2)
+MEMBER_RESP=$(echo "$CLAIM_JSON" | grep -o '"patientResponsibility":[0-9.]*' | head -1 | cut -d: -f2)
 echo
 
 # ── Summary ───────────────────────────────────────────────────────────────────
@@ -191,6 +180,7 @@ echo "════════════════════════�
 echo " Tenant:       $TENANT_ID"
 echo " Plan ID:      $PLAN_ID"
 echo " Claim ID:     $CLAIM_ID"
+echo " Status:       $STATUS"
 echo " Allowed:      \$${ALLOWED:-n/a}"
 echo " Plan pays:    \$${PLAN_PAYMENT:-n/a}"
 echo " Member owes:  \$${MEMBER_RESP:-n/a}"

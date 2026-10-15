@@ -165,13 +165,13 @@ public interface IClaimRepository
     /// disposition (<see cref="ClaimRepository.IsFinalDisposition"/> —
     /// Approved, Denied, Paid, PartiallyPaid, Voided) is never downgraded
     /// back to Pended, in case this async projection lands after another
-    /// write path (the Argo workflow's synchronous finalize step, or an
-    /// examiner override) already finalized the claim. Re-pending an
+    /// write path (remittance, a void, or an examiner override) already
+    /// finalized the claim. Re-pending an
     /// already-<c>Pended</c> claim (a re-adjudication run refreshing
     /// <paramref name="pendDetails"/>) is allowed — Pended is not a final
     /// disposition. When <paramref name="resolvedStatus"/> is supplied, this
     /// call also projects async Pass/Deny/Reject outcomes through the same
-    /// guarded status transition used by <c>UpdateAdjudicationSummaryAsync</c>,
+    /// guarded status transition used by <c>TryTransitionStatusAsync</c>,
     /// so async-only adjudication runs become observable without overwriting
     /// an already Pended or final claim.
     /// </para>
@@ -269,33 +269,6 @@ public interface IClaimRepository
         DateTime from, DateTime to, int limit, CancellationToken ct = default);
 
     /// <summary>
-    /// Fast claim-level adjudication projection for direct local workflow
-    /// validation. Patches summary adjudication fields on a known claim row and
-    /// intentionally skips full-claim hydration, line projection, and event
-    /// emission. Use the full adjudication pipeline when downstream finalized
-    /// events or line adjudications are required.
-    ///
-    /// <para>
-    /// Residual-race fix — <paramref name="status"/> is applied through the
-    /// same precedence guard as <see cref="TryTransitionStatusAsync"/>
-    /// (<see cref="ClaimRepository.BlocksSynchronousWriteback"/>): it is never
-    /// written over a claim already Pended or at a final disposition, because
-    /// this method's only caller (the validator's synchronous write-back) is
-    /// racing the async orchestrator's own Pend projection, not resolving one.
-    /// <see cref="AdjudicationResult"/>/dates persist unconditionally either
-    /// way — only the status transition is guarded — so a suppressed run never
-    /// drops financial/audit data. See docs/architecture/
-    /// claim-adjudication-pipeline.md D9b.
-    /// </para>
-    /// </summary>
-    Task<StatusWriteResult> UpdateAdjudicationSummaryAsync(
-        string tenantId,
-        string claimId,
-        AdjudicationResult adjudicationResult,
-        ClaimStatus status,
-        CancellationToken ct = default);
-
-    /// <summary>
     /// Atomically applies <paramref name="desiredStatus"/> to the single claim
     /// row identified by <paramref name="claimId"/> (direct row id, not a
     /// version-chain lookup — mirrors <see cref="GetByIdAsync"/>), subject to
@@ -307,9 +280,9 @@ public interface IClaimRepository
     /// true concurrent write, not just sequential ordering.
     ///
     /// <para>
-    /// Used by the two Argo-invoked synchronous write-back endpoints
-    /// (<c>PUT /{id}/adjudication</c>, <c>PUT /{id}/status</c>) so their
-    /// status decision is race-safe even though the rest of the claim still
+    /// Used by <c>PUT /{id}/status</c> (operational, non-outcome statuses
+    /// only — see <c>ClaimsController.UpdateClaimStatus</c>) so its status
+    /// decision is race-safe even though the rest of the claim still
     /// persists through <see cref="UpdateAsync"/>'s full-document replace.
     /// Also updates <c>VersionState</c> to keep it consistent with the
     /// applied status (<see cref="ClaimRepository.MapStatusToVersionState"/>).
@@ -605,10 +578,9 @@ public class ClaimRepository : IClaimRepository
 
     /// <summary>
     /// True when <paramref name="status"/> must not be overwritten by a
-    /// synchronous, non-authoritative adjudication write-back —
-    /// <c>UpdateAdjudicationSummaryAsync</c> (the validator's own write-back)
-    /// and <c>TryTransitionStatusAsync</c> (backing the Argo-invoked
-    /// <c>PUT /{id}/adjudication</c> and <c>PUT /{id}/status</c> endpoints).
+    /// guarded status write — <c>TryTransitionStatusAsync</c> (backing
+    /// <c>PUT /{id}/status</c>) and the adjudication pipeline's resolved-status
+    /// projection in <c>UpdateAdjudicationProjectionAsync</c>.
     ///
     /// <para>
     /// Composes <see cref="IsFinalDisposition"/> (a stray re-adjudication
@@ -635,8 +607,8 @@ public class ClaimRepository : IClaimRepository
         Enum.GetValues<ClaimStatus>().Where(BlocksSynchronousWriteback).ToArray();
 
     /// <summary>
-    /// True for the narrow repair allowed by benchmark summary writeback: a
-    /// row already says Denied, while the incoming summary is paid and carries
+    /// True for the narrow repair allowed by the pipeline's resolved-status
+    /// projection: a row already says Denied, while the incoming result is paid and carries
     /// no denial evidence. This prevents an impossible "Denied + payer payment
     /// + no denial reason" state from surviving while still protecting pends
     /// and non-paid summaries.
@@ -651,8 +623,8 @@ public class ClaimRepository : IClaimRepository
         && !HasDenialEvidence(incomingAdjudication);
 
     /// <summary>
-    /// True for the inverse narrow repair allowed by benchmark summary
-    /// writeback: a row already says Approved, while the incoming summary is
+    /// True for the inverse narrow repair allowed by the pipeline's
+    /// resolved-status projection: a row already says Approved, while the incoming result is
     /// denied, pays nothing, and carries explicit denial evidence. This
     /// prevents an impossible "Approved + zero payer payment + denial reason"
     /// state without weakening pend protection or reopening a consistent
@@ -1516,8 +1488,8 @@ public class ClaimRepository : IClaimRepository
             // the row's live state at commit time via FilterPredicate rather than
             // the `head` snapshot read above. Precedence: never downgrade a claim
             // that already reached a later-stage disposition (IsFinalDisposition)
-            // — e.g. because the Argo workflow's synchronous finalize step, or an
-            // examiner override, raced ahead of this async projection. A
+            // — e.g. because remittance, a void, or an examiner override raced
+            // ahead of this async projection. A
             // read-then-decide check (the original form of this guard) only
             // catches that race when the other write happens to land before this
             // method's own read; a concurrent write landing in between read and
@@ -1570,75 +1542,6 @@ public class ClaimRepository : IClaimRepository
         return true;
     }
 
-    public async Task<StatusWriteResult> UpdateAdjudicationSummaryAsync(
-        string tenantId,
-        string claimVersionId,
-        AdjudicationResult adjudicationResult,
-        ClaimStatus status,
-        CancellationToken ct = default)
-    {
-        var draftParams = new Dictionary<string, object>();
-        var draftClause = EnumInClause("c.versionState", "draft", draftParams, ClaimVersionState.Draft);
-        var query = new QueryDefinition($@"
-            SELECT TOP 1 c.id, c.status
-            FROM c
-            WHERE c.tenantId = @tenantId
-              AND (c.claimVersionId = @claimVersionId
-                   OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
-                   OR (c.claimVersionId = '' AND c.id = @claimVersionId))
-              AND (NOT IS_DEFINED(c.versionState) OR c.versionState = null OR NOT ({draftClause}))
-            ORDER BY c.versionNumber DESC")
-            .WithParameter("@tenantId", tenantId)
-            .WithParameter("@claimVersionId", claimVersionId);
-        foreach (var (name, value) in draftParams) query = query.WithParameter(name, value);
-
-        HeadIdResult? head = null;
-        var iterator = _container.GetItemQueryIterator<HeadIdResult>(
-            query,
-            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
-        if (iterator.HasMoreResults)
-        {
-            var page = await iterator.ReadNextAsync(ct);
-            head = page.FirstOrDefault();
-        }
-
-        if (head is null || string.IsNullOrEmpty(head.Id)) return StatusWriteResult.NotFoundResult;
-
-        // Residual-race fix — financial/audit data (AdjudicationResult, dates)
-        // persists by chain/id even if async adjudication already finalized
-        // the row. Only /status + /versionState are guarded, in a separate
-        // conditional patch — see TryPatchStatusAsync.
-        var now = DateTime.UtcNow;
-        var summaryOps = new List<PatchOperation>
-        {
-            PatchOperation.Set("/adjudicationResult", adjudicationResult),
-            PatchOperation.Set("/adjudicatedDate", now),
-            PatchOperation.Set("/lastUpdatedDate", now),
-        };
-
-        try
-        {
-            await _container.PatchItemAsync<Claim>(
-                head.Id,
-                new PartitionKey(tenantId),
-                summaryOps,
-                cancellationToken: ct);
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            return StatusWriteResult.NotFoundResult;
-        }
-
-        return await TryPatchStatusAsync(
-            tenantId,
-            head.Id,
-            status,
-            ClaimVersionState.Adjudicated,
-            ct,
-            adjudicationResult,
-            head.Status);
-    }
-
     public Task<StatusWriteResult> TryTransitionStatusAsync(
         string tenantId,
         string claimId,
@@ -1647,8 +1550,9 @@ public class ClaimRepository : IClaimRepository
         TryPatchStatusAsync(tenantId, claimId, desiredStatus, MapStatusToVersionState(desiredStatus), ct);
 
     /// <summary>
-    /// Shared atomic status write behind <see cref="UpdateAdjudicationSummaryAsync"/>
-    /// and <see cref="TryTransitionStatusAsync"/>. Guarded by
+    /// Shared atomic status write behind <see cref="TryTransitionStatusAsync"/>
+    /// and the pipeline's resolved-status projection
+    /// (<see cref="UpdateAdjudicationProjectionAsync"/>). Guarded by
     /// <see cref="BlocksSynchronousWriteback"/> via a Cosmos patch
     /// <c>FilterPredicate</c>, evaluated server-side against the row's live
     /// state at commit time — not a read-then-decide check, so it holds under
@@ -1739,7 +1643,7 @@ public class ClaimRepository : IClaimRepository
                 }
                 catch (CosmosException repairEx) when (repairEx.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
                 {
-                    // Another writer changed the row after summary writeback.
+                    // Another writer changed the row after the projection write.
                     // Fall through to the normal readback so callers see the
                     // persisted status that actually won.
                 }
