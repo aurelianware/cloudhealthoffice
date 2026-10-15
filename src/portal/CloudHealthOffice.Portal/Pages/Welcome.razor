@@ -1,6 +1,8 @@
 @page "/welcome"
 @using Microsoft.AspNetCore.Authorization
 @inject NavigationManager Navigation
+@inject IConfiguration Configuration
+@inject IWebHostEnvironment HostEnvironment
 
 @attribute [AllowAnonymous]
 
@@ -14,22 +16,43 @@
         <div class="w-hero-badge">THE SENTINEL PLATFORM</div>
         <h1 class="w-hero-headline">Cloud Health Office</h1>
         <p class="w-hero-sub">
-            The Source-Available Cloud-Native Payer Platform. FHIR APIs,
-            &lt;500ms claims adjudication, CMS-0057-F conformance in progress.
+            A source-available, FHIR-native core administration platform for health plans:
+            claims, benefits, enrollment and CMS-0057-F interoperability. Run it alongside
+            your existing core, or replace it one domain at a time.
         </p>
+        @if (IsDemoEnvironment)
+        {
+            <div class="w-demo-note">
+                Demo environment &middot; synthetic data only &middot; no real member information
+            </div>
+        }
         <div class="w-hero-cta">
-            <MudButton Href="/signup"
-                       Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       Size="Size.Large"
-                       Class="w-btn-primary">
-                Start Free Trial
-            </MudButton>
-            <MudButton Href="/demo"
+            @if (IsDemoEnvironment)
+            {
+                <MudButton Href="@SignInHref"
+                           Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Size="Size.Large"
+                           Class="w-btn-primary">
+                    Sign in to the demo
+                </MudButton>
+            }
+            else
+            {
+                <MudButton Href="/signup"
+                           Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Size="Size.Large"
+                           Class="w-btn-primary">
+                    Start Free Trial
+                </MudButton>
+            }
+            <MudButton Href="https://cloudhealthoffice.com/evidence"
+                       Target="_blank"
                        Variant="Variant.Outlined"
                        Color="Color.Primary"
                        Size="Size.Large">
-                View Demo
+                See the evidence
             </MudButton>
             <MudButton Href="/docs"
                        Variant="Variant.Outlined"
@@ -46,30 +69,26 @@
     <MudGrid Justify="Justify.Center">
         <MudItem xs="6" sm="3">
             <a href="/apis" class="w-stat-link">
-                <div class="w-stat-icon">🔌</div>
                 <div class="w-stat-title">FHIR APIs</div>
                 <div class="w-stat-desc">FHIR R4 REST APIs</div>
             </a>
         </MudItem>
         <MudItem xs="6" sm="3">
             <a href="/docs" class="w-stat-link">
-                <div class="w-stat-icon">📖</div>
                 <div class="w-stat-title">Docs</div>
                 <div class="w-stat-desc">Integration guides &amp; examples</div>
             </a>
         </MudItem>
         <MudItem xs="6" sm="3">
             <a href="/pricing" class="w-stat-link">
-                <div class="w-stat-icon">💡</div>
                 <div class="w-stat-title">Pricing</div>
-                <div class="w-stat-desc">Contact sales for pricing</div>
+                <div class="w-stat-desc">PMPM, pilot terms per engagement</div>
             </a>
         </MudItem>
         <MudItem xs="6" sm="3">
-            <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" class="w-stat-link">
-                <div class="w-stat-icon">⭐</div>
+            <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener" class="w-stat-link">
                 <div class="w-stat-title">GitHub</div>
-                <div class="w-stat-desc">BSL 1.1 · 250K+ clones</div>
+                <div class="w-stat-desc">Source-available &middot; BSL 1.1</div>
             </a>
         </MudItem>
     </MudGrid>
@@ -79,107 +98,117 @@
 <section class="w-section">
     <div class="w-section-inner">
         <div class="w-section-label">PLATFORM CAPABILITIES</div>
-        <h2 class="w-section-title">Platform Capabilities</h2>
+        <h2 class="w-section-title">What runs in this platform</h2>
         <MudGrid>
-            <MudItem xs="12" sm="6" md="4">
-                <div class="w-feature-card">
-                    <div class="w-feature-icon">⚡</div>
-                    <h3 class="w-feature-title">Claims Processing</h3>
-                    <p class="w-feature-desc">837/835 Professional &amp; Institutional claims with &lt;500ms adjudication. 10-step intelligent workflow.</p>
-                </div>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <div class="w-feature-card">
-                    <div class="w-feature-icon">✓</div>
-                    <h3 class="w-feature-title">Eligibility Verification</h3>
-                    <p class="w-feature-desc">270/271 real-time eligibility inquiries with benefit coverage details and plan information.</p>
-                </div>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <div class="w-feature-card">
-                    <div class="w-feature-icon">🔐</div>
-                    <h3 class="w-feature-title">Prior Authorization</h3>
-                    <p class="w-feature-desc">Prior authorization with CDS Hooks for coverage requirements discovery. Da Vinci CRD/DTR/PAS in development; X12 278 bridging planned.</p>
-                </div>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <div class="w-feature-card">
-                    <div class="w-feature-icon">📎</div>
-                    <h3 class="w-feature-title">Medical Attachments</h3>
-                    <p class="w-feature-desc">275/277 attachments with RFAI workflows. Automated document delivery and tracking.</p>
-                </div>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <div class="w-feature-card">
-                    <div class="w-feature-icon">👥</div>
-                    <h3 class="w-feature-title">Member Enrollment</h3>
-                    <p class="w-feature-desc">834 enrollment transactions with member demographics, coverage updates, and sponsor management.</p>
-                </div>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <div class="w-feature-card">
-                    <div class="w-feature-icon">🔌</div>
-                    <h3 class="w-feature-title">FHIR R4 APIs</h3>
-                    <p class="w-feature-desc">Patient Access, Prior Auth, Provider Directory APIs. CMS-9115-F and CMS-0057-F conformance in progress.</p>
-                </div>
-            </MudItem>
+            @foreach (var feature in Features)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <div class="w-feature-card">
+                        <div class="w-feature-kicker">@feature.Kicker</div>
+                        <h3 class="w-feature-title">@feature.Title</h3>
+                        <p class="w-feature-desc">@feature.Description</p>
+                    </div>
+                </MudItem>
+            }
         </MudGrid>
     </div>
 </section>
 
-<!-- Results / Testimonials -->
-<section class="w-testimonials-section">
+<!-- Evidence -->
+<section class="w-evidence-section">
     <div class="w-section-inner">
-        <div class="w-section-label">CUSTOMER RESULTS</div>
-        <h2 class="w-section-title">Modern Architecture, Proven Results</h2>
+        <div class="w-section-label">EVIDENCE, NOT TESTIMONIALS</div>
+        <h2 class="w-section-title">Numbers you can check</h2>
         <MudGrid>
-            <MudItem xs="12" md="4">
-                <div class="w-testimonial">
-                    <p class="w-testimonial-quote">"Reduced prior authorization turnaround from 12 days to under 2 minutes"</p>
-                    <p class="w-testimonial-author">— Regional Health Plan</p>
-                </div>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <div class="w-testimonial">
-                    <p class="w-testimonial-quote">"99.9% faster than our previous system. Claims adjudication now &lt;500ms"</p>
-                    <p class="w-testimonial-author">— Medicare Advantage Plan</p>
-                </div>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <div class="w-testimonial">
-                    <p class="w-testimonial-quote">"From signup to first claim processed in 47 minutes. Incredible."</p>
-                    <p class="w-testimonial-author">— Startup Health Plan</p>
-                </div>
-            </MudItem>
+            @foreach (var proof in Proofs)
+            {
+                <MudItem xs="12" sm="6" md="3">
+                    <a class="w-proof" href="@proof.Href" target="_blank" rel="noopener">
+                        <div class="w-proof-figure">@proof.Figure</div>
+                        <div class="w-proof-label">@proof.Label</div>
+                        <p class="w-proof-detail">@proof.Detail</p>
+                        <div class="w-proof-scope">@proof.Scope</div>
+                    </a>
+                </MudItem>
+            }
         </MudGrid>
+        <p class="w-evidence-note">
+            Benchmarks are local Kubernetes validation runs with published run IDs, answer keys and known
+            limits. They are not production-cloud capacity claims.
+        </p>
     </div>
 </section>
 
 <!-- CTA Section -->
 <section class="w-cta-section">
     <div class="w-section-inner" style="text-align: center;">
-        <h2 class="w-cta-headline">Start Your <span class="w-cta-accent">14-Day Free Trial</span></h2>
-        <p class="w-cta-sub">Secure billing powered by Stripe.</p>
+        @if (IsDemoEnvironment)
+        {
+            <h2 class="w-cta-headline">Talk about a <span class="w-cta-accent">pilot</span></h2>
+            <p class="w-cta-sub">Scoped to one domain, in your own cloud, with your core system of record intact.</p>
+        }
+        else
+        {
+            <h2 class="w-cta-headline">Start Your <span class="w-cta-accent">14-Day Free Trial</span></h2>
+            <p class="w-cta-sub">Secure billing powered by Stripe.</p>
+        }
         <div class="w-cta-buttons">
-            <MudButton Href="/signup"
-                       Variant="Variant.Filled"
+            @if (!IsDemoEnvironment)
+            {
+                <MudButton Href="/signup"
+                           Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Size="Size.Large"
+                           Class="w-btn-primary">
+                    Sign Up Now
+                </MudButton>
+            }
+            <MudButton Href="/contact-sales"
+                       Variant="@(IsDemoEnvironment ? Variant.Filled : Variant.Outlined)"
                        Color="Color.Primary"
                        Size="Size.Large"
-                       Class="w-btn-primary">
-                Sign Up Now
-            </MudButton>
-            <MudButton Href="/contact-sales"
-                       Variant="Variant.Outlined"
-                       Color="Color.Primary"
-                       Size="Size.Large">
+                       Class="@(IsDemoEnvironment ? "w-btn-primary" : string.Empty)">
                 Contact Sales
             </MudButton>
         </div>
         <div class="w-cta-links">
             <a href="/docs">Documentation</a>
             <a href="/apis">FHIR APIs</a>
-            <a href="/demo">Live Demo</a>
+            <a href="https://cloudhealthoffice.com/evidence" target="_blank" rel="noopener">Evidence</a>
             <a href="/legal">Legal &amp; Compliance</a>
         </div>
     </div>
 </section>
+
+@code {
+    // Demo and evaluation hosts (Development/Testing) run on synthetic data with
+    // LocalDemo sign-in; production shows the self-serve trial instead.
+    private bool IsDemoEnvironment => !HostEnvironment.IsProduction();
+
+    private string SignInHref =>
+        string.Equals(Configuration["Authentication:Mode"], "LocalDemo", StringComparison.OrdinalIgnoreCase)
+            ? "/local-demo/sign-in?redirectUri=/"
+            : "/MicrosoftIdentity/Account/SignIn";
+
+    private sealed record Feature(string Kicker, string Title, string Description);
+
+    private sealed record Proof(string Figure, string Label, string Detail, string Scope, string Href);
+
+    private static readonly Feature[] Features =
+    {
+        new("837 · 835", "Claims", "Professional and institutional claims adjudicated through nine rules engines (benefits, fee schedules, NCCI, COB and more), with 835 remittance. An AI examiner gives advisory recommendations on pended claims; examiners decide."),
+        new("270 · 271", "Eligibility", "Real-time eligibility with plan and benefit detail."),
+        new("CRD · DTR · PAS · 278", "Prior Authorization", "Da Vinci CRD, DTR and PAS with X12 278 workflows. Interoperability tested against an independently developed Da Vinci implementation."),
+        new("275 · 277 · RFAI", "Attachments", "Claim attachments and requests for additional information, tracked to resolution."),
+        new("834", "Enrollment", "834 enrollment with member demographics, coverage changes and sponsor management."),
+        new("CMS-0057-F", "FHIR R4 APIs", "Patient Access, Provider Access, Payer-to-Payer and Provider Directory. Evidence and known limits are published."),
+    };
+
+    private static readonly Proof[] Proofs =
+    {
+        new("1,000,000", "claims adjudicated", "Full Million Claim Challenge corpus at 155.89 claims/sec, all claims terminal, zero dead letters.", "Local Kubernetes benchmark", "https://cloudhealthoffice.com/insights/million-claim-challenge/"),
+        new("199.42/sec", "raw X12 837P, end to end", "100,000 of 100,000 claims accepted and adjudicated from raw X12.", "Local Kubernetes benchmark", "https://cloudhealthoffice.com/insights/million-claim-challenge/"),
+        new("3 clouds", "same manifests", "Local Kubernetes, Azure AKS and Google GKE from the same manifests and images. No application rewrite.", "Engineering field notes", "https://cloudhealthoffice.com/insights/gcp-scaling/"),
+        new("Da Vinci", "interoperability evidence", "CRD, DTR and PAS exercised against an independently developed HL7 Da Vinci implementation.", "Published evidence", "https://cloudhealthoffice.com/evidence"),
+    };
+}
