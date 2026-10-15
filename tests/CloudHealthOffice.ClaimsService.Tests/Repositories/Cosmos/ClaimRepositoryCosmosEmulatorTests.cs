@@ -108,9 +108,11 @@ public sealed class ClaimRepositoryCosmosEmulatorTests : IAsyncLifetime
     }
 
     [SkippableFact]
-    public async Task ResolutionLock_IsOnlyTakenOnAPendedClaim()
+    public async Task ResolutionLock_IsOnlyTakenOnAReprocessableClaim()
     {
-        await SeedAsync(status: ClaimStatus.Approved);
+        // Pended, Pay (Approved) and Deny stay workable until the payment cycle;
+        // a finalized claim (Paid / Denied) is never locked for resolution.
+        await SeedAsync(status: ClaimStatus.Paid);
         (await Repo.TryAcquireResolutionLockAsync(Tenant, "C1", "t1", "examiner-1", Now, TimeSpan.FromMinutes(10))).Should().BeFalse();
         (await Repo.TryAcquireResolutionLockAsync(Tenant, "missing", "t1", "examiner-1", Now, TimeSpan.FromMinutes(10))).Should().BeFalse();
         (await StoredAsync()).ResolutionLock.Should().BeNull();
@@ -377,7 +379,7 @@ public sealed class ClaimRepositoryCosmosEmulatorTests : IAsyncLifetime
         {
             (await Repo.UpdateAdjudicationProjectionAsync(
                 Tenant, "C1", new AdjudicationResult { PayerPayment = 0m, DenialReasonCode = "CO-50" }, [],
-                resolvedStatus: ClaimStatus.Denied)).Should().BeTrue();
+                resolvedStatus: ClaimStatus.Deny)).Should().BeTrue();
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.BadRequest
                                           && ex.Message.Contains("filter predicate could not be evaluated", StringComparison.OrdinalIgnoreCase))
@@ -386,7 +388,9 @@ public sealed class ClaimRepositoryCosmosEmulatorTests : IAsyncLifetime
             return;
         }
 
-        (await StoredAsync()).Status.Should().Be(ClaimStatus.Denied);
+        // The pipeline's deny is the adjudicated (non-final) Deny; the payment
+        // cycle finalizes it to Denied.
+        (await StoredAsync()).Status.Should().Be(ClaimStatus.Deny);
     }
 
     // ── Void / supersede projections ─────────────────────────────────────
