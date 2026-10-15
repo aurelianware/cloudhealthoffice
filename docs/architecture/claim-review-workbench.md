@@ -1,6 +1,6 @@
 # Claim review workbench: edit overrides, documents, corrections and intake
 
-**Status:** Draft for review
+**Status:** Approved (2026-10-15). Section 7 records the decisions.
 **Scope:** What a claims reviewer can see and do on a claim:
 - override decisions, and how they are made and audited;
 - documents and requests for additional information (RFAIs) on claims;
@@ -95,12 +95,13 @@ A reviewer can deny a line the engine would pay. For example, the records don't 
 
 | Permission | Grants |
 |---|---|
-| `claims:work` | Work claims, add notes, override `Examiner`-policy edits, deny lines. (Existing.) |
+| `claims:work` | Work claims, override `Examiner`-policy edits, deny lines. (Existing.) |
+| `claims:note` | **New.** Add notes to a claim. Held by claims staff, member services and provider relations. |
 | `claims:override-edit` | **New.** Override `Supervisor`-policy edits. |
 | `claims:override-approve` | Existing whole-claim supervisor override and payer-order override. Unchanged. |
 
 **Optional second approver:**
-- A tenant setting requires a second, different person for overrides over a dollar threshold or on chosen edit types.
+- Off by default. A tenant can turn it on to require a second, different person for overrides over a dollar threshold (e.g., more than $10,000 of added payment) or on chosen edit types.
 - The Finish then parks the claim in "awaiting approval" instead of finalizing.
 - This reuses the existing `SecondApproverId` path.
 
@@ -118,13 +119,13 @@ Each entry shows type, source, received date and who added it, and opens in a vi
 
 ### 3.2 Requesting records (claim RFAI)
 
-1. **Request.** The reviewer selects "Request information", picks what's needed (records, itemized bill, operative report, prior payer EOB…) and a due date. The default is 45 days, configurable per tenant and line of business.
+1. **Request.** The reviewer selects "Request information", picks what's needed (records, itemized bill, operative report, prior payer EOB…) and a due date. The default is **45 days**, configurable per tenant and line of business.
    - CHO sends a 277 RFAI to the provider, or a letter when the provider isn't electronic.
 2. **The claim waits.** It leaves the work queue and its work item is **paused**: off Get Next, and the SLA clock is stopped where the line of business allows it.
 3. **Documents arrive.** A 275 or upload is matched to the request, the work item resumes, and the claim goes back to the queue, ideally to the reviewer who asked.
 4. **Nothing arrives by the deadline.** One of two tenant settings applies:
-   - **Auto-deny** with CARC 252 (*additional information required*) / RARC N706 (*missing documentation*);
-   - **Back to a person** for a decision.
+   - **Back to a person** for a decision. This is the default.
+   - **Auto-deny** with CARC 252 (*additional information required*) / RARC N706 (*missing documentation*), when the tenant turns it on.
 
 **Prompt pay:** state prompt-pay clocks usually stop while a properly requested RFAI is outstanding, but not in every state. The tenant's state setting decides, and the console shows which rule applies.
 
@@ -164,9 +165,11 @@ Health plans still have to accept paper (CMS-1500, UB-04), faxes and member reim
 6. **Editable payer-side fields** (§4).
 7. **Paper intake:** flag, image, manual entry form (§5). AI extraction last.
 
-## 7. Open questions for review
+## 7. Decisions
 
-1. **Member services and notes.** The MemberServices role has `claims:read` but not `claims:work`, so a rep who talks to a member can't leave a *Member contact* note on the claim. Should notes get their own permission (`claims:note`) that member services and provider relations also hold?
-2. **Default RFAI window:** 45 days, or per line of business?
-3. **Auto-deny at the deadline:** on or off by default? I'd lean off (back to a person) for Medicaid.
-4. **Second approver:** default off, or on above a threshold (e.g., overrides adding more than $10,000 of payment)?
+Agreed 2026-10-15:
+
+1. **Notes get their own permission, `claims:note`.** Member services and provider relations hold it as well as claims staff, so a rep can record a member or provider call on the claim (§2.6).
+2. **RFAI window:** 45 days by default, configurable per tenant and line of business (§3.2).
+3. **No records by the deadline:** the claim goes back to a person by default. Auto-deny (CARC 252 / N706) is an opt-in tenant setting (§3.2).
+4. **Second approver:** off by default. A tenant can turn it on with a dollar threshold or for chosen edit types (§2.6).
