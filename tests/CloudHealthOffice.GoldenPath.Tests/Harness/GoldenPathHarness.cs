@@ -525,7 +525,9 @@ internal sealed class GoldenPathHarness
             {
                 var id = Uri.UnescapeDataString(path.Split('/')[3]);
                 var remittance = (await request.Content!.ReadFromJsonAsync<Claims.RemittanceUpdate>(Wire.ClaimsService, ct))!;
-                Assert.True(remittance.PaymentAmount > 0m, "zero-payment remittances take the legacy Denied path, not exercised here");
+                // A $0 remittance finalizes like a paid one (same service call);
+                // a negative one is refused by the controller, never sent.
+                Assert.True(remittance.PaymentAmount >= 0m, "payment-service never remits a negative plan payment");
                 var result = await finalization.FinalizeAsync(id, new ClaimFinalizationRequest
                 {
                     CheckNumber = remittance.CheckNumber ?? string.Empty,

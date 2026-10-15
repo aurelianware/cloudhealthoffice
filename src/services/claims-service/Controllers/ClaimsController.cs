@@ -501,6 +501,7 @@ public class ClaimsController : ControllerBase
     [HttpPut("{id}/status")]
     [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<Claim>> UpdateClaimStatus(
         string id,
         [FromBody] ClaimStatusUpdate statusUpdate,
@@ -516,6 +517,20 @@ public class ClaimsController : ControllerBase
         _logger.LogInformation(
             "Updating claim {Id} status to {Status}",
             SanitizeForLog(id), statusUpdate.Status);
+
+        // A void is the void transition (VoidAsync), never a bare status
+        // write: it saves the terminal accumulator reversal with the void and
+        // emits ClaimVersionVoided, exactly as POST {id}/void does.
+        if (statusUpdate.Status == ClaimStatus.Voided)
+        {
+            var voidResult = await VoidThroughFinalizationAsync(
+                id,
+                string.IsNullOrWhiteSpace(statusUpdate.Notes) ? "Voided via PUT /api/claims/{id}/status" : statusUpdate.Notes,
+                ct);
+            return voidResult.Outcome is ClaimVoidOutcome.Voided or ClaimVoidOutcome.AlreadyVoided
+                ? Ok(voidResult.Claim)
+                : VoidFailure(id, voidResult);
+        }
 
         var claim = await _claimRepository.GetByIdAsync(id);
         if (claim == null)
@@ -1002,12 +1017,27 @@ public class ClaimsController : ControllerBase
     /// (<c>claims.finalized.v1</c>) fire alongside the legacy Status
     /// update; idempotent when the same CheckNumber arrives twice;
     /// returns 409 on CheckNumber mismatch and 422 when the source claim
-    /// is not in a Paid-eligible state. Zero-payment remittances retain
-    /// the legacy direct-write Denied path until 5.12 introduces a
-    /// dedicated Denied-transition flow.
+    /// is not in a Paid-eligible state.
+    ///
+    /// <para>
+    /// A zero-payment remittance finalizes exactly like a paid one: a claim
+    /// the pipeline Approved with a $0 plan payment (its allowed amount
+    /// fully applied to deductible / copay / coinsurance) is payable, and is
+    /// moved to Paid through the same service, so its accumulator commit
+    /// (the deductible credit) is kept rather than dropped as a denial. When
+    /// no check / EFT trace is supplied, the remittance control number stands
+    /// in for it (an 835 with no payment still carries a TRN02 reference),
+    /// so a repeat of the same remittance is an idempotent no-op. A $0
+    /// remittance never changes a claim's disposition: a claim the pipeline
+    /// already Denied stays Denied (200, unchanged: a $0 remittance is what
+    /// a denial's 835 carries), and any other ineligible source state
+    /// (Pended, Submitted, ...) answers 422, unchanged. A negative amount is
+    /// rejected (400): a recoupment is a reversal run, not a remittance.
+    /// </para>
     /// </summary>
     [HttpPost("{id}/remittance")]
     [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
@@ -1019,17 +1049,34 @@ public class ClaimsController : ControllerBase
             "Processing remittance for claim {Id}, check number {CheckNumber}",
             SanitizeForLog(id), SanitizeForLog(remittance.CheckNumber));
 
-        // Zero-payment remittances stay on the legacy direct-write Denied
-        // path. Phase 1 finalization scope is Paid only; the Denied
-        // transition is part of capability 5.12.
-        if (remittance.PaymentAmount <= 0m)
+        if (remittance.PaymentAmount < 0m)
         {
-            return await ProcessZeroPaymentRemittanceAsync(id, remittance);
+            return BadRequest(new { message = "PaymentAmount cannot be negative; a recoupment is a reversal run (POST {id}/void)" });
+        }
+
+        var zeroPay = remittance.PaymentAmount == 0m;
+
+        // The check / EFT trace the finalize is keyed on (idempotency and
+        // conflict detection). A $0 remittance may carry none: its control
+        // number stands in, deterministically, so a repeat is a no-op.
+        var checkNumber = !string.IsNullOrWhiteSpace(remittance.CheckNumber)
+            ? remittance.CheckNumber
+            : zeroPay && !string.IsNullOrWhiteSpace(remittance.ControlNumber)
+                ? remittance.ControlNumber
+                : null;
+        if (checkNumber is null)
+        {
+            return BadRequest(new
+            {
+                message = zeroPay
+                    ? "A zero-payment remittance needs a CheckNumber or a ControlNumber"
+                    : "CheckNumber is required for a paid remittance",
+            });
         }
 
         var request = new ClaimFinalizationRequest
         {
-            CheckNumber = remittance.CheckNumber ?? string.Empty,
+            CheckNumber = checkNumber,
             PaymentDate = remittance.PaymentDate,
             PayerPayment = remittance.PaymentAmount,
             PaymentRunId = remittance.PaymentRunId,
@@ -1054,6 +1101,15 @@ public class ClaimsController : ControllerBase
 
             case ClaimFinalizationOutcome.Conflict:
                 return Conflict(new { message = result.Message, currentStatus = result.Claim?.Status });
+
+            case ClaimFinalizationOutcome.InvalidSourceState
+                when zeroPay && result.Claim?.Status == ClaimStatus.Denied:
+                // The pipeline denied the claim; a $0 remittance is what its
+                // 835 carries. Nothing changes (Denied is terminal).
+                _logger.LogInformation(
+                    "Zero-payment remittance for Denied claim {Id}; claim left Denied, unchanged",
+                    SanitizeForLog(id));
+                return Ok(result.Claim);
 
             case ClaimFinalizationOutcome.InvalidSourceState:
                 return UnprocessableEntity(new { message = result.Message, currentStatus = result.Claim?.Status });
@@ -1187,34 +1243,6 @@ public class ClaimsController : ControllerBase
         };
     }
 
-    private async Task<ActionResult<Claim>> ProcessZeroPaymentRemittanceAsync(string id, RemittanceUpdate remittance)
-    {
-        var claim = await _claimRepository.GetByIdAsync(id);
-        if (claim == null)
-        {
-            return NotFound($"Claim {id} not found");
-        }
-
-        claim.EDI835ControlNumber = remittance.ControlNumber;
-        claim.PaidDate = DateTime.UtcNow;
-        claim.Status = ClaimStatus.Denied;
-        claim.LastUpdatedDate = DateTime.UtcNow;
-
-        claim.AdjudicationResult ??= new AdjudicationResult();
-        claim.AdjudicationResult.CheckNumber = remittance.CheckNumber;
-        claim.AdjudicationResult.PaymentDate = remittance.PaymentDate;
-        claim.AdjudicationResult.PayerPayment = 0m;
-
-        var updated = await _claimRepository.UpdateAsync(claim);
-
-        if (IsTerminalStatus(updated.Status))
-        {
-            await _eventPublisher.PublishClaimFinalizedAsync(updated, GetTenantId());
-        }
-
-        return Ok(updated);
-    }
-
     // Identity.Name is the display name claim, and X-User-Id is caller-supplied;
     // the actor is the token subject.
     private string? TryGetActorId() => ResolveActorId();
@@ -1291,36 +1319,44 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
-    /// Delete claim (soft delete - set status to Voided)
+    /// Delete claim (soft delete: void it). Routed through
+    /// <see cref="IClaimFinalizationService.VoidAsync"/>, the same transition
+    /// as <c>POST {id}/void</c>: the void saves the claim's terminal
+    /// accumulator reversal with the void write and emits
+    /// <c>ClaimVersionVoided</c>. Only Paid / PartiallyPaid / Adjusted claims
+    /// can be voided (422 otherwise, unchanged); a repeat is a no-op (204).
     /// </summary>
     [HttpDelete("{id}")]
     [RequirePermission(ClaimsPermissions.Void)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> VoidClaim(string id)
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> VoidClaim(string id, CancellationToken ct = default)
     {
         _logger.LogInformation("Voiding claim: {Id}", SanitizeForLog(id));
 
-        var claim = await _claimRepository.GetByIdAsync(id);
-        if (claim == null)
-        {
-            return NotFound($"Claim {id} not found");
-        }
-
-        claim.Status = ClaimStatus.Voided;
-        claim.LastUpdatedDate = DateTime.UtcNow;
-        claim.LastUpdatedBy = ResolveActorId();
-
-        var updated = await _claimRepository.UpdateAsync(claim);
-
-        // Voided is a terminal status — downstream consumers (accumulators,
-        // analytics) need the reversal signal just as they do for paid/denied
-        // transitions. Without this publish a void initiated via DELETE silently
-        // diverges from voids reached through the status-update endpoint.
-        await _eventPublisher.PublishClaimFinalizedAsync(updated, GetTenantId());
-
-        return NoContent();
+        var result = await VoidThroughFinalizationAsync(id, "Voided via DELETE /api/claims/{id}", ct);
+        return result.Outcome is ClaimVoidOutcome.Voided or ClaimVoidOutcome.AlreadyVoided
+            ? NoContent()
+            : VoidFailure(id, result);
     }
+
+    /// <summary>The void behind DELETE {id} and PUT {id}/status (Voided): <see cref="IClaimFinalizationService.VoidAsync"/>.</summary>
+    private Task<ClaimVoidResult> VoidThroughFinalizationAsync(string id, string reason, CancellationToken ct) =>
+        _finalizationService.VoidAsync(
+            id, new ClaimVoidRequest { Reason = reason }, GetTenantId(), TryGetActorId(), TryGetCorrelationId(), ct);
+
+    private ActionResult VoidFailure(string id, ClaimVoidResult result) => result.Outcome switch
+    {
+        ClaimVoidOutcome.NotFound => NotFound(new { message = result.Message ?? $"Claim {id} not found" }),
+        ClaimVoidOutcome.InvalidSourceState => UnprocessableEntity(new
+        {
+            message = result.Message,
+            currentStatus = result.Claim?.Status.ToString(),
+            currentVersionState = result.Claim?.VersionState.ToString(),
+        }),
+        _ => StatusCode(StatusCodes.Status500InternalServerError),
+    };
 
     /// <summary>
     /// Get aggregated accumulator totals for a member or family for a plan year.

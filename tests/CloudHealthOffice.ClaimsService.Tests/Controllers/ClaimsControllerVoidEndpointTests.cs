@@ -127,4 +127,87 @@ public class ClaimsControllerVoidEndpointTests : IClassFixture<ClaimsApiFactory>
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    // ── DELETE {id} and PUT {id}/status (Voided) void through VoidAsync ──
+
+    private void VoidReturns(string id, ClaimVoidResult result) =>
+        _finalization.VoidAsync(
+            id, Arg.Any<ClaimVoidRequest>(), "test-tenant",
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(result);
+
+    [Fact]
+    public async Task Delete_VoidsThroughVoidAsync_Returns204()
+    {
+        VoidReturns("del-1", ClaimVoidResult.Voided(VoidedClaim("del-1")));
+
+        var response = await _client.DeleteAsync("/api/claims/del-1");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        await _finalization.Received(1).VoidAsync(
+            "del-1", Arg.Is<ClaimVoidRequest>(r => r.Reason.Contains("DELETE") && r.ReversalRunId == null),
+            "test-tenant", Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Delete_AlreadyVoided_Returns204_Idempotent()
+    {
+        VoidReturns("del-2", ClaimVoidResult.AlreadyVoided(VoidedClaim("del-2")));
+
+        Assert.Equal(HttpStatusCode.NoContent, (await _client.DeleteAsync("/api/claims/del-2")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_NotFound_Returns404()
+    {
+        VoidReturns("del-missing", ClaimVoidResult.NotFound("Claim del-missing not found"));
+
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.DeleteAsync("/api/claims/del-missing")).StatusCode);
+    }
+
+    /// <summary>A claim VoidAsync cannot void (here Approved, not yet paid) is refused unchanged.</summary>
+    [Fact]
+    public async Task Delete_InvalidSourceState_Returns422()
+    {
+        var claim = VoidedClaim("del-approved");
+        claim.Status = ClaimStatus.Approved;
+        claim.VersionState = ClaimVersionState.Adjudicated;
+        VoidReturns("del-approved", ClaimVoidResult.InvalidSourceState(claim, "current Status=Approved"));
+
+        var response = await _client.DeleteAsync("/api/claims/del-approved");
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Contains("Approved", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task PutStatusVoided_VoidsThroughVoidAsync_WithTheNotesAsReason()
+    {
+        VoidReturns("put-1", ClaimVoidResult.Voided(VoidedClaim("put-1")));
+
+        var response = await _client.PutAsJsonAsync(
+            "/api/claims/put-1/status", new { status = (int)ClaimStatus.Voided, notes = "duplicate submission" }, Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _finalization.Received(1).VoidAsync(
+            "put-1", Arg.Is<ClaimVoidRequest>(r => r.Reason == "duplicate submission"),
+            "test-tenant", Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PutStatusVoided_InvalidSourceState_Returns422()
+    {
+        var claim = VoidedClaim("put-pended");
+        claim.Status = ClaimStatus.Pended;
+        claim.VersionState = ClaimVersionState.Submitted;
+        VoidReturns("put-pended", ClaimVoidResult.InvalidSourceState(claim, "current Status=Pended"));
+
+        var response = await _client.PutAsJsonAsync(
+            "/api/claims/put-pended/status", new { status = (int)ClaimStatus.Voided }, Json);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        await _finalization.Received(1).VoidAsync(
+            "put-pended", Arg.Is<ClaimVoidRequest>(r => !string.IsNullOrWhiteSpace(r.Reason)),
+            "test-tenant", Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
 }
