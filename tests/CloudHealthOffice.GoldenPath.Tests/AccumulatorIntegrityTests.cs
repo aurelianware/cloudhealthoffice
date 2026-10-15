@@ -384,7 +384,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
 
         Assert.Equal(200, StatusOf(denied));
         var after = (await Claim(pended.Id))!;
-        Assert.Equal(Claims.ClaimStatus.Denied, after.Status);
+        Assert.Equal(Claims.ClaimStatus.Deny, after.Status);
         Assert.Null(after.PendingAccumulatorReversal);
         await AssertBalances(0m, 0m);
         await AssertNoWriteForAsync(pended.Id);
@@ -444,8 +444,8 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         Assert.Equal(200, StatusOf(bDenied!));
         Assert.Equal(409, StatusOf(aApproved));
         var final = (await Claim(pended.Id))!;
-        Assert.Equal(Claims.ClaimStatus.Denied, final.Status);
-        Assert.Equal("Denied", Assert.Single(final.ExaminerResolutions).Disposition);
+        Assert.Equal(Claims.ClaimStatus.Deny, final.Status);
+        Assert.Equal("Deny", Assert.Single(final.ExaminerResolutions).Disposition);
         Assert.Null(final.PendingAccumulatorCommit);
         await AssertBalances(0m, 0m);
         Assert.Equal(0m, await Balance(AccumulatorType.FamilyDeductible, AccumulatorScope.Family));
@@ -581,7 +581,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         Assert.Equal(200, StatusOf(await ResolveAsync("examiner-1", pended.Id, "Denied")));
 
         var denied = (await Claim(pended.Id))!;
-        Assert.Equal(Claims.ClaimStatus.Denied, denied.Status);
+        Assert.Equal(Claims.ClaimStatus.Deny, denied.Status);
         Assert.NotNull(denied.PendingAccumulatorReversal);
         await AssertBalances(100m, 100m);
 
@@ -924,7 +924,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
 
         Assert.Equal(1, run.Denied);
         var denied = (await Claim(pended.Id))!;
-        Assert.Equal(Claims.ClaimStatus.Denied, denied.Status);
+        Assert.Equal(Claims.ClaimStatus.Deny, denied.Status);
         Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredCode, denied.AdjudicationResult!.DenialReasonCode);
         await AssertBalances(0m, 0m);
         await AssertNoWriteForAsync(pended.Id);
