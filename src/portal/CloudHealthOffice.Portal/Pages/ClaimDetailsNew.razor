@@ -9,6 +9,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IJSRuntime JS
+@inject IServiceProvider Services
 
 <PageTitle>Claim Details - Cloud Health Office</PageTitle>
 
@@ -37,7 +38,9 @@
                         Claim @_claim.ClaimNumber
                         @if (!string.IsNullOrEmpty(_claim.PriorAuthorizationNumber))
                         {
-                            <MudChip Size="Size.Medium" Variant="Variant.Outlined" Class="ml-2">
+                            <MudChip Size="Size.Medium" Variant="Variant.Outlined" Class="ml-2"
+                                     Icon="@Icons.Material.Filled.OpenInNew" OnClick="OpenAuthorizationAsync"
+                                     data-testid="open-authorization" title="Open the authorization">
                                 Auth: @_claim.PriorAuthorizationNumber
                             </MudChip>
                         }
@@ -329,7 +332,7 @@
                         }
                         <div>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Member ID</MudText>
-                            <MudText Typo="Typo.body2">@_claim.MemberId</MudText>
+                            <MudLink Typo="Typo.body2" OnClick="OpenMemberAsync" data-testid="open-member">@_claim.MemberId</MudLink>
                         </div>
                     </MudStack>
                 </MudPaper>
@@ -341,14 +344,14 @@
                     <MudStack Spacing="2">
                         <div>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Billing Provider</MudText>
-                            <MudText Typo="Typo.body2">@_claim.BillingProviderName</MudText>
+                            <MudLink Typo="Typo.body2" OnClick="@(() => OpenProviderAsync(_claim.BillingProviderNPI))" data-testid="open-billing-provider">@_claim.BillingProviderName</MudLink>
                             <MudText Typo="Typo.caption">NPI: @_claim.BillingProviderNPI</MudText>
                         </div>
                         @if (!string.IsNullOrEmpty(_claim.RenderingProviderName))
                         {
                             <div>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">Rendering Provider</MudText>
-                                <MudText Typo="Typo.body2">@_claim.RenderingProviderName</MudText>
+                                <MudLink Typo="Typo.body2" OnClick="@(() => OpenProviderAsync(_claim.RenderingProviderNPI))">@_claim.RenderingProviderName</MudLink>
                                 <MudText Typo="Typo.caption">NPI: @_claim.RenderingProviderNPI</MudText>
                             </div>
                         }
@@ -471,15 +474,65 @@
                                 <MudItem xs="2">
                                     <MudText Typo="Typo.body2" Style="text-align: right;">@line.ChargeAmount.ToString("C")</MudText>
                                 </MudItem>
+                                @{ var review = ClaimLineReview.Evaluate(_claim, line); }
                                 <MudItem xs="2">
-                                    <MudChip Size="Size.Small" Color="@GetLineStatusColor(line.LineStatus)" Variant="Variant.Filled">
-                                        @line.LineStatus
+                                    <MudChip Size="Size.Small" Color="@OutcomeColor(review.Outcome)" Variant="Variant.Filled"
+                                             data-testid="@($"line-{line.LineNumber}-outcome")">
+                                        @review.Label
                                     </MudChip>
                                 </MudItem>
+                                @if (review.Summary is { } summary)
+                                {
+                                    <MudItem xs="12">
+                                        <MudText Typo="Typo.caption" Color="@(review.Outcome == LineOutcome.Pay ? Color.Secondary : OutcomeColor(review.Outcome))"
+                                                 data-testid="@($"line-{line.LineNumber}-summary")">
+                                            @summary
+                                        </MudText>
+                                    </MudItem>
+                                }
                             </MudGrid>
                         </TitleContent>
                         <ChildContent>
+                            @{ var detail = ClaimLineReview.Evaluate(_claim, line); }
                             <MudGrid>
+                                @if (detail.Edits.Count > 0)
+                                {
+                                    <MudItem xs="12">
+                                        <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1">Edits on this line</MudText>
+                                        @foreach (var edit in detail.Edits)
+                                        {
+                                            <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined" Class="mb-1">
+                                                <b>@edit.Type</b>@(string.IsNullOrWhiteSpace(edit.RuleId) ? "" : $" {edit.RuleId}"): @edit.Text
+                                                @if (edit.OtherLines.Count > 0)
+                                                {
+                                                    <span> · also on line@(edit.OtherLines.Count > 1 ? "s" : "") @string.Join(", ", edit.OtherLines)</span>
+                                                }
+                                                @if (edit.ModifierPresent)
+                                                {
+                                                    <span> · a bypass modifier is present</span>
+                                                }
+                                            </MudAlert>
+                                        }
+                                    </MudItem>
+                                }
+                                @if (detail.Reasons.Count > 0)
+                                {
+                                    <MudItem xs="12">
+                                        <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1">Why</MudText>
+                                        <MudSimpleTable Dense="true" Elevation="0" data-testid="@($"line-{line.LineNumber}-reasons")">
+                                            <tbody>
+                                                @foreach (var reason in detail.Reasons)
+                                                {
+                                                    <tr>
+                                                        <td style="font-family: monospace; white-space: nowrap;">@reason.Code</td>
+                                                        <td style="@(reason.IsDenial ? "color: var(--mud-palette-error);" : "")">@reason.Text</td>
+                                                        <td style="text-align: right;">@(reason.Amount is { } amount ? amount.ToString("C") : "")</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </MudSimpleTable>
+                                    </MudItem>
+                                }
                                 <MudItem xs="12">
                                     <MudText Typo="Typo.subtitle2" Class="mt-2">Amounts</MudText>
                                     <MudTable Items="@GetLineDetails(line)" Dense="true" Elevation="0" Hover="false" Striped="false">
@@ -509,27 +562,6 @@
                                         {
                                             <MudChip Size="Size.Small" Variant="Variant.Outlined" Class="mr-2">Diagnosis @pointer</MudChip>
                                         }
-                                    </MudItem>
-                                }
-
-                                @if (line.Adjustments.Count > 0)
-                                {
-                                    <MudItem xs="12">
-                                        <MudText Typo="Typo.subtitle2" Class="mt-3 mb-2">Adjustments</MudText>
-                                        <MudTable Items="@line.Adjustments" Dense="true" Elevation="0" Hover="true" Striped="true">
-                                            <HeaderContent>
-                                                <MudTh>Type</MudTh>
-                                                <MudTh>Code</MudTh>
-                                                <MudTh>Description</MudTh>
-                                                <MudTh Style="text-align: right;">Amount</MudTh>
-                                            </HeaderContent>
-                                            <RowTemplate>
-                                                <MudTd DataLabel="Type">@context.GroupCode</MudTd>
-                                                <MudTd DataLabel="Code">@context.ReasonCode</MudTd>
-                                                <MudTd DataLabel="Description">@context.Description</MudTd>
-                                                <MudTd DataLabel="Amount" Style="text-align: right;">@context.Amount.ToString("C")</MudTd>
-                                            </RowTemplate>
-                                        </MudTable>
                                     </MudItem>
                                 }
 
@@ -1155,13 +1187,61 @@
 
     private Color GetStatusColor(string status) => ClaimStatusDisplay.Color(status);
 
-    private Color GetLineStatusColor(string? status) => status switch
+    private static Color OutcomeColor(LineOutcome outcome) => outcome switch
     {
-        "Approved" or "Paid" => Color.Success,
-        "Denied" or "Deny" => Color.Error,
-        "Pended" or "Review" => Color.Warning,
+        LineOutcome.Pay => Color.Success,
+        LineOutcome.Deny => Color.Error,
+        LineOutcome.Pend => Color.Warning,
         _ => Color.Default
     };
+
+    private ProviderDetailsDialog? _providerDialog;
+    private bool _providerDialogRequested;
+
+    private async Task OpenMemberAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_claim?.MemberId)) return;
+        var parameters = new DialogParameters { { "MemberId", _claim.MemberId } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+        await DialogService.ShowAsync<MemberDetailsDialog>("Member Details", parameters, options);
+    }
+
+    private async Task OpenProviderAsync(string? npi)
+    {
+        if (string.IsNullOrWhiteSpace(npi)) return;
+        var providers = Services.GetService<IProviderService>();
+        if (providers is null) return;
+        try
+        {
+            var match = (await providers.SearchProvidersAsync(searchTerm: npi))
+                .FirstOrDefault(p => string.Equals(p.NPI, npi, StringComparison.Ordinal));
+            if (match is null)
+            {
+                Snackbar.Add($"No provider record found for NPI {npi}.", Severity.Info);
+                return;
+            }
+            if (_providerDialog is null)
+            {
+                _providerDialogRequested = true;
+                StateHasChanged();
+                await Task.Yield();
+            }
+            if (_providerDialog is not null)
+                await _providerDialog.OpenAsync(match.ProviderId);
+        }
+        catch (ServiceUnavailableException)
+        {
+            Snackbar.Add("The provider service is unavailable right now.", Severity.Warning);
+        }
+    }
+
+    private async Task OpenAuthorizationAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_claim?.PriorAuthorizationNumber)) return;
+        var parameters = new DialogParameters { { "AuthorizationId", _claim.PriorAuthorizationNumber } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true };
+        await DialogService.ShowAsync<AuthorizationDetailsDialog>("Authorization Details", parameters, options);
+    }
 
     private static Color GetAiRecommendationColor(string recommendation) => recommendation switch
     {
@@ -1412,6 +1492,11 @@
 }
 
 <!-- Dialog Components -->
+@if (_providerDialogRequested)
+{
+    @* Rendered on first use only: the dialog brings its own services. *@
+    <ProviderDetailsDialog @ref="_providerDialog" />
+}
 <style>
     code {
         background-color: #f5f5f5;

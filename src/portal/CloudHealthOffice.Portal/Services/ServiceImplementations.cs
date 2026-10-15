@@ -979,7 +979,20 @@ public class AuthorizationService : IAuthorizationService
         var baseUrl = _configuration["Services:AuthorizationService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<AuthorizationDetails>($"{baseUrl}/authorizations/{authorizationId}");
+            // Callers pass either the record id or the authorization number
+            // (the list and a claim's prior-auth field show the number): try
+            // the id, then the number.
+            var key = Uri.EscapeDataString(authorizationId);
+            using var byId = await _httpClient.GetAsync($"{baseUrl}/authorizations/{key}");
+            if (byId.IsSuccessStatusCode)
+                return await byId.Content.ReadFromJsonAsync<AuthorizationDetails>();
+            if (byId.StatusCode != System.Net.HttpStatusCode.NotFound)
+                byId.EnsureSuccessStatusCode();
+
+            using var byNumber = await _httpClient.GetAsync($"{baseUrl}/authorizations/number/{key}");
+            if (byNumber.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            byNumber.EnsureSuccessStatusCode();
+            return await byNumber.Content.ReadFromJsonAsync<AuthorizationDetails>();
         }
         catch (HttpRequestException ex)
         {
