@@ -19,7 +19,9 @@ AUTHORIZATION_URL="${AUTHORIZATION_URL:-http://authorization-service}"
 SEED_MEMBERS="${SEED_MEMBERS:-true}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
 SEED_AUTHORIZATIONS="${SEED_AUTHORIZATIONS:-true}"
-SERVICEBUS_ONLY="${SERVICEBUS_ONLY:-false}"
+# Score the claims-service pipeline's persisted outcome (the single adjudicator).
+# SERVICEBUS_ONLY=false runs the dry-run synchronous diagnostic instead.
+SERVICEBUS_ONLY="${SERVICEBUS_ONLY:-true}"
 SERVICEBUS_RECONCILIATION_ENABLED="${SERVICEBUS_RECONCILIATION_ENABLED:-true}"
 SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS="${SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS:-300}"
 CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS="${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS:-15}"
@@ -229,7 +231,7 @@ spec:
             $(if [[ "$SEED_MEMBERS" != "true" ]]; then printf -- '- --no-seed-members\n'; fi)
             $(if [[ "$SEED_PROVIDERS" != "true" ]]; then printf -- '- --no-seed-providers\n'; fi)
             $(if [[ "$SEED_AUTHORIZATIONS" != "true" ]]; then printf -- '- --no-seed-authorizations\n'; fi)
-            $(if [[ "$SERVICEBUS_ONLY" == "true" ]]; then printf -- '- --servicebus-only\n'; fi)
+            $(if [[ "$SERVICEBUS_ONLY" == "true" ]]; then printf -- '- --servicebus-only\n'; else printf -- '- --synchronous-diagnostic\n'; fi)
             $(if [[ "$SERVICEBUS_RECONCILIATION_ENABLED" != "true" ]]; then printf -- '- --no-servicebus-reconciliation\n'; fi)
             - --servicebus-reconciliation-timeout
             - "${SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS}"

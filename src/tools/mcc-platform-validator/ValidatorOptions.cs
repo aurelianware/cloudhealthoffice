@@ -88,6 +88,9 @@ public sealed record ValidatorOptions(
                 case "--servicebus-only":
                     options.ServiceBusOnly = true;
                     break;
+                case "--synchronous-diagnostic":
+                    options.ServiceBusOnly = false;
+                    break;
                 case "--no-servicebus-reconciliation":
                     options.ServiceBusReconciliationEnabled = false;
                     break;
@@ -215,7 +218,9 @@ public sealed record ValidatorOptions(
         public bool SeedProviders { get; set; } = true;
         public bool SeedAuthorizations { get; set; } = true;
         public bool SkipClaimUpdate { get; set; }
-        public bool ServiceBusOnly { get; set; }
+        // Score the persisted outcome of the claims-service pipeline, the single
+        // adjudicator. --synchronous-diagnostic turns this off for diagnostics.
+        public bool ServiceBusOnly { get; set; } = true;
         public bool ServiceBusReconciliationEnabled { get; set; } = true;
         public int ServiceBusReconciliationTimeoutSeconds { get; set; } = 300;
         public bool PendObservationEnabled { get; set; } = true;

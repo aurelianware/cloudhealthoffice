@@ -62,12 +62,18 @@ public class ValidatorOptionsTests
     }
 
     [Fact]
-    public void Parse_WhenServiceBusOnlyProvided_EnablesAsynchronousAdjudicationMode()
+    public void Parse_DefaultsToScoringThePipelineOutcome()
     {
-        var options = ValidatorOptions.Parse(["--servicebus-only"]);
+        // The claims-service pipeline is the single adjudicator: by default the
+        // validator only submits and observes, it never adjudicates on the side.
+        Assert.True(ValidatorOptions.Parse([]).ServiceBusOnly);
+        Assert.True(ValidatorOptions.Parse(["--servicebus-only"]).ServiceBusOnly);
+    }
 
-        Assert.True(options.ServiceBusOnly);
-        Assert.False(ValidatorOptions.Parse([]).ServiceBusOnly);
+    [Fact]
+    public void Parse_WhenSynchronousDiagnosticProvided_DisablesPipelineOnlyMode()
+    {
+        Assert.False(ValidatorOptions.Parse(["--synchronous-diagnostic"]).ServiceBusOnly);
     }
 
     [Fact]
