@@ -132,6 +132,27 @@ public class ChoRolePermissionsTests
         Assert.Equal(expected, ChoRolePermissions.Satisfies(granted, permission));
     }
 
+    // work-management-service: examiners pull work; supervisors push it and
+    // manage queues / memberships; TenantAdmin through *:*; nobody else.
+    [Theory]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, ChoRolePermissions.WorkQueueRead, true)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, ChoRolePermissions.WorkQueueWork, true)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, ChoRolePermissions.WorkQueueAssign, false)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, ChoRolePermissions.WorkQueueAdmin, false)]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor, ChoRolePermissions.WorkQueueWork, true)]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor, ChoRolePermissions.WorkQueueAssign, true)]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor, ChoRolePermissions.WorkQueueAdmin, true)]
+    [InlineData(ChoRolePermissions.TenantAdmin, ChoRolePermissions.WorkQueueAdmin, true)]
+    [InlineData(ChoRolePermissions.MemberServices, ChoRolePermissions.WorkQueueWork, false)]
+    [InlineData(ChoRolePermissions.ComplianceOfficer, ChoRolePermissions.WorkQueueRead, true)]
+    [InlineData(ChoRolePermissions.ComplianceOfficer, ChoRolePermissions.WorkQueueAssign, false)]
+    public void Work_management_grants(string role, string permission, bool expected)
+    {
+        var granted = ChoRolePermissions.Expand([role]);
+
+        Assert.Equal(expected, ChoRolePermissions.Satisfies(granted, permission));
+    }
+
     [Theory]
     [InlineData(ChoRolePermissions.ClaimsSupervisor, "encounters:read", true)]
     [InlineData(ChoRolePermissions.ClaimsSupervisor, "encounters:write", true)]
