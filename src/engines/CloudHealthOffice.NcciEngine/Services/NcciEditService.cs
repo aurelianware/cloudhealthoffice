@@ -253,6 +253,7 @@ internal class NcciEditService : INcciEditService
             Column2Code = col2Line.ProcedureCode,
             AffectedLineNumbers = [col2Line.LineNumber],
             ModifierOverridePresent = false,
+            ModifierIndicator = (int)edit.ModifierIndicator,
             SuggestedCarc = carc,
             SuggestedRarc = rarc,
         });
@@ -343,6 +344,8 @@ internal class NcciEditService : INcciEditService
             AffectedLineNumbers = lineNumbers,
             UnitsBilled = unitsBilled,
             MueMaxUnits = mue.MaxUnits,
+            MueAdjudicationIndicator = (int)mue.AdjudicationIndicator,
+            ServiceDate = dos,
             SuggestedCarc = "151",
             SuggestedRarc = "N115",
         };

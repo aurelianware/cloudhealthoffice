@@ -156,8 +156,56 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Pass(StageName);
         }
 
-        ApplyFailureSnapshots(context, engineResult.EditFailures);
-        return BuildModeDrivenResult(context, activity, hasFailures: true);
+        // Approval re-run: edits the reviewer decided are settled. Overridden
+        // edits are suppressed; upheld ones were already applied as line
+        // denials by benefit calculation. Only an edit nobody decided pends.
+        var (undecided, decidedNotes) = SplitDecided(context, engineResult.EditFailures);
+        if (undecided.Count == 0)
+        {
+            activity?.SetTag("ncci.outcome", "decided");
+            return new ClaimAdjudicationStageResult { StageName = StageName, Notes = decidedNotes };
+        }
+
+        ApplyFailureSnapshots(context, undecided);
+        var result = BuildModeDrivenResult(context, activity, hasFailures: true);
+        return decidedNotes.Count == 0
+            ? result
+            : new ClaimAdjudicationStageResult
+            {
+                StageName = result.StageName,
+                Continue = result.Continue,
+                Outcome = result.Outcome,
+                Reason = result.Reason,
+                Notes = [.. result.Notes, .. decidedNotes],
+            };
+    }
+
+    /// <summary>
+    /// Separates the edits a reviewer decided (by <see cref="EditIdentity"/>)
+    /// from the ones nobody has seen.
+    /// </summary>
+    private static (List<EngineModels.NcciEditFailure> Undecided, List<string> Notes) SplitDecided(
+        ClaimAdjudicationContext context, IReadOnlyList<EngineModels.NcciEditFailure> failures)
+    {
+        var undecided = new List<EngineModels.NcciEditFailure>();
+        var notes = new List<string>();
+        foreach (var failure in failures)
+        {
+            var key = EditIdentity.Key(MapFailure(failure));
+            var disposition = EditDispositionApplier.DispositionFor(context, key);
+            if (disposition is null)
+            {
+                undecided.Add(failure);
+                continue;
+            }
+
+            var note = disposition.Decision == EditDecision.Override
+                ? $"Edit {failure.RuleId} overridden by examiner: {key}" + (string.IsNullOrWhiteSpace(disposition.Reason) ? "" : $" ({disposition.Reason})")
+                : $"Edit {failure.RuleId} upheld by examiner{(disposition.UpheldByDefault ? " at Finish" : "")}: {key}";
+            notes.Add(note);
+            context.ExaminerOverrides.Add($"{StageName}: {note}");
+        }
+        return (undecided, notes);
     }
 
     private void ApplyFailureSnapshots(
@@ -292,7 +340,14 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
     /// cases, so <see cref="EngineModels.NcciEditFailure.ModifierOverridePresent"/>
     /// is structurally false on emitted failures (Decision 15).
     /// </summary>
-    internal static NcciEditFailureSnapshot MapFailure(EngineModels.NcciEditFailure failure) => new()
+    internal static NcciEditFailureSnapshot MapFailure(EngineModels.NcciEditFailure failure)
+    {
+        var snapshot = MapFailureFields(failure);
+        snapshot.EditKey = EditIdentity.Key(snapshot);
+        return snapshot;
+    }
+
+    private static NcciEditFailureSnapshot MapFailureFields(EngineModels.NcciEditFailure failure) => new()
     {
         EditType = MapEditType(failure.EditType),
         RuleId = failure.RuleId,
@@ -305,6 +360,9 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
         MueMaxUnits = failure.MueMaxUnits,
         SuggestedCarc = failure.SuggestedCarc,
         SuggestedRarc = failure.SuggestedRarc,
+        ModifierIndicator = failure.ModifierIndicator,
+        MueAdjudicationIndicator = failure.MueAdjudicationIndicator,
+        ServiceDate = failure.ServiceDate?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
     };
 
     /// <summary>

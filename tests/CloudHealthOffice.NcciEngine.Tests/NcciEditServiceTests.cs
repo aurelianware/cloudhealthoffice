@@ -147,6 +147,8 @@ public class NcciEditServiceTests
         Assert.Equal("97", failure.SuggestedCarc);
         Assert.Equal("N519", failure.SuggestedRarc);
         Assert.Contains(2, failure.AffectedLineNumbers); // col2 is line 2
+        Assert.Equal(0, failure.ModifierIndicator); // the override policy keys on it
+        Assert.Null(failure.MueAdjudicationIndicator);
     }
 
     [Fact]
@@ -312,6 +314,9 @@ public class NcciEditServiceTests
         Assert.Equal("N115", failure.SuggestedRarc);
         Assert.Equal(4m, failure.UnitsBilled);
         Assert.Equal(3, failure.MueMaxUnits);
+        Assert.Equal(1, failure.MueAdjudicationIndicator); // the override policy keys on it
+        Assert.NotNull(failure.ServiceDate);
+        Assert.Null(failure.ModifierIndicator);
     }
 
     [Fact]

@@ -179,6 +179,22 @@ public class NcciEditFailure
     public int? MueMaxUnits { get; set; }
 
     /// <summary>
+    /// NCCI pair edits: the CMS modifier indicator (0 = no modifier allows
+    /// the pair; 1 = a distinct-procedure modifier may). Null for MUE.
+    /// </summary>
+    public int? ModifierIndicator { get; set; }
+
+    /// <summary>
+    /// MUE failures: the CMS MUE adjudication indicator, as published
+    /// (1 = claim line, 2 = date of service — policy, 3 = date of service —
+    /// clinical). Null for pair edits.
+    /// </summary>
+    public int? MueAdjudicationIndicator { get; set; }
+
+    /// <summary>MUE failures: the date of service the units were counted on.</summary>
+    public DateOnly? ServiceDate { get; set; }
+
+    /// <summary>
     /// CARC (Claim Adjustment Reason Code) to apply on the EOB/835.
     ///   97  = Contractually required; payment included in allowance for another service/procedure.
     ///   B15 = This procedure code is not payable when billed with an additional procedure code.

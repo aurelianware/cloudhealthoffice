@@ -728,9 +728,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             ServiceDate = serviceDate,
             NetworkTier = ResolveNetworkTier(context),
             Lines = claim.ClaimLines.Select(l => BuildLine(l, claim, pointerToCode)).ToList(),
-            AllowedAmounts = context.PricingResult is { } pricing
-                ? new Dictionary<int, decimal>(pricing.AllowedAmounts)
-                : new Dictionary<int, decimal>(),
+            AllowedAmounts = AllowedAfterUpheldEdits(context),
             ClaimType = MapClaimType(claim.ClaimType),
             TypeOfBill = claim.TypeOfBill,
             // Claims-service stores CLM05-1 (facility type) as the claim's
@@ -990,6 +988,19 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         };
     }
 
+    /// <summary>
+    /// The priced allowed amounts, less what the reviewer's upheld edits deny
+    /// (approval re-run only; see <see cref="EditDispositionApplier"/>).
+    /// </summary>
+    private static Dictionary<int, decimal> AllowedAfterUpheldEdits(ClaimAdjudicationContext context)
+    {
+        var allowed = context.PricingResult is { } pricing
+            ? new Dictionary<int, decimal>(pricing.AllowedAmounts)
+            : new Dictionary<int, decimal>();
+        EditDispositionApplier.ApplyToAllowed(allowed, EditDispositionApplier.LineDenials(context));
+        return allowed;
+    }
+
     internal static void ApplyToContext(
         ClaimAdjudicationContext context,
         BenefitResolutionResult result)
@@ -1041,6 +1052,17 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                     i < priorLines.Count ? priorLines[i].AdjustmentReasons : null),
             })
             .ToList();
+
+        var denials = EditDispositionApplier.LineDenials(context);
+        if (denials.Count > 0)
+        {
+            EditDispositionApplier.ApplyToLineAdjustments(context.Claim.ClaimLines, context.LineAdjudicationResults, denials);
+            foreach (var d in denials)
+            {
+                context.ExaminerOverrides.Add(
+                    $"Upheld edit {d.EditKey}: line {d.LineNumber} denied {d.DeniedUnits} of {d.LineUnits} unit(s), CO-{d.Carc}");
+            }
+        }
     }
 
     /// <summary>
