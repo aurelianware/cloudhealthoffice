@@ -9,6 +9,11 @@ using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
 
+// `--check-anthropic` runs one real Messages API call with this service's
+// configuration and exits 0/1 (deploys run it inside the pod after rollout).
+var checkAnthropic = args.Contains(AnthropicConnectivityCheck.CommandLineFlag);
+args = args.Where(a => a != AnthropicConnectivityCheck.CommandLineFlag).ToArray();
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Secret provider (Azure Key Vault / env var fallback)
@@ -48,6 +53,8 @@ builder.Services.AddTransient<AnthropicAuthHandler>();
 builder.Services.AddHttpClient<IAnthropicClient, AnthropicClient>()
     .AddHttpMessageHandler<AnthropicAuthHandler>()
     .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+builder.Services.AddHttpClient<AnthropicConnectivityCheck>()
+    .AddHttpMessageHandler<AnthropicAuthHandler>();
 
 // Claims-service client (typed HttpClient)
 builder.Services.AddHttpClient<IClaimsServiceClient, ClaimsServiceClient>(client =>
@@ -86,6 +93,15 @@ builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();
 
+if (checkAnthropic)
+{
+    var check = app.Services.GetRequiredService<AnthropicConnectivityCheck>();
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+    var result = await check.RunAsync(app.Configuration["Anthropic:ApiKey"], cts.Token);
+    Console.WriteLine(result.Message);
+    return result.Ok ? 0 : 1;
+}
+
 app.UseChoObservability();
 
 // Shared middleware pipeline (includes UseChoAuthentication: authentication,
@@ -96,6 +112,7 @@ app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingM
 app.MapControllers();
 
 app.Run();
+return 0;
 
 // Expose Program for WebApplicationFactory in integration tests
 public partial class Program { }

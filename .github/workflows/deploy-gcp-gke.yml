@@ -3,9 +3,17 @@ name: Deploy demo to GKE
 # Builds every Cloud Health Office image, pushes it to Artifact Registry, and
 # deploys the demo to the GKE cluster (infrastructure/gcp) with scripts/deploy-gke.sh.
 #
-# Manual only. Demo-grade: synthetic data, no public ingress, development
-# signing keys (see docs/deploy/GCP-DEMO.md). The Azure workflow
-# (deploy-azure-aks.yml) is separate and unaffected.
+# Runs on every push to main (merged PRs; docs-only changes are skipped) and on
+# demand. Set the repository variable GKE_AUTO_DEPLOY=false to pause the
+# automatic deploys, e.g. before a live demo; the manual run keeps working.
+# Demo-grade: synthetic data, no public ingress, development signing keys (see
+# docs/deploy/GCP-DEMO.md). The Azure workflow (deploy-azure-aks.yml) is
+# separate and unaffected.
+#
+# The AI claims examiner is on for automatic runs, and for manual runs unless
+# ai_examiner is unticked. When it is on, a missing ANTHROPIC_API_KEY fails the
+# deploy, and after rollout the examiner makes one real call to Claude; the
+# deploy fails if that call doesn't succeed (bad key, no credit, retired model).
 #
 # One-time setup: run infrastructure/gcp (Terraform), then add these settings
 # (infrastructure/gcp/README.md maps each to a Terraform output):
@@ -16,6 +24,11 @@ name: Deploy demo to GKE
 #   variables GCP_PROJECT_ID, GKE_CLUSTER, GKE_LOCATION, GAR_REPOSITORY
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
   workflow_dispatch:
     inputs:
       image_tag:
@@ -54,6 +67,7 @@ env:
 jobs:
   plan:
     name: Check settings and list images
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.GKE_AUTO_DEPLOY != 'false' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.images.outputs.matrix }}
@@ -89,7 +103,7 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     needs: plan
-    if: ${{ inputs.image_tag == '' }}
+    if: ${{ (inputs.image_tag || '') == '' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -147,10 +161,14 @@ jobs:
         run: pip install --quiet pyyaml
 
       - name: Deploy
+        # Manual runs take the form's values. Automatic (push) runs have no
+        # inputs, so each setting falls back to the default the form shows.
         env:
-          ENABLE_KAFKA: ${{ inputs.enable_kafka }}
-          RESOURCE_PROFILE: ${{ inputs.resource_profile }}
-          ANTHROPIC_API_KEY: ${{ inputs.ai_examiner && secrets.ANTHROPIC_API_KEY || '' }}
+          ENABLE_KAFKA: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_kafka || github.event_name != 'workflow_dispatch' }}
+          RESOURCE_PROFILE: ${{ inputs.resource_profile || 'small' }}
+          # On unless a manual run unticks it; when on, the key must be set and must work.
+          REQUIRE_AI_EXAMINER: ${{ github.event_name == 'workflow_dispatch' && inputs.ai_examiner || github.event_name != 'workflow_dispatch' }}
+          ANTHROPIC_API_KEY: ${{ (github.event_name != 'workflow_dispatch' || inputs.ai_examiner) && secrets.ANTHROPIC_API_KEY || '' }}
           CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
         run: ./scripts/deploy-gke.sh
 
