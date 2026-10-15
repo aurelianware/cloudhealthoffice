@@ -280,7 +280,9 @@ the `workqueue:*` names claims-service and the role catalogue already had.
 
 `WorkManagement:LeaseMinutes` (30), `AssignedLeaseMinutes` (480),
 `CandidatesPerQueue` (25), `GetNextRounds` (3), `RescoreIntervalMinutes` (15,
-0 = off), `Reconcile:*` (above). Store: MongoDB (`MongoDb:ConnectionString`), or
+0 = off), `Reconcile:*` (above), `SeedMemberUserIds` (demo only: users given a
+primary membership in every active claim queue of a tenant where they have none,
+checked once per tenant per process; the GKE demo seeds `local-demo-admin`). Store: MongoDB (`MongoDb:ConnectionString`), or
 Cosmos (`Database:Provider=Cosmos`; containers `WorkQueues`, `WorkTeams`,
 `WorkMemberships`, `WorkItems`, `WorkAudit`, partition `/tenantId`); with neither,
 the in-memory store, Development / Testing hosts only.

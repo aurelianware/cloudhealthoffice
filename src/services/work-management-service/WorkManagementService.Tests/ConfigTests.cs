@@ -26,6 +26,38 @@ public class ConfigTests
     }
 
     [Fact]
+    public async Task SeedMembers_GetEveryActiveClaimQueue_OnceAndNotOverAnAdminsSetup()
+    {
+        _kit.Options.SeedMemberUserIds = ["presenter", "admin-configured"];
+        // An admin already gave this user one queue: the seed leaves them alone.
+        await _kit.Store.UpsertMembershipAsync(new WorkMembership
+        {
+            Id = "admin-set", TenantId = T, UserId = "admin-configured", QueueId = "any-queue",
+        });
+
+        await _kit.Config().EnsureSeededAsync(T);
+        // A restart (fresh seed tracker) changes nothing.
+        _kit.Seeds.Clear();
+        await _kit.Config().EnsureSeededAsync(T);
+
+        var memberships = await _kit.Store.ListMembershipsAsync(T);
+        var claimQueues = (await _kit.Store.ListQueuesAsync(T)).Where(q => q.WorkType == WorkType.Claim && q.IsActive).ToList();
+        claimQueues.Should().HaveCount(DefaultClaimQueues.All.Count);
+        memberships.Where(m => m.UserId == "presenter").Select(m => m.QueueId)
+            .Should().BeEquivalentTo(claimQueues.Select(q => q.Id), "one primary membership per claim queue, no duplicates");
+        memberships.Where(m => m.UserId == "admin-configured").Select(m => m.Id).Should().Equal("admin-set");
+        (await _kit.Config().EffectiveQueuesAsync(T, "presenter")).Should().HaveCount(claimQueues.Count);
+    }
+
+    [Fact]
+    public async Task NoSeedMembers_ByDefault()
+    {
+        await _kit.Config().EnsureSeededAsync(T);
+
+        (await _kit.Store.ListMembershipsAsync(T)).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ATenantThatAlreadyHasClaimQueues_IsNotReseeded()
     {
         await _kit.Config().ListQueuesAsync(T);

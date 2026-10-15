@@ -84,7 +84,8 @@ public sealed class WorkTestKit
 
     public DateTime Now => Clock.GetUtcNow().UtcDateTime;
 
-    public WorkConfigService Config() => new(Store, Seeds, Clock, NullLogger<WorkConfigService>.Instance);
+    public WorkConfigService Config() =>
+        new(Store, Seeds, Clock, NullLogger<WorkConfigService>.Instance, Microsoft.Extensions.Options.Options.Create(Options));
 
     public WorkIntakeService Intake() => new(Store, Config(), Clock, NullLogger<WorkIntakeService>.Instance);
 

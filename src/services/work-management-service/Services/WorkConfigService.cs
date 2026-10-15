@@ -68,12 +68,21 @@ public sealed class WorkConfigService
     private readonly TimeProvider _time;
     private readonly ILogger<WorkConfigService> _logger;
 
-    public WorkConfigService(IWorkStore store, WorkSeedTracker seeded, TimeProvider time, ILogger<WorkConfigService> logger)
+    private readonly IReadOnlyList<string> _seedMembers;
+
+    public WorkConfigService(
+        IWorkStore store, WorkSeedTracker seeded, TimeProvider time, ILogger<WorkConfigService> logger,
+        Microsoft.Extensions.Options.IOptions<WorkManagementOptions>? options = null)
     {
         _store = store;
         _seeded = seeded;
         _time = time;
         _logger = logger;
+        _seedMembers = (options?.Value.SeedMemberUserIds ?? new List<string>())
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Select(u => u.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 
     private DateTime Now => _time.GetUtcNow().UtcDateTime;
@@ -101,7 +110,42 @@ public sealed class WorkConfigService
             if (created > 0)
                 _logger.LogInformation("Seeded {Count} default claim queues for tenant {TenantId}", created, tenantId);
         }
+        if (_seedMembers.Count > 0)
+            await SeedMembershipsAsync(tenantId, ct);
         _seeded.MarkSeeded(tenantId);
+    }
+
+    /// <summary>
+    /// Gives each configured seed user a primary membership in every active
+    /// claim queue, unless they already have any membership in the tenant (so
+    /// an admin's own setup is never overwritten). Deterministic ids keep it
+    /// idempotent across replicas and restarts.
+    /// </summary>
+    private async Task SeedMembershipsAsync(string tenantId, CancellationToken ct)
+    {
+        var memberships = await _store.ListMembershipsAsync(tenantId, ct);
+        var queues = WorkRouter.Ordered(await _store.ListQueuesAsync(tenantId, ct))
+            .Where(q => q.WorkType == WorkType.Claim && q.IsActive)
+            .ToList();
+        foreach (var userId in _seedMembers)
+        {
+            if (memberships.Any(m => string.Equals(m.UserId, userId, StringComparison.Ordinal))) continue;
+            foreach (var queue in queues)
+            {
+                await _store.UpsertMembershipAsync(new WorkMembership
+                {
+                    Id = $"seed-{userId}-{queue.Id}",
+                    TenantId = tenantId,
+                    UserId = userId,
+                    QueueId = queue.Id,
+                    Rank = 1,
+                    UpdatedAt = Now,
+                    UpdatedBy = "seed",
+                }, ct);
+            }
+            _logger.LogInformation("Gave seed user {UserId} the {Count} claim queues of tenant {TenantId}",
+                userId, queues.Count, tenantId);
+        }
     }
 
     public async Task<IReadOnlyList<WorkQueue>> ListQueuesAsync(string tenantId, CancellationToken ct = default)
