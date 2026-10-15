@@ -181,14 +181,17 @@ public class PaymentRunService : IPaymentRunService
             claims = ExcludeNotPayable(claims, paymentRun);
             claims = ExcludeUnbalancedServiceLines(claims, paymentRun, denied: false);
 
-            // Step 1b: Denied claims not yet remitted. They ride in the same
-            //          835s as zero-pay claims (CLP02 = 4, CLP04 = 0): no
-            //          payment, no reservation, no claims-service call (Denied
-            //          is final there). A denial listed in an earlier 835 is
-            //          not remitted again.
-            var denials = paymentRun.Criteria.IncludeDeniedClaims
+            // Step 1b: Adjudicated denials (claims-service Deny) not yet
+            //          remitted. They ride in the same 835s as zero-pay claims
+            //          (CLP02 = 4, CLP04 = 0): no payment, no reservation.
+            //          After the 835 is persisted each is finalized to Denied
+            //          by a $0 remittance (Step 7b). A denial listed in an
+            //          earlier 835 is not remitted again; if its finalize did
+            //          not land then, it is finalized now without a new 835.
+            var denialSelection = paymentRun.Criteria.IncludeDeniedClaims
                 ? await SelectDenialsToRemitAsync(paymentRun, fetched)
-                : new List<ClaimDto>();
+                : DenialSelection.Empty;
+            var denials = denialSelection.ToRemit;
 
             // Step 2: Resolve trading partners for each unique pay-to / billing
             //         provider NPI. A claim whose provider has none is not paid:
@@ -218,6 +221,10 @@ public class PaymentRunService : IPaymentRunService
 
             if (!claims.Any() && !denials.Any())
             {
+                // Nothing to remit, but a denial an earlier 835 remitted may
+                // still owe its finalize (Deny → Denied).
+                await FinalizeRemittedDenialsAsync(
+                    new List<EraPaymentInput>(), new Dictionary<string, string>(StringComparer.Ordinal), denialSelection, paymentRun);
                 paymentRun.Warnings.Add(fetched.Count == 0
                     ? "No approved claims found matching criteria"
                     : "No approved claims left to pay after excluding paid, reserved, trading-partner-less, not-approved, missing- or negative-plan-paid-amount and unbalanced-service-line claims");
@@ -353,7 +360,8 @@ public class PaymentRunService : IPaymentRunService
             //          after the payments so a partner's envelope keeps its
             //          payment's check number as TRN02. They add 0 to BPR02; a
             //          partner with only denials gets a NON 835 (BPR02 = 0).
-            eraInputs.AddRange(BuildDenialInputs(denials, resolvedTradingPartners, checkByTradingPartner, paymentRun));
+            var denialInputs = BuildDenialInputs(denials, resolvedTradingPartners, checkByTradingPartner, paymentRun);
+            eraInputs.AddRange(denialInputs);
 
             // Step 6: Batched 835 generation — one envelope per trading partner.
             var partnerInfos = BuildTradingPartnerInfos(resolvedTradingPartners);
@@ -407,6 +415,12 @@ public class PaymentRunService : IPaymentRunService
             //         finalize is retried (POST {id}/finalize, or the next run
             //         that sees the claim), never re-paid.
             await FinalizeIssuedPaymentsAsync(issuedPayments, eraInputs, paymentRun);
+
+            // Step 7b: Finalize the remitted Deny claims (Deny → Denied) by a
+            //          $0 remittance carrying the denial's 835 trace, plus any
+            //          Deny claim an earlier 835 remitted whose finalize did
+            //          not land. Legacy claims already Denied need none.
+            await FinalizeRemittedDenialsAsync(denialInputs, claimToEnvelopeId, denialSelection, paymentRun);
 
             paymentRun.Status = PaymentRunStatus.Completed;
             paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
@@ -484,6 +498,18 @@ public class PaymentRunService : IPaymentRunService
         }
 
         paymentRun.PendingFinalizeClaimIds = stillPending.Distinct(StringComparer.Ordinal).ToList();
+
+        // Remitted denials whose Deny → Denied finalize did not land.
+        var deniesStillPending = new List<string>();
+        foreach (var claimId in paymentRun.PendingDenialFinalizeClaimIds.Distinct(StringComparer.Ordinal))
+        {
+            if (await TryFinalizeDenialAsync(paymentRun.TenantId, claimId, DenialRetryTrace(paymentRun), paymentRun, null) is null)
+                finalized++;
+            else
+                deniesStillPending.Add(claimId);
+        }
+        paymentRun.PendingDenialFinalizeClaimIds = deniesStillPending;
+
         paymentRun.Warnings.Add(
             $"Finalize retried by {_actor.UserId} at {DateTime.UtcNow:O}: {finalized} claim(s) finalized, " +
             $"{paymentRun.PendingFinalizeClaimIds.Count} still pending; no payment was created");
@@ -820,16 +846,37 @@ public class PaymentRunService : IPaymentRunService
 
     private static bool RemitsAtClaimLevel(ClaimDto claim) => Era835ClaimPaymentBuilder.RemitsAtClaimLevel(claim);
 
-    /// <summary>
-    /// The denied claims to remit in this run: claims-service status Denied,
-    /// not already in a (non-reversal) 835 or a payment in payment-service
-    /// (a denial is remitted once), carrying a denial reason, and with
-    /// service lines that balance to 0. Denials already remitted are skipped
-    /// silently (every run sees them again); the others are listed.
-    /// </summary>
-    private async Task<List<ClaimDto>> SelectDenialsToRemitAsync(PaymentRun paymentRun, List<ClaimDto> approvedFetched)
+    /// <summary>The denials a run remits, and the Deny claims it only finalizes.</summary>
+    private sealed record DenialSelection(List<ClaimDto> ToRemit, HashSet<string> DenyIds, List<string> FinalizeOnly)
     {
-        var fetched = await FetchClaimsAsync(paymentRun.TenantId, paymentRun.Criteria, ClaimStatus.Denied);
+        public static DenialSelection Empty => new(new List<ClaimDto>(), new HashSet<string>(StringComparer.Ordinal), new List<string>());
+    }
+
+    /// <summary>
+    /// Legacy rows already Denied (claims-service set Denied at adjudication
+    /// before the Deny status existed) and never in an 835 are remitted once
+    /// too, until <c>PaymentRuns:RemitLegacyDeniedClaims</c> is false.
+    /// </summary>
+    private bool RemitLegacyDenied =>
+        !string.Equals(_configuration["PaymentRuns:RemitLegacyDeniedClaims"], "false", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The denied claims to remit in this run: claims-service status Deny
+    /// (adjudicated, not yet remitted) — plus legacy Denied rows never
+    /// remitted, see <see cref="RemitLegacyDenied"/> — not already in a
+    /// (non-reversal) 835 or a payment in payment-service (a denial is
+    /// remitted once), carrying a denial reason, and with service lines that
+    /// balance to 0. Denials already remitted are skipped silently (every run
+    /// sees them again); the others are listed. A Deny claim already in an
+    /// 835 is not remitted again, but its finalize (Deny → Denied) did not
+    /// land, so it is returned in <see cref="DenialSelection.FinalizeOnly"/>.
+    /// A Denied claim (finalized) is never finalized again.
+    /// </summary>
+    private async Task<DenialSelection> SelectDenialsToRemitAsync(PaymentRun paymentRun, List<ClaimDto> approvedFetched)
+    {
+        var fetched = await FetchClaimsAsync(paymentRun.TenantId, paymentRun.Criteria, ClaimStatus.Deny);
+        if (RemitLegacyDenied)
+            fetched.AddRange(await FetchClaimsAsync(paymentRun.TenantId, paymentRun.Criteria, ClaimStatus.Denied));
 
         var approvedIds = new HashSet<string>(approvedFetched.Select(c => c.Id), StringComparer.Ordinal);
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -838,17 +885,20 @@ public class PaymentRunService : IPaymentRunService
         {
             if (string.IsNullOrEmpty(claim.Id) || !seen.Add(claim.Id) || approvedIds.Contains(claim.Id))
                 continue;
-            if (claim.Status != ClaimStatus.Denied)
+            if (claim.Status is not (ClaimStatus.Deny or ClaimStatus.Denied)
+                || (claim.Status == ClaimStatus.Denied && !RemitLegacyDenied))
             {
                 paymentRun.Warnings.Add(
-                    $"Claim {claim.Id} not remitted as a denial: claims-service returned it with status {claim.Status}, not Denied");
+                    $"Claim {claim.Id} not remitted as a denial: claims-service returned it with status {claim.Status}, not Deny");
                 continue;
             }
             candidates.Add(claim);
         }
 
+        var denyIds = new HashSet<string>(
+            candidates.Where(c => c.Status == ClaimStatus.Deny).Select(c => c.Id), StringComparer.Ordinal);
         if (candidates.Count == 0)
-            return candidates;
+            return new DenialSelection(candidates, denyIds, new List<string>());
 
         var ids = candidates.Select(c => c.Id).ToList();
         var remitted = new HashSet<string>(
@@ -862,6 +912,13 @@ public class PaymentRunService : IPaymentRunService
                 "{Count} denied claims already remitted; not remitted again by payment run {PaymentRunNumber}",
                 remitted.Count, paymentRun.PaymentRunNumber);
         }
+
+        // A Deny claim already in an 835 was remitted, but its finalize did
+        // not land (claims-service still says Deny): finalize it, no new 835.
+        var finalizeOnly = candidates
+            .Where(c => c.Status == ClaimStatus.Deny && remitted.Contains(c.Id))
+            .Select(c => c.Id)
+            .ToList();
 
         // A denied subrogation demand (837 2010AC) is no more the billing
         // provider's to receive than a paid one: it is not remitted to the
@@ -883,7 +940,92 @@ public class PaymentRunService : IPaymentRunService
                 $"Denied claim {claim.Id} not remitted: claims-service returned no denial reason code or adjustment reason, and an 835 denial needs a CARC");
         }
 
-        return ExcludeUnbalancedServiceLines(withReason, paymentRun, denied: true);
+        return new DenialSelection(ExcludeUnbalancedServiceLines(withReason, paymentRun, denied: true), denyIds, finalizeOnly);
+    }
+
+    /// <summary>The trace a finalize-only retry of a remitted denial carries (no new 835).</summary>
+    private static string DenialRetryTrace(PaymentRun paymentRun) => $"{paymentRun.PaymentRunNumber}-DF";
+
+    /// <summary>
+    /// Step 7b: each Deny claim that landed in one of this run's persisted
+    /// 835s is finalized to Denied by a $0 POST /api/claims/{id}/remittance
+    /// carrying its 835 trace (TRN02) and envelope; so is each Deny claim an
+    /// earlier 835 remitted whose finalize did not land. A finalize that
+    /// fails is listed (<see cref="PaymentRun.PendingDenialFinalizeClaimIds"/>)
+    /// and retried, never remitted again. Legacy Denied claims are already
+    /// final and get no call.
+    /// </summary>
+    private async Task FinalizeRemittedDenialsAsync(
+        List<EraPaymentInput> denialInputs,
+        IReadOnlyDictionary<string, string> claimToEnvelopeId,
+        DenialSelection selection,
+        PaymentRun paymentRun)
+    {
+        var pending = new List<string>();
+        foreach (var input in denialInputs)
+        {
+            foreach (var cp in input.Payment.ClaimPayments)
+            {
+                if (!selection.DenyIds.Contains(cp.ClaimId) || !claimToEnvelopeId.TryGetValue(cp.ClaimId, out var envelopeId))
+                    continue;
+                if (await TryFinalizeDenialAsync(paymentRun.TenantId, cp.ClaimId, input.Payment.CheckNumber, paymentRun, envelopeId) is { } error)
+                {
+                    pending.Add(cp.ClaimId);
+                    paymentRun.Errors.Add(
+                        $"Denied claim {cp.ClaimId} remitted in 835 trace {input.Payment.CheckNumber} but claims-service did not finalize it ({error}); " +
+                        $"it stays Deny and is not remitted again; retry with POST /api/paymentruns/{paymentRun.Id}/finalize");
+                }
+            }
+        }
+
+        foreach (var claimId in selection.FinalizeOnly)
+        {
+            if (await TryFinalizeDenialAsync(paymentRun.TenantId, claimId, DenialRetryTrace(paymentRun), paymentRun, null) is { } error)
+            {
+                pending.Add(claimId);
+                paymentRun.Errors.Add(
+                    $"Denied claim {claimId} (remitted by an earlier 835) still not finalized ({error}); retry with POST /api/paymentruns/{paymentRun.Id}/finalize");
+            }
+        }
+
+        paymentRun.PendingDenialFinalizeClaimIds = pending.Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// One $0 POST /api/claims/{id}/remittance finalizing a remitted Deny
+    /// claim to Denied. claims-service answers 200 for an already-Denied
+    /// claim (idempotent). Returns null on success, else the error.
+    /// </summary>
+    private async Task<string?> TryFinalizeDenialAsync(
+        string tenantId, string claimId, string trace, PaymentRun paymentRun, string? envelopeId)
+    {
+        try
+        {
+            var body = new RemittancePostBody
+            {
+                ControlNumber = paymentRun.PaymentRunNumber ?? string.Empty,
+                CheckNumber = trace,
+                PaymentDate = paymentRun.PaymentDate,
+                PaymentAmount = 0m,
+                PaymentRunId = paymentRun.Id,
+                EraEnvelopeId = envelopeId,
+            };
+            var tenant = RunExecutionGrant.Current?.TenantId ?? tenantId;
+            using var response = await _claimsService.PostRemittanceAsync(tenant, claimId, body);
+            if (response.IsSuccessStatusCode)
+                return null;
+
+            var bodyText = await response.Content.ReadAsStringAsync();
+            _logger.LogWarning(
+                "Denial finalize call for claim {ClaimId} returned {Status}: {Body}",
+                SanitizeForLog(claimId), response.StatusCode, SanitizeForLog(bodyText));
+            return $"claims-service returned {(int)response.StatusCode}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error finalizing denied claim {ClaimId}", SanitizeForLog(claimId));
+            return $"finalize call threw: {ex.Message}";
+        }
     }
 
     private List<ClaimDto> ExcludeWithoutTradingPartner(

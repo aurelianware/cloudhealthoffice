@@ -23,6 +23,17 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     /// <summary>The benefit engine (substitute): a denial of a pended claim reverses its accumulators here.</summary>
     public IBenefitCalculationEngine BenefitEngine { get; } = Substitute.For<IBenefitCalculationEngine>();
 
+    /// <summary>The engine store's commit lookup; answers "nothing recorded" unless a test says otherwise.</summary>
+    public IAccumulatorCommitLookup CommitLookup { get; } = NothingRecorded();
+
+    private static IAccumulatorCommitLookup NothingRecorded()
+    {
+        var lookup = Substitute.For<IAccumulatorCommitLookup>();
+        lookup.LookupCommitRecordsAsync(Arg.Any<IReadOnlyList<AccumulatorCommitLookupItem>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, bool>());
+        return lookup;
+    }
+
     /// <summary>
     /// The examiner-resolution lock (round 3, L10) is free by default; tests
     /// of a concurrent resolution reconfigure it.
@@ -175,6 +186,12 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                 services.Remove(descriptor);
             }
             services.AddSingleton(BenefitEngine);
+
+            // The accumulator commit lookup (a denial asks whether the claim
+            // contributed): by default nothing is recorded.
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IAccumulatorCommitLookup)).ToList())
+                services.Remove(descriptor);
+            services.AddSingleton(CommitLookup);
 
             foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IClaimApprovalReadjudicator)).ToList())
                 services.Remove(descriptor);

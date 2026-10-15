@@ -185,7 +185,16 @@ public class ClaimAcknowledgmentService : IClaimAcknowledgmentService
     ///   16 = Pended
     ///   19 = Not in system
     ///   20 = Accepted for adjudication
+    ///   3  = Adjudicated, awaiting payment cycle
     ///   97 = Adjudicated - finalized
+    ///
+    /// Pay (Approved) and Deny are adjudicated but NOT final — reprocess or
+    /// an examiner may still change them until the payment cycle's 835 —
+    /// so they report the Pending category ("no more action will be taken"
+    /// is what Finalized means) with status 3, "claim has been adjudicated
+    /// and is awaiting payment cycle". Only Paid / Denied (835 sent) report
+    /// Finalized (F1/F2 semantics: 2 = paid, 4 = denied, this module's
+    /// existing codes).
     /// </summary>
     private static (string stc01, string actionCode) MapStatus(ClaimStatus status) =>
         status switch
@@ -194,8 +203,9 @@ public class ClaimAcknowledgmentService : IClaimAcknowledgmentService
             ClaimStatus.Received       => ("A:20:85", "WQ"),  // Acknowledged, accepted
             ClaimStatus.InAdjudication => ("P:15:85", "WQ"),  // Pending, in adjudication
             ClaimStatus.Pended         => ("P:16:85", "WQ"),  // Pending, additional info needed
-            ClaimStatus.Approved       => ("F:97:85", "U"),   // Finalized, adjudicated
-            ClaimStatus.PartiallyPaid  => ("F:97:85", "U"),   // Finalized, adjudicated (partial)
+            ClaimStatus.Approved       => ("P:3:85",  "WQ"),  // Pay: adjudicated, awaiting payment cycle
+            ClaimStatus.Deny           => ("P:3:85",  "WQ"),  // Deny: adjudicated, awaiting payment cycle (not yet remitted)
+            ClaimStatus.PartiallyPaid  => ("F:97:85", "U"),   // Legacy: finalized, adjudicated (partial)
             ClaimStatus.Denied         => ("F:4:85",  "U"),   // Finalized, denied
             ClaimStatus.Paid           => ("F:2:85",  "U"),   // Finalized, paid
             ClaimStatus.Voided         => ("R:19:85", "U"),   // Rejected, not in system

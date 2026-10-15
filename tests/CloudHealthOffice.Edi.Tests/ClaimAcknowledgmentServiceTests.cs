@@ -10,6 +10,10 @@ public class ClaimAcknowledgmentServiceTests
     [Theory]
     [InlineData(ClaimStatus.Submitted, "A:20:85", "WQ")]
     [InlineData(ClaimStatus.InAdjudication, "P:15:85", "WQ")]
+    // Pay / Deny: adjudicated, awaiting the payment cycle (not final, so Pending, status 3).
+    [InlineData(ClaimStatus.Approved, "P:3:85", "WQ")]
+    [InlineData(ClaimStatus.Deny, "P:3:85", "WQ")]
+    // Finalized by the payment cycle (835 sent).
     [InlineData(ClaimStatus.Denied, "F:4:85", "U")]
     [InlineData(ClaimStatus.Paid, "F:2:85", "U")]
     [InlineData(ClaimStatus.Voided, "R:19:85", "U")]

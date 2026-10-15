@@ -115,7 +115,7 @@ public class CobAdditionalPendApprovalTests : TestContext
         var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "CLM-8"));
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("CN-8"));
 
-        cut.FindAll("button").First(b => b.TextContent.Trim() == "Approve").Click();
+        cut.FindAll("button").First(b => b.TextContent.Trim() == "Pay").Click();
 
         cut.WaitForAssertion(() => _workQueue.Verify(w => w.ResolvePendedClaimAsync(
             "CLM-8", "Approved", "secondary per EOB", It.IsAny<string?>(), "examiner-1", 2, "v2-def"), Times.Once));

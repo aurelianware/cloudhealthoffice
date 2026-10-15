@@ -42,6 +42,7 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/claims/admin/accumulators/accumulator-commit-pends/rerun"] = (Kind.StatusOrOutcomeWriter, "accumulator pend re-run through the pipeline"),
             ["POST api/claims/admin/accumulators/prior-auth-unavailable-pends/rerun"] = (Kind.StatusOrOutcomeWriter, "prior-auth pend re-run through the pipeline"),
             ["POST api/v1/claims/{predecessorClaimId}/adjustments"] = (Kind.StatusOrOutcomeWriter, "adjustment: new version supersedes the predecessor"),
+            ["POST api/claims/admin/lifecycle/deny-backfill"] = (Kind.StatusOrOutcomeWriter, "one-time opt-in backfill: unremitted legacy Denied -> Deny (same adjudicated outcome, non-final phase)"),
 
             // ── No status / outcome change ──────────────────────────────
             ["POST api/claims"] = (Kind.NoStatusChange, "legacy submission: creates a Submitted claim; the pipeline adjudicates it"),
@@ -81,7 +82,8 @@ public class ClaimOutcomeWriterRouteGuardTests
                 "POST api/claims/work-queue/{claimId}/resolve",
                 "POST api/claims/admin/accumulators/accumulator-commit-pends/rerun",
                 "POST api/claims/admin/accumulators/prior-auth-unavailable-pends/rerun",
-                "POST api/v1/claims/{predecessorClaimId}/adjustments");
+                "POST api/v1/claims/{predecessorClaimId}/adjustments",
+                "POST api/claims/admin/lifecycle/deny-backfill");
     }
 
     [Theory]

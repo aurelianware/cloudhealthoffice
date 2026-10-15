@@ -222,6 +222,30 @@ public interface IClaimAdjudicationStage
 `ResolvedPlan` / `ResolvedMember` as they pass through. Single-threaded
 within one message handler so mutability is safe.
 
+### D8b — Outcome → ClaimStatus: Pay / Deny now, Paid / Denied at the payment cycle
+
+The pipeline decides an outcome; it never finalizes one. Lifecycle (QNXT
+PAY/PAID, DENY/DENIED; full detail in
+[`claim-versioning.md`](./claim-versioning.md#claim-lifecycle-pay--deny-before-paid--denied)):
+
+| Phase | Statuses | Editable? |
+| --- | --- | --- |
+| Adjudicated, not yet remitted | `Pended`, `Approved` ("Pay"), `Deny` | Yes — reprocess, examiner resolve / override |
+| Finalized by the payment cycle (835 sent) | `Paid`, `Denied` | No — only an adjustment (new version) or a void / reversal |
+| Corrected / reversed | `Voided` (row `Adjusted`) | No |
+
+| Pipeline outcome | Persisted `ClaimStatus` | `VersionState` | Finalized by |
+| --- | --- | --- | --- |
+| Pass | `Approved` (Pay) | `Adjudicated` | payment run → `Paid` |
+| Pend | `Pended` | `Submitted` | examiner resolve / re-run |
+| Deny, Reject | `Deny` | `Adjudicated` | payment run ($0 in the 835) → `Denied` |
+
+Accumulators: Pay prepares a commit (outbox); Deny writes none, and the
+outbox drops a commit left on a claim that is `Deny` or `Denied`.
+277: Pay and Deny report `P:3` (adjudicated, awaiting payment cycle) —
+Pending, not Finalized, because the decision can still change; `Paid`
+and `Denied` report their Finalized codes.
+
 ### D9 — PersistenceStage uses the bypass method
 
 `PersistenceStage` calls
@@ -268,8 +292,8 @@ Fixed as follows:
 3. **Precedence rule** (documented here — the source of truth, not just
    the PR that introduced it): when `isPend` is true, the repository ALSO
    patches `/status` to `ClaimStatus.Pended`, *unless* the claim's current
-   `Status` is already a later-stage disposition — `Approved`, `Denied`,
-   `Paid`, `PartiallyPaid`, or `Voided` (`ClaimRepository.IsFinalDisposition`,
+   `Status` is already a later-stage disposition — `Approved`, `Deny`,
+   `Denied`, `Paid`, `PartiallyPaid`, or `Voided` (`ClaimRepository.IsFinalDisposition`,
    shared by both the Cosmos and Mongo repositories). This guards against
    downgrading a claim that another write path — remittance, a void, or
    an examiner's work-queue override — finalized before this async
@@ -282,7 +306,7 @@ Fixed as follows:
    a coverage-service outage, mirroring `NcciEditsStage`'s existing
    precedent of recording the deterministic snapshot regardless of
    enforcement mode (so a Deny-mode COB claim still carries an audit
-   trail even though it ends up `Denied`, not `Pended` — Deny outweighs
+   trail even though it ends up `Deny`, not `Pended` — Deny outweighs
    Pend in the same precedence rule). No new pend vocabulary: `"COB"` was
    already a documented `PendDetails.PendCode` value and the work queue
    already had a `CobRequired` bucket keyed on it; the stage simply never
@@ -349,7 +373,7 @@ write-back side doors were removed:
 
 `PUT /api/claims/{id}/status` now accepts only operational statuses
 (`Received`, `InAdjudication`, and `Voided` with `claims:void`); it
-answers **422** for `Approved`, `Denied`, `Pended`, `Paid` and
+answers **422** for `Approved`, `Deny`, `Denied`, `Pended`, `Paid` and
 `PartiallyPaid`, pointing to the work queue
 (`POST /api/claims/work-queue/{id}/resolve` / `/override`, which re-run
 the pipeline), remittance (`POST /api/claims/{id}/remittance`,
@@ -495,7 +519,8 @@ always enabled regardless.
 
 ## Denial reason codes (every Deny/Reject carries a CARC)
 
-A Deny or Reject persists as `ClaimStatus.Denied`, and payment-service only
+A Deny or Reject persists as `ClaimStatus.Deny` (finalized to `Denied` by
+the payment run, see D8b), and payment-service only
 remits a denial that carries a CARC (see
 [`claim-remittance-generation.md`](./claim-remittance-generation.md)). The
 stage that denies sets `AdjudicationResult.DenialReasonCode` (bare code, no

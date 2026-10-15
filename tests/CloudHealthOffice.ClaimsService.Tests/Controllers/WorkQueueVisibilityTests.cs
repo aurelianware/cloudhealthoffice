@@ -374,16 +374,109 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
         await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
     }
 
-    [Fact]
-    public async Task ResolvePendedClaim_Denies_Only_Pended_Claims()
+    /// <summary>
+    /// Finalized claims (Paid / Denied: the 835 went out; Voided) are not
+    /// resolvable: 422 pointing to an adjustment or a void, nothing written.
+    /// </summary>
+    [Theory]
+    [InlineData(ClaimStatus.Paid, ClaimVersionState.Paid, "Denied")]
+    [InlineData(ClaimStatus.Paid, ClaimVersionState.Paid, "Approved")]
+    [InlineData(ClaimStatus.Denied, ClaimVersionState.Denied, "Approved")]
+    [InlineData(ClaimStatus.Denied, ClaimVersionState.Denied, "Denied")]
+    [InlineData(ClaimStatus.Voided, ClaimVersionState.Voided, "Approved")]
+    public async Task ResolvePendedClaim_RefusesFinalizedClaims_With422(ClaimStatus status, ClaimVersionState state, string disposition)
     {
         var claim = NcciPendedClaim();
-        claim.Status = ClaimStatus.Approved;
+        claim.Status = status;
+        claim.VersionState = state;
         _repo.GetByIdAsync(claim.Id).Returns(claim);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/claims/work-queue/{claim.Id}/resolve",
-            new { disposition = "Denied", reason = "Documentation not received" });
+            new { disposition, reason = "Documentation not received", pendFingerprint = claim.PendDetails!.Fingerprint });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("adjustments", body);
+        Assert.Contains("/void", body);
+        await _repo.DidNotReceiveWithAnyArgs().TryAcquireResolutionLockAsync(default!, default!, default!, default, default, default, default);
+        await _repo.DidNotReceiveWithAnyArgs().UpdateHoldingResolutionLockAsync(default!, default!, default);
+        await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
+    }
+
+    /// <summary>The override (supervisor approval) refuses a finalized claim the same way.</summary>
+    [Fact]
+    public async Task OverrideClaim_RefusesFinalizedDenied_With422()
+    {
+        var claim = NcciPendedClaim();
+        claim.Status = ClaimStatus.Denied;
+        claim.VersionState = ClaimVersionState.Denied;
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/claims/work-queue/{claim.Id}/override",
+            new { overrideReason = "should have paid", pendFingerprint = claim.PendDetails!.Fingerprint });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        await _repo.DidNotReceiveWithAnyArgs().UpdateHoldingResolutionLockAsync(default!, default!, default);
+    }
+
+    /// <summary>
+    /// A Deny claim (adjudicated, not yet remitted) is reprocessable: an
+    /// examiner's approval re-runs the pipeline and writes Pay (Approved),
+    /// non-terminal, with the re-run's accumulator commit.
+    /// </summary>
+    [Fact]
+    public async Task ResolvePendedClaim_DenyClaim_Approve_ReadjudicatesToPay()
+    {
+        var claim = NcciPendedClaim();
+        claim.Status = ClaimStatus.Deny;
+        claim.VersionState = ClaimVersionState.Adjudicated;
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/claims/work-queue/{claim.Id}/resolve",
+            new { disposition = "Approved", reason = "eligibility corrected", pendFingerprint = claim.PendDetails!.Fingerprint });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _readjudicator.Received(1).ReadjudicateForApprovalAsync(
+            "test-tenant", claim.Id, Arg.Any<ExaminerApproval>(), Arg.Any<CancellationToken>());
+        await _repo.Received(1).UpdateHoldingResolutionLockAsync(
+            Arg.Is<Claim>(saved => saved.Status == ClaimStatus.Approved && saved.VersionState == ClaimVersionState.Adjudicated),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A Pay (Approved) claim not yet remitted can still be denied by an examiner: it becomes Deny, never Denied.</summary>
+    [Fact]
+    public async Task ResolvePendedClaim_PayClaim_Deny_WritesNonFinalDeny()
+    {
+        var claim = NcciPendedClaim();
+        claim.Status = ClaimStatus.Approved;
+        claim.VersionState = ClaimVersionState.Adjudicated;
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/claims/work-queue/{claim.Id}/resolve",
+            new { disposition = "Deny", reason = "Documentation not received" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _repo.Received(1).UpdateHoldingResolutionLockAsync(
+            Arg.Is<Claim>(saved => saved.Status == ClaimStatus.Deny && saved.VersionState == ClaimVersionState.Adjudicated),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
+    }
+
+    /// <summary>A claim not yet adjudicated (Submitted) is still a 409, not a 422.</summary>
+    [Fact]
+    public async Task ResolvePendedClaim_NotYetAdjudicated_Is409()
+    {
+        var claim = NcciPendedClaim();
+        claim.Status = ClaimStatus.Submitted;
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/claims/work-queue/{claim.Id}/resolve",
+            new { disposition = "Denied", reason = "x" });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         await _repo.DidNotReceiveWithAnyArgs().UpdateHoldingResolutionLockAsync(default!, default!, default);

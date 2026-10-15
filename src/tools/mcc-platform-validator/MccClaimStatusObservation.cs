@@ -289,12 +289,13 @@ internal sealed record ObservedClaimStatus(
         {
             "4" => ClaimValidationOutcome.Pended,
             "5" or "7" or "9" => ClaimValidationOutcome.Paid,
-            "6" or "8" => ClaimValidationOutcome.BusinessDenial,
+            "6" or "8" or "10" => ClaimValidationOutcome.BusinessDenial,
             { } value when value.Equals("Pended", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.Pended,
             { } value when value.Equals("Approved", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.Paid,
             { } value when value.Equals("Paid", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.Paid,
             { } value when value.Equals("PartiallyPaid", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.Paid,
             { } value when value.Equals("Denied", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.BusinessDenial,
+            { } value when value.Equals("Deny", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.BusinessDenial,
             { } value when value.Equals("Voided", StringComparison.OrdinalIgnoreCase) => ClaimValidationOutcome.BusinessDenial,
             _ => ClaimValidationOutcome.PlatformFailure
         };

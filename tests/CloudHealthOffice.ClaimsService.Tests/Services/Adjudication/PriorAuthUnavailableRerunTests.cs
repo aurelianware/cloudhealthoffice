@@ -30,7 +30,7 @@ public sealed class PriorAuthUnavailableRerunTests
     {
         _sut = new AccumulatorOperationsService(
             _claims, Substitute.For<IClaimVersionEventPublisher>(), Substitute.For<IClaimEventPublisher>(),
-            NullLogger<AccumulatorOperationsService>.Instance, _readjudicator);
+            NullLogger<AccumulatorOperationsService>.Instance, _readjudicator, lookup: NothingRecorded());
         _claims.TryAcquireResolutionLockAsync(default!, default!, default!, default!, default, default, default)
             .ReturnsForAnyArgs(true);
         _claims.GetForAccumulatorOutboxAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -39,6 +39,14 @@ public sealed class PriorAuthUnavailableRerunTests
             .Returns(ci => ci.Arg<Claim>());
         _claims.FindPendedByPendCodeAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<Claim>());
+    }
+
+    private static IAccumulatorCommitLookup NothingRecorded()
+    {
+        var lookup = Substitute.For<IAccumulatorCommitLookup>();
+        lookup.LookupCommitRecordsAsync(Arg.Any<IReadOnlyList<AccumulatorCommitLookupItem>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, bool>());
+        return lookup;
     }
 
     private Claim Pended(string id, string code)
@@ -112,7 +120,7 @@ public sealed class PriorAuthUnavailableRerunTests
 
         Assert.Equal(1, run.Denied);
         await _claims.Received(1).UpdateHoldingResolutionLockAsync(
-            Arg.Is<Claim>(c => c.Status == ClaimStatus.Denied
+            Arg.Is<Claim>(c => c.Status == ClaimStatus.Deny
                                && c.ExaminerResolutions.Single().Reason!.Contains(BenefitCalculationStage.PriorAuthorizationRequiredReason)
                                && !c.ExaminerResolutions.Single().Reason!.Contains("payer order")),
             Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -181,10 +189,10 @@ public sealed class PriorAuthUnavailableRerunTests
             Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    // ── S-B: the denial carries the reversal fence ────────────────────
+    // ── S-B: a denial of a pended claim owes no reversal ───────────────
 
     [Fact]
-    public async Task Deny_WritesTheTerminalReversalWithTheDenial()
+    public async Task Deny_OfAPendedClaim_QueuesNoReversal()
     {
         Pending(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, Pended("C1", BenefitCalculationStage.PriorAuthorizationUnavailablePendCode));
         var denial = $"{BenefitCalculationStage.StageName}: {BenefitCalculationStage.PriorAuthorizationRequiredReason}";
@@ -197,9 +205,10 @@ public sealed class PriorAuthUnavailableRerunTests
         await _sut.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
 
         await _claims.Received(1).UpdateHoldingResolutionLockAsync(
-            Arg.Is<Claim>(c => c.Status == ClaimStatus.Denied
-                               && c.PendingAccumulatorReversal != null
-                               && c.PendingAccumulatorReversal.Reversal!.ClaimId == "C1"
+            // A pended claim never committed (Prospective pricing commits on
+            // Pay only), and Deny is reprocessable: nothing to reverse or fence.
+            Arg.Is<Claim>(c => c.Status == ClaimStatus.Deny
+                               && c.PendingAccumulatorReversal == null
                                && c.PendingAccumulatorCommit == null),
             Arg.Any<string>(), Arg.Any<CancellationToken>());
     }

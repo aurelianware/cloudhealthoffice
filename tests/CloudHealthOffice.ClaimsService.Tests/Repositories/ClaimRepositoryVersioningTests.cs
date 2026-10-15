@@ -173,6 +173,7 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     [InlineData(ClaimStatus.InAdjudication, ClaimVersionState.Submitted)]
     [InlineData(ClaimStatus.Pended, ClaimVersionState.Submitted)]
     [InlineData(ClaimStatus.Approved, ClaimVersionState.Adjudicated)]
+    [InlineData(ClaimStatus.Deny, ClaimVersionState.Adjudicated)]
     [InlineData(ClaimStatus.PartiallyPaid, ClaimVersionState.Paid)]
     [InlineData(ClaimStatus.Paid, ClaimVersionState.Paid)]
     [InlineData(ClaimStatus.Denied, ClaimVersionState.Denied)]
@@ -190,6 +191,7 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     [InlineData(ClaimStatus.InAdjudication, false)]
     [InlineData(ClaimStatus.Pended, false)] // not final — re-pending must be allowed
     [InlineData(ClaimStatus.Approved, true)]
+    [InlineData(ClaimStatus.Deny, true)] // decided: no stray write-back re-litigates it (VersionState stays non-terminal)
     [InlineData(ClaimStatus.Denied, true)]
     [InlineData(ClaimStatus.Paid, true)]
     [InlineData(ClaimStatus.PartiallyPaid, true)]
@@ -543,12 +545,12 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
             },
             Array.Empty<LineAdjudicationResult>(),
             isPend: false,
-            resolvedStatus: ClaimStatus.Denied);
+            resolvedStatus: ClaimStatus.Deny);
 
         ok.Should().BeTrue();
         var reread = await _repo.GetVersionAsync("chain-approved-denial-race", "row-1");
-        reread!.Status.Should().Be(ClaimStatus.Denied);
-        reread.VersionState.Should().Be(ClaimVersionState.Denied);
+        reread!.Status.Should().Be(ClaimStatus.Deny);
+        reread.VersionState.Should().Be(ClaimVersionState.Adjudicated, "Deny is non-final");
         reread.AdjudicationResult.Should().NotBeNull();
         reread.AdjudicationResult!.DenialReasonCode.Should().Be("197");
         reread.AdjudicationResult.DenialReason.Should().Be("Authorization expired or not yet active");
@@ -709,6 +711,7 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     [InlineData(ClaimStatus.InAdjudication, false)]
     [InlineData(ClaimStatus.Pended, true)] // the residual-race fix's headline addition
     [InlineData(ClaimStatus.Approved, true)]
+    [InlineData(ClaimStatus.Deny, true)] // only an explicit examiner resolve / reprocess changes it
     [InlineData(ClaimStatus.Denied, true)]
     [InlineData(ClaimStatus.Paid, true)]
     [InlineData(ClaimStatus.PartiallyPaid, true)]
@@ -729,7 +732,7 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
         var paidSummary = new AdjudicationResult { PayerPayment = 150m };
 
         ClaimRepository.CanRepairContradictoryDeniedSummary(
-                ClaimStatus.Denied,
+                ClaimStatus.Deny,
                 ClaimStatus.Approved,
                 paidSummary)
             .Should().BeTrue();
@@ -741,7 +744,7 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
             .Should().BeFalse("pends remain protected from synchronous summary writeback");
 
         ClaimRepository.CanRepairContradictoryDeniedSummary(
-                ClaimStatus.Denied,
+                ClaimStatus.Deny,
                 ClaimStatus.Approved,
                 new AdjudicationResult { PayerPayment = 150m, DenialReasonCode = "96" })
             .Should().BeFalse("an incoming summary with denial evidence is not a paid contradiction");
@@ -759,19 +762,19 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
 
         ClaimRepository.CanRepairContradictoryApprovedSummary(
                 ClaimStatus.Approved,
-                ClaimStatus.Denied,
+                ClaimStatus.Deny,
                 deniedSummary)
             .Should().BeTrue();
 
         ClaimRepository.CanRepairContradictoryApprovedSummary(
                 ClaimStatus.Pended,
-                ClaimStatus.Denied,
+                ClaimStatus.Deny,
                 deniedSummary)
             .Should().BeFalse("pends remain protected from synchronous summary writeback");
 
         ClaimRepository.CanRepairContradictoryApprovedSummary(
                 ClaimStatus.Approved,
-                ClaimStatus.Denied,
+                ClaimStatus.Deny,
                 new AdjudicationResult { PayerPayment = 0m })
             .Should().BeFalse("zero payment without denial evidence is not enough to reopen a final status");
     }
@@ -782,14 +785,16 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
     /// never repaired; a row whose lock moved on is never repaired.
     /// </summary>
     [Theory]
-    [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 0, "197", null, true)]
-    [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 0, null, null, false)]
-    [InlineData(ClaimStatus.Pended, ClaimStatus.Denied, 0, "197", null, false)]
-    [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 10, "197", null, false)]
-    [InlineData(ClaimStatus.Denied, ClaimStatus.Approved, 150, null, null, true)]
-    [InlineData(ClaimStatus.Denied, ClaimStatus.Approved, 150, "96", null, false)]
-    [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 0, "197", "other-token", false)]
-    [InlineData(ClaimStatus.Approved, ClaimStatus.Denied, 0, "197", "my-token", true)]
+    [InlineData(ClaimStatus.Approved, ClaimStatus.Deny, 0, "197", null, true)]
+    [InlineData(ClaimStatus.Approved, ClaimStatus.Deny, 0, null, null, false)]
+    [InlineData(ClaimStatus.Pended, ClaimStatus.Deny, 0, "197", null, false)]
+    [InlineData(ClaimStatus.Approved, ClaimStatus.Deny, 10, "197", null, false)]
+    [InlineData(ClaimStatus.Deny, ClaimStatus.Approved, 150, null, null, true)]
+    [InlineData(ClaimStatus.Deny, ClaimStatus.Approved, 150, "96", null, false)]
+    [InlineData(ClaimStatus.Approved, ClaimStatus.Deny, 0, "197", "other-token", false)]
+    [InlineData(ClaimStatus.Approved, ClaimStatus.Deny, 0, "197", "my-token", true)]
+    // A finalized Denied row (835 sent) is never repaired back to Pay.
+    [InlineData(ClaimStatus.Denied, ClaimStatus.Approved, 150, null, null, false)]
     public void IsRepairableContradiction_ChecksTheLiveRow(
         ClaimStatus rowStatus, ClaimStatus desired, int payerPayment, string? denialCode, string? lockOnRow, bool expected)
     {
@@ -814,7 +819,50 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
             AdjudicationResult = new AdjudicationResult { PayerPayment = 0m, AdjustmentReasons = null! },
         };
 
-        ClaimRepository.IsRepairableContradiction(row, ClaimStatus.Denied, null).Should().BeFalse();
+        ClaimRepository.IsRepairableContradiction(row, ClaimStatus.Deny, null).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// The Pay/Deny lifecycle: the adjudicated outcomes (Approved "Pay",
+    /// Deny) are VersionState Adjudicated — non-terminal, reprocessable —
+    /// and only the payment cycle's finalize makes them Paid / Denied
+    /// (terminal).
+    /// </summary>
+    [Theory]
+    [InlineData(ClaimStatus.Approved, ClaimVersionState.Adjudicated)]
+    [InlineData(ClaimStatus.Deny, ClaimVersionState.Adjudicated)]
+    [InlineData(ClaimStatus.Paid, ClaimVersionState.Paid)]
+    [InlineData(ClaimStatus.PartiallyPaid, ClaimVersionState.Paid)]
+    [InlineData(ClaimStatus.Denied, ClaimVersionState.Denied)]
+    [InlineData(ClaimStatus.Voided, ClaimVersionState.Voided)]
+    public void MapStatusToVersionState_DenyIsAdjudicated_DeniedIsTerminal(ClaimStatus status, ClaimVersionState expected)
+    {
+        ClaimRepository.MapStatusToVersionState(status).Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_DenyClaim_IsWritable_DeniedClaim_IsTerminal()
+    {
+        var deny = Sample("row-deny-writable");
+        deny.Status = ClaimStatus.Deny;
+        deny.VersionState = ClaimVersionState.Unknown; // hydrates from Status
+        await _repo.CreateAsync(deny);
+        var stored = await _repo.GetByIdAsync("row-deny-writable");
+        stored!.VersionState.Should().Be(ClaimVersionState.Adjudicated);
+
+        stored.Status = ClaimStatus.Approved;
+        var act = () => _repo.UpdateAsync(stored);
+        await act.Should().NotThrowAsync("a Deny claim is not yet remitted: reprocessing may change it");
+
+        var denied = Sample("row-denied-terminal");
+        denied.Status = ClaimStatus.Denied;
+        denied.VersionState = ClaimVersionState.Unknown;
+        await _repo.CreateAsync(denied);
+        var final = await _repo.GetByIdAsync("row-denied-terminal");
+        final!.VersionState.Should().Be(ClaimVersionState.Denied);
+        final.Status = ClaimStatus.Approved;
+        var refused = () => _repo.UpdateAsync(final);
+        await refused.Should().ThrowAsync<global::ClaimsService.Exceptions.ClaimVersionStateException>();
     }
 
     [Fact]
@@ -823,7 +871,7 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
         var row = new Claim { Status = ClaimStatus.Approved, AdjudicationResult = new AdjudicationResult { PayerPayment = 0m } };
         row.AdjudicationResult.AdjustmentReasons.Add(new ClaimAdjustmentReason { GroupCode = "CO", ReasonCode = "50", Amount = 10m });
 
-        ClaimRepository.IsRepairableContradiction(row, ClaimStatus.Denied, null).Should().BeTrue();
+        ClaimRepository.IsRepairableContradiction(row, ClaimStatus.Deny, null).Should().BeTrue();
     }
 
     [Fact]

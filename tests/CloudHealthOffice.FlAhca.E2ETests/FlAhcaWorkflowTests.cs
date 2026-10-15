@@ -435,7 +435,7 @@ public class FlAhcaWorkflowTests
 
     private static readonly HashSet<string> TerminalStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
-        nameof(ClaimStatus.Pended), nameof(ClaimStatus.Approved), nameof(ClaimStatus.Denied),
+        nameof(ClaimStatus.Pended), nameof(ClaimStatus.Approved), nameof(ClaimStatus.Deny), nameof(ClaimStatus.Denied),
         nameof(ClaimStatus.Paid), nameof(ClaimStatus.PartiallyPaid), nameof(ClaimStatus.Voided),
     };
 
@@ -468,7 +468,8 @@ public class FlAhcaWorkflowTests
             Assert.True(result.GetProperty("payerPayment").GetDecimal() > 0m,
                 $"Approved claim {claimId} should carry a payer payment");
         }
-        else if (string.Equals(status, nameof(ClaimStatus.Denied), StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(status, nameof(ClaimStatus.Deny), StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(status, nameof(ClaimStatus.Denied), StringComparison.OrdinalIgnoreCase))
         {
             Assert.Equal(0m, result.GetProperty("payerPayment").GetDecimal());
         }

@@ -44,6 +44,11 @@ public enum AccumulatorOutboxResult
     Dropped,
     /// <summary>The engine call failed; rescheduled with backoff.</summary>
     Rescheduled,
+    /// <summary>
+    /// A commit-scoped reversal found a newer commit of the claim applied
+    /// (it went back to Pay): stale, nothing changed; the entry is cleared.
+    /// </summary>
+    Superseded,
 }
 
 /// <summary>Metrics of the accumulator outbox (meter <see cref="ChoMetrics.MeterName"/>).</summary>
@@ -151,10 +156,11 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
 
     private async Task<AccumulatorOutboxResult> CommitAsync(Claim claim, AccumulatorOutboxItem item, CancellationToken ct)
     {
-        var dropReason = claim.Status is ClaimStatus.Denied or ClaimStatus.Voided
-            // Finalized as approved, then denied or voided before the commit
-            // ran: it must never land (the void / denial reversal fences it
-            // in the store as well).
+        var dropReason = ClaimStatusSemantics.IsDenied(claim.Status) || claim.Status == ClaimStatus.Voided
+            // Adjudicated as Pay, then denied (Deny, or finalized Denied) or
+            // voided before the commit ran: it must never land (the void /
+            // denial reversal fences it in the store as well). Denials write
+            // no accumulators in either phase.
             ? $"the claim is {claim.Status}"
             : claim.VersionState == ClaimVersionState.Adjusted || claim.SupersededAt is not null
                 // A replacement superseded this version before its commit ran
@@ -220,6 +226,9 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
         {
             AccumulatorCommitOutcome.Committed => AccumulatorOutboxResult.Committed,
             AccumulatorCommitOutcome.AlreadyCommitted => AccumulatorOutboxResult.AlreadyCommitted,
+            // That commit was reversed while in flight (the claim was denied
+            // meanwhile): it must not land, and it is not an error.
+            AccumulatorCommitOutcome.RefusedCommitReversed => AccumulatorOutboxResult.Dropped,
             _ => AccumulatorOutboxResult.Refused,
         };
     }
@@ -227,9 +236,29 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
     private async Task<AccumulatorOutboxResult> ReverseAsync(AccumulatorOutboxItem item, CancellationToken ct)
     {
         var order = item.Reversal ?? throw new InvalidOperationException($"Outbox entry {item.Id} holds no reversal.");
-        await _engine.ReverseClaimAsync(
-            order.MemberId, order.SubscriberId, Guid.Parse(order.BenefitPlanId),
-            DateOnly.FromDateTime(order.ServiceDate), order.ClaimId, ct);
+        if (order.Terminal)
+            await _engine.ReverseClaimAsync(
+                order.MemberId, order.SubscriberId, Guid.Parse(order.BenefitPlanId),
+                DateOnly.FromDateTime(order.ServiceDate), order.ClaimId, ct);
+        else
+        {
+            // A Pay claim moved to Deny: compare-and-reverse the commit it
+            // names (no claim fence — it may go back to Pay and commit again).
+            // A newer commit already applied makes this a no-op.
+            var outcome = await _engine.ReverseClaimForReprocessingAsync(
+                order.MemberId, order.SubscriberId, Guid.Parse(order.BenefitPlanId),
+                DateOnly.FromDateTime(order.ServiceDate), order.ClaimId, order.EngineCommitId, ct);
+            await _claims.CompleteAccumulatorOutboxAsync(
+                _tenantContext.TenantId!, order.ClaimId, AccumulatorOutboxKind.Reversal, item.Id, ct: CancellationToken.None);
+            if (outcome == AccumulatorReversalOutcome.Superseded)
+            {
+                _logger.LogInformation(
+                    "Accumulator reversal {ItemId} of commit {CommitId} for claim {ClaimId} superseded: a newer commit is applied",
+                    SanitizeForLog(item.Id), SanitizeForLog(order.CommitId), SanitizeForLog(order.ClaimId));
+                return AccumulatorOutboxResult.Superseded;
+            }
+            return AccumulatorOutboxResult.Reversed;
+        }
         await _claims.CompleteAccumulatorOutboxAsync(
             _tenantContext.TenantId!, order.ClaimId, AccumulatorOutboxKind.Reversal, item.Id, ct: CancellationToken.None);
         return AccumulatorOutboxResult.Reversed;
