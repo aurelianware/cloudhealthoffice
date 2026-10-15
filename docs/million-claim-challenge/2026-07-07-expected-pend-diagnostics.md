@@ -8,6 +8,12 @@ validation run in PR #841 showed expected-pend scenarios terminating as
 codebase as of this writing. It has not yet been confirmed by an empirical
 diagnostics run — see "How to produce the empirical companion report" below.
 
+> **Historical.** The write-back endpoints this trace cites —
+> `PUT /api/claims/{id}/pend`, `PUT /api/claims/{id}/adjudication-summary`
+> (`UpdateAdjudicationSummaryAsync`) and `PUT /api/claims/{id}/adjudication` —
+> have since been removed; the adjudication pipeline is the only writer of a
+> claim's outcome. See `docs/architecture/claim-adjudication-pipeline.md` D9c.
+
 > **Defects A/B remediated (this PR — pend-persistence defect fix).** The
 > two structural defects this trace identified inside claims-service's own
 > async orchestrator are now fixed:

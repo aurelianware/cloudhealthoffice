@@ -120,16 +120,6 @@ public sealed class ClaimRepositoryVersionStateCosmosTests
     }
 
     [Fact]
-    public async Task UpdateAdjudicationSummary_excludes_drafts_by_their_persisted_spelling()
-    {
-        await _sut.UpdateAdjudicationSummaryAsync(TenantId, "chain-1", new AdjudicationResult(), ClaimStatus.Approved);
-
-        var q = _captured.First();
-        ValuesWithPrefix(q, "@draft").Should().Contain(PersistedVersionState(ClaimVersionState.Draft));
-        AssertEveryParameterReferenced(q);
-    }
-
-    [Fact]
     public async Task UpdateAdjudicationProjection_matches_adjudicatable_states_by_their_persisted_spelling()
     {
         await _sut.UpdateAdjudicationProjectionAsync(

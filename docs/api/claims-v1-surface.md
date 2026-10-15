@@ -121,9 +121,7 @@ See [claim-submission-api.md](../architecture/claim-submission-api.md),
 | GET | `/api/claims/number/{claimNumber}` | Get claim by claim number | Read-only | 5.3 |
 | GET | `/api/claims/search` | Query-string search | Read-only | 5.3 |
 | POST | `/api/claims/search` | Body-shaped search (advanced) | Idempotent search | 5.3 |
-| PUT | `/api/claims/{id}/status` | Update claim status | State-transition; rejects illegal transitions | 5.5 |
-| PUT | `/api/claims/{id}/pend` | Pend claim with reason | State-transition | 5.5 |
-| PUT | `/api/claims/{id}/adjudication` | Set adjudication result | State-transition; emits `ClaimVersionAdjudicated` | 5.5 |
+| PUT | `/api/claims/{id}/status` | Update an operational claim status (`Received`, `InAdjudication`; `Voided` needs `claims:void`) | State-transition through the precedence guard; **422** for outcome statuses (`Approved`, `Denied`, `Pended`, `Paid`, `PartiallyPaid`) — those come only from the adjudication pipeline, the work queue or remittance | 5.5 |
 | PUT | `/api/claims/{id}/ai-examination` | Set AI examination result | State-transition; persists `AiExamination` projection | 5.9 |
 | GET | `/api/claims/{id}/ai-examination/audit` | AI examination audit history | Read-only | 5.9 |
 | POST | `/api/claims/{id}/ai-examination/agreement` | Operator agreement / disagreement on AI advisory | Idempotent per-operator-action | 5.9 |

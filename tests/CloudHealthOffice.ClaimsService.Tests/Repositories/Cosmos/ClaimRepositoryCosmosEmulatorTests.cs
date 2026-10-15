@@ -322,7 +322,7 @@ public sealed class ClaimRepositoryCosmosEmulatorTests : IAsyncLifetime
         stored.AdjudicationResult.Should().BeNull();
     }
 
-    // ── Synchronous write-back guard (TryTransitionStatusAsync / summary) ─
+    // ── Guarded status write (TryTransitionStatusAsync) ─────────────────
 
     [SkippableFact]
     public async Task TransitionStatus_OnAnOpenClaim_IsApplied()
@@ -361,91 +361,31 @@ public sealed class ClaimRepositoryCosmosEmulatorTests : IAsyncLifetime
             .Should().Be(StatusWriteResult.NotFoundResult);
     }
 
-    [SkippableFact]
-    public async Task AdjudicationSummary_OverAPend_KeepsThePend_ButRecordsTheFinancials()
-    {
-        await SeedAsync(status: ClaimStatus.Pended);
-
-        var result = await Repo.UpdateAdjudicationSummaryAsync(
-            Tenant, "C1", new AdjudicationResult { PayerPayment = 80m, AllowedAmount = 100m }, ClaimStatus.Approved);
-
-        result.Should().Be(new StatusWriteResult(StatusWriteOutcome.Suppressed, ClaimStatus.Pended));
-        var stored = await StoredAsync();
-        stored.Status.Should().Be(ClaimStatus.Pended);
-        stored.AdjudicationResult!.PayerPayment.Should().Be(80m);
-    }
-
-    [SkippableFact]
-    public async Task AdjudicationSummary_OnAnOpenClaim_SetsStatusAndAdjudicatedState()
-    {
-        await SeedAsync(status: ClaimStatus.InAdjudication);
-
-        var result = await Repo.UpdateAdjudicationSummaryAsync(
-            Tenant, "C1", new AdjudicationResult { PayerPayment = 80m, AllowedAmount = 100m }, ClaimStatus.Approved);
-
-        result.Should().Be(new StatusWriteResult(StatusWriteOutcome.Applied, ClaimStatus.Approved));
-        var stored = await StoredAsync();
-        stored.Status.Should().Be(ClaimStatus.Approved);
-        stored.VersionState.Should().Be(ClaimVersionState.Adjudicated);
-    }
-
     /// <summary>
-    /// The narrow repair: a row stuck at "Denied + paid + no denial reason"
-    /// is corrected by a paid, reason-free Approved summary.
+    /// The narrow repair the pipeline's resolved-status projection may make
+    /// (Approved + unpaid + denial evidence → Denied). Skipped on the vnext
+    /// emulator gap where a patch <c>FilterPredicate</c> cannot be evaluated
+    /// (400 "The filter predicate could not be evaluated"); Azure Cosmos DB
+    /// evaluates it.
     /// </summary>
     [SkippableFact]
-    public async Task AdjudicationSummary_RepairsAContradictoryDenial()
-    {
-        await SeedAsync(status: ClaimStatus.Denied, adjudication: new AdjudicationResult { PayerPayment = 50m });
-
-        var result = await Repo.UpdateAdjudicationSummaryAsync(
-            Tenant, "C1", new AdjudicationResult { PayerPayment = 50m, AllowedAmount = 60m }, ClaimStatus.Approved);
-
-        result.Should().Be(new StatusWriteResult(StatusWriteOutcome.Applied, ClaimStatus.Approved));
-        (await StoredAsync()).Status.Should().Be(ClaimStatus.Approved);
-    }
-
-    /// <summary>An unpaid Approved summary is no evidence against a denial: the denial stands.</summary>
-    [SkippableFact]
-    public async Task AdjudicationSummary_UnpaidApproval_DoesNotReopenADenial()
-    {
-        await SeedAsync(status: ClaimStatus.Denied,
-            adjudication: new AdjudicationResult { PayerPayment = 0m, DenialReasonCode = "CO-50" });
-
-        var result = await Repo.UpdateAdjudicationSummaryAsync(
-            Tenant, "C1", new AdjudicationResult { PayerPayment = 0m }, ClaimStatus.Approved);
-
-        result.Should().Be(new StatusWriteResult(StatusWriteOutcome.Suppressed, ClaimStatus.Denied));
-        (await StoredAsync()).Status.Should().Be(ClaimStatus.Denied);
-    }
-
-    /// <summary>
-    /// The inverse repair (Approved + unpaid + denial evidence). Its
-    /// predicate uses <c>ARRAY_LENGTH</c>, which the vnext emulator does not
-    /// evaluate inside a patch <c>FilterPredicate</c> (400 "The filter
-    /// predicate could not be evaluated"); Azure Cosmos DB does. Skipped on
-    /// that emulator gap rather than asserted, and runs again unchanged once
-    /// the emulator supports it.
-    /// </summary>
-    [SkippableFact]
-    public async Task AdjudicationSummary_RepairsAContradictoryApproval()
+    public async Task ResolvedStatusProjection_RepairsAContradictoryApproval()
     {
         await SeedAsync(status: ClaimStatus.Approved, adjudication: new AdjudicationResult { PayerPayment = 0m });
 
-        StatusWriteResult result;
         try
         {
-            result = await Repo.UpdateAdjudicationSummaryAsync(
-                Tenant, "C1", new AdjudicationResult { PayerPayment = 0m, DenialReasonCode = "CO-50" }, ClaimStatus.Denied);
+            (await Repo.UpdateAdjudicationProjectionAsync(
+                Tenant, "C1", new AdjudicationResult { PayerPayment = 0m, DenialReasonCode = "CO-50" }, [],
+                resolvedStatus: ClaimStatus.Denied)).Should().BeTrue();
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.BadRequest
                                           && ex.Message.Contains("filter predicate could not be evaluated", StringComparison.OrdinalIgnoreCase))
         {
-            Skip.If(true, "Cosmos emulator gap: ARRAY_LENGTH is not supported in a patch FilterPredicate.");
+            Skip.If(true, "Cosmos emulator gap: the predicate is not supported in a patch FilterPredicate.");
             return;
         }
 
-        result.Should().Be(new StatusWriteResult(StatusWriteOutcome.Applied, ClaimStatus.Denied));
         (await StoredAsync()).Status.Should().Be(ClaimStatus.Denied);
     }
 

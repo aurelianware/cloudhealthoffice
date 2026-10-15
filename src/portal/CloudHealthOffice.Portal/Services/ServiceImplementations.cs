@@ -253,22 +253,6 @@ public class ClaimsService : IClaimsService
         }
     }
 
-    public async Task UpdateClaimStatusAsync(string claimId, string status, string? notes = null)
-    {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var updateRequest = new { status, notes };
-            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/claims/{claimId}/status", updateRequest);
-            response.EnsureSuccessStatusCode();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
-            throw new ServiceUnavailableException("Claims Service", ex);
-        }
-    }
-
     public async Task<bool> TryRecordAiExaminerAgreementAsync(
         string claimId,
         string agreement,
