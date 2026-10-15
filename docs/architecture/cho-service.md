@@ -14,7 +14,7 @@ It runs inside CHO, or standalone beside another core admin system such as QNXT.
 
 ## 1. Why build it
 
-- **QNXT plans need a replacement.** QNXT plans report that its call tracking is being retired. I found no public announcement, but the signs fit: Cognizant presents call tracking only inside myQNXT, the QNXT product page no longer lists it, and its new investment (TriZetto Unify AI agents) starts with prior authorization, not service. Plans are shopping now.
+- **QNXT plans need a replacement.** QNXT's call tracking is being retired. That's known from inside QNXT plans; Cognizant hasn't announced it publicly, but the signs fit: Cognizant presents call tracking only inside myQNXT, the QNXT product page no longer lists it, and its new investment (TriZetto Unify AI agents) starts with prior authorization, not service. Plans are shopping now.
 - **The alternatives are general CRMs plus a long integration project:**
   - **Salesforce (Health Cloud / Agentforce Health):** one consultant estimates $250–500 per user per month on top of Service Cloud, and 4–9 months for a mid-size project. Integration is 30–40% of the cost.
   - **Microsoft Dynamics 365:** payer projects run as multi-year, integrator-led roadmaps, wired into Facets, IVR and care management one at a time.
