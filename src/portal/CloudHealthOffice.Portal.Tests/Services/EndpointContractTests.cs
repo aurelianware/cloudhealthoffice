@@ -200,7 +200,8 @@ public class EndpointContractTests
     [Fact]
     public async Task AppealsService_Search_CallsAppealsServiceUrl()
     {
-        var handler = new RecordingHandler();
+        // appeals-service list routes return an { "items": [...] } envelope.
+        var handler = new RecordingHandler(body: """{"items":[]}""");
         var config = BuildConfig(new());
         var sut = new AppealsService(
             new HttpClient(handler) { BaseAddress = new Uri("http://appeals-service") },

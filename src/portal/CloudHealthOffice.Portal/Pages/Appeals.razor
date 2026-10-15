@@ -362,7 +362,8 @@
         var appeal = args.Item;
         if (appeal == null) return;
 
-        var detail = await AppealsService.GetAppealByIdAsync(appeal.AppealId);
+        var detail = await AppealsService.GetAppealByIdAsync(
+            string.IsNullOrEmpty(appeal.Id) ? appeal.AppealId : appeal.Id);
         if (detail == null) return;
 
         var parameters = new DialogParameters
