@@ -129,12 +129,14 @@ public class AdjudicationController : ControllerBase
     // ═══════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Full adjudication: pricing + benefit calculation in one call.
-    /// Replaces the get-rates, get-benefits, and calculate-cost-sharing
-    /// workflow steps with a single HTTP round-trip.
+    /// Pricing + benefit calculation in one call, as a dry run: nothing is
+    /// persisted and no accumulator is written. It is not an adjudicator —
+    /// claims are adjudicated only by the claims-service pipeline, which owns
+    /// the outcome and the accumulator commit. Retained for diagnostics and
+    /// legacy scripts; prefer POST /api/v1/adjudication/estimate for what-if
+    /// pricing. Deprecated.
     /// </summary>
     [HttpPost("adjudicate")]
-    // Writes accumulator updates in Production execution mode, so a benefits reader alone may not call it.
     [RequirePermission("claims:work")]
     [ProducesResponseType(typeof(AdjudicationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -543,8 +545,16 @@ public class AdjudicationController : ControllerBase
 
         // A line whose rate matched but could not be computed (e.g. percent-of-Medicare
         // with no Medicare reference) prices at $0 — pend rather than adjudicate on it.
+        // A line with no contracted or plan-default rate falls back to billed
+        // charges; never price on that either (matches claims-service PricingStage,
+        // which pends it NOCONTRACT). A $0-billed line cannot overpay and stays priced.
+        var billedByLine = request.Lines
+            .GroupBy(l => l.LineNumber)
+            .ToDictionary(g => g.Key, g => g.Sum(l => l.BilledAmount));
         var unresolvedLines = pricingResults.LineResults
-            .Where(p => p.RateSource == CloudHealthOffice.FeeScheduleEngine.Domain.RateSource.Unresolved)
+            .Where(p => p.RateSource == CloudHealthOffice.FeeScheduleEngine.Domain.RateSource.Unresolved
+                || (p.RateSource == CloudHealthOffice.FeeScheduleEngine.Domain.RateSource.BilledCharges
+                    && billedByLine.GetValueOrDefault(p.LineNumber) != 0m))
             .ToList();
         if (unresolvedLines.Count > 0)
         {
@@ -567,7 +577,9 @@ public class AdjudicationController : ControllerBase
                     lineNumber = p.LineNumber,
                     procedureCode = p.ProcedureCode,
                     feeScheduleId = p.FeeScheduleId,
-                    reason = p.UnresolvedReason,
+                    reason = p.RateSource == CloudHealthOffice.FeeScheduleEngine.Domain.RateSource.BilledCharges
+                        ? "no contracted or plan-default fee schedule rate (engine fell back to billed charges)"
+                        : p.UnresolvedReason,
                 }),
                 timings = stageTimings,
             });
@@ -606,6 +618,12 @@ public class AdjudicationController : ControllerBase
             var perStay = PerStayPricing.Resolve(claimTypeCode, request.DrgCode, request.LengthOfStay, pricingResults);
             var benefitRequest = new BenefitResolutionRequest
             {
+                // Estimate only. claims-service's pipeline is the single adjudicator
+                // and the only writer of accumulators (via commit-accumulators, with
+                // commit records and void/denial fences). Production mode here wrote
+                // raw accumulator increments the pipeline could neither see nor undo,
+                // double-counting a claim the pipeline also adjudicated.
+                ExecutionMode = AdjudicationExecutionMode.Prospective,
                 MemberId = request.MemberId,
                 SubscriberId = request.SubscriberId,
                 BenefitPlanId = request.BenefitPlanId,

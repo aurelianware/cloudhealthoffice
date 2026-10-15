@@ -19,7 +19,9 @@ MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
 SEED_MEMBERS="${SEED_MEMBERS:-true}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
-SERVICEBUS_ONLY="${SERVICEBUS_ONLY:-false}"
+# Score the claims-service pipeline's persisted outcome (the single adjudicator).
+# SERVICEBUS_ONLY=false runs the dry-run synchronous diagnostic instead.
+SERVICEBUS_ONLY="${SERVICEBUS_ONLY:-true}"
 SERVICEBUS_RECONCILIATION_ENABLED="${SERVICEBUS_RECONCILIATION_ENABLED:-true}"
 SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS="${SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS:-300}"
 CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS="${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS:-15}"
@@ -115,6 +117,8 @@ run_case() {
   fi
   if [[ "$SERVICEBUS_ONLY" == "true" ]]; then
     servicebus_only_arg='                --servicebus-only \'
+  else
+    servicebus_only_arg='                --synchronous-diagnostic \'
   fi
   if [[ "$SERVICEBUS_RECONCILIATION_ENABLED" != "true" ]]; then
     servicebus_reconciliation_arg='                --no-servicebus-reconciliation \'

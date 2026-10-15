@@ -594,25 +594,13 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         stage.Stop();
         adjudicationElapsed = stage.Elapsed;
 
-        var skipSynchronousWriteback = options.SkipClaimUpdate
-            || expectedValidation.ExpectedOutcome is ClaimValidationOutcome.Pended
-            || RequiresClaimsServiceWorkflowObservation(claim, expectedValidation);
+        // Diagnostic only (--synchronous-diagnostic): benefit-plan's /adjudicate is a
+        // dry run (no accumulators, nothing persisted), and its answer is never written
+        // back. The claims-service pipeline is the single adjudicator; the claim keeps
+        // whatever the pipeline decided.
         var outcome = adjudicated.Success
             ? ClaimValidationOutcome.Paid
             : ClaimValidationOutcome.BusinessDenial;
-
-        if (!skipSynchronousWriteback)
-        {
-            failureStage = "writeback";
-            stage.Restart();
-            var writebackOutcome = await UpdateClaimAdjudicationAsync(http, options, submitted.Id, networkTier, adjudicated, json);
-            if (writebackOutcome is not null)
-            {
-                outcome = writebackOutcome.Value;
-            }
-            stage.Stop();
-            updateElapsed = stage.Elapsed;
-        }
 
         sw.Stop();
         var businessDenialCode = NormalizeBusinessDenialCode(adjudicated.BusinessDenialCode
@@ -3064,48 +3052,6 @@ static string NormalizeIdentifierSegment(string value)
     return string.IsNullOrWhiteSpace(normalized) ? "tenant" : normalized;
 }
 
-static async Task<ClaimValidationOutcome?> UpdateClaimAdjudicationAsync(
-    HttpClient http,
-    ValidatorOptions options,
-    string submittedClaimId,
-    string networkTier,
-    AdjudicationResponseDto adjudication,
-    JsonSerializerOptions json)
-{
-    var payload = new
-    {
-        networkTier,
-        allowedAmount = adjudication.Totals.AllowedAmount,
-        deductibleAmount = adjudication.Totals.DeductibleAmount,
-        coinsuranceAmount = adjudication.Totals.CoinsuranceAmount,
-        copayAmount = adjudication.Totals.CopayAmount,
-        patientResponsibility = adjudication.Totals.MemberResponsibility,
-        payerPayment = adjudication.Totals.PlanPayment,
-        denialReasonCode = adjudication.DenialReasonCode,
-        denialReason = adjudication.DenialReasonDescription
-    };
-
-    using var response = await http.PutAsJsonAsync($"{options.ClaimsUrl}/api/claims/{submittedClaimId}/adjudication-summary", payload, json);
-    if (!response.IsSuccessStatusCode)
-    {
-        var body = await response.Content.ReadAsStringAsync();
-        throw new InvalidOperationException($"claim adjudication update failed ({submittedClaimId}): {(int)response.StatusCode} {body}");
-    }
-
-    if (response.StatusCode != System.Net.HttpStatusCode.OK)
-    {
-        return null;
-    }
-
-    var writeback = await response.Content.ReadFromJsonAsync<AdjudicationSummaryWriteResponseDto>(json);
-    if (writeback is not { StatusPreserved: true })
-    {
-        return null;
-    }
-
-    return MccClaimStatusMapping.ToValidationOutcome(writeback.PersistedStatus);
-}
-
 static async Task<List<ClaimValidationResult>> ObserveExpectedPendResultsAsync(
     HttpClient http,
     ValidatorOptions options,
@@ -3728,9 +3674,11 @@ static void PrintUsage()
       --no-seed-members          Skip synthetic member seeding
       --no-seed-providers        Skip synthetic provider seeding
       --no-seed-authorizations   Skip prior authorization fixture seeding
-      --skip-claim-update        Do not write adjudication projection back to claims-service
-      --servicebus-only          Submit claims and score only the persisted asynchronous Service Bus outcome;
-                                 skips synchronous benefit adjudication and writeback
+      --skip-claim-update        Accepted for compatibility; the validator never writes adjudication back
+      --servicebus-only          Default. Submit claims and score only the outcome the claims-service
+                                 pipeline persisted (the single adjudicator)
+      --synchronous-diagnostic   Diagnostic: also call benefit-plan's dry-run /adjudicate and score its
+                                 answer instead. Never writes to claims; not a benchmark of the pipeline
       --no-servicebus-reconciliation
                                  Do not revisit Service Bus observation timeouts after the timed pass
       --servicebus-reconciliation-timeout <seconds>
@@ -4005,10 +3953,6 @@ internal sealed record AdjudicationResponseDto(
     AdjudicationTotalsDto Totals,
     string? BusinessDenialCode = null,
     IReadOnlyDictionary<string, double>? Timings = null);
-
-internal sealed record AdjudicationSummaryWriteResponseDto(
-    bool StatusPreserved,
-    int PersistedStatus);
 
 internal sealed record AuthorizationValidationProbeResponse(
     string AuthorizationNumber,
