@@ -258,7 +258,7 @@ public class NetworkCredentialingStageTests
     }
 
     [Fact]
-    public async Task DegradedMembership_FailClosed_denies()
+    public async Task DegradedMembership_FailClosed_pends()
     {
         _membership.GetMembershipAsync(TenantId, Network1, Npi, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
             .Returns((NetworkMembership?)null);
@@ -271,13 +271,40 @@ public class NetworkCredentialingStageTests
 
         var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
 
-        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        // FailClosed = don't pay without verification: an unavailable
+        // lookup pends (retried), it is not an out-of-network denial.
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(EnforcementDecision.Pend, ctx.EnforcementOutcomes[0].Decision);
         Assert.Contains("membership-verification-unavailable",
             ctx.EnforcementOutcomes[0].Reason ?? string.Empty);
+        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
+    }
+
+    /// <summary>
+    /// benefit-plan-service gave no answer for the plan (so its network
+    /// tiers are unknown): under FailClosed that is an outage, not "no
+    /// in-network tier" -- the claim pends, it is not denied.
+    /// </summary>
+    [Fact]
+    public async Task PlanUnavailable_FailClosed_pends_not_denies()
+    {
+        var ctx = NewContext(tiers: Array.Empty<ResolvedNetworkTier>());
+        ctx.ResolvedPlan = null;
+        ctx.PlanResolutionFailed = true;
+        var sut = NewStage(new TenantEnforcementPolicyOptions
+        {
+            NetworkMode = NetworkEnforcementMode.FailClosed,
+            CredentialingMode = CredentialingEnforcementMode.FailClosed,
+        });
+
+        var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
     }
 
     [Fact]
-    public async Task ApprovedMembership_DegradedCredentialing_FailClosed_denies()
+    public async Task ApprovedMembership_DegradedCredentialing_FailClosed_pends()
     {
         _membership.GetMembershipAsync(TenantId, Network1, Npi, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
             .Returns(new NetworkMembership
@@ -297,10 +324,11 @@ public class NetworkCredentialingStageTests
 
         var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
 
-        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
-        // Membership = Allow, Credentialing = Deny.
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        // Membership = Allow, Credentialing unavailable = Pend (not Deny).
         Assert.Equal(EnforcementDecision.Allow, ctx.EnforcementOutcomes[0].Decision);
-        Assert.Equal(EnforcementDecision.Deny, ctx.EnforcementOutcomes[1].Decision);
+        Assert.Equal(EnforcementDecision.Pend, ctx.EnforcementOutcomes[1].Decision);
+        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
     }
 
     [Fact]

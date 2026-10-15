@@ -133,6 +133,15 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
             activity?.SetTag("ncci.engine_status", "exception");
 
             ApplyEngineExceptionSnapshot(context, ex);
+            // Deny mode denies NCCI/MUE findings, not an engine that could
+            // not run: an outage pends (the "NCCI engine threw" reason is
+            // transient, so the approval re-run retries the edits).
+            if (_options.NcciMode == NcciEnforcementMode.Deny)
+            {
+                activity?.SetTag("ncci.outcome", "pend");
+                return ClaimAdjudicationStageResult.Pend(
+                    StageName, $"NCCI engine threw: {ex.GetType().Name}; pended (an outage is never denied)");
+            }
             return BuildModeDrivenResult(activity, hasFailures: true);
         }
 
