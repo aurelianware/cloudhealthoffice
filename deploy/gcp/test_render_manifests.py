@@ -165,6 +165,7 @@ def test_work_management_service_is_built_and_deployed():
     # The demo reconciles periodically even with Kafka (seeded pends, lost events).
     assert env(dep)["WorkManagement__Reconcile__Enabled"] == "true"
     assert env(dep)["WorkManagement__Reconcile__Tenants__0"] == "demo"
+    assert env(dep)["WorkManagement__SeedMemberUserIds__0"] == "local-demo-admin"
     service = next(d for d in docs if d["kind"] == "Service" and d["metadata"]["name"] == "work-management-service")
     assert service["spec"]["ports"][0]["port"] == 80
     assert service["spec"]["ports"][0]["targetPort"] == 8080

@@ -127,6 +127,9 @@ TESTING_HOSTS = {"claims-service", "provider-service", "fhir-service"}
 WORK_MANAGEMENT_DEMO_ENV = {
     "WorkManagement__Reconcile__Enabled": "true",
     "WorkManagement__Reconcile__Tenants__0": "demo",
+    # The portal's local demo sign-in (its CHO token subject): a primary
+    # membership in every claim queue, so Get Next works without setup.
+    "WorkManagement__SeedMemberUserIds__0": "local-demo-admin",
 }
 
 # Not needed in the demo: services sign their own tokens with the development
