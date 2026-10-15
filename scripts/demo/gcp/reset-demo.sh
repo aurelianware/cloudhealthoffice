@@ -63,7 +63,8 @@ const targets = [
   'Payments', 'PaymentRuns', 'PaymentClaimReservations', 'PaymentReservationAudit', 'EraEnvelopes', 'ReversalRuns', 'ProviderReceivables',
   'WorkItems', 'WorkAudit', 'Appeals', 'AppealEvents', 'RfaiCases',
 ];
-const filter = { \$or: [{ tenantId: tenant }, { TenantId: tenant }] };
+// MassAdjudicationRuns keep the tenant inside the run (Run.TenantId).
+const filter = { \$or: [{ tenantId: tenant }, { TenantId: tenant }, { 'Run.TenantId': tenant }, { 'run.tenantId': tenant }] };
 let total = 0;
 for (const { name: dbName } of db.adminCommand({ listDatabases: 1, nameOnly: true }).databases) {
   if (['admin', 'config', 'local'].includes(dbName)) continue;
