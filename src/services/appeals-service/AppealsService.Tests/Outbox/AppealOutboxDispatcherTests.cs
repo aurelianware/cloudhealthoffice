@@ -80,7 +80,9 @@ public class AppealOutboxDispatcherTests
 
         await dispatcher.RefreshStatsAsync();
 
-        var measured = new Dictionary<string, double>();
+        // Thread-safe: counters from other test classes running in parallel
+        // also reach this listener, from their own threads.
+        var measured = new System.Collections.Concurrent.ConcurrentDictionary<string, double>();
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, l) =>
         {
