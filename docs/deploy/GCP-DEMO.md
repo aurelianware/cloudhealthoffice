@@ -2,7 +2,7 @@
 
 This runbook stands up Cloud Health Office on GKE (a single-node Standard cluster by default, or Autopilot), runs a 25-minute demo, and tears it down. The same services that run on Azure AKS run here without an application rewrite. Only the infrastructure, manifests rendering and secrets differ.
 
-> **Demo-grade.** Synthetic data only. The cluster trusts the repository's public development signing key and has no public ingress; it is reached by `kubectl port-forward`. It is not a HIPAA production environment. See [What this is and isn't](#what-this-is-and-isnt).
+> **Demo-grade.** Synthetic data only. The cluster trusts the repository's public development signing key and has no public ingress; it is reached by `kubectl port-forward`, or optionally at `demo.cloudhealthoffice.com` through a Cloudflare Tunnel behind Cloudflare Access (see [GCP-PUBLIC-HOSTING-PLAN.md](GCP-PUBLIC-HOSTING-PLAN.md); never without Access). It is not a HIPAA production environment. See [What this is and isn't](#what-this-is-and-isnt).
 
 ## Architecture
 

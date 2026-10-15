@@ -1,0 +1,69 @@
+# Cloudflare Tunnel connector for the GKE demo.
+#
+# cloudflared dials out to Cloudflare; nothing in the cluster is exposed to the
+# internet and no load balancer or external IP is created. The tunnel's public
+# hostnames (e.g. demo.cloudhealthoffice.com -> http://portal.cloudhealthoffice.svc.cluster.local:80)
+# are configured in the Cloudflare dashboard, and a Cloudflare Access application
+# must protect every hostname BEFORE it is routed: this cluster accepts the public
+# development signing key and must only ever be reached by approved people.
+# See docs/deploy/GCP-PUBLIC-HOSTING-PLAN.md.
+#
+# Applied by scripts/deploy-gke.sh only when CLOUDFLARE_TUNNEL_TOKEN is set.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: cloudhealthoffice
+  labels:
+    app: cloudflared
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2026.9.3
+          command:
+            - cloudflared
+            - tunnel
+            - --no-autoupdate
+            - --loglevel
+            - info
+            - --metrics
+            - 0.0.0.0:2000
+            - run
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-tunnel-token
+                  key: token
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          # /ready returns 200 only while cloudflared holds an active connection to Cloudflare.
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
