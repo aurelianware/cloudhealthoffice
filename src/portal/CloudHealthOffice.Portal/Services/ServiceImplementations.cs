@@ -242,8 +242,9 @@ public class ClaimsService : IClaimsService
         {
             var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/claims/search", request);
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<ClaimSearchResult>();
-            return result ?? new ClaimSearchResult();
+            var result = await response.Content.ReadFromJsonAsync<ClaimSearchResult>() ?? new ClaimSearchResult();
+            result.FillPageTotalsIfMissing();
+            return result;
         }
         catch (HttpRequestException ex)
         {

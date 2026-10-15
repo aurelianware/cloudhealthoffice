@@ -468,7 +468,7 @@
                                 @context.Status
                             </MudChip>
                         </MudTd>
-                        <MudTd DataLabel="Processing Time" Style="text-align:right">@context.ProcessingTimeMs ms</MudTd>
+                        <MudTd DataLabel="Processing Time" Style="text-align:right">@(context.ProcessingTimeMs > 0 ? $"{context.ProcessingTimeMs} ms" : "—")</MudTd>
                     </RowTemplate>
                 </MudTable>
             }

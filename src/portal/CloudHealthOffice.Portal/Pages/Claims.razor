@@ -234,6 +234,10 @@
                     <MudCardContent>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">Total Charges</MudText>
                         <MudText Typo="Typo.h5">@_searchResult.TotalChargeAmount.ToString("C0")</MudText>
+                        @if (_searchResult.TotalsArePageScoped)
+                        {
+                            <MudText Typo="Typo.caption">This page</MudText>
+                        }
                     </MudCardContent>
                 </MudCard>
             </MudItem>
@@ -242,7 +246,7 @@
                     <MudCardContent>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">Approved</MudText>
                         <MudText Typo="Typo.h5" Color="Color.Success">@_searchResult.ApprovedCount</MudText>
-                        <MudText Typo="Typo.caption">@_searchResult.TotalPaidAmount.ToString("C0")</MudText>
+                        <MudText Typo="Typo.caption">@_searchResult.TotalPaidAmount.ToString("C0") paid@(_searchResult.TotalsArePageScoped ? " · this page" : "")</MudText>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
@@ -251,6 +255,10 @@
                     <MudCardContent>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">Pending</MudText>
                         <MudText Typo="Typo.h5" Color="Color.Warning">@_searchResult.PendingCount</MudText>
+                        @if (_searchResult.TotalsArePageScoped)
+                        {
+                            <MudText Typo="Typo.caption">This page</MudText>
+                        }
                     </MudCardContent>
                 </MudCard>
             </MudItem>
@@ -259,6 +267,10 @@
                     <MudCardContent>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">Denied</MudText>
                         <MudText Typo="Typo.h5" Color="Color.Error">@_searchResult.DeniedCount</MudText>
+                        @if (_searchResult.TotalsArePageScoped)
+                        {
+                            <MudText Typo="Typo.caption">This page</MudText>
+                        }
                     </MudCardContent>
                 </MudCard>
             </MudItem>

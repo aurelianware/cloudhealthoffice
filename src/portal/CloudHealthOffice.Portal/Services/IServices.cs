@@ -910,12 +910,69 @@ public class ClaimSummary
 
     public string ClaimNumber { get; set; } = string.Empty;
 
+    // claims-service returns its Claim document, not this view model: member and
+    // provider names and the adjudicated amounts arrive under their own field
+    // names. These fill the display fields when the explicit ones are absent.
+    private string _memberName = string.Empty;
+    private string _providerName = string.Empty;
+    private string _providerId = string.Empty;
+    private string? _subscriberFirstName, _subscriberLastName, _patientFirstName, _patientLastName;
+
+    [JsonPropertyName("subscriberFirstName")] public string? SubscriberFirstNameWire { set => _subscriberFirstName = value; }
+    [JsonPropertyName("subscriberLastName")] public string? SubscriberLastNameWire { set => _subscriberLastName = value; }
+    [JsonPropertyName("patientFirstName")] public string? PatientFirstNameWire { set => _patientFirstName = value; }
+    [JsonPropertyName("patientLastName")] public string? PatientLastNameWire { set => _patientLastName = value; }
+
+    public string BillingProviderName { get; set; } = string.Empty;
+    public string BillingProviderNPI { get; set; } = string.Empty;
+
+    /// <summary>Adjudication result on the claims-service document; maps the amounts.</summary>
+    [JsonPropertyName("adjudicationResult")]
+    public ClaimAdjudicationProjection? AdjudicationResult
+    {
+        set
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            AllowedAmount = value.AllowedAmount;
+            PaidAmount = value.PayerPayment;
+            OnAdjudicationResult(value);
+        }
+    }
+
+    protected virtual void OnAdjudicationResult(ClaimAdjudicationProjection value)
+    {
+    }
+
+    private static string JoinName(string? first, string? last) =>
+        string.Join(' ', new[] { first, last }.Where(p => !string.IsNullOrWhiteSpace(p))).Trim();
+
     [JsonIgnore]
     public string DisplayClaimNumber => string.IsNullOrWhiteSpace(ClaimNumber) ? ClaimId : ClaimNumber;
-    public string MemberName { get; set; } = string.Empty;
+    public string MemberName
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_memberName)) return _memberName;
+            var patient = JoinName(_patientFirstName, _patientLastName);
+            return patient.Length > 0 ? patient : JoinName(_subscriberFirstName, _subscriberLastName);
+        }
+        set => _memberName = value ?? string.Empty;
+    }
     public string MemberId { get; set; } = string.Empty;
-    public string ProviderName { get; set; } = string.Empty;
-    public string ProviderId { get; set; } = string.Empty;
+    public string ProviderName
+    {
+        get => string.IsNullOrWhiteSpace(_providerName) ? BillingProviderName : _providerName;
+        set => _providerName = value ?? string.Empty;
+    }
+    public string ProviderId
+    {
+        get => string.IsNullOrWhiteSpace(_providerId) ? BillingProviderNPI : _providerId;
+        set => _providerId = value ?? string.Empty;
+    }
     [JsonConverter(typeof(FlexibleClaimTypeJsonConverter))]
     public string ClaimType { get; set; } = string.Empty; // Professional, Institutional, Dental
     [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
@@ -947,8 +1004,6 @@ public class ClaimDetails : ClaimSummary
     public string SubscriberName { get; set; } = string.Empty;
     public string PatientName { get; set; } = string.Empty;
     public string PatientRelationship { get; set; } = string.Empty;
-    public string BillingProviderName { get; set; } = string.Empty;
-    public string BillingProviderNPI { get; set; } = string.Empty;
     public string? RenderingProviderName { get; set; }
     public string? RenderingProviderNPI { get; set; }
     public string? FacilityName { get; set; }
@@ -966,28 +1021,18 @@ public class ClaimDetails : ClaimSummary
     public string? DenialReason { get; set; }
     public ClaimPendDetails? PendDetails { get; set; }
     public ClaimAiExamination? AiExamination { get; set; }
-    [JsonPropertyName("adjudicationResult")]
-    public ClaimAdjudicationProjection? AdjudicationResult
+    protected override void OnAdjudicationResult(ClaimAdjudicationProjection value)
     {
-        set
-        {
-            if (value is null)
-            {
-                return;
-            }
-
-            AllowedAmount = value.AllowedAmount;
-            PaidAmount = value.PayerPayment;
-            DeductibleAmount = value.DeductibleAmount;
-            CoinsuranceAmount = value.CoinsuranceAmount;
-            CopayAmount = value.CopayAmount;
-            PatientResponsibility = value.PatientResponsibility;
-            CheckNumber = value.CheckNumber;
-            PaidDate = value.PaymentDate;
-            DenialReason = value.DenialReason;
-            NetworkTier = value.NetworkTier;
-        }
+        DeductibleAmount = value.DeductibleAmount;
+        CoinsuranceAmount = value.CoinsuranceAmount;
+        CopayAmount = value.CopayAmount;
+        PatientResponsibility = value.PatientResponsibility;
+        CheckNumber = value.CheckNumber;
+        PaidDate = value.PaymentDate;
+        DenialReason = value.DenialReason;
+        NetworkTier = value.NetworkTier;
     }
+
     public List<ClaimDiagnosisCode> DiagnosisCodes
     {
         get => _diagnosisCodes;
@@ -1282,6 +1327,35 @@ public class ClaimSearchResult
     public int ApprovedCount { get; set; }
     public int DeniedCount { get; set; }
     public int PendingCount { get; set; }
+
+    /// <summary>
+    /// True when the service returned no aggregates and the totals above were
+    /// computed from the current page only.
+    /// </summary>
+    [JsonIgnore]
+    public bool TotalsArePageScoped { get; private set; }
+
+    /// <summary>
+    /// claims-service search returns a page and a total count only. When no
+    /// aggregates came back, compute them from this page and say so.
+    /// </summary>
+    public void FillPageTotalsIfMissing()
+    {
+        var hasAggregates = TotalChargeAmount != 0 || TotalAllowedAmount != 0 || TotalPaidAmount != 0
+            || ApprovedCount != 0 || DeniedCount != 0 || PendingCount != 0;
+        if (hasAggregates || Claims.Count == 0)
+        {
+            return;
+        }
+
+        TotalChargeAmount = Claims.Sum(c => c.TotalChargeAmount);
+        TotalAllowedAmount = Claims.Sum(c => c.AllowedAmount);
+        TotalPaidAmount = Claims.Sum(c => c.PaidAmount);
+        ApprovedCount = Claims.Count(c => c.Status is "Approved" or "Paid" or "PartiallyPaid" or "Partially Paid");
+        DeniedCount = Claims.Count(c => c.Status == "Denied");
+        PendingCount = Claims.Count(c => c.Status is "Pended" or "Pending" or "InAdjudication" or "In Adjudication" or "Submitted" or "Received");
+        TotalsArePageScoped = true;
+    }
 }
 
 public class SubmitClaimRequest
