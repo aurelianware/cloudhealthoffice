@@ -282,7 +282,7 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
         if (string.Equals(ChainKey(prior.ClaimVersionId, prior.Id), chainKey, StringComparison.Ordinal)) return false;
         if (string.Equals(prior.Id, chainKey, StringComparison.Ordinal)) return false;
         if (string.Equals(prior.Id, claim.PredecessorVersionId, StringComparison.Ordinal)) return false;
-        if (prior.Status is ClaimStatus.Denied or ClaimStatus.Voided) return false;
+        if (ClaimStatusSemantics.IsDenied(prior.Status) || prior.Status == ClaimStatus.Voided) return false;
         if (prior.VersionState is ClaimVersionState.Draft or ClaimVersionState.Denied
             or ClaimVersionState.Voided or ClaimVersionState.Adjusted) return false;
         if (prior.SupersededAt is not null) return false;

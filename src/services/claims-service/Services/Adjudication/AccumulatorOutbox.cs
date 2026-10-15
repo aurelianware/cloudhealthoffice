@@ -151,10 +151,11 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
 
     private async Task<AccumulatorOutboxResult> CommitAsync(Claim claim, AccumulatorOutboxItem item, CancellationToken ct)
     {
-        var dropReason = claim.Status is ClaimStatus.Denied or ClaimStatus.Voided
-            // Finalized as approved, then denied or voided before the commit
-            // ran: it must never land (the void / denial reversal fences it
-            // in the store as well).
+        var dropReason = ClaimStatusSemantics.IsDenied(claim.Status) || claim.Status == ClaimStatus.Voided
+            // Adjudicated as Pay, then denied (Deny, or finalized Denied) or
+            // voided before the commit ran: it must never land (the void /
+            // denial reversal fences it in the store as well). Denials write
+            // no accumulators in either phase.
             ? $"the claim is {claim.Status}"
             : claim.VersionState == ClaimVersionState.Adjusted || claim.SupersededAt is not null
                 // A replacement superseded this version before its commit ran

@@ -243,7 +243,8 @@ public class ClaimsAuthenticationTests : IClassFixture<ClaimsApiFactory>
     /// </summary>
     [Theory]
     [InlineData(ClaimStatus.Approved, "work-queue")]
-    [InlineData(ClaimStatus.Denied, "work-queue")]
+    [InlineData(ClaimStatus.Deny, "work-queue")]
+    [InlineData(ClaimStatus.Denied, "remittance")]
     [InlineData(ClaimStatus.Pended, "work-queue")]
     [InlineData(ClaimStatus.Paid, "remittance")]
     [InlineData(ClaimStatus.PartiallyPaid, "remittance")]
@@ -459,7 +460,7 @@ public class ClaimsAuthenticationTests : IClassFixture<ClaimsApiFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("examiner-3", claim.LastUpdatedBy);
         await _factory.VersionEventPublisher.Received().PublishVersionResolvedAsync(
-            Arg.Is<Claim>(c => c.Id == claim.Id), "Denied", "not covered", "examiner-3",
+            Arg.Is<Claim>(c => c.Id == claim.Id), "Deny", "not covered", "examiner-3",
             Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

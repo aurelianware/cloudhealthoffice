@@ -15,15 +15,18 @@ namespace ClaimsService.Models;
 ///         <c>Received</c>, <c>InAdjudication</c>, and <c>Pended</c>: those
 ///         are transient pipeline-stage outcomes within the same
 ///         version-state.</item>
-///   <item><c>Adjudicated</c> — adjudication complete (approved or denied);
-///         awaits payment if approved. Non-terminal /
-///         <c>UpdateAsync</c>-writable. The <c>ClaimStatus.Approved</c>
-///         operational sub-state lives here.</item>
+///   <item><c>Adjudicated</c> — adjudication complete, not yet finalized by
+///         the payment cycle: Pay (<c>ClaimStatus.Approved</c>) or Deny
+///         (<c>ClaimStatus.Deny</c>). Non-terminal / <c>UpdateAsync</c>-
+///         writable: reprocess and examiner resolve / override may still
+///         change it. The payment run's finalize moves it to Paid / Denied.</item>
 ///   <item><c>Paid</c> — payment processed (terminal — <c>UpdateAsync</c>
 ///         throws <see cref="Exceptions.ClaimVersionStateException"/>). The
 ///         <c>ClaimStatus.PartiallyPaid</c> operational sub-state lives here
 ///         too.</item>
-///   <item><c>Denied</c> — denied with no payment (terminal).</item>
+///   <item><c>Denied</c> — denial FINALIZED by the payment cycle (the 835
+///         remitted it; <c>ClaimStatus.Denied</c>). Terminal: only an
+///         adjustment changes it.</item>
 ///   <item><c>Adjusted</c> — superseded by an adjustment version (terminal
 ///         from this row's perspective; <c>SupersededByVersionId</c> points
 ///         at the replacement).</item>

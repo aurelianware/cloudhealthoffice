@@ -182,7 +182,8 @@ public sealed class ClaimRepositoryVersionStateCosmosTests
 
         var q = _captured.First();
         q.QueryText.Should().Contain("c.status IN ('approved', 'Approved')");
-        q.QueryText.Should().Contain("c.status IN ('denied', 'Denied')");
+        // Denied counts both phases: Deny (awaiting the 835) and Denied (finalized).
+        q.QueryText.Should().Contain("c.status IN ('deny', 'Deny', 'denied', 'Denied')");
         q.QueryText.Should().NotContain("c.status = 'Approved'");
     }
 }

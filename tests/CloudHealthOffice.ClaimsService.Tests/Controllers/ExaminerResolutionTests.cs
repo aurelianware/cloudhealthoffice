@@ -529,7 +529,8 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
         Received.InOrder(() =>
         {
             _repo.UpdateHoldingResolutionLockAsync(
-                Arg.Is<Claim>(c => c.Status == ClaimStatus.Denied
+                Arg.Is<Claim>(c => c.Status == ClaimStatus.Deny
+                    && c.VersionState == ClaimVersionState.Adjudicated
                     && c.PendingAccumulatorReversal != null
                     && c.PendingAccumulatorReversal.Reversal!.ClaimId == "claim-deny"
                     && c.PendingAccumulatorCommit == null),

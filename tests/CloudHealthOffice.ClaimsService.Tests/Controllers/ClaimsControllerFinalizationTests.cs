@@ -215,12 +215,27 @@ public class ClaimsControllerFinalizationTests : IClassFixture<ClaimsApiFactory>
         await _factory.ClaimRepository.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
     }
 
-    /// <summary>A claim the pipeline denied stays Denied: the $0 remittance is its 835, acknowledged unchanged.</summary>
+    /// <summary>The payment cycle's $0 remittance finalizes a Deny claim to Denied (200 with the finalized claim).</summary>
+    [Fact]
+    public async Task ProcessRemittance_ZeroPayment_DenyClaim_FinalizesToDenied()
+    {
+        var finalized = ClaimIn("zp-deny", ClaimStatus.Denied, ClaimVersionState.Denied);
+        FinalizeReturns("zp-deny", ClaimFinalizationResult.Finalized(finalized));
+
+        var response = await _client.PostAsJsonAsync("/api/claims/zp-deny/remittance", Body(amount: 0m), Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<Claim>(Json);
+        Assert.Equal(ClaimStatus.Denied, body!.Status);
+        Assert.Equal(ClaimVersionState.Denied, body.VersionState);
+    }
+
+    /// <summary>A claim already finalized Denied stays Denied: a repeat $0 remittance is acknowledged unchanged.</summary>
     [Fact]
     public async Task ProcessRemittance_ZeroPayment_DeniedClaim_StaysDenied()
     {
         var denied = ClaimIn("zp-denied", ClaimStatus.Denied, ClaimVersionState.Denied);
-        FinalizeReturns("zp-denied", ClaimFinalizationResult.InvalidSourceState(denied, "current status is Denied"));
+        FinalizeReturns("zp-denied", ClaimFinalizationResult.AlreadyFinalized(denied));
         _factory.ClaimRepository.ClearReceivedCalls();
 
         var response = await _client.PostAsJsonAsync("/api/claims/zp-denied/remittance", Body(amount: 0m), Json);

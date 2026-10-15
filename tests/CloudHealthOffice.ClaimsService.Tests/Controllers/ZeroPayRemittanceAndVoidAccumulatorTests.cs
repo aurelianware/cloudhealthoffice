@@ -210,6 +210,70 @@ public class ZeroPayRemittanceAndVoidAccumulatorTests : IClassFixture<ClaimsApiF
         await _factory.ClaimRepository.DidNotReceive().UpdateAsync(Arg.Is<Claim>(c => c.Id == claim.Id));
     }
 
+    /// <summary>
+    /// The payment cycle finalizes an adjudicated denial: a $0 remittance on
+    /// a Deny claim (non-final) makes it Denied (terminal), records the 835
+    /// trace, and emits ClaimVersionDenied; a repeat is an idempotent 200.
+    /// </summary>
+    [Fact]
+    public async Task ZeroPayRemittance_DenyClaim_IsFinalizedToDenied_AndRepeatsIdempotently()
+    {
+        var claim = Seed(ClaimStatus.Deny, ClaimVersionState.Adjudicated);
+        claim.AdjudicationResult = new AdjudicationResult { PayerPayment = 0m, DenialReasonCode = "27", DenialReason = "Coverage terminated" };
+
+        var response = await _client.PostAsJsonAsync($"/api/claims/{claim.Id}/remittance", Remittance(0m, checkNumber: "PR-0001-D1"), Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var stored = _store[claim.Id];
+        Assert.Equal(ClaimStatus.Denied, stored.Status);
+        Assert.Equal(ClaimVersionState.Denied, stored.VersionState);
+        Assert.Equal("PR-0001-D1", stored.AdjudicationResult!.CheckNumber);
+        Assert.Equal("27", stored.AdjudicationResult.DenialReasonCode);
+        Assert.Equal("PR-0001", stored.EDI835ControlNumber);
+        await _factory.VersionEventPublisher.Received(1).PublishVersionDeniedAsync(
+            Arg.Is<Claim>(c => c.Id == claim.Id), "Coverage terminated", Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+
+        var repeat = await _client.PostAsJsonAsync($"/api/claims/{claim.Id}/remittance", Remittance(0m, checkNumber: "PR-0001-D1"), Json);
+        Assert.Equal(HttpStatusCode.OK, repeat.StatusCode);
+        await _factory.VersionEventPublisher.Received(1).PublishVersionDeniedAsync(
+            Arg.Is<Claim>(c => c.Id == claim.Id), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A paid remittance never finalizes a Deny claim: 422, unchanged.</summary>
+    [Fact]
+    public async Task PaidRemittance_DenyClaim_Is422_Unchanged()
+    {
+        var claim = Seed(ClaimStatus.Deny, ClaimVersionState.Adjudicated);
+
+        var response = await _client.PostAsJsonAsync($"/api/claims/{claim.Id}/remittance", Remittance(80m), Json);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal(ClaimStatus.Deny, _store[claim.Id].Status);
+        await _factory.ClaimRepository.DidNotReceive().UpdateAsync(Arg.Is<Claim>(c => c.Id == claim.Id));
+    }
+
+    /// <summary>
+    /// Denials write no accumulators in either phase: a commit left on a claim
+    /// that is now Deny (an examiner denied it after Pay) is dropped, never
+    /// written.
+    /// </summary>
+    [Theory]
+    [InlineData(ClaimStatus.Deny, ClaimVersionState.Adjudicated)]
+    [InlineData(ClaimStatus.Denied, ClaimVersionState.Denied)]
+    public async Task AccumulatorOutbox_DropsTheCommit_OfADeniedClaim_InEitherPhase(ClaimStatus status, ClaimVersionState state)
+    {
+        var claim = Seed(status, state, withPendingCommit: true);
+
+        var outcome = await new AccumulatorOutboxProcessor(
+                _factory.ClaimRepository, _engine, new AdjudicationTenantContext(),
+                Options.Create(new AccumulatorOutboxOptions()), NullLogger<AccumulatorOutboxProcessor>.Instance)
+            .ProcessAsync(Tenant, claim.Id, AccumulatorOutboxKind.Commit, null, CancellationToken.None);
+
+        Assert.Equal(AccumulatorOutboxResult.Dropped, outcome);
+        await _engine.DidNotReceiveWithAnyArgs().CommitAccumulatorsAsync(default!, default);
+        Assert.Null(_store[claim.Id].PendingAccumulatorCommit);
+    }
+
     [Fact]
     public async Task ZeroPayRemittance_DeniedClaim_StaysDenied()
     {

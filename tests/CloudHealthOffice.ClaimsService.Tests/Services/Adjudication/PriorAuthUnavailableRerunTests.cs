@@ -112,7 +112,7 @@ public sealed class PriorAuthUnavailableRerunTests
 
         Assert.Equal(1, run.Denied);
         await _claims.Received(1).UpdateHoldingResolutionLockAsync(
-            Arg.Is<Claim>(c => c.Status == ClaimStatus.Denied
+            Arg.Is<Claim>(c => c.Status == ClaimStatus.Deny
                                && c.ExaminerResolutions.Single().Reason!.Contains(BenefitCalculationStage.PriorAuthorizationRequiredReason)
                                && !c.ExaminerResolutions.Single().Reason!.Contains("payer order")),
             Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -197,7 +197,7 @@ public sealed class PriorAuthUnavailableRerunTests
         await _sut.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
 
         await _claims.Received(1).UpdateHoldingResolutionLockAsync(
-            Arg.Is<Claim>(c => c.Status == ClaimStatus.Denied
+            Arg.Is<Claim>(c => c.Status == ClaimStatus.Deny
                                && c.PendingAccumulatorReversal != null
                                && c.PendingAccumulatorReversal.Reversal!.ClaimId == "C1"
                                && c.PendingAccumulatorCommit == null),

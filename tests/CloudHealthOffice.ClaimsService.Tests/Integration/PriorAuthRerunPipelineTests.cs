@@ -233,7 +233,7 @@ public sealed class PriorAuthRerunPipelineTests
 
         Assert.Equal(1, run.Denied);
         await _claims.Received(1).UpdateHoldingResolutionLockAsync(
-            Arg.Is<Claim>(c => c.Status == ClaimStatus.Denied && c.PendingAccumulatorReversal != null),
+            Arg.Is<Claim>(c => c.Status == ClaimStatus.Deny && c.VersionState == ClaimVersionState.Adjudicated && c.PendingAccumulatorReversal != null),
             Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 

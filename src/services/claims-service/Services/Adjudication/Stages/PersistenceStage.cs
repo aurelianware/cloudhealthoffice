@@ -142,7 +142,8 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
     }
 
     /// <summary>
-    /// Safety net: a Deny/Reject persists as <see cref="ClaimStatus.Denied"/>,
+    /// Safety net: a Deny/Reject persists as <see cref="ClaimStatus.Deny"/>
+    /// (finalized to <see cref="ClaimStatus.Denied"/> by the payment run),
     /// and the 835 (payment-service <c>CarcRarcMappingService</c>) can only
     /// remit a denial that carries a CARC — a denied claim without one is
     /// excluded from the payment run. Every built-in denying stage sets its
@@ -193,8 +194,11 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
     {
         ClaimAdjudicationOutcome.Pass => ClaimStatus.Approved,
         ClaimAdjudicationOutcome.Pend => ClaimStatus.Pended,
-        ClaimAdjudicationOutcome.Deny => ClaimStatus.Denied,
-        ClaimAdjudicationOutcome.Reject => ClaimStatus.Denied,
+        // Deny, not Denied: the adjudicated denial is non-final (reprocess /
+        // examiner resolve may still change it). The payment run's 835 and
+        // its $0 remittance finalize it to Denied.
+        ClaimAdjudicationOutcome.Deny => ClaimStatus.Deny,
+        ClaimAdjudicationOutcome.Reject => ClaimStatus.Deny,
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Unexpected adjudication outcome."),
     };
 }

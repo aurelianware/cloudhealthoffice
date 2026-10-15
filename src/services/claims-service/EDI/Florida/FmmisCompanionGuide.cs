@@ -247,8 +247,7 @@ public static class FmmisCompanionGuide
         }
 
         // ── Claim must be in a terminal status ─────────────────────
-        if (claim.Status is not (ClaimStatus.Paid or ClaimStatus.Approved
-            or ClaimStatus.Denied or ClaimStatus.PartiallyPaid))
+        if (!ClaimStatusSemantics.IsPayOutcome(claim.Status) && !ClaimStatusSemantics.IsDenied(claim.Status))
         {
             errors.Add($"Claim status '{claim.Status}' is not a terminal adjudication status.");
         }

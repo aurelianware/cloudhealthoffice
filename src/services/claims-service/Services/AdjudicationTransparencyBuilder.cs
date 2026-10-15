@@ -175,7 +175,7 @@ public static class AdjudicationTransparencyBuilder
         claim.Status switch
         {
             ClaimStatus.Pended => "Warning",
-            ClaimStatus.Approved or ClaimStatus.Paid or ClaimStatus.PartiallyPaid or ClaimStatus.Denied => "Passed",
+            _ when ClaimStatusSemantics.IsPayOutcome(claim.Status) || ClaimStatusSemantics.IsDenied(claim.Status) => "Passed",
             _ => "Warning"
         };
 
@@ -186,7 +186,7 @@ public static class AdjudicationTransparencyBuilder
             return $"Pended for {pendDetails.PendCode}: {pendDetails.PendReason ?? "review required"}.";
         }
 
-        if (claim.Status == ClaimStatus.Denied && claim.AdjudicationResult?.DenialReasonCode is { Length: > 0 } denialCode)
+        if (ClaimStatusSemantics.IsDenied(claim.Status) && claim.AdjudicationResult?.DenialReasonCode is { Length: > 0 } denialCode)
         {
             return $"Denied with CARC {denialCode}: {claim.AdjudicationResult.DenialReason ?? "reason not captured"}.";
         }

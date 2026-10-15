@@ -350,11 +350,14 @@ public interface IClaimRepository
         AccumulatorOutboxItem? pendingAccumulatorReversal = null);
 
     /// <summary>
-    /// Takes the examiner-resolution lock on a Pended claim (PR #1278 round
-    /// 3, L10): a conditional write that succeeds only while the claim is
-    /// <see cref="ClaimStatus.Pended"/> and holds no unexpired lock, so two
-    /// concurrent approvals cannot both re-adjudicate and publish. False when
-    /// the claim is not Pended, is locked by another resolution, or is gone.
+    /// Takes the examiner-resolution lock on a reprocessable claim (PR #1278
+    /// round 3, L10): a conditional write that succeeds only while the claim
+    /// is <see cref="ClaimStatus.Pended"/> or adjudicated but not finalized
+    /// (<see cref="ClaimStatus.Approved"/> "Pay" / <see cref="ClaimStatus.Deny"/>,
+    /// <see cref="ClaimStatusSemantics.IsReprocessable"/>) and holds no
+    /// unexpired lock, so two concurrent resolutions cannot both re-adjudicate
+    /// and publish. False when the claim is finalized (Paid / Denied / Voided)
+    /// or not yet adjudicated, is locked by another resolution, or is gone.
     /// </summary>
     Task<bool> TryAcquireResolutionLockAsync(
         string tenantId, string claimId, string token, string? actorId, DateTime now, TimeSpan duration,
@@ -364,7 +367,7 @@ public interface IClaimRepository
     Task ReleaseResolutionLockAsync(string tenantId, string claimId, string token, CancellationToken ct = default);
 
     /// <summary>
-    /// True while the claim is still Pended and <paramref name="token"/>
+    /// True while the claim is still reprocessable (Pended / Pay / Deny) and <paramref name="token"/>
     /// holds its resolution lock, unexpired at <paramref name="now"/>. Read
     /// immediately before a side effect that is not itself fenced on the lock
     /// (a denial's accumulator reversal, PR #1278 follow-up 1).
@@ -539,9 +542,13 @@ public class ClaimRepository : IClaimRepository
         ClaimStatus.Received or
         ClaimStatus.InAdjudication or
         ClaimStatus.Pended => ClaimVersionState.Submitted,
-        ClaimStatus.Approved => ClaimVersionState.Adjudicated,
+        // Pay and Deny: adjudicated, not yet finalized by the payment cycle
+        // (non-terminal; reprocess / examiner resolve may still change them).
+        ClaimStatus.Approved or
+        ClaimStatus.Deny => ClaimVersionState.Adjudicated,
         ClaimStatus.Paid or
         ClaimStatus.PartiallyPaid => ClaimVersionState.Paid,
+        // Denied is the FINALIZED denial (835 sent): terminal.
         ClaimStatus.Denied => ClaimVersionState.Denied,
         ClaimStatus.Voided => ClaimVersionState.Voided,
         _ => ClaimVersionState.Submitted
@@ -559,7 +566,11 @@ public class ClaimRepository : IClaimRepository
     /// </summary>
     public static bool IsFinalDisposition(ClaimStatus status) => status switch
     {
+        // Deny (like Approved) is a decided disposition: a stray write-back
+        // must not re-litigate it — only an explicit examiner resolve /
+        // reprocess (fenced on the resolution lock) changes it.
         ClaimStatus.Approved or
+        ClaimStatus.Deny or
         ClaimStatus.Denied or
         ClaimStatus.Paid or
         ClaimStatus.PartiallyPaid or
@@ -608,7 +619,8 @@ public class ClaimRepository : IClaimRepository
 
     /// <summary>
     /// True for the narrow repair allowed by the pipeline's resolved-status
-    /// projection: a row already says Denied, while the incoming result is paid and carries
+    /// projection: a row already says Deny (the non-final adjudicated denial;
+    /// a finalized Denied row is terminal and never patched), while the incoming result is paid and carries
     /// no denial evidence. This prevents an impossible "Denied + payer payment
     /// + no denial reason" state from surviving while still protecting pends
     /// and non-paid summaries.
@@ -617,7 +629,7 @@ public class ClaimRepository : IClaimRepository
         ClaimStatus preWriteStatus,
         ClaimStatus desiredStatus,
         AdjudicationResult incomingAdjudication) =>
-        preWriteStatus == ClaimStatus.Denied
+        preWriteStatus == ClaimStatus.Deny
         && desiredStatus == ClaimStatus.Approved
         && incomingAdjudication.PayerPayment > 0
         && !HasDenialEvidence(incomingAdjudication);
@@ -635,7 +647,7 @@ public class ClaimRepository : IClaimRepository
         ClaimStatus desiredStatus,
         AdjudicationResult incomingAdjudication) =>
         preWriteStatus == ClaimStatus.Approved
-        && desiredStatus == ClaimStatus.Denied
+        && desiredStatus == ClaimStatus.Deny
         && incomingAdjudication.PayerPayment == 0
         && HasDenialEvidence(incomingAdjudication);
 
@@ -652,7 +664,7 @@ public class ClaimRepository : IClaimRepository
         (desiredStatus == ClaimStatus.Approved
             && incomingAdjudication.PayerPayment > 0
             && !HasDenialEvidence(incomingAdjudication))
-        || (desiredStatus == ClaimStatus.Denied
+        || (desiredStatus == ClaimStatus.Deny
             && incomingAdjudication.PayerPayment == 0
             && HasDenialEvidence(incomingAdjudication));
 
@@ -1049,7 +1061,7 @@ public class ClaimRepository : IClaimRepository
             SELECT
                 COUNT(1) as TotalClaims,
                 SUM(CASE WHEN {EnumInLiteral("c.status", ClaimStatus.Approved)} THEN 1 ELSE 0 END) as ApprovedClaims,
-                SUM(CASE WHEN {EnumInLiteral("c.status", ClaimStatus.Denied)} THEN 1 ELSE 0 END) as DeniedClaims,
+                SUM(CASE WHEN {EnumInLiteral("c.status", ClaimStatus.Deny, ClaimStatus.Denied)} THEN 1 ELSE 0 END) as DeniedClaims,
                 SUM(CASE WHEN {EnumInLiteral("c.status", ClaimStatus.Pended)} THEN 1 ELSE 0 END) as PendedClaims,
                 SUM(CASE WHEN {EnumInLiteral("c.status", ClaimStatus.Paid)} THEN 1 ELSE 0 END) as PaidClaims,
                 SUM(c.totalChargeAmount) as TotalChargeAmount,
@@ -1891,9 +1903,9 @@ public class ClaimRepository : IClaimRepository
 
     /// <summary>
     /// The live-row check of the narrow contradiction repair (formerly two
-    /// patch filter predicates): Denied + paid + no denial code → Approved;
+    /// patch filter predicates): Deny + paid + no denial code → Approved;
     /// Approved + unpaid + denial evidence (code, reason or adjustment
-    /// reasons) → Denied. With a resolution lock token, the row must still
+    /// reasons) → Deny. A finalized Denied row is never repaired. With a resolution lock token, the row must still
     /// hold that lock.
     /// </summary>
     internal static bool IsRepairableContradiction(Claim row, ClaimStatus desiredStatus, string? requiredResolutionLockToken)
@@ -1905,10 +1917,10 @@ public class ClaimRepository : IClaimRepository
         if (adjudication is null) return false;
         return desiredStatus switch
         {
-            ClaimStatus.Approved => row.Status == ClaimStatus.Denied
+            ClaimStatus.Approved => row.Status == ClaimStatus.Deny
                                     && adjudication.PayerPayment > 0
                                     && string.IsNullOrEmpty(adjudication.DenialReasonCode),
-            ClaimStatus.Denied => row.Status == ClaimStatus.Approved
+            ClaimStatus.Deny => row.Status == ClaimStatus.Approved
                                   && adjudication.PayerPayment == 0
                                   && HasDenialEvidence(adjudication),
             _ => false,
@@ -2023,6 +2035,10 @@ public class ClaimRepository : IClaimRepository
         // Superseded versions (Adjusted, or SupersededAt set) no longer count.
         var adjustedClause = EnumInClause("c.versionState", "supersededState", enumParams,
             ClaimVersionState.Adjusted);
+        // A Deny claim is VersionState Adjudicated (non-final) but writes no
+        // accumulators: denials (either phase) and voids never count.
+        var deniedClause = EnumInClause("c.status", "uncountedStatus", enumParams,
+            ClaimStatus.Deny, ClaimStatus.Denied, ClaimStatus.Voided);
         var queryText = $@"
             SELECT c.id,
                    c.adjudicationResult.deductibleAmount,
@@ -2043,6 +2059,7 @@ public class ClaimRepository : IClaimRepository
                     {statusClause}
                     OR {versionStateClause}
                   )
+              AND NOT ({deniedClause})
               AND IS_DEFINED(c.adjudicationResult)
               AND (NOT IS_DEFINED(c.versionState) OR NOT ({adjustedClause}))
               AND (NOT IS_DEFINED(c.supersededAt) OR IS_NULL(c.supersededAt))";
@@ -2173,7 +2190,7 @@ public class ClaimRepository : IClaimRepository
         try
         {
             var current = (await _container.ReadItemAsync<Claim>(claimId, new PartitionKey(tenantId), cancellationToken: ct)).Resource;
-            return current.Status == ClaimStatus.Pended
+            return ClaimStatusSemantics.IsReprocessable(current.Status)
                    && current.ResolutionLock is { } held
                    && string.Equals(held.Token, token, StringComparison.Ordinal)
                    && held.ExpiresAt > now;
@@ -2200,7 +2217,7 @@ public class ClaimRepository : IClaimRepository
         var options = new PatchItemRequestOptions
         {
             FilterPredicate =
-                $"FROM c WHERE c.status = '{CosmosStatusLiteral(ClaimStatus.Pended)}' " +
+                $"FROM c WHERE c.status IN ({string.Join(",", ClaimStatusSemantics.ReprocessableStatuses.Select(st => $"'{CosmosStatusLiteral(st)}'"))}) " +
                 "AND (NOT IS_DEFINED(c.resolutionLock) OR IS_NULL(c.resolutionLock) " +
                 $"OR c.resolutionLock.expiresAt < '{nowLiteral}')",
         };
@@ -2337,7 +2354,7 @@ public class ClaimRepository : IClaimRepository
         // (CosmosStatusLiteral); PascalCase is also excluded so rows written
         // by older serializers can never leak through.
         var deadStatuses = DuplicateExclusionLiterals(
-            new[] { ClaimStatus.Denied, ClaimStatus.Voided }.Select(s => s.ToString()));
+            new[] { ClaimStatus.Deny, ClaimStatus.Denied, ClaimStatus.Voided }.Select(s => s.ToString()));
         var deadVersionStates = DuplicateExclusionLiterals(
             new[]
             {

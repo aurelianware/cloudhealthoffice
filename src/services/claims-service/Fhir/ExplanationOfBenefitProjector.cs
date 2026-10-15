@@ -662,7 +662,8 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
     {
         ClaimStatus.Paid or ClaimStatus.Approved => "complete",
         ClaimStatus.PartiallyPaid => "partial",
-        ClaimStatus.Denied => "error",
+        // Denied in either phase (Deny awaiting the 835, or finalized).
+        ClaimStatus.Deny or ClaimStatus.Denied => "error",
         _ => "queued"
     };
 

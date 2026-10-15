@@ -267,12 +267,6 @@ public class ClaimsController : ControllerBase
                     : $"{claim.PendDetails.PendCode}: {claim.PendDetails.PendReason}"
             });
 
-            foreach (var entry in timeline.Where(entry =>
-                         entry.EventType == ClaimVersionEventType.ClaimVersionDenied.ToString()
-                         && entry.Timestamp >= claim.PendDetails.PendedAt))
-            {
-                entry.OldValue = "Pended";
-            }
         }
 
         return Ok(timeline.OrderBy(entry => entry.Timestamp).ToList());
@@ -285,7 +279,8 @@ public class ClaimsController : ControllerBase
             ClaimVersionEventType.ClaimVersionSubmitted => ("Claim submitted", (string?)null, "Submitted"),
             ClaimVersionEventType.ClaimVersionAdjudicated => ("Claim adjudicated", "Submitted", "Approved"),
             ClaimVersionEventType.ClaimVersionPaid => ("Payment recorded", "Approved", "Paid"),
-            ClaimVersionEventType.ClaimVersionDenied => ("Claim denied", "Submitted", "Denied"),
+            // Emitted when the payment cycle finalizes a Deny (835 sent).
+            ClaimVersionEventType.ClaimVersionDenied => ("Denial finalized (835 sent)", "Deny", "Denied"),
             ClaimVersionEventType.ClaimVersionSuperseded => ("Claim version superseded", (string?)null, "Superseded"),
             ClaimVersionEventType.ClaimVersionVoided => ("Claim voided", (string?)null, "Voided"),
             ClaimVersionEventType.ClaimVersionReversed => ("Claim reversed", (string?)null, "Reversed"),
@@ -580,16 +575,16 @@ public class ClaimsController : ControllerBase
     {
         var path = status switch
         {
-            ClaimStatus.Approved or ClaimStatus.Denied =>
-                "Adjudicated outcomes are set only by the adjudication pipeline: submit the claim " +
-                "(POST /api/v1/claims) and let it adjudicate, or resolve a pended claim through " +
+            ClaimStatus.Approved or ClaimStatus.Deny =>
+                "Adjudicated outcomes (Pay / Deny) are set only by the adjudication pipeline: submit the claim " +
+                "(POST /api/v1/claims) and let it adjudicate, or resolve a pended, Pay or Deny claim through " +
                 "POST /api/claims/work-queue/{id}/resolve or /override, which re-run the pipeline.",
             ClaimStatus.Pended =>
                 "Pends are set only by the adjudication pipeline. To act on a pended claim use " +
                 "POST /api/claims/work-queue/{id}/resolve or /override.",
-            ClaimStatus.Paid or ClaimStatus.PartiallyPaid =>
-                "Payment status is set by remittance: POST /api/claims/{id}/remittance " +
-                "(or /inbound-remittance for a payer 835).",
+            ClaimStatus.Paid or ClaimStatus.PartiallyPaid or ClaimStatus.Denied =>
+                "Finalized statuses (Paid / Denied) are set by the payment cycle's remittance: " +
+                "POST /api/claims/{id}/remittance (or /inbound-remittance for a payer 835).",
             _ => null,
         };
 
@@ -602,12 +597,14 @@ public class ClaimsController : ControllerBase
             });
     }
 
+    /// <summary>
+    /// A decided status (either phase) that publishes claims.finalized.v1:
+    /// Pay / Deny (adjudicated) and Paid / Denied / Voided (finalized).
+    /// </summary>
     private static bool IsTerminalStatus(ClaimStatus status) =>
-        status is ClaimStatus.Paid
-            or ClaimStatus.Approved
-            or ClaimStatus.PartiallyPaid
-            or ClaimStatus.Denied
-            or ClaimStatus.Voided;
+        ClaimStatusSemantics.IsPayOutcome(status)
+            || ClaimStatusSemantics.IsDenied(status)
+            || status == ClaimStatus.Voided;
 
     /// <summary>
     /// Write the AI Claims Examiner's advisory recommendation onto a pended claim.
@@ -827,12 +824,14 @@ public class ClaimsController : ControllerBase
     /// (the deductible credit) is kept rather than dropped as a denial. When
     /// no check / EFT trace is supplied, the remittance control number stands
     /// in for it (an 835 with no payment still carries a TRN02 reference),
-    /// so a repeat of the same remittance is an idempotent no-op. A $0
-    /// remittance never changes a claim's disposition: a claim the pipeline
-    /// already Denied stays Denied (200, unchanged: a $0 remittance is what
-    /// a denial's 835 carries), and any other ineligible source state
-    /// (Pended, Submitted, ...) answers 422, unchanged. A negative amount is
-    /// rejected (400): a recoupment is a reversal run, not a remittance.
+    /// so a repeat of the same remittance is an idempotent no-op. The
+    /// payment cycle finalizes both adjudicated outcomes: Approved ("Pay") →
+    /// Paid, and a $0 remittance on a Deny claim (what a denial's 835
+    /// carries) → Denied. A $0 remittance on an already-Denied claim is an
+    /// idempotent 200, unchanged; a paid remittance on a Deny / Denied claim
+    /// and any other ineligible source state (Pended, Submitted, ...) answer
+    /// 422, unchanged. A negative amount is rejected (400): a recoupment is
+    /// a reversal run, not a remittance.
     /// </para>
     /// </summary>
     [HttpPost("{id}/remittance")]
@@ -901,15 +900,6 @@ public class ClaimsController : ControllerBase
 
             case ClaimFinalizationOutcome.Conflict:
                 return Conflict(new { message = result.Message, currentStatus = result.Claim?.Status });
-
-            case ClaimFinalizationOutcome.InvalidSourceState
-                when zeroPay && result.Claim?.Status == ClaimStatus.Denied:
-                // The pipeline denied the claim; a $0 remittance is what its
-                // 835 carries. Nothing changes (Denied is terminal).
-                _logger.LogInformation(
-                    "Zero-payment remittance for Denied claim {Id}; claim left Denied, unchanged",
-                    SanitizeForLog(id));
-                return Ok(result.Claim);
 
             case ClaimFinalizationOutcome.InvalidSourceState:
                 return UnprocessableEntity(new { message = result.Message, currentStatus = result.Claim?.Status });
@@ -1441,10 +1431,12 @@ public class ClaimsController : ControllerBase
         [FromBody] ResolvePendedClaimRequest request)
     {
         // ── validate every input before any side effect (L7) ─────────────
-        if (!Enum.TryParse<ClaimStatus>(request.Disposition, ignoreCase: true, out var disposition)
-            || disposition is not (ClaimStatus.Approved or ClaimStatus.Denied))
+        // An examiner's decision is the non-final adjudicated outcome: Pay
+        // (Approved) or Deny. The payment cycle finalizes it (Paid / Denied).
+        // "Denied" stays accepted for existing callers and means Deny here.
+        if (ParseExaminerDisposition(request.Disposition) is not { } disposition)
         {
-            return BadRequest("disposition must be Approved or Denied");
+            return BadRequest("disposition must be Approved (Pay) or Denied (Deny)");
         }
 
         var validAgreements = new[] { "Accepted", "Modified", "Overridden" };
@@ -1455,10 +1447,7 @@ public class ClaimsController : ControllerBase
 
         var claim = await _claimRepository.GetByIdAsync(claimId);
         if (claim == null) return NotFound();
-        if (claim.Status != ClaimStatus.Pended)
-        {
-            return Conflict($"Claim {claimId} is {claim.Status}, not Pended");
-        }
+        if (RefuseUnresolvable(claim) is { } refusal) return refusal;
 
         if (disposition == ClaimStatus.Approved && claim.PendDetails is not null
             && string.IsNullOrWhiteSpace(request.PendFingerprint))
@@ -1527,14 +1516,13 @@ public class ClaimsController : ControllerBase
         if (!await _claimRepository.TryAcquireResolutionLockAsync(
                 tenantId, claim.Id, lockToken, examinerUserId, requestedAt, ResolutionLockDuration, HttpContext.RequestAborted))
         {
-            return Conflict(new { error = $"Claim {claimId} is being resolved by another examiner, or is no longer Pended." });
+            return Conflict(new { error = $"Claim {claimId} is being resolved by another examiner, or is no longer Pended / Pay / Deny." });
         }
 
         try
         {
             claim = await _claimRepository.GetByIdAsync(claimId) ?? claim;
-            if (claim.Status != ClaimStatus.Pended)
-                return Conflict($"Claim {claimId} is {claim.Status}, not Pended");
+            if (RefuseUnresolvable(claim) is { } lockedRefusal) return lockedRefusal;
             var reviewedPend = claim.PendDetails;
             var fingerprint = PendDetails.ComputeFingerprint(reviewedPend);
             if (!string.IsNullOrWhiteSpace(request.PendFingerprint)
@@ -1689,7 +1677,7 @@ public class ClaimsController : ControllerBase
             claim.PendingAccumulatorCommit = disposition == ClaimStatus.Approved && accumulatorCommit is not null
                 ? AccumulatorOutboxItem.ForCommit(accumulatorCommit, actedAt)
                 : null;
-            claim.PendingAccumulatorReversal = disposition == ClaimStatus.Denied
+            claim.PendingAccumulatorReversal = disposition == ClaimStatus.Deny
                 ? AccumulatorOutboxItem.ForReversal(claim, actedAt)
                 : null;
             claim.ExaminerResolutions.Add(new ExaminerResolutionRecord
@@ -1776,6 +1764,41 @@ public class ClaimsController : ControllerBase
             // No-op once the final write cleared it; frees it on every other exit.
             await _claimRepository.ReleaseResolutionLockAsync(tenantId, claimId, lockToken, CancellationToken.None);
         }
+    }
+
+    /// <summary>
+    /// The examiner disposition: "Approved" / "Pay" → <see cref="ClaimStatus.Approved"/>;
+    /// "Denied" / "Deny" → <see cref="ClaimStatus.Deny"/> (never the finalized
+    /// <see cref="ClaimStatus.Denied"/>: only the payment cycle sets that).
+    /// Numeric values 5, 6 and 10 are accepted as before.
+    /// </summary>
+    internal static ClaimStatus? ParseExaminerDisposition(string? disposition) =>
+        disposition?.Trim().ToLowerInvariant() switch
+        {
+            "approved" or "pay" or "5" => ClaimStatus.Approved,
+            "denied" or "deny" or "6" or "10" => ClaimStatus.Deny,
+            _ => null,
+        };
+
+    /// <summary>
+    /// Null when an examiner may resolve the claim (Pended, Pay or Deny);
+    /// 422 when it was finalized by the payment cycle or reversed (only an
+    /// adjustment or a void changes it); 409 when it is not adjudicated yet.
+    /// </summary>
+    private ObjectResult? RefuseUnresolvable(Claim claim)
+    {
+        if (ClaimStatusSemantics.IsFinalized(claim))
+        {
+            return UnprocessableEntity(new
+            {
+                error = ClaimStatusSemantics.FinalizedRefusal(claim),
+                currentStatus = claim.Status,
+                currentVersionState = claim.VersionState.ToString(),
+            });
+        }
+        return ClaimStatusSemantics.IsReprocessable(claim.Status)
+            ? null
+            : Conflict($"Claim {claim.Id} is {claim.Status}, not Pended, Pay or Deny");
     }
 
     private ConflictObjectResult PendsChanged(Claim claim) => Conflict(new

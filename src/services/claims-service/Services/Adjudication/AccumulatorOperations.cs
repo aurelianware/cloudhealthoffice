@@ -321,7 +321,9 @@ public sealed class AccumulatorOperationsService
                 return StillPended("benefit-plan-service still prepares no accumulator commit");
 
             // From here the decision is made: finish it whatever the caller does.
-            var disposition = deny ? ClaimStatus.Denied : ClaimStatus.Approved;
+            // Deny, not Denied: the re-run's denial is non-final until the
+            // payment cycle remits it.
+            var disposition = deny ? ClaimStatus.Deny : ClaimStatus.Approved;
             claim = await _claims.GetForAccumulatorOutboxAsync(tenantId, claim.Id, CancellationToken.None) ?? claim;
             var actedAt = DateTime.UtcNow;
             var reviewed = claim.PendDetails;
