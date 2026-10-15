@@ -15,7 +15,11 @@
 #   IMAGE_TAG        Image tag to deploy (the workflow uses the commit SHA)
 #
 # Optional environment:
-#   ANTHROPIC_API_KEY        Enables the advisory AI claims examiner
+#   ANTHROPIC_API_KEY        Enables the advisory AI claims examiner. After rollout the deploy
+#                            makes one real call to Claude with the examiner's own settings and
+#                            fails if it doesn't succeed (bad key, no credit, retired model).
+#   REQUIRE_AI_EXAMINER=false  true fails the deploy when ANTHROPIC_API_KEY is empty instead of
+#                            turning the examiner off (the workflow sets it unless you untick it)
 #   CLOUDFLARE_TUNNEL_TOKEN  Runs a Cloudflare Tunnel connector (deploy/gcp/cloudflare) so the
 #                            demo is reachable at a Cloudflare Access-protected hostname
 #   ENABLE_KAFKA=true        Set to false to skip Kafka (services fall back to in-process messaging)
@@ -55,6 +59,9 @@ err()  { echo "  ✗ $*" >&2; exit 1; }
 log "Preflight checks"
 [[ -n "${GAR_REPOSITORY:-}" ]] || err "GAR_REPOSITORY is required (e.g. us-west1-docker.pkg.dev/PROJECT/cho)"
 [[ -n "${IMAGE_TAG:-}" ]] || err "IMAGE_TAG is required"
+if [[ "${REQUIRE_AI_EXAMINER:-false}" == "true" && -z "${ANTHROPIC_API_KEY:-}" ]]; then
+  err "The AI claims examiner is required but ANTHROPIC_API_KEY is empty (set the repository secret, or untick ai_examiner to deploy without it)"
+fi
 for tool in kubectl python3 openssl; do
   command -v "$tool" >/dev/null || err "$tool is required"
 done
@@ -265,6 +272,50 @@ if (( ${#failed[@]} > 0 )); then
   warn "Not ready: ${failed[*]}"
   echo "  Inspect with: kubectl describe deployment/<name> -n $NAMESPACE; kubectl logs deployment/<name> -n $NAMESPACE"
   exit 1
+fi
+
+# ── AI examiner live check ───────────────────────────────────────────────────
+# "Enabled" only means a key was present. Prove it works: run the examiner image
+# once as a Job with the deployment's own env (key, model, network path) and make
+# one tiny call to Claude. A separate pod, so the check can't push the running
+# examiner past its memory limit.
+if [[ "$AI_EXAMINER" == true ]]; then
+  log "Checking the AI claims examiner can reach Claude"
+  check_job="claims-examiner-anthropic-check"
+  kubectl delete job "$check_job" -n "$NAMESPACE" --ignore-not-found >/dev/null
+  kubectl get deployment claims-examiner-service -n "$NAMESPACE" -o json | CHECK_JOB="$check_job" python3 -c '
+import json, os, sys
+dep = json.load(sys.stdin)
+pod = dep["spec"]["template"]
+spec = pod["spec"]
+spec["restartPolicy"] = "Never"
+for c in spec["containers"]:
+    c["args"] = ["--check-anthropic"]
+    for probe in ("livenessProbe", "readinessProbe", "startupProbe"):
+        c.pop(probe, None)
+    c.pop("ports", None)
+labels = {k: v for k, v in (pod.get("metadata", {}).get("labels") or {}).items() if k != "app"}
+labels["app"] = os.environ["CHECK_JOB"]
+print(json.dumps({
+    "apiVersion": "batch/v1", "kind": "Job",
+    "metadata": {"name": os.environ["CHECK_JOB"], "namespace": dep["metadata"]["namespace"]},
+    "spec": {"backoffLimit": 0, "activeDeadlineSeconds": 180, "ttlSecondsAfterFinished": 3600,
+             "template": {"metadata": {"labels": labels}, "spec": spec}},
+}))' | kubectl apply -f - >/dev/null
+  check_result=""
+  for _ in $(seq 1 90); do
+    succeeded="$(kubectl get job "$check_job" -n "$NAMESPACE" -o jsonpath='{.status.succeeded}' 2>/dev/null || true)"
+    failed_count="$(kubectl get job "$check_job" -n "$NAMESPACE" -o jsonpath='{.status.failed}' 2>/dev/null || true)"
+    [[ "${succeeded:-0}" -ge 1 ]] && { check_result=ok; break; }
+    [[ "${failed_count:-0}" -ge 1 ]] && { check_result=failed; break; }
+    sleep 2
+  done
+  check_output="$(kubectl logs "job/$check_job" -n "$NAMESPACE" 2>/dev/null | grep -E '^Anthropic' | tail -1 || true)"
+  case "$check_result" in
+    ok) ok "${check_output:-Anthropic reachable}" ;;
+    failed) err "AI claims examiner cannot reach Claude: ${check_output:-see kubectl logs job/$check_job -n $NAMESPACE}" ;;
+    *) err "AI claims examiner check did not finish in time; see kubectl logs job/$check_job -n $NAMESPACE" ;;
+  esac
 fi
 
 echo
