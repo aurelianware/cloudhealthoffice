@@ -73,13 +73,9 @@ The classification decides what happens next:
 - The plan must "promptly determine and inform the enrollee" whether a complaint is a grievance or an appeal.
 - Records must keep at least the date received, the final disposition, and the date the enrollee was notified.
 
-**Medicaid managed care** (42 CFR 438.400–438.424; *values to verify against the eCFR before publishing*):
-- Grievances and appeals may be filed orally.
-- Standard grievances are resolved within 90 days, standard appeals within 30 days, expedited appeals within 72 hours. Extensions of up to 14 days are allowed under conditions.
-- Section 438.416 requires a record of each grievance and appeal: a general description, the date received, review dates, the resolution and its date, and the member's name.
-- States add their own rules; for example, Texas HHSC's managed care manual sets complaint acknowledgment and resolution timelines and hotline performance standards.
+**Medicaid managed care and state rules:** the full set of levels, timeframes and audit requirements, verified against the regulations, is in [appeals-grievances-compliance.md](appeals-grievances-compliance.md). In short: one level of member appeal, decided in 30 days (72 hours expedited); grievances resolved within 90 days; then a State fair hearing, plus external medical review where the state offers it.
 
-**Configuration:** the rules live in dated rule packs per line of business and state, like the prompt-pay interest rules in [claim-review-workbench.md](claim-review-workbench.md) §3.3.
+**Configuration:** the rules live in dated rule packs per line of business and state ([appeals-grievances-compliance.md](appeals-grievances-compliance.md) §3), like the prompt-pay interest rules in [claim-review-workbench.md](claim-review-workbench.md) §3.3.
 
 **How the module helps the rep classify correctly:**
 - The classification step can't be skipped.
@@ -94,7 +90,7 @@ Produced from contacts and the cases they open:
 - **Misclassification review:** AI-flagged contacts closed as inquiries, with the supervisor's outcome.
 - **Operating metrics:** volume and reason trends, first-call resolution, handle time and after-call work, follow-ups overdue, and repeat callers.
 
-The export layouts follow the CMS program audit record layouts for the relevant lines of business. *(Exact field layouts to be confirmed against the current CMS audit protocol.)*
+The export layouts are versioned CMS program audit templates; see [appeals-grievances-compliance.md](appeals-grievances-compliance.md) §5.
 
 ## 6. Working the call
 
