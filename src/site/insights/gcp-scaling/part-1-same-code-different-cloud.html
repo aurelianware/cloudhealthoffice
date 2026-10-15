@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scaling a Healthcare Payer Core Admin and Interoperability Platform in Google Cloud, Part One: Same Code, Different Cloud | Cloud Health Office</title>
+  <meta name="description" content="Bringing a 35-service healthcare payer platform to Google Kubernetes Engine without an application rewrite: Terraform and keyless deploys, a quota wall on a new billing account, a one-node redesign, and two shared-manifest bugs only a clean environment exposed.">
+  <link rel="canonical" href="https://cloudhealthoffice.com/insights/gcp-scaling/part-1-same-code-different-cloud">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Cloud Health Office">
+  <meta property="og:title" content="Scaling a Healthcare Payer Core Admin and Interoperability Platform in Google Cloud, Part One: Same Code, Different Cloud">
+  <meta property="og:description" content="Bringing a 35-service healthcare payer platform to Google Kubernetes Engine without an application rewrite: Terraform and keyless deploys, a quota wall on a new billing account, a one-node redesign, and two shared-manifest bugs only a clean environment exposed.">
+  <meta property="og:url" content="https://cloudhealthoffice.com/insights/gcp-scaling/part-1-same-code-different-cloud">
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/og-million-claim-challenge.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <script src="/js/mobile-nav.js"></script>
+  <style>
+    .publication { max-width: 860px; margin: 0 auto; padding: 64px 24px 96px; }
+    .publication-nav { margin-bottom: 40px; color: #8b949e; }
+    .publication-nav a { color: #00ffff; }
+    .eyebrow { color: #00ff88; font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .publication h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.08; margin: 12px 0 20px; }
+    .publication h2 { margin-top: 52px; color: #00ffff; }
+    .publication p, .publication li { color: #c9d1d9; font-size: 1.05rem; line-height: 1.8; }
+    .publication code { color: #00ff88; background: #111820; padding: .12rem .35rem; border-radius: 4px; }
+    .disclosure { border-left: 4px solid #f0b429; background: rgba(240,180,41,.08); padding: 18px 22px; margin: 30px 0; }
+    .source-note { font-size: .9rem !important; color: #8b949e !important; }
+    .article-links { display: flex; flex-wrap: wrap; gap: 12px; margin: 40px 0; }
+    .article-links a { border: 1px solid rgba(0,255,255,.35); border-radius: 6px; padding: 10px 14px; color: #00ffff; text-decoration: none; }
+    .evidence-block { margin: 28px 0; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; overflow: hidden; }
+    .evidence-block summary { cursor: pointer; padding: 18px 20px; color: #00ffff; font-weight: 700; background: #0d1117; }
+    .evidence-block pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 22px; background: #080c10; color: #c9d1d9; font-size: .84rem; line-height: 1.55; }
+    .article-figure { margin: 40px 0; }
+    .article-figure img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid rgba(0,255,255,.18); background: #000; }
+    .article-figure figcaption { margin-top: 12px; font-size: .85rem; color: #8b949e; text-align: center; line-height: 1.5; }
+    .table-wrap { margin: 28px 0; overflow-x: auto; border: 1px solid rgba(0,255,255,.22); border-radius: 8px; }
+    .table-wrap table { width: 100%; border-collapse: collapse; font-size: .95rem; font-variant-numeric: tabular-nums; }
+    .table-wrap th, .table-wrap td { padding: 10px 16px; text-align: left; border-bottom: 1px solid rgba(139,148,158,.2); white-space: nowrap; }
+    .table-wrap th { color: #00ffff; font-weight: 700; background: #0d1117; }
+    .table-wrap td { color: #c9d1d9; }
+    .table-wrap tr:last-child td { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <main class="publication">
+    <nav class="publication-nav"><a href="/">Home</a> / <a href="/insights">Insights</a> / <a href="/insights/gcp-scaling/">Scaling in Google Cloud</a></nav>
+    <div class="eyebrow">Scaling a Payer Platform in Google Cloud · Part One</div>
+    <h1>Scaling a Healthcare Payer Core Admin and Interoperability Platform in Google Cloud, Part One: Same Code, Different Cloud</h1>
+    <div class="disclosure"><strong>Evidence scope:</strong> This engineering field note covers two days standing the platform up on a new Google Cloud project with synthetic data. It is about portability, not performance: the environment is a single 8-vCPU demo node, and no Google Cloud throughput figures are claimed. Published Million Claim Challenge numbers come from local Kubernetes.</div>
+    <div class="article-links">
+      <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/gcp-scaling/podcast/episode-001/article.txt" target="_blank" rel="noopener noreferrer">View article source</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/deploy/GCP-DEMO.md" target="_blank" rel="noopener noreferrer">GKE runbook</a>
+      <a href="https://github.com/aurelianware/cloudhealthoffice/tree/main/infrastructure/gcp" target="_blank" rel="noopener noreferrer">Terraform</a>
+    </div>
+    <p>The Azure field notes ended with a promise: after Azure, run the same exercise somewhere else and find out which lessons were Azure's and which were simply what happens when a real platform meets a real cloud. This is the first half of that answer. Over two days in October 2026, this platform went from no presence on Google Cloud at all to every service it deploys reporting ready on Google Kubernetes Engine. It took no application rewrite. The services, Kubernetes manifests and container images are the same ones that run on a laptop and on AKS. It did take a redesign forced by a brand-new billing account, two dependency breaks that had nothing to do with Google, and two genuine bugs that every environment had been carrying and only this one surfaced.</p>
+    <h2 id="why-google-cloud-and-why-now">Why Google Cloud, and why now</h2>
+    <p>Health plans rarely live in one cloud. Many run some workloads in Azure, some in AWS and some in Google Cloud, and a common plan for the next few years is to consolidate onto one of them. A core administration platform that only runs well in the cloud it was born in becomes one more thing holding a consolidation back. The claim this platform makes is that it is Kubernetes-native and cloud-portable. Google Cloud is where that claim gets tested by doing it, not by saying it.</p>
+    <p>The goal for Part One was deliberately narrow. Before any scale numbers, the first question was whether the whole platform comes up on GKE from the repository, repeatably, without editing application code: claims, benefits, eligibility, enrollment, FHIR, prior authorization, payments, the portal and the rest, along with the Kafka, MongoDB, Redis and Postgres they depend on.</p>
+    <figure class="article-figure">
+      <a href="/graphics/insights/gcp-partner-seams.svg" target="_blank" rel="noopener"><img src="/graphics/insights/gcp-partner-seams.svg" alt="Diagram: an existing core admin system connects to Cloud Health Office in legacy, augment or replace mode by domain; partner capabilities for eligibility verification, risk adjustment, clinical data exchange and quality connect through X12, FHIR R4 and event-stream seams; the platform runs on the plan's own Kubernetes on GKE, AKS, EKS or on-premises." width="1200" loading="lazy"></a>
+      <figcaption>Where existing cores and partner services meet the platform. The partner boxes are categories of capability, not named integrations; each seam exists in the repository today.</figcaption>
+    </figure>
+    <h2 id="what-got-built">What got built</h2>
+    <p>Everything is code in the repository, so a health plan's platform team can read it, run it and tear it down.</p>
+    <ul>
+      <li>Terraform (<code>infrastructure/gcp</code>) creates the cluster, an Artifact Registry repository for the service images with a cleanup policy, and Workload Identity Federation so GitHub Actions deploys without a service account key. The federation trusts tokens minted for this one repository only. An optional budget alert sits on top.</li>
+      <li>A manual GitHub Actions workflow builds the service images, pushes them to Artifact Registry and deploys. It can also skip the build and deploy an existing image tag, which mattered more than expected.</li>
+      <li>Kafka runs in-cluster under the Strimzi operator: three KRaft brokers, so the existing topic definitions apply unchanged.</li>
+      <li>MongoDB, Redis and Postgres run in-cluster too, with a small seed for a synthetic demo tenant.</li>
+      <li>A renderer (<code>deploy/gcp/render_manifests.py</code>) reads the same per-service manifests the local deploy applies and adjusts them for GKE: images from Artifact Registry, Google storage classes in place of Azure's, Azure-only tolerations removed, and the host settings the demo needs. The source manifests are not modified, so the Azure and local paths are unaffected.</li>
+    </ul>
+    <p>The environment is demo-grade by design, and it says so. It holds synthetic data only. There is no public ingress; it is reached by port-forward. Its development signing key is public in the repository, so it must never hold real data. There is no Google BAA, customer-managed encryption key or private cluster. Those are the gaps between this and a HIPAA production deployment, and <code>docs/deploy/GCP-DEMO.md</code> lists them.</p>
+    <figure class="article-figure">
+      <a href="/graphics/insights/gcp-gke-demo-architecture.svg" target="_blank" rel="noopener"><img src="/graphics/insights/gcp-gke-demo-architecture.svg" alt="Diagram: GitHub Actions authenticates through Workload Identity Federation and pushes images to Artifact Registry; one GKE node runs 35 services grouped as claims, members and benefits, interoperability, and providers, finance and risk, plus Kafka under Strimzi and MongoDB, Redis and Postgres on standard disk." width="1200" loading="lazy"></a>
+      <figcaption>The demo environment as deployed: keyless delivery from GitHub, one e2-standard-8 node, synthetic data, port-forward access only.</figcaption>
+    </figure>
+    <h2 id="the-first-wall-was-not-google-s">The first wall was not Google's</h2>
+    <p>The first full workflow run failed before it reached Google Cloud at all. Nine image builds stopped at restore with NU1605, a package downgrade error. A grouped Dependabot update the day before had moved one cryptography package forward. Two other packages the solution pins centrally now sat below the version it required. The fix was to align the pins, but the lesson was the useful part. This solution already centralizes package versions precisely because grouped bumps have broken it before, and a single updated package can still pull a transitive floor past everything else. The same class of break happened again the next day with an Azure Storage package whose new version required a newer Azure.Core than the solution can take. That bump is now held back in Dependabot until the Azure package family moves together.</p>
+    <h2 id="the-second-wall-was-a-new-billing-account">The second wall was a new billing account</h2>
+    <p>The second run built every image, pushed them all and applied every manifest. Then nothing scheduled. GKE Autopilot tried to add nodes and Google Cloud refused: <code>Quota 'SSD_TOTAL_GB' exceeded. Limit: 250.0</code>. The CPU and external IP quotas were close behind, at 12 vCPUs and 4 addresses.</p>
+    <p>Those are the defaults for a new billing account. The fix looked like a form: request 500 GB of SSD, 24 vCPUs and 8 addresses. The request was declined, both through the API and in the console, even after the account was upgraded from the free trial to a paid account. The console was plain about why: based on the account's usage history, it was not eligible for an increase yet. The same wall stopped the Azure series, on a different cloud. A new subscription's default limits are a real constraint for anyone evaluating a platform in a fresh account, which is how evaluations usually start.</p>
+    <p>Waiting was one option. Fitting inside the limit was the better one.</p>
+    <h2 id="fitting-a-payer-platform-on-one-node">Fitting a payer platform on one node</h2>
+    <p>The cluster became a single-zone GKE Standard cluster with one <code>e2-standard-8</code> node: 8 vCPUs and 32 GB of memory on standard, non-SSD persistent disk. That uses 8 of the 12 allowed vCPUs, one external address and none of the SSD quota. Autopilot stays one Terraform variable away for when quota allows.</p>
+    <p>Two changes made the platform fit on it.</p>
+    <ul>
+      <li>Storage moved to a standard-disk class the deploy creates, for Kafka, MongoDB and every service volume.</li>
+      <li>A small resource profile lowers what each service reserves. Kubernetes schedules by requests, the CPU a pod reserves, not by what it uses. Most of these services sit idle at a few millicores and reserve far more. The small profile caps CPU requests at 50 millicores (250 for claims-service), runs one replica of each service and leaves limits unchanged, so any service can still burst when it is working. The services' combined reservations dropped to about 2.2 vCPUs.</li>
+    </ul>
+    <p>Running the whole platform around the clock costs roughly seven dollars a day at list price, and the node pool scales to zero between sessions.</p>
+    <p>One more lesson came from the cluster definition itself. <code>terraform validate</code> passed. <code>terraform plan</code>, run against the real project, rejected it: the provider does not allow <code>enable_autopilot = false</code> alongside <code>remove_default_node_pool</code>. The field has to be left unset instead. Validation checks shape; only a plan against a real project checks what the provider will accept.</p>
+    <figure class="article-figure">
+      <a href="/graphics/insights/gcp-cpu-reservations.svg" target="_blank" rel="noopener"><img src="/graphics/insights/gcp-cpu-reservations.svg" alt="Bar chart: with manifest defaults the platform reserves about 10.0 vCPU, above the roughly 7.9 vCPU allocatable on one e2-standard-8 node; with the small profile it reserves about 3.1 vCPU. The new account's quota is 12 vCPU." width="1200" loading="lazy"></a>
+      <figcaption>CPU reserved by all services plus Kafka, MongoDB and Redis. Defaults: 10.0 vCPU. Small profile: 3.1 vCPU. GKE system pods not included.</figcaption>
+    </figure>
+    <h2 id="what-gke-found-that-every-environment-had-missed">What GKE found that every environment had missed</h2>
+    <p>The first deploy to the new cluster brought up Kafka, MongoDB, Postgres and Redis, and all but two of the 35 platform services. The two that failed were the most valuable result of the exercise, because neither was a GKE problem.</p>
+    <p>pricing-api restarted in a loop, timing out on MongoDB at <code>localhost</code>. Its Kubernetes manifest supplied the database connection under the standard MongoDb setting. At startup, the service copies its own <code>PricingApi.MongoConnectionString</code> setting into that MongoDb section, and that setting still held the <code>localhost</code> default from <code>appsettings.json</code>. The manifest's value was overwritten every time. The fix was one rename in the manifest. The bug had been there in every deployment that used that manifest.</p>
+    <p>benefit-plan-service started cleanly and never reported ready. Its readiness check failed on Redis's eviction policy. This service keeps accumulator state in Redis: the commit journal and the fences that stop a voided or denied claim from being counted twice. If Redis may evict that data under memory pressure, deductible and out-of-pocket totals can silently go wrong. The service refuses to report ready on any evicting policy, and the repository's own deploy notes say to run that Redis with <code>noeviction</code>. The shared Redis manifest still said <code>volatile-lru</code>. The check did exactly its job, by blocking a deployment that could have miscounted a member's out-of-pocket maximum. The manifest now matches the deploy notes.</p>
+    <p>Both bugs were in manifests shared with the local and Azure deployments. A clean environment, standing up the whole platform from nothing, exposed them.</p>
+    <h2 id="where-it-stands">Where it stands</h2>
+    <p>After those two fixes, a redeploy from the existing image tag finished in under two minutes. Every deployment reported ready: 35 platform services plus Redis, alongside MongoDB, Postgres and a three-broker Kafka cluster, on one 8-vCPU node in <code>us-west1</code>. No application code changed to get there. The code changes were to manifests and package pins that were wrong everywhere, not just on Google Cloud.</p>
+    <p>Ready means each service's own readiness checks passed. They cover its database, cache and message bus connections, and for benefit-plan-service the accumulator integrity rule described above. Readiness is the cluster's opinion, so a scripted smoke test then checked from outside, over port-forward from a laptop. All ten checks passed: claims, benefit-plan and FHIR services live; the FHIR adapter reporting its data as synthetic; the FHIR CapabilityStatement; FHIR responses carrying adapter labels; the claims API rejecting a request with no token (401) and accepting a signed development token; and the portal answering.</p>
+    <h2 id="what-part-one-does-not-show">What Part One does not show</h2>
+    <p>Part One is about portability, not scale. One node with lowered reservations is the right shape for a demo and an evaluation. It is not a performance environment, and nothing here is a throughput number for Google Cloud. The published Million Claim Challenge figures come from local Kubernetes, and they stay there until they are rerun.</p>
+    <h2 id="part-two">Part Two</h2>
+    <p>Part Two is where scaling belongs. Once the account has the quota, the plan is to switch the cluster to Autopilot or a larger node pool, restore full resource reservations and replica counts, and run the Million Claim Challenge methodology on GKE: the same corpus, the same correctness checks and the same published evidence, so the numbers can be compared directly with the local runs.</p>
+    <div class="article-links"><a href="/insights/gcp-scaling/">All Google Cloud articles</a><a href="/insights/azure-scaling/">Azure series</a><a href="/insights/million-claim-challenge/">Million Claim Challenge series</a></div>
+  </main>
+</body>
+</html>

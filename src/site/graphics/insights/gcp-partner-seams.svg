@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="660" viewBox="0 0 1200 660" role="img" aria-labelledby="gps-title gps-desc">
+  <title id="gps-title">Where partner capabilities meet the platform</title>
+  <desc id="gps-desc">On the left, a health plan's existing core system of record connects to the platform in legacy, augment or replace mode, domain by domain. In the center, Cloud Health Office runs claims, benefits, enrollment and eligibility on the plan's own Kubernetes cluster on GKE, AKS or EKS. On the right, four kinds of partner capability connect through standard seams that exist in the platform today: eligibility and coverage verification through X12 270 and 271 and the eligibility-requests topic; risk adjustment and encounters through the encounter and risk-adjustment services; clinical data exchange through FHIR R4 APIs for Patient Access, Payer-to-Payer and prior authorization; and quality and analytics through the event stream.</desc>
+  <defs>
+    <marker id="gpsArr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0 0 L9 3.5 L0 7" fill="#00ffff" opacity="0.8"/></marker>
+    <marker id="gpsArrL" markerWidth="9" markerHeight="7" refX="1" refY="3.5" orient="auto"><path d="M9 0 L0 3.5 L9 7" fill="#00ffff" opacity="0.8"/></marker>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
+    .h { font-size: 15px; font-weight: 800; fill: #ffffff; }
+    .s { font-size: 12.5px; fill: #8b949e; }
+    .seam { font-size: 12px; fill: #00ff88; font-family: "SFMono-Regular", Consolas, monospace; }
+    .k { font-size: 11px; font-weight: 700; letter-spacing: 1.6px; fill: #00ff88; }
+    .box { fill: #0d1117; stroke: rgba(0,255,255,0.35); stroke-width: 1.2; }
+    .core { fill: #07131a; stroke: #00ffff; stroke-opacity: 0.7; stroke-width: 1.6; }
+    .ln { stroke: #00ffff; stroke-width: 1.6; opacity: 0.7; fill: none; }
+  </style>
+
+  <rect width="1200" height="660" fill="#000000"/>
+  <text x="600" y="42" text-anchor="middle" font-size="26" font-weight="900" fill="#ffffff">Seams, not a rip-and-replace</text>
+  <text x="600" y="66" text-anchor="middle" font-size="14" fill="#00ffff">Where existing cores and partner services meet the platform, on whichever cloud the plan runs</text>
+
+  <!-- Left: core of record -->
+  <text x="40" y="112" class="k">SYSTEM OF RECORD</text>
+  <rect x="40" y="124" width="250" height="210" rx="10" class="box"/>
+  <text x="58" y="154" class="h">Existing core admin</text>
+  <text x="58" y="176" class="s">QNXT, Facets, HealthEdge</text>
+  <text x="58" y="210" class="s">Per domain and line of business:</text>
+  <text x="58" y="236" class="seam">legacy</text>
+  <text x="120" y="236" class="s">core decides</text>
+  <text x="58" y="260" class="seam">augment</text>
+  <text x="128" y="260" class="s">both run, compare</text>
+  <text x="58" y="284" class="seam">replace</text>
+  <text x="124" y="284" class="s">platform decides</text>
+  <text x="58" y="314" class="s">Appeals is a typical first cutover</text>
+
+  <rect x="40" y="356" width="250" height="122" rx="10" class="box"/>
+  <text x="58" y="386" class="h">Members &amp; providers</text>
+  <text x="58" y="410" class="s">834 enrollment in</text>
+  <text x="58" y="432" class="s">837 claims in, 835 / 277 out</text>
+  <text x="58" y="454" class="s">Provider directory, prior auth</text>
+
+  <path class="ln" d="M290 229 H346" marker-end="url(#gpsArr)" marker-start="url(#gpsArrL)"/>
+  <path class="ln" d="M290 417 H346" marker-end="url(#gpsArr)" marker-start="url(#gpsArrL)"/>
+
+  <!-- Center: platform -->
+  <rect x="350" y="124" width="420" height="354" rx="12" class="core"/>
+  <text x="560" y="156" text-anchor="middle" class="k">CLOUD HEALTH OFFICE</text>
+  <rect x="374" y="172" width="180" height="62" rx="8" class="box"/>
+  <text x="390" y="198" class="h">Claims</text>
+  <text x="390" y="220" class="s">Adjudication, pricing</text>
+  <rect x="566" y="172" width="180" height="62" rx="8" class="box"/>
+  <text x="582" y="198" class="h">Benefits</text>
+  <text x="582" y="220" class="s">Plans, accumulators</text>
+  <rect x="374" y="246" width="180" height="62" rx="8" class="box"/>
+  <text x="390" y="272" class="h">Enrollment</text>
+  <text x="390" y="294" class="s">Members, coverage</text>
+  <rect x="566" y="246" width="180" height="62" rx="8" class="box"/>
+  <text x="582" y="272" class="h">Eligibility</text>
+  <text x="582" y="294" class="s">270 / 271, real time</text>
+  <rect x="374" y="320" width="372" height="62" rx="8" class="box"/>
+  <text x="390" y="346" class="h">FHIR R4 · CMS-0057-F</text>
+  <text x="390" y="368" class="s">Patient, Provider, Payer-to-Payer · CRD · DTR · PAS</text>
+  <rect x="374" y="394" width="372" height="62" rx="8" class="box"/>
+  <text x="390" y="420" class="h">Event stream (Kafka)</text>
+  <text x="390" y="442" class="s">Claims, enrollment, eligibility and EDI events</text>
+
+  <!-- Right: partner capabilities -->
+  <text x="830" y="112" class="k">PARTNER CAPABILITIES</text>
+  <rect x="830" y="124" width="330" height="78" rx="10" class="box"/>
+  <text x="848" y="152" class="h">Eligibility &amp; coverage verification</text>
+  <text x="848" y="178" class="seam">X12 270/271 · eligibility-requests</text>
+
+  <rect x="830" y="214" width="330" height="78" rx="10" class="box"/>
+  <text x="848" y="242" class="h">Risk adjustment &amp; encounters</text>
+  <text x="848" y="268" class="seam">encounter · risk-adjustment services</text>
+
+  <rect x="830" y="304" width="330" height="78" rx="10" class="box"/>
+  <text x="848" y="332" class="h">Clinical data exchange (HIE, TEFCA)</text>
+  <text x="848" y="358" class="seam">FHIR R4 · Payer-to-Payer · PAS</text>
+
+  <rect x="830" y="394" width="330" height="78" rx="10" class="box"/>
+  <text x="848" y="422" class="h">Quality &amp; analytics</text>
+  <text x="848" y="448" class="seam">event stream · FHIR bulk reads</text>
+
+  <path class="ln" d="M770 277 H826" marker-end="url(#gpsArr)" marker-start="url(#gpsArrL)"/>
+  <path class="ln" d="M800 163 V433" opacity="0.4"/>
+  <path class="ln" d="M800 163 H826" marker-end="url(#gpsArr)"/>
+  <path class="ln" d="M800 253 H826" marker-end="url(#gpsArr)"/>
+  <path class="ln" d="M800 343 H826" marker-end="url(#gpsArr)"/>
+  <path class="ln" d="M800 433 H826" marker-end="url(#gpsArr)"/>
+
+  <!-- Cloud band -->
+  <rect x="40" y="512" width="1120" height="74" rx="10" fill="#0b1219" stroke="rgba(0,255,136,0.35)" stroke-width="1.2"/>
+  <text x="600" y="542" text-anchor="middle" class="h">The plan's own cloud: GKE · AKS · EKS · on-premises Kubernetes</text>
+  <text x="600" y="566" text-anchor="middle" class="s">Same manifests and images everywhere. Consolidating clouds moves the platform; it does not rewrite it.</text>
+
+  <text x="600" y="626" text-anchor="middle" class="s">Partner boxes are categories of capability, not integrations with named vendors. Each seam listed exists in the repository today.</text>
+</svg>
