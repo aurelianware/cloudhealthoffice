@@ -1127,6 +1127,7 @@ public class ClaimPendEditFailure
 {
     public string EditType { get; set; } = string.Empty;
     public string RuleId { get; set; } = string.Empty;
+    public string? Message { get; set; }
     public string? Column1Code { get; set; }
     public string? Column2Code { get; set; }
     public List<int> AffectedLineNumbers { get; set; } = new();
@@ -1245,6 +1246,10 @@ public class ClaimServiceLine
             AllowedAmount = value.AllowedAmount;
             PaidAmount = value.PaidAmount;
             PatientResponsibility = value.PatientResponsibility;
+            if (_adjustments.Count == 0 && value.AdjustmentReasons.Count > 0)
+            {
+                _adjustments = value.AdjustmentReasons;
+            }
         }
     }
 }
@@ -1268,6 +1273,9 @@ public class ClaimLineAdjudicationProjection
     public decimal AllowedAmount { get; set; }
     public decimal PaidAmount { get; set; }
     public decimal PatientResponsibility { get; set; }
+
+    /// <summary>The line's 835 CAS adjustments (group, CARC, amount, RARC).</summary>
+    public List<ClaimLineAdjustment> AdjustmentReasons { get; set; } = new();
 }
 
 public class ClaimLineAdjustment
@@ -1277,6 +1285,8 @@ public class ClaimLineAdjustment
     [JsonConverter(typeof(FlexibleDecimalJsonConverter))]
     public decimal Amount { get; set; }
     public string Description { get; set; } = string.Empty;
+    /// <summary>The RARC qualifying the adjustment, when there is one.</summary>
+    public string? RemarkCode { get; set; }
 }
 
 public class ClaimAdjustmentInfo
