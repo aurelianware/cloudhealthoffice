@@ -126,13 +126,14 @@
                                     @WorkflowEvidenceCaption(latestRun)
                                 </MudText>
                             </MudItem>
-                            <MudItem xs="6" md="3">
+                            <MudItem xs="6" md="3" Style="min-width: 0;">
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">Outcomes</MudText>
-                                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Paid @latestRun.Paid</MudChip>
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Pended @latestRun.Pended</MudChip>
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Error">Denied @latestRun.BusinessDenials</MudChip>
-                                </MudStack>
+                                @* Plain flex wrap: the chips must stay inside this card at any width. *@
+                                <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 100%;">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="ma-0">Paid @latestRun.Paid</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ma-0">Pended @latestRun.Pended</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ma-0">Denied @latestRun.BusinessDenials</MudChip>
+                                </div>
                             </MudItem>
                         </MudGrid>
 
@@ -245,7 +246,7 @@
                                     <MudTh></MudTh>
                                 </HeaderContent>
                                 <RowTemplate>
-                                    <MudTd DataLabel="Claim">@context.ClaimId</MudTd>
+                                    <MudTd DataLabel="Claim" Style="font-family: monospace; white-space: nowrap;">@context.DisplayClaimNumber</MudTd>
                                     <MudTd DataLabel="Reason">
                                         <MudChip T="string" Size="Size.Small" Color="@GetQueueColor(context.QueueReasonCode)">
                                             @context.QueueReasonCode
@@ -448,7 +449,7 @@
             {
                 <MudTable Items="@recentClaims" Dense="true" Hover="true" Striped="true" Elevation="0">
                     <HeaderContent>
-                        <MudTh>Claim ID</MudTh>
+                        <MudTh>Claim</MudTh>
                         <MudTh>Member</MudTh>
                         <MudTh>Provider</MudTh>
                         <MudTh Style="text-align:right">Amount</MudTh>
@@ -456,8 +457,8 @@
                         <MudTh Style="text-align:right">Processing Time</MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd DataLabel="Claim ID">
-                            <MudLink Href="@($"/claims/{context.ClaimId}")">@context.ClaimId</MudLink>
+                        <MudTd DataLabel="Claim">
+                            <MudLink Href="@($"/claims/{Uri.EscapeDataString(context.ClaimId)}")" Style="white-space: nowrap;">@context.DisplayClaimNumber</MudLink>
                         </MudTd>
                         <MudTd DataLabel="Member">@context.MemberName</MudTd>
                         <MudTd DataLabel="Provider">@context.ProviderName</MudTd>

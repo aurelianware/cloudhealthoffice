@@ -171,6 +171,7 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
         Assert.NotNull(items);
         var item = Assert.Single(items!);
         Assert.Equal("claim-ncci-pended", item.ClaimId);
+        Assert.Equal("CLM-NCCI-PENDED", item.ClaimNumber);
         Assert.Equal("NCCI", item.QueueReasonCode);
         Assert.Equal("NCCI Edit Failure", item.QueueReason);
         Assert.Equal(2, item.ProcedureCodes.Count);
@@ -400,6 +401,7 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
     private sealed class WorkQueueItemDto
     {
         public string ClaimId { get; set; } = string.Empty;
+        public string ClaimNumber { get; set; } = string.Empty;
         public string QueueReason { get; set; } = string.Empty;
         public string QueueReasonCode { get; set; } = string.Empty;
         public List<string> ProcedureCodes { get; set; } = new();
