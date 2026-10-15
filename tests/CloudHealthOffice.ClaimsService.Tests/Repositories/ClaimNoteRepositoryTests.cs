@@ -77,7 +77,7 @@ public class ClaimNoteRepositoryCosmosTests
 
     public ClaimNoteRepositoryCosmosTests(CosmosEmulatorFixture cosmos) => _cosmos = cosmos;
 
-    [Fact]
+    [SkippableFact]
     public async Task ListsTheClaimsNotesInWrittenOrder_ScopedToTheTenant()
     {
         _cosmos.SkipIfUnavailable();
