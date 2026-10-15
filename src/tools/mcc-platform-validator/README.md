@@ -38,6 +38,18 @@ reject the claim structurally before COB/subrogation/retro-eligibility pend logi
 runs. Use `--member-url` to point at member-service and `--no-seed-members` only
 when the tenant already has the matching synthetic members.
 
+The claims pipeline prices every line through the fee-schedule engine before
+benefits apply, and MCC providers have no contract there. After creating its
+validation plan the validator therefore seeds the plan's default fee schedule
+(`PUT {benefit-url}/api/v1/plans/{planId}/default-fee-schedule`, permission
+`settings:manage`): flat CPT/CDT rates plus a blank-procedure flat rate for every
+UB-04 revenue code the institutional generator emits
+(`SyntheticFeeScheduleGenerator.GeneratePlanDefaultSchedule`). Without it, lines
+fall back to billed charges and claims pend `NOCONTRACT`. The PUT replaces the
+plan's one default schedule, so reruns are idempotent. Plain institutional claims
+remain unscored: their allowed amounts follow the seeded rates, but paid amounts
+depend on the validation plan's cost sharing, which the generator does not model.
+
 The validator therefore scores expected-pend scenarios in a post-adjudication
 observation pass. The timed benchmark pass completes first; then the validator
 polls claims-service for expected-pend claims only. `P95`, `P99`, stage timings,
