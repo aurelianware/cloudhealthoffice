@@ -130,9 +130,9 @@ builder.Services.AddScoped<IClaimDiagnosisMetadataEnricher, ClaimDiagnosisMetada
 // Kafka claims.finalized.v1 emission. Backed by the existing
 // IClaimRepository / IClaimVersionEventPublisher / IClaimEventPublisher
 // triple — no new infrastructure surfaces. The
-// ClaimsController.ProcessRemittance endpoint delegates here for
-// non-zero-payment remittances; zero-payment Denied transitions stay
-// on the legacy direct-write path until 5.12.
+// ClaimsController.ProcessRemittance endpoint delegates here for every
+// remittance, $0 included; DELETE {id}, PUT {id}/status (Voided) and
+// POST {id}/void all void through VoidAsync.
 builder.Services.AddScoped<IClaimFinalizationService, ClaimFinalizationService>();
 
 // 5.12a — Adjustment workflow service. Owns the supersession transition,

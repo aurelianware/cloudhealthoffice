@@ -101,7 +101,11 @@ contract working without a data migration.
 - **Denied** — terminal for denied claims (no payment).
 - **Adjusted** — terminal for the predecessor of an adjustment chain.
   `SupersededByVersionId` points at the replacement version.
-- **Voided** — terminal for reversed/cancelled claims.
+- **Voided** — terminal for reversed/cancelled claims. Every void
+  (`POST {id}/void`, `DELETE {id}`, `PUT {id}/status` with `Voided`)
+  goes through `IClaimFinalizationService.VoidAsync`: Paid /
+  PartiallyPaid / Adjusted only (422 otherwise), with the terminal
+  accumulator reversal saved by the void write.
 
 `UpdateAsync` rejects writes against `Paid`, `Denied`, `Voided`, and
 `Adjusted` rows with `ClaimVersionStateException`. The adjustment

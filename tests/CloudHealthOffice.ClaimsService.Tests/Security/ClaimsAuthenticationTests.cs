@@ -182,32 +182,44 @@ public class ClaimsAuthenticationTests : IClassFixture<ClaimsApiFactory>
     [Fact]
     public async Task DeleteVoid_RequiresClaimsVoid()
     {
-        var claim = StubClaim(ClaimStatus.Approved);
+        // DELETE voids through VoidAsync (the transition that saves the
+        // accumulator reversal), never a bare status write.
+        var claim = StubClaim(ClaimStatus.Paid);
+        _factory.FinalizationService
+            .VoidAsync(claim.Id, Arg.Any<ClaimVoidRequest>(), Tenant, Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(ClaimVoidResult.Voided(claim));
 
         Assert.Equal(HttpStatusCode.Forbidden, (await Examiner().DeleteAsync($"/api/claims/{claim.Id}")).StatusCode);
-        Assert.Equal(ClaimStatus.Approved, claim.Status);
+        await _factory.FinalizationService.DidNotReceive().VoidAsync(
+            claim.Id, Arg.Any<ClaimVoidRequest>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
 
         Assert.Equal(HttpStatusCode.NoContent, (await Supervisor().DeleteAsync($"/api/claims/{claim.Id}")).StatusCode);
-        Assert.Equal(ClaimStatus.Voided, claim.Status);
-        Assert.Equal("supervisor-1", claim.LastUpdatedBy);
+        await _factory.FinalizationService.Received(1).VoidAsync(
+            claim.Id, Arg.Is<ClaimVoidRequest>(r => !string.IsNullOrWhiteSpace(r.Reason)),
+            Tenant, "supervisor-1", Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await _factory.ClaimRepository.DidNotReceive().UpdateAsync(Arg.Is<Claim>(c => c.Id == claim.Id));
     }
 
     [Fact]
     public async Task GenericStatusEndpoint_CannotVoid_WithoutClaimsVoid()
     {
-        var claim = StubClaim(ClaimStatus.Approved);
-        _factory.ClaimRepository
-            .TryTransitionStatusAsync(Tenant, claim.Id, Arg.Any<ClaimStatus>(), Arg.Any<CancellationToken>())
-            .Returns(ci => new StatusWriteResult(StatusWriteOutcome.Applied, ci.ArgAt<ClaimStatus>(2)));
+        var claim = StubClaim(ClaimStatus.Paid);
+        _factory.FinalizationService
+            .VoidAsync(claim.Id, Arg.Any<ClaimVoidRequest>(), Tenant, Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(ClaimVoidResult.Voided(claim));
 
         var asExaminer = await Examiner().PutAsJsonAsync($"/api/claims/{claim.Id}/status", new { status = (int)ClaimStatus.Voided });
         Assert.Equal(HttpStatusCode.Forbidden, asExaminer.StatusCode);
-        await _factory.ClaimRepository.DidNotReceive().TryTransitionStatusAsync(
-            Tenant, claim.Id, ClaimStatus.Voided, Arg.Any<CancellationToken>());
+        await _factory.FinalizationService.DidNotReceive().VoidAsync(
+            claim.Id, Arg.Any<ClaimVoidRequest>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
 
         var asSupervisor = await Supervisor().PutAsJsonAsync($"/api/claims/{claim.Id}/status", new { status = (int)ClaimStatus.Voided });
         Assert.Equal(HttpStatusCode.OK, asSupervisor.StatusCode);
-        Assert.Equal(ClaimStatus.Voided, claim.Status);
+        await _factory.FinalizationService.Received(1).VoidAsync(
+            claim.Id, Arg.Any<ClaimVoidRequest>(), Tenant, "supervisor-1", Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        // The void never goes through the generic status write.
+        await _factory.ClaimRepository.DidNotReceive().TryTransitionStatusAsync(
+            Tenant, claim.Id, ClaimStatus.Voided, Arg.Any<CancellationToken>());
     }
 
     [Fact]

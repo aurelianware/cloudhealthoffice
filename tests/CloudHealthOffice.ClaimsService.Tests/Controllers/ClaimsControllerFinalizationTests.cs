@@ -124,31 +124,149 @@ public class ClaimsControllerFinalizationTests : IClassFixture<ClaimsApiFactory>
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
     }
 
-    [Fact]
-    public async Task ProcessRemittance_ZeroPayment_BypassesFinalizationService()
-    {
-        // Zero-payment remittances stay on the legacy direct-write Denied path.
-        // The finalization service must NOT be called.
-        var existing = new Claim
-        {
-            Id = "c1",
-            TenantId = "test-tenant",
-            ClaimNumber = "CLM-001",
-            Status = ClaimStatus.Approved,
-            BillingProviderNPI = "1234567890",
-            LineOfBusiness = LineOfBusiness.Commercial,
-            MemberId = "m1",
-            TotalChargeAmount = 1000m,
-            ServiceDateFrom = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
-            ServiceDateTo = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc)
-        };
-        _factory.ClaimRepository.GetByIdAsync("c1").Returns(existing);
-        _factory.ClaimRepository.UpdateAsync(Arg.Any<Claim>()).Returns(call => call.Arg<Claim>());
+    private void FinalizeReturns(string id, ClaimFinalizationResult result) =>
+        _finalization.FinalizeAsync(
+            id, Arg.Any<ClaimFinalizationRequest>(), "test-tenant",
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(result);
 
-        var response = await _client.PostAsJsonAsync("/api/claims/c1/remittance", Body(amount: 0m), Json);
+    private static Claim ClaimIn(string id, ClaimStatus status, ClaimVersionState state)
+    {
+        var claim = PaidClaim(id);
+        claim.Status = status;
+        claim.VersionState = state;
+        claim.AdjudicationResult = new AdjudicationResult { PayerPayment = 0m };
+        return claim;
+    }
+
+    /// <summary>
+    /// An Approved claim whose allowed amount went entirely to the member's
+    /// deductible pays $0. It is payable, and finalizes like a paid claim:
+    /// through the finalization service, with the check number, PayerPayment 0.
+    /// </summary>
+    [Fact]
+    public async Task ProcessRemittance_ZeroPayment_FinalizesThroughFinalizationService()
+    {
+        var paid = ClaimIn("zp-approved", ClaimStatus.Paid, ClaimVersionState.Paid);
+        FinalizeReturns("zp-approved", ClaimFinalizationResult.Finalized(paid));
+        _factory.ClaimRepository.ClearReceivedCalls();
+
+        var response = await _client.PostAsJsonAsync("/api/claims/zp-approved/remittance", Body(amount: 0m), Json);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        await _finalization.DidNotReceiveWithAnyArgs().FinalizeAsync(
-            default!, default!, default!, default!, default!, default!);
+        var body = await response.Content.ReadFromJsonAsync<Claim>(Json);
+        Assert.Equal(ClaimStatus.Paid, body!.Status);
+        await _finalization.Received(1).FinalizeAsync(
+            "zp-approved",
+            Arg.Is<ClaimFinalizationRequest>(r =>
+                r.CheckNumber == "CHK-001" && r.PayerPayment == 0m
+                && r.PaymentRunId == "run-1" && r.EdiControlNumber == "PR-1"),
+            "test-tenant",
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        // No legacy direct write (the old path replaced the claim as Denied).
+        await _factory.ClaimRepository.DidNotReceive().UpdateAsync(Arg.Is<Claim>(c => c.Id == "zp-approved"));
+    }
+
+    /// <summary>A $0 remittance with no check / EFT trace is keyed on its control number.</summary>
+    [Fact]
+    public async Task ProcessRemittance_ZeroPayment_NoCheckNumber_UsesControlNumber()
+    {
+        FinalizeReturns("zp-nocheck", ClaimFinalizationResult.Finalized(ClaimIn("zp-nocheck", ClaimStatus.Paid, ClaimVersionState.Paid)));
+
+        var response = await _client.PostAsJsonAsync("/api/claims/zp-nocheck/remittance", new
+        {
+            controlNumber = "PR-77",
+            paymentDate = new DateTime(2026, 5, 4, 0, 0, 0, DateTimeKind.Utc),
+            paymentAmount = 0m,
+        }, Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _finalization.Received(1).FinalizeAsync(
+            "zp-nocheck",
+            Arg.Is<ClaimFinalizationRequest>(r => r.CheckNumber == "PR-77" && r.PayerPayment == 0m),
+            "test-tenant",
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A repeat of the same $0 remittance is the same idempotent no-op as a paid one.</summary>
+    [Fact]
+    public async Task ProcessRemittance_ZeroPayment_AlreadyFinalized_Returns200()
+    {
+        FinalizeReturns("zp-repeat", ClaimFinalizationResult.AlreadyFinalized(ClaimIn("zp-repeat", ClaimStatus.Paid, ClaimVersionState.Paid)));
+
+        var response = await _client.PostAsJsonAsync("/api/claims/zp-repeat/remittance", Body(amount: 0m), Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    /// <summary>A Pended claim is not payable: a $0 remittance must not deny it (422, unchanged).</summary>
+    [Fact]
+    public async Task ProcessRemittance_ZeroPayment_PendedClaim_Returns422_AndDoesNotWrite()
+    {
+        var pended = ClaimIn("zp-pended", ClaimStatus.Pended, ClaimVersionState.Submitted);
+        FinalizeReturns("zp-pended", ClaimFinalizationResult.InvalidSourceState(pended, "current status is Pended"));
+        _factory.ClaimRepository.ClearReceivedCalls();
+
+        var response = await _client.PostAsJsonAsync("/api/claims/zp-pended/remittance", Body(amount: 0m), Json);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Contains("Pended", await response.Content.ReadAsStringAsync());
+        Assert.Equal(ClaimStatus.Pended, pended.Status);
+        await _factory.ClaimRepository.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
+    }
+
+    /// <summary>A claim the pipeline denied stays Denied: the $0 remittance is its 835, acknowledged unchanged.</summary>
+    [Fact]
+    public async Task ProcessRemittance_ZeroPayment_DeniedClaim_StaysDenied()
+    {
+        var denied = ClaimIn("zp-denied", ClaimStatus.Denied, ClaimVersionState.Denied);
+        FinalizeReturns("zp-denied", ClaimFinalizationResult.InvalidSourceState(denied, "current status is Denied"));
+        _factory.ClaimRepository.ClearReceivedCalls();
+
+        var response = await _client.PostAsJsonAsync("/api/claims/zp-denied/remittance", Body(amount: 0m), Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<Claim>(Json);
+        Assert.Equal(ClaimStatus.Denied, body!.Status);
+        await _factory.ClaimRepository.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
+    }
+
+    /// <summary>A paid remittance for a Denied claim is still refused (only the $0 one is acknowledged).</summary>
+    [Fact]
+    public async Task ProcessRemittance_PaidAmount_DeniedClaim_Returns422()
+    {
+        FinalizeReturns("p-denied", ClaimFinalizationResult.InvalidSourceState(
+            ClaimIn("p-denied", ClaimStatus.Denied, ClaimVersionState.Denied), "current status is Denied"));
+
+        var response = await _client.PostAsJsonAsync("/api/claims/p-denied/remittance", Body(), Json);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ProcessRemittance_NegativeAmount_Returns400_WithoutFinalizing()
+    {
+        var response = await _client.PostAsJsonAsync("/api/claims/neg/remittance", Body(amount: -5m), Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _finalization.DidNotReceive().FinalizeAsync(
+            "neg", Arg.Any<ClaimFinalizationRequest>(), Arg.Any<string>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessRemittance_PaidAmount_NoCheckNumber_Returns400()
+    {
+        var response = await _client.PostAsJsonAsync("/api/claims/nocheck/remittance", new
+        {
+            controlNumber = "PR-1",
+            paymentDate = new DateTime(2026, 5, 4, 0, 0, 0, DateTimeKind.Utc),
+            paymentAmount = 10m,
+        }, Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _finalization.DidNotReceive().FinalizeAsync(
+            "nocheck", Arg.Any<ClaimFinalizationRequest>(), Arg.Any<string>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 }

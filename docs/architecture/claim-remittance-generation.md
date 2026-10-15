@@ -87,11 +87,29 @@ Existing endpoint refined by 5.10. Accepts `RemittanceUpdate`:
 }
 ```
 
-**Non-zero `paymentAmount`** delegates to
+Every non-negative `paymentAmount` delegates to
 `IClaimFinalizationService.FinalizeAsync` for the
-Approved/PartiallyPaid → Paid transition. **Zero `paymentAmount`**
-stays on the legacy direct-write Denied path until 5.12 introduces
-the dedicated Denied-transition flow.
+Approved/PartiallyPaid → Paid transition. **Zero `paymentAmount`** is
+not a denial: a claim the pipeline Approved with a $0 plan payment
+(allowed amount fully applied to deductible / copay / coinsurance) is
+payable and finalizes to Paid exactly like a paid one, so its pending
+accumulator commit (the member's deductible credit) is kept — the
+outbox drops a commit only for Denied / Voided / superseded claims.
+A $0 remittance never changes a claim's disposition:
+
+- `checkNumber` may be absent on a $0 remittance; the `controlNumber`
+  then stands in as the finalize key (an 835 with no payment still
+  carries a TRN02 reference), so a repeat is the same idempotent no-op.
+  A paid remittance without `checkNumber` is 400.
+- A claim the pipeline already **Denied** stays Denied: 200 with the
+  claim unchanged (a $0 remittance is what a denial's 835 carries).
+  Every other ineligible source state (Pended, Submitted, …) is 422,
+  unchanged — the same as the paid path.
+- A negative `paymentAmount` is 400 (a recoupment is a reversal run).
+
+(Before October 2026 a $0 remittance was written directly as Denied
+from any state, which dropped the accumulator commit of a $0 Approved
+claim and could deny a Pended one.)
 
 Outcomes:
 
@@ -100,7 +118,7 @@ Outcomes:
 | `Finalized` | 200 | Status → Paid; VersionState → Paid; `ClaimVersionPaid` event + Kafka `claims.finalized.v1` emitted |
 | `AlreadyFinalized` | 200 | Same CheckNumber arrives twice; idempotent no-op (no UpdateAsync, no event re-emit) |
 | `Conflict` | 409 | Different CheckNumber on already-Paid claim; structured error body |
-| `InvalidSourceState` | 422 | Source not Approved/PartiallyPaid; structured error body |
+| `InvalidSourceState` | 422 | Source not Approved/PartiallyPaid; structured error body (a $0 remittance for a Denied claim: 200, unchanged) |
 | `NotFound` | 404 | Claim id unknown for tenant |
 
 Idempotency relies on `(claim.Status, claim.AdjudicationResult.CheckNumber)`
