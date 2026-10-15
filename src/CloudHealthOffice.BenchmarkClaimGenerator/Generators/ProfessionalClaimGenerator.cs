@@ -16,10 +16,20 @@ public class ProfessionalClaimGenerator : IClaimGenerator
     /// Initializes a new instance of the <see cref="ProfessionalClaimGenerator"/> class.
     /// </summary>
     /// <param name="refData">Reference data provider for codes and entities.</param>
-    public ProfessionalClaimGenerator(IReferenceDataProvider refData)
+    /// <param name="referenceDate">"As of" date for the corpus: no service or receipt date is generated
+    /// after it. Defaults to today (UTC); pass it explicitly to reproduce a
+    /// corpus (same seed + same date = same claims).</param>
+    public ProfessionalClaimGenerator(IReferenceDataProvider refData, DateTime? referenceDate = null)
     {
         _refData = refData;
+        ReferenceDate = ClaimDateAnchor.Resolve(referenceDate);
     }
+
+    /// <summary>Latest date any generated claim may carry (see <see cref="ClaimDateAnchor"/>).</summary>
+    public DateTime ReferenceDate { get; }
+
+    /// <summary>Longest gap between the date of service and the payer receipt date.</summary>
+    internal const int MaxReceiptLagDays = 29;
 
     /// <inheritdoc />
     public string ClaimType => "Professional";
@@ -30,7 +40,7 @@ public class ProfessionalClaimGenerator : IClaimGenerator
         var member = _refData.GenerateMember(random);
         var renderingProvider = _refData.GenerateProvider(random);
         var billingProvider = _refData.GenerateProvider(random);
-        var serviceDate = new DateTime(2024, 1, 1).AddDays(random.Next(365));
+        var serviceDate = ClaimDateAnchor.DrawServiceDate(ReferenceDate, MaxReceiptLagDays, random);
         var pos = _refData.GetPlaceOfServiceCode(random, subType);
         var diagnosisContext = subType == "behavioralhealth" ? "behavioral" :
                                subType is "surgical" or "globalsurgery" or "bilateral" or "assistantsurgeon" ? "surgical" :
@@ -46,7 +56,7 @@ public class ProfessionalClaimGenerator : IClaimGenerator
             ClaimId = $"MCC-P-{sequenceNumber:D7}",
             ClaimType = ClaimType,
             DateOfService = serviceDate,
-            DateReceived = serviceDate.AddDays(random.Next(1, 30)),
+            DateReceived = serviceDate.AddDays(random.Next(1, MaxReceiptLagDays + 1)),
             Member = member,
             RenderingProvider = renderingProvider,
             BillingProvider = billingProvider,

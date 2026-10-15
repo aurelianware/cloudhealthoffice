@@ -134,8 +134,16 @@ public class AdapterClaim
         InstitutionalClaimDetails.ComposeTypeOfBill(Institutional?.FacilityTypeCode, ClaimFrequencyCode);
 
     public ClaimStatus Status { get; set; } = ClaimStatus.Submitted;
+
+    /// <summary>Payer receipt date; server-stamped at intake, any submitted value is ignored. See <see cref="Claim.SubmittedDate"/>.</summary>
     public DateTime SubmittedDate { get; set; }
+
+    /// <summary>Payer receipt date; server-stamped at intake, any submitted value is ignored. See <see cref="Claim.ReceivedDate"/>.</summary>
     public DateTime? ReceivedDate { get; set; }
+
+    /// <summary>See <see cref="Claim.SubmitterTransactionDate"/>.</summary>
+    public DateTime? SubmitterTransactionDate { get; set; }
+
     public DateTime? AdjudicatedDate { get; set; }
     public DateTime? PaidDate { get; set; }
 
@@ -205,6 +213,7 @@ public class AdapterClaim
         Status = src.Status,
         SubmittedDate = src.SubmittedDate,
         ReceivedDate = src.ReceivedDate,
+        SubmitterTransactionDate = src.SubmitterTransactionDate,
         AdjudicatedDate = src.AdjudicatedDate,
         PaidDate = src.PaidDate,
         AdjudicationResult = src.AdjudicationResult is null
@@ -272,6 +281,7 @@ public class AdapterClaim
         Status = Status,
         SubmittedDate = SubmittedDate,
         ReceivedDate = ReceivedDate,
+        SubmitterTransactionDate = SubmitterTransactionDate,
         AdjudicatedDate = AdjudicatedDate,
         PaidDate = PaidDate,
         AdjudicationResult = AdjudicationResult?.ToAdjudicationResult(),

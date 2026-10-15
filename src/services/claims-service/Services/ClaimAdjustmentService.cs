@@ -364,7 +364,13 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         corrected.PublishedBy = null;
         corrected.SupersededAt = null;
         corrected.SupersededByVersionId = null;
-        corrected.SubmittedDate = DateTime.UtcNow;
+        // SubmittedDate/ReceivedDate are not set here: SubmitAsync below
+        // stamps them with its clock, as for every intake, and ignores
+        // whatever the corrected payload carried. The new version's receipt
+        // date is when the corrected claim was received (the semantics this
+        // service has always had: it set SubmittedDate to now). The original
+        // claim's receipt date is not copied forward; it stays on the
+        // predecessor row, reachable through PredecessorVersionId.
         corrected.AdjudicatedDate = null;
         corrected.PaidDate = null;
         corrected.AdjudicationResult = null;
