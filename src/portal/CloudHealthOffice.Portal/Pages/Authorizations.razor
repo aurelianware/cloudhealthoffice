@@ -3,6 +3,7 @@
 @using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
+@inject CloudHealthOffice.Portal.Infrastructure.ISearchCriteriaPolicy SearchPolicy
 @inject IDialogService DialogService
 
 <PageTitle>Authorizations - Cloud Health Office</PageTitle>
@@ -229,6 +230,17 @@
     private bool _loading = false;
     private bool _hasSearched = false;
     private bool _showValidationMessage = false;
+    private bool _requireCriteria = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _requireCriteria = await SearchPolicy.RequiresCriteriaAsync();
+        if (!_requireCriteria)
+        {
+            // Demo tenants (synthetic data) open on a browsable list.
+            await SearchAuthorizations();
+        }
+    }
     private string? _serviceError;
 
     private string _authIdSearch = string.Empty;
@@ -241,7 +253,7 @@
 
     private async Task SearchAuthorizations()
     {
-        if (!HasCriteria)
+        if (_requireCriteria && !HasCriteria)
         {
             _showValidationMessage = true;
             return;
