@@ -28,6 +28,27 @@ public static class ChoRolePermissions
     /// </summary>
     public const string LegalHold = "records:legal-hold";
 
+    /// <summary>
+    /// Work management (work-management-service). The role is coarse
+    /// entitlement; which queues a person pulls from is queue membership,
+    /// managed by a supervisor. <c>workqueue:read</c> sees queues and items,
+    /// <c>workqueue:work</c> pulls (Get Next), renews and releases one's own
+    /// leases, <c>workqueue:assign</c> pushes work (assign / reassign /
+    /// unassign), <c>workqueue:admin</c> configures queues, teams and
+    /// memberships and runs recompute / reconcile. TenantAdmin holds all four
+    /// through <c>*:*</c>.
+    /// </summary>
+    public const string WorkQueueRead = "workqueue:read";
+
+    /// <inheritdoc cref="WorkQueueRead"/>
+    public const string WorkQueueWork = "workqueue:work";
+
+    /// <inheritdoc cref="WorkQueueRead"/>
+    public const string WorkQueueAssign = "workqueue:assign";
+
+    /// <inheritdoc cref="WorkQueueRead"/>
+    public const string WorkQueueAdmin = "workqueue:admin";
+
     private static readonly string[] ExaminerPermissions =
     [
         "claims:read", "claims:work", "claims:override-request",
@@ -45,6 +66,9 @@ public static class ChoRolePermissions
             [
                 .. ExaminerPermissions,
                 "claims:override-approve", "workqueue:assign", "workqueue:reassign",
+                // Supervisors manage their teams' queue memberships and the
+                // queue configuration (work-management-service).
+                "workqueue:admin",
                 "reports:claims", "claims:void", "claims:adjust", "trading-partners:read",
                 "encounters:read", "encounters:write"
             ],

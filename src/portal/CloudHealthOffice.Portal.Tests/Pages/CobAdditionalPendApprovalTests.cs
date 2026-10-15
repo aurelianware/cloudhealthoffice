@@ -30,6 +30,8 @@ public class CobAdditionalPendApprovalTests : TestContext
         Services.AddSingleton(_claims.Object);
         Services.AddSingleton(_users.Object);
         Services.AddSingleton(_dialogs.Object);
+        // The Work Queues page also reads work-management (queue counts, assignees).
+        Services.AddSingleton(Mock.Of<IWorkManagementService>());
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         _users.Setup(u => u.GetCurrentUserAsync()).ReturnsAsync(new UserContext

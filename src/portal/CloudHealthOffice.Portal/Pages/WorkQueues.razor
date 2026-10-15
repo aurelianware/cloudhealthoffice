@@ -3,6 +3,7 @@
 @using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
 @inject IWorkQueueService WorkQueueService
+@inject IWorkManagementService WorkManagement
 @inject IUserContextService UserContextService
 @inject NavigationManager NavigationManager
 @inject ISnackbar Snackbar
@@ -91,6 +92,28 @@
         </MudGrid>
     }
 
+    @* ─── Work-management queues (routing, counts, leases) ─── *@
+    @if (_workError != null)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4" data-testid="work-management-unavailable">
+            Work assignment is unavailable: @_workError The claims below are still shown, but cannot be reassigned.
+        </MudAlert>
+    }
+    @if (_workQueues.Count > 0)
+    {
+        <MudPaper Class="pa-3 mb-4" Elevation="1">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Work queues (open / in progress)</MudText>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var q in _workQueues.Where(q => q.IsActive && q.WorkType == "Claim"))
+                {
+                    <MudChip T="string" Variant="Variant.Outlined" Color="@(q.Open > 0 ? Color.Primary : Color.Default)" data-testid="work-queue-count">
+                        @q.Name: @q.Open / @q.Leased
+                    </MudChip>
+                }
+            </div>
+        </MudPaper>
+    }
+
     @* ─── Examiner Filter ─── *@
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudGrid>
@@ -102,10 +125,11 @@
                            T="string"
                            AnchorOrigin="Origin.BottomCenter">
                     <MudSelectItem Value="@("All")">All Examiners</MudSelectItem>
-                    <MudSelectItem Value="@("Sarah Williams")">Sarah Williams (My Queue)</MudSelectItem>
-                    <MudSelectItem Value="@("James Martinez")">James Martinez</MudSelectItem>
-                    <MudSelectItem Value="@("Priya Kapoor")">Priya Kapoor</MudSelectItem>
-                    <MudSelectItem Value="@("David Chen")">David Chen</MudSelectItem>
+                    <MudSelectItem Value="@(UnassignedFilter)">Unassigned</MudSelectItem>
+                    @foreach (var user in _assignees)
+                    {
+                        <MudSelectItem Value="@user">@user</MudSelectItem>
+                    }
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="4">
@@ -155,10 +179,10 @@
             <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.ServiceDate)">Service Date</MudTableSortLabel></MudTh>
             <MudTh>Queue Reason</MudTh>
             <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="new Func<WorkQueueItem, object>(x => x.DaysInQueue)">Days in Queue</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.Priority)">Priority</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => WorkOf(x)?.PriorityScore ?? 0)">Priority</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.TotalCharged)">Charged</MudTableSortLabel></MudTh>
             <MudTh>AI Advisory</MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => x.AssignedTo)">Assigned To</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<WorkQueueItem, object>(x => AssignedOf(x))">Assigned To</MudTableSortLabel></MudTh>
             <MudTh>Actions</MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -188,9 +212,21 @@
                 </MudText>
             </MudTd>
             <MudTd DataLabel="Priority">
-                <MudChip T="string" Size="Size.Small" Color="@GetPriorityColor(context.Priority)" Variant="Variant.Filled">
-                    @context.Priority
-                </MudChip>
+                @if (WorkOf(context) is { } work)
+                {
+                    <MudTooltip Text="@work.PriorityReason">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined" data-testid="work-priority">
+                            @work.PriorityScore.ToString("0.#")
+                        </MudChip>
+                    </MudTooltip>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@(work.QueueName ?? "Unrouted")</MudText>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="@GetPriorityColor(context.Priority)" Variant="Variant.Filled">
+                        @context.Priority
+                    </MudChip>
+                }
             </MudTd>
             <MudTd DataLabel="Charged">@context.TotalCharged.ToString("C")</MudTd>
             <MudTd DataLabel="AI Advisory">
@@ -211,13 +247,29 @@
                 }
             </MudTd>
             <MudTd DataLabel="Assigned To">
-                <MudSelect T="string" Value="@context.AssignedTo" ValueChanged="@(val => OnReassign(context.ClaimId, val))"
-                           Variant="Variant.Text" Dense="true" Margin="Margin.Dense" Style="min-width: 140px;">
-                    <MudSelectItem Value="@("Sarah Williams")">Sarah Williams</MudSelectItem>
-                    <MudSelectItem Value="@("James Martinez")">James Martinez</MudSelectItem>
-                    <MudSelectItem Value="@("Priya Kapoor")">Priya Kapoor</MudSelectItem>
-                    <MudSelectItem Value="@("David Chen")">David Chen</MudSelectItem>
-                </MudSelect>
+                @if (_canAssign && WorkOf(context) is { } work)
+                {
+                    <MudSelect T="string" Value="@(work.AssignedTo ?? UnassignedFilter)"
+                               ValueChanged="@(val => OnReassign(context.ClaimId, val))"
+                               Variant="Variant.Text" Dense="true" Margin="Margin.Dense" Style="min-width: 140px;"
+                               data-testid="reassign">
+                        <MudSelectItem Value="@(UnassignedFilter)">Unassigned</MudSelectItem>
+                        @foreach (var user in AssigneeOptions(work))
+                        {
+                            <MudSelectItem Value="@user">@user</MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (work.LeaseExpiresAt is { } until && work.AssignedTo != null)
+                    {
+                        <MudText Typo="Typo.caption" Color="@(work.LeaseActive ? Color.Secondary : Color.Warning)">
+                            @(work.LeaseActive ? "until " : "lease expired ")@until.ToLocalTime().ToString("t")
+                        </MudText>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">@(string.IsNullOrEmpty(AssignedOf(context)) ? "Unassigned" : AssignedOf(context))</MudText>
+                }
             </MudTd>
             <MudTd DataLabel="Actions">
                 <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
@@ -257,6 +309,25 @@
     private string? _selectedQueueFilter;
     private string _selectedExaminer = "All";
 
+    /// <summary>Select value standing for "no one".</summary>
+    private const string UnassignedFilter = "(unassigned)";
+
+    // work-management-service: the work item behind each pended claim
+    // (queue, priority, assignee, lease), the queue counts and who work can
+    // be pushed to. Optional: the claims list works without it.
+    private Dictionary<string, WorkItemView> _workByClaim = new(StringComparer.Ordinal);
+    private List<WorkQueueCounts> _workQueues = new();
+    private List<string> _assignees = new();
+    private string? _workError;
+    private bool _canAssign;
+
+    private WorkItemView? WorkOf(WorkQueueItem item) => _workByClaim.GetValueOrDefault(item.ClaimId);
+
+    private string AssignedOf(WorkQueueItem item) => WorkOf(item)?.AssignedTo ?? string.Empty;
+
+    private IEnumerable<string> AssigneeOptions(WorkItemView work) =>
+        work.AssignedTo is { } current && !_assignees.Contains(current) ? _assignees.Append(current) : _assignees;
+
     private int TotalCount => _summary == null ? 0
         : _summary.NcciEditFailures + _summary.MissingAuth + _summary.ProviderNotContracted
           + _summary.CobRequired + _summary.MedicalReview;
@@ -277,6 +348,7 @@
 
             _summary = summaryTask.Result;
             _allItems = itemsTask.Result;
+            await LoadWorkAsync();
             ApplyFilters();
         }
         catch (ServiceUnavailableException ex)
@@ -293,13 +365,43 @@
         }
     }
 
+    private async Task LoadWorkAsync()
+    {
+        _workError = null;
+        _canAssign = UserContextService.HasPermission("workqueue:assign");
+        try
+        {
+            _workQueues = await WorkManagement.GetQueuesAsync() ?? new();
+            if (_canAssign)
+            {
+                var page = await WorkManagement.ListAsync(pageSize: 500);
+                _workByClaim = (page?.Items ?? new())
+                    .Where(w => w.WorkType == "Claim")
+                    .GroupBy(w => w.SourceId)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+                _assignees = await WorkManagement.GetAssigneesAsync() ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Work assignment is an addition to this page: whatever goes wrong
+            // with it, the pended claims (from claims-service) still show.
+            _workError = ex is ServiceUnavailableException or WorkManagementRefusedException
+                ? ex.Message
+                : "the work management service did not answer as expected.";
+            _canAssign = false;
+        }
+    }
+
     private void ApplyFilters()
     {
         var items = _allItems.AsEnumerable();
         if (!string.IsNullOrEmpty(_selectedQueueFilter))
             items = items.Where(i => i.QueueReasonCode == _selectedQueueFilter);
-        if (_selectedExaminer != "All")
-            items = items.Where(i => i.AssignedTo == _selectedExaminer);
+        if (_selectedExaminer == UnassignedFilter)
+            items = items.Where(i => string.IsNullOrEmpty(AssignedOf(i)));
+        else if (_selectedExaminer != "All")
+            items = items.Where(i => AssignedOf(i) == _selectedExaminer);
         _filteredItems = items.OrderByDescending(i => i.DaysInQueue).ToList();
     }
 
@@ -314,16 +416,34 @@
         await LoadData();
     }
 
+    /// <summary>
+    /// Supervisor push through work-management-service: assign / reassign the
+    /// claim's work item (it is leased to the assignee) or put it back in its
+    /// queue. The stored assignment is what the page shows afterwards.
+    /// </summary>
     private async Task OnReassign(string claimId, string newAssignee)
     {
-        await WorkQueueService.AssignClaimAsync(claimId, newAssignee);
-        var item = _allItems.FirstOrDefault(i => i.ClaimId == claimId);
-        if (item != null)
+        if (!_workByClaim.TryGetValue(claimId, out var work))
         {
-            item.AssignedTo = newAssignee;
-            ApplyFilters();
+            Snackbar.Add($"Claim {claimId} has no work item yet; it appears after the next sync.", Severity.Warning);
+            return;
         }
-        Snackbar.Add($"Claim {claimId} reassigned to {newAssignee}", Severity.Success);
+        try
+        {
+            var updated = newAssignee == UnassignedFilter
+                ? await WorkManagement.UnassignAsync(work.Id)
+                : await WorkManagement.AssignAsync(work.Id, newAssignee);
+            _workByClaim[claimId] = updated;
+            ApplyFilters();
+            Snackbar.Add(updated.AssignedTo is null
+                    ? $"Claim {work.DisplayNumber} returned to its queue"
+                    : $"Claim {work.DisplayNumber} assigned to {updated.AssignedTo}",
+                Severity.Success);
+        }
+        catch (Exception ex) when (ex is ServiceUnavailableException or WorkManagementRefusedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     private async Task OnOverride(string claimId)

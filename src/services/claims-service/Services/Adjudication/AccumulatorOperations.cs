@@ -86,6 +86,7 @@ public sealed class AccumulatorOperationsService
     private readonly IClaimVersionEventPublisher _versionEvents;
     private readonly IClaimEventPublisher _events;
     private readonly ILogger<AccumulatorOperationsService> _logger;
+    private readonly IClaimWorkEventPublisher? _workEvents;
 
     public AccumulatorOperationsService(
         IClaimRepository claims,
@@ -94,8 +95,10 @@ public sealed class AccumulatorOperationsService
         ILogger<AccumulatorOperationsService> logger,
         IClaimApprovalReadjudicator? readjudicator = null,
         IAccumulatorOutboxProcessor? outbox = null,
-        IAccumulatorCommitLookup? lookup = null)
+        IAccumulatorCommitLookup? lookup = null,
+        IClaimWorkEventPublisher? workEvents = null)
     {
+        _workEvents = workEvents;
         _claims = claims;
         _versionEvents = versionEvents;
         _events = events;
@@ -330,6 +333,7 @@ public sealed class AccumulatorOperationsService
                 ? await DenialAccumulatorReversal.ForDenialAsync(claim, claim.Status, actedAt, _lookup, _logger, CancellationToken.None)
                 : null;
             var reviewed = claim.PendDetails;
+            var sourceStatus = claim.Status;
             claim.LastUpdatedBy = actor;
             claim.Status = disposition;
             claim.VersionState = ClaimRepository.MapStatusToVersionState(disposition);
@@ -379,6 +383,8 @@ public sealed class AccumulatorOperationsService
             await _versionEvents.PublishVersionResolvedAsync(
                 updated, disposition.ToString(), $"{kind.Name} re-run", actor, correlationId, CancellationToken.None);
             await _events.PublishClaimFinalizedAsync(updated, tenantId);
+            if (sourceStatus == ClaimStatus.Pended && _workEvents is not null)
+                await _workEvents.PublishWorkResolvedAsync(updated, tenantId, disposition.ToString(), actor, CancellationToken.None);
             return deny ? Item("Denied", rerun.DenialReason ?? rerun.Reason) : Item("Approved");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

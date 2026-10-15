@@ -188,7 +188,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        # All 33 .NET services need repo root as context (build_context: '.')
+        # All 34 .NET services need repo root as context (build_context: '.')
         # to reach src/services/shared/CloudHealthOffice.Infrastructure/
         # and/or src/engines/. Passed inline via the with: block below
         # for every entry — replaces the per-entry include: overrides
@@ -226,6 +226,7 @@ jobs:
           - encounter-submission-service
           - member-document-service
           - personal-representative-service
+          - work-management-service
         include:
           # Image name overrides for the two PascalCase services. Repo
           # convention treats the override value verbatim — no double

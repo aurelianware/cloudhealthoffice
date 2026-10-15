@@ -88,6 +88,7 @@ public static class StandardRoles
             "members:read", "accumulators:read", "providers:read",
             // Supervisor-specific permissions
             "claims:override-approve", "workqueue:assign", "workqueue:reassign",
+            "workqueue:admin",
             "reports:claims", "claims:void", "claims:adjust",
             "encounters:read", "encounters:write"
         }

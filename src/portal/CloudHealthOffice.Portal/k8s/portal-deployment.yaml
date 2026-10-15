@@ -18,6 +18,7 @@ data:
   TokenService__Scope: "api://cfada1ac-f251-48ea-9330-39212aa4c862/Cho.Token"
   Services__BillingService: "http://premium-billing-service.cloudhealthoffice/api"
   Services__RfaiService: "http://rfai-service.cloudhealthoffice/api"
+  Services__WorkManagementService: "http://work-management-service.cloudhealthoffice/api/v1"
   Services__PricingApi: "http://pricing-api.cloudhealthoffice"
   Services__AppealsService: "http://appeals-service.cloudhealthoffice/api"
   Services__CapitationService: "http://capitation-service.cloudhealthoffice/api"
@@ -141,6 +142,11 @@ spec:
             configMapKeyRef:
               name: portal-config
               key: Services__RfaiService
+        - name: Services__WorkManagementService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__WorkManagementService
         - name: Services__ArgoWorkflows
           valueFrom:
             configMapKeyRef:

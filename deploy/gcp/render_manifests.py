@@ -95,6 +95,7 @@ BUILT_IMAGES = {
     "terminology-service": "src/services/CHO.TerminologyService/Dockerfile",
     "token-service": "src/services/token-service/Dockerfile",
     "trading-partner-service": "src/services/trading-partner-service/Dockerfile",
+    "work-management-service": "src/services/work-management-service/Dockerfile",
 }
 
 AKS_TAINT_DOMAIN = "kubernetes.azure.com"
@@ -118,6 +119,15 @@ BOTH_PROBES_TO_LIVE = {"encounter-service", "sponsor-service", "fhir-service"}
 
 # Kept off Development by scripts/deploy-local.sh; run as Testing here.
 TESTING_HOSTS = {"claims-service", "provider-service", "fhir-service"}
+
+# work-management-service keeps work items in step with claims-service from the
+# claims.work.v1 events (Kafka). In the demo the periodic reconcile is also on,
+# whatever the Kafka setting: it picks up claims pended before the service
+# started (seeded data) and repairs anything an in-memory or absent bus lost.
+WORK_MANAGEMENT_DEMO_ENV = {
+    "WorkManagement__Reconcile__Enabled": "true",
+    "WorkManagement__Reconcile__Tenants__0": "demo",
+}
 
 # Not needed in the demo: services sign their own tokens with the development
 # key (Source=LocalKey) instead of fetching them from token-service.
@@ -285,6 +295,9 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
 
         if name == "claims-service":
             set_env(container, "Adjudication__Enforcement__AiMode", "BestEffort" if args.ai_examiner else "Disabled")
+        if name == "work-management-service":
+            for key, value in WORK_MANAGEMENT_DEMO_ENV.items():
+                set_env(container, key, value)
         if name == "portal":
             set_env(container, "XDG_DATA_HOME", "/tmp")
         if name == "smart-auth-service":

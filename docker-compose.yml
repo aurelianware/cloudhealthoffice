@@ -24,7 +24,7 @@
 #   5022  RFAI                5023  FHIR                5024  Smart Auth
 #   5025  Risk Adjustment     5026  Encounter
 #   5027  Encounter Submission  5028  Claims Examiner (AI)
-#   5030  Token Service
+#   5030  Token Service       5031  Work Management
 #   5080  Terminology
 #   27017 MongoDB             6379  Redis
 
@@ -460,6 +460,26 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=RfaiDB
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]
+
+  # Work management (My Work / Get Next). Consumes claims.work.v1 from
+  # claims-service; the periodic reconcile is automatic when Kafka is absent.
+  work-management-service:
+    build:
+      context: .
+      dockerfile: src/services/work-management-service/Dockerfile
+    ports:
+      - "5031:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=WorkManagementDB
+      - Kafka__BootstrapServers=kafka:9092
+      - Kafka__ClientId=work-management-service
+      - Services__ClaimsService=http://claims-service:8080
     depends_on:
       mongo:
         condition: service_healthy

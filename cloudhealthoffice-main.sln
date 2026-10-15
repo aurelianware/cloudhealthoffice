@@ -281,6 +281,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AccumulatorReversalKindBack
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AccumulatorReversalKindBackfill.Tests", "tests\AccumulatorReversalKindBackfill.Tests\AccumulatorReversalKindBackfill.Tests.csproj", "{279D9E4F-8BE8-464A-A295-A604B6DBECEC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "work-management-service", "src\services\work-management-service\work-management-service.csproj", "{3D609CD2-8B75-43CC-82E9-3F67B467359C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorkManagementService.Tests", "src\services\work-management-service\WorkManagementService.Tests\WorkManagementService.Tests.csproj", "{A75BB0A5-1711-429B-8FC0-33A53A548FAE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1647,6 +1651,30 @@ Global
 		{279D9E4F-8BE8-464A-A295-A604B6DBECEC}.Release|x64.Build.0 = Release|Any CPU
 		{279D9E4F-8BE8-464A-A295-A604B6DBECEC}.Release|x86.ActiveCfg = Release|Any CPU
 		{279D9E4F-8BE8-464A-A295-A604B6DBECEC}.Release|x86.Build.0 = Release|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Debug|x64.Build.0 = Debug|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Debug|x86.Build.0 = Debug|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Release|x64.ActiveCfg = Release|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Release|x64.Build.0 = Release|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Release|x86.ActiveCfg = Release|Any CPU
+		{3D609CD2-8B75-43CC-82E9-3F67B467359C}.Release|x86.Build.0 = Release|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Debug|x64.Build.0 = Debug|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Debug|x86.Build.0 = Debug|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Release|x64.ActiveCfg = Release|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Release|x64.Build.0 = Release|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Release|x86.ActiveCfg = Release|Any CPU
+		{A75BB0A5-1711-429B-8FC0-33A53A548FAE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

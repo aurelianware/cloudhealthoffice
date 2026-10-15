@@ -415,6 +415,22 @@ services:
         condition: service_healthy
     healthcheck: *service-healthcheck
 
+  work-management-service:
+    build:
+      context: .
+      dockerfile: src/services/work-management-service/Dockerfile
+    ports:
+      - "5031:8080"
+    environment:
+      <<: *common-env
+      Services__ClaimsService: http://claims-service:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      claims-service:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
   encounter-service:
     build:
       context: .
@@ -499,6 +515,7 @@ services:
       TokenService__Scope: ${PORTAL_TOKEN_SERVICE_SCOPE:-api://cfada1ac-f251-48ea-9330-39212aa4c862/Cho.Token}
       Services__CoverageService: http://coverage-service:8080/api
       Services__RfaiService: http://rfai-service:8080/api
+      Services__WorkManagementService: http://work-management-service:8080/api/v1
       Services__AppealsService: http://appeals-service:8080/api
       Services__AttachmentService: http://attachment-service:8080/api
       Services__MemberDocumentService: http://member-document-service:8080

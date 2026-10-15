@@ -293,6 +293,8 @@ builder.Services.AddScoped<IPremiumBillingService, PremiumBillingService>();
 builder.Services.AddScoped<ISponsorBankAccountService, SponsorBankAccountService>();
 builder.Services.AddScoped<IReportingService, ReportingService>();
 builder.Services.AddScoped<IWorkQueueService, WorkQueueService>();
+// My Work / Get Next and the Work Management admin (work-management-service).
+builder.Services.AddScoped<IWorkManagementService, WorkManagementService>();
 builder.Services.AddScoped<IEnrollmentOperationsService, EnrollmentOperationsService>();
 builder.Services.AddScoped<IAppealsService, AppealsService>();
 builder.Services.AddScoped<ICorrespondenceService, CorrespondenceService>();

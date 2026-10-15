@@ -1,0 +1,442 @@
+@page "/admin/work-management"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject IWorkManagementService WorkManagement
+@inject ISnackbar Snackbar
+
+<PageTitle>Work Management - Cloud Health Office</PageTitle>
+
+@*
+    Work Management configuration (workqueue:admin). Three separate concerns:
+    routing (queues: rules on the item, first match by order, else the
+    fallback), entitlement (the role decides which work types a person may
+    do), and membership (who pulls from which queue, in what order, up to what
+    amount). Queue changes apply to new work at once; Recompute moves the
+    work already open.
+*@
+<PermissionGate Permission="workqueue:admin" RoleName="ClaimsSupervisor">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h3" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-2" />
+        Work Management
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Queues route work by its attributes; memberships decide who pulls from which queue. Roles still decide which kinds of work a person may do.
+    </MudText>
+
+    @if (_error != null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _error = null">@_error</MudAlert>
+    }
+
+    <div class="d-flex gap-2 mb-4">
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadAll">Refresh</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Calculate" OnClick="Recompute" data-testid="recompute">
+            Recompute open work
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Sync" OnClick="Reconcile" data-testid="reconcile">
+            Reconcile with claims
+        </MudButton>
+    </div>
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+        @* ─── Queues ─── *@
+        <MudTabPanel Text="Queues">
+            <MudTable Items="@_queues" Dense="true" Hover="true" Loading="_loading">
+                <HeaderContent>
+                    <MudTh>Order</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Type</MudTh>
+                    <MudTh>Criteria</MudTh>
+                    <MudTh>SLA</MudTh>
+                    <MudTh>Weights (deadline / age / amount / expedited)</MudTh>
+                    <MudTh>Active</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@(context.IsFallback ? "fallback" : context.Order.ToString())</MudTd>
+                    <MudTd>@context.Name</MudTd>
+                    <MudTd>@context.WorkType</MudTd>
+                    <MudTd><MudText Typo="Typo.caption">@CriteriaText(context)</MudText></MudTd>
+                    <MudTd>@context.SlaDays d</MudTd>
+                    <MudTd>@context.Weights.Deadline / @context.Weights.Age / @context.Weights.Amount / @context.Weights.Expedited</MudTd>
+                    <MudTd>@(context.IsActive ? "Yes" : "No")</MudTd>
+                    <MudTd>
+                        <MudButtonGroup Size="Size.Small" Variant="Variant.Text">
+                            @if (!context.IsFallback)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" OnClick="@(() => Move(context, -1))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" OnClick="@(() => Move(context, 1))" />
+                            }
+                            <MudButton OnClick="@(() => EditQueue(context))">Edit</MudButton>
+                            <MudButton Color="Color.Error" OnClick="@(() => DeleteQueue(context))">Delete</MudButton>
+                        </MudButtonGroup>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewQueue">New queue</MudButton>
+
+            @if (_queueForm != null)
+            {
+                <MudPaper Class="pa-4 mt-4" Outlined="true" data-testid="queue-form">
+                    <MudText Typo="Typo.h6" Class="mb-2">@(_editingQueueId == null ? "New queue" : $"Edit {_queueForm.Name}")</MudText>
+                    <MudGrid>
+                        <MudItem xs="12" md="4"><MudTextField @bind-Value="_queueForm.Name" Label="Name" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2">
+                            <MudSelect T="string" @bind-Value="_queueForm.WorkType" Label="Work type" Variant="Variant.Outlined" Disabled="_editingQueueId != null">
+                                @foreach (var type in WorkTypes)
+                                {
+                                    <MudSelectItem Value="@type">@type</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="6" md="2"><MudNumericField @bind-Value="_queueForm.SlaDays" Label="SLA days" Min="1" Max="365" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="6" md="2"><MudSwitch T="bool" @bind-Value="_queueForm.IsActive" Label="Active" Color="Color.Primary" /></MudItem>
+                        <MudItem xs="6" md="2"><MudSwitch T="bool" @bind-Value="_queueForm.IsFallback" Label="Fallback" Color="Color.Warning" /></MudItem>
+                        <MudItem xs="12"><MudTextField @bind-Value="_queueForm.Description" Label="Description" Variant="Variant.Outlined" /></MudItem>
+
+                        <MudItem xs="12"><MudText Typo="Typo.subtitle2">Routing criteria (comma-separated; empty = any)</MudText></MudItem>
+                        <MudItem xs="12" md="4"><MudTextField @bind-Value="_pendCodes" Label="Pend codes" HelperText="e.g. NCCI, MUE" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2"><MudSwitch T="bool" @bind-Value="_queueForm.Criteria.MatchAnyPendCode" Label="Match any pend (not just the routing one)" /></MudItem>
+                        <MudItem xs="12" md="3"><MudTextField @bind-Value="_lobs" Label="Lines of business" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="3"><MudTextField @bind-Value="_claimTypes" Label="Claim types" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="6" md="2"><MudNumericField T="decimal?" @bind-Value="_queueForm.Criteria.MinAmount" Label="Min amount" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="6" md="2"><MudNumericField T="decimal?" @bind-Value="_queueForm.Criteria.MaxAmount" Label="Max amount" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="3"><MudTextField @bind-Value="_npis" Label="Provider NPIs" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2"><MudTextField @bind-Value="_tins" Label="Provider TINs" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="2"><MudTextField @bind-Value="_tiers" Label="Network tiers" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="12" md="1">
+                            <MudSelect T="string" @bind-Value="_expedited" Label="Expedited" Variant="Variant.Outlined">
+                                <MudSelectItem Value="@("any")">Any</MudSelectItem>
+                                <MudSelectItem Value="@("yes")">Yes</MudSelectItem>
+                                <MudSelectItem Value="@("no")">No</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+
+                        <MudItem xs="12"><MudText Typo="Typo.subtitle2">Priority weights (0–10)</MudText></MudItem>
+                        <MudItem xs="6" md="3"><MudNumericField @bind-Value="_queueForm.Weights.Deadline" Label="Deadline" Min="0" Max="10" Step="0.25" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="6" md="3"><MudNumericField @bind-Value="_queueForm.Weights.Age" Label="Age" Min="0" Max="10" Step="0.25" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="6" md="3"><MudNumericField @bind-Value="_queueForm.Weights.Amount" Label="Amount" Min="0" Max="10" Step="0.25" Variant="Variant.Outlined" /></MudItem>
+                        <MudItem xs="6" md="3"><MudNumericField @bind-Value="_queueForm.Weights.Expedited" Label="Expedited" Min="0" Max="10" Step="0.25" Variant="Variant.Outlined" /></MudItem>
+                    </MudGrid>
+                    <div class="d-flex gap-2 mt-3">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveQueue" data-testid="save-queue">Save</MudButton>
+                        <MudButton Variant="Variant.Text" OnClick="() => _queueForm = null">Cancel</MudButton>
+                    </div>
+                </MudPaper>
+            }
+        </MudTabPanel>
+
+        @* ─── Teams ─── *@
+        <MudTabPanel Text="Teams">
+            <MudTable Items="@_teams" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Team</MudTh>
+                    <MudTh>Members</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Name</MudTd>
+                    <MudTd>@string.Join(", ", context.UserIds)</MudTd>
+                    <MudTd>
+                        <MudButton Size="Size.Small" OnClick="@(() => EditTeam(context))">Edit</MudButton>
+                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteTeam(context))">Delete</MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+            <MudPaper Class="pa-4 mt-4" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-2">@(_editingTeamId == null ? "New team" : "Edit team")</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="4"><MudTextField @bind-Value="_teamName" Label="Team name" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_teamUsers" Label="User ids (comma-separated)" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="2" Class="d-flex align-center">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTeam">Save team</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        </MudTabPanel>
+
+        @* ─── Memberships ─── *@
+        <MudTabPanel Text="Memberships">
+            <MudTable Items="@_memberships" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Member</MudTh>
+                    <MudTh>Queue</MudTh>
+                    <MudTh>Rank</MudTh>
+                    <MudTh>Tier</MudTh>
+                    <MudTh>Authority limit</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@(context.UserId ?? $"team: {TeamName(context.TeamId)}")</MudTd>
+                    <MudTd>@QueueName(context.QueueId)</MudTd>
+                    <MudTd>@context.Rank</MudTd>
+                    <MudTd>@(context.IsOverflow ? "Overflow" : "Primary")</MudTd>
+                    <MudTd>@(context.AuthorityLimit is { } limit ? limit.ToString("C0") : "No limit")</MudTd>
+                    <MudTd>
+                        <MudButton Size="Size.Small" OnClick="@(() => EditMembership(context))">Edit</MudButton>
+                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteMembership(context))">Delete</MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+            <MudPaper Class="pa-4 mt-4" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-2">@(_editingMembershipId == null ? "Add a member to a queue" : "Edit membership")</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="3"><MudTextField @bind-Value="_membershipForm.UserId" Label="User id" HelperText="or choose a team" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="2">
+                        <MudSelect T="string" @bind-Value="_membershipForm.TeamId" Label="Team" Variant="Variant.Outlined" Clearable="true">
+                            @foreach (var team in _teams)
+                            {
+                                <MudSelectItem Value="@team.Id">@team.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudSelect T="string" @bind-Value="_membershipForm.QueueId" Label="Queue" Variant="Variant.Outlined">
+                            @foreach (var queue in _queues)
+                            {
+                                <MudSelectItem Value="@queue.Id">@queue.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="4" md="1"><MudNumericField @bind-Value="_membershipForm.Rank" Label="Rank" Min="1" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="4" md="1"><MudSwitch T="bool" @bind-Value="_membershipForm.IsOverflow" Label="Overflow" /></MudItem>
+                    <MudItem xs="4" md="2"><MudNumericField T="decimal?" @bind-Value="_membershipForm.AuthorityLimit" Label="Authority limit" Variant="Variant.Outlined" /></MudItem>
+                </MudGrid>
+                <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveMembership">Save membership</MudButton>
+            </MudPaper>
+
+            <MudPaper Class="pa-4 mt-4" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-2">Effective queues for a user</MudText>
+                <div class="d-flex gap-2 align-center">
+                    <MudTextField @bind-Value="_effectiveUser" Label="User id" Variant="Variant.Outlined" Style="max-width: 320px;" />
+                    <MudButton Variant="Variant.Outlined" OnClick="ShowEffective">Show</MudButton>
+                </div>
+                @if (_effective != null)
+                {
+                    <MudSimpleTable Dense="true" Class="mt-3">
+                        <thead><tr><th>Order</th><th>Queue</th><th>Tier</th><th>Rank</th><th>Authority</th><th>Via</th></tr></thead>
+                        <tbody>
+                            @foreach (var (e, i) in _effective.Select((e, i) => (e, i)))
+                            {
+                                <tr>
+                                    <td>@(i + 1)</td>
+                                    <td>@e.QueueName</td>
+                                    <td>@(e.IsOverflow ? "Overflow" : "Primary")</td>
+                                    <td>@e.Rank</td>
+                                    <td>@(e.AuthorityLimit is { } l ? l.ToString("C0") : "No limit")</td>
+                                    <td>@string.Join(", ", e.Via)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                    @if (_effective.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-2">This user has no queues: Get Next will find nothing.</MudText>
+                    }
+                }
+            </MudPaper>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private static readonly string[] WorkTypes = ["Claim", "Appeal", "PriorAuth", "Enrollment834", "Payment"];
+
+    private bool _loading = true;
+    private string? _error;
+    private List<WorkQueueConfig> _queues = new();
+    private List<WorkTeamConfig> _teams = new();
+    private List<WorkMembershipConfig> _memberships = new();
+
+    private WorkQueueInput? _queueForm;
+    private string? _editingQueueId;
+    private string? _pendCodes, _lobs, _claimTypes, _npis, _tins, _tiers;
+    private string _expedited = "any";
+
+    private string? _editingTeamId;
+    private string? _teamName;
+    private string? _teamUsers;
+
+    private string? _editingMembershipId;
+    private WorkMembershipInput _membershipForm = new();
+
+    private string? _effectiveUser;
+    private List<EffectiveWorkQueue>? _effective;
+
+    protected override async Task OnInitializedAsync() => await LoadAll();
+
+    private async Task Guard(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception ex) when (ex is ServiceUnavailableException or WorkManagementRefusedException)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private Task LoadAll() => Guard(async () =>
+    {
+        _loading = true;
+        try
+        {
+            _queues = await WorkManagement.GetQueueConfigsAsync();
+            _teams = await WorkManagement.GetTeamsAsync();
+            _memberships = await WorkManagement.GetMembershipsAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    });
+
+    private string QueueName(string id) => _queues.FirstOrDefault(q => q.Id == id)?.Name ?? id;
+    private string TeamName(string? id) => _teams.FirstOrDefault(t => t.Id == id)?.Name ?? id ?? "";
+
+    private static string CriteriaText(WorkQueueConfig q)
+    {
+        if (q.IsFallback) return "Everything no other queue matches";
+        var c = q.Criteria;
+        var parts = new List<string>();
+        if (c.PendCodes.Count > 0) parts.Add((c.MatchAnyPendCode ? "any pend " : "pend ") + string.Join("/", c.PendCodes));
+        if (c.LinesOfBusiness.Count > 0) parts.Add("LOB " + string.Join("/", c.LinesOfBusiness));
+        if (c.ClaimTypes.Count > 0) parts.Add(string.Join("/", c.ClaimTypes));
+        if (c.MinAmount is { } min) parts.Add($"≥ {min:C0}");
+        if (c.MaxAmount is { } max) parts.Add($"≤ {max:C0}");
+        if (c.ProviderNpis.Count > 0) parts.Add("NPI " + string.Join("/", c.ProviderNpis));
+        if (c.ProviderTins.Count > 0) parts.Add("TIN " + string.Join("/", c.ProviderTins));
+        if (c.NetworkTiers.Count > 0) parts.Add(string.Join("/", c.NetworkTiers));
+        if (c.Expedited is { } e) parts.Add(e ? "expedited" : "not expedited");
+        return parts.Count == 0 ? "Everything" : string.Join("; ", parts);
+    }
+
+    private static List<string> Split(string? text) =>
+        (text ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    private static string Join(List<string> values) => string.Join(", ", values);
+
+    private void NewQueue() => LoadForm(null, new WorkQueueInput());
+
+    private void EditQueue(WorkQueueConfig q) => LoadForm(q.Id, WorkQueueInput.From(q));
+
+    private void LoadForm(string? id, WorkQueueInput input)
+    {
+        _editingQueueId = id;
+        _queueForm = input;
+        _pendCodes = Join(input.Criteria.PendCodes);
+        _lobs = Join(input.Criteria.LinesOfBusiness);
+        _claimTypes = Join(input.Criteria.ClaimTypes);
+        _npis = Join(input.Criteria.ProviderNpis);
+        _tins = Join(input.Criteria.ProviderTins);
+        _tiers = Join(input.Criteria.NetworkTiers);
+        _expedited = input.Criteria.Expedited switch { true => "yes", false => "no", _ => "any" };
+    }
+
+    private Task SaveQueue() => Guard(async () =>
+    {
+        if (_queueForm == null) return;
+        _queueForm.Criteria.PendCodes = Split(_pendCodes);
+        _queueForm.Criteria.LinesOfBusiness = Split(_lobs);
+        _queueForm.Criteria.ClaimTypes = Split(_claimTypes);
+        _queueForm.Criteria.ProviderNpis = Split(_npis);
+        _queueForm.Criteria.ProviderTins = Split(_tins);
+        _queueForm.Criteria.NetworkTiers = Split(_tiers);
+        _queueForm.Criteria.Expedited = _expedited switch { "yes" => true, "no" => false, _ => null };
+        await WorkManagement.SaveQueueAsync(_editingQueueId, _queueForm);
+        Snackbar.Add($"Queue '{_queueForm.Name}' saved. Run Recompute to move open work.", Severity.Success);
+        _queueForm = null;
+        await LoadAll();
+    });
+
+    private Task DeleteQueue(WorkQueueConfig q) => Guard(async () =>
+    {
+        await WorkManagement.DeleteQueueAsync(q.Id);
+        Snackbar.Add($"Queue '{q.Name}' deleted.", Severity.Info);
+        await LoadAll();
+    });
+
+    private Task Move(WorkQueueConfig q, int delta) => Guard(async () =>
+    {
+        var ordered = _queues.Where(x => x.WorkType == q.WorkType && !x.IsFallback).OrderBy(x => x.Order).Select(x => x.Id).ToList();
+        var index = ordered.IndexOf(q.Id);
+        var target = index + delta;
+        if (index < 0 || target < 0 || target >= ordered.Count) return;
+        (ordered[index], ordered[target]) = (ordered[target], ordered[index]);
+        await WorkManagement.ReorderQueuesAsync(q.WorkType, ordered);
+        await LoadAll();
+    });
+
+    private void EditTeam(WorkTeamConfig team)
+    {
+        _editingTeamId = team.Id;
+        _teamName = team.Name;
+        _teamUsers = Join(team.UserIds);
+    }
+
+    private Task SaveTeam() => Guard(async () =>
+    {
+        await WorkManagement.SaveTeamAsync(_editingTeamId, _teamName ?? "", Split(_teamUsers));
+        Snackbar.Add($"Team '{_teamName}' saved.", Severity.Success);
+        _editingTeamId = null;
+        _teamName = _teamUsers = null;
+        await LoadAll();
+    });
+
+    private Task DeleteTeam(WorkTeamConfig team) => Guard(async () =>
+    {
+        await WorkManagement.DeleteTeamAsync(team.Id);
+        await LoadAll();
+    });
+
+    private void EditMembership(WorkMembershipConfig m)
+    {
+        _editingMembershipId = m.Id;
+        _membershipForm = new WorkMembershipInput
+        {
+            UserId = m.UserId, TeamId = m.TeamId, QueueId = m.QueueId, Rank = m.Rank, IsOverflow = m.IsOverflow, AuthorityLimit = m.AuthorityLimit,
+        };
+    }
+
+    private Task SaveMembership() => Guard(async () =>
+    {
+        if (string.IsNullOrWhiteSpace(_membershipForm.UserId)) _membershipForm.UserId = null;
+        await WorkManagement.SaveMembershipAsync(_editingMembershipId, _membershipForm);
+        Snackbar.Add("Membership saved.", Severity.Success);
+        _editingMembershipId = null;
+        _membershipForm = new WorkMembershipInput();
+        await LoadAll();
+    });
+
+    private Task DeleteMembership(WorkMembershipConfig m) => Guard(async () =>
+    {
+        await WorkManagement.DeleteMembershipAsync(m.Id);
+        await LoadAll();
+    });
+
+    private Task ShowEffective() => Guard(async () =>
+    {
+        if (string.IsNullOrWhiteSpace(_effectiveUser)) return;
+        _effective = await WorkManagement.GetEffectiveQueuesAsync(_effectiveUser.Trim());
+    });
+
+    private Task Recompute() => Guard(async () =>
+    {
+        var result = await WorkManagement.RecomputeAsync();
+        Snackbar.Add($"Recomputed {result.Examined} open item(s): {result.Rerouted} moved, {result.Rescored} re-scored.", Severity.Success);
+    });
+
+    private Task Reconcile() => Guard(async () =>
+    {
+        var result = await WorkManagement.ReconcileAsync();
+        if (result.Succeeded)
+            Snackbar.Add($"Reconciled {result.Pended} pended claim(s): {result.Created} added, {result.Reopened} reopened, {result.Closed} closed.", Severity.Success);
+        else
+            _error = result.Error ?? "Reconcile failed.";
+    });
+}

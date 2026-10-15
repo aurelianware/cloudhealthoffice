@@ -34,6 +34,14 @@ public class ClaimsController : ControllerBase
     private readonly CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine? _benefitEngine;
     private readonly IAccumulatorOutboxProcessor? _accumulatorOutbox;
 
+    /// <summary>
+    /// Work-management notification (claims.work.v1). Optional and
+    /// fire-and-forget: a resolution never waits on, or fails because of,
+    /// work-management-service; the work item completes eventually (event, or
+    /// work-management's reconcile).
+    /// </summary>
+    private readonly IClaimWorkEventPublisher? _workEvents;
+
     public ClaimsController(
         IClaimRepository claimRepository,
         IMassAdjudicationRunRepository massAdjudicationRunRepository,
@@ -51,8 +59,10 @@ public class ClaimsController : ControllerBase
         IClaimApprovalReadjudicator? approvalReadjudicator = null,
         CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine? benefitEngine = null,
         IAccumulatorOutboxProcessor? accumulatorOutbox = null,
-        IAccumulatorCommitLookup? accumulatorCommitLookup = null)
+        IAccumulatorCommitLookup? accumulatorCommitLookup = null,
+        IClaimWorkEventPublisher? workEvents = null)
     {
+        _workEvents = workEvents;
         _accumulatorOutbox = accumulatorOutbox;
         _accumulatorCommitLookup = accumulatorCommitLookup;
         _approvalReadjudicator = approvalReadjudicator;
@@ -1296,6 +1306,42 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
+    /// Work-management reconcile source: every Pended claim of the caller's
+    /// tenant as a <see cref="CloudHealthOffice.Events.ClaimWorkEvent"/>
+    /// work-needed snapshot, built by the same mapping as the
+    /// <c>claims.work.v1</c> events (<see cref="ClaimWorkEvents"/>), one page
+    /// at a time. work-management-service pages through it to create missing
+    /// work items and close items whose claim is no longer pended. Every
+    /// snapshot carries the same <c>sourceVersion</c>: the moment this read
+    /// started, so a transition published after it wins over the snapshot.
+    /// </summary>
+    [HttpGet("work-queue/snapshots")]
+    [ProducesResponseType(typeof(WorkSnapshotPage), StatusCodes.Status200OK)]
+    public async Task<ActionResult<WorkSnapshotPage>> GetWorkSnapshots(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 500)
+    {
+        var observedAt = DateTime.UtcNow;
+        var tenantId = GetTenantId();
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
+        var safePage = Math.Max(page, 1);
+        var (claims, total) = await _claimRepository.SearchWithCountAsync(
+            memberId: null, providerNPI: null,
+            serviceDateFrom: null, serviceDateTo: null,
+            status: ClaimStatus.Pended, lineOfBusiness: null,
+            page: safePage, pageSize: safePageSize);
+
+        return Ok(new WorkSnapshotPage
+        {
+            Page = safePage,
+            PageSize = safePageSize,
+            TotalCount = total,
+            ObservedAt = observedAt,
+            Items = claims.Select(c => ClaimWorkEvents.Needed(c, tenantId, null, observedAt)).ToList(),
+        });
+    }
+
+    /// <summary>
     /// Accumulator adjustment reviews: claims whose engine accumulator commit
     /// was clamped at a limit (a concurrent claim for the member or family
     /// reached the deductible / OOP maximum first), or refused by the store
@@ -1770,6 +1816,14 @@ public class ClaimsController : ControllerBase
 
             await _eventPublisher.PublishClaimFinalizedAsync(updated, tenantId);
 
+            // The claim left Pended: its work item is done. A Pay / Deny claim
+            // re-resolved here was not work (it never had an open item).
+            if (sourceStatus == ClaimStatus.Pended && _workEvents is not null)
+            {
+                await _workEvents.PublishWorkResolvedAsync(
+                    updated, tenantId, disposition.ToString(), examinerUserId, CancellationToken.None);
+            }
+
             _logger.LogInformation(
                 "Examiner {User} resolved pended claim {ClaimId} as {Disposition}: {Reason}",
                 SanitizeForLog(examinerUserId),
@@ -1921,6 +1975,18 @@ public class AccumulatorAdjustmentItem
     public string Kind { get; set; } = AccumulatorClampReview.Clamped;
     public string CommitId { get; set; } = string.Empty;
     public List<CloudHealthOffice.BenefitEngine.Models.AccumulatorClamp> Clamps { get; set; } = new();
+}
+
+/// <summary>One page of <c>GET work-queue/snapshots</c>.</summary>
+public class WorkSnapshotPage
+{
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalCount { get; set; }
+
+    /// <summary>When the read started; every item's <c>sourceVersion</c> is its tick count.</summary>
+    public DateTime ObservedAt { get; set; }
+    public List<CloudHealthOffice.Events.ClaimWorkEvent> Items { get; set; } = new();
 }
 
 public class WorkQueueSummary
