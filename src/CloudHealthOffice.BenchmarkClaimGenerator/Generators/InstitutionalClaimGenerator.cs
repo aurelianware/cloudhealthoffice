@@ -15,10 +15,23 @@ public class InstitutionalClaimGenerator : IClaimGenerator
     /// Initializes a new instance of the <see cref="InstitutionalClaimGenerator"/> class.
     /// </summary>
     /// <param name="refData">Reference data provider for codes and entities.</param>
-    public InstitutionalClaimGenerator(IReferenceDataProvider refData)
+    /// <param name="referenceDate">"As of" date for the corpus: no admission, discharge, line or receipt
+    /// date is generated after it. Defaults to today (UTC); pass it explicitly
+    /// to reproduce a corpus (same seed + same date = same claims).</param>
+    public InstitutionalClaimGenerator(IReferenceDataProvider refData, DateTime? referenceDate = null)
     {
         _refData = refData;
+        ReferenceDate = ClaimDateAnchor.Resolve(referenceDate);
     }
+
+    /// <summary>Latest date any generated claim may carry (see <see cref="ClaimDateAnchor"/>).</summary>
+    public DateTime ReferenceDate { get; }
+
+    /// <summary>Longest length of stay any sub-type draws (skilled nursing: 7-89 days).</summary>
+    internal const int MaxLengthOfStayDays = 89;
+
+    /// <summary>Longest gap between discharge and the payer receipt date.</summary>
+    internal const int MaxReceiptLagDays = 13;
 
     /// <inheritdoc />
     public string ClaimType => "Institutional";
@@ -29,7 +42,10 @@ public class InstitutionalClaimGenerator : IClaimGenerator
         var member = _refData.GenerateMember(random);
         var renderingProvider = _refData.GenerateProvider(random);
         var billingProvider = _refData.GenerateProvider(random);
-        var admitDate = new DateTime(2024, 1, 1).AddDays(random.Next(365));
+        // Admission is anchored far enough before the reference date that the
+        // longest stay plus the longest receipt lag still ends before it.
+        var admitDate = ClaimDateAnchor.DrawServiceDate(
+            ReferenceDate, MaxLengthOfStayDays + MaxReceiptLagDays, random);
         var diagContext = subType == "emergency" ? "emergency" : "general";
 
         var los = GetLengthOfStay(subType, random);
@@ -51,7 +67,7 @@ public class InstitutionalClaimGenerator : IClaimGenerator
             ClaimId = $"MCC-I-{sequenceNumber:D7}",
             ClaimType = ClaimType,
             DateOfService = admitDate,
-            DateReceived = dischargeDate.AddDays(random.Next(1, 14)),
+            DateReceived = dischargeDate.AddDays(random.Next(1, MaxReceiptLagDays + 1)),
             Member = member,
             RenderingProvider = renderingProvider,
             BillingProvider = billingProvider,
@@ -141,7 +157,7 @@ public class InstitutionalClaimGenerator : IClaimGenerator
             "stoploss" => random.Next(10, 45),
             "emergency" => 0,
             "observation" => random.Next(0, 2),
-            "skillednursing" => random.Next(7, 90),
+            "skillednursing" => random.Next(7, MaxLengthOfStayDays + 1),
             "outpatient" => 0,
             _ => 0
         };

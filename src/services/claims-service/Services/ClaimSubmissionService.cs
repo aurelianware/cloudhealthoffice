@@ -130,17 +130,20 @@ public class ClaimSubmissionService : IClaimSubmissionService
     private readonly IClaimVersionEventPublisher _eventPublisher;
     private readonly IMessageBus _messageBus;
     private readonly ILogger<ClaimSubmissionService> _logger;
+    private readonly TimeProvider _clock;
 
     public ClaimSubmissionService(
         ClaimAdapterFactory adapterFactory,
         IClaimVersionEventPublisher eventPublisher,
         IMessageBus messageBus,
-        ILogger<ClaimSubmissionService> logger)
+        ILogger<ClaimSubmissionService> logger,
+        TimeProvider? clock = null)
     {
         _adapterFactory = adapterFactory;
         _eventPublisher = eventPublisher;
         _messageBus = messageBus;
         _logger = logger;
+        _clock = clock ?? TimeProvider.System;
     }
 
     public async Task<ClaimSubmissionResult> SubmitAsync(
@@ -159,6 +162,19 @@ public class ClaimSubmissionService : IClaimSubmissionService
         // caller supplied in the body. The HttpContext-resolved tenant is
         // authoritative.
         claim.TenantId = tenantId;
+
+        // The payer receipt date is the moment the claim reaches this
+        // service. Timely filing, prompt-pay clocks, aging and the dashboard
+        // windows are all measured from it, so a submitter must never be able
+        // to set or backdate it: whatever the body carried is overwritten.
+        // Every intake path funnels through here (legacy POST /api/claims,
+        // POST /api/v1/claims, the raw 837 import, and adjustments), so this
+        // is the single place it is stamped. SubmittedDate and ReceivedDate
+        // carry the same instant: the platform has no separate submitter-side
+        // date on these fields (837 BHT04 travels as SubmitterTransactionDate).
+        var receivedAt = _clock.GetUtcNow().UtcDateTime;
+        claim.SubmittedDate = receivedAt;
+        claim.ReceivedDate = receivedAt;
 
         // Compute total charge from the lines BEFORE validating, so the
         // caller-supplied total doesn't influence the validation outcome

@@ -264,14 +264,29 @@ public class Claim
     public ClaimStatus Status { get; set; } = ClaimStatus.Submitted;
 
     /// <summary>
-    /// Claim submission date
+    /// Payer receipt date (UTC): when claims-service accepted the claim.
+    /// Stamped server-side at intake by <c>ClaimSubmissionService</c> and
+    /// never taken from the submitter. Timely filing, prompt-pay clocks,
+    /// aging and the dashboard windows are measured from it. An adjustment's
+    /// new version is stamped when the corrected claim is received; the
+    /// original claim's receipt date stays on the predecessor row.
     /// </summary>
     public DateTime SubmittedDate { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Claim received date (by payer)
+    /// Payer receipt date (UTC). Stamped at intake with the same instant as
+    /// <see cref="SubmittedDate"/>; a later status write to Received does not
+    /// move it.
     /// </summary>
     public DateTime? ReceivedDate { get; set; }
+
+    /// <summary>
+    /// Submitter-reported creation date of the transaction that carried the
+    /// claim (837 BHT04), as the submitter stated it. Informational only: it
+    /// is not the payer receipt date and nothing (timely filing included) is
+    /// measured from it. Null for claims not received as X12 837.
+    /// </summary>
+    public DateTime? SubmitterTransactionDate { get; set; }
 
     /// <summary>
     /// Adjudication date (when claim was processed)

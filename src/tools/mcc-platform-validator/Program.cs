@@ -2907,8 +2907,8 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
             revenueCode = line.RevenueCode
         }),
         status = 1,
-        submittedDate = claim.DateReceived,
-        receivedDate = claim.DateReceived,
+        // No submittedDate/receivedDate: the payer receipt date is stamped by
+        // claims-service at intake and a submitted value would be ignored.
         priorAuthorizationNumber = claim.PriorAuthNumber,
         relatedCausesCode = claim.RelatedCausesCode,
         accidentDate = claim.AccidentDate

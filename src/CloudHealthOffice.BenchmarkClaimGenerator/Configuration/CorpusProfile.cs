@@ -12,6 +12,14 @@ public class CorpusProfile
     /// <summary>Random seed for deterministic, reproducible generation.</summary>
     public int Seed { get; set; } = 42;
 
+    /// <summary>
+    /// "As of" date the corpus is anchored to: no service, admission,
+    /// discharge or receipt date is generated after it. Null means today
+    /// (UTC). Set it explicitly to reproduce a corpus exactly: the same seed
+    /// and the same reference date always produce the same claims.
+    /// </summary>
+    public DateTime? ReferenceDate { get; set; }
+
     /// <summary>Professional claim distribution (CMS-1500).</summary>
     public ProfessionalDistribution Professional { get; set; } = new();
 

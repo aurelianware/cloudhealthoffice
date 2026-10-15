@@ -100,7 +100,12 @@ public static class X12837ClaimMapper
             UnmatchedOtherPayerLines = unmatchedOtherPayerLines,
 
             Status = ClaimStatus.Submitted,
-            SubmittedDate = DateTime.UtcNow,
+
+            // The payer receipt date (SubmittedDate/ReceivedDate) is stamped
+            // by ClaimSubmissionService at intake, not here. BHT04 is the
+            // submitter's own creation date for the transaction set: kept
+            // for reference, never used as the receipt date.
+            SubmitterTransactionDate = ParseD8(source.TransactionDate),
 
             // 2300 REF*G1; a line's own 2400 REF*G1 is on the line and
             // overrides this one for that line at adjudication.

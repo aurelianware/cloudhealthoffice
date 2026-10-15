@@ -7,6 +7,7 @@ var claimCount = 1_000;
 var seed = 42;
 var outputPath = Path.Combine(Directory.GetCurrentDirectory(), "mcc-output");
 var format = "json";
+DateTime? referenceDate = null;
 
 // Parse arguments
 for (int i = 0; i < args.Length; i++)
@@ -24,6 +25,10 @@ for (int i = 0; i < args.Length; i++)
             break;
         case "--format" or "-f" when i + 1 < args.Length:
             format = args[++i].ToLowerInvariant();
+            break;
+        case "--as-of" when i + 1 < args.Length:
+            referenceDate = DateTime.ParseExact(
+                args[++i], "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
             break;
         case "--help" or "-h":
             PrintUsage();
@@ -56,6 +61,7 @@ var profile = new CorpusProfile
 {
     TotalClaims = claimCount,
     Seed = seed,
+    ReferenceDate = referenceDate,
     Professional = new ProfessionalDistribution
     {
         Count = majorCounts["professional"],
@@ -103,6 +109,7 @@ var profile = new CorpusProfile
 Console.WriteLine($"Million Claim Challenge — Corpus Generator");
 Console.WriteLine($"  Claims:  {profile.TotalClaims:N0}");
 Console.WriteLine($"  Seed:    {seed}");
+Console.WriteLine($"  As of:   {(referenceDate ?? DateTime.UtcNow).Date:yyyy-MM-dd}");
 Console.WriteLine($"  Output:  {outputPath}");
 Console.WriteLine($"  Format:  {format}");
 Console.WriteLine();
@@ -148,6 +155,9 @@ static void PrintUsage()
       -s, --seed <seed>      Random seed for reproducibility (default: 42)
       -o, --output <path>    Output directory (default: ./mcc-output)
       -f, --format <fmt>     Output format: json or fhir (default: json)
+          --as-of <yyyy-MM-dd>
+                             Reference date: no claim date is generated after it
+                             (default: today UTC). Seed + as-of reproduce a corpus.
       -h, --help             Show this help
 
     Examples:
