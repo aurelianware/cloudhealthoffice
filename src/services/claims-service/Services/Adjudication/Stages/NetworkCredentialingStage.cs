@@ -89,9 +89,15 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
 
         if (string.IsNullOrWhiteSpace(billingNpi))
         {
-            return ClaimAdjudicationStageResult.Reject(
-                StageName,
-                "Claim is missing BillingProviderNPI; network/credentialing checks cannot run.");
+            const string missingNpiReason =
+                "Claim is missing BillingProviderNPI; network/credentialing checks cannot run.";
+            // CO-16 + N257: missing billing provider primary identifier.
+            AdjudicationDenialCodes.Apply(
+                context,
+                AdjudicationDenialCodes.ClaimLacksInformationCarc,
+                missingNpiReason,
+                AdjudicationDenialCodes.MissingBillingProviderIdRarc);
+            return ClaimAdjudicationStageResult.Reject(StageName, missingNpiReason);
         }
 
         var serviceDate = ResolveEarliestServiceDate(claim);
@@ -160,7 +166,7 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
             }
         }
 
-        return CombineOutcomes(outcomes);
+        return CombineOutcomes(context, outcomes);
     }
 
     private async Task<EnforcementOutcome> ResolveMembershipAsync(
@@ -410,13 +416,16 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
     }
 
     private static ClaimAdjudicationStageResult CombineOutcomes(
+        ClaimAdjudicationContext context,
         IReadOnlyList<EnforcementOutcome> outcomes)
     {
         // Deny dominates Pend; Pend dominates Allow/Observe.
         var deny = outcomes.FirstOrDefault(o => o.Decision == EnforcementDecision.Deny);
         if (deny is not null)
         {
-            return ClaimAdjudicationStageResult.Deny(StageName, FormatReason(deny));
+            var reason = FormatReason(deny);
+            AdjudicationDenialCodes.Apply(context, DenialCarcFor(deny.Check), reason);
+            return ClaimAdjudicationStageResult.Deny(StageName, reason);
         }
 
         var pend = outcomes.FirstOrDefault(o => o.Decision == EnforcementDecision.Pend);
@@ -428,6 +437,19 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
         // All Allow / Observe.
         return ClaimAdjudicationStageResult.Pass(StageName);
     }
+
+    /// <summary>
+    /// CARC for a FailClosed network/credentialing denial (including the
+    /// "could not verify" denials, which deny for the same check):
+    /// membership → CO-242 (services not provided by network providers);
+    /// credentialing → CO-B7 (provider not certified/eligible to be paid on
+    /// this date of service).
+    /// </summary>
+    internal static string DenialCarcFor(EnforcementCheck check) => check switch
+    {
+        EnforcementCheck.Credentialing => AdjudicationDenialCodes.ProviderNotCertifiedCarc,
+        _ => AdjudicationDenialCodes.NotNetworkProviderCarc,
+    };
 
     private static string FormatReason(EnforcementOutcome outcome)
         => $"{outcome.Check}: {outcome.Reason ?? outcome.Decision.ToString()} (mode={outcome.Mode})";

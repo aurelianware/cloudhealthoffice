@@ -199,9 +199,15 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             // missing-NPI Reject path.
             activity?.SetTag("cob.outcome", "reject");
             activity?.SetTag("cob.reason", "missing_member_id");
-            return ClaimAdjudicationStageResult.Reject(
-                StageName,
-                "Claim is missing MemberId; coordination-of-benefits lookup cannot run.");
+            const string missingMemberReason =
+                "Claim is missing MemberId; coordination-of-benefits lookup cannot run.";
+            // CO-16 + N382: missing/invalid patient identifier.
+            AdjudicationDenialCodes.Apply(
+                context,
+                AdjudicationDenialCodes.ClaimLacksInformationCarc,
+                missingMemberReason,
+                AdjudicationDenialCodes.MissingPatientIdRarc);
+            return ClaimAdjudicationStageResult.Reject(StageName, missingMemberReason);
         }
 
         var serviceDate = ResolveEarliestServiceDate(context.Claim);
@@ -635,7 +641,7 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             EditFailures = new List<NcciEditFailureSnapshot>(),
         };
 
-        return BuildModeDrivenSecondaryResult(activity);
+        return BuildModeDrivenSecondaryResult(context, activity);
     }
 
     /// <summary>
@@ -726,15 +732,25 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
     private static DateOnly ToDateOnly(DateTime value) =>
         DateOnly.FromDateTime(value);
 
-    private ClaimAdjudicationStageResult BuildModeDrivenSecondaryResult(Activity? activity)
+    private ClaimAdjudicationStageResult BuildModeDrivenSecondaryResult(
+        ClaimAdjudicationContext context, Activity? activity)
     {
         switch (_options.CobMode)
         {
             case CobEnforcementMode.Deny:
                 activity?.SetTag("cob.outcome_mode", "deny");
-                return ClaimAdjudicationStageResult.Deny(
-                    StageName,
-                    "denied for CHO-secondary scenario: the 837 carries no usable prior-payer data (Deny mode)");
+                const string denyReason =
+                    "denied for CHO-secondary scenario: the 837 carries no usable prior-payer data (Deny mode)";
+                // Another payer is primary and its adjudication is missing:
+                // CO-22 (covered by another payer per COB) + MA04 (secondary
+                // payment cannot be considered without the primary payer's
+                // payment information).
+                AdjudicationDenialCodes.Apply(
+                    context,
+                    AdjudicationDenialCodes.CoveredByAnotherPayerCarc,
+                    denyReason,
+                    AdjudicationDenialCodes.MissingPrimaryPayerRarc);
+                return ClaimAdjudicationStageResult.Deny(StageName, denyReason);
 
             // SoftValidation used to pass here, pricing a claim this plan is
             // not primary on as primary. A later-payer claim without usable
