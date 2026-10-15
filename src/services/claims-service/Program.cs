@@ -450,6 +450,10 @@ builder.Services.AddHealthChecks().AddCheck<AccumulatorOutboxScopeHealthCheck>(
 // Operator tools: the post-rollout sweep and the ACCUMCOMMIT bulk re-run.
 builder.Services.AddScoped<IAccumulatorCommitLookup, HttpBenefitCalculationEngineClient>();
 builder.Services.AddScoped<AccumulatorOperationsService>();
+// One-time Pay/Deny lifecycle backfill (Denied-at-adjudication -> Deny); opt-in.
+builder.Services.Configure<ClaimsService.Services.Migrations.DenyStatusBackfillOptions>(
+    builder.Configuration.GetSection(ClaimsService.Services.Migrations.DenyStatusBackfillOptions.SectionName));
+builder.Services.AddScoped<ClaimsService.Services.Migrations.DenyStatusBackfillService>();
 
 builder.Services.AddScoped<ClaimAdjudicationOrchestrator>();
 builder.Services.AddScoped<IClaimAdjudicationOrchestrator>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());

@@ -269,6 +269,24 @@ public interface IClaimRepository
         DateTime from, DateTime to, int limit, CancellationToken ct = default);
 
     /// <summary>
+    /// Deny backfill (docs/operations/CLAIM-DENY-STATUS-BACKFILL.md): up to
+    /// <paramref name="limit"/> claims of the request's tenant that are
+    /// <see cref="ClaimStatus.Denied"/> with no payment-cycle evidence
+    /// (<see cref="ClaimRepository.IsLegacyUnremittedDenied"/>) — rows the
+    /// pipeline denied before <see cref="ClaimStatus.Deny"/> existed.
+    /// </summary>
+    Task<IReadOnlyList<Claim>> FindLegacyUnremittedDeniedAsync(int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deny backfill: moves one such claim to <see cref="ClaimStatus.Deny"/>
+    /// (VersionState Adjudicated), only while it still matches
+    /// <see cref="ClaimRepository.IsLegacyUnremittedDenied"/> (checked by the
+    /// write itself). False when it no longer does (already moved, finalized
+    /// by a remittance, gone): a rerun is a no-op.
+    /// </summary>
+    Task<bool> TryReopenLegacyDeniedAsync(string tenantId, string claimId, CancellationToken ct = default);
+
+    /// <summary>
     /// Atomically applies <paramref name="desiredStatus"/> to the single claim
     /// row identified by <paramref name="claimId"/> (direct row id, not a
     /// version-chain lookup — mirrors <see cref="GetByIdAsync"/>), subject to
@@ -673,6 +691,24 @@ public class ClaimRepository : IClaimRepository
         && (!string.IsNullOrWhiteSpace(adjudication.DenialReasonCode)
             || !string.IsNullOrWhiteSpace(adjudication.DenialReason)
             || adjudication.AdjustmentReasons?.Any() == true);
+
+    /// <summary>
+    /// A Denied claim with no payment-cycle evidence on claims-service's side:
+    /// no check / 835 trace, no payment date, no outbound 835 control number,
+    /// not superseded. Before <see cref="ClaimStatus.Deny"/> existed the
+    /// pipeline set Denied at adjudication and the payment run never wrote
+    /// back to a denial, so this does NOT prove the denial was never in an
+    /// 835 — payment-service's envelopes are the only proof (see the
+    /// backfill runbook); the backfill is opt-in, dry-run first, and takes
+    /// the remitted claim ids to exclude.
+    /// </summary>
+    public static bool IsLegacyUnremittedDenied(Claim claim) =>
+        claim.Status == ClaimStatus.Denied
+        && claim.VersionState is ClaimVersionState.Denied or ClaimVersionState.Unknown
+        && string.IsNullOrWhiteSpace(claim.AdjudicationResult?.CheckNumber)
+        && claim.AdjudicationResult?.PaymentDate is null
+        && string.IsNullOrWhiteSpace(claim.EDI835ControlNumber)
+        && claim.SupersededAt is null;
 
     private static bool IsTerminal(ClaimVersionState state) => state switch
     {
@@ -1837,6 +1873,58 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@to", to);
         foreach (var (name, value) in parameters) query = query.WithParameter(name, value);
         return await QueryTenantAsync(query, tenantId, limit, ct);
+    }
+
+    public async Task<IReadOnlyList<Claim>> FindLegacyUnremittedDeniedAsync(int limit, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        var parameters = new Dictionary<string, object>();
+        var denied = EnumInClause("c.status", "deniedStatus", parameters, ClaimStatus.Denied);
+        // Coarse server-side filter (no check number); the full predicate is
+        // evaluated on each hydrated row.
+        var query = new QueryDefinition($@"
+            SELECT TOP @limit * FROM c
+            WHERE c.tenantId = @tenantId AND {denied}
+              AND (NOT IS_DEFINED(c.adjudicationResult.checkNumber)
+                   OR IS_NULL(c.adjudicationResult.checkNumber)
+                   OR c.adjudicationResult.checkNumber = '')
+              AND (NOT IS_DEFINED(c.supersededAt) OR IS_NULL(c.supersededAt))")
+            .WithParameter("@limit", limit)
+            .WithParameter("@tenantId", tenantId);
+        foreach (var (name, value) in parameters) query = query.WithParameter(name, value);
+        return (await QueryTenantAsync(query, tenantId, limit, ct)).Where(IsLegacyUnremittedDenied).ToList();
+    }
+
+    public async Task<bool> TryReopenLegacyDeniedAsync(string tenantId, string claimId, CancellationToken ct = default)
+    {
+        ItemResponse<Claim> current;
+        try
+        {
+            current = await _container.ReadItemAsync<Claim>(claimId, new PartitionKey(tenantId), cancellationToken: ct);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+        if (!IsLegacyUnremittedDenied(Hydrate(current.Resource))) return false;
+        try
+        {
+            // The ETag makes the check and the write one step: a remittance
+            // landing in between wins and this writes nothing.
+            await _container.PatchItemAsync<Claim>(claimId, new PartitionKey(tenantId),
+                [
+                    PatchOperation.Set("/status", ClaimStatus.Deny),
+                    PatchOperation.Set("/versionState", ClaimVersionState.Adjudicated),
+                    PatchOperation.Set("/lastUpdatedDate", DateTime.UtcNow),
+                ],
+                new PatchItemRequestOptions { IfMatchEtag = current.ETag }, ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed
+                                             or System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
     }
 
     private async Task<IReadOnlyList<Claim>> QueryTenantAsync(QueryDefinition query, string tenantId, int limit, CancellationToken ct)

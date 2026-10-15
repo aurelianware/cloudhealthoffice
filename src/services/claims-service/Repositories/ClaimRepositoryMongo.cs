@@ -927,6 +927,37 @@ public class ClaimRepositoryMongo : IClaimRepository
         return (await _collection.Find(filter).SortBy(c => c.PendDetails!.PendedAt).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
     }
 
+    /// <summary>The store-side part of <see cref="ClaimRepository.IsLegacyUnremittedDenied"/>.</summary>
+    private static FilterDefinition<Claim> LegacyUnremittedDeniedFilter(FilterDefinitionBuilder<Claim> b) => b.And(
+        b.Eq(c => c.Status, ClaimStatus.Denied),
+        b.Or(b.In(c => c.VersionState, new[] { ClaimVersionState.Denied, ClaimVersionState.Unknown }), b.Exists(c => c.VersionState, false)),
+        b.Or(b.Eq(c => c.AdjudicationResult!.CheckNumber, null), b.Eq(c => c.AdjudicationResult!.CheckNumber, string.Empty)),
+        b.Eq(c => c.AdjudicationResult!.PaymentDate, null),
+        b.Or(b.Eq(c => c.EDI835ControlNumber, null), b.Eq(c => c.EDI835ControlNumber, string.Empty)),
+        b.Eq(c => c.SupersededAt, null));
+
+    public async Task<IReadOnlyList<Claim>> FindLegacyUnremittedDeniedAsync(int limit, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(b.Eq(c => c.TenantId, GetTenantId()), LegacyUnremittedDeniedFilter(b));
+        return (await _collection.Find(filter).Limit(limit).ToListAsync(ct))
+            .Select(Hydrate)
+            .Where(ClaimRepository.IsLegacyUnremittedDenied)
+            .ToList();
+    }
+
+    public async Task<bool> TryReopenLegacyDeniedAsync(string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, claimId), LegacyUnremittedDeniedFilter(b));
+        var update = Builders<Claim>.Update
+            .Set(c => c.Status, ClaimStatus.Deny)
+            .Set(c => c.VersionState, ClaimVersionState.Adjudicated)
+            .Set(c => c.LastUpdatedDate, DateTime.UtcNow);
+        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.ModifiedCount == 1;
+    }
+
     public async Task<IReadOnlyList<Claim>> FindFinalizedForAccumulatorSweepAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default)
     {
