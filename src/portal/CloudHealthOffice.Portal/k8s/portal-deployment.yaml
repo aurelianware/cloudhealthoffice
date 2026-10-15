@@ -25,6 +25,10 @@ data:
   Services__MemberDocumentService: "http://member-document-service.cloudhealthoffice"
   Services__SponsorService: "http://sponsor-service.cloudhealthoffice/api/v1"
   Services__ReferenceDataService: "http://reference-data-service.cloudhealthoffice/api/ReferenceData"
+  Services__EnrollmentImportService: "http://enrollment-import-service.cloudhealthoffice/api"
+  Services__ArService: "http://ar-service.cloudhealthoffice/api"
+  Services__ProviderContractsService: "http://provider-contracts-service.cloudhealthoffice/api"
+  Services__TerminologyService: "http://terminology-service.cloudhealthoffice"
   Services__ArgoWorkflows: "http://argo-workflows-server.cloudhealthoffice:2746"
   Services__Prometheus: "http://cho-monitoring-prometheus-server.cho-monitoring"
   Portal__Title: "Cloud Health Office"
@@ -242,6 +246,26 @@ spec:
             configMapKeyRef:
               name: portal-config
               key: Services__ReferenceDataService
+        - name: Services__EnrollmentImportService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__EnrollmentImportService
+        - name: Services__ArService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__ArService
+        - name: Services__ProviderContractsService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__ProviderContractsService
+        - name: Services__TerminologyService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__TerminologyService
         - name: PricingApi__AdminSecret
           valueFrom:
             secretKeyRef:
