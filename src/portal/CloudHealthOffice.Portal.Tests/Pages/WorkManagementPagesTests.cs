@@ -109,6 +109,77 @@ public class MyWorkPageTests : TestContext
 }
 
 /// <summary>The Work Queues page: work-management queue data and a real supervisor reassign.</summary>
+/// <summary>
+/// The compact Get Next card on the dashboard: the same button as My Work,
+/// with how much the user is holding, and nothing at all for users who
+/// can't work queues.
+/// </summary>
+public class DashboardGetNextCardTests : TestContext
+{
+    private readonly Mock<IWorkManagementService> _work = new();
+
+    public DashboardGetNextCardTests()
+    {
+        Services.AddMudServices();
+        Services.AddSingleton(_work.Object);
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        _work.Setup(w => w.GetMineAsync()).ReturnsAsync(new List<WorkItemView>());
+    }
+
+    private IRenderedComponent<GetNextCard> Render(params string[] permissions)
+    {
+        Services.AddSingleton(GatingUsers.With(permissions).Object);
+        return RenderComponent<GetNextCard>(p => p.Add(x => x.Compact, true));
+    }
+
+    [Fact]
+    public void Shows_how_much_the_user_holds_and_gets_their_next_item()
+    {
+        _work.Setup(w => w.GetMineAsync()).ReturnsAsync(new List<WorkItemView> { WorkItems.Claim("c-1", "u-1"), WorkItems.Claim("c-2", "u-1") });
+        _work.Setup(w => w.GetNextAsync(null)).ReturnsAsync(new WorkNextResult { Item = WorkItems.Claim("c-9", "u-1"), OpenUrl = "/claims/c-9" });
+        var cut = Render("workqueue:work");
+        var nav = Services.GetRequiredService<FakeNavigationManager>();
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=get-next-held]").TextContent.Should().Contain("holding 2 items"));
+        cut.Find("[data-testid=get-next]").Click();
+        cut.WaitForAssertion(() => nav.Uri.Should().EndWith("/claims/c-9"));
+    }
+
+    [Fact]
+    public void Nothing_waiting_shows_the_caught_up_message()
+    {
+        _work.Setup(w => w.GetNextAsync(null)).ReturnsAsync((WorkNextResult?)null);
+
+        var cut = Render("workqueue:work");
+        cut.WaitForAssertion(() => cut.Find("[data-testid=get-next]"));
+        cut.Find("[data-testid=get-next]").Click();
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=get-next-empty]").TextContent.Should().Contain("all caught up"));
+    }
+
+    [Fact]
+    public void Users_who_cant_work_queues_see_nothing()
+    {
+        var cut = Render("claims:read");
+
+        cut.WaitForAssertion(() => cut.Markup.Trim().Should().BeEmpty());
+        _work.Verify(w => w.GetMineAsync(), Times.Never);
+    }
+
+    [Fact]
+    public void A_work_management_outage_doesnt_break_the_dashboard()
+    {
+        _work.Setup(w => w.GetMineAsync()).ThrowsAsync(new ServiceUnavailableException("Work Management Service"));
+        _work.Setup(w => w.GetNextAsync(null)).ThrowsAsync(new ServiceUnavailableException("Work Management Service"));
+
+        var cut = Render("workqueue:work");
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=get-next-held]").TextContent.Should().Contain("unavailable"));
+        cut.Find("[data-testid=get-next]").Click();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=get-next-error]").TextContent.Should().Contain("Work Management Service"));
+    }
+}
+
 public class WorkQueuesReassignTests : TestContext
 {
     private readonly Mock<IWorkQueueService> _claimsQueue = new();

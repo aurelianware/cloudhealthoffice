@@ -1,0 +1,137 @@
+@using CloudHealthOffice.Portal.Services
+@inject IWorkManagementService WorkManagement
+@inject IUserContextService UserContextService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+@*
+    Get Next: leases the highest-priority item in the user's queues and opens
+    it in its own screen. Used full size on My Work and compact on the
+    dashboard. Renders nothing for users who can't work queues.
+*@
+
+@if (!_canWork)
+{
+    return;
+}
+
+@if (Compact)
+{
+    <MudCard Elevation="1" Class="mb-4" data-testid="get-next-card">
+        <MudCardContent>
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="3">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h6">
+                        <MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                        My Work
+                    </MudText>
+                    @if (_heldError)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" data-testid="get-next-held">Work queues are unavailable right now.</MudText>
+                    }
+                    else if (_held is { } held)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" data-testid="get-next-held">
+                            @(held == 0 ? "You're not holding any work." : held == 1 ? "You're holding 1 item." : $"You're holding {held} items.")
+                            <MudLink Href="/my-work" Typo="Typo.caption" Class="ml-1">Open My Work</MudLink>
+                        </MudText>
+                    }
+                </MudStack>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           Disabled="_pulling" OnClick="GetNext"
+                           Style="min-width: 180px;"
+                           data-testid="get-next">
+                    @(_pulling ? "Finding your next item…" : "Get Next")
+                </MudButton>
+            </MudStack>
+            @EmptyAndError
+        </MudCardContent>
+    </MudCard>
+}
+else
+{
+    <MudPaper Elevation="2" Class="pa-6 mb-6 d-flex flex-column align-center" data-testid="get-next-card">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                   Disabled="_pulling" OnClick="GetNext"
+                   Style="min-width: 260px; min-height: 64px; font-size: 1.25rem;"
+                   data-testid="get-next">
+            @(_pulling ? "Finding your next item…" : "Get Next")
+        </MudButton>
+        @EmptyAndError
+    </MudPaper>
+}
+
+@code {
+    /// <summary>The dashboard's one-line version: title, items held, and the button.</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    private bool _canWork;
+    private bool _pulling;
+    private bool _nothingToWork;
+    private string? _error;
+    private int? _held;
+    private bool _heldError;
+
+    private RenderFragment EmptyAndError => __builder =>
+    {
+        if (_nothingToWork)
+        {
+            <MudAlert Severity="Severity.Success" Variant="Variant.Text" Class="mt-3" Dense="Compact" data-testid="get-next-empty">
+                You're all caught up — nothing is waiting in your queues right now. Check back shortly, or ask your
+                supervisor to add you to another queue.
+            </MudAlert>
+        }
+        if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Class="mt-3" Dense="Compact" data-testid="get-next-error">@_error</MudAlert>
+        }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UserContextService.GetCurrentUserAsync();
+        _canWork = UserContextService.HasPermission("workqueue:work");
+        if (!_canWork || !Compact)
+        {
+            return;
+        }
+
+        try
+        {
+            _held = (await WorkManagement.GetMineAsync()).Count;
+        }
+        catch (Exception ex) when (ex is ServiceUnavailableException or WorkManagementRefusedException or HttpRequestException)
+        {
+            _heldError = true;
+        }
+    }
+
+    private async Task GetNext()
+    {
+        _pulling = true;
+        _nothingToWork = false;
+        _error = null;
+        try
+        {
+            var next = await WorkManagement.GetNextAsync();
+            if (next is null)
+            {
+                _nothingToWork = true;
+                return;
+            }
+            if (next.Resumed)
+                Snackbar.Add($"You are still holding {next.Item.DisplayNumber}; finish or release it first.", Severity.Info);
+            NavigationManager.NavigateTo(string.IsNullOrWhiteSpace(next.OpenUrl) ? next.Item.OpenUrl : next.OpenUrl);
+        }
+        catch (Exception ex) when (ex is ServiceUnavailableException or WorkManagementRefusedException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _pulling = false;
+        }
+    }
+}
