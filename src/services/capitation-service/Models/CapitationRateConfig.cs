@@ -30,6 +30,15 @@ public class CapitationRateConfig
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision (MongoDB): every write to this contract
+    /// increments it, and a whole-document replace succeeds only if it is still
+    /// the value read, so a stale write (two rate edits, or an edit and an
+    /// activate/terminate) fails instead of overwriting a concurrent change.
+    /// Documents written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// User-facing rate config number. Format: CAP-{NPI}-{Year}-{Seq}
     /// </summary>
     [Required]
