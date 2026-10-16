@@ -3,7 +3,7 @@ using CloudHealthOffice.Infrastructure.Data;
 namespace CapitationService.Repositories;
 
 /// <summary>
-/// A capitation run, statement or disbursement write based on a stale read:
+/// A capitation run, statement, disbursement or contract write based on a stale read:
 /// another write changed the document (its <c>Revision</c>) since it was read.
 /// Nothing was written; 409 Conflict at the API boundary. The caller re-reads
 /// and retries.
@@ -18,7 +18,7 @@ public sealed class CapitationConcurrencyException : ConcurrencyConflictExceptio
         ExpectedRevision = expectedRevision;
     }
 
-    /// <summary>"Capitation run", "Capitation statement" or "Capitation disbursement".</summary>
+    /// <summary>"Capitation run", "Capitation statement", "Capitation disbursement" or "Capitation contract".</summary>
     public string Entity { get; }
     public string Id { get; }
     public long ExpectedRevision { get; }
