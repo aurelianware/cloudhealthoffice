@@ -43,8 +43,4 @@
     <Using Include="FluentAssertions" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
-    <Compile Include="..\..\..\..\tests\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
-  </ItemGroup>
 </Project>
