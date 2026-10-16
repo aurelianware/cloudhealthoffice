@@ -18,9 +18,17 @@ public interface ITenantUserRepository
     /// fields, which only token-service redemption/linking and
     /// <see cref="UnlinkAsync"/> change. Throws
     /// <see cref="UserChangedConcurrentlyException"/> if the stored user crossed
-    /// the Invited boundary (an invitation was redeemed) since it was read.
+    /// the Invited boundary (an invitation was redeemed), or was written at all
+    /// (its <see cref="TenantUser.Revision"/> moved on), since it was read, and
+    /// when the user no longer exists.
     /// </summary>
     Task<TenantUser> UpdateAsync(TenantUser user);
+
+    /// <summary>
+    /// Sets only <see cref="TenantUser.LastLoginAt"/> (and bumps the revision).
+    /// False when the user does not exist.
+    /// </summary>
+    Task<bool> RecordLoginAsync(string userId, DateTime at);
 
     /// <summary>Clears oid and tid. Null when the user is not in the tenant.</summary>
     Task<TenantUser?> UnlinkAsync(string tenantId, string userId, string actor);

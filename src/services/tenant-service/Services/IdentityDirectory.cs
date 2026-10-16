@@ -213,6 +213,7 @@ public sealed class IdentityDirectory : IIdentityDirectory
                     f.Eq(u => u.AzureAdObjectId, oid),
                     f.In(u => u.AzureAdTenantId, new[] { string.Empty, null, tid }))));
         var update = Builders<TenantUser>.Update
+            .Inc(u => u.Revision, 1L)
             .Set(u => u.AzureAdObjectId, oid)
             .Set(u => u.AzureAdTenantId, tid)
             .Set(u => u.UpdatedAt, DateTime.UtcNow);
