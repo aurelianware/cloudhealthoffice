@@ -6,6 +6,7 @@
 @inject CloudHealthOffice.Portal.Infrastructure.ISearchCriteriaPolicy SearchPolicy
 @inject ICoverageService CoverageService
 @inject IDialogService DialogService
+@inject NavigationManager Navigation
 
 <PageTitle>Members - Cloud Health Office</PageTitle>
 
@@ -107,7 +108,7 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Member ID">
-                        <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.MemberId</MudText>
+                        <RecordLink Href="@MemberHref(context.MemberId)" style="font-family: monospace;" data-testid="member-link">@context.MemberId</RecordLink>
                     </MudTd>
                     <MudTd DataLabel="Name">
                         <MudText Typo="Typo.body2">@context.FirstName @context.LastName</MudText>
@@ -125,8 +126,8 @@
                         <MudButton Variant="Variant.Text"
                                   Color="Color.Primary"
                                   Size="Size.Small"
-                                  OnClick="@(() => ViewMemberDetails(context.MemberId))">
-                            View Details
+                                  Href="@MemberHref(context.MemberId)">
+                            Open
                         </MudButton>
                     </MudTd>
                 </RowTemplate>
@@ -274,20 +275,12 @@
         };
     }
 
-    private async Task ViewMemberDetails(string memberId)
+    private static string MemberHref(string memberId) => $"/members/{Uri.EscapeDataString(memberId)}";
+
+    // ?memberId=X&open=true lands on the member record when the search finds exactly one.
+    private Task ViewMemberDetails(string memberId)
     {
-        var parameters = new DialogParameters
-        {
-            { "MemberId", memberId }
-        };
-
-        var options = new DialogOptions
-        {
-            MaxWidth = MaxWidth.Medium,
-            FullWidth = true,
-            CloseButton = true
-        };
-
-        await DialogService.ShowAsync<MemberDetailsDialog>("Member Details", parameters, options);
+        Navigation.NavigateTo(MemberHref(memberId), replace: true);
+        return Task.CompletedTask;
     }
 }

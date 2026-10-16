@@ -1466,9 +1466,14 @@
     private async Task OpenMemberAsync()
     {
         if (string.IsNullOrWhiteSpace(_claim?.MemberId)) return;
-        var parameters = new DialogParameters { { "MemberId", _claim.MemberId } };
-        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
-        await DialogService.ShowAsync<MemberDetailsDialog>("Member Details", parameters, options);
+        // Peek: the member's coverage on the date of service, without leaving the claim.
+        var parameters = new DialogParameters
+        {
+            { nameof(MemberPeekDialog.MemberId), _claim.MemberId },
+            { nameof(MemberPeekDialog.AsOf), _claim.ServiceDateFrom == default ? (DateTime?)null : _claim.ServiceDateFrom },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        await DialogService.ShowAsync<MemberPeekDialog>("Member", parameters, options);
     }
 
     private async Task OpenProviderAsync(string? npi)
