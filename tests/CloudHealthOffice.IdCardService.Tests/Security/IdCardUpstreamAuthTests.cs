@@ -165,9 +165,14 @@ public class IdCardUpstreamAuthTests : IClassFixture<IdCardUpstreamAuthTests.Fac
         var adapters = scope.ServiceProvider.GetRequiredService<IdCardAdapterFactory>();
 
         Assert.Equal("cho", (await adapters.GetAdapterAsync("tenant-no-answer")).Platform);
+        var firstCall = _factory.Upstream.To("tenant-service").Count();
         Assert.Equal("cho", (await adapters.GetAdapterAsync("tenant-no-answer")).Platform);
 
-        Assert.Equal(2, _factory.Upstream.To("tenant-service").Count());
+        // Not cached: the second call asks tenant-service again. (A 5xx GET is
+        // retried by the shared client resilience, so one call can be several
+        // requests; a 404 is not retried.)
+        Assert.True(firstCall >= 1);
+        Assert.Equal(2 * firstCall, _factory.Upstream.To("tenant-service").Count());
     }
 
     [Fact]
