@@ -33,6 +33,34 @@ public class ClaimStatusTests
     }
 
     [Fact]
+    public async Task RequestFromAnotherTenantsTransmissionId_IsNotFound()
+    {
+        var (gateway, transmissions, _, _) = await SeedAsync(GatewayClaimFixtures.Professional());
+        var tx = (await transmissions.FindByTenantAndClaimIdAsync("tenant-alpha", "CLM-P-1001")).Single();
+
+        var response = await gateway.CheckClaimStatusAsync(new ClaimStatusRequest
+        {
+            TenantId = "tenant-beta",
+            TransmissionId = tx.TransmissionId,
+        });
+
+        response.IsSuccess.Should().BeFalse();
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.TransmissionNotFound);
+    }
+
+    [Fact]
+    public async Task RequestFromTransmissionId_WithoutTenant_IsAValidationError()
+    {
+        var (gateway, transmissions, _, _) = await SeedAsync(GatewayClaimFixtures.Professional());
+        var tx = (await transmissions.FindByTenantAndClaimIdAsync("tenant-alpha", "CLM-P-1001")).Single();
+
+        var response = await gateway.CheckClaimStatusAsync(new ClaimStatusRequest { TransmissionId = tx.TransmissionId });
+
+        response.IsSuccess.Should().BeFalse();
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.Validation);
+    }
+
+    [Fact]
     public async Task RequestFromClaimId_SelectsLatestTransmission()
     {
         var (gateway, _, _, _) = await SeedAsync(GatewayClaimFixtures.Professional());
