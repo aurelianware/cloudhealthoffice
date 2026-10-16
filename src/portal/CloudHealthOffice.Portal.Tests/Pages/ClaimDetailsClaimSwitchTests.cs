@@ -47,7 +47,7 @@ public class ClaimDetailsClaimSwitchTests : TestContext
     {
         _claims.Setup(c => c.GetAdjudicationDataAsync(It.IsAny<string>()))
             .ReturnsAsync((AdjudicationTransparencyData?)null);
-        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A"));
+        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A").Add(x => x.Tab, "notes"));
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("CLM-A"));
 
         cut.Find("textarea").Change("draft note for claim A");
@@ -66,13 +66,12 @@ public class ClaimDetailsClaimSwitchTests : TestContext
         _claims.Setup(c => c.GetAdjudicationDataAsync("A")).Returns(slowA.Task);
         _claims.Setup(c => c.GetAdjudicationDataAsync("B")).ReturnsAsync(Detail("Step for claim B"));
 
-        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A"));
+        // Steps render on the Adjudication tab.
+        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A").Add(x => x.Tab, "adjudication"));
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("CLM-A"));
 
         cut.SetParametersAndRender(p => p.Add(x => x.ClaimId, "B"));
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("CLM-B"));
-        // Steps render on the Adjudication Pipeline tab.
-        cut.FindAll(".mud-tab").First(t => t.TextContent.Contains("Adjudication Pipeline")).Click();
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("Step for claim B"));
 
         // Claim A's request finishes after the switch; its data must not win.
