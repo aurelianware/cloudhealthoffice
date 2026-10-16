@@ -23,6 +23,9 @@ public class IdCardOrchestrator : IIdCardOrchestrator
     private readonly IIdCardRecordRepository _records;
     private readonly ILogger<IdCardOrchestrator> _logger;
 
+    /// <summary>What an order that failed unexpectedly reports; the exception is logged.</summary>
+    public const string IssuanceFailedMessage = "The ID card could not be issued. Retry the order or contact support.";
+
     public IdCardOrchestrator(
         IdCardAdapterFactory adapters,
         IIdCardOrderRepository orders,
@@ -140,7 +143,8 @@ public class IdCardOrchestrator : IIdCardOrchestrator
             _logger.LogError(ex, "ID card issuance failed for order {OrderId}", order.Id);
             order.Status = IdCardOrderStatus.Failed;
             order.FailureCode = "ISSUANCE_ERROR";
-            order.FailureReason = ex.Message;
+            // The order is returned to the caller: the exception text stays in the log.
+            order.FailureReason = IssuanceFailedMessage;
         }
         finally
         {
