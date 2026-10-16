@@ -48,8 +48,8 @@ public interface ISponsorAccountRepository
     Task<SponsorAccount> UpdateAsync(string groupNumber, Action<SponsorAccount> change);
 }
 
-/// <summary>Another writer changed the document first.</summary>
-public sealed class ConcurrencyConflictException : Exception
+/// <summary>Another writer changed the document first (409 Conflict at the API boundary).</summary>
+public sealed class ConcurrencyConflictException : CloudHealthOffice.Infrastructure.Data.ConcurrencyConflictException
 {
     public ConcurrencyConflictException(string message) : base(message) { }
 }

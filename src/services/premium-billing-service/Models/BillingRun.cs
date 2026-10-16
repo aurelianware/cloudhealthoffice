@@ -141,6 +141,31 @@ public class BillingRun
 
     /// <summary>Groups skipped because the period already has an invoice of the other pricing.</summary>
     public List<string> SkippedGroupNumbers { get; set; } = new();
+
+    /// <summary>
+    /// Optimistic concurrency (Mongo): incremented on every write; saving a copy
+    /// read before another write throws <see cref="BillingRunConcurrencyException"/>.
+    /// Runs written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+}
+
+/// <summary>
+/// A billing run write based on a stale read: another write changed the run (its
+/// <see cref="BillingRun.Revision"/>) since it was read. Nothing was written;
+/// 409 Conflict at the API boundary.
+/// </summary>
+public sealed class BillingRunConcurrencyException : CloudHealthOffice.Infrastructure.Data.ConcurrencyConflictException
+{
+    public BillingRunConcurrencyException(string billingRunId, long expectedRevision)
+        : base($"Billing run {billingRunId} was changed by another write (expected revision {expectedRevision}); re-read it and retry.")
+    {
+        BillingRunId = billingRunId;
+        ExpectedRevision = expectedRevision;
+    }
+
+    public string BillingRunId { get; }
+    public long ExpectedRevision { get; }
 }
 
 /// <summary>
