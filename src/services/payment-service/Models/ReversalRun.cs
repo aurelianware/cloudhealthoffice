@@ -39,6 +39,15 @@ public class ReversalRun
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
+    /// <summary>
+    /// Optimistic-concurrency revision (MongoDB): every write to the run
+    /// increments it (targeted writes such as reservation outcomes or the EFT
+    /// file pin included), and a whole-run save succeeds only while it is still
+    /// the revision that was read, so it can never undo a concurrent write.
+    /// Documents written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
     /// <summary>Operator-facing run number (e.g. <c>RR-20260502-AB12CD</c>).</summary>
     [Required]
     [StringLength(50)]

@@ -68,9 +68,23 @@ public class ReversalRunRepositoryMongo : IReversalRunRepository
     {
         reversalRun.TenantId = GetTenantId();
         reversalRun.CreatedAt = DateTime.UtcNow;
+        reversalRun.Revision = 0;
         await _collection.InsertOneAsync(reversalRun);
         _logger.LogInformation("Created reversal run {ReversalRunNumber}", reversalRun.ReversalRunNumber);
         return reversalRun;
+    }
+
+    /// <summary>Every write to a run document bumps its <see cref="ReversalRun.Revision"/>.</summary>
+    private static UpdateDefinition<ReversalRun> Bumped(UpdateDefinition<ReversalRun> update) =>
+        update.Inc(x => x.Revision, 1L);
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<ReversalRun> RevisionIs(long expected)
+    {
+        var b = Builders<ReversalRun>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
     }
 
     public async Task<bool> TryStartAsync(string id, string executedBy, DateTime startedAt)
@@ -84,7 +98,7 @@ public class ReversalRunRepositoryMongo : IReversalRunRepository
             .Set(x => x.Status, ReversalRunStatus.Running)
             .Set(x => x.ExecutedBy, executedBy)
             .Set(x => x.ExecutionStartedAt, startedAt);
-        var result = await _collection.UpdateOneAsync(filter, update);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update));
         return result.ModifiedCount == 1;
     }
 
@@ -98,9 +112,9 @@ public class ReversalRunRepositoryMongo : IReversalRunRepository
         var touched = outcomes.TouchedClaimIds;
         if (touched.Count > 0)
         {
-            var pulled = await _collection.UpdateOneAsync(filter, Builders<ReversalRun>.Update.PullFilter(
+            var pulled = await _collection.UpdateOneAsync(filter, Bumped(Builders<ReversalRun>.Update.PullFilter(
                 x => x.ReservationsNeedingAttention,
-                Builders<ReservationAttention>.Filter.In(a => a.ClaimId, touched)));
+                Builders<ReservationAttention>.Filter.In(a => a.ClaimId, touched))));
             if (pulled.MatchedCount == 0)
                 return false;
         }
@@ -115,7 +129,7 @@ public class ReversalRunRepositoryMongo : IReversalRunRepository
         if (updates.Count == 0)
             return true;
 
-        var result = await _collection.UpdateOneAsync(filter, Builders<ReversalRun>.Update.Combine(updates));
+        var result = await _collection.UpdateOneAsync(filter, Bumped(Builders<ReversalRun>.Update.Combine(updates)));
         return result.MatchedCount == 1;
     }
 
@@ -124,7 +138,31 @@ public class ReversalRunRepositoryMongo : IReversalRunRepository
         var filter = Builders<ReversalRun>.Filter.And(
             Builders<ReversalRun>.Filter.Eq(x => x.Id, reversalRun.Id),
             Builders<ReversalRun>.Filter.Eq(x => x.TenantId, reversalRun.TenantId));
-        await _collection.ReplaceOneAsync(filter, reversalRun);
+
+        // Conditional on the revision the caller read: a targeted write in
+        // between (Pending -> Running, reservation outcomes) or another save
+        // makes this one fail instead of being silently undone by the replace.
+        var expected = reversalRun.Revision;
+        reversalRun.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), reversalRun);
+        }
+        catch
+        {
+            reversalRun.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            reversalRun.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new PaymentConcurrencyException("Reversal run", reversalRun.Id, expected);
+            // Missing: as before, nothing is written and the run is returned.
+        }
+
         _logger.LogInformation("Updated reversal run {ReversalRunNumber}", reversalRun.ReversalRunNumber);
         return reversalRun;
     }

@@ -136,6 +136,7 @@ public class ReversalRunService : IReversalRunService
         run.Status = ReversalRunStatus.Running;
         run.ExecutedBy = approver;
         run.ExecutionStartedAt = startedAt;
+        run.Revision++; // the start was a write to the run, too
 
         // Every reversal payment this execution creates, for the GL event (also on failure).
         var issuedForGl = new List<Payment>();
@@ -171,7 +172,7 @@ public class ReversalRunService : IReversalRunService
                 run.Status = ReversalRunStatus.Completed;
                 run.ExecutionCompletedAt = DateTime.UtcNow;
                 run.ExecutionDurationSeconds = (run.ExecutionCompletedAt.Value - run.ExecutionStartedAt!.Value).TotalSeconds;
-                return await _reversalRunRepository.UpdateAsync(run);
+                return await SaveExecutingRunAsync(run);
             }
 
             // Step 2 — fetch the predecessor claim for each adjustment.
@@ -211,7 +212,7 @@ public class ReversalRunService : IReversalRunService
                     run.Status = ReversalRunStatus.Completed;
                     run.ExecutionCompletedAt = DateTime.UtcNow;
                     run.ExecutionDurationSeconds = (run.ExecutionCompletedAt.Value - run.ExecutionStartedAt!.Value).TotalSeconds;
-                    return await _reversalRunRepository.UpdateAsync(run);
+                    return await SaveExecutingRunAsync(run);
                 }
             }
 
@@ -436,7 +437,7 @@ public class ReversalRunService : IReversalRunService
 
             // GL: the recouped expense becomes a provider receivable, in the same write as Completed.
             GlEventOutbox.AttachReversalRunExecuted(run, issuedForGl, DateTime.UtcNow);
-            return await _reversalRunRepository.UpdateAsync(run);
+            return await SaveExecutingRunAsync(run);
         }
         catch (Exception ex)
         {
@@ -449,8 +450,36 @@ public class ReversalRunService : IReversalRunService
                 ? (run.ExecutionCompletedAt.Value - run.ExecutionStartedAt.Value).TotalSeconds
                 : 0;
             GlEventOutbox.AttachReversalRunExecuted(run, issuedForGl, DateTime.UtcNow, replaceUnpublished: true);
-            await _reversalRunRepository.UpdateAsync(run);
+            await SaveExecutingRunAsync(run);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Saves the run this execution holds (Running, or leaving Running). The save is
+    /// conditional on the run's revision; on a conflict the fresh copy's reservation
+    /// outcomes are kept (<see cref="ConcurrentSaves.KeepReservationOutcomes(ReversalRun, ReversalRun)"/>)
+    /// and the save retried, a bounded number of times. Anything else having moved the
+    /// run out of Running is not merged: the conflict propagates.
+    /// </summary>
+    private async Task<ReversalRun> SaveExecutingRunAsync(ReversalRun run)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await _reversalRunRepository.UpdateAsync(run);
+            }
+            catch (PaymentConcurrencyException) when (attempt < ConcurrentSaves.MaxAttempts)
+            {
+                var fresh = await _reversalRunRepository.GetByIdAsync(run.Id);
+                if (fresh == null || fresh.Status != ReversalRunStatus.Running)
+                    throw;
+                _logger.LogWarning(
+                    "Reversal run {ReversalRunNumber} changed while executing (reservation outcomes); keeping them and saving again",
+                    run.ReversalRunNumber);
+                ConcurrentSaves.KeepReservationOutcomes(run, fresh);
+            }
         }
     }
 
@@ -887,11 +916,22 @@ public class ReversalRunService : IReversalRunService
 
             if (ok && !string.IsNullOrEmpty(payment.RunId) && payment.RunId != run.Id)
             {
-                var original = await _reversalRunRepository.GetByIdAsync(payment.RunId);
-                if (original != null && original.PendingVoidClaimIds.Remove(claimId))
+                // Read-modify-write of the earlier run, which others may be writing
+                // (reservation outcomes, a void retry): re-read and re-apply on a conflict.
+                for (var attempt = 1; ; attempt++)
                 {
+                    var original = await _reversalRunRepository.GetByIdAsync(payment.RunId);
+                    if (original == null || !original.PendingVoidClaimIds.Remove(claimId))
+                        break;
                     original.Warnings.Add($"Predecessor {claimId} voided by reversal run {run.ReversalRunNumber} at {DateTime.UtcNow:O}");
-                    await _reversalRunRepository.UpdateAsync(original);
+                    try
+                    {
+                        await _reversalRunRepository.UpdateAsync(original);
+                        break;
+                    }
+                    catch (PaymentConcurrencyException) when (attempt < ConcurrentSaves.MaxAttempts)
+                    {
+                    }
                 }
             }
         }
@@ -941,13 +981,8 @@ public class ReversalRunService : IReversalRunService
         }
     }
 
-    private async Task SavePaymentStatusAsync(Payment payment)
-    {
-        payment.Status = payment.ClaimPayments.All(cp => cp.FinalizedAt != null)
-            ? PaymentStatus.Posted
-            : PaymentStatus.PaidPendingFinalize;
-        await _paymentRepository.UpdateAsync(payment);
-    }
+    private Task SavePaymentStatusAsync(Payment payment)
+        => ConcurrentSaves.SaveFinalizeOutcomeAsync(_paymentRepository, payment);
 
     private static string SanitizeForLog(string? value)
     {
