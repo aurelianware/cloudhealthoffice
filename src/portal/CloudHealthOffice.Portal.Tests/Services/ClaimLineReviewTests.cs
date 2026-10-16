@@ -169,12 +169,15 @@ public class ClaimDetailsLineOutcomeTests : TestContext
             PriorAuthorizationNumber = "PA-77", ServiceLines = lines,
         });
 
-        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A"));
+        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A").Add(x => x.Tab, "lines"));
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("CLM-A"));
 
         cut.Find("[data-testid=line-1-outcome]").TextContent.Trim().Should().Be("Pay");
         cut.Find("[data-testid=line-2-outcome]").TextContent.Trim().Should().Be("Deny");
         cut.Find("[data-testid=line-2-summary]").TextContent.Should().Contain("Units or frequency exceed");
+
+        // Member and provider are on the Summary tab.
+        cut.SetParametersAndRender(p => p.Add(x => x.Tab, "summary"));
         cut.Find("[data-testid=open-member]").TextContent.Should().Be("MBR001");
         cut.Find("[data-testid=open-billing-provider]").TextContent.Should().Be("Lakeside Orthopedics");
         cut.Find("[data-testid=open-authorization]").TextContent.Should().Contain("PA-77");

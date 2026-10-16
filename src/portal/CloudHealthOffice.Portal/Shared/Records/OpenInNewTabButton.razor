@@ -1,0 +1,11 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@* Shown in a record header: opens this record (on its current tab) in a new
+   browser tab, to keep it beside another record. *@
+<MudTooltip Text="Open in new tab">
+    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Href="@Href" Target="_blank" rel="noopener"
+                   Size="Size.Small" aria-label="Open in new tab" data-testid="open-in-new-tab" />
+</MudTooltip>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
+}
