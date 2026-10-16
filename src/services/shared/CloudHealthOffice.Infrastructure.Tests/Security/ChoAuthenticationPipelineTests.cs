@@ -161,7 +161,7 @@ public sealed class ChoAuthenticationPipelineTests : IAsyncLifetime
     [Fact]
     public async Task RoleWithoutDefaultReadPermission_Returns403()
     {
-        var token = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ProviderRelations);
+        var token = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ComplianceViewer);
         var response = await _client.SendAsync(Request(HttpMethod.Get, "/api/widgets", token));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -301,7 +301,7 @@ public sealed class ChoAuthenticationPipelineTests : IAsyncLifetime
     [InlineData("/minimal-top")]
     public async Task MinimalGet_Unannotated_RequiresDefaultReadPermission(string path)
     {
-        var noRead = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ProviderRelations);
+        var noRead = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ComplianceViewer);
         var reader = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ComplianceOfficer);
 
         (await _client.SendAsync(Request(HttpMethod.Get, path, null)))

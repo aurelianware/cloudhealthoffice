@@ -32,6 +32,9 @@ public class StandardRolesTests
     [InlineData("Finance", "billing:read", true)]
     [InlineData("Finance", "payments:approve", false)]
     [InlineData("ProviderRelations", "billing:read", false)]
+    [InlineData("ProviderRelations", "claims:read", true)]
+    [InlineData("ProviderRelations", "claims:note", true)]
+    [InlineData("ProviderRelations", "claims:work", false)]
     // Code-set lookups (not PHI) for the finance and compliance-viewer roles.
     [InlineData("Finance", "reference-data:read", true)]
     [InlineData("FinanceApprover", "reference-data:read", true)]
