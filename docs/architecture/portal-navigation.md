@@ -67,12 +67,32 @@ Home                      landing: My Work / Get Next, pinned + recent records, 
 
 ### 3.1 Home
 
-Home replaces the current Dashboard as the landing page. It shows:
+Home replaces the current Dashboard as the landing page. It answers one question for whoever signs in: what do I need to do now? Everything on it opens a record or a filtered list. Charts and trends live in each module's Insights view (§5.1).
 
-- **Get Next** and the user's queue counts (the existing `GetNextCard`).
+**For everyone, at the top:**
+- **Search:** the global search box (§3.2), large.
+- **Get Next:** the user's queue counts by work type (claim pends, appeals, auths, call follow-ups), showing only the queues they belong to. This is the existing `GetNextCard`.
+- **Due today and overdue:** the user's assigned items, sorted by deadline clock rather than arrival date. An expedited appeal due in 6 hours sorts above last week's claim pend.
 - **Recent records:** the last 10 records the user opened, across all modules. They are kept per user on the server, so they follow the user to any device.
 - **Pinned records:** what the user is following, such as an open grievance or a member in case management.
-- **Role tiles:** a supervisor sees queue aging and SLA risk, compliance sees appeals near their deadline, and finance sees the next payment run.
+- **Plan notices:** bulletins posted by admins, such as "new fee schedule effective 11/1" or "system maintenance Saturday".
+  - Each notice has a start and an expiry date, can be targeted to roles, and can be marked as read.
+  - Posting takes a `notices:write` permission; TenantAdmin has it by default.
+
+**Below that, role tiles** (a user sees the tiles their roles allow):
+
+| Role | Tiles |
+|---|---|
+| Claims examiner | my pends by age; finished today; claims waiting on records I requested |
+| Supervisor | inventory and aging by queue; unassigned items; items at deadline risk; throughput by person (reassign from here) |
+| Customer service | call follow-ups due; my recent calls |
+| Appeals & grievances | cases by deadline (48 hours, overdue); acknowledgments not sent; cases waiting on a member or provider |
+| Utilization management | pending auths by decision deadline, expedited first |
+| Compliance | timeliness against state and CMS standards; prompt-pay interest this month; unusual access-log activity (e.g. one user opening hundreds of member records) |
+| Finance | next payment run and total; held payments; cash posting exceptions |
+| Operations / IT | last batch adjudication run; EDI rejects; failed transactions |
+
+The current Dashboard's claim metrics and batch-run panel move into the supervisor and operations tiles and the Claims Insights view.
 
 ### 3.2 Global search
 
@@ -165,7 +185,12 @@ The tabs are Summary (check/EFT, payee, status) | Claims paid | 835 | Adjustment
 
 The tabs are Summary | Linked records | Follow-ups | Notes † | Documents †. The full design is in `cho-service.md`.
 
-## 5. Lists (module landing)
+## 5. Module landing: List and Insights
+
+Each module opens on two views, **List** and **Insights**, at `/{module}` and `/{module}/insights`.
+
+### 5.0 List
+
 
 Each module opens on a searchable list. Its parts:
 
@@ -173,6 +198,27 @@ Each module opens on a searchable list. Its parts:
 - **Columns:** chosen per role.
 - **Opening a row:** a row opens the record page; Ctrl/⌘-click or the middle button opens it in a new browser tab, because rows are real links.
 - **Filter state lives in the URL,** so "members in Dallas County with an open grievance" is a link someone can send.
+
+### 5.1 Insights
+
+Each module carries its own reporting, so people working in Claims don't have to go somewhere else to see how claims are doing.
+
+| Module | Insights |
+|---|---|
+| Claims | inventory and aging; auto-adjudication rate; pend reasons; denial reasons (CARCs) and top edits; receipt-to-payment turnaround; prompt-pay interest; first-pass rate by provider |
+| Members | enrollment trend, adds and terms; PCP assignment gaps; ID cards outstanding; call reasons |
+| Providers | network size and changes; credentialing due; top billers; denial rate by provider; records requests outstanding |
+| Authorizations | volume; approval and denial rates; decision timeliness (standard vs expedited); auths with no claim |
+| Appeals & Grievances | timeliness by level; overturn rate; top reasons; cases sent to the state |
+| Service | call volume and reasons; first-call resolution; follow-ups overdue |
+| Payments / Finance | paid by period; recoupments; held payments; cash posting exceptions |
+
+**Rules:**
+1. **Every number drills down.** Clicking a number opens the module's List with that filter, as a shareable URL. Example: "312 claims pended over 30 days".
+2. **One definition per metric.** A metric is defined once, server-side, and used by Insights, Home tiles and compliance exports alike. The appeals timeliness shown on screen is the same figure as the regulator export.
+3. **Permission and scope.** Insights for a module need that module's read permission. Counts respect tenant and line-of-business scope. Insights shows aggregates only; member-level detail appears only on drill-down, which is an audited list read.
+4. **Export and schedule.** Any view exports to CSV and can be scheduled to email a recipient with that permission. The email carries a link, not PHI.
+5. **Cross-domain reporting lives in Reports** (Operations). This covers executive views, medical cost trend, state quarterly reports and CMS timeliness universes, built on the same metric definitions.
 
 ## 6. Audit and security
 
@@ -188,9 +234,10 @@ Each module opens on a searchable list. Its parts:
    - a breadcrumb that remembers the tab you came from.
    - Claims moves onto it first, since most of its tabs exist; this gives it Payment, Documents and Access log.
 2. **Member page.** Lift the dialog's tabs into the shell, one tab component at a time. The dialog becomes a thin "quick view" that links to "Open member" during the transition, then goes away.
-3. **Home and global search.**
+3. **Home (search, Get Next, due items, recent, pinned, plan notices, role tiles) and global search.**
 4. **The left nav regrouped** as in §3, with old routes kept as redirects.
 5. **Provider, Authorization, Appeal, then Payment pages.**
+   - Each module's Insights view ships with or after its page; Claims Insights comes first, built from today's Dashboard.
 6. **Calls,** with CHO Service.
 
 Each step is a separate PR. Nothing is removed until its replacement is live.
@@ -199,8 +246,9 @@ Each step is a separate PR. Nothing is removed until its replacement is live.
 
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | Should Home replace Dashboard as the landing page, with the dashboard metrics moving to role tiles? | Yes. |
+| 1 | Should Home replace Dashboard as the landing page, with the dashboard metrics moving to role tiles? | **Agreed.** Plan notices included. |
 | 2 | Should the member dialog stay as a quick-view peek, for example from a claim header? | Keep a small peek (overview and alerts only), with "Open member". |
 | 3 | Should tab order and visibility be configurable per tenant? | Not at first. Use a fixed order plus permission-based hiding, and revisit if a plan asks. |
 | 4 | Should the claim's Adjudication Pipeline and Benefit Breakdown tabs merge into one Adjudication tab? | Yes. |
 | 5 | Should the top bar get a record-tab strip, i.e. several open records as tabs inside the app, like QNXT's open windows? | No. Browser tabs plus deep links do this better; Recent covers going back. |
+| 6 | Should each module carry its own Insights view? | **Agreed** (§5.1). |
