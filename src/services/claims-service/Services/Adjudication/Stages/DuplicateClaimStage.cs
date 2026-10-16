@@ -181,6 +181,24 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
         activity?.SetTag("duplicate.priors", priors.Count);
 
         var findings = FindDuplicates(claim, lines, priors);
+
+        // Approval re-run: findings the reviewer decided are settled.
+        // Overridden ones are dropped; upheld ones are denied line by line in
+        // benefit calculation. Only an undecided finding pends or denies here.
+        if (context.ExaminerApproval is { EditDispositions.Count: > 0 })
+        {
+            var decided = findings
+                .Where(f => EditDispositionApplier.DispositionFor(context, EditIdentity.Key(ToSnapshot(f))) is not null)
+                .ToList();
+            foreach (var f in decided)
+            {
+                var key = EditIdentity.Key(ToSnapshot(f));
+                var disposition = EditDispositionApplier.DispositionFor(context, key)!;
+                context.ExaminerOverrides.Add(
+                    $"{StageName}: duplicate {(disposition.Decision == EditDecision.Override ? "overridden" : "upheld")} by examiner: {key}");
+            }
+            findings = findings.Except(decided).ToList();
+        }
         activity?.SetTag("duplicate.exact_lines", findings.Count(f => f.IsExact));
         activity?.SetTag("duplicate.suspect_lines", findings.Count(f => !f.IsExact));
 
@@ -430,7 +448,14 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
             : $"{findings.Count} possible duplicate line(s); first: {head}.";
     }
 
-    private static DuplicateFindingSnapshot ToSnapshot(DuplicateFinding finding) => new()
+    private static DuplicateFindingSnapshot ToSnapshot(DuplicateFinding finding)
+    {
+        var snapshot = ToSnapshotFields(finding);
+        snapshot.EditKey = EditIdentity.Key(snapshot);
+        return snapshot;
+    }
+
+    private static DuplicateFindingSnapshot ToSnapshotFields(DuplicateFinding finding) => new()
     {
         DuplicateType = finding.IsExact ? ExactDuplicateType : SuspectDuplicateType,
         RuleId = finding.IsExact ? ExactRuleId : SuspectRuleId,
