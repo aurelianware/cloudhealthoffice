@@ -41,11 +41,10 @@
                         <PinButton Kind="Claim" RecordId="@ClaimId" Label="@($"Claim {_claim.ClaimNumber}")" />
                         @if (!string.IsNullOrEmpty(_claim.PriorAuthorizationNumber))
                         {
-                            <MudChip Size="Size.Medium" Variant="Variant.Outlined" Class="ml-2"
-                                     Icon="@Icons.Material.Filled.OpenInNew" OnClick="OpenAuthorizationAsync"
-                                     data-testid="open-authorization" title="Open the authorization">
-                                Auth: @_claim.PriorAuthorizationNumber
-                            </MudChip>
+                            <MudText Typo="Typo.body1" Inline="true" Class="ml-3">
+                                Auth <RecordLink Href="@($"/authorizations/{Uri.EscapeDataString(_claim.PriorAuthorizationNumber)}")"
+                                                 data-testid="open-authorization" title="Open the authorization">@_claim.PriorAuthorizationNumber</RecordLink>
+                            </MudText>
                         }
                     </MudText>
                     <MudGrid>
@@ -1479,14 +1478,6 @@
     // real link, so Ctrl/⌘-click and the ↗ icon open it in a new tab.
     private static string ProviderHref(string? npi) =>
         string.IsNullOrWhiteSpace(npi) ? "/providers" : $"/providers/npi/{Uri.EscapeDataString(npi)}";
-
-    private async Task OpenAuthorizationAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_claim?.PriorAuthorizationNumber)) return;
-        var parameters = new DialogParameters { { "AuthorizationId", _claim.PriorAuthorizationNumber } };
-        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true };
-        await DialogService.ShowAsync<AuthorizationDetailsDialog>("Authorization Details", parameters, options);
-    }
 
     private static Color GetAiRecommendationColor(string recommendation) => recommendation switch
     {

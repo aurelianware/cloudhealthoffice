@@ -1,8 +1,11 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
 @using CloudHealthOffice.Portal.Services
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 
-<MudDialog>
-    <DialogContent>
+@* The authorization record (docs/architecture/portal-navigation.md §4):
+   status, member and provider in the header, tabs with their own URLs
+   (/authorizations/{id}/{tab}). Hosted by the /authorizations/{id} page. *@
+<div data-testid="authorization-record">
         @if (_serviceError != null)
         {
             <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
@@ -16,7 +19,27 @@
         }
         else if (_authorization != null)
         {
-            <!-- Status Header -->
+            <div class="d-flex align-center gap-3 mb-3 pa-2" style="border: 1px solid rgba(0,255,255,0.2); border-radius: 8px; background: rgba(0,255,255,0.03);">
+                <MudAvatar Size="Size.Large" Color="Color.Primary"><MudIcon Icon="@Icons.Material.Filled.Gavel" /></MudAvatar>
+                <div>
+                    <MudText Typo="Typo.h5" Style="font-weight: 600;">Authorization @_authorization.AuthorizationId</MudText>
+                    <div class="d-flex align-center gap-3 mt-1 flex-wrap">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@_authorization.ServiceType</MudText>
+                        @if (!string.IsNullOrWhiteSpace(_authorization.MemberId))
+                        {
+                            <span>Member <RecordLink Href="@($"/members/{Uri.EscapeDataString(_authorization.MemberId)}")" data-testid="authorization-member">@(string.IsNullOrWhiteSpace(_authorization.MemberName) ? _authorization.MemberId : _authorization.MemberName)</RecordLink></span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_authorization.ProviderId))
+                        {
+                            <span>Provider <RecordLink Href="@ProviderHref(_authorization.ProviderId)" data-testid="authorization-provider">@(string.IsNullOrWhiteSpace(_authorization.ProviderName) ? _authorization.ProviderId : _authorization.ProviderName)</RecordLink></span>
+                        }
+                    </div>
+                </div>
+                <OpenInNewTabButton Href="@RecordTabs.Href(BaseHref, ActiveTab)" />
+                <PinButton Kind="Authorization" RecordId="@AuthorizationId" Label="@($"Authorization {_authorization.AuthorizationId}")" />
+            </div>
+
+            <!-- Status -->
             <MudAlert Severity="@GetSeverity(_authorization.StatusText)" Class="mb-4">
                 <MudText Typo="Typo.h6">
                     Status: @_authorization.StatusText
@@ -34,9 +57,11 @@
                 }
             </MudAlert>
 
-            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
-                <!-- General Info Tab -->
-                <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Info">
+            <RecordTabBar Tabs="AuthorizationTabs" ActiveKey="@ActiveTab" BaseHref="@BaseHref" />
+
+            @if (ActiveTab == "overview")
+            {
+                <div data-testid="authorization-tab-overview">
                     <MudGrid Class="mt-4">
                         <MudItem xs="12" md="6">
                             <MudTextField Label="Authorization ID" 
@@ -63,10 +88,6 @@
                                         Variant="Variant.Outlined" />
                         </MudItem>
                     </MudGrid>
-                </MudTabPanel>
-
-                <!-- Member Info Tab -->
-                <MudTabPanel Text="Member" Icon="@Icons.Material.Filled.Person">
                     <MudGrid Class="mt-4">
                         <MudItem xs="12" md="6">
                             <MudTextField Label="Member ID" 
@@ -81,10 +102,6 @@
                                         Variant="Variant.Outlined" />
                         </MudItem>
                     </MudGrid>
-                </MudTabPanel>
-
-                <!-- Provider Info Tab -->
-                <MudTabPanel Text="Provider" Icon="@Icons.Material.Filled.LocalHospital">
                     <MudGrid Class="mt-4">
                         <MudItem xs="12" md="6">
                             <MudTextField Label="Provider ID" 
@@ -99,10 +116,11 @@
                                         Variant="Variant.Outlined" />
                         </MudItem>
                     </MudGrid>
-                </MudTabPanel>
-
-                <!-- Service Details Tab -->
-                <MudTabPanel Text="Service Details" Icon="@Icons.Material.Filled.MedicalServices">
+                </div>
+            }
+            else if (ActiveTab == "services")
+            {
+                <div data-testid="authorization-tab-services">
                     <MudGrid Class="mt-4">
                         <MudItem xs="12" md="6">
                             <MudTextField Label="Diagnosis Code" 
@@ -159,10 +177,11 @@
                                         Variant="Variant.Outlined" />
                         </MudItem>
                     </MudGrid>
-                </MudTabPanel>
-
-                <!-- Review Notes Tab -->
-                <MudTabPanel Text="Review" Icon="@Icons.Material.Filled.Assignment">
+                </div>
+            }
+            else if (ActiveTab == "review")
+            {
+                <div data-testid="authorization-tab-review">
                     <div class="mt-4">
                         @if (!string.IsNullOrWhiteSpace(_authorization.ReviewerNotes))
                         {
@@ -187,10 +206,11 @@
                                         Class="mt-4" />
                         }
                     </div>
-                </MudTabPanel>
-
-                <!-- Attachments Tab -->
-                <MudTabPanel Text="Attachments" Icon="@Icons.Material.Filled.AttachFile" BadgeData="@_authorization.Attachments.Count" BadgeDot="@(_authorization.Attachments.Count > 0)">
+                </div>
+            }
+            else if (ActiveTab == "documents")
+            {
+                <div data-testid="authorization-tab-documents">
                     <div class="mt-4">
                         @if (_authorization.Attachments.Any())
                         {
@@ -241,31 +261,42 @@
                             </MudAlert>
                         }
                     </div>
-                </MudTabPanel>
-            </MudTabs>
+                </div>
+            }
         }
         else
         {
             <MudAlert Severity="Severity.Error">Failed to load authorization details</MudAlert>
         }
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="Close">Close</MudButton>
-        @if (_authorization != null && _authorization.StatusText == "Approved")
-        {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Print">
-                Print Approval
-            </MudButton>
-        }
-    </DialogActions>
-</MudDialog>
+</div>
 
 @code {
-    [CascadingParameter] 
-    MudDialogInstance MudDialog { get; set; } = null!;
-
-    [Parameter]
+    [Parameter, EditorRequired]
     public string AuthorizationId { get; set; } = string.Empty;
+
+    /// <summary>The tab in the URL; none means Overview.</summary>
+    [Parameter] public string? Tab { get; set; }
+
+    /// <summary>The record's path without a tab, e.g. <c>/authorizations/PA-1</c>.</summary>
+    [Parameter, EditorRequired] public string BaseHref { get; set; } = string.Empty;
+
+    // Fixed order (portal-navigation.md §8 decision 3). Decision & Letters,
+    // Related claims, Notes and Access log join when their data is wired.
+    private IReadOnlyList<RecordTab> AuthorizationTabs =>
+    [
+        new("overview", "Overview", Icons.Material.Filled.Info),
+        new("services", "Services", Icons.Material.Filled.MedicalServices),
+        new("review", "Review", Icons.Material.Filled.Assignment),
+        new("documents", "Documents", Icons.Material.Filled.AttachFile, _authorization is { Attachments.Count: > 0 } a ? a.Attachments.Count : null),
+    ];
+
+    private string ActiveTab => RecordTabs.Resolve(AuthorizationTabs, Tab, "overview");
+
+    // An authorization's provider may be held as an NPI or as a provider id.
+    private static string ProviderHref(string providerId) =>
+        providerId.Length == 10 && providerId.All(char.IsDigit)
+            ? $"/providers/npi/{providerId}"
+            : $"/providers/{Uri.EscapeDataString(providerId)}";
 
     private AuthorizationDetails? _authorization;
     private bool _loading = true;
@@ -352,5 +383,4 @@
             return $"{bytes / (1024.0 * 1024):F1} MB";
     }
 
-    private void Close() => MudDialog.Close();
 }
