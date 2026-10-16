@@ -1,3 +1,4 @@
+using ClaimsService.Audit;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using Microsoft.AspNetCore.Mvc;
@@ -39,6 +40,7 @@ public sealed class MassAdjudicationRunsController : ControllerBase
     }
 
     [HttpGet("{id}/claims")]
+    [AuditClaimAccess(ClaimAccessActions.List)]
     [ProducesResponseType(typeof(IReadOnlyList<MassAdjudicationClaimResult>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<MassAdjudicationClaimResult>>> ListClaimResults(
         string id,

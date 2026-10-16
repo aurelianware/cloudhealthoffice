@@ -260,6 +260,10 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                 // dependency resolvable to construct the controller at all).
                 services.AddSingleton(Substitute.For<IClaimImportTransactionRepository>());
 
+                // The claim access log's Mongo repository is removed by the
+                // filter above; the audit filter's writer still needs one.
+                services.AddSingleton<global::ClaimsService.Repositories.IClaimAccessAuditRepository>(new InMemoryClaimAccessAuditRepository());
+
                 // 5.7 — NcciEngine's repository implementation gets removed
                 // by the Cosmos/Mongo filter above. INcciEditService still
                 // depends on INcciRepository — register a substitute so

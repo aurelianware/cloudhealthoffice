@@ -48,6 +48,13 @@ builder.Services.Configure<ClaimsService.Services.EditOverridePolicyOptions>(
     builder.Configuration.GetSection(ClaimsService.Services.EditOverridePolicyOptions.SectionName));
 builder.Services.AddSingleton<ClaimsService.Services.EditOverridePolicy>();
 
+// Claim access log: every read of claim data is recorded (who, what, when,
+// allowed or denied). The filter records reads that reach the action; the
+// authorization result handler records the ones refused before it.
+builder.Services.AddScoped<ClaimsService.Audit.ClaimAccessAuditWriter>();
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(o => o.Filters.Add<ClaimsService.Audit.ClaimAccessAuditFilter>());
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, ClaimsService.Audit.ClaimAccessDenialRecorder>();
+
 // Repository — Cosmos or Mongo based on config (database client registered by shared lib)
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 
@@ -57,6 +64,7 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
     builder.Services.AddHostedService<ClaimIndexInitializer>();
     builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryMongo>();
     builder.Services.AddScoped<IClaimNoteRepository, ClaimNoteRepositoryMongo>();
+    builder.Services.AddScoped<IClaimAccessAuditRepository, ClaimAccessAuditRepositoryMongo>();
     builder.Services.AddScoped<IMassAdjudicationRunRepository, MassAdjudicationRunRepositoryMongo>();
     builder.Services.AddScoped<IClaimImportTransactionRepository, ClaimImportTransactionRepositoryMongo>();
     builder.Services.AddHostedService<MassAdjudicationRunIndexInitializer>();
@@ -93,6 +101,7 @@ else
     builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
     builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryCosmos>();
     builder.Services.AddScoped<IClaimNoteRepository, ClaimNoteRepositoryCosmos>();
+    builder.Services.AddScoped<IClaimAccessAuditRepository, ClaimAccessAuditRepositoryCosmos>();
     builder.Services.AddSingleton<IMassAdjudicationRunRepository, InMemoryMassAdjudicationRunRepository>();
     builder.Services.AddSingleton<IClaimImportTransactionRepository, InMemoryClaimImportTransactionRepository>();
 

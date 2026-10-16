@@ -16,6 +16,9 @@ public static class ClaimsPermissions
 
     /// <summary>Add a note to a claim: claims staff and member services.</summary>
     public const string Note = "claims:note";
+
+    /// <summary>Read the claim access log (compliance roles).</summary>
+    public const string AuditRead = "audit:read";
     public const string WorkQueueAssign = "workqueue:assign";
 
     /// <summary>Work the examiner queue: resolve (approve / deny) a pended claim.</summary>

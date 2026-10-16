@@ -60,6 +60,9 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
 
     /// <summary>Claim notes, kept in memory so the notes endpoints can be exercised end to end.</summary>
     public InMemoryClaimNoteRepository NoteRepository { get; } = new();
+
+    /// <summary>The claim access log, in memory, so tests can see what reads were recorded.</summary>
+    public InMemoryClaimAccessAuditRepository AccessAudit { get; } = new();
     public IClaimSubmissionService SubmissionService { get; } = Substitute.For<IClaimSubmissionService>();
     public IClaimAdapter ClaimAdapter { get; } = CreateChoStubAdapter();
     public IClaimVersionEventPublisher VersionEventPublisher { get; } = Substitute.For<IClaimVersionEventPublisher>();
@@ -131,6 +134,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                          || d.ServiceType == typeof(ITenantComplianceConfigService)
                          || d.ServiceType == typeof(IAiExaminationAuditRepository)
                          || d.ServiceType == typeof(IClaimNoteRepository)
+                         || d.ServiceType == typeof(IClaimAccessAuditRepository)
                          || d.ServiceType == typeof(IClaimSubmissionService)
                          || d.ServiceType == typeof(IClaimFinalizationService)
                          || d.ServiceType == typeof(IClaimAdjustmentService)
@@ -211,6 +215,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(Substitute.For<ITenantComplianceConfigService>());
             services.AddSingleton(AuditRepository);
             services.AddSingleton<IClaimNoteRepository>(NoteRepository);
+            services.AddSingleton<IClaimAccessAuditRepository>(AccessAudit);
             services.AddSingleton(VersionEventPublisher);
             foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IClaimWorkEventPublisher)).ToList())
                 services.Remove(descriptor);
