@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using CapitationService.Models;
 using CapitationService.Repositories;
 using CapitationService.Services;
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 
 namespace CapitationService.Controllers;
@@ -205,9 +206,9 @@ public class CapitationStatementsController : ControllerBase
         {
             // A BPR/TRN configuration cannot fill (e.g. no Era:OriginatingCompanyId
             // for TRN03/BPR10) is refused, never emitted misaligned.
-            _logger.LogError(ex, "Cannot generate 835 for capitation statement {StatementId}", id.Replace("\r", "").Replace("\n", ""));
-            return Problem(title: "835 cannot be generated", detail: ex.Message,
-                statusCode: StatusCodes.Status500InternalServerError);
+            _logger.LogError(ex, "Cannot generate 835 for capitation statement {StatementId} (trace id {TraceId})",
+                id.Replace("\r", "").Replace("\n", ""), ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("835 cannot be generated");
         }
 
         return Content(edi, "text/plain");
