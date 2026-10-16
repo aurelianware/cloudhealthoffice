@@ -2,6 +2,7 @@ using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Models;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -184,5 +185,37 @@ public class ExceptionHandlingMiddlewareTests
 
         var error = await GetErrorResponse(context);
         error!.TraceId.Should().NotBeNullOrEmpty();
+    }
+}
+
+public class ConcurrencyConflictMiddlewareTests
+{
+    [Fact]
+    public async Task AConflict_Is409_WithAProblemBody()
+    {
+        var middleware = new CloudHealthOffice.Infrastructure.Middleware.ConcurrencyConflictMiddleware(
+            _ => throw new CloudHealthOffice.Infrastructure.Data.ConcurrencyConflictException("stale"),
+            NullLogger<CloudHealthOffice.Infrastructure.Middleware.ConcurrencyConflictMiddleware>.Instance);
+        var services = new ServiceCollection().AddLogging()
+            .AddProblemDetails().BuildServiceProvider();
+        var context = new DefaultHttpContext { RequestServices = services, Response = { Body = new MemoryStream() } };
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.StatusCode.Should().Be(409);
+        context.Response.Body.Position = 0;
+        (await new StreamReader(context.Response.Body).ReadToEndAsync()).Should().Contain("traceId");
+    }
+
+    [Fact]
+    public async Task OtherExceptions_PassThrough()
+    {
+        var middleware = new CloudHealthOffice.Infrastructure.Middleware.ConcurrencyConflictMiddleware(
+            _ => throw new InvalidOperationException("boom"),
+            NullLogger<CloudHealthOffice.Infrastructure.Middleware.ConcurrencyConflictMiddleware>.Instance);
+
+        var act = () => middleware.InvokeAsync(new DefaultHttpContext());
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 }
