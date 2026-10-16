@@ -160,6 +160,10 @@ public class ProviderContractsController : ControllerBase
         contract.IntegrityRating = existing.IntegrityRating;
         contract.LastVerifiedAt = existing.LastVerifiedAt;
         contract.NextVerificationDue = existing.NextVerificationDue;
+        // The body replaces the contract as read just now: the write is
+        // conditional on that revision, so a concurrent amendment or
+        // lifecycle change in between answers 409 instead of being erased.
+        contract.Revision = existing.Revision;
         // CapitationRateConfigIds / FfsRateConfigIds stay editable here: no
         // other endpoint links rate configs to a contract (rate-configs is
         // read-only and sync-children is a stub), and the portal sends them.
