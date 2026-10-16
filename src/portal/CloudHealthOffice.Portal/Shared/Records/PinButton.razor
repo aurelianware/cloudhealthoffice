@@ -1,0 +1,70 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@* Pin this record to Home (portal-navigation.md §3.1). Pins are the user's
+   own; the label is what the record header already shows. *@
+@inject IServiceProvider Services
+@inject IUserContextService UserContextService
+@inject ISnackbar Snackbar
+
+@if (_canPin)
+{
+    <MudTooltip Text="@(_pinned ? "Unpin from Home" : "Pin to Home")">
+        <MudIconButton Icon="@(_pinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
+                       Color="@(_pinned ? Color.Primary : Color.Default)" Size="Size.Small" Disabled="_busy"
+                       OnClick="ToggleAsync" aria-label="@(_pinned ? "Unpin from Home" : "Pin to Home")"
+                       aria-pressed="@(_pinned ? "true" : "false")" data-testid="pin-button" />
+    </MudTooltip>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Kind { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    // Resolved optionally: a host without the workspace simply has no pin button.
+    private IWorkspaceService? Workspace => Services.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+
+    private bool _canPin;
+    private bool _pinned;
+    private bool _busy;
+    private string? _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{Kind}|{RecordId}";
+        if (key == _loadedFor) return;
+        _loadedFor = key;
+        try
+        {
+            await UserContextService.GetCurrentUserAsync();
+            _canPin = Workspace is not null && UserContextService.HasPermission("workspace:use");
+            if (!_canPin) return;
+            var pins = await Workspace!.GetPinsAsync() ?? new();
+            _pinned = pins.Any(p => string.Equals(p.Kind, Kind, StringComparison.OrdinalIgnoreCase) && p.RecordId == RecordId);
+        }
+        catch
+        {
+            // Pinning is a convenience: without the workspace, hide the button.
+            _canPin = false;
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        _busy = true;
+        try
+        {
+            if (_pinned) await Workspace!.UnpinAsync(Kind, RecordId);
+            else await Workspace!.PinAsync(Kind, RecordId, Label);
+            _pinned = !_pinned;
+            Snackbar.Add(_pinned ? "Pinned to Home." : "Unpinned.", Severity.Info);
+        }
+        catch (Exception ex) when (ex is WorkManagementRefusedException or ServiceUnavailableException)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

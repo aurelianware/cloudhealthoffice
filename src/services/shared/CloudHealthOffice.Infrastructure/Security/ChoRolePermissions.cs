@@ -49,10 +49,21 @@ public static class ChoRolePermissions
     /// <inheritdoc cref="WorkQueueRead"/>
     public const string WorkQueueAdmin = "workqueue:admin";
 
+    /// <summary>
+    /// The user's own workspace on Home: read plan notices (and mark them
+    /// read) and pin records to follow. Every staff role holds it; it opens
+    /// no record data by itself (a pinned record is still read through its
+    /// own service and permission).
+    /// </summary>
+    public const string WorkspaceUse = "workspace:use";
+
+    /// <summary>Post, edit and withdraw plan notices. TenantAdmin holds it through <c>*:*</c>.</summary>
+    public const string NoticesWrite = "notices:write";
+
     private static readonly string[] ExaminerPermissions =
     [
         "claims:read", "claims:work", "claims:override-request", "claims:note",
-        "workqueue:read", "workqueue:work",
+        "workqueue:read", "workqueue:work", WorkspaceUse,
         "members:read", "accumulators:read", "providers:read",
         "terminology:read", "reference-data:read",
         "attachments:read", "attachments:write", "benefits:read"
@@ -74,6 +85,7 @@ public static class ChoRolePermissions
             ],
             [MemberServices] =
             [
+                WorkspaceUse,
                 "members:read", "members:search", "accumulators:read",
                 "eligibility:check", "claims:read", "claims:note", "coverage:read",
                 "authorizations:read", "reference-data:read",
@@ -84,6 +96,7 @@ public static class ChoRolePermissions
             ],
             [EnrollmentSpecialist] =
             [
+                WorkspaceUse,
                 "members:read", "members:write",
                 "enrollment:read", "enrollment:process",
                 "coverage:read", "coverage:write", "reference-data:read",
@@ -96,6 +109,7 @@ public static class ChoRolePermissions
             ],
             [UMCoordinator] =
             [
+                WorkspaceUse,
                 "authorizations:read", "authorizations:write", "authorizations:decide",
                 "appeals:read", "appeals:write",
                 "rfai:read", "rfai:write",
@@ -109,6 +123,7 @@ public static class ChoRolePermissions
             ],
             [ProviderRelations] =
             [
+                WorkspaceUse,
                 // Claim status, denials and payments for provider calls, and
                 // the call recorded on the claim. Never claims:work.
                 "claims:read", "claims:note",
@@ -120,6 +135,7 @@ public static class ChoRolePermissions
             // Finance prepares payments; it does not approve or release them.
             [Finance] =
             [
+                WorkspaceUse,
                 "payments:read", "payments:run",
                 "billing:read", "billing:run",
                 "finance:read", "finance:write",
@@ -136,6 +152,7 @@ public static class ChoRolePermissions
             // behind the sponsor debits it releases; it still cannot run billing.
             [FinanceApprover] =
             [
+                WorkspaceUse,
                 "payments:read", "payments:approve",
                 "billing:read",
                 "finance:read", "reports:financial",
@@ -146,11 +163,13 @@ public static class ChoRolePermissions
             // and PlatformAdmin hold records:legal-hold through *:*.
             [ComplianceOfficer] =
             [
+                WorkspaceUse,
                 "*:read", "audit:read", "compliance:read", "reports:compliance",
                 LegalHold
             ],
             [ComplianceViewer] =
             [
+                WorkspaceUse,
                 "compliance:read", "authorizations:read", "audit:read",
                 "reference-data:read"
             ],

@@ -46,6 +46,7 @@ var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
 if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
     builder.Services.AddScoped<IWorkStore>(sp => new MongoWorkStore(sp.GetRequiredService<IMongoDatabase>()));
+    builder.Services.AddScoped<IWorkspaceStore>(sp => new MongoWorkspaceStore(sp.GetRequiredService<IMongoDatabase>()));
     Console.WriteLine("[work-management-service] Using MongoDB database provider");
 }
 else if (databaseProvider == ChoDatabaseProvider.CosmosDb)
@@ -53,6 +54,7 @@ else if (databaseProvider == ChoDatabaseProvider.CosmosDb)
     var cosmosOptions = CosmosWorkStoreOptions.From(builder.Configuration);
     builder.Services.AddSingleton(cosmosOptions);
     builder.Services.AddSingleton<IWorkStore>(sp => new CosmosWorkStore(sp.GetRequiredService<CosmosClient>(), cosmosOptions));
+    builder.Services.AddSingleton<IWorkspaceStore>(sp => new CosmosWorkspaceStore(sp.GetRequiredService<CosmosClient>(), cosmosOptions));
     Console.WriteLine("[work-management-service] Using Cosmos DB database provider");
 }
 else
@@ -63,6 +65,7 @@ else
         throw new InvalidOperationException(
             "work-management-service needs a database: set MongoDb:ConnectionString, or Database:Provider=Cosmos with CosmosDb settings.");
     builder.Services.AddSingleton<IWorkStore, InMemoryWorkStore>();
+    builder.Services.AddSingleton<IWorkspaceStore, InMemoryWorkspaceStore>();
     Console.WriteLine("[work-management-service] No database configured: using the in-memory store (Development only)");
 }
 

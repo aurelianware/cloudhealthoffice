@@ -4,6 +4,8 @@
 @inject IUserContextService UserContextService
 @inject IWorkManagementService WorkManagement
 @inject IClaimsService ClaimsService
+@inject IWorkspaceService Workspace
+@inject ISnackbar Snackbar
 
 <PageTitle>Home - Cloud Health Office</PageTitle>
 
@@ -18,6 +20,52 @@
     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">@DateTime.Now.ToString("dddd, MMMM d")</MudText>
 
     <div class="mb-6"><GlobalSearchBox Large="true" /></div>
+
+    @if (_notices is { Count: > 0 })
+    {
+        var unread = _notices.Where(n => !n.Read).ToList();
+        var read = _notices.Where(n => n.Read).ToList();
+        <MudPaper Class="pa-4 mb-4" Elevation="1" data-testid="home-notices">
+            <MudText Typo="Typo.h6" Class="mb-2">
+                Plan notices
+                @if (unread.Count > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ml-2">@unread.Count new</MudChip>
+                }
+            </MudText>
+            @foreach (var notice in unread)
+            {
+                <MudAlert Severity="@(notice.Important ? Severity.Warning : Severity.Info)" Variant="Variant.Outlined" Dense="true" Class="mb-2"
+                          data-testid="home-notice">
+                    <div class="d-flex align-start gap-2">
+                        <div style="flex: 1;">
+                            <MudText Typo="Typo.subtitle2">@notice.Title</MudText>
+                            @if (!string.IsNullOrWhiteSpace(notice.Body))
+                            {
+                                <MudText Typo="Typo.body2" Style="white-space: pre-line;">@notice.Body</MudText>
+                            }
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @(notice.CreatedByName ?? notice.CreatedBy) · @notice.StartsAt.ToLocalTime().ToString("MM/dd")
+                                @if (notice.ExpiresAt is { } until) { <span> · until @until.ToLocalTime().ToString("MM/dd")</span> }
+                            </MudText>
+                        </div>
+                        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => MarkReadAsync(notice))" data-testid="notice-mark-read">Mark read</MudButton>
+                    </div>
+                </MudAlert>
+            }
+            @if (read.Count > 0)
+            {
+                <MudExpansionPanels Elevation="0" Dense="true">
+                    <MudExpansionPanel Text="@($"{read.Count} read")" data-testid="home-notices-read">
+                        @foreach (var notice in read)
+                        {
+                            <MudText Typo="Typo.body2" Class="mb-1"><strong>@notice.Title</strong> @notice.Body</MudText>
+                        }
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+        </MudPaper>
+    }
 
     <MudGrid>
         @if (_canWork)
@@ -59,6 +107,26 @@
                             </div>
                         }
                         <MudButton Href="/my-work" Variant="Variant.Text" Size="Size.Small" Class="mt-1">All my work</MudButton>
+                    }
+                </MudPaper>
+            </MudItem>
+        }
+
+        @if (_pins is { Count: > 0 })
+        {
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="1" data-testid="home-pins">
+                    <MudText Typo="Typo.h6" Class="mb-2">Pinned</MudText>
+                    @foreach (var pin in _pins)
+                    {
+                        <div class="d-flex align-center gap-2 py-1" data-testid="home-pin">
+                            <MudIcon Icon="@Icons.Material.Filled.PushPin" Size="Size.Small" Color="Color.Primary" />
+                            <RecordLink Href="@pin.Href">@pin.Label</RecordLink>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@pin.Kind</MudText>
+                            <MudSpacer />
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" aria-label="Unpin"
+                                           OnClick="@(() => UnpinAsync(pin))" data-testid="home-unpin" />
+                        </div>
                     }
                 </MudPaper>
             </MudItem>
@@ -131,6 +199,9 @@
     private string? _workError;
     private List<RecentClaimView>? _recent;
     private MassAdjudicationRunSummary? _lastRun;
+    private bool _hasWorkspace;
+    private List<PlanNoticeView>? _notices;
+    private List<PinnedRecordView>? _pins;
 
     private string Greeting
     {
@@ -148,9 +219,15 @@
         try { _user = await UserContextService.GetCurrentUserAsync(); } catch { _user = null; }
         _canWork = UserContextService.HasPermission("workqueue:work");
         _canReadClaims = UserContextService.HasPermission("claims:read");
+        _hasWorkspace = UserContextService.HasPermission("workspace:use");
 
         // Each panel loads on its own; one service being down doesn't blank Home.
         var loads = new List<Task>();
+        if (_hasWorkspace)
+        {
+            loads.Add(LoadNoticesAsync());
+            loads.Add(LoadPinsAsync());
+        }
         if (_canWork) loads.Add(LoadDueAsync());
         if (_canReadClaims)
         {
@@ -185,6 +262,44 @@
     {
         try { _lastRun = (await ClaimsService.GetMassAdjudicationRunsAsync(1))?.FirstOrDefault(); }
         catch { _lastRun = null; }
+    }
+
+    private async Task LoadNoticesAsync()
+    {
+        try { _notices = await Workspace.GetMyNoticesAsync() ?? new(); }
+        catch { _notices = null; }
+    }
+
+    private async Task LoadPinsAsync()
+    {
+        try { _pins = await Workspace.GetPinsAsync() ?? new(); }
+        catch { _pins = null; }
+    }
+
+    private async Task MarkReadAsync(PlanNoticeView notice)
+    {
+        try
+        {
+            await Workspace.MarkNoticeReadAsync(notice.Id);
+            notice.Read = true;
+        }
+        catch (Exception ex) when (ex is WorkManagementRefusedException or ServiceUnavailableException)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    private async Task UnpinAsync(PinnedRecordView pin)
+    {
+        try
+        {
+            await Workspace.UnpinAsync(pin.Kind, pin.RecordId);
+            _pins?.Remove(pin);
+        }
+        catch (Exception ex) when (ex is WorkManagementRefusedException or ServiceUnavailableException)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
     }
 
     private static string Ago(DateTime utc)

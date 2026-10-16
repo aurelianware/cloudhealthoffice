@@ -1,0 +1,185 @@
+@page "/admin/notices"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Infrastructure.Security
+@attribute [Authorize]
+@inject IWorkspaceService Workspace
+@inject ISnackbar Snackbar
+
+<PageTitle>Plan Notices - Cloud Health Office</PageTitle>
+
+@*
+    Plan notices (portal-navigation.md §3.1): bulletins for the plan's staff,
+    shown on Home between their start and expiry to the roles they target.
+    Posting needs notices:write (tenant administrators). A notice is never
+    deleted: it is withdrawn, so what staff were told stays on record.
+*@
+<PermissionGate Permission="notices:write" RoleName="TenantAdmin">
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">
+        <MudIcon Icon="@Icons.Material.Filled.Campaign" Class="mr-2" />
+        Plan notices
+    </MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Bulletins for staff on Home: new fee schedules, system maintenance, policy changes.
+    </MudText>
+
+    <MudPaper Class="pa-4 mb-6" Elevation="1" data-testid="notice-form">
+        <MudText Typo="Typo.h6" Class="mb-2">@(_editingId is null ? "Post a notice" : "Edit notice")</MudText>
+        <MudTextField @bind-Value="_input.Title" Label="Title" MaxLength="120" Counter="120" Variant="Variant.Outlined" Immediate="true" data-testid="notice-title" />
+        <MudTextField @bind-Value="_input.Body" Label="Text" Lines="4" MaxLength="2000" Counter="2000" Variant="Variant.Outlined" Class="mt-2" data-testid="notice-body" />
+        <MudGrid Class="mt-1">
+            <MudItem xs="12" md="3">
+                <MudSelect T="string" @bind-Value="_input.Severity" Label="Severity" Variant="Variant.Outlined" Dense="true">
+                    <MudSelectItem T="string" Value="@("Info")">Info</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Important")">Important (shown first)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker Label="Starts" Date="_input.StartsAt" DateChanged="@(d => _input.StartsAt = d)" Variant="Variant.Outlined" Clearable="true" HelperText="Blank: now" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker Label="Expires" Date="_input.ExpiresAt" DateChanged="@(d => _input.ExpiresAt = d)" Variant="Variant.Outlined" Clearable="true" HelperText="Blank: until withdrawn" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="string" MultiSelection="true" SelectedValues="_input.TargetRoles" SelectedValuesChanged="@(v => _input.TargetRoles = v.ToList())"
+                           Label="Roles" Variant="Variant.Outlined" Dense="true" HelperText="None selected: all staff">
+                    @foreach (var role in ChoRolePermissions.BuiltInRoles.Where(r => r != ChoRolePermissions.PlatformAdmin).OrderBy(r => r))
+                    {
+                        <MudSelectItem T="string" Value="@role">@role</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+        @if (_formError is not null)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2" data-testid="notice-error">@_formError</MudText>
+        }
+        <MudStack Row="true" Spacing="2" Class="mt-3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_saving || string.IsNullOrWhiteSpace(_input.Title))"
+                       OnClick="SaveAsync" data-testid="notice-save">@(_editingId is null ? "Post" : "Save")</MudButton>
+            @if (_editingId is not null)
+            {
+                <MudButton Variant="Variant.Text" OnClick="Reset">Cancel</MudButton>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <MudTable Items="_notices" Dense="true" Hover="true" Loading="_loading" Elevation="1" data-testid="notice-list">
+        <HeaderContent>
+            <MudTh>Notice</MudTh>
+            <MudTh>State</MudTh>
+            <MudTh>Window</MudTh>
+            <MudTh>Roles</MudTh>
+            <MudTh>Posted by</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>
+                <MudText Typo="Typo.body2"><strong>@context.Title</strong></MudText>
+                @if (context.Important) { <MudChip T="string" Size="Size.Small" Color="Color.Warning">Important</MudChip> }
+            </MudTd>
+            <MudTd><MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)" data-testid="notice-state">@context.State</MudChip></MudTd>
+            <MudTd>
+                <MudText Typo="Typo.caption">@context.StartsAt.ToLocalTime().ToString("MM/dd/yyyy") – @(context.ExpiresAt?.ToLocalTime().ToString("MM/dd/yyyy") ?? "open")</MudText>
+            </MudTd>
+            <MudTd><MudText Typo="Typo.caption">@(context.TargetRoles.Count == 0 ? "All staff" : string.Join(", ", context.TargetRoles))</MudText></MudTd>
+            <MudTd><MudText Typo="Typo.caption">@(context.CreatedByName ?? context.CreatedBy)</MudText></MudTd>
+            <MudTd>
+                @if (context.State != "Withdrawn")
+                {
+                    <MudButtonGroup Size="Size.Small" Variant="Variant.Text">
+                        <MudButton OnClick="@(() => Edit(context))">Edit</MudButton>
+                        <MudButton Color="Color.Warning" OnClick="@(() => WithdrawAsync(context))" data-testid="notice-withdraw">Withdraw</MudButton>
+                    </MudButtonGroup>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="pa-4">No notices yet.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private List<PlanNoticeView> _notices = new();
+    private PlanNoticeInput _input = new();
+    private string? _editingId;
+    private string? _formError;
+    private bool _loading = true;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try { _notices = await Workspace.GetAllNoticesAsync() ?? new(); }
+        catch (Exception ex) when (ex is WorkManagementRefusedException or ServiceUnavailableException) { Snackbar.Add(ex.Message, Severity.Warning); }
+        finally { _loading = false; }
+    }
+
+    private void Reset()
+    {
+        _input = new();
+        _editingId = null;
+        _formError = null;
+    }
+
+    private void Edit(PlanNoticeView notice)
+    {
+        _editingId = notice.Id;
+        _formError = null;
+        _input = new PlanNoticeInput
+        {
+            Title = notice.Title, Body = notice.Body, Severity = notice.Severity,
+            StartsAt = notice.StartsAt.ToLocalTime(), ExpiresAt = notice.ExpiresAt?.ToLocalTime(),
+            TargetRoles = notice.TargetRoles.ToList(),
+        };
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _formError = null;
+        try
+        {
+            if (_editingId is null) await Workspace.PostNoticeAsync(_input);
+            else await Workspace.EditNoticeAsync(_editingId, _input);
+            Snackbar.Add(_editingId is null ? "Notice posted." : "Notice saved.", Severity.Success);
+            Reset();
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is WorkManagementRefusedException or ServiceUnavailableException)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task WithdrawAsync(PlanNoticeView notice)
+    {
+        try
+        {
+            await Workspace.WithdrawNoticeAsync(notice.Id);
+            Snackbar.Add($"“{notice.Title}” withdrawn.", Severity.Info);
+            if (_editingId == notice.Id) Reset();
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is WorkManagementRefusedException or ServiceUnavailableException)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    private static Color StateColor(string state) => state switch
+    {
+        "Live" => Color.Success,
+        "Scheduled" => Color.Info,
+        "Withdrawn" => Color.Error,
+        _ => Color.Default,
+    };
+}
