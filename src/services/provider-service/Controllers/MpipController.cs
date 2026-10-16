@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderService.Models;
@@ -25,6 +26,9 @@ namespace ProviderService.Controllers;
 public class MpipController : ControllerBase
 {
     private const string QualificationWrite = "contracts:write";
+
+    /// <summary>The error reported for a row that failed unexpectedly; the exception is logged.</summary>
+    public const string BulkImportRowFailedMessage = "The qualification could not be saved.";
 
     private readonly IMpipRateService _mpipService;
     private readonly ILogger<MpipController> _logger;
@@ -157,9 +161,10 @@ public class MpipController : ControllerBase
             }
             catch (Exception ex)
             {
-                var msg = $"Provider {qualification.ProviderId}: {ex.Message}";
+                var msg = $"Provider {qualification.ProviderId}: {BulkImportRowFailedMessage}";
                 errors.Add(msg);
-                _logger.LogWarning(ex, "MPIP bulk import error for provider {ProviderId}", SanitizeForLog(qualification.ProviderId));
+                _logger.LogWarning(ex, "MPIP bulk import error for provider {ProviderId} (trace id {TraceId})",
+                    SanitizeForLog(qualification.ProviderId), ChoProblemResults.TraceId(HttpContext));
             }
         }
 
