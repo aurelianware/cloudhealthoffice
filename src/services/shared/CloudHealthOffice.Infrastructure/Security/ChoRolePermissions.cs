@@ -51,7 +51,7 @@ public static class ChoRolePermissions
 
     private static readonly string[] ExaminerPermissions =
     [
-        "claims:read", "claims:work", "claims:override-request",
+        "claims:read", "claims:work", "claims:override-request", "claims:note",
         "workqueue:read", "workqueue:work",
         "members:read", "accumulators:read", "providers:read",
         "terminology:read", "reference-data:read",
@@ -65,7 +65,7 @@ public static class ChoRolePermissions
             [ClaimsSupervisor] =
             [
                 .. ExaminerPermissions,
-                "claims:override-approve", "workqueue:assign", "workqueue:reassign",
+                "claims:override-approve", "claims:override-edit", "workqueue:assign", "workqueue:reassign",
                 // Supervisors manage their teams' queue memberships and the
                 // queue configuration (work-management-service).
                 "workqueue:admin",
@@ -75,7 +75,7 @@ public static class ChoRolePermissions
             [MemberServices] =
             [
                 "members:read", "members:search", "accumulators:read",
-                "eligibility:check", "claims:read", "coverage:read",
+                "eligibility:check", "claims:read", "claims:note", "coverage:read",
                 "authorizations:read", "reference-data:read",
                 "attachments:read", "benefits:read", "consent:read", "consent:write",
                 "providers:read",

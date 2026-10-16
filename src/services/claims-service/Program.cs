@@ -42,6 +42,12 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultWritePermission = "claims:work";
 });
 
+// Edit override policy (claim-review-workbench §2.3): CHO defaults, with
+// per-tenant changes from Claims:EditOverridePolicy:Tenants:{tenant}:{category}.
+builder.Services.Configure<ClaimsService.Services.EditOverridePolicyOptions>(
+    builder.Configuration.GetSection(ClaimsService.Services.EditOverridePolicyOptions.SectionName));
+builder.Services.AddSingleton<ClaimsService.Services.EditOverridePolicy>();
+
 // Repository — Cosmos or Mongo based on config (database client registered by shared lib)
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 

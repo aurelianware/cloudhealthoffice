@@ -1470,6 +1470,16 @@ public class ExaminerResolutionRecord
     /// <summary>The pends the approval re-run overrode ("{stage}: {code}: {reason}").</summary>
     public List<string> OverriddenPends { get; set; } = new();
 
+    /// <summary>
+    /// The reviewer's decision on every edit of the reviewed pend (workbench
+    /// step 2): overrides with their reasons, and edits upheld — explicitly or
+    /// by default at Finish. Empty for a whole-claim approval.
+    /// </summary>
+    public List<EditDisposition> EditDispositions { get; set; } = new();
+
+    /// <summary>Lines the reviewer denied on their own judgment.</summary>
+    public List<ManualLineDenial> ManualLineDenials { get; set; } = new();
+
     /// <summary>When the (first) approver acted.</summary>
     public DateTime RequestedAt { get; set; }
 

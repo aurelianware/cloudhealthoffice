@@ -61,6 +61,9 @@ public sealed record ExaminerApproval
     /// </summary>
     public IReadOnlyList<EditDisposition> EditDispositions { get; init; } = [];
 
+    /// <summary>Lines the reviewer denied on their own judgment, with their CARC.</summary>
+    public IReadOnlyList<ManualLineDenial> ManualLineDenials { get; init; } = [];
+
     /// <summary>
     /// The claim's persisted pend — what the examiner actually reviewed.
     /// Only pends matching it are overridden on the re-run (PR #1278 round
