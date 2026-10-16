@@ -115,8 +115,9 @@ builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
     {
         client.Timeout = TimeSpan.FromSeconds(5);
     });
-
-builder.Services.AddScoped<IEligibilityService, EligibilityServiceImpl>();
+// (A second AddScoped<IEligibilityService, EligibilityServiceImpl> used to
+// follow and replace the typed client: the service then got a plain client
+// without this 5 s timeout.)
 
 // 270/271 EDI services
 builder.Services.AddScoped<IEdi270Parser, Edi270Parser>();

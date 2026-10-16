@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Http;
 using CloudHealthOffice.Infrastructure.Caching;
 using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
 using CloudHealthOffice.ProviderEnrollmentService.Aggregator;
@@ -204,7 +205,8 @@ public sealed class ProviderEnrollmentServiceBuilder
             var opts = sp.GetRequiredService<IOptions<ProviderEnrollmentOptions>>().Value;
             c.BaseAddress = new Uri(opts.Tmhp.BaseUrl);
             c.DefaultRequestHeaders.Add("Accept", "application/json");
-        }).AddStandardResilienceHandler();
+        }).WithoutChoResilience() // its own standard handler below; no second pipeline
+        .AddStandardResilienceHandler();
 
         _services.AddScoped<IStateEnrollmentSource, TmhpPemsSource>();
         return this;
@@ -216,7 +218,8 @@ public sealed class ProviderEnrollmentServiceBuilder
         {
             c.BaseAddress = new Uri("https://medi-cal.ca.gov/api/pave");
             c.DefaultRequestHeaders.Add("Accept", "application/json");
-        }).AddStandardResilienceHandler();
+        }).WithoutChoResilience() // its own standard handler below; no second pipeline
+        .AddStandardResilienceHandler();
 
         _services.AddScoped<IStateEnrollmentSource, DhcsPaveSource>();
         return this;
@@ -228,7 +231,8 @@ public sealed class ProviderEnrollmentServiceBuilder
         {
             c.BaseAddress = new Uri("https://www.floridamedicaid.com/api");
             c.DefaultRequestHeaders.Add("Accept", "application/json");
-        }).AddStandardResilienceHandler();
+        }).WithoutChoResilience() // its own standard handler below; no second pipeline
+        .AddStandardResilienceHandler();
 
         _services.AddScoped<IStateEnrollmentSource, AhcaFmmisSource>();
         return this;
@@ -240,7 +244,8 @@ public sealed class ProviderEnrollmentServiceBuilder
         {
             c.BaseAddress = new Uri("https://www.emedny.org/api");
             c.DefaultRequestHeaders.Add("Accept", "application/json");
-        }).AddStandardResilienceHandler();
+        }).WithoutChoResilience() // its own standard handler below; no second pipeline
+        .AddStandardResilienceHandler();
 
         _services.AddScoped<IStateEnrollmentSource, EMedNySource>();
         return this;
@@ -257,7 +262,8 @@ public sealed class ProviderEnrollmentServiceBuilder
             var opts = sp.GetRequiredService<IOptions<ProviderEnrollmentOptions>>().Value;
             c.BaseAddress = new Uri(opts.Caqh.BaseUrl);
             c.DefaultRequestHeaders.Add("Accept", "application/json");
-        }).AddStandardResilienceHandler();
+        }).WithoutChoResilience() // its own standard handler below; no second pipeline
+        .AddStandardResilienceHandler();
 
         _services.AddScoped<IStateEnrollmentSource, CaqhProViewSource>();
         return this;
