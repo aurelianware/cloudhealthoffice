@@ -821,14 +821,18 @@ public class MembersController : ControllerBase
 
     private IActionResult DownstreamUnavailable(DownstreamUnavailableException ex)
     {
+        _logger?.LogWarning(ex, "{Service} unavailable (trace id {TraceId})",
+            ex.ServiceName, CloudHealthOffice.Infrastructure.Middleware.ChoProblemResults.TraceId(HttpContext));
         var problem = new ProblemDetails
         {
             Type = "https://cloudhealthoffice.com/problems/downstream-unavailable",
             Title = "Downstream service unavailable",
             Status = StatusCodes.Status503ServiceUnavailable,
-            Detail = ex.Detail ?? ex.Message
+            // The exception text (a host, a port, a driver message) stays in the log.
+            Detail = $"{ex.ServiceName} is unavailable. Retry later."
         };
         problem.Extensions["service"] = ex.ServiceName;
+        problem.Extensions["traceId"] = CloudHealthOffice.Infrastructure.Middleware.ChoProblemResults.TraceId(HttpContext);
         return StatusCode(StatusCodes.Status503ServiceUnavailable, problem);
     }
 
