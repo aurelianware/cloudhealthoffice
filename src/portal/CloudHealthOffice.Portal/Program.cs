@@ -21,6 +21,9 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
+// Development and Testing accept the public development keys: refuse them on a
+// deployed host unless the deployment opts in (the services do this in AddChoAuthentication).
+CloudHealthOffice.Infrastructure.Security.ChoTestingEnvironment.EnsureNotDeployed(builder.Environment);
 // Invitation links carry a secret in the path (/invite/{code}): keep request URLs out of logs.
 builder.Logging.KeepInvitationCodesOutOfLogs();
 // Secret provider (Azure Key Vault / none)
