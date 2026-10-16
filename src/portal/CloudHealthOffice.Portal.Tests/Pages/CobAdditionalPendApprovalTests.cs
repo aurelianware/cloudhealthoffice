@@ -49,7 +49,8 @@ public class CobAdditionalPendApprovalTests : TestContext
 
         _workQueue.Setup(w => w.ResolvePendedClaimAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
-                It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>()))
+                It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<string?>(),
+                It.IsAny<IReadOnlyList<EditDecisionInput>?>(), It.IsAny<IReadOnlyList<LineDenialInput>?>()))
             .ReturnsAsync(ClaimResolutionResult.Resolved);
     }
 
@@ -79,7 +80,7 @@ public class CobAdditionalPendApprovalTests : TestContext
         cut.FindAll("button").First(b => b.TextContent.Contains("Override")).Click();
 
         cut.WaitForAssertion(() => _workQueue.Verify(w => w.ResolvePendedClaimAsync(
-            "CLM-7", "Approved", "secondary per EOB", It.IsAny<string?>(), "examiner-1", 2, "v2-abc"), Times.Once));
+            "CLM-7", "Approved", "secondary per EOB", It.IsAny<string?>(), "examiner-1", 2, "v2-abc", null, null), Times.Once));
         _dialogs.Verify(d => d.ShowAsync<CobPayerOrderDialog>(It.IsAny<string>()), Times.Once);
     }
 
@@ -93,7 +94,7 @@ public class CobAdditionalPendApprovalTests : TestContext
         cut.FindAll("button").First(b => b.TextContent.Contains("Override")).Click();
 
         cut.WaitForAssertion(() => _workQueue.Verify(w => w.ResolvePendedClaimAsync(
-            "CLM-7", "Approved", It.IsAny<string>(), It.IsAny<string?>(), "examiner-1", null, "v2-abc"), Times.Once));
+            "CLM-7", "Approved", It.IsAny<string>(), It.IsAny<string?>(), "examiner-1", null, "v2-abc", null, null), Times.Once));
         _dialogs.Verify(d => d.ShowAsync<CobPayerOrderDialog>(It.IsAny<string>()), Times.Never);
     }
 
@@ -120,7 +121,7 @@ public class CobAdditionalPendApprovalTests : TestContext
         cut.FindAll("button").First(b => b.TextContent.Trim() == "Pay").Click();
 
         cut.WaitForAssertion(() => _workQueue.Verify(w => w.ResolvePendedClaimAsync(
-            "CLM-8", "Approved", "secondary per EOB", It.IsAny<string?>(), "examiner-1", 2, "v2-def"), Times.Once));
+            "CLM-8", "Approved", "secondary per EOB", It.IsAny<string?>(), "examiner-1", 2, "v2-def", null, null), Times.Once));
     }
 
     [Theory]

@@ -249,6 +249,24 @@ public class WorkQueueServiceTests
     }
 
     [Fact]
+    public async Task ResolvePendedClaimAsync_SendsEditDecisionsAndLineDenials_OnlyWhenGiven()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.ResolvePendedClaimAsync("CLM-1", "Approved", "ok", null, "examiner-1", null, "fp",
+            [new EditDecisionInput("NCCI|NE001|A|B|2", "Override", "separate incision")],
+            [new LineDenialInput(3, null, "CO", "50", "not supported")]);
+        await sut.ResolvePendedClaimAsync("CLM-1", "Approved", "ok", null, "examiner-1");
+
+        var edited = await handler.CapturedRequests[0].Content!.ReadAsStringAsync();
+        edited.Should().Contain("\"editDecisions\":[{\"editKey\":\"NCCI|NE001|A|B|2\",\"decision\":\"Override\",\"reason\":\"separate incision\"}]");
+        edited.Should().Contain("\"lineDenials\":[{\"lineNumber\":3,\"units\":null,\"groupCode\":\"CO\",\"carc\":\"50\",\"reason\":\"not supported\"}]");
+        var legacy = await handler.CapturedRequests[1].Content!.ReadAsStringAsync();
+        legacy.Should().Contain("\"editDecisions\":null", "no list means a whole-claim approval");
+    }
+
+    [Fact]
     public void PendDetailsAndWorkQueueItems_ReadTheServicesFingerprint()
     {
         var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);

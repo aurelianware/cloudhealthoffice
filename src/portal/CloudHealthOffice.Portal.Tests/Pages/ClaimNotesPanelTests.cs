@@ -29,7 +29,7 @@ public class ClaimNotesPanelTests : TestContext
         _claims.Setup(c => c.GetAdjudicationDataAsync(It.IsAny<string>())).ReturnsAsync((AdjudicationTransparencyData?)null);
     }
 
-    private void CanWork(bool canWork) => _user.Setup(u => u.HasPermission("claims:work")).Returns(canWork);
+    private void CanWork(bool canWork) => _user.Setup(u => u.HasPermission("claims:note")).Returns(canWork);
 
     private static ClaimNoteView Note(string text, string category = ClaimNoteCategory.Decision, string? authorName = "Pat Examiner") => new()
     {
