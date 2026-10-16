@@ -67,7 +67,7 @@ MemberDocument, PremiumInvoice, and the Consent and PersonalRep transitions.
 | premium-billing-service | RemittanceBatch | |
 | eligibility-service | batch job document (`MongoBatchJobContainer`) | no revision: job, inline payload and blob payload writes are targeted `$set`s of the parts they own |
 | fhir-service | payer-to-payer ledger (`UpdateBackfilledLedgerAsync`) | no revision: a targeted `$set` of the backfill's own fields, fenced on the commit it read |
-| shared Infrastructure | claim transmission, remittance receipt, inbound attachment receipt (`MongoClaimLifecycleStore`) | the 277CA processor, gateways, remittance processor/poster and attachment outbox re-read and re-apply through the existing state rules, so a status cannot move backwards and outbox markers survive |
+| shared Infrastructure | claim transmission, remittance receipt, inbound attachment receipt (`MongoClaimLifecycleStore`) | the 277CA processor, gateways, remittance processor/poster and attachment outbox re-read and re-apply through the existing state rules, so a status cannot move backwards and outbox markers survive. A submit does not send while another request has the same key `Transmitting` (`TransmittingSinceUtc` within a 10-minute lease); a retry claims the send with a conditional save first |
 
 Benefit-plan, provider, capitation contract, provider contract, fee schedule
 and risk score PUTs replace the document with the request body. The body
@@ -124,9 +124,7 @@ grep -rnE "ReplaceOneAsync|FindOneAndReplaceAsync|\.ReplaceOne\(" --include='*.c
   processed twice at once.
 - **claim lifecycle.** Two different 277CA outcomes still end at whichever was
   applied last. The acknowledgment, cursor, outbound attachment transmission
-  and status-inquiry records are still unconditional (low). In the Stedi and
-  Mock gateways, the loser of a create race whose winner is still
-  `Transmitting` sends a second submission (pre-existing).
+  and status-inquiry records are still unconditional (low).
 - **fhir-service.** The clinical backfill's `StageAsync` upserts rows from the
   archive it read, so an ingestion re-staging the same exchange at the same
   time could be overwritten.
