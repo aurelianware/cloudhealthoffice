@@ -1,3 +1,4 @@
+using ClaimsService.Audit;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.Text.Json.Nodes;
@@ -664,6 +665,7 @@ public class ClaimsV1Controller : ControllerBase
     /// is a FHIR <c>ExplanationOfBenefit</c> array (one per matching
     /// claim).
     /// </summary>
+    [AuditClaimAccess(ClaimAccessActions.Eob)]
     [HttpGet]
     [ProducesResponseType(typeof(EobSearchResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

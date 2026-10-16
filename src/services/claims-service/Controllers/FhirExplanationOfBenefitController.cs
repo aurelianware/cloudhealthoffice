@@ -1,3 +1,4 @@
+using ClaimsService.Audit;
 using System.Text.Json.Nodes;
 using ClaimsService.Fhir;
 using ClaimsService.Models;
@@ -64,6 +65,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
     /// state. Per-version (<c>_history</c>) reads are Phase 2.
     /// </summary>
     [HttpGet("ExplanationOfBenefit/{id}")]
+    [AuditClaimAccess(ClaimAccessActions.Eob, ClaimIdRouteValue = "id")]
     [Produces(FhirContentType)]
     public async Task<IActionResult> ReadEob(string id, CancellationToken ct)
     {
@@ -142,6 +144,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
     /// search-seam expansion.
     /// </summary>
     [HttpGet("ExplanationOfBenefit")]
+    [AuditClaimAccess(ClaimAccessActions.Eob)]
     [Produces(FhirContentType)]
     public async Task<IActionResult> SearchEobs(
         [FromQuery] string? patient,
