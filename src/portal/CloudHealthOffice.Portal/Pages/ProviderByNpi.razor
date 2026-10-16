@@ -1,0 +1,55 @@
+@page "/providers/npi/{Npi}"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IProviderService ProviderService
+@inject NavigationManager Navigation
+
+@* Claims carry NPIs, not provider ids: /providers/npi/{npi} finds the
+   provider record and opens it in place of itself (Back skips this hop). *@
+<PageTitle>Provider - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-6">
+    @if (_notFound)
+    {
+        <MudAlert Severity="Severity.Info" data-testid="provider-npi-missing">
+            No provider record for NPI @Npi. <MudLink Href="@($"/providers?q={Uri.EscapeDataString(Npi)}")">Search providers</MudLink>
+        </MudAlert>
+    }
+    else if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Warning">@_error</MudAlert>
+    }
+    else
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public string Npi { get; set; } = string.Empty;
+
+    private bool _notFound;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _notFound = false;
+        _error = null;
+        try
+        {
+            var match = (await ProviderService.SearchProvidersAsync(Npi) ?? new())
+                .FirstOrDefault(p => string.Equals(p.NPI, Npi, StringComparison.Ordinal));
+            if (match is null || string.IsNullOrWhiteSpace(match.ProviderId))
+            {
+                _notFound = true;
+                return;
+            }
+            var rest = Navigation.ToAbsoluteUri(Navigation.Uri).Query;
+            Navigation.NavigateTo($"/providers/{Uri.EscapeDataString(match.ProviderId)}{rest}", replace: true);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Providers couldn't be searched: {ex.Message}";
+        }
+    }
+}

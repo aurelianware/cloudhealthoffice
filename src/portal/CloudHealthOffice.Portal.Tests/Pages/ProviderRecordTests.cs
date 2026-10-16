@@ -87,20 +87,40 @@ public class ProviderRecordTests : TestContext
     }
 
     [Fact]
-    public void The_claim_header_opens_the_billing_providers_record()
+    public void The_claim_header_links_to_the_billing_providers_record_by_npi()
     {
         _claims.Setup(c => c.GetClaimByIdAsync("C1")).ReturnsAsync(new ClaimDetails
         {
             ClaimId = "C1", ClaimNumber = "CLM-C1", Status = "Paid", BillingProviderNPI = "1234567893", BillingProviderName = "Lakeside Orthopedics",
         });
         _claims.Setup(c => c.GetClaimNotesAsync(It.IsAny<string>())).ReturnsAsync(new List<ClaimNoteView>());
-        _providers.Setup(p => p.SearchProvidersAsync("1234567893"))
-            .ReturnsAsync(new List<ProviderSummary> { new() { ProviderId = "P1", NPI = "1234567893", Name = "Lakeside Orthopedics" } });
         var claim = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "C1"));
         claim.WaitForAssertion(() => claim.Find("[data-testid=open-billing-provider]"));
 
-        claim.Find("[data-testid=open-billing-provider]").Click();
+        // A real link: Ctrl/⌘-click and the ↗ icon open it in a new tab.
+        claim.Find("[data-testid=open-billing-provider]").GetAttribute("href").Should().Be("/providers/npi/1234567893");
+    }
 
-        Services.GetRequiredService<FakeNavigationManager>().Uri.Should().EndWith("/providers/P1");
+    [Fact]
+    public void An_npi_link_opens_the_provider_record_in_place_of_itself()
+    {
+        _providers.Setup(p => p.SearchProvidersAsync("1234567893"))
+            .ReturnsAsync(new List<ProviderSummary> { new() { ProviderId = "P1", NPI = "1234567893", Name = "Lakeside Orthopedics" } });
+        var nav = Services.GetRequiredService<FakeNavigationManager>();
+
+        RenderComponent<ProviderByNpi>(p => p.Add(x => x.Npi, "1234567893"));
+
+        nav.Uri.Should().EndWith("/providers/P1");
+        nav.History.First().Options.ReplaceHistoryEntry.Should().BeTrue();
+    }
+
+    [Fact]
+    public void An_unknown_npi_says_so_and_offers_a_search()
+    {
+        _providers.Setup(p => p.SearchProvidersAsync("9999999999")).ReturnsAsync(new List<ProviderSummary>());
+
+        var cut = RenderComponent<ProviderByNpi>(p => p.Add(x => x.Npi, "9999999999"));
+
+        cut.Find("[data-testid=provider-npi-missing]").TextContent.Should().Contain("9999999999");
     }
 }
