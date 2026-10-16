@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Every service now answers `ConcurrencyConflictException` with 409. The
   medium and low sites still open are listed in
   `docs/architecture/mongo-write-concurrency.md`.
+- **An AR adjustment can no longer be counted twice on its balance.** Posting
+  and reversing saved the balance entry, then the adjustment, and the entry
+  had a fresh GUID. A retry after a failed adjustment save added a second
+  entry. Entries now carry a fixed id per adjustment (`adj-post:{id}`,
+  `adj-reverse:{id}`), and a retry that finds it only saves the adjustment.
 - **The claim lifecycle store's MongoDB indexes are created.** Its
   `EnsureIndexesAsync` declared a unique index on `_id`, which MongoDB
   rejects. That failed host start-up and left the unique tenant +
