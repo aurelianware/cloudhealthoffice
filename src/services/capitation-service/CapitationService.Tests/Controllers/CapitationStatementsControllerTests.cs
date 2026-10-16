@@ -222,6 +222,30 @@ public class CapitationStatementsControllerTests
     }
 
     [Fact]
+    public async Task GenerateEra_GeneratorFailure_IsAProblemWithATraceId_NotTheExceptionText()
+    {
+        _controller.ControllerContext = new ControllerContext { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() };
+        _statementRepo.Setup(r => r.GetByIdAsync("stmt-1")).ReturnsAsync(CreateStatement());
+        _contractRepo.Setup(r => r.GetByIdAsync("contract-1")).ReturnsAsync(new CapitationContract
+        {
+            Id = "contract-1", ContractNumber = "CAP-123-2026"
+        });
+        _eraService.Setup(s => s.Generate835ForStatement(
+                It.IsAny<CapitationStatement>(),
+                It.IsAny<CapitationContract>(),
+                It.IsAny<CapitationEraTradingPartnerInfo>()))
+            .Throws(new InvalidOperationException("mongodb://admin:hunter2@db:27017 timed out"));
+
+        var result = await _controller.GenerateEra("stmt-1", null);
+
+        var obj = result.Should().BeOfType<ObjectResult>().Subject;
+        obj.StatusCode.Should().Be(500);
+        var problem = obj.Value.Should().BeOfType<ProblemDetails>().Subject;
+        System.Text.Json.JsonSerializer.Serialize(problem).Should().NotContain("hunter2");
+        problem.Extensions.Should().ContainKey("traceId");
+    }
+
+    [Fact]
     public async Task GenerateEra_StatementNotFound_Returns404()
     {
         _statementRepo.Setup(r => r.GetByIdAsync("missing")).ReturnsAsync((CapitationStatement?)null);
