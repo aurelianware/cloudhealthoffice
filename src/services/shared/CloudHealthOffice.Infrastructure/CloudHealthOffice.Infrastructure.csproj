@@ -20,6 +20,8 @@
     <PackageReference Include="Azure.Messaging.ServiceBus" />
     <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
+    <!-- ChoServiceClientResilience: retries, timeouts and a circuit breaker on every service HttpClient. -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="MongoDB.Driver" />
   <PackageReference Include="SharpCompress" />
   <PackageReference Include="Snappier" />
