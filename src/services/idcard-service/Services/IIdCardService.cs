@@ -168,30 +168,62 @@ public class IdCardOrchestrator : IIdCardOrchestrator
     {
         if (string.IsNullOrWhiteSpace(revokedBy)) throw new ArgumentException("Actor is required.", nameof(revokedBy));
 
-        var record = await _records.FindByCardIdAsync(tenantId, cardId, ct);
-        if (record == null) return null;
+        // A concurrent write (a scan) moved the card on since it was read: re-read
+        // it and apply the revocation again on top. After the last attempt the
+        // conflict propagates (409).
+        for (var attempt = 1; ; attempt++)
+        {
+            var record = await _records.FindByCardIdAsync(tenantId, cardId, ct);
+            if (record == null) return null;
 
-        record.RevokedAt = DateTime.UtcNow;
-        record.RevocationReason = request.Reason;
-        record.RevocationNotes = request.Notes;
-        record.RevokedBy = revokedBy;
-        await _records.UpsertAsync(record, ct);
-        return record;
+            record.RevokedAt = DateTime.UtcNow;
+            record.RevocationReason = request.Reason;
+            record.RevocationNotes = request.Notes;
+            record.RevokedBy = revokedBy;
+            try
+            {
+                await _records.UpsertAsync(record, ct);
+                return record;
+            }
+            catch (IdCardConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+            }
+        }
     }
+
+    /// <summary>How many times a card save is re-read and retried against concurrent writers.</summary>
+    internal const int MaxConcurrencyAttempts = 5;
 
     public async Task<IdCardRecord?> RecordScanAsync(string tenantId, string cardId, CancellationToken ct = default)
     {
-        // Phase 1 uses read-modify-write on ScanCount; under concurrent
-        // scans a small number of increments can be lost. The counter is
-        // for analytics / "is this card still in use" heuristics, not a
-        // billing or security control, so exact accuracy isn't required.
-        // Phase 2 will switch to Mongo $inc / Cosmos patch when the
-        // repository abstraction grows atomic-increment support.
-        var record = await _records.FindByCardIdAsync(tenantId, cardId, ct);
-        if (record == null) return null;
-        record.ScanCount += 1;
-        record.LastScannedAt = DateTime.UtcNow;
-        await _records.UpsertAsync(record, ct);
-        return record;
+        // Read-modify-write on ScanCount, saved only against the revision read
+        // (see IIdCardRecordRepository.UpsertAsync). A scan whose read is
+        // overtaken (by a revocation or another scan) re-reads and counts again
+        // on the fresh card, so it never writes back a stale copy and never
+        // clears a revocation. A scan does not fail for this: if every attempt
+        // is overtaken the increment is dropped (the counter is for analytics /
+        // "is this card still in use" heuristics, not a billing or security
+        // control) and the latest card is returned.
+        IdCardRecord? record = null;
+        for (var attempt = 1; attempt <= MaxConcurrencyAttempts; attempt++)
+        {
+            record = await _records.FindByCardIdAsync(tenantId, cardId, ct);
+            if (record == null) return null;
+            record.ScanCount += 1;
+            record.LastScannedAt = DateTime.UtcNow;
+            try
+            {
+                await _records.UpsertAsync(record, ct);
+                return record;
+            }
+            catch (IdCardConcurrencyException)
+            {
+                // Overtaken: re-read and count on the fresh card.
+            }
+        }
+
+        _logger.LogWarning("Scan of card {CardId} not counted: overtaken by concurrent writes {Attempts} times",
+            LogSafe.Of(cardId), MaxConcurrencyAttempts);
+        return await _records.FindByCardIdAsync(tenantId, cardId, ct) ?? record;
     }
 }

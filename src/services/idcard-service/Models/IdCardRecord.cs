@@ -49,6 +49,14 @@ public class IdCardRecord
 
     public long ScanCount { get; set; }
     public DateTime? LastScannedAt { get; set; }
+
+    /// <summary>
+    /// Optimistic concurrency: incremented on every save, which succeeds only
+    /// against the revision read, so a scan read before a revocation cannot
+    /// write the card back un-revoked. Documents written before the field
+    /// existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
 }
 
 public enum IdCardRevocationReason
