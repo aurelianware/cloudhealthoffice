@@ -1,0 +1,79 @@
+@* Member quick view (portal-navigation.md principle 3): who the member is,
+   alerts, and coverage on the date that matters (a claim's date of service),
+   without leaving the page. Open goes to the member record; Open in new tab
+   keeps this page where it is. *@
+@inject IMemberService MemberService
+@inject NavigationManager Navigation
+
+<MudDialog data-testid="member-peek">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            @(_member is null ? $"Member {MemberId}" : $"{_member.FirstName} {_member.LastName}")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (_member is null)
+        {
+            <MudAlert Severity="Severity.Warning" data-testid="member-peek-missing">Member @MemberId couldn't be loaded.</MudAlert>
+        }
+        else
+        {
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudText Typo="Typo.body2" Style="font-family: monospace;">@_member.MemberId</MudText>
+                <MudChip T="string" Size="Size.Small">@_member.DisplayStatus</MudChip>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">DOB @_member.DateOfBirth.ToString("MM/dd/yyyy")</MudText>
+            </MudStack>
+            <MemberAlertBanner MemberId="@MemberId" />
+            @if (AsOf is { } asOf)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1" data-testid="member-peek-as-of">Coverage on @asOf.ToString("MM/dd/yyyy")</MudText>
+            }
+            <MemberCoveragePanel MemberId="@MemberId" AsOf="@AsOf" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Href="@MemberHref" Target="_blank" rel="noopener" StartIcon="@Icons.Material.Filled.OpenInNew"
+                   data-testid="member-peek-new-tab">Open in new tab</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Open" data-testid="member-peek-open">Open member</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance? Dialog { get; set; }
+
+    [Parameter, EditorRequired] public string MemberId { get; set; } = string.Empty;
+
+    /// <summary>Show coverage as of this date (e.g. the claim's date of service).</summary>
+    [Parameter] public DateTime? AsOf { get; set; }
+
+    private MemberDetails? _member;
+    private bool _loading = true;
+
+    private string MemberHref => $"/members/{Uri.EscapeDataString(MemberId)}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _member = await MemberService.GetMemberByIdAsync(MemberId);
+        }
+        catch
+        {
+            _member = null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Open()
+    {
+        Dialog?.Close();
+        Navigation.NavigateTo(MemberHref);
+    }
+}
