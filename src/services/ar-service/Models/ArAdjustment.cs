@@ -61,6 +61,13 @@ public class ArAdjustment
 
     [StringLength(200)]
     public string? CreatedBy { get; set; }
+
+    /// <summary>
+    /// Optimistic concurrency: incremented on every save; a save of a stale
+    /// copy fails with <see cref="Repositories.ArConcurrencyException"/>.
+    /// Documents saved before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
 }
 
 public enum ArAdjustmentType

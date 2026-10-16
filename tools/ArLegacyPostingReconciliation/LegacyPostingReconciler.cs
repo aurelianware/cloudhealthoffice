@@ -526,6 +526,8 @@ public sealed class LegacyPostingReconciler
                 }).ToList()
             };
             posting.LastUpdatedAt = now;
+            // Bump the revision so an API save from a copy read before this one conflicts instead of overwriting it.
+            posting.Revision++;
             if (BeforePostingSave != null)
                 await BeforePostingSave(posting);
             var f = Builders<CashPosting>.Filter;

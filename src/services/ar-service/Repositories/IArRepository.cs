@@ -1,4 +1,5 @@
 using ArService.Models;
+using CloudHealthOffice.Infrastructure.Data;
 
 namespace ArService.Repositories;
 
@@ -11,8 +12,12 @@ public interface IGlAccountRepository
     Task<GlAccount> UpdateAsync(GlAccount account);
 }
 
-/// <summary>The document changed since it was read; re-read and retry.</summary>
-public sealed class ArConcurrencyException : Exception
+/// <summary>
+/// The document changed since it was read (its <see cref="ArBalance.Version"/>
+/// or <c>Revision</c> moved on); nothing was written. 409 Conflict at the API
+/// boundary; re-read and retry.
+/// </summary>
+public sealed class ArConcurrencyException : ConcurrencyConflictException
 {
     public ArConcurrencyException(string message) : base(message) { }
 }
