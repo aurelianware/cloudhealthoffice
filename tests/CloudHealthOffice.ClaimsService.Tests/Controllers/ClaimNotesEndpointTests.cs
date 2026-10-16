@@ -138,16 +138,20 @@ public class ClaimNotesEndpointTests : IClassFixture<ClaimsApiFactory>
     }
 
     [Fact]
-    public async Task Add_NeedsClaimsWork_ButReadingNeedsOnlyClaimsRead()
+    public async Task Adding_needs_claims_note_which_member_services_has_but_finance_does_not()
     {
         var id = SeedClaim();
-        var viewer = Client("viewer-1", ChoRolePermissions.MemberServices);
+        var memberServices = Client("rep-1", ChoRolePermissions.MemberServices);
+        var finance = Client("finance-1", ChoRolePermissions.Finance);
 
-        var add = await viewer.PostAsJsonAsync($"/api/claims/{id}/notes", new { text = "hello" }, Json);
-        var list = await viewer.GetAsync($"/api/claims/{id}/notes");
+        var byRep = await memberServices.PostAsJsonAsync($"/api/claims/{id}/notes",
+            new { category = "MemberContact", text = "Member called about the balance." }, Json);
+        var byFinance = await finance.PostAsJsonAsync($"/api/claims/{id}/notes", new { text = "hello" }, Json);
+        var financeReads = await finance.GetAsync($"/api/claims/{id}/notes");
 
-        Assert.Equal(HttpStatusCode.Forbidden, add.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, byRep.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, byFinance.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, financeReads.StatusCode);
     }
 
     [Fact]
