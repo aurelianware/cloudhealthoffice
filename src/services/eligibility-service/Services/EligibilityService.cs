@@ -13,20 +13,26 @@ public class EligibilityServiceImpl : IEligibilityService
     private readonly ILogger<EligibilityServiceImpl> _logger;
     private readonly IConfiguration _configuration;
     private readonly EligibilityAdapterFactory _adapterFactory;
+    private readonly TimeProvider _timeProvider;
 
     public EligibilityServiceImpl(
         IEligibilityRepository repository,
         HttpClient httpClient,
         ILogger<EligibilityServiceImpl> logger,
         IConfiguration configuration,
-        EligibilityAdapterFactory adapterFactory)
+        EligibilityAdapterFactory adapterFactory,
+        TimeProvider? timeProvider = null)
     {
         _repository = repository;
         _httpClient = httpClient;
         _logger = logger;
         _configuration = configuration;
         _adapterFactory = adapterFactory;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
+
+    /// <summary>Today's date in UTC, independent of the host's time zone.</summary>
+    private DateTime TodayUtc => _timeProvider.GetUtcNow().UtcDateTime.Date;
 
     public async Task<EligibilityResponse> ProcessInquiryAsync(EligibilityInquiry inquiry)
     {
@@ -150,7 +156,7 @@ public class EligibilityServiceImpl : IEligibilityService
     public async Task<(DeductibleInfo? Deductible, OutOfPocketInfo? OutOfPocket)> GetAccumulationAsync(
         string tenantId, string subscriberId)
     {
-        var coverage = await GetActiveCoverageAsync(tenantId, subscriberId, DateTime.Today);
+        var coverage = await GetActiveCoverageAsync(tenantId, subscriberId, TodayUtc);
         
         if (coverage == null)
         {
@@ -169,7 +175,7 @@ public class EligibilityServiceImpl : IEligibilityService
     public async Task<(bool Required, string Reason)> CheckAuthRequirementAsync(
         string tenantId, string subscriberId, string serviceTypeCode, string? procedureCode)
     {
-        var coverage = await GetActiveCoverageAsync(tenantId, subscriberId, DateTime.Today, serviceTypeCode);
+        var coverage = await GetActiveCoverageAsync(tenantId, subscriberId, TodayUtc, serviceTypeCode);
 
         if (coverage == null)
         {

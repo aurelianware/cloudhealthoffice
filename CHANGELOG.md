@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Accumulator plan-year dates no longer shift with the host time zone.**
+  The MongoDB driver stored an `Unspecified`-kind plan-year boundary such as
+  2025-01-01 as local time converted to UTC: 07:00Z on a UTC-7 host and
+  2024-12-31T22:00Z on a UTC+2 host. On the UTC+2 host the read-back start
+  then built the previous plan year's snapshot id. Plan-year fields on
+  accumulator snapshots, events and processed-claim lease targets now use
+  `UtcCalendarDateSerializer` (Infrastructure), which stores the wall-clock
+  date as UTC. On a UTC host it writes exactly what the default serializer
+  wrote, so documents from UTC pods read back unchanged. Documents written by
+  a non-UTC host are not rewritten; they still hold the shifted value.
+- **Eligibility's default service date is today in UTC** from the injected
+  `TimeProvider`, not the host's `DateTime.Today`. This covers quick check,
+  benefit details, accumulation and the auth-requirement lookups.
+
+### Changed
+
+- **CI runs the .NET unit tests a second time with `TZ=America/Phoenix`**
+  (`test-dotnet.yml` matrix). The UTC leg keeps the `.NET Unit Tests` check
+  name, artifact and coverage.
+
 - **Benefit engine: deductibles now apply on non-HDHP plans.** The benefit-plan
   projection (`ChoBenefitPlanProvider`) emitted only copay/coinsurance rules, so
   the engine never took the deductible unless the plan was an HDHP — claims were
