@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Service-to-service calls are resilient.** Every factory-built
+  `HttpClient` gets these defaults:
+  - a total timeout and a per-attempt timeout;
+  - retries with jitter, for idempotent requests only (a POST is never
+    retried without an idempotency key or an explicit opt-in);
+  - a circuit breaker per client.
+
+  The settings live in `ChoServiceClientResilience` (Infrastructure). An
+  open circuit surfaces as a 503 `HttpRequestException`, so the claims
+  pipeline's "pend, don't deny" behaviour applies unchanged. See
+  `docs/architecture/service-client-resilience.md`.
+- **Whether a claim pend is an outage is a typed flag, not reason text.**
+  `ClaimAdjudicationStageResult.CheckUnavailable`, set by each stage, replaces
+  substring matching of pend reasons, so rewording a message can no longer
+  make an outage pend overridable by an examiner.
+- **claims-examiner-service no longer drops claims.pended.v1 messages.**
+  - A claims-service transport failure, or a 5xx on the write-back, is
+    retried with backoff.
+  - After the last attempt the message is dead-lettered to
+    `claims.pended.v1.dlq`.
+  - The offset only moves past a message that was processed or
+    dead-lettered.
+  - A crashed consume loop stops the host instead of exiting silently.
+  - The Anthropic client retries 429 and 529.
+  - Model dispositions outside the known set escalate to a human.
+- **eligibility-service uses its configured HttpClient.** A duplicate
+  `AddScoped` registration had replaced the typed client and its 5 s timeout.
+
 - **`claims.finalized.v1` is no longer lost when Kafka is down or the
   process dies.** claims-service published the event right after the
   finalize write and logged and dropped any failure, so accumulator-service
