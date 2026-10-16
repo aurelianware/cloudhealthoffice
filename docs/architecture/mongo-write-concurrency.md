@@ -40,7 +40,7 @@ Reference implementation: `ClaimRepositoryMongo` (`Bumped`, `RevisionIs`).
 | rfai-service | RfaiCase | concurrent delivery and response both survive |
 | coverage-service | Coverage | a stale replace cannot turn Terminated back into Active |
 | member-service | Member | |
-| ar-service | CashPosting, ArAdjustment | |
+| ar-service | CashPosting, ArAdjustment | posting and reversing an adjustment write a fixed balance entry id (`adj-post:{id}`, `adj-reverse:{id}`), so a retry after a failed adjustment save cannot count it twice |
 | idcard-service | IdCardRecord | a scan can no longer undo a revocation |
 | tenant-service | TenantUser | a login sets only `LastLoginAt`; it can no longer restore a removed role or status |
 
@@ -96,10 +96,6 @@ grep -rnE "ReplaceOneAsync|FindOneAndReplaceAsync|\.ReplaceOne\(" --include='*.c
 
 ## Known residual gaps in fixed services
 
-- **ar-service.** `PostAdjustment` and `ReverseAdjustment` write the balance
-  entry before the adjustment, and the entry has no fixed id. A concurrent
-  second post can add the entry twice before its own adjustment save gets
-  the 409. Closing this needs a fixed entry id per adjustment.
 - **Multi-document flows.** These write one document and then another, so a
   409 on the second leaves the first written. The order was the same before;
   no compensation was added.
