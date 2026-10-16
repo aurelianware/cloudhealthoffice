@@ -1,37 +1,28 @@
-using System.Text.Json;
-using ClaimsExaminerService.Models;
-using ClaimsExaminerService.Services.Examiner;
-using CloudHealthOffice.Events;
 using Confluent.Kafka;
 
 namespace ClaimsExaminerService.Services.Kafka;
 
 /// <summary>
-/// Background consumer for claims.pended.v1. Pulls events off the topic and
-/// hands each one to ExaminerOrchestrator. Errors are logged and the offset
-/// is committed regardless — by design, a single bad event must not block the
-/// queue. Genuinely transient errors (network blips talking to Anthropic) are
-/// already retried inside the orchestrator's HttpClient and Anthropic SDK retry
-/// policies, so a hard failure here means the event is structurally bad.
+/// Background consumer for claims.pended.v1. Each message is handed to
+/// <see cref="ClaimPendedMessageProcessor"/>, which returns only once it is
+/// processed or on the dead-letter topic; only then is the offset committed.
+/// A transient failure (claims-service unreachable) is retried, never skipped.
+/// If the consume loop itself fails, the failure is logged as critical and
+/// rethrown, so the host stops and is restarted instead of running on without
+/// a consumer.
 /// </summary>
 public class ClaimPendedConsumer : BackgroundService
 {
-    private readonly IServiceProvider _services;
+    private readonly ClaimPendedMessageProcessor _processor;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ClaimPendedConsumer> _logger;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true
-    };
-
     public ClaimPendedConsumer(
-        IServiceProvider services,
+        ClaimPendedMessageProcessor processor,
         IConfiguration configuration,
         ILogger<ClaimPendedConsumer> logger)
     {
-        _services = services;
+        _processor = processor;
         _configuration = configuration;
         _logger = logger;
     }
@@ -127,7 +118,8 @@ public class ClaimPendedConsumer : BackgroundService
                     continue;
                 }
 
-                await HandleMessageAsync(result, stoppingToken);
+                // Returns only once the message is processed or dead-lettered.
+                await _processor.ProcessAsync(result.Topic, result.Message.Key, result.Message.Value, stoppingToken);
 
                 try
                 {
@@ -135,60 +127,27 @@ public class ClaimPendedConsumer : BackgroundService
                 }
                 catch (KafkaException ex)
                 {
+                    // The message is redelivered after a rebalance; the examination is idempotent.
                     _logger.LogError(ex, "Failed to commit offset for {Topic} {Partition} {Offset}",
                         result.Topic, result.Partition, result.Offset);
                 }
             }
         }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Shutdown.
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Claims-pended consumer crashed");
+            // Not a silent exit: the host stops (BackgroundServiceExceptionBehavior.StopHost)
+            // and the orchestrator restarts the pod with a fresh consumer.
+            _logger.LogCritical(ex, "Claims-pended consumer failed; stopping the host so it is restarted");
+            throw;
         }
         finally
         {
             try { consumer?.Close(); } catch { /* ignore on shutdown */ }
             consumer?.Dispose();
-        }
-    }
-
-    private async Task HandleMessageAsync(ConsumeResult<string, string> result, CancellationToken ct)
-    {
-        ClaimPendedEvent? evt;
-        try
-        {
-            evt = JsonSerializer.Deserialize<ClaimPendedEvent>(result.Message.Value, JsonOptions);
-        }
-        catch (JsonException ex)
-        {
-            // Malformed event — log and skip. The offset commit in the caller
-            // moves us past this poison message; alerting on this log line is
-            // the right operational response, not retrying.
-            _logger.LogError(ex,
-                "Failed to deserialize ClaimPendedEvent at {Topic} {Partition} {Offset}",
-                result.Topic, result.Partition, result.Offset);
-            return;
-        }
-
-        if (evt is null)
-        {
-            _logger.LogWarning("Null ClaimPendedEvent at {Offset}", result.Offset);
-            return;
-        }
-
-        // Each message gets its own DI scope so the orchestrator and its
-        // collaborators (HttpClient handlers, etc.) get scoped lifetimes.
-        using var scope = _services.CreateScope();
-        var orchestrator = scope.ServiceProvider.GetRequiredService<IExaminerOrchestrator>();
-
-        try
-        {
-            await orchestrator.ProcessAsync(evt, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Unhandled error processing ClaimPendedEvent for claim {ClaimId}; advancing offset",
-                evt.ClaimId);
         }
     }
 }

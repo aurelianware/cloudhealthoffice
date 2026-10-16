@@ -9,10 +9,13 @@ namespace ClaimsExaminerService.Services.Examiner;
 public interface IExaminerOrchestrator
 {
     /// <summary>
-    /// Process a single ClaimPendedEvent. Always swallows recoverable errors and
-    /// logs them — the Kafka consumer should commit the offset on return so we
-    /// don't loop forever on a poison message. Caller decides retry policy
-    /// for transient transport errors.
+    /// Process a single ClaimPendedEvent. Out-of-scope and malformed events
+    /// return normally (the consumer commits past them). When claims-service
+    /// cannot be reached, or does not take the write-back,
+    /// <see cref="ExaminerTransientException"/> is thrown, and the consumer
+    /// retries the message and dead-letters it after its last attempt instead
+    /// of advancing past it. An Anthropic failure, after the client's own
+    /// retries of 429 / 529 / 5xx, writes the EscalateToHuman fallback.
     /// </summary>
     Task ProcessAsync(ClaimPendedEvent evt, CancellationToken ct);
 }
@@ -53,7 +56,7 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
         // ── v1 scope filter: only NCCI bundling pends with at least one ──
         // modifier-addressable edit failure are eligible for AI examination.
         // Other pend codes (AUTH, COB, MEDREVIEW, etc.) are out of scope.
-        if (!string.Equals(evt.PendDetails?.PendCode, "NCCI", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(evt.PendDetails?.PendCode, ExaminerPendCodes.Ncci, StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogDebug(
                 "Skipping claim {ClaimId}: pend code {PendCode} is out of scope for v1",
@@ -79,12 +82,10 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
         {
             claim = await _claimsClient.GetClaimAsync(evt.ClaimId, evt.TenantId, ct);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested))
         {
-            _logger.LogError(ex,
-                "Transport error fetching claim {ClaimId}; skipping (event will not be retried)",
-                evt.ClaimId);
-            return;
+            _logger.LogError(ex, "Transport error fetching claim {ClaimId}; the event will be retried", evt.ClaimId);
+            throw new ExaminerTransientException($"claims-service unreachable fetching claim {evt.ClaimId}", ex);
         }
 
         if (claim is null) return;
@@ -140,7 +141,7 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
 
         var examination = ProjectToDto(result, _promptBuilder.PromptVersion);
 
-        var written = await _claimsClient.SetAiExaminationAsync(evt.ClaimId, evt.TenantId, examination, ct);
+        var written = await WriteBackAsync(evt, examination, ct);
         if (written)
         {
             // Capability 5.9 — terminal completion event for downstream
@@ -168,7 +169,8 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
     {
         var args = result.Arguments;
 
-        var disposition = args["recommended_disposition"]?.GetValue<string>() ?? "EscalateToHuman";
+        // A value outside the tool's enum is never passed on: it escalates to a human.
+        var disposition = AiDispositions.Normalize(args["recommended_disposition"]?.GetValue<string>());
         var confidence = args["confidence_score"]?.GetValue<double>() ?? 0.0;
         var rationale = args["rationale"]?.GetValue<string>();
 
@@ -198,11 +200,25 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
         };
     }
 
+    /// <summary>The write-back to claims-service; a transport failure is transient (retried by the consumer).</summary>
+    private async Task<bool> WriteBackAsync(ClaimPendedEvent evt, AiExaminationDto examination, CancellationToken ct)
+    {
+        try
+        {
+            return await _claimsClient.SetAiExaminationAsync(evt.ClaimId, evt.TenantId, examination, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+        {
+            _logger.LogError(ex, "Transport error writing the AI examination for claim {ClaimId}; the event will be retried", evt.ClaimId);
+            throw new ExaminerTransientException($"claims-service unreachable writing the AI examination for claim {evt.ClaimId}", ex);
+        }
+    }
+
     private async Task WriteFallbackAsync(ClaimPendedEvent evt, CancellationToken ct, string reason)
     {
         var fallback = new AiExaminationDto
         {
-            RecommendedDisposition = "EscalateToHuman",
+            RecommendedDisposition = AiDispositions.EscalateToHuman,
             ConfidenceScore = 0,
             Rationale = reason,
             PolicyCitations = new List<string>(),
@@ -211,7 +227,7 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
             GeneratedAt = DateTime.UtcNow
         };
 
-        var written = await _claimsClient.SetAiExaminationAsync(evt.ClaimId, evt.TenantId, fallback, ct);
+        var written = await WriteBackAsync(evt, fallback, ct);
         if (written)
         {
             // EscalateToHuman is still a terminal AI recommendation —
