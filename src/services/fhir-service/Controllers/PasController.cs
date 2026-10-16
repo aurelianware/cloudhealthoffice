@@ -10,6 +10,7 @@ using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Observability;
 
 namespace FhirService.Controllers;
@@ -184,9 +185,11 @@ public class PasController : FhirControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "PAS $submit failed after {ElapsedMs}ms", sw.ElapsedMilliseconds);
+            var traceId = ChoProblemResults.TraceId(HttpContext);
+            _logger.LogError(ex, "PAS $submit failed after {ElapsedMs}ms (trace id {TraceId})", sw.ElapsedMilliseconds, traceId);
             RecordMetrics(sw, "error", "exception");
-            return FhirUnprocessable($"Internal error processing PAS request: {ex.Message}");
+            // The exception text (hosts, connection strings, PHI) stays in the log.
+            return FhirUnprocessable($"Internal error processing PAS request. Quote traceId {traceId} when reporting it.");
         }
     }
 
