@@ -18,7 +18,9 @@ What it changes:
     claims-service, provider-service and fhir-service, which the local deploy
     keeps off Development (scope-validation issues) and which run here as
     deliberate in-cluster Testing hosts (CHO_TESTING=1,
-    CHO_ALLOW_TESTING_ENVIRONMENT=true). Both accept the public development
+    CHO_ALLOW_TESTING_ENVIRONMENT=true). Development hosts need
+    CHO_ALLOW_DEV_ON_DEPLOYED_HOST=true to start on Kubernetes, so every
+    Deployment gets it. Both accept the public development
     signing key (deploy/gcp/cho-service-tokens.demo.yaml), so the cluster must
     hold synthetic data only and must not be exposed publicly. The demo is
     reached by port-forward.
@@ -139,6 +141,9 @@ SCALED_TO_ZERO = {"token-service"}
 DEMO_ENV = {
     "CHO_TESTING": "1",
     "CHO_ALLOW_TESTING_ENVIRONMENT": "true",
+    # Development hosts refuse to start on a deployed platform without this
+    # (ChoTestingEnvironment). The demo is port-forward only and holds no real data.
+    "CHO_ALLOW_DEV_ON_DEPLOYED_HOST": "true",
     "SecretProvider__Provider": "None",
 }
 
