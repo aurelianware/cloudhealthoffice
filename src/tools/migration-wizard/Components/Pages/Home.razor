@@ -313,7 +313,7 @@
             _cutoverResult = new CutoverResult
             {
                 Success = false,
-                ErrorMessage = ex.Message
+                ErrorMessage = "Cutover failed. See the migration wizard log for details."
             };
         }
         finally
@@ -338,7 +338,7 @@
             _cutoverResult = new CutoverResult
             {
                 Success = false,
-                ErrorMessage = ex.Message
+                ErrorMessage = "Rollback failed. See the migration wizard log for details."
             };
         }
         finally
