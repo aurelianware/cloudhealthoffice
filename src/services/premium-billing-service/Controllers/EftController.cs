@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.NachaTransmission;
 using Microsoft.AspNetCore.Authorization;
@@ -394,8 +395,8 @@ public class EftController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing Stripe webhook");
-            return BadRequest(new { error = ex.Message });
+            _logger.LogError(ex, "Error processing Stripe webhook (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Error processing Stripe webhook", StatusCodes.Status400BadRequest);
         }
     }
 

@@ -224,5 +224,24 @@ public class EftControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task StripeWebhook_UnexpectedFailure_IsAProblemWithATraceId_NotTheExceptionText()
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Body = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{}"));
+        httpContext.Request.Headers["Stripe-Signature"] = "t=1,v1=abc";
+        _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+        _draftService.Setup(s => s.ProcessStripeWebhookAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new InvalidOperationException("mongodb://admin:hunter2@db:27017 timed out"));
+
+        var result = await _controller.StripeWebhook();
+
+        var obj = result.Should().BeOfType<ObjectResult>().Subject;
+        obj.StatusCode.Should().Be(400);
+        var problem = obj.Value.Should().BeOfType<ProblemDetails>().Subject;
+        System.Text.Json.JsonSerializer.Serialize(problem).Should().NotContain("hunter2");
+        problem.Extensions.Should().ContainKey("traceId");
+    }
+
     #endregion
 }
