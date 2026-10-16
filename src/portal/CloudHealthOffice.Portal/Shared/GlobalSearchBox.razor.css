@@ -1,0 +1,11 @@
+.global-search {
+    min-width: 220px;
+    max-width: 360px;
+    margin: 0 12px;
+}
+
+.global-search.large {
+    max-width: 720px;
+    width: 100%;
+    margin: 0;
+}

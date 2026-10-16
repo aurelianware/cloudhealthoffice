@@ -1,0 +1,198 @@
+@page "/home"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IUserContextService UserContextService
+@inject IWorkManagementService WorkManagement
+@inject IClaimsService ClaimsService
+
+<PageTitle>Home - Cloud Health Office</PageTitle>
+
+@*
+    Home (docs/architecture/portal-navigation.md §3.1): what do I need to do
+    now? Search, Get Next, my items by deadline, what I opened recently, and
+    tiles for my roles. Everything opens a record or a filtered list; charts
+    live in each module's Insights.
+*@
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4" data-testid="home">
+    <MudText Typo="Typo.h4" Class="mb-1">@Greeting</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">@DateTime.Now.ToString("dddd, MMMM d")</MudText>
+
+    <div class="mb-6"><GlobalSearchBox Large="true" /></div>
+
+    <MudGrid>
+        @if (_canWork)
+        {
+            <MudItem xs="12" md="6">
+                <GetNextCard />
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="1" data-testid="home-due">
+                    <MudText Typo="Typo.h6" Class="mb-2">Due today and overdue</MudText>
+                    @if (_workError is not null)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Warning">@_workError</MudText>
+                    }
+                    else if (_due is null)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                    }
+                    else if (_due.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" data-testid="home-due-empty">
+                            Nothing due today@(_heldCount > 0 ? $" ({_heldCount} other item{(_heldCount == 1 ? "" : "s")} in My Work)" : "").
+                        </MudText>
+                    }
+                    else
+                    {
+                        @foreach (var item in _due)
+                        {
+                            var overdue = item.DueAt < DateTime.UtcNow;
+                            <div class="d-flex align-center gap-2 py-1" data-testid="home-due-item">
+                                <MudIcon Icon="@(overdue ? Icons.Material.Filled.ErrorOutline : Icons.Material.Filled.Schedule)"
+                                         Color="@(overdue ? Color.Error : Color.Warning)" Size="Size.Small" />
+                                <RecordLink Href="@item.OpenUrl">@item.WorkType @item.DisplayNumber</RecordLink>
+                                <MudText Typo="Typo.caption" Color="@(overdue ? Color.Error : Color.Secondary)">
+                                    @(overdue ? "overdue since" : "due") @item.DueAt!.Value.ToLocalTime().ToString("MM/dd h:mm tt")
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@item.QueueName</MudText>
+                            </div>
+                        }
+                        <MudButton Href="/my-work" Variant="Variant.Text" Size="Size.Small" Class="mt-1">All my work</MudButton>
+                    }
+                </MudPaper>
+            </MudItem>
+        }
+
+        @if (_canReadClaims)
+        {
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="1" data-testid="home-recent">
+                    <MudText Typo="Typo.h6" Class="mb-2">Recent</MudText>
+                    @if (_recent is null)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                    }
+                    else if (_recent.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" data-testid="home-recent-empty">Claims you open show up here, on any device.</MudText>
+                    }
+                    else
+                    {
+                        @foreach (var claim in _recent)
+                        {
+                            <div class="d-flex align-center gap-2 py-1" data-testid="home-recent-item">
+                                <MudIcon Icon="@Icons.Material.Filled.Receipt" Size="Size.Small" Color="Color.Secondary" />
+                                <RecordLink Href="@($"/claims/{Uri.EscapeDataString(claim.ClaimId)}")">Claim @(claim.ClaimNumber ?? claim.ClaimId)</RecordLink>
+                                @if (!string.IsNullOrWhiteSpace(claim.MemberId))
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">member @claim.MemberId</MudText>
+                                }
+                                <MudSpacer />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@Ago(claim.ViewedAt)</MudText>
+                            </div>
+                        }
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="1" data-testid="home-batch">
+                    <MudText Typo="Typo.h6" Class="mb-2">Batch adjudication</MudText>
+                    @if (_lastRun is { } run)
+                    {
+                        <MudText Typo="Typo.body2">
+                            Last run: @run.Processed.ToString("N0") of @run.TotalClaims.ToString("N0") claims ·
+                            @run.Paid.ToString("N0") paid · @run.Pended.ToString("N0") pended · @run.BusinessDenials.ToString("N0") denied
+                        </MudText>
+                        @if (run.PlatformFailures > 0)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Error" data-testid="home-batch-failures">@run.PlatformFailures.ToString("N0") platform failures</MudText>
+                        }
+                        <MudButton Href="@($"/batch-adjudication?run={Uri.EscapeDataString(run.Id)}")" Variant="Variant.Text" Size="Size.Small" Class="mt-1">Open run</MudButton>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No batch runs recorded yet.</MudText>
+                    }
+                    <MudButton Href="/dashboard" Variant="Variant.Text" Size="Size.Small" Class="mt-1">Claims dashboard</MudButton>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private UserContext? _user;
+    private bool _canWork;
+    private bool _canReadClaims;
+    private List<WorkItemView>? _due;
+    private int _heldCount;
+    private string? _workError;
+    private List<RecentClaimView>? _recent;
+    private MassAdjudicationRunSummary? _lastRun;
+
+    private string Greeting
+    {
+        get
+        {
+            var hour = DateTime.Now.Hour;
+            var part = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+            var name = _user?.FirstName is { Length: > 0 } first ? first : _user?.DisplayName;
+            return string.IsNullOrWhiteSpace(name) ? part : $"{part}, {name}";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _user = await UserContextService.GetCurrentUserAsync(); } catch { _user = null; }
+        _canWork = UserContextService.HasPermission("workqueue:work");
+        _canReadClaims = UserContextService.HasPermission("claims:read");
+
+        // Each panel loads on its own; one service being down doesn't blank Home.
+        var loads = new List<Task>();
+        if (_canWork) loads.Add(LoadDueAsync());
+        if (_canReadClaims)
+        {
+            loads.Add(LoadRecentAsync());
+            loads.Add(LoadLastRunAsync());
+        }
+        await Task.WhenAll(loads);
+    }
+
+    private async Task LoadDueAsync()
+    {
+        try
+        {
+            var mine = await WorkManagement.GetMineAsync() ?? new();
+            var endOfToday = DateTime.Today.AddDays(1).ToUniversalTime();
+            _due = mine.Where(i => i.DueAt is { } d && d < endOfToday).OrderBy(i => i.DueAt).ToList();
+            _heldCount = mine.Count - _due.Count;
+        }
+        catch (Exception ex)
+        {
+            _workError = $"My Work is unavailable: {ex.Message}";
+        }
+    }
+
+    private async Task LoadRecentAsync()
+    {
+        try { _recent = await ClaimsService.GetRecentlyViewedClaimsAsync(10) ?? new(); }
+        catch { _recent = new(); }
+    }
+
+    private async Task LoadLastRunAsync()
+    {
+        try { _lastRun = (await ClaimsService.GetMassAdjudicationRunsAsync(1))?.FirstOrDefault(); }
+        catch { _lastRun = null; }
+    }
+
+    private static string Ago(DateTime utc)
+    {
+        var span = DateTime.UtcNow - (utc.Kind == DateTimeKind.Local ? utc.ToUniversalTime() : utc);
+        if (span.TotalMinutes < 1) return "just now";
+        if (span.TotalHours < 1) return $"{(int)span.TotalMinutes}m ago";
+        if (span.TotalDays < 1) return $"{(int)span.TotalHours}h ago";
+        return $"{(int)span.TotalDays}d ago";
+    }
+}

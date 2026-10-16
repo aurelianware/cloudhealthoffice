@@ -269,10 +269,20 @@
     private bool _showValidationMessage = false;
     private bool _requireCriteria = true;
 
+    /// <summary>A search to run on arrival (/providers?q=…, from global search): an NPI or a name.</summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? Query { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         _requireCriteria = await SearchPolicy.RequiresCriteriaAsync();
-        if (!_requireCriteria)
+        if (Query?.Trim() is { Length: > 0 } q)
+        {
+            if (q.Length == 10 && q.All(char.IsDigit)) _npiSearch = q; else _nameSearch = q;
+            await SearchProviders();
+        }
+        else if (!_requireCriteria)
         {
             // Demo tenants (synthetic data) open on a browsable list.
             await SearchProviders();

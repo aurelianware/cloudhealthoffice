@@ -200,4 +200,21 @@ public class ClaimAccessAuditTests : IClassFixture<ClaimsApiFactory>
         Assert.Empty(ClaimSubjects.From(new { Id = "not-a-claim" }));
         Assert.Empty(ClaimSubjects.From("text"));
     }
+
+    [Fact]
+    public async Task Recently_viewed_lists_the_callers_own_claims_newest_first_once_each()
+    {
+        var a = Seed();
+        var b = Seed();
+        var me = Client(ChoRolePermissions.ClaimsExaminer, "examiner-recent");
+        await me.GetAsync($"/api/claims/{a.Id}");
+        await me.GetAsync($"/api/claims/{b.Id}");
+        await me.GetAsync($"/api/claims/{a.Id}");
+        await Client(ChoRolePermissions.ClaimsExaminer, "someone-else").GetAsync($"/api/claims/{Seed().Id}");
+
+        var recent = await me.GetFromJsonAsync<List<global::ClaimsService.Controllers.RecentClaimView>>("/api/claims/recently-viewed", Json);
+
+        Assert.Equal(new[] { a.Id, b.Id }, recent!.Select(r => r.ClaimId).ToArray());
+        Assert.Equal(a.ClaimNumber, recent[0].ClaimNumber);
+    }
 }

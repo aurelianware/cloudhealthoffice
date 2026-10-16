@@ -167,7 +167,7 @@ public class PermissionGateTests : TestContext
     }
 
     [Fact]
-    public void AccessDenied_ShowsBackToDashboardButton()
+    public void AccessDenied_ShowsBackToHomeButton()
     {
         _userContextService.Setup(s => s.GetCurrentUserAsync()).ReturnsAsync((UserContext?)null);
 
@@ -175,7 +175,7 @@ public class PermissionGateTests : TestContext
             .Add(p => p.Permission, "claims:read")
             .AddChildContent("<p>Secret</p>"));
 
-        cut.Markup.Should().Contain("Back to Dashboard");
-        cut.Markup.Should().Contain("/dashboard");
+        cut.Markup.Should().Contain("Back to Home");
+        cut.Markup.Should().Contain("/home");
     }
 }

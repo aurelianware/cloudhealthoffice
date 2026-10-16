@@ -25,8 +25,8 @@
 
         if (IsLocalDemoUser(user))
         {
-            Logger.LogInformation("Local demo user detected, redirecting to dashboard");
-            Navigation.NavigateTo("/dashboard");
+            Logger.LogInformation("Local demo user detected, redirecting to home");
+            Navigation.NavigateTo("/home");
             return;
         }
 
@@ -124,8 +124,8 @@
             return;
         }
 
-        Logger.LogInformation("User {Email} authorized, redirecting to dashboard", userEmail);
-        Navigation.NavigateTo("/dashboard");
+        Logger.LogInformation("User {Email} authorized, redirecting to home", userEmail);
+        Navigation.NavigateTo("/home");
     }
 
     private bool IsLocalDemoUser(ClaimsPrincipal user)
