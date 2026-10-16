@@ -99,7 +99,7 @@ architecture map and component-level guides.
 ## Screenshots And Evidence
 
 The current public evidence comes from local Docker Desktop Kubernetes runs and
-the Mass Adjudication console.
+the Batch Adjudication page.
 
 | View | Screenshot |
 | --- | --- |

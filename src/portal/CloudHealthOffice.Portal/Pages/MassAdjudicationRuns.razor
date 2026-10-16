@@ -1,3 +1,4 @@
+@page "/batch-adjudication"
 @page "/mass-adjudication-runs"
 @attribute [Authorize]
 @implements IAsyncDisposable
@@ -5,16 +6,16 @@
 @inject IClaimsService ClaimsService
 @inject ISnackbar Snackbar
 
-<PageTitle>Mass Adjudication Runs — Cloud Health Office</PageTitle>
+<PageTitle>Batch Adjudication — Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="claims:read" RoleName="ClaimsSupervisor">
 <div class="mass-runs-page">
 <MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700;">
     <MudIcon Icon="@Icons.Material.Filled.Assessment" Class="mr-2" Style="vertical-align: middle;" />
-    Mass Adjudication Runs
+    Batch Adjudication
 </MudText>
 <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.55);" Class="mb-4">
-    Million Claim Challenge and production mass adjudication evidence: outcome mix, workflow scoring, timing, and platform failure signal.
+    Million Claim Challenge and production batch adjudication evidence: outcome mix, workflow scoring, timing, and platform failure signal.
 </MudText>
 
 @if (!string.IsNullOrWhiteSpace(_error))
@@ -166,7 +167,7 @@
             <NoRecordsContent>
                 <div class="pa-8 text-center">
                     <MudIcon Icon="@Icons.Material.Filled.Assessment" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
-                    <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.55);">No mass adjudication runs found</MudText>
+                    <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.55);">No batch adjudication runs found</MudText>
                 </div>
             </NoRecordsContent>
             <PagerContent>
@@ -603,7 +604,7 @@
             if (newRunCount > 0)
             {
                 _newRunsSeen += newRunCount;
-                Snackbar.Add($"{newRunCount} new mass adjudication run{(newRunCount == 1 ? string.Empty : "s")} published", Severity.Info);
+                Snackbar.Add($"{newRunCount} new batch adjudication run{(newRunCount == 1 ? string.Empty : "s")} published", Severity.Info);
             }
 
             await LoadClaimResults(silent);
@@ -613,7 +614,7 @@
             _error = ex.Message;
             if (!silent)
             {
-                Snackbar.Add("Unable to load mass adjudication runs", Severity.Error);
+                Snackbar.Add("Unable to load batch adjudication runs", Severity.Error);
             }
         }
         finally

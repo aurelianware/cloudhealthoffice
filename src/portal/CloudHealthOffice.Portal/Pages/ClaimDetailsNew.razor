@@ -904,7 +904,7 @@
             else if (_adjudicationData == null)
             {
                 <MudAlert Severity="Severity.Info">
-                    No adjudication pipeline trace was captured for this claim. The claim disposition is shown above; detailed step telemetry may be unavailable for mass adjudication run claims.
+                    No adjudication pipeline trace was captured for this claim. The claim disposition is shown above; detailed step telemetry may be unavailable for batch adjudication run claims.
                 </MudAlert>
             }
             else
@@ -1001,7 +1001,7 @@
             else if (_adjudicationData == null)
             {
                 <MudAlert Severity="Severity.Info">
-                    No benefit breakdown trace was captured for this claim. The financial summary is shown above; detailed calculation telemetry may be unavailable for mass adjudication run claims.
+                    No benefit breakdown trace was captured for this claim. The financial summary is shown above; detailed calculation telemetry may be unavailable for batch adjudication run claims.
                 </MudAlert>
             }
             else
@@ -1199,7 +1199,7 @@
     private bool _exportingEob;
     private string BackHref => string.IsNullOrWhiteSpace(FromRun)
         ? "/claims"
-        : $"/mass-adjudication-runs?run={Uri.EscapeDataString(FromRun)}";
+        : $"/batch-adjudication?run={Uri.EscapeDataString(FromRun)}";
     private string BackLabel => string.IsNullOrWhiteSpace(FromRun)
         ? "Back to Claims"
         : "Back to Adjudication Run";
@@ -1292,7 +1292,7 @@
 
         if (!string.IsNullOrWhiteSpace(FromRun))
         {
-            _breadcrumbItems.Add(new BreadcrumbItem("Mass Adjudication", href: BackHref));
+            _breadcrumbItems.Add(new BreadcrumbItem("Batch Adjudication", href: BackHref));
         }
         else
         {

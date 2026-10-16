@@ -13,7 +13,7 @@ public development signing key, so it is reached only through port-forward.
 | `port-forward.sh` | Opens the portal (8080), claims-service (5001), benefit-plan-service (5002), fhir-service (5023) and authorization-service (5006) on localhost |
 | `cho_demo.py smoke` | End-to-end checks: health, token enforcement, adapter labels, portal. Exits non-zero on failure |
 | `reset-demo.sh` | Clears the demo tenant's claims activity (claims, adjudication runs, accumulators, payments, work items, appeals, RFAI cases) so a fresh `run-mcc.sh` starts clean. Keeps members, plans, providers, rules and the work-queue setup. Dry run unless `--yes` |
-| `run-mcc.sh` | Demo-sized Million Claim Challenge (default 2,000 claims). Results show in the portal's Mass Adjudication console |
+| `run-mcc.sh` | Demo-sized Million Claim Challenge (default 2,000 claims). Results show in the portal's Batch Adjudication page |
 | `cho_demo.py claims` | Narrates a paid claim, then a pended claim with the AI examiner's advisory recommendation and its unchanged status |
 | `cho_demo.py seed-auths` | Loads a CMS-0057-F prior-authorization scenario (open requests at every point of the 72-hour and 7-day clocks, recent reviewer and automated decisions, a year of history) for the portal's **Compliance → CMS-0057-F Console**. Re-running refreshes it |
 | `cho_demo.py adapter-status` | Shows which FHIR resources are demo, hybrid or live, and the response headers |

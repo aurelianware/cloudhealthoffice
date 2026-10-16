@@ -76,12 +76,12 @@
                 <MudCardContent>
                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
                         <MudStack Spacing="0">
-                            <MudText Typo="Typo.h6">Mass Adjudication Operations</MudText>
+                            <MudText Typo="Typo.h6">Batch Adjudication</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                 Latest benchmark run and validator signals
                             </MudText>
                         </MudStack>
-                        <MudButton Href="/mass-adjudication-runs"
+                        <MudButton Href="/batch-adjudication"
                                    Variant="Variant.Text"
                                    Color="Color.Primary"
                                    Size="Size.Small"
@@ -97,13 +97,13 @@
                     else if (_recentRunsUnavailable || _recentRuns == null)
                     {
                         <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
-                            Mass adjudication run history is temporarily unavailable.
+                            Batch adjudication run history is temporarily unavailable.
                         </MudAlert>
                     }
                     else if (_recentRuns.Count == 0)
                     {
                         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-                            No mass adjudication runs have been recorded for this tenant yet.
+                            No batch adjudication runs have been recorded for this tenant yet.
                         </MudAlert>
                     }
                     else
@@ -161,7 +161,7 @@
                                 </MudTd>
                                 <MudTd DataLabel="Latency">@context.P95LatencyMilliseconds.ToString("N0") ms P95</MudTd>
                                 <MudTd DataLabel="Actions" Style="text-align:right">
-                                    <MudButton Href="@($"/mass-adjudication-runs?run={Uri.EscapeDataString(context.Id)}")"
+                                    <MudButton Href="@($"/batch-adjudication?run={Uri.EscapeDataString(context.Id)}")"
                                                Variant="Variant.Text"
                                                Size="Size.Small"
                                                Color="Color.Primary">
@@ -730,7 +730,7 @@
             "EDI volume");
         var runsTask = TryLoadOperationalAsync(
             () => ClaimsService.GetMassAdjudicationRunsAsync(10),
-            "mass adjudication runs");
+            "batch adjudication runs");
         var queueSummaryTask = TryLoadOperationalAsync(
             () => WorkQueueService.GetQueueSummaryAsync(),
             "work queue summary");
