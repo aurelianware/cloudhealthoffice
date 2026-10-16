@@ -1,8 +1,20 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
 @using CloudHealthOffice.Portal.Services
+@inject IAppealsService AppealsService
 
-<MudDialog Style="min-width: 800px; max-width: 1100px;">
-    <DialogContent>
-        @if (Detail != null)
+@* The appeal / grievance record (docs/architecture/portal-navigation.md
+   §4): due clock, member and original decision in the header, tabs with
+   their own URLs (/appeals/{id}/{tab}). Hosted by the /appeals/{id} page. *@
+<div data-testid="appeal-record">
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (Detail is null)
+        {
+            <MudAlert Severity="Severity.Error" data-testid="appeal-missing">Appeal @AppealId couldn't be loaded.</MudAlert>
+        }
+        else
         {
             @* Header *@
             <div class="d-flex align-center gap-3 mb-4 pa-2" style="border: 1px solid rgba(0,255,255,0.2); border-radius: 8px; background: rgba(0,255,255,0.03);">
@@ -18,11 +30,16 @@
                             <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">EXPEDITED</MudChip>
                         }
                         <MudChip T="string" Size="Size.Small" Color="@GetComplianceColor(Detail.ComplianceStatus)" Variant="Variant.Filled">@Detail.ComplianceStatus</MudChip>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">@Detail.MemberName (@Detail.MemberId)</MudText>
+                        @if (!string.IsNullOrWhiteSpace(Detail.MemberId))
+                        {
+                            <RecordLink Href="@($"/members/{Uri.EscapeDataString(Detail.MemberId)}")" data-testid="appeal-member">@(string.IsNullOrWhiteSpace(Detail.MemberName) ? Detail.MemberId : $"{Detail.MemberName} ({Detail.MemberId})")</RecordLink>
+                        }
                     </div>
                 </div>
+                <OpenInNewTabButton Href="@RecordTabs.Href(BaseHref, ActiveTab)" />
+                <PinButton Kind="Appeal" RecordId="@AppealId" Label="@($"Appeal {Detail.AppealId}")" />
                 <MudSpacer />
-                <div class="text-right">
+                <div class="text-right" data-testid="appeal-due">
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Due</MudText>
                     <MudText Typo="Typo.h6" Color="@GetDueDateColor(Detail.DaysRemaining)">
                         @Detail.DueDate.ToString("MM/dd/yyyy")
@@ -40,9 +57,11 @@
                 </div>
             </div>
 
-            <MudTabs Elevation="0" ApplyEffectsToContainer="true" PanelClass="pt-4">
-                @* ─── Original Decision Tab ─── *@
-                <MudTabPanel Text="Original Decision" Icon="@Icons.Material.Filled.Description">
+            <RecordTabBar Tabs="AppealTabs" ActiveKey="@ActiveTab" BaseHref="@BaseHref" />
+
+            @if (ActiveTab == "case")
+            {
+                <div data-testid="appeal-tab-case">
                     <MudGrid>
                         <MudItem xs="12" md="4">
                             <MudText Typo="Typo.caption" Color="Color.Secondary">APPEAL TYPE</MudText>
@@ -55,7 +74,7 @@
                             }
                             @if (decisionHref != null)
                             {
-                                <MudLink Href="@decisionHref" Typo="Typo.body2" Style="font-family: monospace;">@Detail.OriginalDecisionId</MudLink>
+                                <RecordLink Href="@decisionHref" style="font-family: monospace;" data-testid="appeal-original-decision">@Detail.OriginalDecisionId</RecordLink>
                             }
                             else
                             {
@@ -107,10 +126,43 @@
                             </MudItem>
                         </MudGrid>
                     }
-                </MudTabPanel>
-
-                @* ─── Documents Tab ─── *@
-                <MudTabPanel Text="Documents" Icon="@Icons.Material.Filled.AttachFile">
+                </div>
+            }
+            else if (ActiveTab == "timeline")
+            {
+                <div data-testid="appeal-tab-timeline">
+                    @if (Detail.Timeline.Any())
+                    {
+                        <MudTimeline TimelinePosition="TimelinePosition.Start">
+                            @foreach (var evt in Detail.Timeline.OrderBy(e => e.EventDate))
+                            {
+                                <MudTimelineItem Color="@GetTimelineColor(evt.EventType)" Size="Size.Small">
+                                    <ItemContent>
+                                        <MudCard Elevation="1" Class="mb-1" Style="border: 1px solid rgba(0,255,255,0.1);">
+                                            <MudCardContent Class="py-2">
+                                                <div class="d-flex justify-space-between align-center">
+                                                    <MudText Typo="Typo.body1" Style="font-weight: 500;">@evt.Description</MudText>
+                                                    <MudChip T="string" Size="Size.Small" Color="@GetTimelineColor(evt.EventType)">@evt.EventType</MudChip>
+                                                </div>
+                                                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                                    @evt.EventDate.ToString("MMM dd, yyyy h:mm tt") — @evt.PerformedBy
+                                                </MudText>
+                                            </MudCardContent>
+                                        </MudCard>
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">No timeline events recorded.</MudAlert>
+                    }
+                </div>
+            }
+            else if (ActiveTab == "documents")
+            {
+                <div data-testid="appeal-tab-documents">
                     @if (Detail.Documents.Any())
                     {
                         <MudSimpleTable Dense="true" Hover="true" Elevation="1">
@@ -144,52 +196,40 @@
                     {
                         <MudAlert Severity="Severity.Info">No supporting documents have been uploaded for this appeal.</MudAlert>
                     }
-                </MudTabPanel>
-
-                @* ─── Timeline Tab ─── *@
-                <MudTabPanel Text="Review Timeline" Icon="@Icons.Material.Filled.Timeline">
-                    @if (Detail.Timeline.Any())
-                    {
-                        <MudTimeline TimelinePosition="TimelinePosition.Start">
-                            @foreach (var evt in Detail.Timeline.OrderBy(e => e.EventDate))
-                            {
-                                <MudTimelineItem Color="@GetTimelineColor(evt.EventType)" Size="Size.Small">
-                                    <ItemContent>
-                                        <MudCard Elevation="1" Class="mb-1" Style="border: 1px solid rgba(0,255,255,0.1);">
-                                            <MudCardContent Class="py-2">
-                                                <div class="d-flex justify-space-between align-center">
-                                                    <MudText Typo="Typo.body1" Style="font-weight: 500;">@evt.Description</MudText>
-                                                    <MudChip T="string" Size="Size.Small" Color="@GetTimelineColor(evt.EventType)">@evt.EventType</MudChip>
-                                                </div>
-                                                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                                    @evt.EventDate.ToString("MMM dd, yyyy h:mm tt") — @evt.PerformedBy
-                                                </MudText>
-                                            </MudCardContent>
-                                        </MudCard>
-                                    </ItemContent>
-                                </MudTimelineItem>
-                            }
-                        </MudTimeline>
-                    }
-                    else
-                    {
-                        <MudAlert Severity="Severity.Info">No timeline events recorded.</MudAlert>
-                    }
-                </MudTabPanel>
-            </MudTabs>
+                </div>
+            }
         }
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="Close">Close</MudButton>
-    </DialogActions>
-</MudDialog>
+</div>
 
 @code {
-    [CascadingParameter]
-    MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter, EditorRequired] public string AppealId { get; set; } = string.Empty;
 
-    [Parameter]
-    public AppealDetails? Detail { get; set; }
+    /// <summary>The tab in the URL; none means Case.</summary>
+    [Parameter] public string? Tab { get; set; }
+
+    /// <summary>The record's path without a tab, e.g. <c>/appeals/APL-1</c>.</summary>
+    [Parameter, EditorRequired] public string BaseHref { get; set; } = string.Empty;
+
+    // Fixed order. Decision & Letters, Notes and the level clocks from the
+    // appeals rule packs (appeals-grievances-compliance.md) join as they land.
+    private IReadOnlyList<RecordTab> AppealTabs =>
+    [
+        new("case", "Case", Icons.Material.Filled.Description),
+        new("timeline", "Timeline", Icons.Material.Filled.Timeline, Detail is { Timeline.Count: > 0 } dt ? dt.Timeline.Count : null),
+        new("documents", "Documents", Icons.Material.Filled.AttachFile, Detail is { Documents.Count: > 0 } dd ? dd.Documents.Count : null),
+    ];
+
+    private string ActiveTab => RecordTabs.Resolve(AppealTabs, Tab, "case");
+
+    private AppealDetails? Detail;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { Detail = await AppealsService.GetAppealByIdAsync(AppealId); }
+        catch { Detail = null; }
+        finally { _loading = false; }
+    }
 
     private static Color GetStatusColor(string status) => status switch
     {
@@ -231,10 +271,9 @@
 
     private static string? GetDecisionLink(string id)
     {
-        if (id.StartsWith("CLM-")) return $"/claims/{id}";
-        if (id.StartsWith("AUTH-")) return "/authorizations";
+        if (id.StartsWith("CLM-")) return $"/claims/{Uri.EscapeDataString(id)}";
+        if (id.StartsWith("AUTH-") || id.StartsWith("PA-")) return $"/authorizations/{Uri.EscapeDataString(id)}";
         return null;
     }
 
-    private void Close() => MudDialog.Close();
 }
