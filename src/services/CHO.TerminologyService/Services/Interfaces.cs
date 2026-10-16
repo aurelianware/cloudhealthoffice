@@ -124,6 +124,9 @@ public class MapLoadOptions
 
 public class MapLoadResult
 {
+    /// <summary>What a load that failed unexpectedly reports; the exception is logged.</summary>
+    public const string FatalLoadError = "Fatal: the map could not be loaded. Retry the load or contact support.";
+
     public bool Success { get; set; }
     public int EntriesLoaded { get; set; }
     public int EntriesSkipped { get; set; }
