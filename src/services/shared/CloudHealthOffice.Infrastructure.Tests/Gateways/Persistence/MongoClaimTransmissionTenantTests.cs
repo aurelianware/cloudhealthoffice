@@ -20,9 +20,9 @@ public sealed class MongoClaimTransmissionTenantTests(MongoClaimTransmissionTena
     public async Task InitializeAsync()
     {
         _db = mongo.Client.GetDatabase($"claim_transmission_tenant_{Guid.NewGuid():N}");
-        // No EnsureIndexesAsync: on MongoDB 7 it fails on its unique _id index
-        // spec (pre-existing; reported separately). The lookups need no index.
-        _store = new MongoClaimLifecycleStore(_db, new ClaimLifecycleOptions());
+        var store = new MongoClaimLifecycleStore(_db, new ClaimLifecycleOptions());
+        await store.EnsureIndexesAsync(CancellationToken.None);
+        _store = store;
         await _store.SaveAsync(new ClaimTransmissionRecord
         {
             TransmissionId = "tx-alpha-1",
@@ -34,6 +34,21 @@ public sealed class MongoClaimTransmissionTenantTests(MongoClaimTransmissionTena
     }
 
     public Task DisposeAsync() => mongo.Client.DropDatabaseAsync(_db.DatabaseNamespace.DatabaseName);
+
+    /// <summary>
+    /// The index set is accepted by a real MongoDB, including the unique
+    /// tenant + idempotency-key index that de-duplicates submissions. It used
+    /// to fail on a <c>unique</c> <c>_id</c> spec, so none was created.
+    /// </summary>
+    [Fact]
+    public async Task EnsureIndexes_CreatesTheUniqueIdempotencyIndex()
+    {
+        var indexes = await (await _db.GetCollection<MongoDB.Bson.BsonDocument>(new ClaimLifecycleOptions().TransmissionsCollection)
+            .Indexes.ListAsync()).ToListAsync();
+
+        indexes.Should().Contain(i => i.Contains("unique") && i["unique"].AsBoolean
+            && i["key"].AsBsonDocument.Contains("TenantId") && i["key"].AsBsonDocument.Contains("IdempotencyKey"));
+    }
 
     [Fact]
     public async Task OwnTenant_ReadsTheTransmission()
