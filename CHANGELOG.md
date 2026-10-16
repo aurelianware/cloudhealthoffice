@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`claims.finalized.v1` is no longer lost when Kafka is down or the
+  process dies.** claims-service published the event right after the
+  finalize write and logged and dropped any failure, so accumulator-service
+  could silently miss a Paid or Voided claim. The event is now stored on the
+  claim (`PendingClaimEvents`) in the same write as the status change.
+  - It is published inline and retried with backoff by
+    `ClaimEventOutboxDispatcher` (`Claims:EventOutbox`) until Kafka
+    acknowledges it.
+  - A claim's events are published in order.
+  - Delivery is at least once with a stable `eventId`. accumulator-service
+    and work-management-service already deduplicate.
+
+  See `docs/architecture/claim-event-outbox.md`.
+- **Shared Kafka producer.** `CloudHealthOffice.Events.Kafka.ChoKafkaProducer`
+  has idempotence on, `acks=all` and a bounded delivery timeout.
+  claims-service now publishes all its claim events through it. Six other
+  services still build their own producer; they are listed in the outbox
+  doc.
+
 ### Changed
 
 - **Redis accumulators store integer cents.** `RedisAccumulatorService`
