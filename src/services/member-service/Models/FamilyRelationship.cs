@@ -27,6 +27,15 @@ public class FamilyRelationship
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision of the MongoDB document, bumped by every
+    /// write. A pair update replaces each row only while its stored revision is
+    /// still the one it read, so a stale update aborts instead of silently
+    /// overwriting a concurrent change. Documents written before the field
+    /// existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// Partition key. Both sides of a symmetric pair share the same tenant, so the two
     /// rows live in the same Cosmos partition and can be written in a TransactionalBatch.
     /// </summary>

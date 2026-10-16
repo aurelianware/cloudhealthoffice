@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MemberService.Models;
+using MemberService.Services;
 using MongoDB.Driver;
 
 namespace MemberService.Repositories;
@@ -35,6 +36,8 @@ public class FamilyRelationshipRepositoryMongo : IFamilyRelationshipRepository
         if (forward.TenantId != inverse.TenantId)
             throw new InvalidOperationException("Pair rows must share TenantId.");
 
+        forward.Revision = 0;
+        inverse.Revision = 0;
         using var session = await _client.StartSessionAsync(cancellationToken: ct);
         session.StartTransaction();
         try
@@ -54,26 +57,72 @@ public class FamilyRelationshipRepositoryMongo : IFamilyRelationshipRepository
         if (forward.TenantId != inverse.TenantId)
             throw new InvalidOperationException("Pair rows must share TenantId.");
 
+        // Each row is replaced only while it still has the revision it was read
+        // with: a concurrent update of the pair in between makes this one abort
+        // (neither row written) instead of silently overwriting it.
+        var forwardExpected = forward.Revision;
+        var inverseExpected = inverse.Revision;
         using var session = await _client.StartSessionAsync(cancellationToken: ct);
         session.StartTransaction();
         try
         {
-            await _collection.ReplaceOneAsync(session,
-                Builders<FamilyRelationship>.Filter.Eq(x => x.Id, forward.Id) &
-                Builders<FamilyRelationship>.Filter.Eq(x => x.TenantId, forward.TenantId),
-                forward, cancellationToken: ct);
-            await _collection.ReplaceOneAsync(session,
-                Builders<FamilyRelationship>.Filter.Eq(x => x.Id, inverse.Id) &
-                Builders<FamilyRelationship>.Filter.Eq(x => x.TenantId, inverse.TenantId),
-                inverse, cancellationToken: ct);
+            await ReplaceIfUnchangedAsync(session, forward, ct);
+            await ReplaceIfUnchangedAsync(session, inverse, ct);
             await session.CommitTransactionAsync(ct);
         }
         catch
         {
+            forward.Revision = forwardExpected;
+            inverse.Revision = inverseExpected;
             await session.AbortTransactionAsync(ct);
             throw;
         }
     }
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<FamilyRelationship> RevisionIs(long expected)
+    {
+        var b = Builders<FamilyRelationship>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
+    }
+
+    private async Task ReplaceIfUnchangedAsync(IClientSessionHandle session, FamilyRelationship row, CancellationToken ct)
+    {
+        var filter = Builders<FamilyRelationship>.Filter.Eq(x => x.Id, row.Id) &
+                     Builders<FamilyRelationship>.Filter.Eq(x => x.TenantId, row.TenantId);
+        var expected = row.Revision;
+        row.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(session, filter & RevisionIs(expected), row, cancellationToken: ct);
+        }
+        catch (MongoException ex) when (IsWriteConflict(ex))
+        {
+            // Another transaction is writing this row right now: the same conflict.
+            row.Revision = expected;
+            throw new FamilyRelationshipConcurrencyException(row.Id, expected, ex);
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            row.Revision = expected;
+            if (await _collection.Find(session, filter).AnyAsync(ct))
+                throw new FamilyRelationshipConcurrencyException(row.Id, expected);
+            // Missing: unchanged behaviour (nothing written for this row, no error).
+        }
+    }
+
+    private const int WriteConflictCode = 112;
+
+    private static bool IsWriteConflict(MongoException ex) => ex switch
+    {
+        MongoCommandException c => c.Code == WriteConflictCode,
+        MongoWriteException w => w.WriteError?.Code == WriteConflictCode,
+        _ => false,
+    };
 
     public async Task<FamilyRelationship?> GetByIdAsync(string tenantId, string id, CancellationToken ct = default)
     {
