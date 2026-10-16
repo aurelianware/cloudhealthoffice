@@ -220,8 +220,8 @@ public static partial class CmsNcciFileParser
             switch (maiRaw.Length > 0 ? maiRaw[0] : ' ')
             {
                 case '1': mai = MueAdjudicationIndicator.ClaimLine; break;
-                case '2': mai = MueAdjudicationIndicator.DateOfService; break;
-                case '3': mai = MueAdjudicationIndicator.DateOfServiceAbsolute; break;
+                case '2': mai = MueAdjudicationIndicator.DateOfServicePolicy; break;
+                case '3': mai = MueAdjudicationIndicator.DateOfServiceClinical; break;
                 default:
                     rejections.Add($"line {lineNumber}: invalid MUE adjudication indicator '{maiRaw}' (expected 1, 2 or 3)");
                     continue;

@@ -348,7 +348,7 @@ public class NcciEditServiceTests
     {
         // MAI 2: sum all lines for same code + DOS — 3 + 3 = 6 > MUE of 4
         var repo = new FakeNcciRepository();
-        repo.AddMueEntry(MakeMue("99213", maxUnits: 4, MueAdjudicationIndicator.DateOfService));
+        repo.AddMueEntry(MakeMue("99213", maxUnits: 4, MueAdjudicationIndicator.DateOfServicePolicy));
         var svc = BuildService(repo);
         var request = new NcciScrubRequest
         {
@@ -376,7 +376,7 @@ public class NcciEditServiceTests
     public async Task NE002_Mai2_TwoLinesSumAtLimit_Passes()
     {
         var repo = new FakeNcciRepository();
-        repo.AddMueEntry(MakeMue("99213", maxUnits: 6, MueAdjudicationIndicator.DateOfService));
+        repo.AddMueEntry(MakeMue("99213", maxUnits: 6, MueAdjudicationIndicator.DateOfServicePolicy));
         var svc = BuildService(repo);
         var request = new NcciScrubRequest
         {
@@ -400,7 +400,7 @@ public class NcciEditServiceTests
     {
         // MAI 3 (absolute): same summation logic as MAI 2
         var repo = new FakeNcciRepository();
-        repo.AddMueEntry(MakeMue("99213", maxUnits: 2, MueAdjudicationIndicator.DateOfServiceAbsolute));
+        repo.AddMueEntry(MakeMue("99213", maxUnits: 2, MueAdjudicationIndicator.DateOfServiceClinical));
         var svc = BuildService(repo);
         var request = new NcciScrubRequest
         {
@@ -511,7 +511,7 @@ public class NcciEditServiceTests
     {
         // MAI 2: grouping is (code, DOS) — units on different dates are independent
         var repo = new FakeNcciRepository();
-        repo.AddMueEntry(MakeMue("99213", maxUnits: 3, MueAdjudicationIndicator.DateOfService));
+        repo.AddMueEntry(MakeMue("99213", maxUnits: 3, MueAdjudicationIndicator.DateOfServicePolicy));
         var svc = BuildService(repo);
         var request = new NcciScrubRequest
         {

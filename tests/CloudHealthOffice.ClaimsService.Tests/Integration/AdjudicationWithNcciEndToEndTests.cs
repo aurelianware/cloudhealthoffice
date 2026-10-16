@@ -221,7 +221,7 @@ public class AdjudicationWithNcciEndToEndTests
                     TenantId = TenantId,
                     ProcedureCode = "99213",
                     MaxUnits = 2,
-                    AdjudicationIndicator = MueAdjudicationIndicator.DateOfService,
+                    AdjudicationIndicator = MueAdjudicationIndicator.DateOfServicePolicy,
                     AppliesToProfessional = true,
                     AppliesToOutpatientFacility = true,
                     EffectiveDate = effective,

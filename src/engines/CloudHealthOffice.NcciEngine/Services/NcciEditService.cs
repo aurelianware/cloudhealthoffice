@@ -316,8 +316,8 @@ internal class NcciEditService : INcciEditService
                     }
                     break;
 
-                case MueAdjudicationIndicator.DateOfService:
-                case MueAdjudicationIndicator.DateOfServiceAbsolute:
+                case MueAdjudicationIndicator.DateOfServicePolicy:
+                case MueAdjudicationIndicator.DateOfServiceClinical:
                     // MAI 2/3: sum units across all lines for this code + DOS
                     var totalUnits = lines.Sum(l => l.Units);
                     if (totalUnits > mue.MaxUnits)
