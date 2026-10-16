@@ -370,7 +370,7 @@
                         <MudChip T="string" Size="Size.Small" Color="@(context.PaymentMethod == "ACH" ? Color.Success : Color.Info)">@context.PaymentMethod</MudChip>
                     </MudTd>
                     <MudTd DataLabel="Check / ACH #">
-                        <MudText Typo="Typo.body2" Style="font-family: monospace; font-size: 0.8em;">@context.CheckNumber</MudText>
+                        <RecordLink Href="@($"/payments/{Uri.EscapeDataString(context.PaymentId)}")" style="font-family: monospace; font-size: 0.8em;" data-testid="era-payment-link">@context.CheckNumber</RecordLink>
                     </MudTd>
                     <MudTd DataLabel="Total Amount">
                         <MudText Typo="Typo.body2" Style="color: #00ff88; font-weight: 600;">@context.TotalPaymentAmount.ToString("C")</MudText>

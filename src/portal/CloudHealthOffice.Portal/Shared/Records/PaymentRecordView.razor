@@ -1,0 +1,262 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@using CloudHealthOffice.Portal.Services
+@inject IPaymentService Payments
+@inject IServiceProvider Services
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+@* A payment record (docs/architecture/portal-navigation.md §4): one check or
+   EFT to a payee. Header: number, method, amount, date, payee, status, run.
+   Tabs with their own URLs (/payments/{id}/{tab}). *@
+<div data-testid="payment-record">
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Warning">@_error</MudAlert>
+    }
+    else if (_payment is null)
+    {
+        <MudAlert Severity="Severity.Error" data-testid="payment-missing">Payment @PaymentId couldn't be found.</MudAlert>
+    }
+    else
+    {
+        var p = _payment;
+        <div class="d-flex align-center gap-3 mb-4 pa-2" style="border: 1px solid rgba(0,255,255,0.2); border-radius: 8px; background: rgba(0,255,255,0.03);">
+            <MudAvatar Size="Size.Large" Color="Color.Primary"><MudIcon Icon="@(p.IsEft ? Icons.Material.Filled.AccountBalance : Icons.Material.Filled.Receipt)" /></MudAvatar>
+            <div>
+                <MudText Typo="Typo.h5" Style="font-weight: 600;">@p.Label</MudText>
+                <div class="d-flex align-center gap-3 mt-1 flex-wrap">
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColor(p.Status)" data-testid="payment-status">@p.Status</MudChip>
+                    @if (p.IsReversal)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">Reversal</MudChip>
+                    }
+                    @if (p.VoidedBeforePaymentAt is { } voided)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error">Voided @voided.ToLocalTime().ToString("MM/dd/yyyy")</MudChip>
+                    }
+                    <span>
+                        Payee
+                        @if (!string.IsNullOrWhiteSpace(p.PayeeNPI))
+                        {
+                            <RecordLink Href="@($"/providers/npi/{Uri.EscapeDataString(p.PayeeNPI)}")" data-testid="payment-payee">@p.PayeeName</RecordLink>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Inline="true"> NPI @p.PayeeNPI</MudText>
+                        }
+                        else
+                        {
+                            <strong>@p.PayeeName</strong>
+                        }
+                    </span>
+                    @if (!string.IsNullOrWhiteSpace(p.RunNumber ?? p.RunId))
+                    {
+                        <span>Run <MudLink Href="/payment-runs" data-testid="payment-run">@(p.RunNumber ?? p.RunId)</MudLink></span>
+                    }
+                </div>
+            </div>
+            <OpenInNewTabButton Href="@RecordTabs.Href(BaseHref, ActiveTab)" />
+            <PinButton Kind="Payment" RecordId="@PaymentId" Label="@($"{p.Label} · {p.PayeeName}")" />
+            <MudSpacer />
+            <div class="text-right">
+                <MudText Typo="Typo.h5" data-testid="payment-amount">@p.TotalPaymentAmount.ToString("C")</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@p.PaymentDate.ToString("MM/dd/yyyy")</MudText>
+            </div>
+        </div>
+
+        <RecordTabBar Tabs="PaymentTabs" ActiveKey="@ActiveTab" BaseHref="@BaseHref" />
+
+        @if (ActiveTab == "summary")
+        {
+            <div data-testid="payment-tab-summary">
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudSimpleTable Dense="true">
+                            <tbody>
+                                <tr><td>Method</td><td>@(p.IsEft ? $"EFT ({p.PaymentMethod})" : $"Check ({p.PaymentMethod})")</td></tr>
+                                <tr><td>Payer</td><td>@p.PayerName @(string.IsNullOrWhiteSpace(p.PayerId) ? null : $"({p.PayerId})")</td></tr>
+                                <tr><td>Payee address</td><td>@p.PayeeAddress</td></tr>
+                                <tr><td>Trace numbers</td><td style="font-family: monospace;">@string.Join(", ", p.TraceNumbers)</td></tr>
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudSimpleTable Dense="true">
+                            <tbody>
+                                <tr><td>Claims paid</td><td>@p.ClaimPayments.Count · @p.ClaimPayments.Sum(c => c.PaymentAmount).ToString("C")</td></tr>
+                                <tr><td>Provider adjustments</td><td>@p.ProviderAdjustments.Sum(a => a.Amount).ToString("C")</td></tr>
+                                <tr><td>Recouped</td><td>@p.ReceivableOffsets.Sum(o => o.Amount).ToString("C")</td></tr>
+                                <tr><td>Received</td><td>@p.ReceivedAt.ToLocalTime().ToString("MM/dd/yyyy h:mm tt")</td></tr>
+                                <tr><td>Posted</td><td>@(p.PostedAt is { } posted ? $"{posted.ToLocalTime():MM/dd/yyyy} by {p.PostedBy}" : "—")</td></tr>
+                                <tr><td>Reconciled</td><td>@(p.ReconciledAt is { } rec ? $"{rec.ToLocalTime():MM/dd/yyyy} by {p.ReconciledBy}" : "—")</td></tr>
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudItem>
+                    @if (!string.IsNullOrWhiteSpace(p.Notes))
+                    {
+                        <MudItem xs="12"><MudAlert Severity="Severity.Info" Dense="true">@p.Notes</MudAlert></MudItem>
+                    }
+                </MudGrid>
+            </div>
+        }
+        else if (ActiveTab == "claims")
+        {
+            <div data-testid="payment-tab-claims">
+                <MudSimpleTable Dense="true" Hover="true">
+                    <thead>
+                        <tr><th>Claim</th><th>Member</th><th>Status</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Patient resp.</th><th>Adjustments</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in p.ClaimPayments)
+                        {
+                            <tr data-testid="payment-claim-row">
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(c.ClaimId))
+                                    {
+                                        <RecordLink Href="@($"/claims/{Uri.EscapeDataString(c.ClaimId)}")">@(string.IsNullOrWhiteSpace(c.PatientControlNumber) ? c.ClaimId : c.PatientControlNumber)</RecordLink>
+                                    }
+                                    else { @c.PatientControlNumber }
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(c.MemberId))
+                                    {
+                                        <RecordLink Href="@($"/members/{Uri.EscapeDataString(c.MemberId)}")">@c.MemberId</RecordLink>
+                                    }
+                                </td>
+                                <td><MudChip T="string" Size="Size.Small" Color="@(c.ClaimStatusCode == "4" || c.ClaimStatusCode == "22" ? Color.Warning : Color.Default)">@c.StatusLabel</MudChip></td>
+                                <td style="text-align:right;">@c.ChargeAmount.ToString("C")</td>
+                                <td style="text-align:right;">@c.PaymentAmount.ToString("C")</td>
+                                <td style="text-align:right;">@c.PatientResponsibilityAmount.ToString("C")</td>
+                                <td><MudText Typo="Typo.caption">@string.Join(", ", c.ClaimAdjustments.Select(a => $"{a.GroupCode}-{a.ReasonCode} {a.Amount:C}"))</MudText></td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
+        }
+        else if (ActiveTab == "adjustments")
+        {
+            <div data-testid="payment-tab-adjustments">
+                <MudText Typo="Typo.h6" Class="mb-2">Provider-level adjustments (PLB)</MudText>
+                @if (p.ProviderAdjustments.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">None.</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true">
+                        <thead><tr><th>Code</th><th>What</th><th>Reference</th><th style="text-align:right;">Amount</th></tr></thead>
+                        <tbody>
+                            @foreach (var a in p.ProviderAdjustments)
+                            {
+                                <tr data-testid="payment-plb-row"><td>@a.AdjustmentIdentifier</td><td>@a.Description</td><td>@a.ReferenceIdentification</td><td style="text-align:right;">@a.Amount.ToString("C")</td></tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                <MudText Typo="Typo.h6" Class="mt-6 mb-2">Recoupments</MudText>
+                @if (p.ReceivableOffsets.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">None.</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true">
+                        <thead><tr><th>Receivable</th><th>Code</th><th>Reference</th><th style="text-align:right;">Amount</th></tr></thead>
+                        <tbody>
+                            @foreach (var o in p.ReceivableOffsets)
+                            {
+                                <tr><td style="font-family: monospace;">@o.ReceivableId</td><td>@o.AdjustmentCode</td><td>@o.Reference</td><td style="text-align:right;">@o.Amount.ToString("C")</td></tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </div>
+        }
+        else if (ActiveTab == "era")
+        {
+            <div data-testid="payment-tab-era">
+                <MudText Typo="Typo.body2" Class="mb-3">
+                    The 835 remittance for this payment, generated on demand. Bank routing and account numbers are masked.
+                </MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download"
+                           Disabled="_downloading" OnClick="DownloadEraAsync" data-testid="payment-download-835">
+                    @(_downloading ? "Generating…" : "Download 835")
+                </MudButton>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string PaymentId { get; set; } = string.Empty;
+
+    /// <summary>The tab in the URL; none means Summary.</summary>
+    [Parameter] public string? Tab { get; set; }
+
+    /// <summary>The record's path without a tab, e.g. <c>/payments/P1</c>.</summary>
+    [Parameter, EditorRequired] public string BaseHref { get; set; } = string.Empty;
+
+    private IReadOnlyList<RecordTab> PaymentTabs =>
+    [
+        new("summary", "Summary", Icons.Material.Filled.Info),
+        new("claims", "Claims paid", Icons.Material.Filled.Receipt, _payment?.ClaimPayments.Count),
+        new("adjustments", "Adjustments & recoupments", Icons.Material.Filled.SwapVert,
+            _payment is { } p && p.ProviderAdjustments.Count + p.ReceivableOffsets.Count > 0 ? p.ProviderAdjustments.Count + p.ReceivableOffsets.Count : null),
+        new("era", "835", Icons.Material.Filled.Description),
+    ];
+
+    private string ActiveTab => RecordTabs.Resolve(PaymentTabs, Tab, "summary");
+
+    private PaymentView? _payment;
+    private bool _loading = true;
+    private bool _downloading;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // An id, or a check / EFT trace number (global search, a remit in hand).
+            _payment = await Payments.GetPaymentAsync(PaymentId) ?? await Payments.GetPaymentByCheckNumberAsync(PaymentId);
+        }
+        catch (Exception ex)
+        {
+            _error = $"The payment couldn't be loaded: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task DownloadEraAsync()
+    {
+        if (_payment is null || Services.GetService(typeof(IEdiOperationsService)) is not IEdiOperationsService edi) return;
+        _downloading = true;
+        try
+        {
+            await using var stream = await edi.DownloadEraAsync(_payment.Id);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            await JS.InvokeVoidAsync("downloadBase64File", $"835_{_payment.CheckNumber}.edi", "application/x-edi", Convert.ToBase64String(ms.ToArray()));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"The 835 couldn't be generated: {ex.Message}", Severity.Warning);
+        }
+        finally
+        {
+            _downloading = false;
+        }
+    }
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "Posted" or "Reconciled" => Color.Success,
+        "Exception" => Color.Error,
+        "PaidPendingFinalize" => Color.Warning,
+        _ => Color.Default,
+    };
+}
