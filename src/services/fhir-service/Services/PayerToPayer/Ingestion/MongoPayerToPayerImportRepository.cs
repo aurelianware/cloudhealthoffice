@@ -257,12 +257,36 @@ public sealed class MongoPayerToPayerImportRepository
     public async Task UpdateBackfilledLedgerAsync(
         PayerToPayerImportLedgerEntry entry, CancellationToken ct = default)
     {
-        // Counts and the backfill marker only. The status, the archived package
-        // and every timestamp the original exchange wrote are updated to their
-        // existing values, so nothing the exchange recorded is lost.
-        await _ledger.ReplaceOneAsync(
-            LedgerFilter(entry.TenantId, entry.ExchangeId), ToDocument(entry),
-            new ReplaceOptions { IsUpsert = false }, ct);
+        // A targeted write of what the backfill owns: the clinical, unsupported
+        // and rejected counts and the backfill marker. Replacing the whole entry
+        // from the copy the cursor read would write back a stale status, archived
+        // package, counts and timestamps over an ingestion that re-opened,
+        // committed or failed the exchange meanwhile.
+        //
+        // Fenced on the commit the backfill read (still Completed, same
+        // completedAtUtc): the counts were derived from that commit's archive, so
+        // they are not written over a different commit or an exchange that is no
+        // longer committed. Such an entry is skipped; its own ingestion recorded
+        // its counts. A missing entry is not written (as before).
+        var f = Builders<BsonDocument>.Filter;
+        var filter = LedgerFilter(entry.TenantId, entry.ExchangeId)
+            & f.Eq("status", PayerToPayerIngestionStatus.Completed.ToString())
+            & f.Eq("completedAtUtc", entry.CompletedAtUtc ?? (BsonValue)BsonNull.Value);
+        var update = Builders<BsonDocument>.Update
+            .Set("counts.clinical", entry.Counts.Clinical)
+            .Set("counts.unsupported", entry.Counts.Unsupported)
+            .Set("counts.unsupportedTypes", new BsonArray(entry.Counts.UnsupportedTypes))
+            .Set("counts.rejected", entry.Counts.Rejected)
+            .Set("counts.rejectedReasons", new BsonArray(entry.Counts.RejectedReasons))
+            .Set("clinicalBackfilledAtUtc", entry.ClinicalBackfilledAtUtc ?? (BsonValue)BsonNull.Value);
+
+        var result = await _ledger.UpdateOneAsync(filter, update, new UpdateOptions { IsUpsert = false }, ct);
+        if (result.MatchedCount == 0)
+        {
+            _logger.LogInformation(
+                "Clinical backfill left an exchange that changed since it was read: exchange={Exchange}",
+                Clean(entry.ExchangeId));
+        }
     }
 
     // ── IClinicalResourceStore ────────────────────────────────────────────────
