@@ -562,4 +562,68 @@ public class EnrollmentImportServiceTests
 
         batch!.ActorId.Should().BeNull();
     }
+
+    // ── Raw 834 snapshot: no SSN or date of birth is stored ─────────────
+
+    [Fact]
+    public async Task RawSegment_RedactsSsnAndDateOfBirth_OfTheSubscriberAndEveryDependent()
+    {
+        var (svc, events, _, _, _, _, _) = Build();
+        var subscriber = NewSubscriber("M-001");
+        subscriber.Demographics = new Demographics
+        {
+            FirstName = "Jane", LastName = "Doe", IdQualifier = "34", Id = "123456789",
+            DateOfBirth = "19800215", Address1 = "1 Main St",
+        };
+        subscriber.Dependents = new()
+        {
+            new Dependent
+            {
+                Relationship = "19", FirstName = "Kid", LastName = "Doe", IdQualifier = "34",
+                Id = "987654321", DateOfBirth = "20150101",
+            },
+        };
+
+        await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "phi.834", BatchId = "B-phi", Enrollments = new() { subscriber },
+        }, "t1");
+
+        events.AllEvents.Should().NotBeEmpty();
+        foreach (var evt in events.AllEvents)
+        {
+            evt.RawSegment.Should().NotBeNullOrEmpty();
+            evt.RawSegment.Should().NotContain("123456789").And.NotContain("987654321");
+            evt.RawSegment.Should().NotContain("19800215").And.NotContain("20150101");
+
+            var raw = System.Text.Json.Nodes.JsonNode.Parse(evt.RawSegment!)!;
+            raw["demographics"]!["id"]!.GetValue<string>().Should().Be(ImportSvc.RedactedValue);
+            raw["demographics"]!["dateOfBirth"]!.GetValue<string>().Should().Be(ImportSvc.RedactedValue);
+            raw["demographics"]!["idQualifier"]!.GetValue<string>().Should().Be("34");
+            raw["demographics"]!["lastName"]!.GetValue<string>().Should().Be("Doe");
+            foreach (var dependent in raw["dependents"]?.AsArray() ?? new System.Text.Json.Nodes.JsonArray())
+            {
+                dependent!["id"]!.GetValue<string>().Should().Be(ImportSvc.RedactedValue);
+                dependent["dateOfBirth"]!.GetValue<string>().Should().Be(ImportSvc.RedactedValue);
+            }
+        }
+        events.AllEvents.Should().Contain(e => e.RawSegment!.Contains("\"dependents\":[{"),
+            "the subscriber's snapshot carries the dependent");
+    }
+
+    [Fact]
+    public async Task RawSegment_WithoutSsnOrDateOfBirth_IsStoredAsIs()
+    {
+        var (svc, events, _, _, _, _, _) = Build();
+
+        await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "plain.834", BatchId = "B-plain", Enrollments = new() { NewSubscriber("M-002") },
+        }, "t1");
+
+        var raw = System.Text.Json.Nodes.JsonNode.Parse(events.AllEvents.Single().RawSegment!)!;
+        raw["subscriberId"]!.GetValue<string>().Should().Be("M-002");
+        raw["demographics"]!.AsObject().ContainsKey("id").Should().BeFalse();
+        raw["demographics"]!.AsObject().ContainsKey("dateOfBirth").Should().BeFalse();
+    }
 }
