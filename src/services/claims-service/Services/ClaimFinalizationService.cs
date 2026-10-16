@@ -320,12 +320,14 @@ public class ClaimFinalizationService : IClaimFinalizationService
             claim.EDI835ControlNumber = request.EdiControlNumber;
         }
 
+        // The claims.finalized.v1 event is stored with the finalize (outbox):
+        // published below, and retried by the dispatcher until Kafka has it.
+        claim.AddPendingClaimEvent(_kafkaEventPublisher.PrepareClaimFinalized(claim, tenantId));
         var updated = await _claimRepository.UpdateAsync(claim);
 
         // Version-chain event first (system-of-record); then the Kafka
-        // notification for downstream consumers (accumulator, analytics).
-        // Failures on the Kafka side are intentionally swallowed by the
-        // publisher itself — the claim DB is truth, not the bus.
+        // notification for downstream consumers (accumulator, analytics),
+        // from the outbox entry saved with the finalize.
         try
         {
             if (deny)
@@ -424,8 +426,10 @@ public class ClaimFinalizationService : IClaimFinalizationService
         // the void write itself (outbox), then driven — with claims-service's
         // own service token — and retried by the dispatcher on failure.
         var reversal = _accumulatorOutbox is null ? null : AccumulatorOutboxItem.ForReversal(claim, voidedAt);
+        // So is the claims.finalized.v1 "Reversed" event that reports it (outbox).
+        var claimEvent = _kafkaEventPublisher.PrepareClaimFinalized(claim, tenantId, finalStatus: "Reversed");
         var ok = await _claimRepository.MarkVoidedProjectionAsync(
-            tenantId, claim.Id, voidedAt, actorId, ct, reversal);
+            tenantId, claim.Id, voidedAt, actorId, ct, reversal, claimEvent);
         if (!ok)
         {
             // Should not happen — we just read the row above. Surface as
@@ -450,6 +454,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
             claim.VersionState = ClaimVersionState.Voided;
             claim.LastUpdatedDate = voidedAt;
             claim.LastUpdatedBy = actorId;
+            claim.AddPendingClaimEvent(claimEvent);
             updated = claim;
             _logger.LogWarning(
                 "Void refetch returned null for claim {ClaimId}; emitting events from in-memory post-Void state",
