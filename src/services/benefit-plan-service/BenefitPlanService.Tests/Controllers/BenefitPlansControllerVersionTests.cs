@@ -179,6 +179,35 @@ public class BenefitPlansControllerVersionTests
     }
 
     [Fact]
+    public async Task Supersede_unexpected_failure_is_a_409_problem_without_the_exception_text()
+    {
+        var failing = new Mock<IBenefitPlanService>();
+        failing.Setup(s => s.SupersedeVersionAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()))
+            .ThrowsAsync(new InvalidOperationException("mongodb://admin:hunter2@db:27017 publish failed"));
+        var cache = new BenefitPlanTenantConfigCache(
+            new StubHttpClientFactory(FakeHttpMessageHandler.Status(System.Net.HttpStatusCode.NotFound)),
+            new ConfigurationBuilder().Build(),
+            NullLogger<BenefitPlanTenantConfigCache>.Instance);
+        var factory = new BenefitPlanAdapterFactory(
+            Array.Empty<IBenefitPlanAdapter>(), cache, NullLogger<BenefitPlanAdapterFactory>.Instance);
+        var controller = new BenefitPlansController(failing.Object, factory, new FakeCurrentActor("token-user"),
+            NullLogger<BenefitPlansController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        controller.ControllerContext.HttpContext.Items["TenantId"] = Tenant;
+
+        var result = await controller.Supersede("plan-x", "v1", new SupersedeRequest { Reason = "test" });
+
+        var obj = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        obj.StatusCode.Should().Be(409);
+        var problem = obj.Value.Should().BeOfType<ProblemDetails>().Subject;
+        System.Text.Json.JsonSerializer.Serialize(problem).Should().NotContain("hunter2");
+        problem.Extensions.Should().ContainKey("traceId");
+    }
+
+    [Fact]
     public async Task DeletePlan_terminates_and_returns_204()
     {
         var (controller, service, _) = Build();
