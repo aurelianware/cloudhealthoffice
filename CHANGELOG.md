@@ -35,10 +35,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CHO_ALLOW_DEV_ON_DEPLOYED_HOST=true`, and then warn on stderr. The portal
   now runs the same check. The GKE demo renderer and
   `scripts/deploy-local.sh` set the override.
-- **Unexpected errors no longer return exception text.** attachment-,
-  eligibility- and member-service now return an RFC 7807 problem with a
-  `traceId` (new `ChoProblemResults` helper) and log the exception
-  server-side. Messages from typed validation exceptions are unchanged.
+- **Unexpected errors no longer return exception text.** The affected
+  services are attachment, eligibility, member, provider, premium-billing,
+  payment, benefit-plan, capitation, trading-partner, fhir, idcard,
+  enrollment-import and terminology, plus the migration-wizard UI. They now
+  return an RFC 7807 problem with a `traceId` (new `ChoProblemResults`
+  helper), or record a fixed message on run, batch and row results, and log
+  the exception server-side. Messages from the services' own validation and
+  state exceptions are unchanged. Converted error bodies are now problem
+  documents rather than `{ error | message }` objects. For example, the
+  provider credentialing 503 no longer carries
+  `error: "credentialing_publish_failed"`. The portal still shows raw
+  exception text in about 200 places; that is not yet changed.
 - **Secret scanning covers service `appsettings*.json` files.** The
   path-based exemption in `.gitleaks.toml` is removed, and
   `verify-gitleaks-rules.sh` fails if it returns.
