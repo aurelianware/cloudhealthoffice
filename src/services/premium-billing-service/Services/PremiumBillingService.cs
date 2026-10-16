@@ -90,6 +90,9 @@ public class PremiumBillingService : IPremiumBillingService
         billingRun.ExecutionStartedAt = DateTime.UtcNow;
         billingRun.ExecutedBy = ActorId;
         billingRun.ExecutedByIsService = _actor.IsService;
+        // Pending to Running only from the revision read: of two executes (or an
+        // execute and a cancel) racing, exactly one wins. The other gets
+        // BillingRunConcurrencyException (409) here and generates nothing.
         await _billingRunRepository.UpdateAsync(billingRun);
 
         try
@@ -195,7 +198,34 @@ public class PremiumBillingService : IPremiumBillingService
             _logger.LogError(ex, "Billing run {BillingRunNumber} failed", billingRun.BillingRunNumber);
         }
 
-        return await _billingRunRepository.UpdateAsync(billingRun);
+        return await SaveRunOutcomeAsync(billingRun);
+    }
+
+    /// <summary>
+    /// Saves the outcome of a run this call moved to Running. A write made to the
+    /// run meanwhile (a batch EFT recording warnings on it) is kept: the run is
+    /// re-read, its warnings merged into the outcome, and the save tried again,
+    /// up to <see cref="InvoiceWrites.MaxAttempts"/> times. A run that is no
+    /// longer Running is not overwritten: the conflict reaches the caller.
+    /// </summary>
+    private async Task<BillingRun> SaveRunOutcomeAsync(BillingRun billingRun)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await _billingRunRepository.UpdateAsync(billingRun);
+            }
+            catch (BillingRunConcurrencyException) when (attempt < InvoiceWrites.MaxAttempts)
+            {
+                var fresh = await _billingRunRepository.GetByIdAsync(billingRun.Id);
+                if (fresh == null || fresh.Status != BillingRunStatus.Running)
+                    throw;
+                foreach (var warning in fresh.Warnings.Where(w => !billingRun.Warnings.Contains(w)))
+                    billingRun.Warnings.Add(warning);
+                billingRun.Revision = fresh.Revision;
+            }
+        }
     }
 
     public async Task<BillingRun> GetBillingRunAsync(string billingRunId)
@@ -219,6 +249,8 @@ public class PremiumBillingService : IPremiumBillingService
 
         billingRun.Status = BillingRunStatus.Cancelled;
         billingRun.CancelledBy = ActorId;
+        // Conditional on the revision read: a run started meanwhile is not
+        // cancelled (BillingRunConcurrencyException, 409).
         await _billingRunRepository.UpdateAsync(billingRun);
     }
 

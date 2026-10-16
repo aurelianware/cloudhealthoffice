@@ -185,6 +185,32 @@ public class EftDraft
 
     /// <summary>Sets <see cref="ActiveInvoiceKey"/> from the status.</summary>
     public void RefreshActiveInvoiceKey() => ActiveInvoiceKey = IsActive(Status) ? InvoiceId : null;
+
+    /// <summary>
+    /// Optimistic concurrency (Mongo): incremented on every write, including the
+    /// conditional claim and cancel; replacing a copy read before another write
+    /// throws <see cref="EftDraftConcurrencyException"/> instead of undoing it.
+    /// Drafts written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+}
+
+/// <summary>
+/// An EFT draft write based on a stale read: another write (a cancel, a claim
+/// for release, a recorded outcome) changed the draft since it was read. Nothing
+/// was written; 409 Conflict at the API boundary.
+/// </summary>
+public sealed class EftDraftConcurrencyException : CloudHealthOffice.Infrastructure.Data.ConcurrencyConflictException
+{
+    public EftDraftConcurrencyException(string draftId, long expectedRevision)
+        : base($"EFT draft {draftId} was changed by another write (expected revision {expectedRevision}); re-read it and retry.")
+    {
+        DraftId = draftId;
+        ExpectedRevision = expectedRevision;
+    }
+
+    public string DraftId { get; }
+    public long ExpectedRevision { get; }
 }
 
 /// <summary>
