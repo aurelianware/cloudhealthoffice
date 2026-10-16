@@ -1,3 +1,4 @@
+using ClaimsService.Audit;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -362,6 +363,7 @@ public class ClaimsController : ControllerBase
     /// Get recent claims (for dashboard display)
     /// </summary>
     [HttpGet("recent")]
+    [AuditClaimAccess(ClaimAccessActions.List)]
     [ProducesResponseType(typeof(IEnumerable<Claim>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<IEnumerable<Claim>>> GetRecentClaims(
@@ -383,6 +385,7 @@ public class ClaimsController : ControllerBase
     /// Get claim by ID
     /// </summary>
     [HttpGet("{id}")]
+    [AuditClaimAccess(ClaimAccessActions.View, ClaimIdRouteValue = "id")]
     [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Claim>> GetClaimById(string id)
@@ -405,6 +408,7 @@ public class ClaimsController : ControllerBase
     /// structured pend snapshot, which is intentionally not a version event.
     /// </summary>
     [HttpGet("{id}/audit-timeline")]
+    [AuditClaimAccess(ClaimAccessActions.AuditTimeline, ClaimIdRouteValue = "id")]
     [ProducesResponseType(typeof(IReadOnlyList<ClaimAuditTimelineEntry>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<IReadOnlyList<ClaimAuditTimelineEntry>>> GetAuditTimeline(
@@ -485,6 +489,7 @@ public class ClaimsController : ControllerBase
     /// Get a persisted adjudication projection for claim detail transparency.
     /// </summary>
     [HttpGet("{id}/adjudication-detail")]
+    [AuditClaimAccess(ClaimAccessActions.AdjudicationDetail, ClaimIdRouteValue = "id")]
     [ProducesResponseType(typeof(AdjudicationTransparencyData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AdjudicationTransparencyData>> GetAdjudicationDetail(string id)
@@ -516,6 +521,7 @@ public class ClaimsController : ControllerBase
     /// than summarized.
     /// </summary>
     [HttpGet("{id}/duplicate-matches")]
+    [AuditClaimAccess(ClaimAccessActions.DuplicateMatches, ClaimIdRouteValue = "id")]
     [ProducesResponseType(typeof(IReadOnlyList<ClaimDuplicateMatch>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<IReadOnlyList<ClaimDuplicateMatch>>> GetDuplicateMatches(string id)
@@ -543,6 +549,7 @@ public class ClaimsController : ControllerBase
     /// Get claim by claim number
     /// </summary>
     [HttpGet("number/{claimNumber}")]
+    [AuditClaimAccess(ClaimAccessActions.View, ClaimNumberRouteValue = "claimNumber")]
     [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Claim>> GetClaimByNumber(string claimNumber)
@@ -563,6 +570,7 @@ public class ClaimsController : ControllerBase
     /// Search claims (by member, provider, date range, status)
     /// </summary>
     [HttpGet("search")]
+    [AuditClaimAccess(ClaimAccessActions.Search)]
     [ProducesResponseType(typeof(IEnumerable<Claim>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Claim>>> SearchClaims(
         [FromQuery] string? memberId = null,
@@ -587,6 +595,7 @@ public class ClaimsController : ControllerBase
 
     /// <summary>Search claims via POST body (portal search form).</summary>
     [HttpPost("search")]
+    [AuditClaimAccess(ClaimAccessActions.Search)]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public async Task<IActionResult> SearchClaimsPost([FromBody] ClaimSearchBody body, CancellationToken ct = default)
     {
@@ -909,6 +918,7 @@ public class ClaimsController : ControllerBase
     /// RecommendedDisposition x ExaminerAgreement).
     /// </summary>
     [HttpGet("{id}/ai-examination/audit")]
+    [AuditClaimAccess(ClaimAccessActions.AiExamination, ClaimIdRouteValue = "id")]
     [ProducesResponseType(typeof(IEnumerable<AiExaminationAudit>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<AiExaminationAudit>>> GetAiExaminationAudit(
         string id, CancellationToken ct = default)
@@ -1241,6 +1251,7 @@ public class ClaimsController : ControllerBase
     /// Download the X12 277CA Claim Acknowledgment for a claim
     /// </summary>
     [HttpGet("{id}/277ca")]
+    [AuditClaimAccess(ClaimAccessActions.Acknowledgment, ClaimIdRouteValue = "id")]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetClaimAcknowledgment(
@@ -1408,6 +1419,7 @@ public class ClaimsController : ControllerBase
     /// Get work queue items (pended claims for examiner review)
     /// </summary>
     [HttpGet("work-queue/items")]
+    [AuditClaimAccess(ClaimAccessActions.WorkQueue)]
     [ProducesResponseType(typeof(IEnumerable<WorkQueueItem>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<WorkQueueItem>>> GetWorkQueueItems(
         [FromQuery] string? queueType = null,

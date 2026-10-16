@@ -1,3 +1,4 @@
+using ClaimsService.Audit;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
@@ -39,6 +40,7 @@ public class ClaimNotesController : ControllerBase
         HttpContext?.Items["TenantId"]?.ToString() is { Length: > 0 } tenant ? tenant : _actor.TenantId;
 
     [HttpGet]
+    [AuditClaimAccess(ClaimAccessActions.Notes, ClaimIdRouteValue = "claimId")]
     [ProducesResponseType(typeof(IEnumerable<ClaimNote>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<ClaimNote>>> List(string claimId, CancellationToken ct = default)
     {

@@ -1,3 +1,4 @@
+using ClaimsService.Audit;
 using System.Diagnostics;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
@@ -137,6 +138,7 @@ public class ClaimAdjustmentsController : ControllerBase
     /// returns at most one row per Decision 11 (depth=1 invariant).
     /// </summary>
     [HttpGet("api/v1/claims/{predecessorClaimId}/adjustments")]
+    [AuditClaimAccess(ClaimAccessActions.Adjustments, ClaimIdRouteValue = "predecessorClaimId")]
     [ProducesResponseType(typeof(ClaimAdjustmentListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListAdjustmentsForClaim(
         [FromRoute] string predecessorClaimId,
@@ -168,6 +170,7 @@ public class ClaimAdjustmentsController : ControllerBase
     /// for batch creation.
     /// </summary>
     [HttpGet("api/v1/adjustments")]
+    [AuditClaimAccess(ClaimAccessActions.Adjustments)]
     [ProducesResponseType(typeof(ClaimAdjustmentListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListAdjustments(
         [FromQuery] ClaimAdjustmentListFilter filter,
@@ -195,6 +198,7 @@ public class ClaimAdjustmentsController : ControllerBase
     }
 
     [HttpGet("api/v1/adjustments/{id}")]
+    [AuditClaimAccess(ClaimAccessActions.Adjustments)]
     [ProducesResponseType(typeof(ClaimAdjustmentResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetAdjustment(

@@ -72,6 +72,7 @@ public sealed class ClaimIndexInitializer : IHostedService
         collection.Indexes.CreateMany(indexes, cancellationToken);
 
         Repositories.ClaimNoteRepositoryMongo.EnsureIndexes(_db, cancellationToken);
+        Repositories.ClaimAccessAuditRepositoryMongo.EnsureIndexes(_db, cancellationToken);
 
         var txnCollection = _db.GetCollection<ClaimImportTransaction>(
             Repositories.ClaimImportTransactionRepositoryMongo.CollectionName);

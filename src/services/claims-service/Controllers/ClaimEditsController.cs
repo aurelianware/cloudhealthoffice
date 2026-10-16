@@ -1,3 +1,4 @@
+using ClaimsService.Audit;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
@@ -32,6 +33,7 @@ public class ClaimEditsController : ControllerBase
         HttpContext?.Items["TenantId"]?.ToString() is { Length: > 0 } tenant ? tenant : _actor.TenantId;
 
     [HttpGet("{claimId}/edits")]
+    [AuditClaimAccess(ClaimAccessActions.Edits, ClaimIdRouteValue = "claimId")]
     [ProducesResponseType(typeof(ClaimEditsView), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ClaimEditsView>> Get(string claimId)
