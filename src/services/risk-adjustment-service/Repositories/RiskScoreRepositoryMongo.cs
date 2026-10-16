@@ -209,6 +209,7 @@ public class RiskScoreRepositoryMongo : IRiskScoreRepository
     public async Task<MemberRiskScore> CreateAsync(MemberRiskScore score)
     {
         score.TenantId = GetTenantId();
+        score.Revision = 0;
         await _collection.InsertOneAsync(score);
         return score;
     }
@@ -220,8 +221,39 @@ public class RiskScoreRepositoryMongo : IRiskScoreRepository
         var filter = Builders<MemberRiskScore>.Filter.And(
             Builders<MemberRiskScore>.Filter.Eq(s => s.Id, score.Id),
             Builders<MemberRiskScore>.Filter.Eq(s => s.TenantId, tenantId));
-        await _collection.ReplaceOneAsync(filter, score);
+        // Conditional on the revision the caller read: of two concurrent writes
+        // (a recalculation and a batch status change, two upserts) only one is
+        // written; the other conflicts instead of silently erasing it.
+        var expected = score.Revision;
+        score.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), score);
+        }
+        catch
+        {
+            score.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            score.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new RiskScoreConcurrencyException(score.Id, expected);
+            // Missing: as before, nothing written and no error.
+        }
         return score;
+    }
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<MemberRiskScore> RevisionIs(long expected)
+    {
+        var b = Builders<MemberRiskScore>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(s => s.Revision, 0L), b.Exists(s => s.Revision, false))
+            : b.Eq(s => s.Revision, expected);
     }
 
     public async Task DeleteAsync(string id)
