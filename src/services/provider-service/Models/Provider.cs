@@ -34,6 +34,16 @@ public class Provider
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision of the MongoDB document, bumped by every
+    /// write (including the projection patches). A whole-document replace (a
+    /// draft edit, an activation, a supersede, a suspension or termination)
+    /// succeeds only while the stored revision is still the one it read, so of
+    /// two concurrent transitions only one wins and a stale write cannot undo a
+    /// newer one. Documents written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// Stable chain key — the provider entity identifier preserved across
     /// every version row. For genesis / legacy single-row chains
     /// <c>ProviderId == Id</c>; subsequent amend versions share the same
