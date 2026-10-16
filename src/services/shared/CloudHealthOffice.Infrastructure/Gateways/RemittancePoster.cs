@@ -173,20 +173,27 @@ public sealed class RemittancePoster : IRemittancePoster
         }
 
         var now = _timeProvider.GetUtcNow();
-        receipt.Status = RemittanceLifecycleStatus.Posted;
-        receipt.PostedAtUtc = now;
-        receipt.ClaimsPosted = claimsPosted;
-        receipt.AccumulatorsApplied = accumulatorsApplied;
-        if (receipt.Outbox.All(e => e.EventType != RemittanceMessageTypes.Posted))
-        {
-            receipt.Outbox.Add(new RemittanceOutboxEntry
-            {
-                EventType = RemittanceMessageTypes.Posted,
-                CreatedAtUtc = now
-            });
-        }
+        MarkPosted(receipt, now, claimsPosted, accumulatorsApplied);
 
-        await _receipts.SaveAsync(receipt, cancellationToken).ConfigureAwait(false);
+        // The claims and accumulators are posted (idempotently), so the
+        // outcome must be recorded. A concurrent write (an outbox dispatch,
+        // another post) makes the save conflict: re-apply on a fresh copy,
+        // keeping its published markers; one already Posted needs nothing.
+        receipt = await ClaimLifecycleWrites.SaveWithRetryAsync(
+            receipt,
+            r => _receipts.SaveAsync(r, cancellationToken),
+            () => _receipts.GetByIdAsync(request.ReceiptId, cancellationToken),
+            fresh =>
+            {
+                if (fresh.Status == RemittanceLifecycleStatus.Posted)
+                {
+                    return false;
+                }
+
+                MarkPosted(fresh, now, claimsPosted, accumulatorsApplied);
+                return true;
+            },
+            _logger).ConfigureAwait(false);
         ChoMetrics.RemittancePosted.Add(1,
             new KeyValuePair<string, object?>("cho.gateway", receipt.Gateway),
             new KeyValuePair<string, object?>("cho.status", receipt.Status.ToString()));
@@ -199,6 +206,23 @@ public sealed class RemittancePoster : IRemittancePoster
             accumulatorsApplied);
 
         return ToResult(receipt, replay: false, claimsPosted, accumulatorsApplied);
+    }
+
+    private static void MarkPosted(
+        RemittanceReceipt receipt, DateTimeOffset now, int claimsPosted, int accumulatorsApplied)
+    {
+        receipt.Status = RemittanceLifecycleStatus.Posted;
+        receipt.PostedAtUtc = now;
+        receipt.ClaimsPosted = claimsPosted;
+        receipt.AccumulatorsApplied = accumulatorsApplied;
+        if (receipt.Outbox.All(e => e.EventType != RemittanceMessageTypes.Posted))
+        {
+            receipt.Outbox.Add(new RemittanceOutboxEntry
+            {
+                EventType = RemittanceMessageTypes.Posted,
+                CreatedAtUtc = now
+            });
+        }
     }
 
     private async Task<string?> ResolveMemberIdAsync(string tenantId, RemittedClaim claim, CancellationToken ct)

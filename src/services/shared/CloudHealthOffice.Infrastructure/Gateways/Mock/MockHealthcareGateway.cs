@@ -204,7 +204,7 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
         record.SubmissionId = $"mock-{record.TransmissionId}";
         record.ExternalTransactionId = record.SubmissionId;
         record.ErrorCategory = GatewayErrorCategory.None;
-        await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+        await ClaimLifecycleWrites.SaveSubmitOutcomeAsync(_transmissions, record, _logger, ct).ConfigureAwait(false);
 
         var metadata = ClaimMetadata(request, startedAt, GatewayTransactionStatus.Completed,
             GatewayErrorCategory.None, Stopwatch.GetElapsedTime(timestamp), record);

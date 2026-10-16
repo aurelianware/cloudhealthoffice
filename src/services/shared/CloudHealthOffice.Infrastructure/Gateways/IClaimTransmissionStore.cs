@@ -126,4 +126,11 @@ public sealed class ClaimTransmissionRecord
     public GatewayErrorCategory ErrorCategory { get; set; } = GatewayErrorCategory.None;
 
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Optimistic-concurrency revision kept by the durable store: a save is
+    /// conditional on the revision that was read and bumps it. Callers carry
+    /// it from the read; they do not set it.
+    /// </summary>
+    public long Revision { get; set; }
 }

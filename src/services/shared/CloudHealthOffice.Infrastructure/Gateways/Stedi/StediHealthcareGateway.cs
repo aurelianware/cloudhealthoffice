@@ -323,7 +323,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
             record.RetryCount = ex.RetryCount;
             record.ErrorCategory = ex.Category;
             record.ErrorMessage = ex.Message;
-            await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+            await ClaimLifecycleWrites.SaveSubmitOutcomeAsync(_transmissions, record, _logger, ct).ConfigureAwait(false);
             return ClaimFail(request, startedAt, stopwatch, ex.RetryCount, ex.Category, ex.Message);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -336,7 +336,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
                 SanitizeForLog(request.TenantId), request.ClaimType);
             record.Status = GatewayClaimTransmissionStatus.Failed;
             record.ErrorCategory = GatewayErrorCategory.Internal;
-            await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+            await ClaimLifecycleWrites.SaveSubmitOutcomeAsync(_transmissions, record, _logger, ct).ConfigureAwait(false);
             return ClaimFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Internal,
                 "Unexpected error executing the Stedi claim submission.");
         }
@@ -356,7 +356,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
             record.ErrorMessage = result.Errors.FirstOrDefault();
         }
 
-        await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+        await ClaimLifecycleWrites.SaveSubmitOutcomeAsync(_transmissions, record, _logger, ct).ConfigureAwait(false);
 
         var txStatus = result.AcceptedForProcessing
             ? GatewayTransactionStatus.Completed
