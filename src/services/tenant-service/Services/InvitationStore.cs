@@ -168,6 +168,7 @@ public sealed class MongoInvitationStore : IInvitationStore
                 UserFilter.Not(StatusIsActive),
                 UserFilter.Eq(u => u.InvitationId, user.InvitationId));
             var update = Builders<TenantUser>.Update
+                .Inc(u => u.Revision, 1L)
                 .Set(u => u.Status, TenantUserStatus.Invited)
                 .Set(u => u.InvitationId, invitation.Id)
                 .Set(u => u.InvitationCodeHash, invitation.CodeHash)
@@ -270,6 +271,7 @@ public sealed class MongoInvitationStore : IInvitationStore
         // 1. The user: from here on only the new code can match it.
         var userUpdate = await _users.UpdateOneAsync(InvitedUserOf(inv),
             Builders<TenantUser>.Update
+                .Inc(u => u.Revision, 1L)
                 .Set(u => u.InvitationCodeHash, newCodeHash)
                 .Set(u => u.InvitationExpiresAt, expiresAt)
                 .Set(u => u.UpdatedAt, now)
@@ -314,6 +316,7 @@ public sealed class MongoInvitationStore : IInvitationStore
         //    The user stays Invited (it cannot sign in) until it is re-invited or deleted.
         var userUpdate = await _users.UpdateOneAsync(InvitedUserOf(inv),
             Builders<TenantUser>.Update
+                .Inc(u => u.Revision, 1L)
                 .Set(u => u.InvitationCodeHash, null)
                 .Set(u => u.InvitationExpiresAt, null)
                 .Set(u => u.UpdatedAt, now)
@@ -410,6 +413,7 @@ public sealed class MongoInvitationStore : IInvitationStore
                 UserFilter.Gt(u => u.InvitationExpiresAt, now),
                 UserFilter.Eq(u => u.EmailNormalized, inv.EmailNormalized)),
             Builders<TenantUser>.Update
+                .Inc(u => u.Revision, 1L)
                 .Set(u => u.AzureAdObjectId, oid)
                 .Set(u => u.AzureAdTenantId, tid)
                 .Set(u => u.Status, TenantUserStatus.Active)
@@ -438,6 +442,7 @@ public sealed class MongoInvitationStore : IInvitationStore
                     UserFilter.Eq(u => u.AzureAdTenantId, tid),
                     UserFilter.Eq(u => u.UpdatedBy, RedemptionActor)),
                 Builders<TenantUser>.Update
+                    .Inc(u => u.Revision, 1L)
                     .Set(u => u.AzureAdObjectId, string.Empty)
                     .Set(u => u.AzureAdTenantId, string.Empty)
                     .Set(u => u.Status, TenantUserStatus.Invited)
