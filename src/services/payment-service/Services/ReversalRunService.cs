@@ -443,7 +443,7 @@ public class ReversalRunService : IReversalRunService
             _logger.LogError(ex, "Error executing reversal run {ReversalRunId}", SanitizeForLog(reversalRunId));
 
             run.Status = ReversalRunStatus.Failed;
-            run.Errors.Add($"Execution failed: {ex.Message}");
+            run.Errors.Add($"Execution failed: {ClientErrorText.For(ex)}");
             run.ExecutionCompletedAt = DateTime.UtcNow;
             run.ExecutionDurationSeconds = run.ExecutionStartedAt.HasValue
                 ? (run.ExecutionCompletedAt.Value - run.ExecutionStartedAt.Value).TotalSeconds
@@ -934,7 +934,7 @@ public class ReversalRunService : IReversalRunService
         }
         catch (Exception ex)
         {
-            cp.FinalizeError = $"void call threw: {ex.Message}";
+            cp.FinalizeError = ClientErrorText.VoidCallFailed;
             _logger.LogError(ex, "Void of predecessor {ClaimId} (adjustment {AdjustmentId}) threw",
                 SanitizeForLog(cp.ClaimId), SanitizeForLog(adjustmentId));
             return false;

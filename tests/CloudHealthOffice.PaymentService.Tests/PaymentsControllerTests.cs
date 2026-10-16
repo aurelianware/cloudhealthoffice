@@ -220,6 +220,23 @@ public class PaymentsControllerTests : IClassFixture<PaymentApiFactory>
     }
 
     [Fact]
+    public async Task GetEra835_GeneratorFailure_IsAProblemWithATraceId_NotTheExceptionText()
+    {
+        var payment = CreateValidPayment();
+        payment.Id = "pay-835-throws";
+        _repo.GetByIdAsync("pay-835-throws").Returns(payment);
+        _eraGenerator.Generate835(Arg.Is<Payment>(p => p.Id == "pay-835-throws"), Arg.Any<TradingPartnerInfo>())
+            .Returns(_ => throw new InvalidOperationException("mongodb://admin:hunter2@db:27017 timed out"));
+
+        var response = await _client.GetAsync("/api/payments/pay-835-throws/835");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("hunter2", body);
+        Assert.Contains("traceId", body);
+    }
+
+    [Fact]
     public async Task GetEra835_NonexistentPayment_Returns404()
     {
         _repo.GetByIdAsync("nonexistent").Returns((Payment?)null);
