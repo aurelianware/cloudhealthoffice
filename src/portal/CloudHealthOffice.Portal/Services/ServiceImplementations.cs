@@ -363,6 +363,22 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<List<RecentClaimView>> GetRecentlyViewedClaimsAsync(int limit = 10)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<RecentClaimView>>(
+                       $"{baseUrl}/claims/recently-viewed?limit={limit}", JsonOptions)
+                   ?? new List<RecentClaimView>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
     public async Task<List<ClaimAccessEntry>> GetClaimAccessLogAsync(string claimId, int limit = 200)
     {
         var baseUrl = _configuration["Services:ClaimsService"];

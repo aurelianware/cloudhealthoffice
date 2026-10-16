@@ -64,6 +64,22 @@ public interface IClaimsService
     /// Reading the log is itself recorded.
     /// </summary>
     Task<List<ClaimAccessEntry>> GetClaimAccessLogAsync(string claimId, int limit = 200);
+
+    /// <summary>
+    /// Claims the signed-in user opened recently, newest first, one per claim
+    /// (claims-service <c>GET /claims/recently-viewed</c>, built from the
+    /// caller's own access events).
+    /// </summary>
+    Task<List<RecentClaimView>> GetRecentlyViewedClaimsAsync(int limit = 10);
+}
+
+/// <summary>A claim the user opened recently (Home "Recent").</summary>
+public sealed class RecentClaimView
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public string? ClaimNumber { get; set; }
+    public string? MemberId { get; set; }
+    public DateTime ViewedAt { get; set; }
 }
 
 /// <summary>One read of a claim in the claim access log.</summary>

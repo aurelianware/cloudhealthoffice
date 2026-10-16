@@ -1,0 +1,32 @@
+@* One search box for the whole portal (portal-navigation.md §3.2). Enter
+   goes to /search?q=…, which jumps straight to the record when the query is
+   an identifier. "/" focuses the box from anywhere (see _Layout). *@
+@inject NavigationManager Navigation
+
+<div class="global-search @(Large ? "large" : null)" data-testid="global-search">
+    <MudTextField T="string" @bind-Value="_query" Immediate="true"
+                  Placeholder="@(Large ? "Search: claim #, member ID, NPI, or a name" : "Search  ( / )")"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Variant="@(Large ? Variant.Outlined : Variant.Text)" Margin="@(Large ? Margin.Normal : Margin.Dense)"
+                  DisableUnderLine="@(!Large)" OnKeyDown="OnKeyDown"
+                  UserAttributes="@(new Dictionary<string, object?> { ["id"] = Large ? "home-search" : "global-search-input", ["aria-label"] = "Search" })" />
+</div>
+
+@code {
+    /// <summary>The big box on Home; the app bar uses the compact one.</summary>
+    [Parameter] public bool Large { get; set; }
+
+    private string? _query;
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "NumpadEnter") Go();
+    }
+
+    private void Go()
+    {
+        var q = _query?.Trim();
+        if (string.IsNullOrEmpty(q)) return;
+        Navigation.NavigateTo($"/search?q={Uri.EscapeDataString(q)}");
+    }
+}
