@@ -137,7 +137,8 @@ public sealed class SponsorServiceClient : ISponsorServiceClient
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            return SponsorSuspensionOutcome.Failed(null, $"sponsor-service call failed: {ex.Message}");
+            _logger.LogWarning(ex, "sponsor-service suspension call failed for group {GroupNumber}", groupNumber.Replace("\r", string.Empty).Replace("\n", string.Empty));
+            return SponsorSuspensionOutcome.Failed(null, $"sponsor-service call failed: {ClientErrorText.For(ex)}");
         }
     }
 
