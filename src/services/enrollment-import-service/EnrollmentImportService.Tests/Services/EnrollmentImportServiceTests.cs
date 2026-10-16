@@ -410,6 +410,30 @@ public class EnrollmentImportServiceTests
     }
 
     [Fact]
+    public async Task Import_UnexpectedFailure_RecordsAFixedError_NotTheExceptionText()
+    {
+        var (svc, _, _, _, _, benefitPlanClient, _) = Build();
+        benefitPlanClient.Setup(b => b.ResolvePlanIdAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Connection refused (mongodb://admin:hunter2@db:27017)"));
+
+        var enrollment = NewSubscriber("M-unreachable");
+        enrollment.GroupNumber = "GRP0001";
+        enrollment.Coverage.Add(new CoverageDetail { InsuranceLineCode = "HLT", PlanCoverageDescription = "PPO2026" });
+
+        var result = await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-unreachable",
+            Enrollments = new() { enrollment }
+        }, "t1");
+
+        result.FailedCount.Should().Be(1);
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Contain("M-unreachable").And.NotContain("hunter2");
+    }
+
+    [Fact]
     public async Task Import_PlanCodeLookupRefused_FailsTheSubscriberInsteadOfCountingAGap()
     {
         var (svc, _, coverageClient, _, _, benefitPlanClient, _) = Build();
