@@ -369,14 +369,14 @@
                         <MudStack Spacing="2">
                             <div>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">Billing Provider</MudText>
-                                <MudLink Typo="Typo.body2" OnClick="@(() => OpenProviderAsync(_claim.BillingProviderNPI))" data-testid="open-billing-provider">@_claim.BillingProviderName</MudLink>
+                                <RecordLink Href="@ProviderHref(_claim.BillingProviderNPI)" data-testid="open-billing-provider">@_claim.BillingProviderName</RecordLink>
                                 <MudText Typo="Typo.caption">NPI: @_claim.BillingProviderNPI</MudText>
                             </div>
                             @if (!string.IsNullOrEmpty(_claim.RenderingProviderName))
                             {
                                 <div>
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">Rendering Provider</MudText>
-                                    <MudLink Typo="Typo.body2" OnClick="@(() => OpenProviderAsync(_claim.RenderingProviderNPI))">@_claim.RenderingProviderName</MudLink>
+                                    <RecordLink Href="@ProviderHref(_claim.RenderingProviderNPI)" data-testid="open-rendering-provider">@_claim.RenderingProviderName</RecordLink>
                                     <MudText Typo="Typo.caption">NPI: @_claim.RenderingProviderNPI</MudText>
                                 </div>
                             }
@@ -1475,28 +1475,10 @@
         await DialogService.ShowAsync<MemberPeekDialog>("Member", parameters, options);
     }
 
-    private async Task OpenProviderAsync(string? npi)
-    {
-        if (string.IsNullOrWhiteSpace(npi)) return;
-        var providers = Services.GetService<IProviderService>();
-        if (providers is null) return;
-        try
-        {
-            var match = (await providers.SearchProvidersAsync(searchTerm: npi))
-                .FirstOrDefault(p => string.Equals(p.NPI, npi, StringComparison.Ordinal));
-            if (match is null)
-            {
-                Snackbar.Add($"No provider record found for NPI {npi}.", Severity.Info);
-                return;
-            }
-            // The provider's record page; Back returns to this claim.
-            NavigationManager.NavigateTo($"/providers/{Uri.EscapeDataString(match.ProviderId)}");
-        }
-        catch (ServiceUnavailableException)
-        {
-            Snackbar.Add("The provider service is unavailable right now.", Severity.Warning);
-        }
-    }
+    // Claims carry NPIs; /providers/npi/{npi} opens the provider record. A
+    // real link, so Ctrl/⌘-click and the ↗ icon open it in a new tab.
+    private static string ProviderHref(string? npi) =>
+        string.IsNullOrWhiteSpace(npi) ? "/providers" : $"/providers/npi/{Uri.EscapeDataString(npi)}";
 
     private async Task OpenAuthorizationAsync()
     {
