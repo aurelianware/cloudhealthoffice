@@ -136,8 +136,8 @@ public class MueEntry
     /// <summary>
     /// MUE Adjudication Indicator (MAI).
     ///   1 = Claim line edit — each line adjudicated independently.
-    ///   2 = Date of service edit — sum units across all claim lines.
-    ///   3 = Date of service edit, absolute (anatomically impossible to exceed).
+    ///   2 = Date of service edit, policy — units summed across lines; the limit is absolute.
+    ///   3 = Date of service edit, clinical — units summed across lines; may be exceeded on review.
     /// </summary>
     public MueAdjudicationIndicator AdjudicationIndicator { get; set; }
 
@@ -259,25 +259,30 @@ public enum NcciPolicyType
 }
 
 /// <summary>
-/// MUE Adjudication Indicator — controls how units are counted for MUE comparison.
+/// MUE Adjudication Indicator, as CMS publishes it — controls how units are
+/// counted and whether the limit can ever be exceeded. The numbers are the
+/// CMS values and are what is stored; the names follow CMS's meaning.
 /// </summary>
 public enum MueAdjudicationIndicator
 {
     /// <summary>
-    /// MAI 1 — each individual claim line is compared against the MUE in isolation.
-    /// A claim with two lines for the same code can each carry up to MaxUnits.
+    /// MAI 1 — claim line edit: each claim line is compared against the MUE on
+    /// its own, so two lines (e.g. with an anatomic modifier) can each carry up
+    /// to MaxUnits.
     /// </summary>
     ClaimLine = 1,
 
     /// <summary>
-    /// MAI 2 — all units for the procedure code on the same date of service are
-    /// summed across all lines before comparing against MaxUnits.
+    /// MAI 2 — date of service edit, policy: units for the code on the same date
+    /// are summed across lines. The limit is absolute (CMS policy, anatomy, or
+    /// the code descriptor) and is never exceeded on appeal.
     /// </summary>
-    DateOfService = 2,
+    DateOfServicePolicy = 2,
 
     /// <summary>
-    /// MAI 3 — anatomically absolute. Units are summed across lines (same as MAI 2)
-    /// but the limit reflects a hard biological ceiling that can never be exceeded.
+    /// MAI 3 — date of service edit, clinical: units are summed across lines the
+    /// same way, but the limit is clinical; units above it may be paid on review
+    /// when the medical record supports them.
     /// </summary>
-    DateOfServiceAbsolute = 3,
+    DateOfServiceClinical = 3,
 }

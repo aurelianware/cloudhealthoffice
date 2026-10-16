@@ -111,45 +111,45 @@ public static class NcciSeedData
         var entries = new List<(string code, int max, MueAdjudicationIndicator mai, bool prof, bool fac)>
         {
             // ── E&M ───────────────────────────────────────────────────────
-            ("99213", 1, MueAdjudicationIndicator.DateOfService, true,  false),
-            ("99214", 1, MueAdjudicationIndicator.DateOfService, true,  false),
-            ("99215", 1, MueAdjudicationIndicator.DateOfService, true,  false),
+            ("99213", 1, MueAdjudicationIndicator.DateOfServiceClinical, true,  false),
+            ("99214", 1, MueAdjudicationIndicator.DateOfServiceClinical, true,  false),
+            ("99215", 1, MueAdjudicationIndicator.DateOfServiceClinical, true,  false),
 
             // ── Injections / Infusions ────────────────────────────────────
-            ("96413", 1, MueAdjudicationIndicator.DateOfService, true,  true),
-            ("96415", 8, MueAdjudicationIndicator.DateOfService, true,  true),
-            ("96409", 1, MueAdjudicationIndicator.DateOfService, true,  true),
+            ("96413", 1, MueAdjudicationIndicator.DateOfServiceClinical, true,  true),
+            ("96415", 8, MueAdjudicationIndicator.DateOfServiceClinical, true,  true),
+            ("96409", 1, MueAdjudicationIndicator.DateOfServiceClinical, true,  true),
 
             // ── Radiology ─────────────────────────────────────────────────
-            ("70553", 1, MueAdjudicationIndicator.DateOfServiceAbsolute, true, true),
-            ("71260", 1, MueAdjudicationIndicator.DateOfServiceAbsolute, true, true),
-            ("74178", 1, MueAdjudicationIndicator.DateOfServiceAbsolute, true, true),
+            ("70553", 1, MueAdjudicationIndicator.DateOfServicePolicy, true, true),
+            ("71260", 1, MueAdjudicationIndicator.DateOfServicePolicy, true, true),
+            ("74178", 1, MueAdjudicationIndicator.DateOfServicePolicy, true, true),
 
             // ── Surgery ───────────────────────────────────────────────────
-            ("47563", 1, MueAdjudicationIndicator.DateOfServiceAbsolute, true, true),
-            ("44950", 1, MueAdjudicationIndicator.DateOfServiceAbsolute, true, true),
-            ("66984", 1, MueAdjudicationIndicator.DateOfServiceAbsolute, true, true),
-            ("45385", 1, MueAdjudicationIndicator.DateOfServiceAbsolute, true, true),
+            ("47563", 1, MueAdjudicationIndicator.DateOfServicePolicy, true, true),
+            ("44950", 1, MueAdjudicationIndicator.DateOfServicePolicy, true, true),
+            ("66984", 1, MueAdjudicationIndicator.DateOfServicePolicy, true, true),
+            ("45385", 1, MueAdjudicationIndicator.DateOfServicePolicy, true, true),
 
             // ── Physical Medicine ─────────────────────────────────────────
-            ("97110", 8, MueAdjudicationIndicator.DateOfService, true,  false),
-            ("97140", 8, MueAdjudicationIndicator.DateOfService, true,  false),
-            ("97010", 1, MueAdjudicationIndicator.DateOfService, true,  false),
+            ("97110", 8, MueAdjudicationIndicator.DateOfServiceClinical, true,  false),
+            ("97140", 8, MueAdjudicationIndicator.DateOfServiceClinical, true,  false),
+            ("97010", 1, MueAdjudicationIndicator.DateOfServiceClinical, true,  false),
 
             // ── Lab / Path ────────────────────────────────────────────────
-            ("80053", 1, MueAdjudicationIndicator.DateOfServiceAbsolute, true, true), // comprehensive metabolic panel
-            ("85025", 1, MueAdjudicationIndicator.DateOfServiceAbsolute, true, true), // CBC with differential
-            ("87491", 2, MueAdjudicationIndicator.DateOfService,         true, true), // chlamydia trachomatis
+            ("80053", 1, MueAdjudicationIndicator.DateOfServicePolicy, true, true), // comprehensive metabolic panel
+            ("85025", 1, MueAdjudicationIndicator.DateOfServicePolicy, true, true), // CBC with differential
+            ("87491", 2, MueAdjudicationIndicator.DateOfServiceClinical,         true, true), // chlamydia trachomatis
 
             // ── Wound Care ────────────────────────────────────────────────
-            ("97597", 1, MueAdjudicationIndicator.DateOfService, true, true),
-            ("13160", 1, MueAdjudicationIndicator.DateOfServiceAbsolute, true, true),
+            ("97597", 1, MueAdjudicationIndicator.DateOfServiceClinical, true, true),
+            ("13160", 1, MueAdjudicationIndicator.DateOfServicePolicy, true, true),
 
             // ── Venipuncture ──────────────────────────────────────────────
-            ("36415", 1, MueAdjudicationIndicator.DateOfService, true, true),
+            ("36415", 1, MueAdjudicationIndicator.DateOfServiceClinical, true, true),
 
             // ── ECG ───────────────────────────────────────────────────────
-            ("93000", 1, MueAdjudicationIndicator.DateOfService, true, false),
+            ("93000", 1, MueAdjudicationIndicator.DateOfServiceClinical, true, false),
         };
 
         return entries.Select(e => new MueEntry
