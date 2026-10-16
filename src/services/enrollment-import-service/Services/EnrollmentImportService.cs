@@ -117,7 +117,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             {
                 _logger.LogError(ex, "Error processing enrollment for subscriber {SubscriberId}",
                     SanitizeForLog(memberEnrollment.SubscriberId));
-                result.Errors.Add($"Subscriber {memberEnrollment.SubscriberId}: {ex.Message}");
+                result.Errors.Add($"Subscriber {memberEnrollment.SubscriberId}: {ClientErrorText.For(ex)}");
                 result.FailedCount++;
                 txnStatus = "Rejected";
             }
@@ -550,7 +550,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             _logger.LogError(ex, "Error looking up subscriber {SubscriberId} for dependent",
                 SanitizeForLog(subscriberId));
-            result.Errors.Add($"Subscriber {subscriberId} dependent: {ex.Message}");
+            result.Errors.Add($"Subscriber {subscriberId} dependent: {ClientErrorText.For(ex)}");
             result.FailedCount++;
             await RecordTransactionAsync(
                 ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId);
@@ -629,7 +629,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             _logger.LogError(ex, "Error processing dependent {DependentId} of subscriber {SubscriberId}",
                 SanitizeForLog(dependentMemberId), SanitizeForLog(subscriberMemberId));
-            ctx.Result.Errors.Add($"Dependent {dependentMemberId}: {ex.Message}");
+            ctx.Result.Errors.Add($"Dependent {dependentMemberId}: {ClientErrorText.For(ex)}");
             await RecordTransactionAsync(
                 ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId);
             return DependentOutcome.Failed;
