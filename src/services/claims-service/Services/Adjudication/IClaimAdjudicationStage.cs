@@ -79,6 +79,37 @@ public class ClaimAdjudicationStageResult
 
     public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// True when this result pends because a check could not run (a dependency
+    /// was unreachable, timed out, had an open circuit, or threw), not because
+    /// of a finding. Such a pend is never overridden by an examiner approval;
+    /// the re-run retries the check. Set by <see cref="AsCheckUnavailable"/>,
+    /// never inferred from the reason text.
+    /// </summary>
+    public bool CheckUnavailable { get; init; }
+
+    /// <summary>
+    /// This result, flagged <see cref="CheckUnavailable"/> and recorded on
+    /// <paramref name="context"/> (with <paramref name="pendReasons"/>, the
+    /// reasons the stage wrote to <see cref="ClaimAdjudicationContext.PendDetails"/>
+    /// for it). A Pass is returned unchanged: the check's mode let the claim through.
+    /// </summary>
+    public ClaimAdjudicationStageResult AsCheckUnavailable(ClaimAdjudicationContext context, params string?[] pendReasons)
+    {
+        if (Outcome == ClaimAdjudicationOutcome.Pass) return this;
+        context.MarkCheckUnavailable(Reason);
+        foreach (var reason in pendReasons) context.MarkCheckUnavailable(reason);
+        return new ClaimAdjudicationStageResult
+        {
+            StageName = StageName,
+            Continue = Continue,
+            Outcome = Outcome,
+            Reason = Reason,
+            Notes = Notes,
+            CheckUnavailable = true,
+        };
+    }
+
     public static ClaimAdjudicationStageResult Pass(string stageName) =>
         new() { StageName = stageName, Continue = true, Outcome = ClaimAdjudicationOutcome.Pass };
 
