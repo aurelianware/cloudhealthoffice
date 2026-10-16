@@ -63,7 +63,11 @@ public sealed class MongoSponsorRowStore : ISponsorRowStore
             f.Eq(s => s.TenantId, row.Sponsor.TenantId),
             f.Eq(s => s.BillingInfo!.BillingAccountNumber, row.Sponsor.BillingInfo!.BillingAccountNumber));
         var result = await _collection.UpdateOneAsync(match,
-            Builders<Sponsor>.Update.Set(s => s.BillingInfo!.BillingAccountNumber, stored), cancellationToken: ct);
+            Builders<Sponsor>.Update
+                .Set(s => s.BillingInfo!.BillingAccountNumber, stored)
+                // Every write bumps the revision (see SponsorRepositoryMongo).
+                .Inc(s => s.Revision, 1L),
+            cancellationToken: ct);
         return result.ModifiedCount == 1;
     }
 }
