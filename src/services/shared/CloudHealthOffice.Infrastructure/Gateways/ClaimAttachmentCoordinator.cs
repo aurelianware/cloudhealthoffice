@@ -65,7 +65,15 @@ internal sealed class ClaimAttachmentCoordinator
             return Fail(gatewayName, request, startedAt, stopwatch, 0, validation.Value.Category, validation.Value.Message);
         }
 
-        var transmission = await _transmissions.GetByIdAsync(request.TransmissionId, ct).ConfigureAwait(false);
+        // The transmission is read within the caller's tenant: another tenant's id
+        // is "not found", and a request without a tenant cannot adopt one.
+        if (string.IsNullOrWhiteSpace(request.TenantId))
+        {
+            return Fail(gatewayName, request, startedAt, stopwatch, 0,
+                GatewayErrorCategory.Validation, "TenantId is required.");
+        }
+
+        var transmission = await _transmissions.GetByTenantAndIdAsync(request.TenantId, request.TransmissionId, ct).ConfigureAwait(false);
         if (transmission is null)
         {
             return Fail(gatewayName, request, startedAt, stopwatch, 0,
