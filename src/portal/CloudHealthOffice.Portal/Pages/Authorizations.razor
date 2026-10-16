@@ -162,7 +162,7 @@
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Auth ID">
-                            <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.AuthorizationId</MudText>
+                            <RecordLink Href="@AuthorizationHref(context.AuthorizationId)" style="font-family: monospace;" data-testid="authorization-link">@context.AuthorizationId</RecordLink>
                         </MudTd>
                         <MudTd DataLabel="Member">
                             <MudText Typo="Typo.body2">@context.MemberName</MudText>
@@ -198,7 +198,7 @@
                             <MudIconButton Icon="@Icons.Material.Filled.Visibility"
                                           Color="Color.Primary"
                                           Size="Size.Small"
-                                          OnClick="@(() => ViewAuthorizationDetails(context.AuthorizationId))" />
+                                          Href="@AuthorizationHref(context.AuthorizationId)" aria-label="Open authorization" />
                         </MudTd>
                     </RowTemplate>
                 </MudTable>
@@ -359,22 +359,7 @@
             return $"{avg / 60000:F1}m";
     }
 
-    private async Task ViewAuthorizationDetails(string authorizationId)
-    {
-        var parameters = new DialogParameters
-        {
-            { "AuthorizationId", authorizationId }
-        };
-
-        var options = new DialogOptions
-        {
-            MaxWidth = MaxWidth.Large,
-            FullWidth = true,
-            CloseButton = true
-        };
-
-        await DialogService.ShowAsync<AuthorizationDetailsDialog>("Authorization Details", parameters, options);
-    }
+    private static string AuthorizationHref(string authorizationId) => $"/authorizations/{Uri.EscapeDataString(authorizationId)}";
 
     private async Task OpenSubmitDialog()
     {

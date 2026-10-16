@@ -1,0 +1,30 @@
+@page "/authorizations/{AuthorizationId}"
+@page "/authorizations/{AuthorizationId}/{Tab}"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+
+<PageTitle>Authorization @AuthorizationId - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="authorizations:read" RoleName="UMCoordinator">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudBreadcrumbs Items="_breadcrumbs" Class="mb-4" />
+    <AuthorizationRecordView @key="AuthorizationId" AuthorizationId="@AuthorizationId" Tab="@Tab" BaseHref="@BaseHref" />
+</MudContainer>
+</PermissionGate>
+
+@code {
+    [Parameter] public string AuthorizationId { get; set; } = string.Empty;
+    [Parameter] public string? Tab { get; set; }
+
+    private string BaseHref => $"/authorizations/{Uri.EscapeDataString(AuthorizationId)}";
+
+    private List<BreadcrumbItem> _breadcrumbs = new();
+
+    protected override void OnParametersSet() =>
+        _breadcrumbs =
+        [
+            new("Home", href: "/home"),
+            new("Authorizations", href: "/authorizations"),
+            new($"Authorization {AuthorizationId}", href: null, disabled: true),
+        ];
+}
