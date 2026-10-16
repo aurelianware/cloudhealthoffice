@@ -72,9 +72,19 @@ public class CapitationRunRepositoryMongo : ICapitationRunRepository
     {
         run.TenantId = GetTenantId();
         run.CreatedAt = DateTime.UtcNow;
+        run.Revision = 0;
         await _collection.InsertOneAsync(run);
         _logger.LogInformation("Created capitation run {RunNumber}", run.RunNumber);
         return run;
+    }
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<CapitationRun> RevisionIs(long expected)
+    {
+        var b = Builders<CapitationRun>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
     }
 
     public async Task<CapitationRun> UpdateAsync(CapitationRun run)
@@ -82,7 +92,28 @@ public class CapitationRunRepositoryMongo : ICapitationRunRepository
         var filter = Builders<CapitationRun>.Filter.And(
             Builders<CapitationRun>.Filter.Eq(x => x.Id, run.Id),
             Builders<CapitationRun>.Filter.Eq(x => x.TenantId, run.TenantId));
-        await _collection.ReplaceOneAsync(filter, run);
+        // Conditional on the revision the caller read: of two executes (or an
+        // execute and a cancel) of the same Pending run, only one is written.
+        var expected = run.Revision;
+        run.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), run);
+        }
+        catch
+        {
+            run.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            run.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new CapitationConcurrencyException("Capitation run", run.Id, expected);
+            // Missing: as before, nothing written and no error.
+        }
         _logger.LogInformation("Updated capitation run {RunNumber}", run.RunNumber);
         return run;
     }

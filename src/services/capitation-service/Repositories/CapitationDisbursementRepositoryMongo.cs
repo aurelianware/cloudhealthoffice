@@ -73,6 +73,7 @@ public class CapitationDisbursementRepositoryMongo : ICapitationDisbursementRepo
     public async Task<CapitationDisbursement> CreateAsync(CapitationDisbursement disbursement)
     {
         disbursement.TenantId = GetTenantId();
+        disbursement.Revision = 0;
         await _collection.InsertOneAsync(disbursement);
         return disbursement;
     }
@@ -85,12 +86,12 @@ public class CapitationDisbursementRepositoryMongo : ICapitationDisbursementRepo
             f.Eq(d => d.TenantId, tenantId),
             f.Eq(d => d.Id, id),
             f.Eq(d => d.Status, DisbursementStatus.Pending));
-        var result = await _collection.UpdateOneAsync(filter, Builders<CapitationDisbursement>.Update
+        var result = await _collection.UpdateOneAsync(filter, Bumped(Builders<CapitationDisbursement>.Update
             .Set(d => d.Status, DisbursementStatus.Releasing)
             .Set(d => d.ReleaseClaimId, claimId)
             .Set(d => d.ReleaseClaimedAt, claimedAt)
             .Set(d => d.ReleasedBy, releasedBy)
-            .Set(d => d.LastUpdatedAt, DateTime.UtcNow));
+            .Set(d => d.LastUpdatedAt, DateTime.UtcNow)));
         return result.ModifiedCount == 1;
     }
 
@@ -103,20 +104,56 @@ public class CapitationDisbursementRepositoryMongo : ICapitationDisbursementRepo
             f.Eq(d => d.Id, id),
             f.Eq(d => d.Status, DisbursementStatus.Releasing),
             f.Eq(d => d.ReleaseClaimId, claimId));
-        await _collection.UpdateOneAsync(filter, Builders<CapitationDisbursement>.Update
+        await _collection.UpdateOneAsync(filter, Bumped(Builders<CapitationDisbursement>.Update
             .Set(d => d.Status, DisbursementStatus.Pending)
             .Set(d => d.ReleaseClaimId, null)
             .Set(d => d.ReleaseClaimedAt, null)
             .Set(d => d.ReleasedBy, null)
             .Set(d => d.ErrorMessage, reason)
-            .Set(d => d.LastUpdatedAt, DateTime.UtcNow));
+            .Set(d => d.LastUpdatedAt, DateTime.UtcNow)));
+    }
+
+    /// <summary>Every targeted write to a disbursement bumps its <see cref="CapitationDisbursement.Revision"/>.</summary>
+    private static UpdateDefinition<CapitationDisbursement> Bumped(UpdateDefinition<CapitationDisbursement> update) =>
+        update.Inc(d => d.Revision, 1L);
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<CapitationDisbursement> RevisionIs(long expected)
+    {
+        var b = Builders<CapitationDisbursement>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(d => d.Revision, 0L), b.Exists(d => d.Revision, false))
+            : b.Eq(d => d.Revision, expected);
     }
 
     public async Task<CapitationDisbursement> UpdateAsync(CapitationDisbursement disbursement)
     {
         disbursement.LastUpdatedAt = DateTime.UtcNow;
-        await _collection.ReplaceOneAsync(
-            d => d.TenantId == disbursement.TenantId && d.Id == disbursement.Id, disbursement);
+        var f = Builders<CapitationDisbursement>.Filter;
+        var filter = f.And(f.Eq(d => d.TenantId, disbursement.TenantId), f.Eq(d => d.Id, disbursement.Id));
+        // Conditional on the revision the caller read: a replace from a stale
+        // read (a cancel read while Pending) can never undo a conditional write
+        // made since (TryClaimForReleaseAsync's Pending to Releasing).
+        var expected = disbursement.Revision;
+        disbursement.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), disbursement);
+        }
+        catch
+        {
+            disbursement.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            disbursement.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new CapitationConcurrencyException("Capitation disbursement", disbursement.Id, expected);
+            // Missing: as before, nothing written and no error.
+        }
         return disbursement;
     }
 }
