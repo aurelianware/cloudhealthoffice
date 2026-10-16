@@ -211,6 +211,8 @@ public static class ChoAuthenticationExtensions
     {
         var tenantOptions = app.ApplicationServices.GetRequiredService<TenantMiddlewareOptions>();
 
+        // A conditional write that lost to a concurrent one is answered 409, in every service.
+        app.UseMiddleware<ConcurrencyConflictMiddleware>();
         app.UseAuthentication();
         app.UseMiddleware<TenantMiddleware>(tenantOptions);
         app.UseAuthorization();
