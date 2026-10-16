@@ -68,8 +68,8 @@ public class EligibilityController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing eligibility inquiry");
-            return StatusCode(500, new { error = "Error processing inquiry", details = ex.Message });
+            _logger.LogError(ex, "Error processing eligibility inquiry (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Error processing inquiry");
         }
     }
 
@@ -268,10 +268,16 @@ public class EligibilityController : ControllerBase
         {
             parsed = _edi270Parser.Parse(edi270);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
         {
+            // The parser's own validation messages describe the input, not the server.
             _logger.LogWarning(ex, "Failed to parse 270 EDI");
             return BadRequest($"Invalid 270 EDI: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse 270 EDI (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return BadRequest($"Invalid 270 EDI: the interchange could not be parsed (trace id {ChoProblemResults.TraceId(HttpContext)}).");
         }
 
         var inquiry = parsed.Inquiry;

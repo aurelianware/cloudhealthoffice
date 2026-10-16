@@ -41,6 +41,9 @@ public class BatchEligibilityService : IBatchEligibilityService
     private readonly EligibilityAdapterFactory _adapters;
     private readonly ILogger<BatchEligibilityService> _logger;
 
+    /// <summary>What a batch row that failed unexpectedly reports; the exception is logged.</summary>
+    public const string BatchRowFailedMessage = "The eligibility check for this row failed. Retry the batch or contact support.";
+
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     public BatchEligibilityService(
@@ -258,15 +261,17 @@ public class BatchEligibilityService : IBatchEligibilityService
             }
             catch (Exception ex)
             {
+                // The row result is returned to the caller: the exception text stays in the log.
+                _logger.LogError(ex, "Batch eligibility row {RowNumber} failed", row.RowNumber);
                 resultRow.IsEligible = false;
-                resultRow.Error = ex.Message;
+                resultRow.Error = BatchRowFailedMessage;
                 job.FailedRows++;
                 if (job.Errors.Count < 20)
                     job.Errors.Add(new BatchRowError
                     {
                         RowNumber = row.RowNumber,
                         SubscriberId = row.Identifier,
-                        Message = ex.Message
+                        Message = BatchRowFailedMessage
                     });
             }
 
