@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Audit;
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PaymentService.Models;
@@ -271,10 +272,10 @@ public class PaymentsController : ControllerBase
         {
             // An ACH BPR that configuration cannot fill (e.g. no BPR10
             // originating company id) is refused, never emitted misaligned.
-            _logger.LogError(ex, "Cannot generate 835 for payment {PaymentId}", SanitizeForLog(id));
+            _logger.LogError(ex, "Cannot generate 835 for payment {PaymentId} (trace id {TraceId})",
+                SanitizeForLog(id), ChoProblemResults.TraceId(HttpContext));
             await RecordEraAsync(accessLog, id, payment, StatusCodes.Status500InternalServerError);
-            return Problem(title: "835 cannot be generated", detail: ex.Message,
-                statusCode: StatusCodes.Status500InternalServerError);
+            return this.ServerError("835 cannot be generated");
         }
 
         var filename = $"835_{payment.CheckNumber}.edi";
