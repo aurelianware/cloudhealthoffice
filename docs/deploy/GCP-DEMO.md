@@ -128,6 +128,7 @@ To bring everything back, rerun the deploy workflow with the existing image tag.
 - Cloud Health Office's services running on Google Cloud with no application code changes. The same manifests drive AKS, local Kubernetes and GKE.
 - Kafka, MongoDB and Redis running in the cluster, with keyless GitHub Actions deploys.
 - Token authentication enforced on every API, using development-signed tokens.
+- Services running as `Development` hosts (claims-service, provider-service and fhir-service as `Testing` hosts). A Development or Testing host refuses to start on Kubernetes unless an override says it is deliberate. The renderer sets `CHO_ALLOW_DEV_ON_DEPLOYED_HOST=true` (and `CHO_TESTING=1`, `CHO_ALLOW_TESTING_ENVIRONMENT=true`) on every Deployment, and each pod logs a warning on startup. Development hosts return exception details in error responses. That is acceptable only because the cluster holds synthetic data and is not publicly reachable.
 
 **It isn't:**
 - **A production or HIPAA environment.** Production on Google Cloud would need:

@@ -106,16 +106,78 @@ public class ChoTestingEnvironmentTests
     }
 
     [Theory]
-    [InlineData("Production", false)]
-    [InlineData("Staging", false)]
-    [InlineData("Development", true)]
-    public void OtherEnvironments_AreUnaffectedByTheMarkers(string environment, bool allowed)
+    [InlineData("Production")]
+    [InlineData("Staging")]
+    public void ProductionAndStaging_AreUnaffectedByTheMarkers(string environment)
     {
         // Neither the test marker's absence nor a platform marker matters to them.
         foreach (var vars in new[] { Vars(), Vars((ChoTestingEnvironment.KubernetesMarkerVariable, "10.0.0.1")) })
         {
             ((Action)(() => ChoTestingEnvironment.EnsureNotDeployed(new Env(environment), vars))).Should().NotThrow();
-            ChoTestingEnvironment.AllowsDevelopmentSecrets(new Env(environment), vars).Should().Be(allowed);
+            ChoTestingEnvironment.AllowsDevelopmentSecrets(new Env(environment), vars).Should().BeFalse();
         }
+    }
+
+    // ── Development: allowed anywhere except a deployed host, unless overridden ──
+
+    [Fact]
+    public void Development_OffAnyPlatform_IsAllowed_WithoutAnyMarker()
+    {
+        ((Action)(() => ChoTestingEnvironment.EnsureNotDeployed(new Env("Development"), Vars()))).Should().NotThrow();
+        ChoTestingEnvironment.AllowsDevelopmentSecrets(new Env("Development"), Vars()).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(ChoTestingEnvironment.KubernetesMarkerVariable, "10.0.0.1")]
+    [InlineData(ChoTestingEnvironment.AppServiceMarkerVariable, "cho-member-service")]
+    [InlineData(ChoTestingEnvironment.ContainerAppsMarkerVariable, "member-service")]
+    public void Development_OnADeployedHost_WithoutOverride_RefusesToStart(string platformVariable, string value)
+    {
+        var vars = Vars((platformVariable, value));
+
+        ((Action)(() => ChoTestingEnvironment.EnsureNotDeployed(new Env("Development"), vars)))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage($"*{platformVariable}*{ChoTestingEnvironment.DevelopmentOverrideVariable}=true*");
+        ((Func<bool>)(() => ChoTestingEnvironment.AllowsDevelopmentSecrets(new Env("Development"), vars)))
+            .Should().Throw<InvalidOperationException>();
+    }
+
+    [Theory]
+    [InlineData("false")]
+    [InlineData("")]
+    [InlineData("1")]
+    public void Development_InKubernetes_WithAnythingButTrue_RefusesToStart(string value)
+    {
+        var vars = Vars((ChoTestingEnvironment.KubernetesMarkerVariable, "10.0.0.1"),
+            (ChoTestingEnvironment.DevelopmentOverrideVariable, value));
+        ((Action)(() => ChoTestingEnvironment.EnsureNotDeployed(new Env("Development"), vars))).Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Development_InKubernetes_TheTestingOverride_DoesNotCount()
+    {
+        var vars = Vars(Marker, (ChoTestingEnvironment.KubernetesMarkerVariable, "10.0.0.1"),
+            (ChoTestingEnvironment.OverrideVariable, "true"));
+        ((Action)(() => ChoTestingEnvironment.EnsureNotDeployed(new Env("Development"), vars))).Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Development_InKubernetes_WithExplicitOverride_IsAllowed_AndWarnsOnStderr()
+    {
+        var vars = Vars((ChoTestingEnvironment.KubernetesMarkerVariable, "10.0.0.1"),
+            (ChoTestingEnvironment.DevelopmentOverrideVariable, "true"));
+        var stderr = new StringWriter();
+        var original = Console.Error;
+        Console.SetError(stderr);
+        try
+        {
+            ChoTestingEnvironment.AllowsDevelopmentSecrets(new Env("Development"), vars).Should().BeTrue();
+        }
+        finally
+        {
+            Console.SetError(original);
+        }
+
+        stderr.ToString().Should().Contain("WARNING").And.Contain(ChoTestingEnvironment.DevelopmentOverrideVariable);
     }
 }
