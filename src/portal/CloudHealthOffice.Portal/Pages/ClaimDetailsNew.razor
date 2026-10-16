@@ -1235,7 +1235,7 @@
     private bool _exportingEob;
     private string BackHref => string.IsNullOrWhiteSpace(FromRun)
         ? "/claims"
-        : $"/mass-adjudication-runs?run={Uri.EscapeDataString(FromRun)}";
+        : $"/batch-adjudication?run={Uri.EscapeDataString(FromRun)}";
     private string BackLabel => string.IsNullOrWhiteSpace(FromRun)
         ? "Back to Claims"
         : "Back to Adjudication Run";
@@ -1371,7 +1371,7 @@
 
         if (!string.IsNullOrWhiteSpace(FromRun))
         {
-            _breadcrumbItems.Add(new BreadcrumbItem("Mass Adjudication", href: BackHref));
+            _breadcrumbItems.Add(new BreadcrumbItem("Batch Adjudication", href: BackHref));
         }
         else
         {
