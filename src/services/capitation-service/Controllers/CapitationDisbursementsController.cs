@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CapitationService.Models;
 using CapitationService.Services;
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.NachaTransmission;
 
@@ -374,8 +375,8 @@ public class CapitationDisbursementsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing Stripe Connect webhook");
-            return BadRequest(new { error = ex.Message });
+            _logger.LogError(ex, "Error processing Stripe Connect webhook (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Error processing Stripe Connect webhook", StatusCodes.Status400BadRequest);
         }
     }
 }

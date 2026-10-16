@@ -223,7 +223,7 @@ public class CapitationRunService : ICapitationRunService
                 }
                 catch (Exception ex)
                 {
-                    var msg = $"Failed to generate statement for provider {contract.ProviderNPI} ({contract.ContractNumber}): {ex.Message}";
+                    var msg = $"Failed to generate statement for provider {contract.ProviderNPI} ({contract.ContractNumber}): {ClientErrorText.For(ex)}";
                     run.Warnings.Add(msg);
                     _logger.LogWarning(ex, "Failed to generate statement for provider {NPI}, contract {ContractNumber}",
                         contract.ProviderNPI, contract.ContractNumber);
@@ -251,7 +251,7 @@ public class CapitationRunService : ICapitationRunService
         catch (Exception ex)
         {
             run.Status = CapitationRunStatus.Failed;
-            run.Errors.Add(ex.Message);
+            run.Errors.Add(ClientErrorText.For(ex));
             run.ExecutionCompletedAt = DateTime.UtcNow;
             _logger.LogError(ex, "Capitation run {RunNumber} failed", run.RunNumber);
         }
