@@ -280,7 +280,10 @@ public sealed class RedisAccumulatorEngineTests : IClassFixture<RedisServerFixtu
                 new AccumulatorSnapshot { Type = ded, Scope = scope, NetworkTier = NetworkTier.InNetwork, AccumulatedAmountAfter = answer.Sum(c => c.Deductible) },
                 new AccumulatorSnapshot { Type = oop, Scope = scope, NetworkTier = NetworkTier.InNetwork, AccumulatedAmountAfter = answer.Sum(c => c.Oop) },
             ];
-            if (DuringNextRead is { } hook)
+            // The hook is the individual hash's read: GetAccumulatorsAsync rebuilds the
+            // individual and the family hash in parallel, so "the next read" of either
+            // scope would make the scenario depend on which reaches claims-service first.
+            if (scope == AccumulatorScope.Individual && DuringNextRead is { } hook)
             {
                 DuringNextRead = null;
                 await hook();
