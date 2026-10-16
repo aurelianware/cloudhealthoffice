@@ -22,7 +22,7 @@ public class ClaimDetailsClaimSwitchTests : TestContext
         Services.AddSingleton(_claims.Object);
         Services.AddSingleton(Mock.Of<IWorkQueueService>());
         // An examiner: may add notes (claims:work).
-        Services.AddSingleton(Mock.Of<IUserContextService>(u => u.HasPermission("claims:work") == true));
+        Services.AddSingleton(Mock.Of<IUserContextService>(u => u.HasPermission("claims:note") == true));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         _claims.Setup(c => c.GetClaimByIdAsync(It.IsAny<string>()))
