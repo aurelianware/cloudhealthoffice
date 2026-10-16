@@ -123,6 +123,11 @@ public class ClaimsServiceClient : IClaimsServiceClient
         _logger.LogError(
             "Failed to write AI examination for claim {ClaimId}: {Status} {Body}",
             claimId, response.StatusCode, body);
+        // A server-side or throttling failure is not an answer: the write is
+        // retried (the consumer redelivers the event) instead of being dropped.
+        var status = (int)response.StatusCode;
+        if (status >= 500 || status is 408 or 429)
+            throw new HttpRequestException($"claims-service answered {status} to the AI examination write", null, response.StatusCode);
         return false;
     }
 }
