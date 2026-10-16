@@ -122,6 +122,7 @@ public sealed class ScrubbingStage : IClaimAdjudicationStage
                 Continue = false,
                 Outcome = ClaimAdjudicationOutcome.Pend,
                 Reason = reason,
+                CheckUnavailable = true,
             };
         }
 

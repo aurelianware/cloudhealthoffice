@@ -171,7 +171,7 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
                 PendedAt = DateTime.UtcNow,
             };
             activity?.SetTag("duplicate.outcome", "pend");
-            return ClaimAdjudicationStageResult.Pend(StageName, reason);
+            return ClaimAdjudicationStageResult.Pend(StageName, reason).AsCheckUnavailable(context);
         }
 
         var priors = candidates

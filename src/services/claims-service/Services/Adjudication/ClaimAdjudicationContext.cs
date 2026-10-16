@@ -138,6 +138,32 @@ public class ClaimAdjudicationContext
     /// </summary>
     public PendDetails? PendDetails { get; set; }
 
+    private readonly HashSet<string> _unavailableCheckReasons = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The reasons recorded on this run for checks that could not run
+    /// (<see cref="ClaimAdjudicationStageResult.AsCheckUnavailable"/>). These
+    /// are the exact strings the stages wrote, so whether a pend is transient
+    /// never depends on its wording.
+    /// </summary>
+    public IReadOnlyCollection<string> UnavailableCheckReasons => _unavailableCheckReasons;
+
+    /// <summary>Records <paramref name="reason"/> as a check that could not run on this run.</summary>
+    public void MarkCheckUnavailable(string? reason)
+    {
+        if (!string.IsNullOrWhiteSpace(reason)) _unavailableCheckReasons.Add(reason);
+    }
+
+    /// <summary>
+    /// True when <paramref name="reason"/> (a pend reason, or a "CODE: reason"
+    /// entry, possibly truncated) is one this run recorded as a check that
+    /// could not run.
+    /// </summary>
+    public bool IsCheckUnavailable(string? reason) =>
+        !string.IsNullOrWhiteSpace(reason)
+        && _unavailableCheckReasons.Any(r => reason.Contains(r, StringComparison.Ordinal)
+                                             || r.StartsWith(reason, StringComparison.Ordinal));
+
     /// <summary>
     /// Duplicate-claim findings recorded by
     /// <see cref="Stages.DuplicateClaimStage"/> when it pends. Held here as

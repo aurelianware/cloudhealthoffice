@@ -321,7 +321,7 @@ public partial class BenefitCalculationStageTests
         Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
         Assert.Equal(ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode, ctx.PendDetails!.PendCode);
         Assert.Contains($"HTTP {(int)status}", ctx.PendDetails.PendReason);
-        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
+        Assert.True(result.CheckUnavailable);
         Assert.True(ClaimAdjudicationOrchestrator.AnyCheckFailed(ctx));
         // No denial is stamped on the adjudication result.
         Assert.Null(ctx.AdjudicationResult.DenialReasonCode);
@@ -793,7 +793,7 @@ public partial class BenefitCalculationStageTests
         Assert.StartsWith(BenefitCalculationStage.PriorAuthorizationUnavailableReason, ctx.PendDetails.PendReason);
         Assert.Null(ctx.AdjudicationResult.DenialReasonCode);
         Assert.Null(ctx.BenefitResolutionResult);
-        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(ctx.PendDetails.PendReason));
+        Assert.True(ctx.IsCheckUnavailable(ctx.PendDetails.PendReason));
         await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
     }
 

@@ -46,4 +46,7 @@ public sealed record EnforcementOutcome(
     DateTime AsOfDate,
     string? NetworkId = null,
     string? TierName = null,
-    int? TierLevel = null);
+    int? TierLevel = null,
+    // The check could not run (a lookup was unavailable): a pend for it is
+    // never overridden by an examiner approval; the re-run retries it.
+    bool CheckUnavailable = false);

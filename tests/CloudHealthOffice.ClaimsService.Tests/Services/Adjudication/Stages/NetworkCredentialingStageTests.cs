@@ -277,7 +277,7 @@ public class NetworkCredentialingStageTests
         Assert.Equal(EnforcementDecision.Pend, ctx.EnforcementOutcomes[0].Decision);
         Assert.Contains("membership-verification-unavailable",
             ctx.EnforcementOutcomes[0].Reason ?? string.Empty);
-        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
+        Assert.True(result.CheckUnavailable);
     }
 
     /// <summary>
@@ -300,7 +300,7 @@ public class NetworkCredentialingStageTests
         var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
-        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
+        Assert.True(result.CheckUnavailable);
     }
 
     [Fact]
@@ -328,7 +328,7 @@ public class NetworkCredentialingStageTests
         // Membership = Allow, Credentialing unavailable = Pend (not Deny).
         Assert.Equal(EnforcementDecision.Allow, ctx.EnforcementOutcomes[0].Decision);
         Assert.Equal(EnforcementDecision.Pend, ctx.EnforcementOutcomes[1].Decision);
-        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
+        Assert.True(result.CheckUnavailable);
     }
 
     [Fact]
