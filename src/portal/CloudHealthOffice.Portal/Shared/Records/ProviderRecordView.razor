@@ -1,10 +1,14 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
 @using CloudHealthOffice.Portal.Services
+@using CloudHealthOffice.Portal.Pages
 @inject IProviderService ProviderService
 @inject IUserContextService UserContextService
 @inject ISnackbar Snackbar
+@inject IClaimsService ClaimsService
 
-<MudDialog>
-    <DialogContent>
+@* The provider record (docs/architecture/portal-navigation.md §4), hosted by
+   /providers/{id}; one instance per provider (the page keys it on the id). *@
+<div data-testid="provider-record">
         @if (_serviceError != null)
         {
             <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
@@ -14,11 +18,37 @@
         {
             <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
         }
-        else if (_provider != null)
+        else if (_provider is null)
         {
-            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
-                <!-- Overview Tab -->
-                <MudTabPanel Text="Overview" Icon="@Icons.Material.Filled.Info">
+            <MudAlert Severity="Severity.Warning" data-testid="provider-missing">Provider @ProviderId couldn't be loaded.</MudAlert>
+        }
+        else
+        {
+            <div class="d-flex align-center gap-3 mb-4 pa-2" style="border: 1px solid rgba(0,255,255,0.2); border-radius: 8px; background: rgba(0,255,255,0.03);">
+                <MudAvatar Size="Size.Large" Color="Color.Primary"><MudIcon Icon="@Icons.Material.Filled.LocalHospital" /></MudAvatar>
+                <div>
+                    <MudText Typo="Typo.h5" Style="font-weight: 600;">@_provider.Name</MudText>
+                    <div class="d-flex align-center gap-2 mt-1">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-family: monospace;">NPI @_provider.NPI</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@GetNetworkStatusColor(_provider.NetworkStatus)">@_provider.NetworkStatus</MudChip>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@_provider.Specialty</MudText>
+                    </div>
+                </div>
+                <OpenInNewTabButton Href="@RecordTabs.Href(BaseHref, ActiveTab)" />
+                <PinButton Kind="Provider" RecordId="@ProviderId" Label="@_provider.Name" />
+                <MudSpacer />
+                @if (_canEdit)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit"
+                               OnClick="EditAsync" data-testid="provider-edit">Edit provider</MudButton>
+                }
+            </div>
+
+            <RecordTabBar Tabs="ProviderTabs" ActiveKey="@ActiveTab" BaseHref="@BaseHref" />
+
+            @if (ActiveTab == "overview")
+            {
+                <div data-testid="provider-tab-overview">
                     <MudGrid Class="mt-2">
                         <!-- Basic Information -->
                         <MudItem xs="12" md="6">
@@ -185,10 +215,11 @@
                             </MudItem>
                         }
                     </MudGrid>
-                </MudTabPanel>
-
-                <!-- Locations Tab -->
-                <MudTabPanel Text="Locations" Icon="@Icons.Material.Filled.LocationOn">
+                </div>
+            }
+            else if (ActiveTab == "locations")
+            {
+                <div data-testid="provider-tab-locations">
                     <MudGrid Class="mt-2">
                         @foreach (var location in _provider.Locations)
                         {
@@ -225,10 +256,11 @@
                             </MudItem>
                         }
                     </MudGrid>
-                </MudTabPanel>
-
-                <!-- Network Assignments Tab -->
-                <MudTabPanel Text="Networks" Icon="@Icons.Material.Filled.Hub">
+                </div>
+            }
+            else if (ActiveTab == "networks")
+            {
+                <div data-testid="provider-tab-networks">
                     <MudTable Items="@_provider.NetworkAssignments" Class="mt-2" Dense="true">
                         <HeaderContent>
                             <MudTh>Network Name</MudTh>
@@ -258,10 +290,11 @@
                             </MudTd>
                         </RowTemplate>
                     </MudTable>
-                </MudTabPanel>
-
-                <!-- Credentials Tab -->
-                <MudTabPanel Text="Credentials" Icon="@Icons.Material.Filled.Badge">
+                </div>
+            }
+            else if (ActiveTab == "credentials")
+            {
+                <div data-testid="provider-tab-credentials">
                     <MudTable Items="@_provider.Credentials" Class="mt-2" Dense="true">
                         <HeaderContent>
                             <MudTh>Type</MudTh>
@@ -284,10 +317,11 @@
                             </MudTd>
                         </RowTemplate>
                     </MudTable>
-                </MudTabPanel>
-
-                <!-- Contract Tab -->
-                <MudTabPanel Text="Contract" Icon="@Icons.Material.Filled.Description">
+                </div>
+            }
+            else if (ActiveTab == "contract")
+            {
+                <div data-testid="provider-tab-contract">
                     @if (_provider.Contract != null)
                     {
                         <MudGrid Class="mt-2">
@@ -335,10 +369,55 @@
                     {
                         <MudAlert Severity="Severity.Info" Class="mt-2">No contract information available</MudAlert>
                     }
-                </MudTabPanel>
-
-                <!-- Performance Tab -->
-                <MudTabPanel Text="Performance" Icon="@Icons.Material.Filled.Analytics">
+                </div>
+            }
+            else if (ActiveTab == "claims")
+            {
+                <div data-testid="provider-tab-claims">
+                    @if (_claimsError is not null)
+                    {
+                        <MudAlert Severity="Severity.Warning">@_claimsError</MudAlert>
+                    }
+                    else if (_claims is null)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                    }
+                    else if (_claims.Claims.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info" data-testid="provider-claims-empty">No claims billed or rendered by NPI @_provider.NPI.</MudAlert>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                            @_claims.TotalCount.ToString("N0") claims billed or rendered by NPI @_provider.NPI@(_claims.TotalCount > _claims.Claims.Count ? $" (newest {_claims.Claims.Count} shown)" : "").
+                        </MudText>
+                        <MudSimpleTable Dense="true" Hover="true">
+                            <thead><tr><th>Claim</th><th>Member</th><th>Service</th><th>Status</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Paid</th></tr></thead>
+                            <tbody>
+                                @foreach (var claim in _claims.Claims)
+                                {
+                                    <tr data-testid="provider-claim">
+                                        <td><RecordLink Href="@($"/claims/{Uri.EscapeDataString(claim.ClaimId)}")">@claim.DisplayClaimNumber</RecordLink></td>
+                                        <td>
+                                            @if (!string.IsNullOrWhiteSpace(claim.MemberId))
+                                            {
+                                                <RecordLink Href="@($"/members/{Uri.EscapeDataString(claim.MemberId)}")">@claim.MemberId</RecordLink>
+                                            }
+                                        </td>
+                                        <td>@(claim.ServiceDateFrom == default ? "" : claim.ServiceDateFrom.ToString("MM/dd/yyyy"))</td>
+                                        <td>@claim.Status</td>
+                                        <td style="text-align:right;">@claim.TotalChargeAmount.ToString("C")</td>
+                                        <td style="text-align:right;">@claim.PaidAmount.ToString("C")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                </div>
+            }
+            else if (ActiveTab == "performance")
+            {
+                <div data-testid="provider-tab-performance">
                     @if (_provider.Performance != null)
                     {
                         <MudGrid Class="mt-2">
@@ -411,33 +490,70 @@
                     {
                         <MudAlert Severity="Severity.Info" Class="mt-2">No performance data available</MudAlert>
                     }
-                </MudTabPanel>
-            </MudTabs>
+                </div>
+            }
         }
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="Close">Close</MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => OnEdit.InvokeAsync(_provider?.ProviderId))">
-            Edit Provider
-        </MudButton>
-    </DialogActions>
-</MudDialog>
+</div>
+
+<CreateEditProviderDialog @ref="_editDialog" OnProviderSaved="ReloadAsync" />
 
 @code {
-    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
-    [Parameter] public EventCallback OnProviderUpdated { get; set; }
+    [Parameter, EditorRequired] public string ProviderId { get; set; } = string.Empty;
 
-    private bool _loading = false;
+    /// <summary>The tab in the URL; none means Overview.</summary>
+    [Parameter] public string? Tab { get; set; }
+
+    /// <summary>The record's path without a tab, e.g. <c>/providers/P1</c>.</summary>
+    [Parameter, EditorRequired] public string BaseHref { get; set; } = string.Empty;
+
+    // Fixed order (portal-navigation.md §8). Payments, Authorizations,
+    // Calls, Notes and Documents join when that data is wired.
+    private static readonly IReadOnlyList<RecordTab> ProviderTabs =
+    [
+        new("overview", "Overview", Icons.Material.Filled.Info),
+        new("locations", "Locations", Icons.Material.Filled.LocationOn),
+        new("networks", "Networks", Icons.Material.Filled.Hub),
+        new("credentials", "Credentials", Icons.Material.Filled.Badge),
+        new("contract", "Contract", Icons.Material.Filled.Description),
+        new("claims", "Claims", Icons.Material.Filled.Receipt),
+        new("performance", "Performance", Icons.Material.Filled.Analytics),
+    ];
+
+    private string ActiveTab => RecordTabs.Resolve(ProviderTabs, Tab, "overview");
+
+    private bool _loading = true;
     private bool _refreshing = false;
+    private bool _canEdit;
     private ProviderDetails? _provider;
     private string? _serviceError;
+    private ClaimSearchResult? _claims;
+    private string? _claimsError;
+    private CreateEditProviderDialog? _editDialog;
 
-    public async Task OpenAsync(string providerId)
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await UserContextService.GetCurrentUserAsync();
+            _canEdit = UserContextService.HasPermission("providers:write");
+        }
+        catch { _canEdit = false; }
+        await ReloadAsync();
+    }
+
+    // The Claims tab loads the first time it is shown.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ActiveTab == "claims" && _claims is null && _claimsError is null && _provider is not null)
+            await LoadClaimsAsync();
+    }
+
+    private async Task ReloadAsync()
     {
         _loading = true;
         try
         {
-            _provider = await ProviderService.GetProviderByIdAsync(providerId);
+            _provider = await ProviderService.GetProviderByIdAsync(ProviderId);
         }
         catch (ServiceUnavailableException ex)
         {
@@ -451,13 +567,26 @@
         finally
         {
             _loading = false;
-            StateHasChanged();
+        }
+        if (ActiveTab == "claims" && _provider is not null) await LoadClaimsAsync();
+        StateHasChanged();
+    }
+
+    private async Task LoadClaimsAsync()
+    {
+        try
+        {
+            _claims = await ClaimsService.SearchClaimsAsync(new ClaimSearchRequest { ProviderId = _provider!.NPI, PageSize = 25 }) ?? new();
+        }
+        catch (Exception ex)
+        {
+            _claimsError = $"Claims couldn't be loaded: {ex.Message}";
         }
     }
 
-    private void Close()
+    private async Task EditAsync()
     {
-        MudDialog?.Close();
+        if (_editDialog is not null && _provider is not null) await _editDialog.OpenAsync(_provider.ProviderId);
     }
 
     /// <summary>
@@ -501,12 +630,6 @@
             StateHasChanged();
         }
     }
-
-    private EventCallback<string?> OnEdit => EventCallback.Factory.Create<string?>(this, async (providerId) =>
-    {
-        Close();
-        await OnProviderUpdated.InvokeAsync();
-    });
 
     private Color GetNetworkStatusColor(string status)
     {

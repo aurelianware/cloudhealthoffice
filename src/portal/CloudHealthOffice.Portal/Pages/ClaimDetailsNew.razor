@@ -1461,8 +1461,6 @@
         _ => Color.Default
     };
 
-    private ProviderDetailsDialog? _providerDialog;
-    private bool _providerDialogRequested;
 
     private async Task OpenMemberAsync()
     {
@@ -1491,14 +1489,8 @@
                 Snackbar.Add($"No provider record found for NPI {npi}.", Severity.Info);
                 return;
             }
-            if (_providerDialog is null)
-            {
-                _providerDialogRequested = true;
-                StateHasChanged();
-                await Task.Yield();
-            }
-            if (_providerDialog is not null)
-                await _providerDialog.OpenAsync(match.ProviderId);
+            // The provider's record page; Back returns to this claim.
+            NavigationManager.NavigateTo($"/providers/{Uri.EscapeDataString(match.ProviderId)}");
         }
         catch (ServiceUnavailableException)
         {
@@ -1876,12 +1868,6 @@
     };
 }
 
-<!-- Dialog Components -->
-@if (_providerDialogRequested)
-{
-    @* Rendered on first use only: the dialog brings its own services. *@
-    <ProviderDetailsDialog @ref="_providerDialog" />
-}
 <style>
     code {
         background-color: #f5f5f5;
