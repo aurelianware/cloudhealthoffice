@@ -4,6 +4,7 @@ using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
+using ChoProblemResults = CloudHealthOffice.Infrastructure.Middleware.ChoProblemResults;
 using CloudHealthOffice.Infrastructure.Security;
 using MongoDB.Driver;
 
@@ -558,7 +559,8 @@ public class BenefitPlansController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new { message = ex.Message });
+            _logger.LogWarning(ex, "Plan version could not be superseded (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return ChoProblemResults.ServerError(this, "Plan version could not be superseded", StatusCodes.Status409Conflict);
         }
     }
 
