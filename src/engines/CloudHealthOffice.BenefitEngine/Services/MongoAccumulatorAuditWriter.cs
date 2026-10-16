@@ -9,8 +9,9 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 /// Writes the durable accumulator audit trail to MongoDB or Cosmos DB.
 ///
 /// Used as the <see cref="IAccumulatorAuditWriter"/> behind the Redis accumulator
-/// service. The Redis service fires this off asynchronously after each adjudication
-/// — it is non-blocking and does not affect the adjudication latency path.
+/// service, which awaits every write inside the operation it records (commit,
+/// increment, reversal): a failed write fails that operation, and its retry
+/// writes the row. Writes are idempotent per claim.
 ///
 /// ── What this writes ──────────────────────────────────────────────
 ///
@@ -22,13 +23,14 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 ///
 /// ── Relationship with RedisAccumulatorService ─────────────────────
 ///
-/// Redis is the hot path (sub-millisecond reads, atomic HINCRBYFLOAT).
-/// This class is the cold path (durable, queryable, for audit/portal).
-/// Both stay in sync via the fire-and-forget write in ApplyUpdatesAsync.
+/// Redis is the hot path (sub-millisecond reads, atomic integer-cent
+/// increments). This class is the cold path (durable, queryable, for
+/// audit/portal).
 ///
-/// If an audit write fails (network blip, DB unavailable), it is logged
-/// and silently swallowed. The Redis state is the authoritative current
-/// balance; the audit trail self-heals on the next cache rebuild.
+/// If an audit write fails (network blip, DB unavailable), the exception
+/// propagates: the Redis service fails the operation with
+/// AccumulatorAuditException and the caller retries it. A cache rebuild does
+/// not touch the audit trail, so nothing else would restore a lost row.
 /// </summary>
 public class MongoAccumulatorAuditWriter : IAccumulatorAuditWriter
 {
@@ -131,8 +133,8 @@ public class MongoAccumulatorAuditWriter : IAccumulatorAuditWriter
                 if (attempt == MaxRetries - 1)
                 {
                     _logger.LogWarning(
-                        "Audit write failed after {Retries} retries for claim {ClaimId}, doc {DocId}. " +
-                        "Audit trail will self-heal on next cache rebuild.",
+                        "Audit write failed after {Retries} retries for claim {ClaimId}, doc {DocId}; " +
+                        "the accumulator operation fails and must be retried.",
                         MaxRetries, SanitizeForLog(claimId), SanitizeForLog(doc.Id));
                     throw;
                 }
