@@ -1,6 +1,7 @@
 using MongoDB.Driver;
 using MongoDB.Bson;
 using MemberService.Models;
+using MemberService.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -119,17 +120,49 @@ public class MemberRepositoryMongo : IMemberRepository
     {
         if (string.IsNullOrEmpty(member.Id))
             member.Id = Guid.NewGuid().ToString();
-            
+        member.Revision = 0;
+
         await _collection.InsertOneAsync(member);
         return member;
     }
 
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<Member> RevisionIs(long expected)
+    {
+        var b = Builders<Member>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
+    }
+
     public async Task<Member> UpdateAsync(Member member)
     {
-        var filter = Builders<Member>.Filter.Eq(x => x.Id, member.Id) & 
+        var filter = Builders<Member>.Filter.Eq(x => x.Id, member.Id) &
                      Builders<Member>.Filter.Eq(x => x.TenantId, member.TenantId);
-                     
-        await _collection.ReplaceOneAsync(filter, member);
+
+        // Conditional on the revision the caller read: a concurrent write in
+        // between makes this one fail instead of being silently overwritten.
+        var expected = member.Revision;
+        member.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), member);
+        }
+        catch
+        {
+            member.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            member.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new MemberConcurrencyException(member.Id, expected);
+            // Missing: unchanged behaviour (nothing written, no error).
+        }
+
         return member;
     }
 
