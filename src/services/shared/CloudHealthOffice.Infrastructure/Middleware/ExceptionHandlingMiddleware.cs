@@ -65,6 +65,7 @@ public class ExceptionHandlingMiddleware
     private static (HttpStatusCode statusCode, string code) MapException(Exception exception) => exception switch
     {
         TenantContextMissingException => (HttpStatusCode.Unauthorized, "TENANT_CONTEXT_MISSING"),
+        Data.ConcurrencyConflictException => (HttpStatusCode.Conflict, "CONCURRENCY_CONFLICT"),
         ArgumentException => (HttpStatusCode.BadRequest, "BAD_REQUEST"),
         UnauthorizedAccessException => (HttpStatusCode.Forbidden, "FORBIDDEN"),
         KeyNotFoundException => (HttpStatusCode.NotFound, "NOT_FOUND"),
@@ -80,6 +81,7 @@ public class ExceptionHandlingMiddleware
         "BAD_REQUEST" => "The request was invalid.",
         "FORBIDDEN" => "Access denied.",
         "NOT_FOUND" => "The requested resource was not found.",
+        "CONCURRENCY_CONFLICT" => "The resource was changed by another request. Re-read it and retry.",
         "INVALID_OPERATION" => "An unexpected error occurred.",
         "NOT_IMPLEMENTED" => "This feature is not yet available.",
         "TIMEOUT" => "The request timed out.",

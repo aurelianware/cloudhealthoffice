@@ -60,6 +60,19 @@ public class ExceptionHandlingMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_ConcurrencyConflict_Returns409()
+    {
+        var middleware = CreateMiddleware(_ => throw new CloudHealthOffice.Infrastructure.Data.ConcurrencyConflictException("stale"));
+        var context = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.StatusCode.Should().Be(409);
+        var error = await GetErrorResponse(context);
+        error!.Code.Should().Be("CONCURRENCY_CONFLICT");
+    }
+
+    [Fact]
     public async Task InvokeAsync_KeyNotFoundException_Returns404()
     {
         var middleware = CreateMiddleware(_ => throw new KeyNotFoundException("Not found"));
