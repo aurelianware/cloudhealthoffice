@@ -69,9 +69,23 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
     {
         paymentRun.TenantId = GetTenantId();
         paymentRun.CreatedAt = DateTime.UtcNow;
+        paymentRun.Revision = 0;
         await _collection.InsertOneAsync(paymentRun);
         _logger.LogInformation("Created payment run {PaymentRunNumber}", paymentRun.PaymentRunNumber);
         return paymentRun;
+    }
+
+    /// <summary>Every write to a run document bumps its <see cref="PaymentRun.Revision"/>.</summary>
+    private static UpdateDefinition<PaymentRun> Bumped(UpdateDefinition<PaymentRun> update) =>
+        update.Inc(x => x.Revision, 1L);
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<PaymentRun> RevisionIs(long expected)
+    {
+        var b = Builders<PaymentRun>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
     }
 
     public async Task<bool> TryStartAsync(string id, string executedBy, DateTime startedAt)
@@ -85,7 +99,7 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
             .Set(x => x.Status, PaymentRunStatus.Running)
             .Set(x => x.ExecutedBy, executedBy)
             .Set(x => x.ExecutionStartedAt, startedAt);
-        var result = await _collection.UpdateOneAsync(filter, update);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update));
         return result.ModifiedCount == 1;
     }
 
@@ -101,9 +115,9 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         var touched = outcomes.TouchedClaimIds;
         if (touched.Count > 0)
         {
-            var pulled = await _collection.UpdateOneAsync(filter, Builders<PaymentRun>.Update.PullFilter(
+            var pulled = await _collection.UpdateOneAsync(filter, Bumped(Builders<PaymentRun>.Update.PullFilter(
                 x => x.ReservationsNeedingAttention,
-                Builders<ReservationAttention>.Filter.In(a => a.ClaimId, touched)));
+                Builders<ReservationAttention>.Filter.In(a => a.ClaimId, touched))));
             if (pulled.MatchedCount == 0)
                 return false;
         }
@@ -118,7 +132,7 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         if (updates.Count == 0)
             return true;
 
-        var result = await _collection.UpdateOneAsync(filter, Builders<PaymentRun>.Update.Combine(updates));
+        var result = await _collection.UpdateOneAsync(filter, Bumped(Builders<PaymentRun>.Update.Combine(updates)));
         return result.MatchedCount == 1;
     }
 
@@ -145,7 +159,7 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
             filter &= f.Nin("GlOutbox.EventId", addGlEvents.Select(e => e.EventId));
             updates.Add(Builders<PaymentRun>.Update.PushEach(x => x.GlOutbox, addGlEvents));
         }
-        var result = await _collection.UpdateOneAsync(filter, Builders<PaymentRun>.Update.Combine(updates));
+        var result = await _collection.UpdateOneAsync(filter, Bumped(Builders<PaymentRun>.Update.Combine(updates)));
         return result.MatchedCount == 1;
     }
 
@@ -155,7 +169,7 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         var tenantId = GetTenantId();
         var f = Builders<PaymentRun>.Filter;
         var filter = f.And(f.Eq(x => x.Id, id), f.Eq(x => x.TenantId, tenantId), f.Eq(x => x.EftFile!.Sha256, superseded.Sha256));
-        var update = Builders<PaymentRun>.Update.Set(x => x.EftFile, file).Push(x => x.EftFileHistory, superseded);
+        var update = Bumped(Builders<PaymentRun>.Update.Set(x => x.EftFile, file).Push(x => x.EftFileHistory, superseded));
         if (addWarnings is { Count: > 0 })
             update = update.PushEach(x => x.Warnings, addWarnings);
         if (addGlEvents is { Count: > 0 })
@@ -191,6 +205,7 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
                     { "EftFile.VoidedPayments.$[v].RemainderReissueReference", reference },
                 } },
             { "$push", new BsonDocument { { "GlOutbox", message.ToBsonDocument() }, { "Warnings", warning } } },
+            { "$inc", new BsonDocument(nameof(PaymentRun.Revision), 1L) },
         };
         var options = new UpdateOptions
         {
@@ -205,7 +220,32 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         var filter = Builders<PaymentRun>.Filter.And(
             Builders<PaymentRun>.Filter.Eq(x => x.Id, paymentRun.Id),
             Builders<PaymentRun>.Filter.Eq(x => x.TenantId, paymentRun.TenantId));
-        await _collection.ReplaceOneAsync(filter, paymentRun);
+
+        // Conditional on the revision the caller read: a targeted write in
+        // between (Pending -> Running, reservation outcomes, the EFT file pin,
+        // a remainder reissue) or another save makes this one fail instead of
+        // being silently undone by the whole-run replace.
+        var expected = paymentRun.Revision;
+        paymentRun.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), paymentRun);
+        }
+        catch
+        {
+            paymentRun.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            paymentRun.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new PaymentConcurrencyException("Payment run", paymentRun.Id, expected);
+            // Missing: as before, nothing is written and the run is returned.
+        }
+
         _logger.LogInformation("Updated payment run {PaymentRunNumber}", paymentRun.PaymentRunNumber);
         return paymentRun;
     }
