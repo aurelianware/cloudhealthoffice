@@ -38,10 +38,15 @@ else if (_alerts.Any())
 
     private List<MemberAlertView> _alerts = new();
     private bool _loading = true;
+    private string? _loadedMemberId;
 
+    // Load once per member. Reloading on every parameter set looped: the
+    // count callback re-renders the host, which sets parameters again,
+    // which reloaded, which called back... re-querying alerts endlessly.
     protected override async Task OnParametersSetAsync()
     {
-        if (string.IsNullOrEmpty(MemberId)) return;
+        if (string.IsNullOrEmpty(MemberId) || string.Equals(MemberId, _loadedMemberId, StringComparison.Ordinal)) return;
+        _loadedMemberId = MemberId;
         await ReloadAsync();
     }
 

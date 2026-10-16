@@ -16,7 +16,7 @@
         {
             <tr>
                 <td>
-                    <span style="font-family: monospace;">@row.RelatedMemberId</span>
+                    <RecordLink Href="@($"/members/{Uri.EscapeDataString(row.RelatedMemberId)}/family")" style="font-family: monospace;" data-testid="family-member-link">@row.RelatedMemberId</RecordLink>
                 </td>
                 <td>
                     <MudChip T="string" Size="Size.Small" Color="Color.Info">@LabelFor(row.RelationshipCode)</MudChip>
