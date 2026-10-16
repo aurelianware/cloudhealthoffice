@@ -1,6 +1,6 @@
 # MongoDB write concurrency
 
-**Status:** high-risk sites fixed (Phase 5a). Medium and low sites are
+**Status:** high- and medium-risk sites fixed (Phase 5a). Low-risk sites are
 tracked below and still open.
 
 ## The rule
@@ -49,27 +49,34 @@ WorkItem, PaymentFileTransmission, ProviderReceivable, BankReconciliation, GL
 journal, ArBalance, SponsorAccount, SponsorBankAccount, ProviderBankAccount,
 MemberDocument, PremiumInvoice, and the Consent and PersonalRep transitions.
 
-## Still open
+### Medium-risk sites (Phase 5a, second pass)
 
-### Medium
-
-| Service | Site | Risk |
+| Service | Document | Notes |
 |---|---|---|
-| benefit-plan-service | `BenefitPlanRepositoryMongo` UpdateAsync, UpdateDraftAsync, publish/supersede, terminate | `VersionState` is checked on the read but not in the filter, and publish has no Draft precondition |
-| provider-service | `ProviderRepositoryMongo`, `OrganizationRepositoryMongo` (draft update, activate/supersede, replace version row) | same as benefit-plan |
-| capitation-service | `CapitationContractRepositoryMongo` UpdateAsync | contract rates |
-| provider-contracts-service | `MongoProviderContractRepository` UpdateAsync | contract terms |
-| engines | `FeeScheduleRepositoryMongo` fee schedule and provider contract upserts | pricing data |
-| eligibility-service | `MongoBatchJobContainer` UpsertAsync, WriteInlinePayloadAsync, RecordBlobPayloadAsync | whole-document writes from separate reads can erase each other |
-| encounter-service | `EncounterRepositoryMongo` UpdateAsync | |
-| risk-adjustment-service | `RiskScoreRepositoryMongo` UpdateAsync | RAF scores |
-| attachment-service | `AttachmentRepositoryMongo` UpdateAsync | |
-| sponsor-service | `SponsorRepositoryMongo` UpdateAsync | can undo `UpdateStatusAsync` |
-| member-service | `FamilyRelationshipRepositoryMongo` UpdatePairAsync | the transaction does not detect a stale read |
-| tenant-service | `TenantRepository` UpdateAsync | Stripe webhooks and admin edits overwrite each other |
-| premium-billing-service | `RemittanceRepositoriesMongo` RemittanceBatch UpdateAsync | |
-| fhir-service | `MongoPayerToPayerImportRepository` UpdateBackfilledLedgerAsync | the backfill job writes back a stale copy |
-| shared Infrastructure | `MongoClaimLifecycleStore` SaveAsync for transmissions, inbound attachment receipts and remittance receipts | a 999 and a 277CA processed concurrently can move a status backwards; outbox markers can be lost |
+| benefit-plan-service | BenefitPlan | publish needs a Draft and a Published predecessor at the revisions read; two publishes of one draft, or two drafts of one version, cannot both succeed; terminate needs Published |
+| provider-service | Provider, Organization | same shape for activate/supersede and draft edits; suspend and terminate are revision-conditional; projection patches bump the revision |
+| capitation-service | CapitationContract | |
+| provider-contracts-service | ProviderContract | |
+| engines | FeeSchedule, provider contract (FeeScheduleEngine) | create-or-replace upserts are conditional; revision 0 means create |
+| encounter-service | Encounter | two dispatches cannot both take the same Pending encounter |
+| risk-adjustment-service | RiskScore | a recalculation cannot undo Submitted |
+| attachment-service | Attachment | the acknowledgment endpoint answers 409, not 500 |
+| sponsor-service | Sponsor | a stale edit cannot undo a status change |
+| member-service | FamilyRelationship | both rows are conditional inside the pair transaction; a server WriteConflict (112) is also 409 |
+| tenant-service | Tenant | Stripe webhooks re-read and re-apply up to 5 times, then answer 400 so Stripe retries; `revision` is hidden in API responses |
+| premium-billing-service | RemittanceBatch | |
+| eligibility-service | batch job document (`MongoBatchJobContainer`) | no revision: job, inline payload and blob payload writes are targeted `$set`s of the parts they own |
+| fhir-service | payer-to-payer ledger (`UpdateBackfilledLedgerAsync`) | no revision: a targeted `$set` of the backfill's own fields, fenced on the commit it read |
+| shared Infrastructure | claim transmission, remittance receipt, inbound attachment receipt (`MongoClaimLifecycleStore`) | the 277CA processor, gateways, remittance processor/poster and attachment outbox re-read and re-apply through the existing state rules, so a status cannot move backwards and outbox markers survive |
+
+Benefit-plan, provider, capitation contract, provider contract, fee schedule
+and risk score PUTs replace the document with the request body. The body
+carries no revision, so the server copies the revision from its own read.
+That closes the race between the server's read and its write. It does not
+detect a client editing from an old copy; that would need the client to send
+a revision (`If-Match`), which is an API change.
+
+## Still open
 
 ### Low
 
@@ -103,8 +110,32 @@ grep -rnE "ReplaceOneAsync|FindOneAndReplaceAsync|\.ReplaceOne\(" --include='*.c
     `CancelDisbursementAsync`;
   - premium-billing NACHA loops;
   - coverage PCP assignment.
+- **Multi-item request loops.** encounter `DispatchBatch` and
+  `MarkBatchSubmitted`, and risk-adjustment batch status, update many
+  documents in a loop. A 409 part way through leaves the earlier items written
+  (encounters queued under a batch id the caller never receives).
+- **Genesis versions.** Two first drafts (no predecessor) of the same plan,
+  provider or organization can both publish, because they share no document
+  to check. Closing this needs a uniqueness constraint or a chain lock.
+- **Insert races without a unique index.** Two first-time risk-score requests
+  for the same member and year can create two scores.
+- **eligibility-service.** Two saves of the same job from separate reads are
+  still last-writer-wins on the job itself; this matters only if a job is
+  processed twice at once.
+- **claim lifecycle.** Two different 277CA outcomes still end at whichever was
+  applied last. The acknowledgment, cursor, outbound attachment transmission
+  and status-inquiry records are still unconditional (low). In the Stedi and
+  Mock gateways, the loser of a create race whose winner is still
+  `Transmitting` sends a second submission (pre-existing).
+- **fhir-service.** The clinical backfill's `StageAsync` upserts rows from the
+  archive it read, so an ingestion re-staging the same exchange at the same
+  time could be overwritten.
+- **tenant-service.** `ValidateApiKeyAsync` and `UpdateUsageAsync` read and
+  replace the whole tenant; nothing calls them today, but wired up they would
+  409 under load and should become targeted updates.
+- **Cosmos repositories** ignore `Revision`; they are removed in Phase 5b.
 - **payment-service.** The GL outbox dispatcher marks `PublishedAt` without
   bumping the revision. A stale run save can clear it, which only causes the
   event to be delivered again; consumers deduplicate.
 - **API responses.** Documents now include `revision` in API responses
-  (tenant-service hides it on TenantUser).
+  (tenant-service hides it on TenantUser and Tenant).
