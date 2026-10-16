@@ -330,6 +330,23 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<ClaimEditsView?> GetClaimEditsAsync(string claimId)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var response = await _httpClient.GetAsync($"{baseUrl}/claims/{Uri.EscapeDataString(claimId)}/edits");
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ClaimEditsView>(JsonOptions);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
     public async Task<List<ClaimNoteView>> GetClaimNotesAsync(string claimId)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
@@ -3566,11 +3583,15 @@ public class WorkQueueService : IWorkQueueService
         string? aiExaminerAgreement,
         string examinerUserId,
         int? payerSequence = null,
-        string? pendFingerprint = null)
+        string? pendFingerprint = null,
+        IReadOnlyList<EditDecisionInput>? editDecisions = null,
+        IReadOnlyList<LineDenialInput>? lineDenials = null)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
+            // editDecisions present (even empty) makes the approval edit-level:
+            // every edit not overridden is upheld. Absent keeps it whole-claim.
             var response = await _httpClient.PostAsJsonAsync(
                 $"{baseUrl}/Claims/work-queue/{Uri.EscapeDataString(claimId)}/resolve",
                 new
@@ -3581,6 +3602,8 @@ public class WorkQueueService : IWorkQueueService
                     examinerUserId,
                     payerSequence,
                     pendFingerprint,
+                    editDecisions,
+                    lineDenials,
                 });
             return await ReadResolutionAsync(response);
         }

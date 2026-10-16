@@ -81,13 +81,27 @@
                                     Not yet remitted: an examiner can still change this decision before the payment cycle.
                                 </MudText>
                             }
-                            <MudButton Variant="Variant.Filled"
-                                      Color="Color.Success"
-                                      FullWidth="true"
-                                      StartIcon="@Icons.Material.Filled.CheckCircle"
-                                      OnClick="@(() => ApproveClaimAsync())">
-                                Pay
-                            </MudButton>
+                            @if (EditLevelReview)
+                            {
+                                <MudButton Variant="Variant.Filled"
+                                          Color="Color.Success"
+                                          FullWidth="true"
+                                          StartIcon="@Icons.Material.Filled.CheckCircle"
+                                          OnClick="@(() => _confirmingFinish = true)"
+                                          data-testid="finish">
+                                    Finish
+                                </MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Filled"
+                                          Color="Color.Success"
+                                          FullWidth="true"
+                                          StartIcon="@Icons.Material.Filled.CheckCircle"
+                                          OnClick="@(() => ApproveClaimAsync())">
+                                    Pay
+                                </MudButton>
+                            }
                             <MudButton Variant="Variant.Filled"
                                       Color="Color.Error"
                                       FullWidth="true"
@@ -266,6 +280,114 @@
                         </MudPaper>
                     </MudItem>
                 </MudGrid>
+            </MudPaper>
+        }
+
+        @if (EditLevelReview && _review is { } review)
+        {
+            <MudPaper Class="pa-4 mb-4" Elevation="1" data-testid="edits-panel">
+                <MudText Typo="Typo.h6" GutterBottom="true">
+                    <MudIcon Icon="@Icons.Material.Filled.Rule" Class="mr-2" />
+                    Edits to decide
+                </MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                    Every edit stands unless you override it. Nothing is saved until you press Finish.
+                </MudText>
+                <MudSimpleTable Dense="true" Hover="true">
+                    <thead>
+                        <tr><th>Edit</th><th>Lines</th><th>Policy</th><th>Decision</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var edit in review.Edits)
+                        {
+                            <tr data-testid="edit-row">
+                                <td>
+                                    <MudText Typo="Typo.body2"><strong>@edit.RuleId</strong> @edit.Message</MudText>
+                                </td>
+                                <td>@edit.Lines</td>
+                                <td>
+                                    <MudChip T="string" Size="Size.Small" Color="@PolicyColor(edit.OverrideLevel)" data-testid="edit-policy">@PolicyLabel(edit)</MudChip>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="display:block;">@edit.PolicyDescription</MudText>
+                                </td>
+                                <td style="min-width: 260px;">
+                                    @if (edit.CanOverride)
+                                    {
+                                        <MudSwitch T="bool" Value="@review.IsOverridden(edit)" ValueChanged="@(v => { review.SetOverride(edit, v); })"
+                                                   Color="Color.Warning" Label="@(review.IsOverridden(edit) ? "Override" : "Uphold")" data-testid="edit-override" />
+                                        @if (review.IsOverridden(edit))
+                                        {
+                                            <MudTextField T="string" Value="@review.OverrideReason(edit)" ValueChanged="@(v => review.SetOverrideReason(edit, v))"
+                                                          Label="@(edit.RequiresDocumentation ? "Reason (cite the documentation)" : "Reason")"
+                                                          Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" data-testid="edit-override-reason" />
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.body2">Uphold</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@(edit.OverrideLevel == "Never" ? "Can't be overridden." : "Needs a supervisor to override.")</MudText>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+
+                @if (review.View.DenialReasons.Count > 0 && _claim.ServiceLines.Count > 0)
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mt-4">Deny a line</MudText>
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                        <MudSelect T="int" @bind-Value="_denyLine" Label="Line" Dense="true" Variant="Variant.Outlined" Style="max-width:110px;" data-testid="deny-line-number">
+                            @foreach (var line in _claim.ServiceLines)
+                            {
+                                <MudSelectItem T="int" Value="@line.LineNumber">@line.LineNumber</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudSelect T="string" @bind-Value="_denyCode" Label="Reason code" Dense="true" Variant="Variant.Outlined" Style="min-width:260px;" data-testid="deny-line-code">
+                            @foreach (var reason in review.View.DenialReasons)
+                            {
+                                <MudSelectItem T="string" Value="@reason.Code">@reason.Code — @reason.Description</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudTextField @bind-Value="_denyReason" Label="Why" Dense="true" Variant="Variant.Outlined" Immediate="true" data-testid="deny-line-reason" />
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="AddLineDenial" data-testid="deny-line-add">Deny line</MudButton>
+                    </MudStack>
+                    @if (_denyError is not null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Error">@_denyError</MudText>
+                    }
+                    @foreach (var denial in review.LineDenials)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1" data-testid="deny-line-entry">
+                            <MudText Typo="Typo.body2">Line @denial.LineNumber: @denial.GroupCode-@denial.Carc — @denial.Reason</MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@(() => review.RemoveLineDenial(denial.LineNumber))" />
+                        </MudStack>
+                    }
+                }
+
+                @if (_confirmingFinish)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4" data-testid="finish-summary">
+                        <MudText Typo="Typo.subtitle2">@review.Summary</MudText>
+                        <ul class="mt-1 mb-2">
+                            @foreach (var effect in review.Effects())
+                            {
+                                <li><MudText Typo="Typo.body2">@effect</MudText></li>
+                            }
+                        </ul>
+                        @foreach (var problem in review.Problems)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Error" data-testid="finish-problem">@problem</MudText>
+                        }
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Upheld edits are recorded as upheld by you. The claim is re-adjudicated once with these decisions.
+                        </MudText>
+                        <MudStack Row="true" Spacing="2" Class="mt-2">
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" Disabled="@(review.Problems.Count > 0 || _finishing)"
+                                       OnClick="FinishAsync" data-testid="finish-confirm">Confirm and finish</MudButton>
+                            <MudButton Variant="Variant.Text" OnClick="@(() => _confirmingFinish = false)">Keep reviewing</MudButton>
+                        </MudStack>
+                    </MudAlert>
+                }
             </MudPaper>
         }
 
@@ -1061,6 +1183,13 @@
     private AdjudicationTransparencyData? _adjudicationData;
     private List<BreadcrumbItem> _breadcrumbItems = new();
     private string _noteInput = string.Empty;
+    private EditReviewDraft? _review;
+    private bool _confirmingFinish;
+    private bool _finishing;
+    private int _denyLine = 1;
+    private string? _denyCode;
+    private string? _denyReason;
+    private string? _denyError;
     private string _noteCategory = ClaimNoteCategory.Internal;
     private List<ClaimNoteView> _notes = new();
     private string? _notesError;
@@ -1104,6 +1233,7 @@
         _ = LoadAdjudicationDataAsync(claimId);
         _ = LoadDuplicateMatchesAsync(claimId);
         _ = LoadNotesAsync(claimId);
+        _ = LoadEditsAsync(claimId);
     }
 
     // Everything that belongs to one claim. Cleared when ClaimId changes so
@@ -1120,6 +1250,9 @@
         _noteCategory = ClaimNoteCategory.Internal;
         _notes = new();
         _notesError = null;
+        _review = null;
+        _confirmingFinish = false;
+        _denyError = null;
         _serviceError = null;
     }
 
@@ -1402,7 +1535,71 @@
         return string.IsNullOrWhiteSpace(value) ? "claim" : value;
     }
 
-    private async Task ApproveClaimAsync()
+    /// <summary>
+    /// The claim has edits to decide: Pay becomes Finish, and the approval
+    /// carries the reviewer's edit decisions (workbench step 2).
+    /// </summary>
+    private bool EditLevelReview => CanResolvePendedClaim && _review?.HasAnythingToDecide == true;
+
+    private async Task LoadEditsAsync(string claimId)
+    {
+        if (!CanResolvePendedClaim) return;
+        try
+        {
+            var view = await ClaimsService.GetClaimEditsAsync(_claim?.ClaimId is { Length: > 0 } id ? id : claimId);
+            if (IsCurrentClaim(claimId))
+            {
+                _review = view is null ? null : new EditReviewDraft(view);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception)
+        {
+            // Without the edits view the page falls back to whole-claim Pay.
+            if (IsCurrentClaim(claimId)) _review = null;
+        }
+    }
+
+    private void AddLineDenial()
+    {
+        if (_review is null) return;
+        _denyError = _review.AddLineDenial(_denyLine, _denyCode ?? string.Empty, _denyReason ?? string.Empty);
+        if (_denyError is null)
+        {
+            _denyReason = null;
+        }
+    }
+
+    private async Task FinishAsync()
+    {
+        if (_review is null || _review.Problems.Count > 0) return;
+        _finishing = true;
+        try
+        {
+            await ApproveClaimAsync(_review);
+            _confirmingFinish = false;
+        }
+        finally
+        {
+            _finishing = false;
+        }
+    }
+
+    private static Color PolicyColor(string level) => level switch
+    {
+        "Examiner" => Color.Success,
+        "Supervisor" => Color.Warning,
+        _ => Color.Default,
+    };
+
+    private static string PolicyLabel(ClaimEditItem edit) => edit.OverrideLevel switch
+    {
+        "Never" => "Can't override",
+        "Supervisor" => edit.RequiresDocumentation ? "Supervisor, documentation" : "Supervisor",
+        _ => edit.RequiresReason ? "Examiner, reason" : "Examiner",
+    };
+
+    private async Task ApproveClaimAsync(EditReviewDraft? review = null)
     {
         if (_claim == null) return;
         
@@ -1421,7 +1618,11 @@
 
         try
         {
-            var result = await ResolvePendedClaimAsync("Approved", reason, payerSequence);
+            if (review is not null)
+            {
+                reason = $"Finished review: {review.Summary}";
+            }
+            var result = await ResolvePendedClaimAsync("Approved", reason, payerSequence, review);
             Snackbar.Add(result.AwaitingSecondApproval
                 ? result.Message ?? "Waiting for a second approver."
                 : "Claim approved successfully",
@@ -1474,7 +1675,8 @@
         _claim?.PendDetails is not null
         && (ClaimStatusDisplay.IsPayOutcome(_claim.Status) || ClaimStatusDisplay.IsDenied(_claim.Status));
 
-    private async Task<ClaimResolutionResult> ResolvePendedClaimAsync(string disposition, string reason, int? payerSequence = null)
+    private async Task<ClaimResolutionResult> ResolvePendedClaimAsync(
+        string disposition, string reason, int? payerSequence = null, EditReviewDraft? review = null)
     {
         if (_claim is null) return ClaimResolutionResult.Resolved;
 
@@ -1500,7 +1702,10 @@
             examinerUserId,
             payerSequence,
             // The pends this page showed: the approval applies to exactly those.
-            _claim.PendDetails?.Fingerprint);
+            _claim.PendDetails?.Fingerprint,
+            // Edit-level approval: overrides only; every other edit is upheld by the service.
+            review?.Decisions(),
+            review?.LineDenials.ToList());
     }
 
     private static string NormalizeDisposition(string disposition) => disposition switch
@@ -1531,7 +1736,7 @@
         try
         {
             await UserContextService.GetCurrentUserAsync();
-            var canAdd = UserContextService.HasPermission("claims:work");
+            var canAdd = UserContextService.HasPermission("claims:note");
             var notes = await ClaimsService.GetClaimNotesAsync(_claim?.ClaimId is { Length: > 0 } id ? id : claimId);
             if (IsCurrentClaim(claimId))
             {

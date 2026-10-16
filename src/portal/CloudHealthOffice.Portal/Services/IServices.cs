@@ -50,6 +50,13 @@ public interface IClaimsService
     /// are set by claims-service from the caller's token.
     /// </summary>
     Task<ClaimNoteView> AddClaimNoteAsync(string claimId, string category, string text);
+
+    /// <summary>
+    /// The edits on a pended claim with the override policy for each and
+    /// what the caller may do (claims-service <c>GET /claims/{id}/edits</c>).
+    /// Null when the claim doesn't exist.
+    /// </summary>
+    Task<ClaimEditsView?> GetClaimEditsAsync(string claimId);
 }
 
 /// <summary>A note a reviewer wrote on a claim.</summary>
@@ -2926,7 +2933,9 @@ public interface IWorkQueueService
         string? aiExaminerAgreement,
         string examinerUserId,
         int? payerSequence = null,
-        string? pendFingerprint = null);
+        string? pendFingerprint = null,
+        IReadOnlyList<EditDecisionInput>? editDecisions = null,
+        IReadOnlyList<LineDenialInput>? lineDenials = null);
 }
 
 public class WorkQueueSummary
