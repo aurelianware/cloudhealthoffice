@@ -153,7 +153,7 @@
             <RowTemplate>
                 <MudTd DataLabel="Appeal ID">
                     <div class="d-flex align-center gap-1">
-                        <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.AppealId</MudText>
+                        <RecordLink Href="@AppealHref(context)" style="font-family: monospace;" data-testid="appeal-link">@context.AppealId</RecordLink>
                         @if (context.IsExpedited)
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">EXP</MudChip>
@@ -357,21 +357,13 @@
             await SearchAppeals();
     }
 
-    private async Task OnRowClick(TableRowClickEventArgs<AppealSummary> args)
+    private static string AppealHref(AppealSummary appeal) =>
+        $"/appeals/{Uri.EscapeDataString(string.IsNullOrEmpty(appeal.Id) ? appeal.AppealId : appeal.Id)}";
+
+    // A row opens the appeal record (its id links too, so Ctrl/⌘-click opens a new tab).
+    private void OnRowClick(TableRowClickEventArgs<AppealSummary> args)
     {
-        var appeal = args.Item;
-        if (appeal == null) return;
-
-        var detail = await AppealsService.GetAppealByIdAsync(
-            string.IsNullOrEmpty(appeal.Id) ? appeal.AppealId : appeal.Id);
-        if (detail == null) return;
-
-        var parameters = new DialogParameters
-        {
-            ["Detail"] = detail
-        };
-        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
-        await DialogService.ShowAsync<AppealDetailDialog>("Appeal Detail", parameters, options);
+        if (args.Item is { } appeal) NavigationManager.NavigateTo(AppealHref(appeal));
     }
 
     private static Color GetStatusColor(string status) => status switch

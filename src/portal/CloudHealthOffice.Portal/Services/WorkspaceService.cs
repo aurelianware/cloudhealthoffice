@@ -55,7 +55,7 @@ public sealed class PinnedRecordView
         "Claim" => $"/claims/{Uri.EscapeDataString(RecordId)}",
         "Provider" => $"/providers/{Uri.EscapeDataString(RecordId)}",
         "Authorization" => $"/authorizations/{Uri.EscapeDataString(RecordId)}",
-        "Appeal" => "/appeals",
+        "Appeal" => $"/appeals/{Uri.EscapeDataString(RecordId)}",
         _ => "/home",
     };
 }
