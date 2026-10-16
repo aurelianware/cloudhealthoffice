@@ -1,3 +1,4 @@
+using ClaimsService.Exceptions;
 using ClaimsService.Models;
 using MongoDB.Driver;
 
@@ -81,6 +82,9 @@ public interface IClaimAdjustmentRepository
     /// Mutates an existing adjustment row (e.g. status transitions, reversal-run linkage).
     /// Throws when the row is missing. Does not enforce a state-machine guard at
     /// the repository layer — the service layer owns the lifecycle ordering.
+    /// Saves only against the <see cref="ClaimAdjustment.Revision"/> read and
+    /// throws <see cref="Exceptions.ClaimAdjustmentConcurrencyException"/> when
+    /// another write changed the row since.
     /// </summary>
     Task<ClaimAdjustment> UpdateAsync(ClaimAdjustment adjustment, CancellationToken ct = default);
 
@@ -115,6 +119,7 @@ public sealed class ClaimAdjustmentRepositoryMongo : IClaimAdjustmentRepository
         {
             adjustment.Id = Guid.NewGuid().ToString();
         }
+        adjustment.Revision = 0;
         await _collection.InsertOneAsync(adjustment, cancellationToken: ct);
         return adjustment;
     }
@@ -188,9 +193,27 @@ public sealed class ClaimAdjustmentRepositoryMongo : IClaimAdjustmentRepository
         ArgumentNullException.ThrowIfNull(adjustment);
         var b = Builders<ClaimAdjustment>.Filter;
         var filter = b.And(b.Eq(x => x.TenantId, adjustment.TenantId), b.Eq(x => x.Id, adjustment.Id));
-        var result = await _collection.ReplaceOneAsync(filter, adjustment, cancellationToken: ct);
+        // Conditional on the revision read (0 also matches rows written before the field existed).
+        var expected = adjustment.Revision;
+        var revisionFilter = expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
+        adjustment.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & revisionFilter, adjustment, cancellationToken: ct);
+        }
+        catch
+        {
+            adjustment.Revision = expected;
+            throw;
+        }
         if (result.MatchedCount == 0)
         {
+            adjustment.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync(ct))
+                throw new ClaimAdjustmentConcurrencyException(adjustment.Id, expected);
             throw new InvalidOperationException(
                 $"ClaimAdjustment {adjustment.Id} for tenant {adjustment.TenantId} not found for update.");
         }
