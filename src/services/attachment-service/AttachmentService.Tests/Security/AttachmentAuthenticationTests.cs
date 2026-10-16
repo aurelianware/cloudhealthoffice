@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AttachmentService.Models;
+using AttachmentService.Services;
 using AttachmentService.Tests.Support;
 using CloudHealthOffice.Infrastructure.Security;
 
@@ -28,6 +29,7 @@ public class AttachmentAuthenticationTests
     {
         _factory = factory;
         _factory.Reset();
+        _factory.Parents.Add(Tenant, AttachmentParentType.Claim, "CLM-1");
     }
 
     private HttpClient NewClient(string tenant = Tenant, params string[] roles)
