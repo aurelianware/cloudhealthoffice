@@ -31,7 +31,13 @@ public interface IFeeScheduleRepository
     Task<FeeScheduleLine?> GetLineAsync(
         string feeScheduleId, string procedureCode, string? modifier, CancellationToken ct = default);
 
-    /// <summary>Create or replace a fee schedule (admin / import operations).</summary>
+    /// <summary>
+    /// Create or replace a fee schedule (admin / import operations).
+    /// <see cref="FeeSchedule.Revision"/> is the revision the caller read (0 to
+    /// create); when the stored schedule has moved on, or a create finds one
+    /// already there, the MongoDB store throws
+    /// <see cref="FeeScheduleConcurrencyException"/> and writes nothing.
+    /// </summary>
     Task<FeeSchedule> UpsertAsync(FeeSchedule schedule, CancellationToken ct = default);
 
     /// <summary>List all schedules for a tenant (for admin UI).</summary>
@@ -54,7 +60,11 @@ public interface IProviderContractRepository
         string tenantId, string providerNpi, string planId, DateTime serviceDate,
         CancellationToken ct = default);
 
-    /// <summary>Create or replace a provider contract.</summary>
+    /// <summary>
+    /// Create or replace a provider contract. <see cref="ProviderContract.Revision"/>
+    /// is the revision the caller read (0 to create); the MongoDB store throws
+    /// <see cref="FeeScheduleConcurrencyException"/> when it no longer matches.
+    /// </summary>
     Task<ProviderContract> UpsertAsync(ProviderContract contract, CancellationToken ct = default);
 
     /// <summary>List contracts for a provider across all plans (for admin UI).</summary>
