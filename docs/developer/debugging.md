@@ -22,7 +22,7 @@ dotnet test <project>.csproj --logger "console;verbosity=normal"
 
 - Check the browser route and the API route separately.
 - Confirm the portal service client points to the running backend.
-- Use claim IDs and run IDs from the Mass Adjudication console when debugging
+- Use claim IDs and run IDs from the Batch Adjudication page when debugging
   benchmark evidence.
 - Reproduce with synthetic claims only.
 
