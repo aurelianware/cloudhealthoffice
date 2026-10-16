@@ -24,6 +24,15 @@ public class Member
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision of the MongoDB document, bumped by every
+    /// write. A whole-document replace succeeds only while the stored revision
+    /// is still the one it read, so a stale write fails instead of silently
+    /// overwriting a concurrent change. Documents written before the field
+    /// existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// Member ID from 834 REF*0F segment or generated
     /// </summary>
     [Required]
