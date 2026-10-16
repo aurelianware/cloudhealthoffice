@@ -123,52 +123,14 @@
         <MudNavMenu Style="padding-top: 8px;">
             <AuthorizeView>
                 <Authorized>
-                    <!-- OPERATIONS — expanded by default, where users spend 90% of time -->
-                    <MudNavGroup Title="Operations" Icon="@Icons.Material.Filled.Speed" Expanded="true"
-                                 Style="border-left: 3px solid transparent;">
-                        <MudNavLink Href="/home" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Home
-                        </MudNavLink>
-                        @if (_canWork)
-                        {
-                            <MudNavLink Href="/my-work" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inbox"
-                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                                My Work
-                            </MudNavLink>
-                        }
-                        <MudNavLink Href="/dashboard" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Dashboard
-                        </MudNavLink>
-                        <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Claims
-                        </MudNavLink>
-                        <MudNavLink Href="/edi-transactions" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            EDI Transactions
-                        </MudNavLink>
-                        <MudNavLink Href="/batch-adjudication" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Batch Adjudication
-                        </MudNavLink>
-                        <MudNavLink Href="/work-queues" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Queue"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Work Queues
-                        </MudNavLink>
-                        <MudNavLink Href="/authorizations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Authorizations
-                        </MudNavLink>
-                        <MudNavLink Href="/appeals" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Balance"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Appeals
-                        </MudNavLink>
-                    </MudNavGroup>
+                    <!-- portal-navigation.md §3: Home, then records, then the work, then run-the-plan. -->
+                    <MudNavLink Href="/home" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home"
+                                Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                        Home
+                    </MudNavLink>
 
-                    <!-- MEMBERS & PROVIDERS -->
-                    <MudNavGroup Title="Members & Providers" Icon="@Icons.Material.Filled.People" Expanded="false"
+                    <!-- RECORDS — find a record and work it from its tabs -->
+                    <MudNavGroup Title="Records" Icon="@Icons.Material.Filled.FolderShared" Expanded="true"
                                  Style="border-left: 3px solid transparent;">
                         <MudNavLink Href="/members" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
@@ -178,6 +140,55 @@
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                             Providers
                         </MudNavLink>
+                        <MudNavLink Href="/claims" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Claims
+                        </MudNavLink>
+                        <MudNavLink Href="/authorizations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Authorizations
+                        </MudNavLink>
+                        <MudNavLink Href="/appeals" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Balance"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Appeals &amp; Grievances
+                        </MudNavLink>
+                    </MudNavGroup>
+
+                    <!-- WORK — my work and the queues -->
+                    <MudNavGroup Title="Work" Icon="@Icons.Material.Filled.Inbox" Expanded="true"
+                                 Style="border-left: 3px solid transparent;">
+                        @if (_canWork)
+                        {
+                            <MudNavLink Href="/my-work" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inbox"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                My Work
+                            </MudNavLink>
+                        }
+                        <MudNavLink Href="/work-queues" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Queue"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Work Queues
+                        </MudNavLink>
+                    </MudNavGroup>
+
+                    <!-- OPERATIONS — running the plan: batches, EDI, enrollment, monitoring -->
+                    <MudNavGroup Title="Operations" Icon="@Icons.Material.Filled.Speed" Expanded="false"
+                                 Style="border-left: 3px solid transparent;">
+                        <MudNavLink Href="/dashboard" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Claims Dashboard
+                        </MudNavLink>
+                        <MudNavLink Href="/batch-adjudication" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Batch Adjudication
+                        </MudNavLink>
+                        <MudNavLink Href="/edi-transactions" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            EDI Transactions
+                        </MudNavLink>
+                        <MudNavLink Href="/edi-operations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.CompareArrows"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            EDI Operations
+                        </MudNavLink>
                         <MudNavLink Href="/enrollment-ops" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.GroupAdd"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                             Enrollment Ops
@@ -186,37 +197,17 @@
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                             Provider Verification
                         </MudNavLink>
-                    </MudNavGroup>
-
-                    <!-- CONFIGURATION -->
-                    <MudNavGroup Title="Configuration" Icon="@Icons.Material.Filled.Tune" Expanded="false"
-                                 Style="border-left: 3px solid transparent;">
-                        <MudNavLink Href="/benefit-plans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HealthAndSafety"
+                        <MudNavLink Href="/workflows" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Benefit Plans
+                            Workflows
                         </MudNavLink>
-                        @if (_canReadSponsors)
-                        {
-                            <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
-                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                                Sponsors
-                            </MudNavLink>
-                        }
-                        <MudNavLink Href="/trading-partners" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz"
+                        <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.BarChart"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Trading Partners
+                            Reports
                         </MudNavLink>
-                        <MudNavLink Href="/reference-data" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Code"
+                        <MudNavLink Href="/eligibility" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FactCheck"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Reference Data
-                        </MudNavLink>
-                        <MudNavLink Href="/terminology/crosswalk" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Translate"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Terminology Crosswalk
-                        </MudNavLink>
-                        <MudNavLink Href="/pricing-api" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Api"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Pricing API
+                            270/271 Eligibility Simulator
                         </MudNavLink>
                     </MudNavGroup>
 
@@ -287,29 +278,35 @@
 
                     </MudNavGroup>
 
-                    <!-- MONITORING -->
-                    <MudNavGroup Title="Monitoring" Icon="@Icons.Material.Filled.BarChart" Expanded="false"
+                    <!-- CONFIGURATION -->
+                    <MudNavGroup Title="Configuration" Icon="@Icons.Material.Filled.Tune" Expanded="false"
                                  Style="border-left: 3px solid transparent;">
-                        <MudNavLink Href="/workflows" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree"
+                        <MudNavLink Href="/benefit-plans" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HealthAndSafety"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Workflows
+                            Benefit Plans
                         </MudNavLink>
-                        <MudNavLink Href="/edi-operations" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.CompareArrows"
+                        @if (_canReadSponsors)
+                        {
+                            <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                Sponsors
+                            </MudNavLink>
+                        }
+                        <MudNavLink Href="/trading-partners" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            EDI Operations
+                            Trading Partners
                         </MudNavLink>
-                        <MudNavLink Href="/reports" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment"
+                        <MudNavLink Href="/reference-data" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Code"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Reports
+                            Reference Data
                         </MudNavLink>
-                    </MudNavGroup>
-
-                    <!-- EDI TOOLS — trading-partner testing; everyday coverage lookups live on the member record -->
-                    <MudNavGroup Title="EDI Tools" Icon="@Icons.Material.Filled.Build" Expanded="false"
-                                 Style="border-left: 3px solid transparent;">
-                        <MudNavLink Href="/eligibility" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.VerifiedUser"
+                        <MudNavLink Href="/terminology/crosswalk" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Translate"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            270/271 Eligibility Simulator
+                            Terminology Crosswalk
+                        </MudNavLink>
+                        <MudNavLink Href="/pricing-api" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Api"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Pricing API
                         </MudNavLink>
                     </MudNavGroup>
 

@@ -191,4 +191,22 @@ public class MainLayoutNavGatingTests : TestContext
         Links(cut, "/sponsors").Should().BeTrue();
         Links(cut, "/capitation/rate-config").Should().BeFalse();
     }
+
+    // portal-navigation.md §3: Home, Records, Work, Operations, Finance,
+    // Configuration, Compliance, Admin; records first.
+    [Fact]
+    public void Navigation_is_grouped_records_first()
+    {
+        var cut = Render("claims:read");
+
+        var groups = cut.FindAll(".mud-nav-group > button .mud-nav-link-text, .mud-nav-group .mud-nav-link-text")
+            .Select(e => e.TextContent.Trim()).Where(t => t is "Records" or "Work" or "Operations" or "Finance" or "Configuration" or "Compliance" or "Admin")
+            .Distinct().ToList();
+        groups.Should().Equal("Records", "Work", "Operations", "Finance", "Configuration", "Compliance", "Admin");
+
+        var markup = cut.Markup;
+        markup.IndexOf("href=\"/home\"", StringComparison.Ordinal).Should().BeLessThan(markup.IndexOf("href=\"/members\"", StringComparison.Ordinal));
+        markup.IndexOf("href=\"/members\"", StringComparison.Ordinal).Should().BeLessThan(markup.IndexOf("href=\"/batch-adjudication\"", StringComparison.Ordinal));
+        markup.Should().NotContain("Members &amp; Providers").And.NotContain(">Monitoring<");
+    }
 }
