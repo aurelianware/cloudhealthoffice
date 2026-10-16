@@ -173,6 +173,9 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         plan.PublishedBy = existing.PublishedBy;
         plan.SupersededAt = existing.SupersededAt;
         plan.SupersededByVersionId = existing.SupersededByVersionId;
+        // The write is conditional on the revision of the row read here, so a
+        // publish or another edit since then makes it a 409, not an overwrite.
+        plan.Revision = existing.Revision;
         _networkTierValidator.Inspect(plan, NetworkTierWriteCaller.UpdatePlan);
         _planLimitValidator.Validate(plan, PlanLimitWriteCaller.UpdatePlan);
         // Repository raises PlanVersionStateException for Published/Superseded;
