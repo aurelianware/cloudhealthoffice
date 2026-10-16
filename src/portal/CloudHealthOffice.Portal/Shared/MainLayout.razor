@@ -342,6 +342,13 @@
                                 Work Management
                             </MudNavLink>
                         }
+                        @if (_canPostNotices)
+                        {
+                            <MudNavLink Href="/admin/notices" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Campaign"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                Plan Notices
+                            </MudNavLink>
+                        }
                         @if (_isTenantAdmin)
                         {
                             <MudNavLink Href="/settings/users" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts"
@@ -459,6 +466,7 @@
     // Work management: My Work (pull) and its configuration (work-management-service).
     private bool _canWork;
     private bool _canAdminWork;
+    private bool _canPostNotices;
     private bool _tenantLoadComplete;
     private List<TenantSubscription> _availableTenants = new();
 
@@ -494,6 +502,7 @@
             _canReadContracts = userContext != null && UserContextService.HasPermission("contracts:read");
             _canWork = userContext != null && UserContextService.HasPermission("workqueue:work");
             _canAdminWork = userContext != null && UserContextService.HasPermission("workqueue:admin");
+            _canPostNotices = userContext != null && UserContextService.HasPermission("notices:write");
         }
         catch (Exception ex)
         {

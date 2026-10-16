@@ -38,6 +38,7 @@
                     <MudText Typo="Typo.h4" GutterBottom="true">
                         Claim @_claim.ClaimNumber
                         <OpenInNewTabButton Href="@RecordTabs.Href(ClaimBaseHref, ActiveTab, TabQuery)" />
+                        <PinButton Kind="Claim" RecordId="@ClaimId" Label="@($"Claim {_claim.ClaimNumber}")" />
                         @if (!string.IsNullOrEmpty(_claim.PriorAuthorizationNumber))
                         {
                             <MudChip Size="Size.Medium" Variant="Variant.Outlined" Class="ml-2"

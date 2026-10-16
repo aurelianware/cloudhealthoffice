@@ -14,6 +14,9 @@ public sealed class CosmosWorkStoreOptions
     public string MembershipsContainer { get; set; } = "WorkMemberships";
     public string ItemsContainer { get; set; } = "WorkItems";
     public string AuditContainer { get; set; } = "WorkAudit";
+    public string NoticesContainer { get; set; } = "PlanNotices";
+    public string NoticeReadsContainer { get; set; } = "PlanNoticeReads";
+    public string PinsContainer { get; set; } = "PinnedRecords";
 
     public static CosmosWorkStoreOptions From(IConfiguration configuration) => new()
     {
@@ -23,10 +26,14 @@ public sealed class CosmosWorkStoreOptions
         MembershipsContainer = configuration["CosmosDb:WorkMembershipsContainer"] ?? "WorkMemberships",
         ItemsContainer = configuration["CosmosDb:WorkItemsContainer"] ?? "WorkItems",
         AuditContainer = configuration["CosmosDb:WorkAuditContainer"] ?? "WorkAudit",
+        NoticesContainer = configuration["CosmosDb:PlanNoticesContainer"] ?? "PlanNotices",
+        NoticeReadsContainer = configuration["CosmosDb:PlanNoticeReadsContainer"] ?? "PlanNoticeReads",
+        PinsContainer = configuration["CosmosDb:PinnedRecordsContainer"] ?? "PinnedRecords",
     };
 
     public IEnumerable<string> AllContainers() =>
-        [QueuesContainer, TeamsContainer, MembershipsContainer, ItemsContainer, AuditContainer];
+        [QueuesContainer, TeamsContainer, MembershipsContainer, ItemsContainer, AuditContainer,
+         NoticesContainer, NoticeReadsContainer, PinsContainer];
 }
 
 /// <summary>

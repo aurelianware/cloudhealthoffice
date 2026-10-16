@@ -21,6 +21,7 @@ public class HomeAndSearchTests : TestContext
     private readonly Mock<IProviderService> _providers = new();
     private readonly Mock<IUserContextService> _user = new();
     private readonly Mock<IWorkManagementService> _work = new();
+    private readonly Mock<IWorkspaceService> _workspace = new();
 
     public HomeAndSearchTests()
     {
@@ -31,6 +32,7 @@ public class HomeAndSearchTests : TestContext
         Services.AddSingleton(_providers.Object);
         Services.AddSingleton(_user.Object);
         Services.AddSingleton(_work.Object);
+        Services.AddSingleton(_workspace.Object);
         Services.AddScoped<GlobalSearch>();
 
         _claims.Setup(c => c.SearchClaimsAsync(It.IsAny<ClaimSearchRequest>())).ReturnsAsync(new ClaimSearchResult());
@@ -39,6 +41,8 @@ public class HomeAndSearchTests : TestContext
         _claims.Setup(c => c.GetRecentlyViewedClaimsAsync(It.IsAny<int>())).ReturnsAsync(new List<RecentClaimView>());
         _claims.Setup(c => c.GetMassAdjudicationRunsAsync(It.IsAny<int>())).ReturnsAsync(new List<MassAdjudicationRunSummary>());
         _work.Setup(w => w.GetMineAsync()).ReturnsAsync(new List<WorkItemView>());
+        _workspace.Setup(w => w.GetMyNoticesAsync()).ReturnsAsync(new List<PlanNoticeView>());
+        _workspace.Setup(w => w.GetPinsAsync()).ReturnsAsync(new List<PinnedRecordView>());
     }
 
     private void Grant(params string[] permissions) =>
@@ -164,5 +168,62 @@ public class HomeAndSearchTests : TestContext
         cut.FindAll("[data-testid=home-recent]").Should().BeEmpty();
         cut.Find("[data-testid=global-search]");
         _work.Verify(w => w.GetMineAsync(), Times.Never);
+    }
+
+    [Fact]
+    public void Home_shows_unread_notices_first_and_marks_them_read()
+    {
+        Grant("workspace:use");
+        _workspace.Setup(w => w.GetMyNoticesAsync()).ReturnsAsync(new List<PlanNoticeView>
+        {
+            new() { Id = "n1", Title = "Maintenance Saturday", Severity = "Important", StartsAt = DateTime.UtcNow, CreatedBy = "admin" },
+            new() { Id = "n2", Title = "Old news", Read = true, StartsAt = DateTime.UtcNow, CreatedBy = "admin" },
+        });
+
+        var cut = RenderComponent<Home>();
+
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=home-notice]").Should().ContainSingle());
+        cut.Find("[data-testid=home-notice]").TextContent.Should().Contain("Maintenance Saturday");
+        cut.Find("[data-testid=home-notices-read]");
+
+        cut.Find("[data-testid=notice-mark-read]").Click();
+
+        _workspace.Verify(w => w.MarkNoticeReadAsync("n1"), Times.Once);
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=home-notice]").Should().BeEmpty());
+    }
+
+    [Fact]
+    public void Home_lists_my_pins_and_unpins()
+    {
+        Grant("workspace:use");
+        _workspace.Setup(w => w.GetPinsAsync()).ReturnsAsync(new List<PinnedRecordView>
+        {
+            new() { Kind = "Member", RecordId = "M1", Label = "Ana Reyes" },
+            new() { Kind = "Claim", RecordId = "c9", Label = "Claim CLM-9" },
+        });
+
+        var cut = RenderComponent<Home>();
+
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=home-pin]").Should().HaveCount(2));
+        cut.FindAll("[data-testid=home-pin] a.record-link-main").Select(a => a.GetAttribute("href")).Should().Equal("/members/M1", "/claims/c9");
+
+        cut.FindAll("[data-testid=home-unpin]").First().Click();
+
+        _workspace.Verify(w => w.UnpinAsync("Member", "M1"), Times.Once);
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=home-pin]").Should().ContainSingle());
+    }
+
+    [Fact]
+    public void A_record_can_be_pinned_and_unpinned_from_its_header()
+    {
+        Grant("workspace:use");
+        var cut = RenderComponent<CloudHealthOffice.Portal.Shared.Records.PinButton>(p => p
+            .Add(x => x.Kind, "Member").Add(x => x.RecordId, "M1").Add(x => x.Label, "Ana Reyes"));
+
+        cut.Find("[data-testid=pin-button]").GetAttribute("aria-pressed").Should().Be("false");
+        cut.Find("[data-testid=pin-button]").Click();
+
+        _workspace.Verify(w => w.PinAsync("Member", "M1", "Ana Reyes"), Times.Once);
+        cut.WaitForAssertion(() => cut.Find("[data-testid=pin-button]").GetAttribute("aria-pressed").Should().Be("true"));
     }
 }

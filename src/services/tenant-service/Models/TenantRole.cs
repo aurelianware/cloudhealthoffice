@@ -69,6 +69,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
+            "workspace:use",
             "claims:read", "claims:work", "claims:override-request", "claims:note",
             "workqueue:read", "workqueue:work",
             "members:read", "accumulators:read", "providers:read"
@@ -82,6 +83,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
+            "workspace:use",
             // ClaimsExaminer permissions
             "claims:read", "claims:work", "claims:override-request", "claims:note",
             "workqueue:read", "workqueue:work",
@@ -101,6 +103,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
+            "workspace:use",
             "members:read", "members:search", "accumulators:read",
             "eligibility:check", "claims:read", "claims:note", "coverage:read",
             "authorizations:read", "providers:read",
@@ -115,6 +118,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
+            "workspace:use",
             "members:read", "members:write",
             "enrollment:read", "enrollment:process",
             "coverage:read", "coverage:write", "benefits:read", "providers:read",
@@ -129,6 +133,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
+            "workspace:use",
             "authorizations:read", "authorizations:write", "authorizations:decide",
             "appeals:read", "appeals:write",
             "rfai:read", "rfai:write",
@@ -145,6 +150,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
+            "workspace:use",
             "claims:read", "claims:note",
             "providers:read", "providers:write", "providers:credential",
             "contracts:read", "contracts:write",
@@ -159,6 +165,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
+            "workspace:use",
             "payments:read", "payments:run",
             "billing:read", "billing:run",
             "reports:financial", "claims:read", "encounters:read",
@@ -174,6 +181,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
+            "workspace:use",
             "payments:read", "payments:approve",
             "billing:read",
             "finance:read", "reports:financial",
@@ -188,6 +196,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
+            "workspace:use",
             "*:read", "audit:read", "compliance:read", "reports:compliance",
             "records:legal-hold"
         }
@@ -200,6 +209,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
+            "workspace:use",
             "compliance:read", "authorizations:read", "audit:read",
             "reference-data:read"
         }
