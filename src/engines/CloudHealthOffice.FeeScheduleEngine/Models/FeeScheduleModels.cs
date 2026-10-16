@@ -114,6 +114,15 @@ public class FeeSchedule
     /// <summary>The procedure/service lines for this schedule.</summary>
     public List<FeeScheduleLine> Lines { get; set; } = new();
 
+    /// <summary>
+    /// Optimistic-concurrency revision (MongoDB): the revision the caller read,
+    /// 0 for a new schedule (and for documents written before the field
+    /// existed). <c>UpsertAsync</c> writes only while the stored revision is
+    /// still this one and stores it + 1, so of two concurrent replaces (or two
+    /// creates) one conflicts instead of silently overwriting the other.
+    /// </summary>
+    public long Revision { get; set; }
+
     public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
     public DateTime LastUpdatedDate { get; set; } = DateTime.UtcNow;
 
@@ -281,6 +290,14 @@ public class ProviderContract
     /// charges. Default false: the contract rate is paid even when it exceeds billed.
     /// </summary>
     public bool LesserOfBilledCharges { get; set; }
+
+    /// <summary>
+    /// Optimistic-concurrency revision (MongoDB): the revision the caller read,
+    /// 0 for a new contract (and for documents written before the field
+    /// existed). <c>UpsertAsync</c> writes only while the stored revision is
+    /// still this one and stores it + 1.
+    /// </summary>
+    public long Revision { get; set; }
 
     public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
     public DateTime LastUpdatedDate { get; set; } = DateTime.UtcNow;
