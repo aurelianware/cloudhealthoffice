@@ -100,7 +100,7 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Authorization">
-                        <MudLink OnClick="@(() => OpenAsync(context.Id))" Style="font-family: monospace;">@context.AuthorizationNumber</MudLink>
+                        <RecordLink Href="@($"/authorizations/{Uri.EscapeDataString(context.Id)}")" style="font-family: monospace;">@context.AuthorizationNumber</RecordLink>
                     </MudTd>
                     <MudTd DataLabel="Member">@context.MemberId</MudTd>
                     <MudTd DataLabel="Request type">
@@ -140,7 +140,7 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Authorization">
-                        <MudLink OnClick="@(() => OpenAsync(context.Id))" Style="font-family: monospace;">@context.AuthorizationNumber</MudLink>
+                        <RecordLink Href="@($"/authorizations/{Uri.EscapeDataString(context.Id)}")" style="font-family: monospace;">@context.AuthorizationNumber</RecordLink>
                     </MudTd>
                     <MudTd DataLabel="Member">@context.MemberId</MudTd>
                     <MudTd DataLabel="Request type">@context.RequestType</MudTd>
@@ -295,13 +295,6 @@
         {
             _loading = false;
         }
-    }
-
-    private async Task OpenAsync(string id)
-    {
-        var parameters = new DialogParameters { { "AuthorizationId", id } };
-        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true };
-        await DialogService.ShowAsync<AuthorizationDetailsDialog>("Authorization Details", parameters, options);
     }
 
     private static Color ClockColor(PriorAuthClock clock) => clock.Breached
