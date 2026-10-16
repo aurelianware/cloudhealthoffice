@@ -3,7 +3,10 @@ using AttachmentService.Models;
 using AttachmentService.Repositories;
 using AttachmentService.Services;
 using CloudHealthOffice.DocumentStore;
+using CloudHealthOffice.Infrastructure.Gateways;
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 
 namespace AttachmentService.Controllers;
@@ -18,6 +21,8 @@ public class AttachmentsController : ControllerBase
     private readonly IAcknowledgmentService _acknowledgmentService;
     private readonly IDocumentStore _documentStore;
     private readonly ICurrentActor _actor;
+    private readonly IAttachmentParentLookup _parents;
+    private readonly AttachmentUploadOptions _uploadOptions;
     private readonly ILogger<AttachmentsController> _logger;
 
     public AttachmentsController(
@@ -25,12 +30,16 @@ public class AttachmentsController : ControllerBase
         IAcknowledgmentService acknowledgmentService,
         IDocumentStore documentStore,
         ICurrentActor actor,
+        IAttachmentParentLookup parents,
+        IOptions<AttachmentUploadOptions> uploadOptions,
         ILogger<AttachmentsController> logger)
     {
         _repository = repository;
         _acknowledgmentService = acknowledgmentService;
         _documentStore = documentStore;
         _actor = actor;
+        _parents = parents;
+        _uploadOptions = uploadOptions.Value;
         _logger = logger;
     }
 
@@ -38,6 +47,7 @@ public class AttachmentsController : ControllerBase
     /// Submit a 275 attachment with optional file upload
     /// </summary>
     [HttpPost]
+    [AttachmentUploadLimit]
     public async Task<ActionResult<Attachment>> CreateAttachment(
         [FromForm] AttachmentRequest request,
         [FromForm] IFormFile? file)
@@ -68,42 +78,114 @@ public class AttachmentsController : ControllerBase
                 Status = "Received"
             };
 
-            // Validate exactly one parent entity is specified
-            var parentCount = new[] { attachment.ClaimId, attachment.AuthorizationId, attachment.AppealId }
-                .Count(x => !string.IsNullOrWhiteSpace(x));
+            // Exactly one parent entity, and its id must be a plain id: it becomes a storage path segment.
+            var parents = new (AttachmentParentType Type, string? Id)[]
+                {
+                    (AttachmentParentType.Claim, attachment.ClaimId),
+                    (AttachmentParentType.Authorization, attachment.AuthorizationId),
+                    (AttachmentParentType.Appeal, attachment.AppealId),
+                }
+                .Where(p => !string.IsNullOrWhiteSpace(p.Id))
+                .ToList();
 
-            if (parentCount == 0)
+            if (parents.Count == 0)
             {
                 return BadRequest("Must specify one of: ClaimId, AuthorizationId, or AppealId");
             }
 
-            if (parentCount > 1)
+            if (parents.Count > 1)
             {
                 return BadRequest("Cannot specify multiple parent entities (ClaimId, AuthorizationId, AppealId)");
             }
 
-            // Upload file to document store if provided
+            var (parentType, parentId) = (parents[0].Type, parents[0].Id!);
+            if (!AttachmentUploadRules.IsValidParentId(parentId))
+            {
+                return BadRequest($"{parentType}Id must be 1-128 letters, digits, '-' or '_'");
+            }
+
+            // Check the file before calling another service about it.
+            AttachmentFormat? format = null;
             if (file != null && file.Length > 0)
+            {
+                if (file.Length > _uploadOptions.MaxFileSizeBytes)
+                {
+                    return Problem(
+                        statusCode: StatusCodes.Status413PayloadTooLarge,
+                        title: "Attachment too large",
+                        detail: $"Attachments are limited to {_uploadOptions.MaxFileSizeBytes} bytes.");
+                }
+
+                format = AttachmentUploadRules.ResolveFormat(attachment.DocumentFormat);
+                if (format is null || !AttachmentUploadRules.ExtensionMatches(file.FileName, format))
+                {
+                    return Problem(
+                        statusCode: StatusCodes.Status415UnsupportedMediaType,
+                        title: "Unsupported attachment format",
+                        detail: "DocumentFormat must be PDF, TIFF, JPEG or PNG, and the file name must have a matching extension.");
+                }
+            }
+
+            // The parent must exist for the caller's tenant. The owning service answers
+            // 404 for another tenant's record, so this also refuses cross-tenant ids.
+            bool parentExists;
+            try
+            {
+                parentExists = await _parents.ExistsAsync(attachment.TenantId, parentType, parentId, HttpContext.RequestAborted);
+            }
+            catch (AttachmentParentLookupException ex)
+            {
+                _logger.LogError(ex, "Could not confirm the {ParentType} for a new attachment (trace id {TraceId})",
+                    parentType, ChoProblemResults.TraceId(HttpContext));
+                return this.ServerError($"Could not confirm the {parentType.ToString().ToLowerInvariant()} exists; nothing was stored. Retry later.",
+                    StatusCodes.Status502BadGateway);
+            }
+
+            if (!parentExists)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: $"{parentType} not found",
+                    detail: $"No {parentType.ToString().ToLowerInvariant()} {parentId} exists for this tenant.");
+            }
+
+            // Upload file to document store if provided
+            if (file != null && file.Length > 0 && format is not null)
             {
                 const string containerName = "attachments";
 
-                // Generate blob name: tenantId/parentType/parentId/attachmentId.ext
-                var parentType = !string.IsNullOrWhiteSpace(attachment.ClaimId) ? "claims" :
-                                 !string.IsNullOrWhiteSpace(attachment.AuthorizationId) ? "authorizations" : "appeals";
-                var parentId   = attachment.ClaimId ?? attachment.AuthorizationId ?? attachment.AppealId;
-                var extension  = Path.GetExtension(file.FileName).ToLowerInvariant();
-                var blobName   = $"{attachment.TenantId}/{parentType}/{parentId}/{attachment.Id}{extension}";
+                using var stream = file.OpenReadStream();
+                if (!await AttachmentUploadRules.HasSignatureAsync(stream, format, HttpContext.RequestAborted))
+                {
+                    return Problem(
+                        statusCode: StatusCodes.Status415UnsupportedMediaType,
+                        title: "Unsupported attachment format",
+                        detail: $"The file content is not a {format.Format} file.");
+                }
+
+                // Blob name: tenantId/parentType/parentId/attachmentId.ext. Every segment is
+                // validated or server-generated, and sanitized again as defense in depth.
+                var parentFolder = parentType switch
+                {
+                    AttachmentParentType.Claim => "claims",
+                    AttachmentParentType.Authorization => "authorizations",
+                    _ => "appeals",
+                };
+                var blobName = string.Join('/',
+                    ClaimAttachmentRules.SanitizePathSegment(attachment.TenantId),
+                    parentFolder,
+                    ClaimAttachmentRules.SanitizePathSegment(parentId),
+                    ClaimAttachmentRules.SanitizePathSegment(attachment.Id) + format.Extension);
 
                 // Compute SHA-256 hash before upload
-                using var stream = file.OpenReadStream();
                 using var sha256 = SHA256.Create();
                 var hashBytes = await sha256.ComputeHashAsync(stream);
                 var hash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
 
                 stream.Position = 0;
-                var contentType = $"application/{attachment.DocumentFormat.ToLowerInvariant()}";
-                var uploaded = await _documentStore.UploadAsync(containerName, blobName, stream, contentType);
+                var uploaded = await _documentStore.UploadAsync(containerName, blobName, stream, format.ContentType);
 
+                attachment.DocumentFormat    = format.Format;
                 attachment.BlobUrl           = uploaded.Uri.ToString();
                 attachment.BlobContainerName = containerName;
                 attachment.BlobName          = blobName;
@@ -132,8 +214,8 @@ public class AttachmentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating attachment");
-            return StatusCode(500, new { error = "Failed to create attachment", details = ex.Message });
+            _logger.LogError(ex, "Error creating attachment (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Failed to create attachment");
         }
     }
 
@@ -227,8 +309,8 @@ public class AttachmentsController : ControllerBase
         }
 
         var stream      = await _documentStore.DownloadAsync(attachment.BlobContainerName!, attachment.BlobName);
-        var contentType = $"application/{attachment.DocumentFormat.ToLowerInvariant()}";
-        var fileName    = $"{attachment.Id}.{attachment.DocumentFormat.ToLowerInvariant()}";
+        var contentType = AttachmentUploadRules.ContentTypeFor(attachment.DocumentFormat);
+        var fileName    = ClaimAttachmentRules.SanitizePathSegment(attachment.Id) + AttachmentUploadRules.ExtensionFor(attachment.DocumentFormat);
 
         return File(stream, contentType, fileName);
     }
