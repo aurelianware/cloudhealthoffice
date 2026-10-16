@@ -125,12 +125,12 @@ public class CmsNcciLoaderTests
 
         var venipuncture = result.Rows.Single(r => r.ProcedureCode == "36415");
         Assert.Equal(2, venipuncture.MaxUnits);
-        Assert.Equal(MueAdjudicationIndicator.DateOfService, venipuncture.AdjudicationIndicator);
+        Assert.Equal(MueAdjudicationIndicator.DateOfServicePolicy, venipuncture.AdjudicationIndicator); // "2 Date of Service Edit: Policy"
         Assert.Equal("CMS Policy", venipuncture.Rationale);
 
         Assert.Equal(MueAdjudicationIndicator.ClaimLine, result.Rows.Single(r => r.ProcedureCode == "J1100").AdjudicationIndicator);
         var cbc = result.Rows.Single(r => r.ProcedureCode == "85025");
-        Assert.Equal(MueAdjudicationIndicator.DateOfServiceAbsolute, cbc.AdjudicationIndicator);
+        Assert.Equal(MueAdjudicationIndicator.DateOfServiceClinical, cbc.AdjudicationIndicator);
         Assert.Equal("Code Descriptor / CPT Instruction", cbc.Rationale);
     }
 
@@ -482,7 +482,7 @@ public class CmsNcciLoaderTests
         h.Repo.AddMueEntry(new MueEntry
         {
             Id = "seed-97110", TenantId = Tenant, ProcedureCode = "97110", MaxUnits = 8,
-            AdjudicationIndicator = MueAdjudicationIndicator.DateOfService, EffectiveDate = new DateTime(2025, 1, 1),
+            AdjudicationIndicator = MueAdjudicationIndicator.DateOfServicePolicy, EffectiveDate = new DateTime(2025, 1, 1),
         });
         await h.Load(PraMueQ4, "2026Q4", NcciCmsFileKind.Mue, NcciSettings.Practitioner);
         await h.Load(PraMueQ1, "2027Q1", NcciCmsFileKind.Mue, NcciSettings.Practitioner);
