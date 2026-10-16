@@ -1,6 +1,6 @@
 # Portal navigation: Home, modules and record pages
 
-**Status:** proposed. Mark up the tab lists in §4 and the open questions in §8 before the build starts.
+**Status:** approved 2026-10-15. The decisions are recorded in §8.
 
 Health plan staff think in records. A call comes in and they say "pull up the member"; a provider disputes a payment and they say "pull up the claim". QNXT and VIDA Suite were both built around that habit. You land on a home page, open a module (Member, Claim, Authorization, ...), find the record, and work it from a set of tabs. CHO keeps that pattern and fixes what made it painful:
 
@@ -244,13 +244,13 @@ Each module carries its own reporting, so people working in Claims don't have to
 
 Each step is a separate PR. Nothing is removed until its replacement is live.
 
-## 8. Decisions for Mark
+## 8. Decisions
 
 | # | Question | Recommendation |
 |---|---|---|
 | 1 | Should Home replace Dashboard as the landing page, with the dashboard metrics moving to role tiles? | **Agreed.** Plan notices included. |
-| 2 | Should the member dialog stay as a quick-view peek, for example from a claim header? | Keep a small peek panel with Open and Open in new tab (principle 3). |
-| 3 | Should tab order and visibility be configurable per tenant? | Not at first. Use a fixed order plus permission-based hiding, and revisit if a plan asks. |
+| 2 | Should the member dialog stay as a quick-view peek, for example from a claim header? | **Agreed:** a peek panel with Open and Open in new tab (principle 3). |
+| 3 | Should tab order and visibility be configurable per tenant? | **Agreed:** fixed order plus permission-based hiding for now; revisit if a plan asks. |
 | 4 | Should the claim's Adjudication Pipeline and Benefit Breakdown tabs merge into one Adjudication tab? | Yes. |
 | 5 | Should the top bar get a record-tab strip, i.e. several open records as tabs inside the app, like QNXT's open windows? | **Agreed:** no in-app tab strip. Use browser tabs, deep links and the ↗ icon; Recent covers going back. |
 | 6 | Should each module carry its own Insights view? | **Agreed** (§5.1). |
