@@ -32,11 +32,11 @@
                 {
                     <tr data-testid="@($"duplicate-row-{match.MatchedClaimId}")">
                         <td>
-                            <MudLink Href="@($"/claims/{Uri.EscapeDataString(match.MatchedClaimId)}")"
-                                     Typo="Typo.body2" Style="font-family: monospace;"
-                                     data-testid="duplicate-link">
+                            @* Ctrl/⌘-click or the ↗ icon opens the match in a new tab, to compare side by side. *@
+                            <RecordLink Href="@($"/claims/{Uri.EscapeDataString(match.MatchedClaimId)}")"
+                                        style="font-family: monospace;" data-testid="duplicate-link">
                                 @(string.IsNullOrWhiteSpace(match.MatchedClaimNumber) ? match.MatchedClaimId : match.MatchedClaimNumber)
-                            </MudLink>
+                            </RecordLink>
                             @if (match.Lines.Count > 0)
                             {
                                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">

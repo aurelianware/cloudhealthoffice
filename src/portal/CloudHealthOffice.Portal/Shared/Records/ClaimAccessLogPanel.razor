@@ -1,0 +1,61 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@* Who read this claim, newest first. Shown on the claim's Access log tab to
+   users with audit:read; reading it is itself recorded. *@
+@if (Error is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" data-testid="access-log-error">@Error</MudAlert>
+}
+else if (Entries is null)
+{
+    <div class="d-flex justify-center pa-8"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+}
+else if (Entries.Count == 0)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" data-testid="access-log-empty">No reads of this claim have been recorded.</MudText>
+}
+else
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        Every read of this claim: views, and searches that returned it. Opening this log is recorded too.
+    </MudText>
+    <MudSimpleTable Dense="true" Hover="true">
+        <thead>
+            <tr><th>When (UTC)</th><th>Who</th><th>Roles</th><th>What</th><th>Outcome</th><th>From</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var entry in Entries)
+            {
+                <tr data-testid="access-log-row">
+                    <td style="white-space: nowrap;">@entry.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                    <td>
+                        @entry.Actor
+                        @if (entry.ActorIsService)
+                        {
+                            <MudChip T="string" Size="Size.Small" Class="ml-1">service</MudChip>
+                        }
+                    </td>
+                    <td><MudText Typo="Typo.caption">@string.Join(", ", entry.ActorRoles)</MudText></td>
+                    <td>@entry.What</td>
+                    <td>
+                        <MudChip T="string" Size="Size.Small" Color="@OutcomeColor(entry.Outcome)" data-testid="access-log-outcome">@entry.Outcome</MudChip>
+                    </td>
+                    <td><MudText Typo="Typo.caption" Style="font-family: monospace;">@entry.ClientIp</MudText></td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    /// <summary>The entries, or null while loading.</summary>
+    [Parameter] public IReadOnlyList<ClaimAccessEntry>? Entries { get; set; }
+    [Parameter] public string? Error { get; set; }
+
+    private static Color OutcomeColor(string outcome) => outcome switch
+    {
+        "Allowed" => Color.Success,
+        "Denied" => Color.Error,
+        "NotFound" => Color.Warning,
+        _ => Color.Default,
+    };
+}

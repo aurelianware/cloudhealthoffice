@@ -1,0 +1,26 @@
+.record-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.record-link-main {
+    color: var(--mud-palette-primary);
+}
+
+.record-link-new {
+    display: inline-flex;
+    color: var(--mud-palette-text-secondary);
+    opacity: 0;
+    transition: opacity 120ms ease-in;
+}
+
+.record-link:hover .record-link-new,
+.record-link:focus-within .record-link-new,
+.record-link-new:focus-visible {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    .record-link-new { opacity: 1; }
+}

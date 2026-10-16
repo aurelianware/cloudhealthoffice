@@ -52,7 +52,7 @@ public class ClaimNotesPanelTests : TestContext
             Note("Second unit denied per MUE.", authorName: null),
         });
 
-        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A"));
+        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A").Add(x => x.Tab, "notes"));
 
         cut.WaitForAssertion(() => cut.FindAll("[data-testid=claim-note]").Should().HaveCount(2));
         var notes = cut.FindAll("[data-testid=claim-note]").ToList();
@@ -66,7 +66,7 @@ public class ClaimNotesPanelTests : TestContext
         CanWork(false);
         _claims.Setup(c => c.GetClaimNotesAsync("A")).ReturnsAsync(new List<ClaimNoteView>());
 
-        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A"));
+        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A").Add(x => x.Tab, "notes"));
 
         cut.WaitForAssertion(() => cut.Find("[data-testid=claim-notes-empty]"));
         cut.FindAll("[data-testid=add-note]").Should().BeEmpty();
@@ -80,7 +80,7 @@ public class ClaimNotesPanelTests : TestContext
         _claims.Setup(c => c.AddClaimNoteAsync("A", ClaimNoteCategory.Internal, "Waiting on records."))
             .ReturnsAsync(Note("Waiting on records.", ClaimNoteCategory.Internal));
 
-        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A"));
+        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A").Add(x => x.Tab, "notes"));
         cut.WaitForAssertion(() => cut.Find("[data-testid=add-note]"));
 
         cut.Find("textarea").Change("  Waiting on records.  ");
@@ -101,7 +101,7 @@ public class ClaimNotesPanelTests : TestContext
         _claims.Setup(c => c.AddClaimNoteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ThrowsAsync(new InvalidOperationException("You don't have permission to add notes to claims."));
 
-        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A"));
+        var cut = RenderComponent<ClaimDetailsNew>(p => p.Add(x => x.ClaimId, "A").Add(x => x.Tab, "notes"));
         cut.WaitForAssertion(() => cut.Find("[data-testid=add-note]"));
         cut.Find("textarea").Change("draft");
         cut.Find("[data-testid=add-note]").Click();

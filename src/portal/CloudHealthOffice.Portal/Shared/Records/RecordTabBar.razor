@@ -1,0 +1,35 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@* The tab strip of a record page. Each tab is a real link to its own URL, so
+   Back, bookmarks and Ctrl/⌘-click (open the tab in a new browser tab) work.
+   Hidden tabs (no permission, nothing to show) are not rendered. *@
+<nav class="record-tabs" aria-label="Record sections" data-testid="record-tabs">
+    @foreach (var tab in Tabs.Where(t => t.Visible))
+    {
+        var active = string.Equals(tab.Key, ActiveKey, StringComparison.OrdinalIgnoreCase);
+        <a href="@RecordTabs.Href(BaseHref, tab.Key, Query)"
+           class="record-tab @(active ? "active" : null)"
+           aria-current="@(active ? "page" : null)"
+           data-testid="record-tab-@tab.Key">
+            @if (tab.Icon is not null)
+            {
+                <MudIcon Icon="@tab.Icon" Size="Size.Small" Class="mr-1" />
+            }
+            <span>@tab.Label</span>
+            @if (tab.Count is { } count)
+            {
+                <span class="record-tab-count">@count</span>
+            }
+        </a>
+    }
+</nav>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<RecordTab> Tabs { get; set; } = [];
+    [Parameter, EditorRequired] public string ActiveKey { get; set; } = string.Empty;
+
+    /// <summary>The record's path without a tab, e.g. <c>/claims/123</c>.</summary>
+    [Parameter, EditorRequired] public string BaseHref { get; set; } = string.Empty;
+
+    /// <summary>A query string to keep on every tab link (e.g. <c>?fromRun=…</c>).</summary>
+    [Parameter] public string? Query { get; set; }
+}

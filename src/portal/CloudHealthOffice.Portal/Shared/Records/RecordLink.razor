@@ -1,0 +1,19 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@* A link to another record. A normal click opens it in this browser tab;
+   the ↗ icon (shown on hover or keyboard focus) opens it in a new one, as do
+   Ctrl/⌘-click and middle-click. *@
+<span class="record-link" data-testid="record-link">
+    <a href="@Href" class="record-link-main" @attributes="Attributes">@ChildContent</a>
+    <a href="@Href" target="_blank" rel="noopener" class="record-link-new"
+       title="Open in new tab" aria-label="Open in new tab" data-testid="record-link-new-tab">
+        <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" />
+    </a>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Extra attributes for the main link (data-testid, style, ...).</summary>
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? Attributes { get; set; }
+}

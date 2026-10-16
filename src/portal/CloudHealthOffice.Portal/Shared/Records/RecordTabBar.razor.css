@@ -1,0 +1,38 @@
+.record-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    margin-bottom: 16px;
+}
+
+.record-tab {
+    display: inline-flex;
+    align-items: center;
+    padding: 10px 16px;
+    color: var(--mud-palette-text-secondary);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.record-tab:hover,
+.record-tab:focus-visible {
+    color: var(--mud-palette-text-primary);
+    background: var(--mud-palette-action-default-hover);
+}
+
+.record-tab.active {
+    color: var(--mud-palette-primary);
+    border-bottom-color: var(--mud-palette-primary);
+}
+
+.record-tab-count {
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    background: var(--mud-palette-action-default-hover);
+}
