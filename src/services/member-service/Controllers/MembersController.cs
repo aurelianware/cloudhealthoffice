@@ -77,7 +77,7 @@ public class MembersController : ControllerBase
         [FromQuery] string? memberId = null,
         [FromQuery] string? groupNumber = null,
         [FromQuery] string? subscriberId = null,
-        [FromQuery] string? lastName = null,
+        [FromQuery][StringLength(MaxNameSearchLength)] string? lastName = null,
         [FromQuery] DateTime? dateOfBirth = null,
         [FromQuery] bool activeOnly = false,
         [FromQuery] bool subscribersOnly = false,
@@ -110,11 +110,14 @@ public class MembersController : ControllerBase
         });
     }
 
-    /// <summary>Free-text search across memberId and lastName.</summary>
+    /// <summary>Longest last-name prefix accepted by the member searches.</summary>
+    public const int MaxNameSearchLength = 100;
+
+    /// <summary>Search by exact memberId, else by last-name prefix (case-insensitive).</summary>
     [AuditRecordAccess("Member", RecordAccessActions.Search, ResultIdProperty = "MemberId")]
     [HttpGet("search")]
     [ProducesResponseType(typeof(List<Member>), 200)]
-    public async Task<IActionResult> SearchByQuery([FromQuery] string? q = null)
+    public async Task<IActionResult> SearchByQuery([FromQuery][StringLength(MaxNameSearchLength)] string? q = null)
     {
         if (string.IsNullOrWhiteSpace(q))
             return await SearchMembers(pageSize: 20);
