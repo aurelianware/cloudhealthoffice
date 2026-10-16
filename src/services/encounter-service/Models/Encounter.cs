@@ -27,6 +27,15 @@ public class Encounter
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision (MongoDB): every write to this encounter
+    /// increments it, and a whole-document replace succeeds only if it is still
+    /// the value read, so a stale write (a status update read before a void
+    /// or a batch dispatch) fails instead of overwriting a concurrent change.
+    /// Documents written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// Encounter control number — payer-assigned or system-generated tracking ID.
     /// Maps to the 837 ISA13 / GS06 control numbers for the submitted batch.
     /// </summary>
