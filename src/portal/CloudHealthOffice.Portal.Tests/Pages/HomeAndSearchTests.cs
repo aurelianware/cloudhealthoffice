@@ -35,7 +35,7 @@ public class HomeAndSearchTests : TestContext
         Services.AddSingleton(_workspace.Object);
         Services.AddScoped<GlobalSearch>();
 
-        _claims.Setup(c => c.SearchClaimsAsync(It.IsAny<ClaimSearchRequest>())).ReturnsAsync(new ClaimSearchResult());
+        _claims.Setup(c => c.GetClaimByIdAsync(It.IsAny<string>())).ReturnsAsync((ClaimDetails?)null);
         _members.Setup(m => m.SearchMembersAsync(It.IsAny<string>())).ReturnsAsync(new List<MemberSummary>());
         _providers.Setup(p => p.SearchProvidersAsync(It.IsAny<string>())).ReturnsAsync(new List<ProviderSummary>());
         _claims.Setup(c => c.GetRecentlyViewedClaimsAsync(It.IsAny<int>())).ReturnsAsync(new List<RecentClaimView>());
@@ -54,8 +54,8 @@ public class HomeAndSearchTests : TestContext
     public async Task A_claim_number_is_an_exact_hit_to_jump_to()
     {
         Grant("claims:read", "members:read", "providers:read");
-        _claims.Setup(c => c.SearchClaimsAsync(It.Is<ClaimSearchRequest>(r => r.ClaimNumber == "CLM-77")))
-            .ReturnsAsync(new ClaimSearchResult { Claims = [new ClaimSummary { ClaimId = "c77", ClaimNumber = "CLM-77", Status = "Paid", MemberId = "M1" }] });
+        _claims.Setup(c => c.GetClaimByIdAsync("CLM-77"))
+            .ReturnsAsync(new ClaimDetails { ClaimId = "c77", ClaimNumber = "CLM-77", Status = "Paid", MemberId = "M1" });
 
         var results = await Search.SearchAsync(" CLM-77 ");
 
@@ -89,7 +89,7 @@ public class HomeAndSearchTests : TestContext
             new() { ProviderId = "p1", NPI = "1234567893", Name = "Lakeside Orthopedics" },
         });
 
-        (await Search.SearchAsync("1234567893")).Jump!.Href.Should().Be("/providers?q=1234567893");
+        (await Search.SearchAsync("1234567893")).Jump!.Href.Should().Be("/providers/p1");
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class HomeAndSearchTests : TestContext
 
         await Search.SearchAsync("anything");
 
-        _claims.Verify(c => c.SearchClaimsAsync(It.IsAny<ClaimSearchRequest>()), Times.Never);
+        _claims.Verify(c => c.GetClaimByIdAsync(It.IsAny<string>()), Times.Never);
         _providers.Verify(p => p.SearchProvidersAsync(It.IsAny<string>()), Times.Never);
         _members.Verify(m => m.SearchMembersAsync("anything"), Times.Once);
     }
@@ -108,8 +108,7 @@ public class HomeAndSearchTests : TestContext
     public async Task Two_exact_hits_list_both_instead_of_jumping_and_an_outage_is_reported()
     {
         Grant("claims:read", "members:read", "providers:read");
-        _claims.Setup(c => c.SearchClaimsAsync(It.IsAny<ClaimSearchRequest>()))
-            .ReturnsAsync(new ClaimSearchResult { Claims = [new ClaimSummary { ClaimId = "x", ClaimNumber = "X1" }] });
+        _claims.Setup(c => c.GetClaimByIdAsync("X1")).ReturnsAsync(new ClaimDetails { ClaimId = "x", ClaimNumber = "X1" });
         _members.Setup(m => m.GetMemberByIdAsync("X1")).ReturnsAsync(new MemberDetails { MemberId = "X1", FirstName = "A", LastName = "B" });
         _providers.Setup(p => p.SearchProvidersAsync(It.IsAny<string>())).ThrowsAsync(new ServiceUnavailableException("Provider Service", new Exception()));
 
@@ -124,8 +123,7 @@ public class HomeAndSearchTests : TestContext
     public void The_search_page_opens_an_exact_match_in_place_of_itself()
     {
         Grant("claims:read");
-        _claims.Setup(c => c.SearchClaimsAsync(It.IsAny<ClaimSearchRequest>()))
-            .ReturnsAsync(new ClaimSearchResult { Claims = [new ClaimSummary { ClaimId = "c77", ClaimNumber = "CLM-77" }] });
+        _claims.Setup(c => c.GetClaimByIdAsync("CLM-77")).ReturnsAsync(new ClaimDetails { ClaimId = "c77", ClaimNumber = "CLM-77" });
         var nav = Services.GetRequiredService<FakeNavigationManager>();
         nav.NavigateTo(nav.GetUriWithQueryParameter("q", "CLM-77"));
 
