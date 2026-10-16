@@ -1135,9 +1135,9 @@ counted.
   outbox fields it does not know; see deploy note 3 and the sweep.
 - **Redis rebuild retries.** A rebuild that races three changes in a row
   serves its answer uncached; the next read rebuilds.
-- **Redis money is a float** (`HINCRBYFLOAT`, JSON numbers in the journal;
-  pre-existing). Amounts are read back as `double` → `decimal` without
-  rounding, so long sums can drift by sub-cent amounts.
+- ~~Redis money is a float~~ — resolved: the Redis store keeps integer
+  cents (`HINCRBY`, cents in the journal; sub-cent amounts are rejected). See
+  `docs/engines/ACCUMULATOR-ENGINE.md`.
 - **Fence / journal growth.** Each claim adds one `__commit:` (and, if
   voided or denied, one `__fence:`) field to its member's and family's hash,
   and Mongo / Cosmos documents keep their transactions and

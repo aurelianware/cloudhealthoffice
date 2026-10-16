@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Redis accumulators store integer cents.** `RedisAccumulatorService`
+  wrote amounts with `HINCRBYFLOAT` and read them back as
+  `double` → `decimal`. 10,000 × $0.10 did not sum to $1,000.00, and a
+  deductible filled exactly to its limit could read as not met. Every hash
+  value is now an integer number of hundredths (`HINCRBY`, integer Lua
+  arithmetic, cents in the per-claim journal and clamp results). An amount
+  with sub-cent precision is rejected, not rounded.
+- **Hashes written before integer cents are never read as cents.** New
+  hashes carry `__v=2`. A hash without it is a cache miss: its amounts and
+  journals are dropped, its fences are kept, and it is rebuilt from
+  claims-service. **Deploying needs benefit-plan-service scaled to zero
+  first**, because old and new pods misread each other's values. See
+  `docs/operations/ACCUMULATOR-CENTS-CUTOVER.md`.
+- **Accumulator audit rows are written before the operation returns.**
+  These are the audit writes on commit, increment and reversal. They were
+  fire-and-forget `Task.Run`s, so a write could be lost on an error or at
+  shutdown, and they used a scoped writer after its request scope had
+  ended. A failed audit write now fails the operation with
+  `AccumulatorAuditException`. The caller retries it (commits come from
+  the claims-service accumulator outbox), and the retry writes the row. For
+  increments, the audit row is written first.
+
 ### Security
 
 - **Attachment uploads are validated before anything is stored.**
