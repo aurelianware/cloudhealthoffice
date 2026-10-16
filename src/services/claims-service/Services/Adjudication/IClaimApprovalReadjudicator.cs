@@ -54,6 +54,14 @@ public sealed record ExaminerApproval
     public bool PayerOrderOverrideAuthorized { get; init; }
 
     /// <summary>
+    /// The reviewer's decision on each edit of the reviewed pend, keyed by
+    /// <see cref="EditIdentity"/>. Overridden edits are suppressed on the
+    /// re-run; upheld edits deny what they cover. Empty for a whole-claim
+    /// approval (the pre-workbench behaviour: every reviewed pend passes).
+    /// </summary>
+    public IReadOnlyList<EditDisposition> EditDispositions { get; init; } = [];
+
+    /// <summary>
     /// The claim's persisted pend — what the examiner actually reviewed.
     /// Only pends matching it are overridden on the re-run (PR #1278 round
     /// 3, B1): a pend the examiner never saw — a provider-integrity check

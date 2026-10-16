@@ -1677,6 +1677,10 @@ public class DuplicateFindingSnapshot
     /// <summary>Suggested CARC for the EOB/835 (18 — exact duplicate claim/service).</summary>
     [StringLength(10)]
     public string? SuggestedCarc { get; set; }
+
+    /// <summary>Stable identity of this finding; see <see cref="Services.Adjudication.EditIdentity"/>.</summary>
+    [StringLength(200)]
+    public string? EditKey { get; set; }
 }
 
 /// <summary>
@@ -1722,6 +1726,23 @@ public class NcciEditFailureSnapshot
 
     /// <summary>For MUE failures: MUE max units limit.</summary>
     public int? MueMaxUnits { get; set; }
+
+    /// <summary>NCCI pair edits: CMS modifier indicator (0 or 1).</summary>
+    public int? ModifierIndicator { get; set; }
+
+    /// <summary>MUE: CMS adjudication indicator (1 line, 2 per day — policy, 3 per day — clinical).</summary>
+    public int? MueAdjudicationIndicator { get; set; }
+
+    /// <summary>MUE: the date of service the units were counted on.</summary>
+    public DateTime? ServiceDate { get; set; }
+
+    /// <summary>
+    /// Stable identity of this edit (see <see cref="Services.Adjudication.EditIdentity"/>):
+    /// the same edit firing again on the same claim facts has the same key,
+    /// so a reviewer's disposition can be matched on re-adjudication.
+    /// </summary>
+    [StringLength(200)]
+    public string? EditKey { get; set; }
 
     /// <summary>Suggested CARC for the EOB/835.</summary>
     [StringLength(10)]
