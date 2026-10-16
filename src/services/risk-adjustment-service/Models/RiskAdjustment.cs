@@ -27,6 +27,16 @@ public class MemberRiskScore
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision (MongoDB): every write to this risk score
+    /// increments it, and a whole-document replace succeeds only if it is still
+    /// the value read, so a stale write (a recalculation read before a status
+    /// change to Submitted) fails instead of overwriting a concurrent change.
+    /// Documents written before the field existed read as 0. Server-set: the
+    /// PUT endpoint replaces the score as it read it just now.
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// Member ID (links to Member Service).
     /// </summary>
     [Required]
