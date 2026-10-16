@@ -43,14 +43,20 @@ public class MongoContainerAdapter : IBatchJobContainer
             new CreateIndexModel<JobDoc>(indexKeys, indexOptions), cancellationToken: ct);
     }
 
+    // Each write $sets only the part of the job document it owns (the job, or
+    // one payload slot) instead of reading the whole document and replacing it:
+    // a replace from a separate read erased whatever another writer stored in
+    // between (a job save dropping the result payload, a payload write
+    // reverting the job's status). Upserts create the document as before.
+
     public async Task UpsertAsync(BatchEligibilityJob job, string partitionKey, CancellationToken ct)
     {
         var docId = ComposeId(job.Id, partitionKey);
-        var existing = await ReadDocAsync(docId, ct);
-        var doc = existing ?? new JobDoc { Id = docId, TenantId = partitionKey };
-        doc.Job = job;
-        await _collection.ReplaceOneAsync(
-            d => d.Id == docId, doc, new ReplaceOptions { IsUpsert = true }, ct);
+        var update = Builders<JobDoc>.Update
+            .Set(d => d.Job, job)
+            .SetOnInsert(d => d.TenantId, partitionKey);
+        await _collection.UpdateOneAsync(
+            d => d.Id == docId, update, new UpdateOptions { IsUpsert = true }, ct);
     }
 
     public async Task<BatchEligibilityJob?> ReadAsync(string id, string partitionKey, CancellationToken ct)
@@ -63,26 +69,25 @@ public class MongoContainerAdapter : IBatchJobContainer
         string id, string partitionKey, string payloadKey, byte[] bytes, CancellationToken ct)
     {
         var docId = ComposeId(id, partitionKey);
-        var doc = (await ReadDocAsync(docId, ct)) ?? new JobDoc { Id = docId, TenantId = partitionKey };
-        doc.Payloads[payloadKey] = new PayloadSlot { Inline = Convert.ToBase64String(bytes) };
-        await _collection.ReplaceOneAsync(
-            d => d.Id == docId, doc, new ReplaceOptions { IsUpsert = true }, ct);
+        var update = Builders<JobDoc>.Update
+            .Set(d => d.Payloads[payloadKey], new PayloadSlot { Inline = Convert.ToBase64String(bytes) })
+            .SetOnInsert(d => d.TenantId, partitionKey);
+        await _collection.UpdateOneAsync(
+            d => d.Id == docId, update, new UpdateOptions { IsUpsert = true }, ct);
     }
 
     public async Task RecordBlobPayloadAsync(
         string id, string partitionKey, string payloadKey, string blobUri, CancellationToken ct)
     {
         var docId = ComposeId(id, partitionKey);
-        var doc = (await ReadDocAsync(docId, ct)) ?? new JobDoc { Id = docId, TenantId = partitionKey };
-        doc.Payloads[payloadKey] = new PayloadSlot { BlobUri = blobUri };
-        if (doc.Job != null)
-        {
-            doc.Job.StorageMode = BatchStorageMode.Blob;
-            if (payloadKey == "input") doc.Job.InputBlobUri = blobUri;
-            if (payloadKey == "result") doc.Job.ResultBlobUri = blobUri;
-        }
-        await _collection.ReplaceOneAsync(
-            d => d.Id == docId, doc, new ReplaceOptions { IsUpsert = true }, ct);
+        var update = Builders<JobDoc>.Update
+            .Set(d => d.Payloads[payloadKey], new PayloadSlot { BlobUri = blobUri })
+            .Set(d => d.Job.StorageMode, BatchStorageMode.Blob)
+            .SetOnInsert(d => d.TenantId, partitionKey);
+        if (payloadKey == "input") update = update.Set(d => d.Job.InputBlobUri, blobUri);
+        if (payloadKey == "result") update = update.Set(d => d.Job.ResultBlobUri, blobUri);
+        await _collection.UpdateOneAsync(
+            d => d.Id == docId, update, new UpdateOptions { IsUpsert = true }, ct);
     }
 
     public async Task<BatchPayloadRecord?> ReadPayloadAsync(
