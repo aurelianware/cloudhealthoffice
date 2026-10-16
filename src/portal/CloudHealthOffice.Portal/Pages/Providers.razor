@@ -184,7 +184,7 @@
                         <RowTemplate>
                             <MudTd DataLabel="NPI">@context.NPI</MudTd>
                             <MudTd DataLabel="Provider Name">
-                                <MudText Typo="Typo.body2"><strong>@context.Name</strong></MudText>
+                                <RecordLink Href="@ProviderHref(context.ProviderId)" data-testid="provider-link"><strong>@context.Name</strong></RecordLink>
                             </MudTd>
                             <MudTd DataLabel="Practice Type">
                                 <MudChip Size="Size.Small"
@@ -229,7 +229,8 @@
                                 <MudIconButton Icon="@Icons.Material.Filled.Visibility"
                                                Size="Size.Small"
                                                Color="Color.Primary"
-                                               OnClick="@(() => OpenDetailsDialog(context.ProviderId))" />
+                                               Href="@ProviderHref(context.ProviderId)"
+                                               aria-label="Open provider" />
                                 <MudIconButton Icon="@Icons.Material.Filled.Edit"
                                                Size="Size.Small"
                                                Color="Color.Secondary"
@@ -259,7 +260,6 @@
     }
 </MudContainer>
 
-<ProviderDetailsDialog @ref="_detailsDialog" OnProviderUpdated="SearchProviders" />
 <CreateEditProviderDialog @ref="_createEditDialog" OnProviderSaved="SearchProviders" />
 </PermissionGate>
 
@@ -296,7 +296,6 @@
     private string? _selectedSpecialty;
     private string? _selectedNetworkStatus;
 
-    private ProviderDetailsDialog? _detailsDialog;
     private CreateEditProviderDialog? _createEditDialog;
 
     private bool HasCriteria =>
@@ -359,11 +358,7 @@
             await SearchProviders();
     }
 
-    private async Task OpenDetailsDialog(string providerId)
-    {
-        if (_detailsDialog != null)
-            await _detailsDialog.OpenAsync(providerId);
-    }
+    private static string ProviderHref(string providerId) => $"/providers/{Uri.EscapeDataString(providerId)}";
 
     private async Task OpenEditDialog(string providerId)
     {

@@ -63,18 +63,20 @@ public sealed class GlobalSearch
 
     public static bool LooksLikeNpi(string q) => q.Length == 10 && q.All(char.IsDigit);
 
+    // By claim id or claim number (claims-service resolves either). The
+    // claims search endpoint has no claim-number filter, so a free-text
+    // claim search would return unrelated claims; only an exact match is shown.
     private async Task Claims(string q, SearchResults results)
     {
         try
         {
-            var found = await _claims.SearchClaimsAsync(new ClaimSearchRequest { ClaimNumber = q, PageSize = MaxPerKind });
+            var claim = await _claims.GetClaimByIdAsync(q);
             lock (results)
             {
-                foreach (var c in (found?.Claims ?? new()).Take(MaxPerKind))
+                if (claim is not null)
                 {
-                    results.Hits.Add(new SearchHit("Claim", $"Claim {c.ClaimNumber}",
-                        $"{c.Status} · member {c.MemberId}", $"/claims/{Uri.EscapeDataString(c.ClaimId)}",
-                        string.Equals(c.ClaimNumber, q, StringComparison.OrdinalIgnoreCase)));
+                    results.Hits.Add(new SearchHit("Claim", $"Claim {claim.DisplayClaimNumber}",
+                        $"{claim.Status} · member {claim.MemberId}", $"/claims/{Uri.EscapeDataString(claim.ClaimId)}", Exact: true));
                 }
                 results.MoreLinks.Add(("Search claims", "/claims"));
             }
@@ -121,7 +123,8 @@ public sealed class GlobalSearch
                 foreach (var p in found.Take(MaxPerKind))
                 {
                     results.Hits.Add(new SearchHit("Provider", p.Name, $"NPI {p.NPI} · {p.Specialty} · {p.City} {p.State}".Trim(),
-                        $"/providers?q={Uri.EscapeDataString(p.NPI)}", LooksLikeNpi(q) && p.NPI == q));
+                        string.IsNullOrWhiteSpace(p.ProviderId) ? $"/providers?q={Uri.EscapeDataString(p.NPI)}" : $"/providers/{Uri.EscapeDataString(p.ProviderId)}",
+                        LooksLikeNpi(q) && p.NPI == q));
                 }
                 results.MoreLinks.Add(("Search providers", $"/providers?q={Uri.EscapeDataString(q)}"));
             }
