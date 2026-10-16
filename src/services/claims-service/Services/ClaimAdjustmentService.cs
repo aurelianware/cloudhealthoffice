@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ClaimsService.Exceptions;
 using ClaimsService.Models;
 using ClaimsService.Models.Messaging;
 using ClaimsService.Repositories;
@@ -523,8 +524,15 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         // pipeline is running asynchronously via Service Bus;
         // transition to PendingReversal is owned by the
         // orchestrator-finalize callback path (5.12b).
+        // The pipeline may already have moved the row on (callback): on a
+        // conflict only NewClaimId is re-applied to the fresh row, so a stale
+        // in-memory Status can never erase a transition.
         adjustment.NewClaimId = newVersion.Id;
-        await _adjustmentRepository.UpdateAsync(adjustment, ct);
+        adjustment = await UpdateReapplyingOnConflictAsync(adjustment, a =>
+        {
+            a.NewClaimId = newVersion.Id;
+            return true;
+        }, ct) ?? adjustment;
 
         _logger.LogInformation(
             "Adjustment {AdjustmentId} created: predecessor {PredecessorClaimId} (chain {ChainKey} v{PredecessorVersion}) → " +
@@ -595,15 +603,29 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
             _ => adjustment.Status, // already filtered Pend above
         };
 
-        adjustment.Status = nextStatus;
-        adjustment.ReadjudicationCompletedAt = DateTime.UtcNow;
-        if (nextStatus == ClaimAdjustmentStatus.Failed)
+        bool Transition(ClaimAdjustment a)
         {
-            adjustment.FailureReason =
-                $"Re-adjudication for new version {newClaimId} resulted in pipeline outcome {outcome}";
+            // Re-checked on a re-read after a conflict: a concurrent callback
+            // that already transitioned the row makes this an idempotent no-op.
+            if (a.Status != ClaimAdjustmentStatus.AwaitingReadjudication) return false;
+            a.Status = nextStatus;
+            a.ReadjudicationCompletedAt = DateTime.UtcNow;
+            if (nextStatus == ClaimAdjustmentStatus.Failed)
+            {
+                a.FailureReason =
+                    $"Re-adjudication for new version {newClaimId} resulted in pipeline outcome {outcome}";
+            }
+            return true;
         }
 
-        await _adjustmentRepository.UpdateAsync(adjustment, ct);
+        Transition(adjustment);
+        if (await UpdateReapplyingOnConflictAsync(adjustment, Transition, ct) == null)
+        {
+            _logger.LogInformation(
+                "OnNewVersionFinalizedAsync: adjustment {AdjustmentId} transitioned concurrently; idempotent no-op",
+                Sanitize(adjustment.Id));
+            return;
+        }
 
         _logger.LogInformation(
             "Adjustment {AdjustmentId} transitioned AwaitingReadjudication → {Status} on outcome {Outcome} for new version {NewClaimId}",
@@ -633,14 +655,61 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
             return;
         }
 
-        adjustment.Status = ClaimAdjustmentStatus.Active;
-        adjustment.ReversalRunId = reversalRunId;
-        adjustment.ReversalCompletedAt = DateTime.UtcNow;
-        await _adjustmentRepository.UpdateAsync(adjustment, ct);
+        bool Activate(ClaimAdjustment a)
+        {
+            // Re-checked on a re-read after a conflict: the row must still be
+            // PendingReversal for this void to complete its lifecycle.
+            if (a.Status != ClaimAdjustmentStatus.PendingReversal) return false;
+            a.Status = ClaimAdjustmentStatus.Active;
+            a.ReversalRunId = reversalRunId;
+            a.ReversalCompletedAt = DateTime.UtcNow;
+            return true;
+        }
+
+        Activate(adjustment);
+        if (await UpdateReapplyingOnConflictAsync(adjustment, Activate, ct) == null)
+        {
+            _logger.LogInformation(
+                "MarkActiveOnReversalAsync: adjustment {AdjustmentId} left PendingReversal concurrently; no lifecycle transition",
+                Sanitize(adjustment.Id));
+            return;
+        }
 
         _logger.LogInformation(
             "Adjustment {AdjustmentId} transitioned PendingReversal → Active on ReversalRun {ReversalRunId} for predecessor {ClaimId}",
             Sanitize(adjustment.Id), Sanitize(reversalRunId), Sanitize(predecessorClaimId));
+    }
+
+    /// <summary>How many times an adjustment write is re-read and re-applied against concurrent writers.</summary>
+    internal const int MaxConcurrencyAttempts = 5;
+
+    /// <summary>
+    /// Saves <paramref name="adjustment"/> (already changed by the caller). When
+    /// a concurrent write moved the row on, re-reads it and lets
+    /// <paramref name="apply"/> make the same change on the fresh row; apply
+    /// returning false means the change no longer applies and nothing is
+    /// written (returns null). Returns the row that was saved. After
+    /// <see cref="MaxConcurrencyAttempts"/> the conflict propagates (409).
+    /// </summary>
+    private async Task<ClaimAdjustment?> UpdateReapplyingOnConflictAsync(
+        ClaimAdjustment adjustment, Func<ClaimAdjustment, bool> apply, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await _adjustmentRepository.UpdateAsync(adjustment, ct);
+                return adjustment;
+            }
+            catch (ClaimAdjustmentConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                var fresh = await _adjustmentRepository.GetByIdAsync(adjustment.TenantId, adjustment.Id, ct)
+                    ?? throw new InvalidOperationException(
+                        $"ClaimAdjustment {adjustment.Id} for tenant {adjustment.TenantId} not found for update.");
+                if (!apply(fresh)) return null;
+                adjustment = fresh;
+            }
+        }
     }
 
     private async Task TryReleaseChainLockAsync(ClaimAdjustment placeholder, CancellationToken ct)
