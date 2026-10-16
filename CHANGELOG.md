@@ -48,6 +48,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a conflict. The low-risk sites still open, and the known residual gaps, are
   listed in
   `docs/architecture/mongo-write-concurrency.md`.
+- **A claim is no longer sent twice while its first send is in flight.**
+  The Stedi and Mock gateways treated a `Transmitting` transmission like a
+  failed one, so a second submit of the same idempotency key (or the loser of
+  the create race) sent the 837 again. A transmission now records
+  `TransmittingSinceUtc`; while that is under 10 minutes old, a second submit
+  is answered as a replay with `AcceptedForProcessing: false`. After that the
+  sender is taken to have crashed and the claim may be resent. A retry of a
+  failed send claims it with a conditional save first, so of two concurrent
+  retries only one sends; the other gets the replay instead of a 409.
 - **An AR adjustment can no longer be counted twice on its balance.** Posting
   and reversing saved the balance entry, then the adjustment, and the entry
   had a fresh GUID. A retry after a failed adjustment save added a second

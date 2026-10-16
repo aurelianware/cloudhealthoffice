@@ -40,6 +40,46 @@ internal static class ClaimLifecycleWrites
 {
     public const int MaxAttempts = 4;
 
+    /// <summary>
+    /// How long a <c>Transmitting</c> transmission counts as being sent by
+    /// another request. Well above one gateway send with its retries (Stedi:
+    /// 30 s timeout, 3 attempts); after it the sender is taken to have crashed
+    /// and the claim may be sent again.
+    /// </summary>
+    public static readonly TimeSpan InFlightLease = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// True while another request is sending this transmission. A record
+    /// written before <see cref="ClaimTransmissionRecord.TransmittingSinceUtc"/>
+    /// existed uses its submit time.
+    /// </summary>
+    public static bool IsInFlight(ClaimTransmissionRecord record, DateTimeOffset now) =>
+        record.Status == GatewayClaimTransmissionStatus.Transmitting
+        && now - (record.TransmittingSinceUtc ?? record.SubmittedAtUtc) < InFlightLease;
+
+    /// <summary>
+    /// Marks <paramref name="record"/> as being sent now and saves it, so a
+    /// concurrent submit of the same key sees it in flight. Returns the current
+    /// copy instead when another request claimed the send first (a revision
+    /// conflict); the caller then must not send.
+    /// </summary>
+    public static async Task<ClaimTransmissionRecord?> TryClaimSendAsync(
+        IClaimTransmissionStore store, ClaimTransmissionRecord record, DateTimeOffset now, CancellationToken ct)
+    {
+        record.Status = GatewayClaimTransmissionStatus.Transmitting;
+        record.TransmittingSinceUtc = now;
+        try
+        {
+            await store.SaveAsync(record, ct).ConfigureAwait(false);
+            return null;
+        }
+        catch (ClaimLifecycleConcurrencyException)
+        {
+            return await store.GetByTenantAndIdAsync(record.TenantId, record.TransmissionId, ct).ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"Transmission {record.TransmissionId} vanished during a submit.");
+        }
+    }
+
     /// <returns>The record as last written, or the fresh copy when nothing was left to write.</returns>
     public static async Task<T> SaveWithRetryAsync<T>(
         T record,
