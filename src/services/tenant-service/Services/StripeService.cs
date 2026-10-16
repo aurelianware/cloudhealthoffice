@@ -199,6 +199,40 @@ public class StripeService : IStripeService
         }
     }
 
+    /// <summary>
+    /// A webhook's change is re-read and re-applied this many times when an
+    /// admin edit (or another webhook) saved the tenant between its read and its
+    /// write, so the event is not lost to a conflict. After that the conflict
+    /// propagates, the webhook answers non-2xx and Stripe retries it.
+    /// </summary>
+    public const int MaxWebhookWriteAttempts = 5;
+
+    /// <summary>
+    /// Reads the tenant, applies <paramref name="apply"/> and saves it,
+    /// conditional on the revision read; on a conflict, re-reads and re-applies.
+    /// <paramref name="apply"/> returns false when there is nothing to write.
+    /// Null when the tenant does not exist.
+    /// </summary>
+    private async Task<Tenant?> ApplyToTenantAsync(string tenantId, Func<Tenant, bool> apply)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var tenant = await _tenantRepository.GetByTenantIdAsync(tenantId);
+            if (tenant == null) return null;
+            if (!apply(tenant)) return tenant;
+            try
+            {
+                return await _tenantRepository.UpdateAsync(tenant);
+            }
+            catch (TenantChangedConcurrentlyException) when (attempt < MaxWebhookWriteAttempts)
+            {
+                _logger.LogInformation(
+                    "Tenant {TenantId} changed while a Stripe webhook was applied (attempt {Attempt}); re-reading",
+                    SanitizeForLog(tenantId), attempt);
+            }
+        }
+    }
+
     private async Task HandleSubscriptionCreatedAsync(Event stripeEvent)
     {
         var subscription = stripeEvent.Data.Object as Subscription;
@@ -207,20 +241,20 @@ public class StripeService : IStripeService
         var tenantId = subscription.Metadata.GetValueOrDefault("tenant_id");
         if (string.IsNullOrEmpty(tenantId)) return;
 
-        var tenant = await _tenantRepository.GetByTenantIdAsync(tenantId);
-        if (tenant == null) return;
-
-        tenant.Billing = new BillingInfo
+        var tenant = await ApplyToTenantAsync(tenantId, t =>
         {
-            StripeCustomerId = subscription.CustomerId,
-            StripeSubscriptionId = subscription.Id,
-            BillingEmail = tenant.ContactInfo.Email,
-            CurrentPeriodStart = subscription.CurrentPeriodStart,
-            CurrentPeriodEnd = subscription.CurrentPeriodEnd,
-            NextBillingDate = subscription.CurrentPeriodEnd
-        };
-
-        await _tenantRepository.UpdateAsync(tenant);
+            t.Billing = new BillingInfo
+            {
+                StripeCustomerId = subscription.CustomerId,
+                StripeSubscriptionId = subscription.Id,
+                BillingEmail = t.ContactInfo.Email,
+                CurrentPeriodStart = subscription.CurrentPeriodStart,
+                CurrentPeriodEnd = subscription.CurrentPeriodEnd,
+                NextBillingDate = subscription.CurrentPeriodEnd
+            };
+            return true;
+        });
+        if (tenant == null) return;
 
         _logger.LogInformation("Subscription created for tenant {TenantId}", SanitizeForLog(tenantId));
     }
@@ -233,17 +267,17 @@ public class StripeService : IStripeService
         var tenantId = subscription.Metadata.GetValueOrDefault("tenant_id");
         if (string.IsNullOrEmpty(tenantId)) return;
 
-        var tenant = await _tenantRepository.GetByTenantIdAsync(tenantId);
-        if (tenant == null) return;
-
-        if (tenant.Billing != null)
+        var tenant = await ApplyToTenantAsync(tenantId, t =>
         {
-            tenant.Billing.CurrentPeriodStart = subscription.CurrentPeriodStart;
-            tenant.Billing.CurrentPeriodEnd = subscription.CurrentPeriodEnd;
-            tenant.Billing.NextBillingDate = subscription.CurrentPeriodEnd;
-        }
-
-        await _tenantRepository.UpdateAsync(tenant);
+            if (t.Billing != null)
+            {
+                t.Billing.CurrentPeriodStart = subscription.CurrentPeriodStart;
+                t.Billing.CurrentPeriodEnd = subscription.CurrentPeriodEnd;
+                t.Billing.NextBillingDate = subscription.CurrentPeriodEnd;
+            }
+            return true;
+        });
+        if (tenant == null) return;
 
         _logger.LogInformation("Subscription updated for tenant {TenantId}", SanitizeForLog(tenantId));
     }
@@ -256,12 +290,13 @@ public class StripeService : IStripeService
         var tenantId = subscription.Metadata.GetValueOrDefault("tenant_id");
         if (string.IsNullOrEmpty(tenantId)) return;
 
-        var tenant = await _tenantRepository.GetByTenantIdAsync(tenantId);
-        if (tenant == null) return;
-
         // Suspend tenant on subscription cancellation
-        tenant.Status = "suspended";
-        await _tenantRepository.UpdateAsync(tenant);
+        var tenant = await ApplyToTenantAsync(tenantId, t =>
+        {
+            t.Status = "suspended";
+            return true;
+        });
+        if (tenant == null) return;
 
         _logger.LogWarning("Subscription canceled for tenant {TenantId}, tenant suspended", SanitizeForLog(tenantId));
     }
@@ -278,8 +313,12 @@ public class StripeService : IStripeService
         // Ensure tenant is active on successful payment
         if (tenant.Status == "suspended")
         {
-            tenant.Status = "active";
-            await _tenantRepository.UpdateAsync(tenant);
+            await ApplyToTenantAsync(tenant.TenantId, t =>
+            {
+                if (t.Status != "suspended") return false;
+                t.Status = "active";
+                return true;
+            });
         }
 
         _logger.LogInformation("Payment succeeded for tenant {TenantId}, amount: {Amount}", tenant.TenantId, invoice.AmountPaid);
