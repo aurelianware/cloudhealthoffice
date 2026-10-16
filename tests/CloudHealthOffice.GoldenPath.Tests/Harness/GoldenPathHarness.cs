@@ -91,7 +91,7 @@ internal sealed class GoldenScenario
     /// <param name="AppendsToExisting">Adds its reason to an existing pend (as NCCI does) instead of
     /// replacing <c>PendDetails</c> (as the duplicate, provider-integrity and benefit stages do).</param>
     public sealed record ReviewStage(string Name, string Code, string Reason, string? RerunReason = null, bool OnlyOnRerun = false,
-        bool AppendsToExisting = false);
+        bool AppendsToExisting = false, bool CheckUnavailable = false);
 
     /// <summary>Payment-run date (BPR16); fixed so the 835 is reproducible.</summary>
     public DateTime PaymentDate { get; init; } = new(2026, 5, 15, 0, 0, 0, DateTimeKind.Utc);
@@ -400,7 +400,9 @@ internal sealed class GoldenPathHarness
             {
                 context.PendDetails.AdditionalPendReasons.Add($"{review.Code}: {reason}");
             }
-            return Task.FromResult(ClaimAdjudicationStageResult.Pend(review.Name, reason));
+            var pend = ClaimAdjudicationStageResult.Pend(review.Name, reason);
+            // An outage the stage reports as such (as the real stages do), not a finding.
+            return Task.FromResult(review.CheckUnavailable ? pend.AsCheckUnavailable(context, reason) : pend);
         }
     }
 

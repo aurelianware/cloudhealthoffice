@@ -378,7 +378,7 @@ public class GoldenPathTests
             reviewStages:
             [
                 new GoldenScenario.ReviewStage("ProviderIntegrity", "MEDREVIEW",
-                    "Billing: Provider integrity check could not be reached.", OnlyOnRerun: true),
+                    "Billing: Provider integrity check could not be reached.", OnlyOnRerun: true, CheckUnavailable: true),
             ],
             approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }],
             expectRefused: true);
@@ -468,7 +468,7 @@ public class GoldenPathTests
             reviewStages:
             [
                 new GoldenScenario.ReviewStage("ProviderIntegrity", "MEDREVIEW",
-                    "Billing: Provider integrity check could not be reached."),
+                    "Billing: Provider integrity check could not be reached.", CheckUnavailable: true),
             ],
             approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }],
             expectRefused: true);

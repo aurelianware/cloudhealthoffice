@@ -215,7 +215,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     /// when the examiner reviewed that pend (PR #1278 round 3, B1): its code
     /// and exact reason are in the claim's persisted pend
     /// (<see cref="ExaminerApproval.ReviewedPend"/>), and it is not a
-    /// transient failure (<see cref="IsTransientFailure"/>, retried instead).
+    /// transient failure (<see cref="ClaimAdjudicationStageResult.CheckUnavailable"/>, retried instead).
     /// Anything else — a pend the examiner never saw — keeps
     /// the claim pended and the approval is refused for re-review. Not in the
     /// set: pricing and benefit calculation (a pend there means the amounts
@@ -240,27 +240,6 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     // edit, credentialing finding or duplicate is a new finding.
 
     /// <summary>
-    /// Pend reasons that mean a check could not run (a service was
-    /// unreachable or threw), not a finding an examiner can rule on. They are
-    /// never overridden by an approval: the re-run retries the check, and the
-    /// approval passes only once it succeeds (round-3 verification, M4).
-    /// </summary>
-    private static readonly string[] TransientFailureMarkers =
-    [
-        Stages.ProviderIntegrityStage.UnreachableReason,
-        Stages.DuplicateClaimStage.LookupFailedReason,
-        Stages.NetworkCredentialingStage.MembershipUnavailableReason,
-        Stages.NetworkCredentialingStage.CredentialingUnavailableReason,
-        "NCCI engine threw",
-        Stages.CoordinationOfBenefitsStage.CoverageServiceUnavailablePendReason,
-        "Coverage-service unavailable",
-        Stages.BenefitCalculationStage.DeferredCommitUnsupportedReason,
-        Stages.BenefitCalculationStage.PriorAuthorizationUnavailableReason,
-        Stages.BenefitCalculationStage.PlanUnavailableReason,
-        ServiceUnavailableReason,
-    ];
-
-    /// <summary>
     /// <see cref="PendDetails.PendCode"/> for a claim pended because a check
     /// could not run: a stage threw, or a dependency (scrubbing engine,
     /// benefit-plan-service) errored or was unreachable. An outage is never a
@@ -280,6 +259,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     /// </summary>
     internal static void RecordServiceUnavailablePend(ClaimAdjudicationContext context, string reason)
     {
+        context.MarkCheckUnavailable(reason);
         if (reason.Length > 500) reason = reason[..500];
         if (context.PendDetails is null)
         {
@@ -307,15 +287,21 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
 
     /// <summary>
     /// #1299 re-verify B1: did any check on this run fail to give a
-    /// definitive answer? Decided from the run's structured state, not from
-    /// the final reason text: a stage that threw (Reject), a transient pend
-    /// (code or marker, primary or additional), an NCCI engine exception
-    /// (<c>ENGINE_EXCEPTION</c> edit failure), pricing unavailable, or the
-    /// benefit engine answering non-2xx.
+    /// definitive answer? Decided from the run's structured state, never from
+    /// reason text:
+    /// <list type="bullet">
+    ///   <item>a stage that threw (Reject);</item>
+    ///   <item>a check flagged unavailable (<see cref="ClaimAdjudicationStageResult.CheckUnavailable"/>);</item>
+    ///   <item>a transient pend code, primary or additional;</item>
+    ///   <item>an NCCI engine exception (<c>ENGINE_EXCEPTION</c> edit failure);</item>
+    ///   <item>pricing unavailable, or the benefit engine answering non-2xx.</item>
+    /// </list>
     /// </summary>
     internal static bool AnyCheckFailed(ClaimAdjudicationContext context)
     {
-        if (context.StageResults.Any(r => r.Outcome == ClaimAdjudicationOutcome.Reject || IsTransientFailure(r.Reason)))
+        if (context.StageResults.Any(r => r.Outcome == ClaimAdjudicationOutcome.Reject || r.CheckUnavailable))
+            return true;
+        if (context.UnavailableCheckReasons.Count > 0)
             return true;
         if (context.PricingResult is { PricingUnavailable: true })
             return true;
@@ -324,21 +310,19 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             return true;
         if (context.PendDetails is not { } pend)
             return false;
-        if (TransientPendCodes.Contains(pend.PendCode ?? string.Empty) || IsTransientFailure(pend.PendReason))
+        if (IsTransientPendCode(pend.PendCode) || context.IsCheckUnavailable(pend.PendReason))
             return true;
         if ((pend.EditFailures ?? []).Any(f => string.Equals(f.RuleId, "ENGINE_EXCEPTION", StringComparison.Ordinal)))
             return true;
         return (pend.AdditionalPendReasons ?? []).Any(entry =>
         {
             var (code, reason) = ExaminerApproval.SplitEntry(entry);
-            return (code is not null && TransientPendCodes.Contains(code)) || IsTransientFailure(reason ?? entry);
+            return IsTransientPendCode(code) || context.IsCheckUnavailable(reason ?? entry);
         });
     }
 
-    /// <summary>See <see cref="TransientFailureMarkers"/>.</summary>
-    internal static bool IsTransientFailure(string? reason) =>
-        reason is not null
-        && TransientFailureMarkers.Any(m => reason.Contains(m, StringComparison.OrdinalIgnoreCase));
+    /// <summary>True for a pend code that means a check could not run (see <see cref="TransientPendCodes"/>).</summary>
+    internal static bool IsTransientPendCode(string? code) => code is not null && TransientPendCodes.Contains(code);
 
     /// <summary>
     /// Pend codes for stages that pend without recording one on
@@ -508,6 +492,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                     Continue = false,
                     Outcome = ClaimAdjudicationOutcome.Pend,
                     Reason = reason,
+                    CheckUnavailable = true,
                 };
             }
 
@@ -521,7 +506,8 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                 // a Pend and the approval is refused.
                 if (context.ExaminerApproval is { } approval
                     && ExaminerOverridableStages.Contains(stage.Name)
-                    && !IsTransientFailure(pendReason)
+                    && !result.CheckUnavailable
+                    && !context.IsCheckUnavailable(pendReason)
                     && approval.Reviewed(pendCode, pendReason, exactReason: true))
                 {
                     context.ExaminerOverrides.Add($"{stage.Name}: {pendCode}: {pendReason}");

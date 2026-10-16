@@ -242,7 +242,7 @@ public class NcciEditsStageTests
 
         // Deny mode denies edit findings; an engine outage pends (transient).
         Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
-        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
+        Assert.True(result.CheckUnavailable);
         Assert.Equal("ENGINE_EXCEPTION", ctx.PendDetails!.EditFailures[0].RuleId);
     }
 
