@@ -29,9 +29,11 @@ Health plan staff think in records. A call comes in and they say "pull up the me
 2. **One shell for every record.**
    - The layout is the same everywhere: header, alerts, tabs, then the tab body.
    - An examiner who knows the claim page already knows the member page.
-3. **Related records link out; they don't nest.**
-   - A claim on the member's Claims tab opens the claim page.
-   - A breadcrumb leads back to the member, on the tab you came from.
+3. **Related records link out; they don't nest.** A related record (for example the member on a claim) can be reached three ways:
+   - **Peek:** clicking the name in a record header opens a side panel without leaving the page. For a member it shows eligibility on the date of service, PCP, alerts and accumulators. The panel has **Open** (same browser tab) and **Open in new tab** buttons.
+   - **Open:** a normal click moves to the record in the same browser tab. Back, or the breadcrumb, returns to where you came from, on the tab you were on.
+   - **New browser tab:** every record link is a real URL, so Ctrl/⌘-click and middle-click open it in a new browser tab. A small ↗ icon appears beside record links on hover or keyboard focus, for people who don't know the shortcut. The record header always shows an "Open in new tab" button.
+   - There are no windows inside the app, so several open records are just several browser tabs.
 4. **Tabs load when opened.** The header loads with the page; each tab fetches its own data the first time it is shown.
 5. **Tabs follow permissions.**
    - A tab the user can't use is not shown. Examples: Access log needs `audit:read`; AR and Premium need finance reads.
@@ -247,8 +249,8 @@ Each step is a separate PR. Nothing is removed until its replacement is live.
 | # | Question | Recommendation |
 |---|---|---|
 | 1 | Should Home replace Dashboard as the landing page, with the dashboard metrics moving to role tiles? | **Agreed.** Plan notices included. |
-| 2 | Should the member dialog stay as a quick-view peek, for example from a claim header? | Keep a small peek (overview and alerts only), with "Open member". |
+| 2 | Should the member dialog stay as a quick-view peek, for example from a claim header? | Keep a small peek panel with Open and Open in new tab (principle 3). |
 | 3 | Should tab order and visibility be configurable per tenant? | Not at first. Use a fixed order plus permission-based hiding, and revisit if a plan asks. |
 | 4 | Should the claim's Adjudication Pipeline and Benefit Breakdown tabs merge into one Adjudication tab? | Yes. |
-| 5 | Should the top bar get a record-tab strip, i.e. several open records as tabs inside the app, like QNXT's open windows? | No. Browser tabs plus deep links do this better; Recent covers going back. |
+| 5 | Should the top bar get a record-tab strip, i.e. several open records as tabs inside the app, like QNXT's open windows? | **Agreed:** no in-app tab strip. Use browser tabs, deep links and the ↗ icon; Recent covers going back. |
 | 6 | Should each module carry its own Insights view? | **Agreed** (§5.1). |
