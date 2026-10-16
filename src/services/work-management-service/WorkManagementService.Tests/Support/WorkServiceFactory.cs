@@ -18,10 +18,12 @@ public sealed class WorkServiceFactory : WebApplicationFactory<Program>
     public InMemoryWorkStore Store { get; } = new();
     public FakeClaimsWorkSource Claims { get; } = new();
     public WorkSeedTracker Seeds { get; } = new();
+    public InMemoryWorkspaceStore Workspace { get; } = new();
 
     public void Reset()
     {
         Store.Clear();
+        Workspace.Clear();
         Seeds.Clear();
         Claims.Pended.Clear();
         Claims.Fail = false;
@@ -40,6 +42,8 @@ public sealed class WorkServiceFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<IWorkStore>();
             services.AddSingleton<IWorkStore>(Store);
+            services.RemoveAll<IWorkspaceStore>();
+            services.AddSingleton<IWorkspaceStore>(Workspace);
             services.RemoveAll<WorkSeedTracker>();
             services.AddSingleton(Seeds);
             services.RemoveAll<IClaimsWorkSource>();

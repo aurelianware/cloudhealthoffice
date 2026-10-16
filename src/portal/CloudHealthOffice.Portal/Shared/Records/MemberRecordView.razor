@@ -49,6 +49,7 @@
                     </div>
                 </div>
                 <OpenInNewTabButton Href="@RecordTabs.Href(BaseHref, ActiveTab)" />
+                <PinButton Kind="Member" RecordId="@MemberId" Label="@($"{_member.FirstName} {_member.LastName}")" />
                 <MudSpacer />
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
                            StartIcon="@Icons.Material.Filled.Receipt"

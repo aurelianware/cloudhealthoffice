@@ -72,10 +72,24 @@ public class ChoRolePermissionsTests
         var granted = ChoRolePermissions.Expand([ChoRolePermissions.FinanceApprover]);
 
         Assert.Equal(
-            new[] { "billing:read", "finance:read", "payments:approve", "payments:read", "reference-data:read", "reports:financial" },
+            new[] { "billing:read", "finance:read", "payments:approve", "payments:read", "reference-data:read", "reports:financial", "workspace:use" },
             granted.OrderBy(p => p, StringComparer.Ordinal));
         Assert.False(ChoRolePermissions.Satisfies(granted, "payments:run"));
         Assert.False(ChoRolePermissions.Satisfies(granted, "billing:run"));
+    }
+
+    // Home: every staff role has a workspace (notices, pins); only
+    // administrators post notices (portal-navigation.md §3.1).
+    [Fact]
+    public void Every_staff_role_has_a_workspace_and_only_admins_post_notices()
+    {
+        foreach (var role in ChoRolePermissions.BuiltInRoles)
+        {
+            var granted = ChoRolePermissions.Expand([role]);
+            Assert.True(ChoRolePermissions.Satisfies(granted, ChoRolePermissions.WorkspaceUse), role);
+            var admin = role is ChoRolePermissions.TenantAdmin or ChoRolePermissions.PlatformAdmin;
+            Assert.Equal(admin, ChoRolePermissions.Satisfies(granted, ChoRolePermissions.NoticesWrite));
+        }
     }
 
     // Claim notes and who may decide claims (claim-review-workbench §2.6).
