@@ -20,6 +20,16 @@
     </div>
     <script src="_framework/blazor.server.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script>
+        // "/" focuses the portal search box (unless already typing somewhere).
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+            var t = e.target, tag = t && t.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+            var box = document.getElementById('home-search') || document.getElementById('global-search-input');
+            if (box) { e.preventDefault(); box.focus(); }
+        });
+    </script>
 </body>
 
 </html>

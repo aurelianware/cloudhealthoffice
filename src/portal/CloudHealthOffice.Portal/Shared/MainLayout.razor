@@ -21,6 +21,12 @@
             Cloud Health Office
         </MudText>
 
+        <AuthorizeView>
+            <Authorized>
+                <GlobalSearchBox />
+            </Authorized>
+        </AuthorizeView>
+
         <MudSpacer />
 
         @* Tenant Switcher / Badge *@
@@ -120,6 +126,10 @@
                     <!-- OPERATIONS — expanded by default, where users spend 90% of time -->
                     <MudNavGroup Title="Operations" Icon="@Icons.Material.Filled.Speed" Expanded="true"
                                  Style="border-left: 3px solid transparent;">
+                        <MudNavLink Href="/home" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home"
+                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                            Home
+                        </MudNavLink>
                         @if (_canWork)
                         {
                             <MudNavLink Href="/my-work" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inbox"

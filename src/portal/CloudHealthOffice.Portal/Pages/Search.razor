@@ -1,0 +1,81 @@
+@page "/search"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject GlobalSearch GlobalSearch
+@inject NavigationManager Navigation
+
+<PageTitle>Search - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h5" Class="mb-4">
+        Search results @if (!string.IsNullOrWhiteSpace(Query)) { <span>for “@Query”</span> }
+    </MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_results is not null)
+    {
+        @if (_results.Hits.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4" data-testid="search-none">Nothing matched “@_results.Query”.</MudAlert>
+        }
+        @foreach (var group in _results.Hits.GroupBy(h => h.Kind))
+        {
+            <MudPaper Class="pa-4 mb-4" Elevation="1" data-testid="@($"search-group-{group.Key}")">
+                <MudText Typo="Typo.h6" Class="mb-2">@(group.Key)s</MudText>
+                @foreach (var hit in group)
+                {
+                    <div class="d-flex align-center gap-2 py-1" data-testid="search-hit">
+                        <RecordLink Href="@hit.Href">@hit.Title</RecordLink>
+                        @if (hit.Exact)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">exact</MudChip>
+                        }
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@hit.Subtitle</MudText>
+                    </div>
+                }
+            </MudPaper>
+        }
+        @if (_results.Unavailable.Count > 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Warning" Class="d-block mb-2" data-testid="search-unavailable">
+                Couldn't search @string.Join(", ", _results.Unavailable) right now.
+            </MudText>
+        }
+        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+            @foreach (var (label, href) in _results.MoreLinks)
+            {
+                <MudButton Variant="Variant.Text" Href="@href" StartIcon="@Icons.Material.Filled.ManageSearch">@label</MudButton>
+            }
+        </MudStack>
+    }
+</MudContainer>
+
+@code {
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? Query { get; set; }
+
+    private SearchResults? _results;
+    private bool _loading;
+    private string? _searched;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var q = Query?.Trim() ?? string.Empty;
+        if (q == _searched) return;
+        _searched = q;
+        _loading = true;
+        _results = await GlobalSearch.SearchAsync(q);
+        _loading = false;
+
+        // An identifier (claim number, member ID, NPI) opens its record. The
+        // search page is replaced in history so Back returns to where the
+        // user searched from.
+        if (_results.Jump is { } jump)
+        {
+            Navigation.NavigateTo(jump.Href, replace: true);
+        }
+    }
+}
