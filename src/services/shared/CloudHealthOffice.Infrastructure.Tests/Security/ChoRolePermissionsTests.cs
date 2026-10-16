@@ -78,6 +78,21 @@ public class ChoRolePermissionsTests
         Assert.False(ChoRolePermissions.Satisfies(granted, "billing:run"));
     }
 
+    // Claim notes and who may decide claims (claim-review-workbench §2.6).
+    [Theory]
+    [InlineData(ChoRolePermissions.ProviderRelations, "claims:read", true)]
+    [InlineData(ChoRolePermissions.ProviderRelations, "claims:note", true)]
+    [InlineData(ChoRolePermissions.ProviderRelations, "claims:work", false)]
+    [InlineData(ChoRolePermissions.MemberServices, "claims:note", true)]
+    [InlineData(ChoRolePermissions.MemberServices, "claims:work", false)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, "claims:note", true)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, "claims:override-edit", false)]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor, "claims:override-edit", true)]
+    [InlineData(ChoRolePermissions.Finance, "claims:note", false)]
+    [InlineData(ChoRolePermissions.ComplianceViewer, "claims:read", false)]
+    public void Claims_note_and_decision_grants(string role, string permission, bool expected) =>
+        Assert.Equal(expected, ChoRolePermissions.Satisfies(ChoRolePermissions.Expand([role]), permission));
+
     [Theory]
     // The checker reviews premium invoices and billing runs before releasing
     // sponsor debits, but neither runs billing nor changes the ledger.

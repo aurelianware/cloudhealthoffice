@@ -80,7 +80,7 @@ public class FhirCallerAuthTests : IClassFixture<FhirTestWebAppFactory>
     [Theory]
     [InlineData("/fhir/r4/Patient/pat-001", ChoRolePermissions.ProviderRelations)]     // members:read
     [InlineData("/fhir/r4/Coverage/cov-001", ChoRolePermissions.Finance)]              // coverage:read
-    [InlineData("/fhir/r4/ExplanationOfBenefit/eob-001", ChoRolePermissions.ProviderRelations)] // claims:read
+    [InlineData("/fhir/r4/ExplanationOfBenefit/eob-001", ChoRolePermissions.ComplianceViewer)] // claims:read
     [InlineData("/fhir/r4/Practitioner/1234567890", ChoRolePermissions.Finance)]       // providers:read
     [InlineData("/api/v1/crd/code-classification", ChoRolePermissions.Finance)]        // authorizations:read
     public async Task ChoToken_WithoutThePermission_Is403(string path, string role)

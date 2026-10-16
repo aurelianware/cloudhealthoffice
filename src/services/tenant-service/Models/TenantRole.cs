@@ -145,6 +145,7 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
+            "claims:read", "claims:note",
             "providers:read", "providers:write", "providers:credential",
             "contracts:read", "contracts:write",
             "networks:read", "networks:write"

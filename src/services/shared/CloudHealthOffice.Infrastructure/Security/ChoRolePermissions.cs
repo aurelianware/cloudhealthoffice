@@ -109,6 +109,9 @@ public static class ChoRolePermissions
             ],
             [ProviderRelations] =
             [
+                // Claim status, denials and payments for provider calls, and
+                // the call recorded on the claim. Never claims:work.
+                "claims:read", "claims:note",
                 "providers:read", "providers:write", "providers:credential",
                 "contracts:read", "contracts:write",
                 "networks:read", "networks:write",
