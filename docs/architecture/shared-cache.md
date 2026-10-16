@@ -69,7 +69,7 @@ the abstraction.
 ### 1. `RedisAccumulatorService` (BenefitEngine)
 
 [`Redisaccumulatorservice.cs`](../../src/engines/CloudHealthOffice.BenefitEngine/Services/Redisaccumulatorservice.cs)
-uses Redis hashes with `HINCRBYFLOAT` to accumulate member deductible /
+uses Redis hashes with integer-cent `HINCRBY` and Lua scripts to accumulate member deductible /
 out-of-pocket-max totals as claims finalize. The operation MUST be
 server-side atomic: two concurrent claim adjudications for the same
 member hit the same hash field simultaneously, and a read-modify-write
