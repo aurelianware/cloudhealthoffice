@@ -84,6 +84,13 @@ public sealed class RemittanceReceipt
 
     public string? LastError { get; set; }
 
+    /// <summary>
+    /// Optimistic-concurrency revision kept by the durable store: a save is
+    /// conditional on the revision that was read and bumps it. Callers carry
+    /// it from the read; they do not set it.
+    /// </summary>
+    public long Revision { get; set; }
+
     public bool EventsPublished =>
         Outbox.Count > 0 && Outbox.All(e => e.PublishedAtUtc is not null);
 
