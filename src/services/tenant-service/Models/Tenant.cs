@@ -68,6 +68,15 @@ public class Tenant
 
     [JsonPropertyName("lastActivityAt")]
     public DateTime? LastActivityAt { get; set; }
+
+    /// <summary>
+    /// Optimistic concurrency: incremented on every write, and a save succeeds
+    /// only against the revision it read, so a Stripe webhook and an admin edit
+    /// can no longer overwrite each other. Documents written before the field
+    /// existed read as 0. Never serialized (as on <see cref="TenantUser"/>).
+    /// </summary>
+    [JsonIgnore]
+    public long Revision { get; set; }
 }
 
 public class ContactInfo

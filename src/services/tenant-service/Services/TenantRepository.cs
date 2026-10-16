@@ -41,6 +41,7 @@ public class TenantRepository : ITenantRepository
     {
         tenant.CreatedAt = DateTime.UtcNow;
         tenant.UpdatedAt = DateTime.UtcNow;
+        tenant.Revision = 0;
 
         await _collection.InsertOneAsync(tenant);
         _logger.LogInformation("Created tenant {TenantId} ({TenantName})",
@@ -53,10 +54,45 @@ public class TenantRepository : ITenantRepository
     {
         tenant.UpdatedAt = DateTime.UtcNow;
 
-        await _collection.ReplaceOneAsync(t => t.Id == tenant.Id, tenant);
+        // Conditional on the revision read, so a Stripe webhook and an admin
+        // edit (or two admin edits) cannot silently overwrite each other; 0 also
+        // matches tenants written before the revision existed.
+        var f = Builders<Tenant>.Filter;
+        var filter = f.Eq(t => t.Id, tenant.Id) & f.Eq(t => t.TenantId, tenant.TenantId);
+        var expected = tenant.Revision;
+        tenant.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), tenant);
+        }
+        catch
+        {
+            tenant.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            tenant.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new TenantChangedConcurrentlyException(tenant.TenantId, expected);
+            // A missing tenant: nothing written, as before.
+            return tenant;
+        }
+
         _logger.LogInformation("Updated tenant {TenantId}", SanitizeForLog(tenant.TenantId));
 
         return tenant;
+    }
+
+    /// <summary>The stored tenant still has the revision the write was based on (0 matches tenants written before the field existed).</summary>
+    private static FilterDefinition<Tenant> RevisionIs(long expected)
+    {
+        var f = Builders<Tenant>.Filter;
+        return expected == 0
+            ? f.Or(f.Eq(t => t.Revision, 0L), f.Exists(t => t.Revision, false))
+            : f.Eq(t => t.Revision, expected);
     }
 
     public async Task DeleteAsync(string tenantId)
@@ -89,6 +125,7 @@ public class TenantRepository : ITenantRepository
         var result = await _collection.UpdateOneAsync(
             t => t.TenantId == tenantId && t.Status == "pending",
             Builders<Tenant>.Update
+                .Inc(t => t.Revision, 1L)
                 .Set(t => t.Status, "active")
                 .Set(t => t.ActivatedAt, now)
                 .Set(t => t.UpdatedAt, now)
