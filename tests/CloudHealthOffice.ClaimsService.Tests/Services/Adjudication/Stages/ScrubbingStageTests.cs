@@ -157,7 +157,7 @@ public class ScrubbingStageTests
         Assert.Null(ctx.ScrubbingResult);
         Assert.Equal(ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode, ctx.PendDetails!.PendCode);
         Assert.Contains("InvalidOperationException", result.Reason);
-        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(result.Reason));
+        Assert.True(result.CheckUnavailable);
     }
 
     [Fact]

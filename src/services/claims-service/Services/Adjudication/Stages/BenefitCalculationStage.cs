@@ -236,7 +236,8 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                     Truncate($"{pendCode}: {priorAuthorizationPendReason}", 500));
             }
 
-            return ClaimAdjudicationStageResult.Pend(StageName, priorAuthorizationPendReason);
+            var paPend = ClaimAdjudicationStageResult.Pend(StageName, priorAuthorizationPendReason);
+            return ClaimAdjudicationOrchestrator.IsTransientPendCode(pendCode) ? paPend.AsCheckUnavailable(context) : paPend;
         }
 
         if (priorAuthorization.DenialReason is { } priorAuthorizationDenialReason)
@@ -315,7 +316,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             var threwReason = $"{ClaimAdjudicationOrchestrator.ServiceUnavailableReason}: benefit calculation engine threw " +
                               $"{ex.GetType().Name}; {TransientPendClearedByApproval}";
             ClaimAdjudicationOrchestrator.RecordServiceUnavailablePend(context, threwReason);
-            return ClaimAdjudicationStageResult.Pend(StageName, threwReason);
+            return ClaimAdjudicationStageResult.Pend(StageName, threwReason).AsCheckUnavailable(context);
         }
 
         context.BenefitResolutionResult = result;
@@ -333,7 +334,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                                     $"{result.DenialReasonDescription ?? "benefit calculation engine gave no answer."} " +
                                     TransientPendClearedByApproval;
             ClaimAdjudicationOrchestrator.RecordServiceUnavailablePend(context, unavailableReason);
-            return ClaimAdjudicationStageResult.Pend(StageName, unavailableReason);
+            return ClaimAdjudicationStageResult.Pend(StageName, unavailableReason).AsCheckUnavailable(context);
         }
 
         // The engine could not produce a balanced result (e.g. a per-stay
@@ -392,7 +393,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             {
                 context.PendDetails.AdditionalPendReasons.Add($"{DeferredCommitUnsupportedPendCode}: {DeferredCommitUnsupportedReason}");
             }
-            return ClaimAdjudicationStageResult.Pend(StageName, DeferredCommitUnsupportedReason);
+            return ClaimAdjudicationStageResult.Pend(StageName, DeferredCommitUnsupportedReason).AsCheckUnavailable(context);
         }
 
         return ClaimAdjudicationStageResult.Pass(StageName);
