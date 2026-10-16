@@ -251,6 +251,6 @@ Each step is a separate PR. Nothing is removed until its replacement is live.
 | 1 | Should Home replace Dashboard as the landing page, with the dashboard metrics moving to role tiles? | **Agreed.** Plan notices included. |
 | 2 | Should the member dialog stay as a quick-view peek, for example from a claim header? | **Agreed:** a peek panel with Open and Open in new tab (principle 3). |
 | 3 | Should tab order and visibility be configurable per tenant? | **Agreed:** fixed order plus permission-based hiding for now; revisit if a plan asks. |
-| 4 | Should the claim's Adjudication Pipeline and Benefit Breakdown tabs merge into one Adjudication tab? | Yes. |
+| 4 | Should the claim's Adjudication Pipeline and Benefit Breakdown tabs merge into one Adjudication tab? | **Agreed.** |
 | 5 | Should the top bar get a record-tab strip, i.e. several open records as tabs inside the app, like QNXT's open windows? | **Agreed:** no in-app tab strip. Use browser tabs, deep links and the ↗ icon; Recent covers going back. |
 | 6 | Should each module carry its own Insights view? | **Agreed** (§5.1). |
