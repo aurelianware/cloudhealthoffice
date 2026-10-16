@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CapitationService.Models;
 using CapitationService.Repositories;
+using CloudHealthOffice.Infrastructure.Data;
 
 namespace CapitationService.Services;
 
@@ -143,7 +144,9 @@ public class CapitationRunService : ICapitationRunService
         if (run.Status != CapitationRunStatus.Pending)
             throw new InvalidOperationException($"Capitation run is in {run.Status} state, expected Pending");
 
-        // 1. Mark as running
+        // 1. Mark as running. Conditional on the revision read: of two concurrent
+        // executes (or an execute and a cancel) only one gets past here; the other
+        // gets a concurrency conflict (409) and generates nothing.
         run.Status = CapitationRunStatus.Running;
         run.ExecutedBy = executedBy;
         run.ExecutionStartedAt = DateTime.UtcNow;
@@ -256,7 +259,43 @@ public class CapitationRunService : ICapitationRunService
             _logger.LogError(ex, "Capitation run {RunNumber} failed", run.RunNumber);
         }
 
-        return await _runRepository.UpdateAsync(run);
+        return await SaveExecutionResultAsync(run);
+    }
+
+    /// <summary>
+    /// Writes the outcome of the execution that marked <paramref name="run"/>
+    /// Running. The statements are already generated, so the outcome is not
+    /// dropped on a concurrency conflict: the run is re-read and, while it is
+    /// still Running for this execution (same start time and executor), the
+    /// outcome is written again over the fresh revision (at most 3 attempts in
+    /// all). A run something else has moved on is left as it is (logged).
+    /// </summary>
+    private async Task<CapitationRun> SaveExecutionResultAsync(CapitationRun run)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await _runRepository.UpdateAsync(run);
+            }
+            catch (ConcurrencyConflictException) when (attempt < 3)
+            {
+                var current = await _runRepository.GetByIdAsync(run.Id);
+                if (current is { Status: CapitationRunStatus.Running }
+                    && current.ExecutedBy == run.ExecutedBy
+                    && current.ExecutionStartedAt is { } started && run.ExecutionStartedAt is { } ours
+                    && Math.Abs((started - ours).TotalMilliseconds) < 1)
+                {
+                    run.Revision = current.Revision;
+                    continue;
+                }
+                _logger.LogCritical(
+                    "Capitation run {RunNumber}: execution result ({Status}, {Statements} statements) not recorded, another write " +
+                    "moved the run on first (now {CurrentStatus}). Reconcile its statements by hand",
+                    run.RunNumber, run.Status, run.StatementIds.Count, current?.Status.ToString() ?? "missing");
+                return current ?? run;
+            }
+        }
     }
 
     public async Task<CapitationRun> GetRunAsync(string runId)

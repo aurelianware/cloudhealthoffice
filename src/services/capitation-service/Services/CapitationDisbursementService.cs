@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CapitationService.Models;
 using CapitationService.Repositories;
+using CloudHealthOffice.Infrastructure.Data;
 using CloudHealthOffice.NachaTransmission;
 
 namespace CapitationService.Services;
@@ -534,6 +535,14 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         {
             if (!await _disbursementRepository.TryClaimForReleaseAsync(disbursement.Id, claimId, claimedAt, releasedBy))
                 continue;
+            // The claim moved the record on (its revision too): work from what was
+            // claimed, so this release's own later writes are not refused as stale.
+            if (await _disbursementRepository.GetByIdAsync(disbursement.Id) is { Status: DisbursementStatus.Releasing } current
+                && current.ReleaseClaimId == claimId)
+            {
+                claimed.Add(current);
+                continue;
+            }
             disbursement.Status = DisbursementStatus.Releasing;
             disbursement.ReleaseClaimId = claimId;
             disbursement.ReleaseClaimedAt = claimedAt;
@@ -721,7 +730,24 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
         for (int i = 0; i < disbursements.Count; i++)
         {
-            var disbursement = disbursements[i];
+            var routingLast4 = disbursements[i].RoutingNumberLast4;
+            var accountLast4 = disbursements[i].AccountNumberLast4;
+            var disbursement = await RecordOutcomeAsync(disbursements[i],
+                d => d.Status == DisbursementStatus.Releasing && d.ReleaseClaimId == claimId,
+                d => ApplySendOutcome(d, i, routingLast4, accountLast4),
+                $"NACHA file {file.FileReference} ({outcome.Status})", throwIfMovedOn: false);
+
+            var summary = Summary(disbursement);
+            summary.ProviderName = entries[i].IndividualName;
+            result.Entries.Add(summary);
+        }
+
+        return result;
+
+        void ApplySendOutcome(CapitationDisbursement disbursement, int i, string? routingLast4, string? accountLast4)
+        {
+            disbursement.RoutingNumberLast4 = routingLast4;
+            disbursement.AccountNumberLast4 = accountLast4;
             // Who released the file, kept with each disbursement: the releaser
             // check still holds once the held file has expired.
             disbursement.ReleasedBy = releasedBy;
@@ -761,14 +787,48 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     disbursement.ErrorMessage = outcome.Reason;
                     break;
             }
-            await _disbursementRepository.UpdateAsync(disbursement);
-
-            var summary = Summary(disbursement);
-            summary.ProviderName = entries[i].IndividualName;
-            result.Entries.Add(summary);
         }
+    }
 
-        return result;
+    /// <summary>
+    /// Records what happened to a disbursement this flow holds (a file sent, the
+    /// bank's answer): an outcome that has already happened, so it is applied
+    /// again rather than lost when the record changed since it was read. On a
+    /// concurrency conflict the record is re-read: still in the state this flow
+    /// expects (<paramref name="stillOurs"/>), the outcome is applied to the
+    /// fresh copy and written again (at most 3 attempts in all). Moved on by
+    /// someone else, their change stands: logged and the fresh copy returned, or
+    /// the conflict rethrown (409) when <paramref name="throwIfMovedOn"/>.
+    /// </summary>
+    private async Task<CapitationDisbursement> RecordOutcomeAsync(
+        CapitationDisbursement disbursement, Func<CapitationDisbursement, bool> stillOurs,
+        Action<CapitationDisbursement> apply, string what, bool throwIfMovedOn)
+    {
+        apply(disbursement);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await _disbursementRepository.UpdateAsync(disbursement);
+                return disbursement;
+            }
+            catch (ConcurrencyConflictException) when (attempt < 3)
+            {
+                var current = await _disbursementRepository.GetByIdAsync(disbursement.Id);
+                if (current != null && stillOurs(current))
+                {
+                    apply(current);
+                    disbursement = current;
+                    continue;
+                }
+                _logger.LogCritical(
+                    "Disbursement {DisbursementId}: {What} not recorded, another write moved it on first (now {Status}); " +
+                    "that change stands. Reconcile it if the two disagree",
+                    SanitizeForLog(disbursement.Id), SanitizeForLog(what), current?.Status.ToString() ?? "missing");
+                if (throwIfMovedOn) throw;
+                return current ?? disbursement;
+            }
+        }
     }
 
     public Task<IReadOnlyList<NachaHeldFile>> ListHeldNachaFilesAsync(string tenantId)
@@ -790,12 +850,14 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             // The held file is gone: back to Pending, so the next release builds a new file.
             foreach (var disbursement in disbursements)
             {
-                disbursement.Status = DisbursementStatus.Pending;
-                disbursement.NachaFileReference = null;
-                disbursement.TraceNumber = null;
-                disbursement.ReleasedBy = null;
-                disbursement.ErrorMessage = $"Held NACHA file {fileReference} expired before it was delivered; back to Pending for the next file.";
-                await _disbursementRepository.UpdateAsync(disbursement);
+                await RecordOutcomeAsync(disbursement, AwaitingRetrievalIn(fileReference), d =>
+                {
+                    d.Status = DisbursementStatus.Pending;
+                    d.NachaFileReference = null;
+                    d.TraceNumber = null;
+                    d.ReleasedBy = null;
+                    d.ErrorMessage = $"Held NACHA file {fileReference} expired before it was delivered; back to Pending for the next file.";
+                }, $"held NACHA file {fileReference} expired", throwIfMovedOn: false);
             }
             throw;
         }
@@ -817,27 +879,35 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         };
 
         var now = DateTime.UtcNow;
-        foreach (var disbursement in disbursements)
+        foreach (var read in disbursements)
         {
+            var disbursement = read;
             if (outcome.Status == NachaTransmissionStatus.Transmitted)
             {
-                disbursement.Status = DisbursementStatus.Submitted;
-                disbursement.SubmittedAt = now;
-                disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
-                disbursement.ErrorMessage = null;
-                await _disbursementRepository.UpdateAsync(disbursement);
+                disbursement = await RecordOutcomeAsync(disbursement, AwaitingRetrievalIn(fileReference), d =>
+                {
+                    d.Status = DisbursementStatus.Submitted;
+                    d.SubmittedAt = now;
+                    d.ExpectedSettlementDate = now.AddBusinessDays(2);
+                    d.ErrorMessage = null;
+                }, $"NACHA file {fileReference} retry (Transmitted)", throwIfMovedOn: false);
             }
             else if (outcome.Status == NachaTransmissionStatus.DeliveryUnknown)
             {
-                disbursement.Status = DisbursementStatus.DeliveryUnknown;
-                disbursement.ErrorMessage = DeliveryUnknownMessage(fileReference, outcome.Reason);
-                await _disbursementRepository.UpdateAsync(disbursement);
+                disbursement = await RecordOutcomeAsync(disbursement, AwaitingRetrievalIn(fileReference), d =>
+                {
+                    d.Status = DisbursementStatus.DeliveryUnknown;
+                    d.ErrorMessage = DeliveryUnknownMessage(fileReference, outcome.Reason);
+                }, $"NACHA file {fileReference} retry (DeliveryUnknown)", throwIfMovedOn: false);
             }
             result.Entries.Add(Summary(disbursement));
         }
 
         return result;
     }
+
+    private static Func<CapitationDisbursement, bool> AwaitingRetrievalIn(string fileReference)
+        => d => d.Status == DisbursementStatus.AwaitingRetrieval && d.NachaFileReference == fileReference;
 
     private static string DeliveryUnknownMessage(string fileReference, string? reason)
         => $"NACHA file {fileReference} may have reached the bank: {reason} Do not send it again: verify with the bank, then " +
@@ -886,7 +956,23 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         var now = DateTime.UtcNow;
         var status = bankReceived ? DisbursementStatus.Submitted
             : fileStillHeld ? DisbursementStatus.AwaitingRetrieval : DisbursementStatus.Pending;
-        foreach (var disbursement in disbursements)
+        foreach (var read in disbursements)
+        {
+            // Of two users recording the bank's answer at once, the second is refused (409).
+            await RecordOutcomeAsync(read,
+                d => d.Status == DisbursementStatus.DeliveryUnknown && d.NachaFileReference == fileReference,
+                ApplyAnswer, $"bank's answer for NACHA file {fileReference}", throwIfMovedOn: true);
+        }
+
+        return new NachaDeliveryResolutionResult
+        {
+            FileReference = fileReference,
+            BankReceived = bankReceived,
+            PaymentStatus = status.ToString(),
+            PaymentsUpdated = disbursements.Count,
+        };
+
+        void ApplyAnswer(CapitationDisbursement disbursement)
         {
             disbursement.Status = status;
             switch (status)
@@ -910,16 +996,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     disbursement.ErrorMessage = $"The bank confirmed it did not receive NACHA file {fileReference}, which has expired; back to Pending for the next file.";
                     break;
             }
-            await _disbursementRepository.UpdateAsync(disbursement);
         }
-
-        return new NachaDeliveryResolutionResult
-        {
-            FileReference = fileReference,
-            BankReceived = bankReceived,
-            PaymentStatus = status.ToString(),
-            PaymentsUpdated = disbursements.Count,
-        };
     }
 
     public async Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string tenantId, string fileReference, NachaActor actor, string reason)
@@ -932,11 +1009,13 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             foreach (var disbursement in (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.AwaitingRetrieval))
                      .Where(d => d.NachaFileReference == fileReference))
             {
-                disbursement.Status = DisbursementStatus.Submitted;
-                disbursement.SubmittedAt = now;
-                disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
-                disbursement.ErrorMessage = $"NACHA file retrieved by platform admin {actor.UserId} for manual delivery to the bank.";
-                await _disbursementRepository.UpdateAsync(disbursement);
+                await RecordOutcomeAsync(disbursement, AwaitingRetrievalIn(fileReference), d =>
+                {
+                    d.Status = DisbursementStatus.Submitted;
+                    d.SubmittedAt = now;
+                    d.ExpectedSettlementDate = now.AddBusinessDays(2);
+                    d.ErrorMessage = $"NACHA file retrieved by platform admin {actor.UserId} for manual delivery to the bank.";
+                }, $"NACHA file {fileReference} retrieval", throwIfMovedOn: false);
             }
         }
         return file;

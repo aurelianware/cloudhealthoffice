@@ -23,6 +23,14 @@ public class CapitationRun
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision (MongoDB): every write to this run
+    /// increments it, and a whole-document replace succeeds only if it is still
+    /// the value read, so a stale write fails instead of overwriting a
+    /// concurrent change. Documents written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// User-facing run number (e.g. "CAPRUN-2026-03-a1b2")
     /// Format: CAPRUN-{yyyy-MM}-{4-char-guid}
     /// </summary>
