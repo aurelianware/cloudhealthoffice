@@ -117,7 +117,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             {
                 _logger.LogError(ex, "Error processing enrollment for subscriber {SubscriberId}",
                     SanitizeForLog(memberEnrollment.SubscriberId));
-                result.Errors.Add($"Subscriber {memberEnrollment.SubscriberId}: {ex.Message}");
+                result.Errors.Add($"Subscriber {memberEnrollment.SubscriberId}: {ClientErrorText.For(ex)}");
                 result.FailedCount++;
                 txnStatus = "Rejected";
             }
@@ -284,21 +284,53 @@ public class EnrollmentImportService : IEnrollmentImportService
     private static bool IsRetro(MemberEnrollment e, DateTime? eventDate) =>
         eventDate.HasValue && eventDate.Value.Date < DateTime.UtcNow.Date.AddDays(-30);
 
+    /// <summary>Stands in for a value that is never stored in the raw snapshot.</summary>
+    public const string RedactedValue = "[REDACTED]";
+
+    /// <summary>
+    /// Removed from the subscriber's and every dependent's demographics before
+    /// the snapshot is stored: <c>id</c> is NM109, the SSN when NM108 is 34, and
+    /// <c>dateOfBirth</c> is DMG02. The member record keeps the SSN under
+    /// field-level encryption (member-service), so the audit copy has no need
+    /// for either.
+    /// </summary>
+    private static readonly string[] RedactedFields = { "id", "dateOfBirth" };
+
     private static string SerializeRawSegment(MemberEnrollment e)
     {
-        // PHI lives in here (names, addresses, optionally SSN). Persistence relies on
-        // container-level encryption-at-rest — do NOT also re-encrypt at the field level.
-        // Telemetry exporters that read this field MUST scrub it the same way they scrub
-        // span attributes.
+        // Audit / display copy of the transaction, stored on the enrollment event
+        // and served to the portal. Identifiers that are not needed for audit are
+        // redacted here, before anything is persisted or published. Names and
+        // addresses remain, and are protected by encryption at rest only.
         try
         {
-            var raw = JsonSerializer.Serialize(e, RawSegmentJsonOptions);
+            if (JsonSerializer.SerializeToNode(e, RawSegmentJsonOptions) is not JsonObject root)
+                return string.Empty;
+
+            Redact(root["demographics"] as JsonObject);
+            if (root["dependents"] is JsonArray dependents)
+            {
+                foreach (var dependent in dependents)
+                    Redact(dependent as JsonObject);
+            }
+
+            var raw = root.ToJsonString(RawSegmentJsonOptions);
             // Cap raw snippet so we don't blow Cosmos's 2MB doc limit on huge dependents.
             return raw.Length > 8000 ? raw.Substring(0, 8000) : raw;
         }
         catch
         {
             return string.Empty;
+        }
+    }
+
+    private static void Redact(JsonObject? person)
+    {
+        if (person is null) return;
+        foreach (var field in RedactedFields)
+        {
+            if (person[field] is not null)
+                person[field] = RedactedValue;
         }
     }
 
@@ -518,7 +550,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             _logger.LogError(ex, "Error looking up subscriber {SubscriberId} for dependent",
                 SanitizeForLog(subscriberId));
-            result.Errors.Add($"Subscriber {subscriberId} dependent: {ex.Message}");
+            result.Errors.Add($"Subscriber {subscriberId} dependent: {ClientErrorText.For(ex)}");
             result.FailedCount++;
             await RecordTransactionAsync(
                 ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId);
@@ -597,7 +629,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             _logger.LogError(ex, "Error processing dependent {DependentId} of subscriber {SubscriberId}",
                 SanitizeForLog(dependentMemberId), SanitizeForLog(subscriberMemberId));
-            ctx.Result.Errors.Add($"Dependent {dependentMemberId}: {ex.Message}");
+            ctx.Result.Errors.Add($"Dependent {dependentMemberId}: {ClientErrorText.For(ex)}");
             await RecordTransactionAsync(
                 ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId);
             return DependentOutcome.Failed;

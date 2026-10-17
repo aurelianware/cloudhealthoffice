@@ -193,6 +193,14 @@ internal sealed class MongoClaimLifecycleStore :
         return doc?.ToModel();
     }
 
+    async Task<ClaimTransmissionRecord?> IClaimTransmissionStore.GetByTenantAndIdAsync(
+        string tenantId, string transmissionId, CancellationToken ct)
+    {
+        var doc = await _transmissions.Find(d => d.Id == transmissionId && d.TenantId == tenantId)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return doc?.ToModel();
+    }
+
     public Task<IReadOnlyList<ClaimTransmissionRecord>> FindBySubmissionIdAsync(
         string gatewayName, string submissionId, CancellationToken ct = default) =>
         FindTransmissionsAsync(d => d.GatewayName == gatewayName && d.SubmissionId == submissionId, ct);

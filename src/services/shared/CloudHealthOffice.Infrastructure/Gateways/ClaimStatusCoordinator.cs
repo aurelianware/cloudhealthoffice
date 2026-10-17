@@ -140,7 +140,13 @@ internal sealed class ClaimStatusCoordinator
     {
         if (!string.IsNullOrWhiteSpace(request.TransmissionId))
         {
-            var byId = await _transmissions.GetByIdAsync(request.TransmissionId, ct).ConfigureAwait(false);
+            // Read within the caller's tenant: another tenant's id is "not found".
+            if (string.IsNullOrWhiteSpace(request.TenantId))
+            {
+                return (null, (GatewayErrorCategory.Validation, "TenantId is required when resolving by TransmissionId."));
+            }
+
+            var byId = await _transmissions.GetByTenantAndIdAsync(request.TenantId, request.TransmissionId, ct).ConfigureAwait(false);
             if (byId is null)
             {
                 return (null, (GatewayErrorCategory.TransmissionNotFound, "Claim transmission was not found."));

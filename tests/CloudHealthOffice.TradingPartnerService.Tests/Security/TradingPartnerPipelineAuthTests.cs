@@ -525,6 +525,41 @@ public class TradingPartnerPipelineAuthTests : IClassFixture<TradingPartnerPipel
         _factory.Repository.All.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task SftpPath_UnexpectedFailure_IsAProblemWithATraceId_NotTheExceptionText()
+    {
+        var partner = Partner(Tenant);
+        partner.SftpConfig!.Paths!.Inbound = new Dictionary<string, string>(new ThrowingComparer()) { ["999"] = "/in/999" };
+        _factory.Repository.Seed(partner);
+
+        var response = await Client(Tenant).GetAsync($"/api/TradingPartners/{Tenant}/availity/prod/sftp/inbound/837");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().NotContain("hunter2").And.Contain("traceId");
+    }
+
+    [Fact]
+    public async Task SftpPath_NotConfigured_StillExplainsItself()
+    {
+        var partner = Partner(Tenant);
+        partner.SftpConfig!.Paths = null!;
+        _factory.Repository.Seed(partner);
+
+        var response = await Client(Tenant).GetAsync($"/api/TradingPartners/{Tenant}/availity/prod/sftp/inbound/837");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("SFTP paths not configured");
+    }
+
+    private sealed class ThrowingComparer : IEqualityComparer<string>
+    {
+        public bool Equals(string? x, string? y) => string.Equals(x, y, StringComparison.Ordinal);
+        public int GetHashCode(string obj) => obj == "837"
+            ? throw new IOException("mongodb://admin:hunter2@db:27017 unreachable")
+            : obj.GetHashCode(StringComparison.Ordinal);
+    }
+
     /// <summary>The fields payment-service's TradingPartnerSummary reads.</summary>
     private sealed class PaymentServiceTradingPartnerSummary
     {

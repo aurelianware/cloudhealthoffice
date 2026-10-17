@@ -399,6 +399,10 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=AttachmentDB
+      - Services__TradingPartnerService=http://trading-partner-service:8080
+      - Services__ClaimsService=http://claims-service:8080
+      - Services__AuthorizationService=http://authorization-service:8080
+      - Services__AppealsService=http://appeals-service:8080
     depends_on:
       mongo:
         condition: service_healthy

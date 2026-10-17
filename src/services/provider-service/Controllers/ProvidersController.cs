@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Audit;
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderService.Adapters;
@@ -886,11 +887,8 @@ public class ProvidersController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-            {
-                error = "credentialing_publish_failed",
-                message = ex.Message,
-            });
+            _logger.LogError(ex, "Credentialing publish failed (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Credentialing publish failed", StatusCodes.Status503ServiceUnavailable);
         }
 
         // Re-read so the response reflects the patched projection. The

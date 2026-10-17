@@ -123,6 +123,25 @@ public class PasControllerTests
     }
 
     [Fact]
+    public async System.Threading.Tasks.Task ClaimSubmit_UnexpectedFailure_AnswersWithATraceId_NotTheExceptionText()
+    {
+        _adjudicatorMock
+            .Setup(a => a.TryDecideAsync(
+                It.IsAny<Claim>(), It.IsAny<Bundle>(), It.IsAny<string>(), It.IsAny<PasDecisionBasis>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("mongodb://admin:hunter2@db:27017 timed out"));
+        _controller.HttpContext.TraceIdentifier = "trace-pas-1";
+
+        var result = await _controller.ClaimSubmit(CreateRequestBundle("99213"));
+
+        var obj = result.Should().BeAssignableTo<ObjectResult>().Subject;
+        obj.StatusCode.Should().Be(422);
+        var outcome = obj.Value.Should().BeOfType<OperationOutcome>().Subject;
+        var diagnostics = outcome.Issue.Single().Diagnostics;
+        diagnostics.Should().NotContain("hunter2");
+        diagnostics.Should().Contain(System.Diagnostics.Activity.Current?.Id ?? "trace-pas-1");
+    }
+
+    [Fact]
     public async System.Threading.Tasks.Task ClaimSubmit_ValidAutoApprovableRequest_CompletesWithin15Seconds()
     {
         _adjudicatorMock

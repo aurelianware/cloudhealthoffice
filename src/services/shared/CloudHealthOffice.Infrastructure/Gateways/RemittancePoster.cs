@@ -122,7 +122,7 @@ public sealed class RemittancePoster : IRemittancePoster
                 claimsPosted++;
             }
 
-            var memberId = await ResolveMemberIdAsync(claim, cancellationToken).ConfigureAwait(false);
+            var memberId = await ResolveMemberIdAsync(receipt.TenantId, claim, cancellationToken).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(memberId))
             {
                 continue;
@@ -134,7 +134,7 @@ public sealed class RemittancePoster : IRemittancePoster
                 continue;
             }
 
-            var serviceDate = await ResolveServiceDateAsync(claim, cancellationToken).ConfigureAwait(false);
+            var serviceDate = await ResolveServiceDateAsync(receipt.TenantId, claim, cancellationToken).ConfigureAwait(false);
             var year = serviceDate.Year;
             var apply = await _accumulators.ApplyAsync(
                 new RemittanceAccumulatorApply
@@ -201,24 +201,24 @@ public sealed class RemittancePoster : IRemittancePoster
         return ToResult(receipt, replay: false, claimsPosted, accumulatorsApplied);
     }
 
-    private async Task<string?> ResolveMemberIdAsync(RemittedClaim claim, CancellationToken ct)
+    private async Task<string?> ResolveMemberIdAsync(string tenantId, RemittedClaim claim, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(claim.TransmissionId))
         {
             return null;
         }
 
-        var tx = await _transmissions.GetByIdAsync(claim.TransmissionId, ct).ConfigureAwait(false);
+        var tx = await _transmissions.GetByTenantAndIdAsync(tenantId, claim.TransmissionId, ct).ConfigureAwait(false);
         return FirstNonBlank(
             tx?.InquirySource?.Subscriber?.MemberId,
             tx?.InquirySource?.Patient?.MemberId);
     }
 
-    private async Task<DateTime> ResolveServiceDateAsync(RemittedClaim claim, CancellationToken ct)
+    private async Task<DateTime> ResolveServiceDateAsync(string tenantId, RemittedClaim claim, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(claim.TransmissionId))
         {
-            var tx = await _transmissions.GetByIdAsync(claim.TransmissionId, ct).ConfigureAwait(false);
+            var tx = await _transmissions.GetByTenantAndIdAsync(tenantId, claim.TransmissionId, ct).ConfigureAwait(false);
             if (tx?.ServiceDateFrom is DateOnly d)
             {
                 return d.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);

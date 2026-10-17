@@ -114,6 +114,24 @@ builder.Services.AddHttpClient(HttpTradingPartnerLookup.ClientName, client =>
     client.Timeout = TimeSpan.FromSeconds(10);
 });
 builder.Services.AddScoped<ITradingPartnerLookup, HttpTradingPartnerLookup>();
+
+// An attachment is stored only against a claim, authorization or appeal that
+// exists for the caller's tenant, read from the service that owns it.
+foreach (var (name, key, fallback) in new[]
+{
+    (HttpAttachmentParentLookup.ClaimsClientName, "Services:ClaimsService", HttpAttachmentParentLookup.ClaimsDefaultBaseUrl),
+    (HttpAttachmentParentLookup.AuthorizationClientName, "Services:AuthorizationService", HttpAttachmentParentLookup.AuthorizationDefaultBaseUrl),
+    (HttpAttachmentParentLookup.AppealsClientName, "Services:AppealsService", HttpAttachmentParentLookup.AppealsDefaultBaseUrl),
+})
+{
+    builder.Services.AddHttpClient(name, client =>
+    {
+        client.BaseAddress = new Uri((builder.Configuration[key] ?? fallback).TrimEnd('/') + "/");
+        client.Timeout = TimeSpan.FromSeconds(10);
+    });
+}
+builder.Services.AddScoped<IAttachmentParentLookup, HttpAttachmentParentLookup>();
+builder.Services.Configure<AttachmentUploadOptions>(builder.Configuration.GetSection(AttachmentUploadOptions.SectionName));
 builder.Services.AddSingleton<AcknowledgmentGeneratorService>();
 builder.Services.AddScoped<IAcknowledgmentService, AcknowledgmentService>();
 

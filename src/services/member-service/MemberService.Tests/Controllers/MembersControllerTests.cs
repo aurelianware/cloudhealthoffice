@@ -235,6 +235,22 @@ public class MembersControllerTests
     }
 
     [Fact]
+    public async Task DownstreamUnavailable_Problem_DoesNotEchoTheExceptionText()
+    {
+        var (ctl, _, _, coverage, _, _, _) = Build();
+        await ctl.CreateMember(CreateReq(), CancellationToken.None);
+        coverage.Setup(c => c.GetPcpAsync(Tenant, "M-001", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DownstreamUnavailableException("coverage-service",
+                "Connection refused (coverage-service.cloudhealthoffice.svc:8080)"));
+
+        var resp = await ctl.GetMemberPcp("M-001", CancellationToken.None);
+
+        var problem = ((ObjectResult)resp).Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Detail.Should().Be("coverage-service is unavailable. Retry later.");
+        problem.Extensions.Should().ContainKey("traceId");
+    }
+
+    [Fact]
     public async Task AssignPcp_EmitsPcpChangedEvent()
     {
         var (ctl, _, events, coverage, _, _, _) = Build();

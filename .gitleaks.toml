@@ -40,9 +40,10 @@ useDefault = true
     # TypeScript FHIR mapping tests (export names flagged as API keys)
     '''src/fhir/mapping/__tests__/.*\.test\.ts''',
     '''src/fhir/__tests__/.*\.test\.ts''',
-    # Cosmos DB Emulator key in dev config and test fixtures
-    '''services/.*/appsettings\.Development\.json''',
-    '''services/.*/appsettings\.json''',
+    # Cosmos DB Emulator key in shared test fixtures. Service appsettings*.json
+    # files are NOT exempted by path: the emulator key is allowlisted by value
+    # below, and anything else in them must be a recognisable placeholder
+    # (scripts/ci/verify-gitleaks-rules.sh fails if these paths are exempted).
     '''services/shared/.*Tests/.*\.cs''',
     '''services/tenant-service/README\.md''',
     # Argo workflow uses Stripe *test* keys (not live)

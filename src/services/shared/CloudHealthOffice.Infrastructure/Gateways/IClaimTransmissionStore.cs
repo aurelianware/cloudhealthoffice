@@ -12,8 +12,19 @@ public interface IClaimTransmissionStore
     Task<ClaimTransmissionRecord?> GetByIdempotencyKeyAsync(
         string tenantId, string idempotencyKey, CancellationToken ct = default);
 
+    /// <summary>
+    /// Any tenant's transmission by id. For gateway correlation only: a 277CA
+    /// or other gateway message arrives with nothing but the transmission id,
+    /// and the record's own <see cref="ClaimTransmissionRecord.TenantId"/> is
+    /// then authoritative. A lookup on behalf of a caller (a request that
+    /// carries a tenant) uses <see cref="GetByTenantAndIdAsync"/>.
+    /// </summary>
     Task<ClaimTransmissionRecord?> GetByIdAsync(
         string transmissionId, CancellationToken ct = default);
+
+    /// <summary>The transmission with this id in <paramref name="tenantId"/>; null for another tenant's.</summary>
+    Task<ClaimTransmissionRecord?> GetByTenantAndIdAsync(
+        string tenantId, string transmissionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<ClaimTransmissionRecord>> FindBySubmissionIdAsync(
         string gatewayName, string submissionId, CancellationToken ct = default);
