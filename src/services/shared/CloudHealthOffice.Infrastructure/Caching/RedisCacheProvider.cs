@@ -57,7 +57,11 @@ internal sealed class RedisCacheProvider : ICacheProvider
             {
                 _logger.LogWarning(ex, "Corrupted cache entry at {Key} — deleting", LogSanitizer.Sanitize(key));
                 try { await db.KeyDeleteAsync(key).ConfigureAwait(false); }
-                catch (RedisException) { /* best-effort */ }
+                catch (RedisException deleteEx)
+                {
+                    // Still a miss either way; the entry's TTL removes it if the delete failed.
+                    _logger.LogDebug(deleteEx, "Deleting corrupted cache entry at {Key} failed", LogSanitizer.Sanitize(key));
+                }
                 return null;
             }
         }

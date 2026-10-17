@@ -701,7 +701,10 @@ public sealed class GlPostingService
     {
         ProviderRefundOwedEvent? refund = null;
         try { refund = System.Text.Json.JsonSerializer.Deserialize<ProviderRefundOwedEvent>(envelope.PayloadJson, GlEventTypes.Json); }
-        catch (System.Text.Json.JsonException) { }
+        catch (System.Text.Json.JsonException)
+        {
+            // An unreadable payload leaves refund null and is parked as InvalidPayload just below.
+        }
         if (refund == null || refund.Amount <= 0m || decimal.Round(refund.Amount, 2) != refund.Amount)
         {
             Park(record, GlParkReason.InvalidPayload, "The ProviderRefundOwed payload has no money amount.");

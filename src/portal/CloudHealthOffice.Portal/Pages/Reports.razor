@@ -506,7 +506,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        try { _sponsors = await SponsorService.SearchSponsorsAsync(""); } catch { }
+        // The sponsor list only fills the optional sponsor filter; every report runs without it.
+        try { _sponsors = await SponsorService.SearchSponsorsAsync(""); }
+        catch { _sponsors = new(); }
     }
 
     private ReportRequest BuildRequest(DateTime? from, DateTime? to, string? sponsorId = null) =>

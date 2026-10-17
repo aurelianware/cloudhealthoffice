@@ -307,6 +307,8 @@ public class CashPostingController : ControllerBase
             }
             catch (ArConcurrencyException) when (attempt < MaxConcurrencyAttempts)
             {
+                // Another writer saved a balance first: re-read and reverse on top. The final
+                // attempt's conflict is not caught and reaches the caller.
             }
         }
 

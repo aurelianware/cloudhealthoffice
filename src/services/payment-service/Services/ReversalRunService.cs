@@ -932,6 +932,8 @@ public class ReversalRunService : IReversalRunService
                     }
                     catch (PaymentConcurrencyException) when (attempt < ConcurrentSaves.MaxAttempts)
                     {
+                        // Lost the race: the loop re-reads the run and re-applies. The final
+                        // attempt's conflict is not caught and reaches the caller.
                     }
                 }
             }

@@ -126,7 +126,10 @@ public class ClaimFinalizedConsumer : BackgroundService
         }
         finally
         {
-            try { consumer.Close(); } catch { /* best-effort */ }
+            // Leaving the group cleanly only speeds up the next rebalance; uncommitted offsets
+            // are redelivered either way, so a failed Close must not fail shutdown.
+            try { consumer.Close(); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Closing the claim-finalized consumer failed"); }
         }
     }
 

@@ -334,8 +334,18 @@ else
         var generated = _statements.Where(s => s.Status == "Generated").ToList();
         var result = await DialogService.ShowMessageBox("Approve All", $"Approve {generated.Count} statements?", "Approve All", "Cancel");
         if (result != true) return;
-        foreach (var s in generated) { try { await CapitationService.ApproveStatementAsync(s.Id); } catch { /* continue */ } }
-        Snackbar.Add($"{generated.Count} statements approved", Severity.Success);
+        // One refusal must not stop the rest, but it must not be reported as approved either.
+        var approved = 0;
+        var failed = new List<string>();
+        foreach (var s in generated)
+        {
+            try { await CapitationService.ApproveStatementAsync(s.Id); approved++; }
+            catch (Exception ex) { failed.Add($"{s.StatementNumber}: {ex.Message}"); }
+        }
+        if (approved > 0)
+            Snackbar.Add($"{approved} statements approved", Severity.Success);
+        if (failed.Count > 0)
+            Snackbar.Add($"{failed.Count} statements not approved — {failed[0]}", Severity.Error);
         await LoadStatements();
     }
 

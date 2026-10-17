@@ -62,7 +62,8 @@ public static class SignupEndpoint
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
-            // handled below
+            // Malformed or non-JSON body: form stays null, and the check below answers
+            // 400 invalid_request. The caller's own bad input is not an error to log.
         }
         if (form is null || string.IsNullOrWhiteSpace(form.OrganizationName) || string.IsNullOrWhiteSpace(form.Tier))
             return Results.Json(new { error = "invalid_request" }, statusCode: StatusCodes.Status400BadRequest);

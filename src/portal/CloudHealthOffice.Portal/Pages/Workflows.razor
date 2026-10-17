@@ -309,7 +309,11 @@
             var details = await WorkflowService.GetWorkflowDetailsAsync(workflowId);
             _expandedSteps = details?.Steps ?? new();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Previously swallowed, which showed the run as having no steps.
+            Snackbar.Add($"Could not load the workflow steps: {ex.Message}", Severity.Error);
+        }
         finally
         {
             _loadingSteps = false;

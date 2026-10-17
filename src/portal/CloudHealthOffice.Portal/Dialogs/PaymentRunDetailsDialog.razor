@@ -279,7 +279,11 @@
 
             await _hubConnection.StartAsync();
         }
-        catch { /* best-effort */ }
+        catch
+        {
+            // Live progress is optional: the details were already loaded, and the dialog
+            // still shows them (reopen to refresh) if the hub cannot be reached.
+        }
     }
 
     private async Task DownloadEra()

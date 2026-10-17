@@ -188,6 +188,8 @@ public class IdCardOrchestrator : IIdCardOrchestrator
             }
             catch (IdCardConcurrencyException) when (attempt < MaxConcurrencyAttempts)
             {
+                // Another writer saved the card first: loop re-reads it and re-applies the
+                // revocation. The final attempt's conflict is not caught and reaches the caller.
             }
         }
     }
