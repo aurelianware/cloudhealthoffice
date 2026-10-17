@@ -25,16 +25,6 @@ public static class ChoMetrics
             description: "HTTP request duration in seconds");
 
     /// <summary>
-    /// Histogram tracking claim adjudication latency (seconds).
-    /// Dimensions: cho.claim_type, cho.adjudication_step.
-    /// </summary>
-    public static readonly Histogram<double> ClaimProcessingLatency =
-        Meter.CreateHistogram<double>(
-            "cho.claims.processing.duration",
-            unit: "s",
-            description: "Claim processing/adjudication latency in seconds");
-
-    /// <summary>
     /// Counter tracking EDI transactions processed.
     /// Dimensions: cho.edi_transaction_type (837, 835, 270, 271, etc.).
     /// </summary>
@@ -47,6 +37,8 @@ public static class ChoMetrics
     /// <summary>
     /// Counter tracking adjudication outcomes.
     /// Dimensions: cho.outcome (approved, denied, pended).
+    /// Nothing records it at present: its only caller was benefit-plan-service's
+    /// removed /adjudicate dry run. The claims-service pipeline does not emit it.
     /// </summary>
     public static readonly Counter<long> AdjudicationOutcome =
         Meter.CreateCounter<long>(

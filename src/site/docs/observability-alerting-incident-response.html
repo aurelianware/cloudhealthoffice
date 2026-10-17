@@ -191,17 +191,17 @@ curl --fail --silent http://127.0.0.1:18080/metrics | head</code></pre>
 
         <h2 id="telemetry">4. Correlate Metrics, Traces, and PHI-Safe Logs</h2>
         <h3>Metrics: detect and size</h3>
-        <p>The shared meter is <code>CloudHealthOffice</code>. Core instruments include <code>cho.http.request.duration</code>, <code>cho.claims.processing.duration</code>, <code>cho.edi.transactions.total</code>, <code>cho.claims.adjudication.outcome.total</code>, and <code>cho.telemetry.scrub.total</code>. Prometheus renders dotted names with underscores.</p>
+        <p>The shared meter is <code>CloudHealthOffice</code>. Core instruments include <code>cho.http.request.duration</code>, <code>cho.edi.transactions.total</code>, and <code>cho.telemetry.scrub.total</code>; ASP.NET Core also emits <code>http.server.request.duration</code>. Prometheus renders dotted names with underscores.</p>
         <div class="code-block-header"><span>PromQL</span><span>starter queries</span></div>
-        <pre><code><span class="code-comment"># p95 claim-processing latency</span>
+        <pre><code><span class="code-comment"># p95 request latency by service</span>
 histogram_quantile(
   0.95,
-  sum(rate(cho_claims_processing_duration_bucket[5m])) by (le)
+  sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le, job)
 )
 
-<span class="code-comment"># adjudication outcomes in the last hour</span>
-sum by (cho_outcome) (
-  increase(cho_claims_adjudication_outcome_total[1h])
+<span class="code-comment"># 5xx rate by service</span>
+sum by (job) (
+  rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m])
 )
 
 <span class="code-comment"># PHI attributes removed before span export</span>

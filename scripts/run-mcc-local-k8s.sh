@@ -19,15 +19,13 @@ AUTHORIZATION_URL="${AUTHORIZATION_URL:-http://authorization-service}"
 SEED_MEMBERS="${SEED_MEMBERS:-true}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
 SEED_AUTHORIZATIONS="${SEED_AUTHORIZATIONS:-true}"
-# Score the claims-service pipeline's persisted outcome (the single adjudicator).
-# SERVICEBUS_ONLY=false runs the dry-run synchronous diagnostic instead.
-SERVICEBUS_ONLY="${SERVICEBUS_ONLY:-true}"
+# The validator always scores the claims-service pipeline's persisted outcome
+# (the single adjudicator).
 SERVICEBUS_RECONCILIATION_ENABLED="${SERVICEBUS_RECONCILIATION_ENABLED:-true}"
 SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS="${SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS:-300}"
 CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS="${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS:-15}"
 ADJUDICATION_MAX_CONCURRENT_CALLS="${ADJUDICATION_MAX_CONCURRENT_CALLS:-}"
 SERVICE_CATEGORY_ADMIN_WRITE_ENABLED="${SERVICE_CATEGORY_ADMIN_WRITE_ENABLED:-true}"
-PEND_OBSERVATION_ENABLED="${PEND_OBSERVATION_ENABLED:-true}"
 PEND_OBSERVATION_TIMEOUT_SECONDS="${PEND_OBSERVATION_TIMEOUT_SECONDS:-45}"
 PEND_OBSERVATION_INTERVAL_MS="${PEND_OBSERVATION_INTERVAL_MS:-1000}"
 # Off by default. Set to a path (e.g. /tmp/mcc-pend-diagnostics.json) to capture
@@ -231,11 +229,9 @@ spec:
             $(if [[ "$SEED_MEMBERS" != "true" ]]; then printf -- '- --no-seed-members\n'; fi)
             $(if [[ "$SEED_PROVIDERS" != "true" ]]; then printf -- '- --no-seed-providers\n'; fi)
             $(if [[ "$SEED_AUTHORIZATIONS" != "true" ]]; then printf -- '- --no-seed-authorizations\n'; fi)
-            $(if [[ "$SERVICEBUS_ONLY" == "true" ]]; then printf -- '- --servicebus-only\n'; else printf -- '- --synchronous-diagnostic\n'; fi)
             $(if [[ "$SERVICEBUS_RECONCILIATION_ENABLED" != "true" ]]; then printf -- '- --no-servicebus-reconciliation\n'; fi)
             - --servicebus-reconciliation-timeout
             - "${SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS}"
-            $(if [[ "$PEND_OBSERVATION_ENABLED" != "true" ]]; then printf -- '- --no-pend-observation\n'; fi)
             - --pend-observation-timeout
             - "${PEND_OBSERVATION_TIMEOUT_SECONDS}"
             - --pend-observation-interval-ms

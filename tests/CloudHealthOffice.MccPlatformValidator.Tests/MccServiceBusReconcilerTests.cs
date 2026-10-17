@@ -133,7 +133,6 @@ public class MccServiceBusReconcilerTests
             TimeSpan.FromMilliseconds(10),
             TimeSpan.FromSeconds(180),
             TimeSpan.Zero,
-            new Dictionary<string, double>(),
             null,
             "servicebus-observation",
             "Timed out waiting for Service Bus adjudication",

@@ -91,24 +91,6 @@ public class BackgroundCallsCarryServiceTokenTests
         NoCallerHost.TokenOf(host.Outbound.Last).Should().Be((Tenant, ClientId));
     }
 
-    [Fact]
-    public async Task TerminologyCrosswalk_WithoutCaller_CarriesServiceTokenForNamedTenant()
-    {
-        using var host = new NoCallerHost(ClientId, (services, outbound) =>
-        {
-            services.AddMemoryCache();
-            services.AddHttpClient<ITerminologyCrosswalkClient, HttpTerminologyCrosswalkClient>(
-                    c => c.BaseAddress = new Uri("http://terminology-service/"))
-                .ConfigurePrimaryHttpMessageHandler(() => outbound);
-        });
-        host.Outbound.Respond = _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[]") };
-
-        await host.Services.GetRequiredService<ITerminologyCrosswalkClient>().TranslateBatchAsync(Tenant,
-            [new CodeCrosswalkRequest { ProcedureCode = "99213", CodeType = "CPT", LineNumber = 1 }]);
-
-        NoCallerHost.TokenOf(host.Outbound.Last).Should().Be((Tenant, ClientId));
-    }
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

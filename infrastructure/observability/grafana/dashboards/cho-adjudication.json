@@ -7,47 +7,9 @@
   "links": [],
   "panels": [
     {
-      "title": "Adjudication Latency (p50 / p95 / p99)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": { "drawStyle": "line", "fillOpacity": 10 }
-        }
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, sum(rate(cho_claims_processing_duration_bucket[5m])) by (le))",
-          "legendFormat": "p50"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(cho_claims_processing_duration_bucket[5m])) by (le))",
-          "legendFormat": "p95"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(cho_claims_processing_duration_bucket[5m])) by (le))",
-          "legendFormat": "p99"
-        }
-      ]
-    },
-    {
-      "title": "Adjudication Outcomes",
-      "type": "piechart",
-      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        {
-          "expr": "sum by (cho_outcome) (increase(cho_claims_adjudication_outcome_total[1h]))",
-          "legendFormat": "{{cho_outcome}}"
-        }
-      ]
-    },
-    {
       "title": "EDI Transactions / min",
       "type": "stat",
-      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "cpm" } },
       "targets": [
@@ -60,7 +22,7 @@
     {
       "title": "HTTP Request Rate by Service",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -72,7 +34,7 @@
     {
       "title": "HTTP Request Duration by Route (p95)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s" } },
       "targets": [
@@ -83,22 +45,9 @@
       ]
     },
     {
-      "title": "Adjudication Latency by Step",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "s" } },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(cho_claims_processing_duration_bucket[5m])) by (le, cho_adjudication_step))",
-          "legendFormat": "{{cho_adjudication_step}} p95"
-        }
-      ]
-    },
-    {
       "title": "HTTP Error Rate (5xx)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "reqps" } },
       "targets": [
@@ -118,5 +67,5 @@
   "timezone": "browser",
   "title": "Cloud Health Office — Adjudication",
   "uid": "cho-adjudication",
-  "version": 1
+  "version": 2
 }

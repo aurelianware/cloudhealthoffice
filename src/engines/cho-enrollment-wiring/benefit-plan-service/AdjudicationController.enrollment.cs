@@ -2,7 +2,7 @@
 // ADDITION to AdjudicationController.cs
 //
 // Drop this endpoint into the existing AdjudicationController class
-// alongside the existing /adjudicate, /resolve-rates, /calculate-benefits
+// alongside the existing /resolve-rates, /calculate-benefits
 // endpoints. It replaces the Argo workflow's Python validate-provider-step.
 //
 // Constructor additions required:

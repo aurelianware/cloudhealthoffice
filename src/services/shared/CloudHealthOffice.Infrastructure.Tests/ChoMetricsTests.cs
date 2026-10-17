@@ -30,24 +30,6 @@ public class ChoMetricsTests
     }
 
     [Fact]
-    public void ClaimProcessingLatency_IsNotNull()
-    {
-        ChoMetrics.ClaimProcessingLatency.Should().NotBeNull();
-    }
-
-    [Fact]
-    public void ClaimProcessingLatency_HasCorrectName()
-    {
-        ChoMetrics.ClaimProcessingLatency.Name.Should().Be("cho.claims.processing.duration");
-    }
-
-    [Fact]
-    public void ClaimProcessingLatency_HasSecondsUnit()
-    {
-        ChoMetrics.ClaimProcessingLatency.Unit.Should().Be("s");
-    }
-
-    [Fact]
     public void EdiTransactionCount_IsNotNull()
     {
         ChoMetrics.EdiTransactionCount.Should().NotBeNull();
@@ -78,7 +60,6 @@ public class ChoMetricsTests
         var act = () =>
         {
             ChoMetrics.RequestDuration.Record(0.5);
-            ChoMetrics.ClaimProcessingLatency.Record(1.2);
             ChoMetrics.EdiTransactionCount.Add(1);
             ChoMetrics.AdjudicationOutcome.Add(1);
         };

@@ -1,6 +1,8 @@
-# Decision needed: benefit-plan-service `POST /api/v1/adjudication/adjudicate`
+# Decision: benefit-plan-service `POST /api/v1/adjudication/adjudicate`
 
-Status: **open, for the owner to decide**. Nothing here is implemented.
+Status: **decided: Option B (remove it and its callers). Done.** See
+[Outcome](#outcome) at the end. The sections up to the recommendation are the
+analysis as written before the decision, in the present tense of that time.
 
 ## What it does today
 
@@ -140,3 +142,63 @@ the pipeline as a separate decision.
 
 Whichever option is chosen, `ADJUDICATION-PIPELINE.md` is wrong today about
 Argo step 6 and should be corrected.
+
+## Outcome
+
+The owner chose **Option B**. Done on branch
+`remediation/remove-adjudicate-endpoint`:
+
+- **Endpoint.** `AdjudicationController.Adjudicate`, its private helpers
+  (`RecordLatency`, `IsMemberEligibleForServiceDate`, `MapToPaLineOfBusiness`,
+  `MapToPaProgram`, `MapToScrubClaim`, `NormalizeClaimType`,
+  `ParseScrubClaimType`), its DTOs (`AdjudicationRequest`,
+  `AdjudicationLineRequest`, `AdjudicationCobInfo`, `AdjudicationResponse`,
+  `AdjudicationTotals`, `AdjudicationLineResponse`) and the controller
+  dependencies only it used (`IPriorAuthRuleEngine`, `IOperatingModeProvider`,
+  `IClaimTypeRouter`, `ITerminologyCrosswalkClient`) are gone.
+  `CobRequestValidation` stays (calculate-benefits uses it).
+- **Terminology crosswalk client.** `ITerminologyCrosswalkClient` /
+  `HttpTerminologyCrosswalkClient`, their DI registration, their tests and
+  benefit-plan-service's outbound allowance for `terminology-service` are
+  removed: `/adjudicate` was the only consumer.
+- **Kept, still used elsewhere.** `ClaimTypeRouter`, `IOperatingModeProvider`
+  and `IPriorAuthRuleEngine` (the payment estimate uses all three);
+  `IBenefitCalculationEngine.CalculateWithModeAsync` and `AugmentResult` (part
+  of the shared engine interface; nothing in production calls the method now);
+  every engine and the other adjudication endpoints.
+- **Validator and scripts.** `--synchronous-diagnostic`, `AdjudicateClaimAsync`,
+  the expected-pend observation / false-pend sweep that only ran in that mode
+  and the scripts' `SERVICEBUS_ONLY` / `PEND_OBSERVATION_ENABLED` are removed.
+  `--synchronous-diagnostic` now fails with an error; `--servicebus-only` and
+  `--no-pend-observation` are accepted as no-ops. The summary's
+  `AdjudicationStepTimings` fields stay in the contract and are now empty.
+- **Tests.** The `/adjudicate` controller tests are deleted. What was still
+  worth guarding moved to the payment estimate: DRG-stay case rate paid and
+  cost-shared once, the `PRICING_REVIEW` case (case rate above billed), the
+  TOB 111 / POS 21 → Inpatient Hospital categorization and the facility-setting
+  pricing rows. Provider-integrity exclusion vs. manual review, CARC 27
+  eligibility, NCCI and pricing pends are covered by the pipeline's stage
+  tests. The AuthPipelineTests `/adjudicate` assertion is dropped; the E2E
+  golden path now submits a claim and checks the 835 with fixed amounts.
+- **Metrics.** `ChoMetrics.ClaimProcessingLatency`
+  (`cho.claims.processing.duration`) is removed. There is no equivalent
+  pipeline latency metric, so the Grafana `cho-adjudication` latency panels
+  were removed, not repointed. `ChoMetrics.AdjudicationOutcome` was also
+  recorded only by `/adjudicate`; the counter is kept (documented as not
+  recorded) and its "Adjudication Outcomes" panel removed. Emitting it from the
+  pipeline is a follow-up.
+- **Docs.** `ADJUDICATION-PIPELINE.md` is rewritten around the claims-service
+  pipeline (the Argo step 6 description is gone); ADR 016's diagram,
+  `prospective-adjudication.md`, `claim-adjudication-pipeline.md`,
+  `observability.md`, the auth playbook, the validator README and the site's
+  observability page are updated. `src/site/graphics/provider-integrity-pipeline.svg`
+  is left as is: it illustrates the Part 11 article, which describes that
+  period. The 2026-07-07 MCC diagnostics note and the podcast material are
+  historical and unchanged.
+
+**No longer runs anywhere on the claim path:** Legacy-Only / Augment routing
+of an individual claim (the estimate still uses routing only to label its
+authority), the plan terminology crosswalk before pricing, and in-process
+`PriorAuthRuleEngine` evaluation for a claim (the pipeline asks
+authorization-service; the estimate and fhir-service PAS still use the rule
+engine). Whether the pipeline should do any of these is a separate decision.

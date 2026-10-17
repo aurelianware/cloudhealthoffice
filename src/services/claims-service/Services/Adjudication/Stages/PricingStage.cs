@@ -17,12 +17,10 @@ namespace ClaimsService.Services.Adjudication.Stages;
 /// <b>Why this stage exists.</b> The async pipeline had no pricing step:
 /// <see cref="BenefitCalculationStage"/> sent an empty <c>AllowedAmounts</c>
 /// map, so the benefit engine silently fell back to allowed = billed and
-/// paid billed charges. The synchronous <c>AdjudicationController.Adjudicate</c>
-/// path in benefit-plan-service always priced via
-/// <c>IRateResolutionService.ResolveBatchAsync</c>; this stage reaches the
-/// same engine through the side-effect-free <c>resolve-rates</c> endpoint
-/// (<see cref="IFeeSchedulePricingClient"/>), so both paths share one
-/// pricing contract.
+/// paid billed charges. This stage prices through the fee schedule engine
+/// (<c>IRateResolutionService.ResolveBatchAsync</c>) via benefit-plan-service's
+/// side-effect-free <c>resolve-rates</c> endpoint
+/// (<see cref="IFeeSchedulePricingClient"/>).
 /// </para>
 ///
 /// <para>
