@@ -24,7 +24,11 @@ public class PaymentAccessAuditTests : IClassFixture<PaymentPipelineFactory>
 
     public PaymentAccessAuditTests(PaymentPipelineFactory factory)
     {
-        var payment = new Payment { Id = "pay-1", CheckNumber = "EFT0001" };
+        var payment = new Payment
+        {
+            Id = "pay-1", CheckNumber = "EFT0001",
+            ClaimPayments = [new ClaimPayment { ClaimId = "c1", MemberId = "M1" }, new ClaimPayment { ClaimId = "c2", MemberId = "M2" }],
+        };
         factory.Payments.GetByIdAsync("pay-1").Returns(payment);
         factory.Payments.GetByCheckNumberAsync("EFT0001").Returns(payment);
         _host = factory.WithWebHostBuilder(b => b.ConfigureServices(services =>
@@ -70,5 +74,28 @@ public class PaymentAccessAuditTests : IClassFixture<PaymentPipelineFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains((await response.Content.ReadFromJsonAsync<List<RecordAccessEvent>>())!, e => e.ActorId == "fin-3");
         Assert.Contains(_log.All, e => e.ActorId == "co-1" && e.Action == RecordAccessActions.AccessLog);
+    }
+
+    [Fact]
+    public async Task A_payment_read_is_logged_against_every_member_it_pays_and_shows_on_their_log()
+    {
+        await As("fin-9", ChoRolePermissions.Finance).GetAsync("/api/payments/pay-1");
+
+        Assert.Contains(_log.All, e => e.ActorId == "fin-9" && e.MemberIds.SequenceEqual(new[] { "M1", "M2" }));
+
+        var response = await As("co-9", ChoRolePermissions.ComplianceOfficer).GetAsync("/api/payments/access-log?memberId=M2");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains((await response.Content.ReadFromJsonAsync<List<RecordAccessEvent>>())!, e => e.ActorId == "fin-9");
+    }
+
+    [Fact]
+    public async Task An_835_download_is_logged_once_against_the_payment_and_its_members()
+    {
+        await As("fin-835", ChoRolePermissions.Finance).GetAsync("/api/payments/pay-1/835");
+
+        var e = Assert.Single(_log.All, x => x.ActorId == "fin-835");
+        Assert.Equal("Era", e.Action);
+        Assert.Equal("pay-1", e.RecordId);
+        Assert.Equal(new[] { "M1", "M2" }, e.MemberIds);
     }
 }
