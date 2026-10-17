@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Gateways.Stedi;
+using CloudHealthOffice.Infrastructure.Http;
 using CloudHealthOffice.Infrastructure.ReferenceData.Payers.Stedi;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,7 +51,7 @@ public static class PayerReferenceServiceCollectionExtensions
 
                 client.Timeout = TimeSpan.FromSeconds(opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 30);
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("CloudHealthOffice-PayerDirectory/1.0");
-            });
+            }).WithoutChoResilience(); // StediHttpSender retries; one retry layer (see AddStediHealthcareGateway)
 
             services.TryAddSingleton(sp => new StediPayerDirectoryClient(
                 sp.GetRequiredService<IHttpClientFactory>(),
