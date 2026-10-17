@@ -98,4 +98,35 @@ public class RecordAccessLogTabTests : TestContext
         cut.WaitForAssertion(() => cut.FindAll("[data-testid=access-log-row]").Should().ContainSingle());
         cut.Find("[data-testid=access-log-row]").TextContent.Should().Contain("Read bank details");
     }
+
+    [Fact]
+    public void Appeal_access_log_loads_by_the_record_id_not_the_appeal_number()
+    {
+        Grant("appeals:read", "audit:read");
+        var appeals = new Mock<IAppealsService>();
+        appeals.Setup(a => a.GetAppealByIdAsync("rec-9")).ReturnsAsync(new AppealDetails { AppealId = "APL-9", RecordId = "rec-9", MemberId = "M1", Status = "InReview" });
+        Services.AddSingleton(appeals.Object);
+        _logs.Setup(l => l.GetAppealAccessLogAsync("rec-9", It.IsAny<int>())).ReturnsAsync(new RecordAccessLog(
+            [new() { Id = "e3", RecordType = "Appeal", RecordId = "rec-9", Action = "History", Outcome = "Allowed", ActorId = "um-1" }], []));
+
+        var cut = RenderComponent<AppealRecordView>(p => p.Add(x => x.AppealId, "rec-9").Add(x => x.Tab, "access-log").Add(x => x.BaseHref, "/appeals/rec-9"));
+
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=access-log-row]").Should().ContainSingle());
+        cut.Find("[data-testid=access-log-row]").TextContent.Should().Contain("Read history");
+    }
+
+    [Fact]
+    public void Appeal_access_log_is_hidden_without_audit_read()
+    {
+        Grant("appeals:read");
+        var appeals = new Mock<IAppealsService>();
+        appeals.Setup(a => a.GetAppealByIdAsync("rec-9")).ReturnsAsync(new AppealDetails { AppealId = "APL-9", RecordId = "rec-9", Status = "InReview" });
+        Services.AddSingleton(appeals.Object);
+
+        var cut = RenderComponent<AppealRecordView>(p => p.Add(x => x.AppealId, "rec-9").Add(x => x.Tab, "access-log").Add(x => x.BaseHref, "/appeals/rec-9"));
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("APL-9"));
+        cut.FindAll("[data-testid=record-tab-access-log]").Should().BeEmpty();
+        _logs.Verify(l => l.GetAppealAccessLogAsync(It.IsAny<string>(), It.IsAny<int>()), Times.Never);
+    }
 }

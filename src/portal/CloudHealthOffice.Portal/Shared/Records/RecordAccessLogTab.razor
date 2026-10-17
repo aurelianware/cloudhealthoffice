@@ -34,6 +34,7 @@
         "Provider" => "Every read of this provider record and of its bank details: views, and searches that returned it.",
         "Payment" => "Every read of this payment and its 835: views, and searches and claim lookups that returned it.",
         "Authorization" => "Every read of this authorization, including validation lookups during claim adjudication.",
+        "Appeal" => "Every read of this appeal, its history, notes and documents: views, and searches that returned it.",
         _ => "Every read of this record: views, and searches that returned it.",
     };
 
@@ -57,6 +58,7 @@
                 "Provider" => await logs.GetProviderAccessLogAsync(RecordId, Npi),
                 "Authorization" => await logs.GetAuthorizationAccessLogAsync(RecordId, Number),
                 "Payment" => await logs.GetPaymentAccessLogAsync(RecordId),
+                "Appeal" => await logs.GetAppealAccessLogAsync(RecordId),
                 _ => throw new ArgumentOutOfRangeException(nameof(Kind), Kind, "No access log for this record type."),
             };
         }

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
 using AppealsService.HostedServices;
@@ -176,6 +177,7 @@ public class AppealsController : ControllerBase
         return CreatedAtAction(nameof(GetAppealById), new { id = created.Id }, view);
     }
 
+    [AuditRecordAccess("Appeal", RecordAccessActions.View, RecordIdRouteValue = "id")]
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(Appeal), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -190,6 +192,7 @@ public class AppealsController : ControllerBase
         return Ok(view);
     }
 
+    [AuditRecordAccess("Appeal", RecordAccessActions.View, ResultIsRecord = true)]
     [HttpGet("number/{appealNumber}")]
     [ProducesResponseType(typeof(Appeal), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -204,6 +207,7 @@ public class AppealsController : ControllerBase
         return Ok(view);
     }
 
+    [AuditRecordAccess("Appeal", RecordAccessActions.List)]
     [HttpGet("claim/{claimId}")]
     [ProducesResponseType(typeof(AppealListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAppealsByClaimId([FromRoute] string claimId, CancellationToken ct)
@@ -213,6 +217,7 @@ public class AppealsController : ControllerBase
         return Ok(new AppealListResponse { Items = decrypted.ToList() });
     }
 
+    [AuditRecordAccess("Appeal", RecordAccessActions.Search)]
     [HttpGet("search")]
     [ProducesResponseType(typeof(AppealListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> SearchAppeals(
@@ -261,6 +266,7 @@ public class AppealsController : ControllerBase
         return Ok(summary);
     }
 
+    [AuditRecordAccess("Appeal", "History", RecordIdRouteValue = "id")]
     [HttpGet("{id}/history")]
     [ProducesResponseType(typeof(AppealHistoryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -1278,6 +1284,7 @@ public class AppealsController : ControllerBase
     // ── Per-note and per-attachment lookup (used by fhir-service) ───────
 
     /// <summary>GET /api/appeals/notes/{noteId} — fetch a single note across any appeal for the tenant.</summary>
+    [AuditRecordAccess("Appeal", RecordAccessActions.Notes, ResultIsRecord = true, ResultIdProperty = "AppealId")]
     [HttpGet("notes/{noteId}")]
     [ProducesResponseType(typeof(AppealNoteLookup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -1292,6 +1299,7 @@ public class AppealsController : ControllerBase
     }
 
     /// <summary>GET /api/appeals/attachments/{attachmentId} — fetch a single attachment across any appeal for the tenant.</summary>
+    [AuditRecordAccess("Appeal", RecordAccessActions.Documents, ResultIsRecord = true, ResultIdProperty = "AppealId")]
     [HttpGet("attachments/{attachmentId}")]
     [ProducesResponseType(typeof(AppealAttachmentLookup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

@@ -110,6 +110,7 @@ internal static class AppealWireMapper
         var details = new AppealDetails
         {
             AppealId = s.AppealId,
+            RecordId = s.Id,
             MemberName = s.MemberName,
             MemberId = s.MemberId,
             AppealType = s.AppealType,
