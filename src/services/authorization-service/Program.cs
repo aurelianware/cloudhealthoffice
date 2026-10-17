@@ -5,7 +5,6 @@ using AuthorizationService;
 using AuthorizationService.Consumers;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services;
-using MongoDB.Driver;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
@@ -69,24 +68,14 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Database — MongoDB is the only authorization store (ADR 006); AddChoDatabase
-// registers the client.
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-if (databaseProvider != ChoDatabaseProvider.MongoDb)
+// Database — MongoDB is the only authorization store (ADR 006, ADR 017);
+// AddChoDatabase registers the client. A host with no database configured
+// refuses to start, in every environment, rather than going Ready and failing
+// every request.
+if (builder.Services.AddChoDatabase(builder.Configuration) is null)
 {
-    const string noDatabase =
-        "No database is configured. Authorization Service requires MongoDb:ConnectionString.";
-
-    // A deployed host refuses to start rather than going Ready and failing
-    // every request; so does any host told to use the Cosmos DB native SDK,
-    // which this service no longer supports.
-    if (databaseProvider is not null
-        || (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing")))
-        throw new InvalidOperationException(noDatabase);
-
-    // Development and test hosts (which substitute the repository) still
-    // build; a real call fails on first use with the same message.
-    builder.Services.AddSingleton<IMongoDatabase>(_ => throw new InvalidOperationException(noDatabase));
+    throw new InvalidOperationException(
+        "Authorization Service requires a database. Configure MongoDb:ConnectionString.");
 }
 builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepositoryMongo>();
 

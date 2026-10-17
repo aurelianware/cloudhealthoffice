@@ -6,9 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AuthorizationService.Tests.Persistence;
 
 /// <summary>
-/// A deployed host with no database configured must refuse to start, not go
-/// Ready and answer every request with a 500. Development hosts (tests, local
-/// runs that substitute the repository) still start.
+/// A host with no database configured must refuse to start, not go Ready and
+/// answer every request with a 500. There is no "no database" mode: this holds
+/// in every environment, Development and Testing included.
 /// </summary>
 public sealed class DatabaseConfigurationStartupTests
 {
@@ -22,7 +22,7 @@ public sealed class DatabaseConfigurationStartupTests
         var act = () => host.Services.GetRequiredService<IServiceProvider>();
 
         act.Should().Throw<InvalidOperationException>()
-            .Where(e => e.ToString().Contains("No database is configured"));
+            .Where(e => e.ToString().Contains(NoDatabaseMessage));
     }
 
     [Theory]
@@ -38,20 +38,28 @@ public sealed class DatabaseConfigurationStartupTests
             .Where(e => e.ToString().Contains("Database:Provider 'CosmosDb' is not supported"));
     }
 
-    [Fact]
-    public void DevelopmentHost_WithNoDatabaseConfigured_Starts()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Testing")]
+    public void DevelopmentHost_WithNoDatabaseConfigured_FailsAtStartup(string environment)
     {
-        using var host = new NoDatabaseHost("Development");
+        using var host = new NoDatabaseHost(environment);
 
-        host.Services.GetRequiredService<IServiceProvider>().Should().NotBeNull();
+        var act = () => host.Services.GetRequiredService<IServiceProvider>();
+
+        act.Should().Throw<InvalidOperationException>()
+            .Where(e => e.ToString().Contains(NoDatabaseMessage));
     }
+
+    private const string NoDatabaseMessage =
+        "Authorization Service requires a database. Configure MongoDb:ConnectionString.";
 
     private sealed class NoDatabaseHost(string environment, string provider = "") : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment(environment);
-            if (environment == "Development")
+            if (environment is "Development" or "Testing")
             {
                 foreach (var (key, value) in ChoDevelopmentAuth.Configuration("authorization-service"))
                     builder.UseSetting(key, value);
