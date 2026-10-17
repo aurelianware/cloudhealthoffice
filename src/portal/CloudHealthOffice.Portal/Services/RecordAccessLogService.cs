@@ -53,6 +53,10 @@ public sealed class RecordAccessEntry
         "AdjudicationDetail" => "Read adjudication detail",
         "Acknowledgment" => "Read 277CA",
         "Eob" => "Read EOB",
+        "BankAccount" => "Read bank details",
+        "Era" => "Downloaded the 835",
+        "Rates" => "Read contracted rates",
+        "Versions" => "Read record history",
         "Notes" or "Edits" or "Eligibility" or "Events" or "Coverage" or "Enrollment" or "Accumulators"
             or "Identifiers" or "Alerts" or "Family" or "Documents" or "Adjustments" => $"Read {Action.ToLowerInvariant()}",
         _ => Action,
@@ -77,6 +81,18 @@ public interface IRecordAccessLogService
     /// claims (claims-service), newest first. Needs <c>audit:read</c>.
     /// </summary>
     Task<RecordAccessLog> GetMemberAccessLogAsync(string memberId, int limit = 200);
+
+    /// <summary>
+    /// Who read this provider: the record (by id) and its bank details (logged
+    /// under the NPI), from provider-service.
+    /// </summary>
+    Task<RecordAccessLog> GetProviderAccessLogAsync(string providerId, string? npi, int limit = 200);
+
+    /// <summary>Who read this authorization (authorization-service).</summary>
+    Task<RecordAccessLog> GetAuthorizationAccessLogAsync(string authorizationId, int limit = 200);
+
+    /// <summary>Who read this payment and its 835 (payment-service).</summary>
+    Task<RecordAccessLog> GetPaymentAccessLogAsync(string paymentId, int limit = 200);
 }
 
 public sealed class RecordAccessLogService : IRecordAccessLogService
@@ -113,6 +129,37 @@ public sealed class RecordAccessLogService : IRecordAccessLogService
             .ToList();
         var unavailable = new[] { member.Result.Unavailable, claims.Result.Unavailable }.OfType<string>().ToList();
         return new RecordAccessLog(entries, unavailable);
+    }
+
+    public async Task<RecordAccessLog> GetProviderAccessLogAsync(string providerId, string? npi, int limit = 200)
+    {
+        var baseUrl = Base("ProviderService", "http://provider-service.cloudhealthoffice/api");
+        var parts = new List<Task<(List<RecordAccessEntry>? Entries, string? Unavailable)>>
+        {
+            Fetch<RecordAccessEntry>("Provider Service", $"{baseUrl}/providers/{E(providerId)}/access-log?limit={limit}"),
+        };
+        if (!string.IsNullOrWhiteSpace(npi) && npi != providerId)
+            parts.Add(Fetch<RecordAccessEntry>("Provider Service", $"{baseUrl}/providers/{E(npi)}/access-log?limit={limit}"));
+        return Merge(await Task.WhenAll(parts), limit);
+    }
+
+    public async Task<RecordAccessLog> GetAuthorizationAccessLogAsync(string authorizationId, int limit = 200) =>
+        Merge([await Fetch<RecordAccessEntry>("Authorization Service",
+            $"{Base("AuthorizationService", "http://authorization-service.cloudhealthoffice/api")}/authorizations/{E(authorizationId)}/access-log?limit={limit}")], limit);
+
+    public async Task<RecordAccessLog> GetPaymentAccessLogAsync(string paymentId, int limit = 200) =>
+        Merge([await Fetch<RecordAccessEntry>("Payment Service",
+            $"{Base("PaymentService", "http://payment-service.cloudhealthoffice/api")}/payments/{E(paymentId)}/access-log?limit={limit}")], limit);
+
+    private static RecordAccessLog Merge(IEnumerable<(List<RecordAccessEntry>? Entries, string? Unavailable)> parts, int limit)
+    {
+        var list = parts.ToList();
+        var entries = list.SelectMany(p => p.Entries ?? [])
+            .GroupBy(e => e.Id).Select(g => g.First())
+            .OrderByDescending(e => e.OccurredAt)
+            .Take(limit)
+            .ToList();
+        return new RecordAccessLog(entries, list.Select(p => p.Unavailable).OfType<string>().Distinct().ToList());
     }
 
     /// <summary>One service's part of a log; an outage or refusal names the service instead of failing the whole log.</summary>

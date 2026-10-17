@@ -1,6 +1,7 @@
 @namespace CloudHealthOffice.Portal.Shared.Records
 @using CloudHealthOffice.Portal.Services
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
+@inject IServiceProvider ServiceProvider
 
 @* The authorization record (docs/architecture/portal-navigation.md §4):
    status, member and provider in the header, tabs with their own URLs
@@ -263,6 +264,10 @@
                     </div>
                 </div>
             }
+            else if (ActiveTab == "access-log")
+            {
+                <RecordAccessLogTab Kind="Authorization" RecordId="@_authorization.Id" />
+            }
         }
         else
         {
@@ -281,13 +286,15 @@
     [Parameter, EditorRequired] public string BaseHref { get; set; } = string.Empty;
 
     // Fixed order (portal-navigation.md §8 decision 3). Decision & Letters,
-    // Related claims, Notes and Access log join when their data is wired.
+    // Related claims and Notes join when their data is wired. Access log is
+    // for audit:read holders only.
     private IReadOnlyList<RecordTab> AuthorizationTabs =>
     [
         new("overview", "Overview", Icons.Material.Filled.Info),
         new("services", "Services", Icons.Material.Filled.MedicalServices),
         new("review", "Review", Icons.Material.Filled.Assignment),
         new("documents", "Documents", Icons.Material.Filled.AttachFile, _authorization is { Attachments.Count: > 0 } a ? a.Attachments.Count : null),
+        new("access-log", "Access log", Icons.Material.Filled.Visibility, Visible: RecordAccessLogTab.CanRead(ServiceProvider)),
     ];
 
     private string ActiveTab => RecordTabs.Resolve(AuthorizationTabs, Tab, "overview");

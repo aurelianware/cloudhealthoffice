@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
@@ -267,6 +268,10 @@ builder.Services.AddChoHealthChecks(options =>
 
 builder.Services.AddChoObservability(builder.Configuration);
 
+// Who read which provider record and its bank details: GET api/providers/{id}/access-log
+// (bank-account reads are logged under the NPI).
+builder.Services.AddRecordAccessAudit();
+
 var app = builder.Build();
 
 app.UseChoObservability();
@@ -290,6 +295,8 @@ app.UseHttpsRedirection();
 app.UseChoAuthentication();
 
 app.MapControllers();
+app.MapRecordAccessLog("api/providers", "Provider");
+app.MapRecordAccessLog("api/v1/providers", "Provider");
 app.MapChoHealthChecks();
 
 app.Run();

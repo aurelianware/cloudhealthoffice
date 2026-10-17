@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
@@ -190,6 +191,9 @@ builder.Services.AddHostedService<AuthorizationService.Services.Retention.PriorA
 
 builder.Services.AddChoObservability(builder.Configuration);
 
+// Who read which authorization (HIPAA access accounting): GET api/authorizations/{id}/access-log.
+builder.Services.AddRecordAccessAudit();
+
 var app = builder.Build();
 
 app.UseChoObservability();
@@ -213,6 +217,7 @@ app.UseHttpsRedirection();
 app.UseChoAuthentication();
 
 app.MapControllers();
+app.MapRecordAccessLog("api/authorizations", "Authorization");
 app.MapChoHealthChecks();
 
 app.Run();

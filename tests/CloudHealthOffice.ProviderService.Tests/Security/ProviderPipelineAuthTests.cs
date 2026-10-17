@@ -28,6 +28,7 @@ public class ProviderPipelineAuthTests : IClassFixture<ProviderPipelineAuthTests
     public sealed class Factory : WebApplicationFactory<ProvidersController>
     {
         public Mock<IProviderRepository> Providers { get; } = new();
+        public CloudHealthOffice.Infrastructure.Audit.RecordAccessStoreInMemory AccessLog { get; } = new();
         public Mock<IProviderVersioningService> Versioning { get; } = new();
         public Mock<ICredentialingService> Credentialing { get; } = new();
         public Mock<IMpipRateService> Mpip { get; } = new();
@@ -45,6 +46,9 @@ public class ProviderPipelineAuthTests : IClassFixture<ProviderPipelineAuthTests
             builder.UseSetting("ProviderVerification:BaseUrl", "http://provider-verification-service");
             builder.ConfigureServices(services =>
             {
+                // The access log stays in memory (the fake Mongo host would make each audited read wait out the append timeout).
+                Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<CloudHealthOffice.Infrastructure.Audit.IRecordAccessStore>(services);
+                services.AddSingleton<CloudHealthOffice.Infrastructure.Audit.IRecordAccessStore>(AccessLog);
                 // Index initializers and the integrity worker would reach for Mongo.
                 foreach (var hosted in services
                              .Where(d => d.ServiceType == typeof(IHostedService)
