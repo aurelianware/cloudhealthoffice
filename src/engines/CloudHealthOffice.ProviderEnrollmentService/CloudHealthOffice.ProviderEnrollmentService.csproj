@@ -21,7 +21,6 @@
 
   <ItemGroup>
     <!-- Azure -->
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <!-- MongoDB -->
     <PackageReference Include="MongoDB.Driver" />
     <!-- HTTP resilience -->
