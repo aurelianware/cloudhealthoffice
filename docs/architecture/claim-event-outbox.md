@@ -32,7 +32,16 @@ accumulator-service never heard about that claim. Nothing repaired it.
    - it drains each claim and reschedules a failed event with exponential
      backoff, from 5 s up to 10 min;
    - it leaves a new event to its writer for 30 s;
-   - it logs an error while the oldest event is older than 15 min;
+   - it logs an error while the oldest event is older than 15 min. That age
+     query reads only claims with a pending event, through the sparse
+     multikey index `claim_event_outbox_created`
+     (`PendingClaimEvents.CreatedAtMs`; filter `$exists` on that path). On
+     MongoDB the index also gives the order, so the query reads one claim.
+     Azure DocumentDB does not push a sort down to an index (ADR 017,
+     Microsoft's limits page): it sorts the pending claims in memory. That
+     set is small unless Kafka has been down for a long time. This was
+     checked on MongoDB 7 (EphemeralMongo), not on a DocumentDB cluster;
+     DocumentDB lists multikey and sparse indexes and `$exists` as supported;
    - its metrics are `cho.claims.event_outbox.attempts.total` and
      `cho.claims.event_outbox.oldest_age`.
 4. **Order.** A claim's events are published oldest first. The first one Kafka
