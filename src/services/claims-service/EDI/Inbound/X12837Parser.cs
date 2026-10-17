@@ -467,7 +467,7 @@ public static class X12837Parser
         s.HlSinceClaim = false;
         s.ClaimPayerResponsibility = s.SubscriberPayerResponsibility;
         s.ClaimId = seg.Element(0) ?? string.Empty;
-        decimal.TryParse(seg.Element(1), out s.TotalCharge);
+        decimal.TryParse(seg.Element(1), NumberStyles.Number, CultureInfo.InvariantCulture, out s.TotalCharge);
         var clmComposite = seg.Element(4) is { } c4 ? X12Tokenizer.SplitComponents(c4, s.ComponentSep) : [];
         s.PlaceOfService = clmComposite.Length > 0 && clmComposite[0].Length > 0 ? clmComposite[0] : null;
         s.FrequencyCode = clmComposite.Length > 2 && clmComposite[2].Length > 0 ? clmComposite[2] : null;
@@ -673,7 +673,7 @@ public static class X12837Parser
     private static void Parse2400LineNumber(ParseState s, X12Segment seg)
     {
         FlushLine(s);
-        int.TryParse(seg.Element(0), out var lineNumber);
+        int.TryParse(seg.Element(0), NumberStyles.Integer, CultureInfo.InvariantCulture, out var lineNumber);
         s.CurrentLine = new ServiceLine { LineNumber = lineNumber, ProcedureCode = string.Empty, ServiceDate = string.Empty, Units = 1 };
     }
 
@@ -681,8 +681,8 @@ public static class X12837Parser
     {
         s.CurrentLine ??= new ServiceLine { LineNumber = s.ServiceLines.Count + 1, ProcedureCode = string.Empty, ServiceDate = string.Empty, Units = 1 };
         var procComposite = seg.Element(0) is { } c0 ? X12Tokenizer.SplitComponents(c0, s.ComponentSep) : [];
-        decimal.TryParse(seg.Element(1), out var chargeAmount);
-        decimal.TryParse(seg.Element(3), out var units);
+        decimal.TryParse(seg.Element(1), NumberStyles.Number, CultureInfo.InvariantCulture, out var chargeAmount);
+        decimal.TryParse(seg.Element(3), NumberStyles.Number, CultureInfo.InvariantCulture, out var units);
         // SV107 (diagnosis pointer composite) is index 6 in a
         // spec-correct SV1 with SV105 place-of-service present;
         // EncounterTransformer's simplified SV1 omits SV105/106
@@ -691,7 +691,7 @@ public static class X12837Parser
         var pointerRaw = seg.Element(6) ?? seg.Element(5);
         var pointers = pointerRaw is { } pr
             ? X12Tokenizer.SplitComponents(pr, s.ComponentSep)
-                .Select(p => int.TryParse(p, out var n) ? n : (int?)null)
+                .Select(p => int.TryParse(p, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : (int?)null)
                 .Where(n => n.HasValue)
                 .Select(n => n!.Value)
                 .ToList()
@@ -719,15 +719,15 @@ public static class X12837Parser
         // SV2*{revenueCode}*HC:{proc}{mods}*{charge}*UN*{units}
         s.CurrentLine ??= new ServiceLine { LineNumber = s.ServiceLines.Count + 1, ProcedureCode = string.Empty, ServiceDate = string.Empty, Units = 1 };
         var sv2Proc = seg.Element(1) is { } c1 ? X12Tokenizer.SplitComponents(c1, s.ComponentSep) : [];
-        decimal.TryParse(seg.Element(2), out var sv2Charge);
-        decimal.TryParse(seg.Element(4), out var sv2Units);
+        decimal.TryParse(seg.Element(2), NumberStyles.Number, CultureInfo.InvariantCulture, out var sv2Charge);
+        decimal.TryParse(seg.Element(4), NumberStyles.Number, CultureInfo.InvariantCulture, out var sv2Units);
         // Not present in every institutional file (this repo's
         // own FMMIS generator omits it), so no fallback chain
         // like SV1's — absent means absent.
         var sv2PointerRaw = seg.Element(6);
         var sv2Pointers = sv2PointerRaw is { } spr
             ? X12Tokenizer.SplitComponents(spr, s.ComponentSep)
-                .Select(p => int.TryParse(p, out var n) ? n : (int?)null)
+                .Select(p => int.TryParse(p, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : (int?)null)
                 .Where(n => n.HasValue)
                 .Select(n => n!.Value)
                 .ToList()
