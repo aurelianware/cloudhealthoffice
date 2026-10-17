@@ -1,5 +1,13 @@
 # 834 Enrollment Import Pipeline - Quick Deployment Checklist
 
+> **Storage has changed.** enrollment-import-service, member-service,
+> coverage-service and sponsor-service store their data in MongoDB only (Azure
+> Cosmos DB for MongoDB vCore when deployed) and refuse to start without
+> `MongoDb:ConnectionString`. The Cosmos DB for NoSQL containers, RU/s figures,
+> `az cosmosdb sql` commands and `CosmosDb` connection settings below describe the
+> original Cosmos SDK build and no longer apply; enrollment-import-service now
+> writes members, coverage and sponsors through those services' APIs.
+
 ## Pre-Deployment Checklist
 
 - [ ] **Cosmos DB Setup**

@@ -315,7 +315,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             }
 
             var raw = root.ToJsonString(RawSegmentJsonOptions);
-            // Cap raw snippet so we don't blow Cosmos's 2MB doc limit on huge dependents.
+            // Cap the raw snippet so huge dependents don't bloat the event document.
             return raw.Length > 8000 ? raw.Substring(0, 8000) : raw;
         }
         catch

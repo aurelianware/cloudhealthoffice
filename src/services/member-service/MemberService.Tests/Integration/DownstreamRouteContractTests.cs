@@ -44,18 +44,11 @@ public class DownstreamRouteContractTests
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
-            builder.ConfigureAppConfiguration((_, cfg) =>
-            {
-                cfg.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    // Enrollment-import requires a Mongo connection string. Fake host so
-                    // the MongoClient constructor succeeds; no I/O runs because
-                    // we replace the repositories below. Same pattern as
-                    // CoverageFactory above.
-                    ["MongoDb:ConnectionString"] = "mongodb://fake-contract-host:27017",
-                    ["MongoDb:DatabaseName"] = "contract"
-                });
-            });
+            // Enrollment-import requires a Mongo connection string: same
+            // host-setting pattern as CoverageFactory above; the repositories
+            // are replaced below.
+            builder.UseSetting("MongoDb:ConnectionString", "mongodb://fake-contract-host:27017");
+            builder.UseSetting("MongoDb:DatabaseName", "contract");
             builder.ConfigureServices(services =>
             {
                 // Coverage moved from a directly-owned Mongo repository
@@ -73,13 +66,17 @@ public class DownstreamRouteContractTests
                 services.AddSingleton<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentImportRunRepository>(
                     new Mock<EnrollmentSvc::EnrollmentImportService.Services.IEnrollmentImportRunRepository>().Object);
 
-                // Remove the Mongo index initializer that would try to connect to
-                // the fake MongoDB host at startup. Don't use RemoveAll<IHostedService>()
-                // — that would also remove the Kestrel host service and prevent the
-                // test server from starting. RemoveAll checks both ServiceType and
-                // ImplementationType so it catches the AddHostedService<T>
-                // registration (same pattern as MemberFhirSmokeTests.Factory).
-                RemoveAll<EnrollmentSvc::EnrollmentImportService.HostedServices.EnrollmentIndexInitializer>(services);
+                // Remove the app's hosted services: the Mongo index initializers
+                // (EnrollmentIndexInitializer and the shared X12 interchange
+                // store's) would wait out server selection against the fake host.
+                // Keep the framework's own (Microsoft.*), which start the test server.
+                foreach (var d in services.Where(d =>
+                             d.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)
+                             && d.ImplementationType?.Namespace?.StartsWith("Microsoft.", StringComparison.Ordinal) != true)
+                         .ToList())
+                {
+                    services.Remove(d);
+                }
             });
         }
 
