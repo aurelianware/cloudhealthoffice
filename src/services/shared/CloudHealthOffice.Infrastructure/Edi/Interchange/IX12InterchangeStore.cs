@@ -59,8 +59,8 @@ public static class X12ControlNumberRange
 }
 
 /// <summary>
-/// Process-local store: used when the service has no MongoDB (Cosmos-only
-/// deployments, tests). The duplicate window and the sequences only span this process.
+/// Process-local store: used when the service has no MongoDB (Development and
+/// test hosts). The duplicate window and the sequences only span this process.
 /// </summary>
 public sealed class InMemoryX12InterchangeStore : IX12InterchangeStore
 {

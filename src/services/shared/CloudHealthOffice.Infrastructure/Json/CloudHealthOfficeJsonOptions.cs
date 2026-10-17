@@ -54,7 +54,7 @@ public static class CloudHealthOfficeJsonOptions
 
     /// <summary>
     /// Default <see cref="JsonSerializerOptions"/> for non-MVC serialization paths —
-    /// Redis cache payloads, Service Bus envelopes, Cosmos document bodies that
+    /// Redis cache payloads, Service Bus envelopes, and other bodies that
     /// round-trip through the app. camelCase on the wire, omit-null-on-write
     /// (smaller payloads, cheaper Redis), and the same string-enum convention
     /// the MVC pipeline uses.

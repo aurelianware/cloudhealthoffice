@@ -5,14 +5,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <!--
-      This project does not use Microsoft.Azure.Cosmos (MongoDB is its only
-      store), but CloudHealthOffice.Infrastructure still references it
-      transitively, which is enough to trigger the SDK's build-time
-      Newtonsoft.Json check. Safe to suppress: this project never constructs
-      a CosmosClient.
-    -->
-    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
   <ItemGroup>
