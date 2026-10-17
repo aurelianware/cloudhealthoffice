@@ -26,7 +26,7 @@ contract existed, the data model existed, but
 resolver fell through to a tiny POS-code inference fallback. BP 5.6
 ships:
 
-1. A real Cosmos / Mongo storage backend implementing the read seam.
+1. A real Mongo storage backend implementing the read seam.
 2. An admin write API for authoring tenant-default and plan-specific
    override mappings.
 3. A curated CHO seed bundle with ~19 operator-friendly categories
@@ -81,15 +81,13 @@ mappings have `benefitPlanId = null`. The same collection hosts a
 `documentType="system-defaults-applied"` sibling document used by the
 seeder for per-tenant idempotency tracking.
 
-**Backend selection**: same `MongoDb:ConnectionString` switch used by
-`BenefitPlanRepository`. Cosmos uses partition key `tenantId`; Mongo
-uses an `_id` index. The same class implements the read, write, and
+**Backend**: MongoDB (`ChoServiceCategoryMappingRepositoryMongo`), the
+only benefit-plan store. The same class implements the read, write, and
 applied-record seams.
 
 **Container/collection name**: `ServiceCategoryMappings` by default;
-override with `CosmosDb:ServiceCategoryMappingsContainerName`. The
-config key intentionally mirrors Cosmos for both backends so a tenant
-migrating between Cosmos and Mongo sees identical config keys.
+override with `CosmosDb:ServiceCategoryMappingsContainerName` (the key
+keeps its historical `CosmosDb:` prefix).
 
 ## Caching
 
@@ -102,7 +100,7 @@ on the TTL window rather than a distributed invalidation channel.
 
 The cache layer is cleanly separated from the storage backend so the
 backend can be tested in isolation and the cache decorator can be unit-
-tested without spinning up a real Cosmos / Mongo client.
+tested without spinning up a real Mongo client.
 
 ## Admin write API
 
@@ -259,7 +257,7 @@ wide audit-pattern initiative.
 
 | Concern | Where to look |
 |---|---|
-| Cosmos / Mongo selection | `Program.cs` — same `MongoDb:ConnectionString` switch as `BenefitPlanRepository` |
+| Store | `Program.cs` — MongoDB, required (`MongoDb:ConnectionString`) |
 | Cache TTL | `ServiceCategoryMapping:CacheTtl` (default 5 min) |
 | Admin gate | `ServiceCategoryMapping:AdminWriteEnabled` (default false) |
 | Seed bundle | `schemas/service-category-mappings/system-defaults.json` (copied to ContentRoot at build time) |

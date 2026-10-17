@@ -9,8 +9,8 @@ using MongoDB.Driver;
 namespace BenefitPlanService.Repositories;
 
 /// <summary>
-/// MongoDB-backed equivalent of <see cref="ChoServiceCategoryMappingRepository"/>
-/// (capability BP 5.6 — Service Category Mapping).
+/// MongoDB-backed storage for service-category mappings (capability BP 5.6 —
+/// Service Category Mapping).
 ///
 /// <para>
 /// Implements the same three seams (read, write, applied-record) against an
@@ -28,6 +28,9 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
     IServiceCategoryMappingWriteRepository,
     ISystemDefaultsAppliedRecordRepository
 {
+    /// <summary>Collection name when <c>CosmosDb:ServiceCategoryMappingsContainerName</c> is unset.</summary>
+    public const string DefaultContainerName = "ServiceCategoryMappings";
+
     public const string DocumentTypeMapping = "mapping";
     public const string DocumentTypeSystemDefaultsApplied = "system-defaults-applied";
 
@@ -40,10 +43,9 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
         IConfiguration configuration,
         ILogger<ChoServiceCategoryMappingRepositoryMongo> logger)
     {
-        // Container-name config key intentionally mirrors Cosmos so a tenant
-        // migrating between backends sees identical config keys.
+        // The collection-name key keeps its historical CosmosDb: prefix.
         var collectionName = configuration["CosmosDb:ServiceCategoryMappingsContainerName"]
-            ?? ChoServiceCategoryMappingRepository.DefaultContainerName;
+            ?? DefaultContainerName;
         _mappings = database.GetCollection<MappingDocument>(collectionName);
         _appliedRecords = database.GetCollection<AppliedRecordDocument>(collectionName);
         _logger = logger;
@@ -129,7 +131,7 @@ public sealed class ChoServiceCategoryMappingRepositoryMongo :
             b.Eq(x => x.DocumentType, DocumentTypeMapping),
             planFilter);
 
-        // Newest-first ordering matches the Cosmos backend so the resolver's
+        // Newest-first ordering, so the resolver's
         // first-match-wins iteration prefers freshly seeded rows over older
         // rows for the same serviceTypeCode after a seeder version-bump.
         var docs = await _mappings.Find(filter)

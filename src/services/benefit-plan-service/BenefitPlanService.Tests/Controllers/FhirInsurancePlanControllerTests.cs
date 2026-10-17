@@ -17,8 +17,7 @@ namespace BenefitPlanService.Tests.Controllers;
 /// parameter semantics, tenant scoping, FHIR OperationOutcome on errors.
 /// Mirrors the shape of <c>FhirPractitionerControllerTests</c> in
 /// provider-service. Uses an in-memory repository fake so the
-/// controller can exercise the full read / search path without Cosmos
-/// or Mongo.
+/// controller can exercise the full read / search path without Mongo.
 /// </summary>
 public sealed class FhirInsurancePlanControllerTests
 {

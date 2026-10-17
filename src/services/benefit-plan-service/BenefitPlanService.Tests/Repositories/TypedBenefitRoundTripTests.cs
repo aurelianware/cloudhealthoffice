@@ -10,7 +10,7 @@ namespace BenefitPlanService.Tests.Repositories;
 /// End-to-end round-trip of typed benefits through the repository contract
 /// and the version-chain lifecycle, exercised via
 /// <see cref="InMemoryBenefitPlanRepository"/>. The fake clones via the
-/// same System.Text.Json Web options that real Cosmos / Mongo wire formats
+/// same System.Text.Json Web options that the real wire formats
 /// will go through, so the discriminator and every type-specific facet
 /// must survive store-and-fetch and the <c>amend → publish v2</c> path.
 /// </summary>

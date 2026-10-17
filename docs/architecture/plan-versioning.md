@@ -23,8 +23,8 @@ creation time) and a 1-based `VersionNumber` monotonic within the
 
 ```
 BenefitPlan
-├── Id                       Cosmos document id (used by point-reads)
-├── TenantId                 partition key — multi-tenant isolation
+├── Id                       document id (used by point-reads)
+├── TenantId                 tenant scope — multi-tenant isolation
 ├── PlanId                   chain key
 ├── VersionId                ULID — stable per-version identifier
 ├── VersionNumber            1-based monotonic
@@ -103,12 +103,10 @@ one shot for clients that don't need an explicit draft → publish flow.
 ## Atomicity
 
 `PublishAndSupersedeAsync` flips the draft to Published and the
-predecessor (if any) to Superseded in a single transaction:
-
-- **Cosmos** — transactional batch on the `(TenantId)` partition key.
-- **Mongo** — session transaction (requires a replica set). On
-  single-node deployments we fall back to sequential writes and emit a
-  warning log so ops can spot the split-state risk.
+predecessor (if any) to Superseded in a single transaction: a Mongo
+session transaction (requires a replica set). On single-node deployments
+we fall back to sequential writes and emit a warning log so ops can spot
+the split-state risk.
 
 Repositories perform the writes; the service layer is responsible for
 applying the new states and timestamps before calling.
@@ -129,8 +127,7 @@ string).
 Bus fan-out (claims-service, eligibility-service notifications) is
 intentionally not wired in this PR — `IPlanVersionEventPublisher` is
 positioned for a decorator that adds bus publishing without touching
-call sites. Cosmos-only deployments without the events stream
-provisioned register a no-op publisher that warns on emit.
+call sites.
 
 ## Audit log
 
@@ -203,9 +200,8 @@ provided.
 
 `UpdateNetworkTiersAsync` resolves the head Published row by chain
 key, then patches the entire `NetworkTiers` collection with a single
-field-scoped op (Cosmos `PatchItemAsync` `Set("/networkTiers", tiers)`;
-Mongo `FindOneAndUpdateAsync` with sort-by-`VersionNumber` and `$set`,
-patching the head row in one round trip). No `PlanVersionEvent` is
+field-scoped op (Mongo `FindOneAndUpdateAsync` with sort-by-`VersionNumber`
+and `$set`, patching the head row in one round trip). No `PlanVersionEvent` is
 emitted — the operation is a projection-metadata refresh, not a chain
 transition.
 
@@ -237,9 +233,8 @@ Future capabilities that want this exemption should:
    `Update<Field>ProjectionAsync` (or `Update<Field>Async` when the
    semantics are richer than a projection refresh — see
    `UpdateNetworkTiersAsync`).
-3. Implement Cosmos and Mongo variants symmetrically. The Mongo
-   variant uses `UpdateOneAsync` with `$set`; the Cosmos variant uses
-   `PatchItemAsync` with field-scoped `Set` ops.
+3. Implement it on the Mongo repository with `UpdateOneAsync` and a
+   field-scoped `$set`.
 4. Add a row to the table above so the exemption stays auditable.
 5. Cover both lanes in tests: the bypass succeeds against Published,
    and the corresponding `UpdateAsync` against the same row still
