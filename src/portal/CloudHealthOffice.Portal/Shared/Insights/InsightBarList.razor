@@ -1,0 +1,52 @@
+@namespace CloudHealthOffice.Portal.Shared.Insights
+@* A ranked list of counts as thin horizontal bars in one hue. Each row's
+   number is a link to the claims it counts; the row reads as a table, so
+   nothing depends on the bar alone. *@
+@if (Rows.Count == 0)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" data-testid="@($"{TestId}-empty")">@EmptyText</MudText>
+}
+else
+{
+    var max = Math.Max(1, Rows.Max(r => r.Count));
+    <div class="insight-bars" role="table" aria-label="@AriaLabel" data-testid="@TestId">
+        @foreach (var row in Rows)
+        {
+            <div class="insight-bar-row" role="row" data-testid="@($"{TestId}-row")" title="@row.Title">
+                <div class="insight-bar-label" role="rowheader">
+                    <span>@row.Label</span>
+                    @if (!string.IsNullOrWhiteSpace(row.Sub))
+                    {
+                        <span class="insight-bar-sub">@row.Sub</span>
+                    }
+                </div>
+                <div class="insight-bar-track" role="presentation">
+                    <div class="insight-bar-fill" style="width: @(row.Count == 0 ? 0 : Math.Max(2, row.Count * 100.0 / max).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></div>
+                </div>
+                <div class="insight-bar-value" role="cell">
+                    @if (row.Href is { } href && row.Count > 0)
+                    {
+                        <a href="@href" data-testid="@($"{TestId}-link")">@row.Count.ToString("N0")</a>
+                    }
+                    else
+                    {
+                        <span>@row.Count.ToString("N0")</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(row.Extra))
+                    {
+                        <span class="insight-bar-sub">@row.Extra</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    public sealed record Row(string Label, int Count, string? Href = null, string? Sub = null, string? Extra = null, string? Title = null);
+
+    [Parameter, EditorRequired] public IReadOnlyList<Row> Rows { get; set; } = [];
+    [Parameter, EditorRequired] public string TestId { get; set; } = string.Empty;
+    [Parameter] public string EmptyText { get; set; } = "None.";
+    [Parameter] public string? AriaLabel { get; set; }
+}

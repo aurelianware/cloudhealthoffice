@@ -180,40 +180,9 @@ public class ClaimRepositoryMongo : IClaimRepository
         return (docs.Select(Hydrate).ToList(), totalCount);
     }
 
-    public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByReferenceAsync(
-        string? claimNumber,
-        string? authorizationNumber,
-        string? memberId,
-        string? providerNPI,
-        DateTime? serviceDateFrom,
-        DateTime? serviceDateTo,
-        ClaimStatus? status,
-        int page,
-        int pageSize)
+    public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByCriteriaAsync(ClaimCriteria criteria, int page, int pageSize)
     {
-        var builder = Builders<Claim>.Filter;
-        var filter = builder.Eq(c => c.TenantId, GetTenantId());
-
-        if (!string.IsNullOrWhiteSpace(claimNumber))
-            filter &= builder.Eq(c => c.ClaimNumber, claimNumber.Trim());
-        if (!string.IsNullOrWhiteSpace(authorizationNumber))
-        {
-            var auth = authorizationNumber.Trim();
-            filter &= builder.Or(
-                builder.Eq(c => c.PriorAuthorizationNumber, auth),
-                builder.ElemMatch(c => c.ClaimLines, Builders<ClaimLine>.Filter.Eq(l => l.PriorAuthorizationNumber, auth)));
-        }
-        if (!string.IsNullOrEmpty(memberId))
-            filter &= builder.Eq(c => c.MemberId, memberId);
-        if (!string.IsNullOrEmpty(providerNPI))
-            filter &= builder.Or(builder.Eq(c => c.BillingProviderNPI, providerNPI), builder.Eq(c => c.RenderingProviderNPI, providerNPI));
-        if (serviceDateFrom.HasValue)
-            filter &= builder.Gte(c => c.ServiceDateFrom, serviceDateFrom.Value);
-        if (serviceDateTo.HasValue)
-            filter &= builder.Lte(c => c.ServiceDateTo, serviceDateTo.Value);
-        if (status.HasValue)
-            filter &= builder.Eq(c => c.Status, status.Value);
-
+        var filter = ClaimCriteriaFilter.Build(GetTenantId(), criteria);
         var safePage = Math.Max(page, 1);
         var safePageSize = Math.Clamp(pageSize, 1, 1000);
         var totalCount = (int)await _collection.CountDocumentsAsync(filter);
@@ -224,6 +193,136 @@ public class ClaimRepositoryMongo : IClaimRepository
             .ToListAsync();
 
         return (docs.Select(Hydrate).ToList(), totalCount);
+    }
+
+    public async Task<ClaimInsights> GetInsightsAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness, DateTime asOf, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        FilterDefinition<Claim> Where(ClaimCriteria c) => ClaimCriteriaFilter.Build(tenantId, c);
+
+        // ── Open inventory, by status ──
+        var open = Where(new ClaimCriteria { Open = true, LineOfBusiness = lineOfBusiness });
+        var byStatus = await _collection.Aggregate().Match(open)
+            .Group(c => c.Status, g => new { Status = g.Key, Count = g.Count(), Charge = g.Sum(x => x.TotalChargeAmount) })
+            .ToListAsync(ct);
+
+        // ── Open inventory, by full days since receipt ──
+        var aging = new List<ClaimAgingBucket>();
+        foreach (var (min, max) in ClaimCriteriaFilter.AgingBuckets)
+        {
+            var after = max is { } m ? asOf.AddDays(-(m + 1)) : (DateTime?)null;
+            var onOrBefore = min == 0 ? (DateTime?)null : asOf.AddDays(-min);
+            var bucket = Where(new ClaimCriteria
+            {
+                Open = true, LineOfBusiness = lineOfBusiness, ReceivedAfter = after, ReceivedOnOrBefore = onOrBefore,
+            });
+            var totals = await _collection.Aggregate().Match(bucket)
+                .Group(_ => 1, g => new { Count = g.Count(), Charge = g.Sum(x => x.TotalChargeAmount) })
+                .FirstOrDefaultAsync(ct);
+            aging.Add(new ClaimAgingBucket
+            {
+                Label = max is null ? $"{min}+ days" : $"{min}–{max} days",
+                MinDays = min, MaxDays = max,
+                Count = totals?.Count ?? 0, Charge = totals?.Charge ?? 0m,
+                ReceivedAfter = after, ReceivedOnOrBefore = onOrBefore,
+            });
+        }
+
+        // ── Pended now, by pend code ──
+        var pended = Where(new ClaimCriteria { Status = ClaimStatus.Pended, LineOfBusiness = lineOfBusiness });
+        var pendDocs = await _collection.Find(pended)
+            .Project(c => new { Code = c.PendDetails == null ? null : c.PendDetails.PendCode, At = c.PendDetails == null ? (DateTime?)null : c.PendDetails.PendedAt })
+            .ToListAsync(ct);
+        var pendReasons = pendDocs
+            .GroupBy(p => string.IsNullOrWhiteSpace(p.Code) ? ClaimCriteria.UnspecifiedPendCode : p.Code!)
+            .Select(g => new ClaimPendReasonInsight { PendCode = g.Key, Count = g.Count(), OldestPendedAt = g.Min(p => p.At) })
+            .OrderByDescending(r => r.Count).ThenBy(r => r.PendCode)
+            .ToList();
+
+        // ── Adjudicated in the period ──
+        var adjudicated = new ClaimCriteria { Adjudicated = true, LineOfBusiness = lineOfBusiness, AdjudicatedFrom = from, AdjudicatedBefore = to };
+        var outcomeRows = await _collection.Aggregate().Match(Where(adjudicated))
+            .Group(c => c.Status, g => new
+            {
+                Status = g.Key, Count = g.Count(), Charge = g.Sum(x => x.TotalChargeAmount),
+                Paid = g.Sum(x => x.AdjudicationResult == null ? 0m : x.AdjudicationResult.PayerPayment),
+            })
+            .ToListAsync(ct);
+        var adjudicatedCount = outcomeRows.Sum(r => r.Count);
+        var autoCount = (int)await _collection.CountDocumentsAsync(Where(new ClaimCriteria
+        {
+            Adjudicated = true, LineOfBusiness = lineOfBusiness, AdjudicatedFrom = from, AdjudicatedBefore = to, AutoAdjudicated = true,
+        }), cancellationToken: ct);
+
+        // ── Denied in the period, by claim-level reason ──
+        var deniedDocs = await _collection.Find(Where(new ClaimCriteria
+            {
+                Adjudicated = true, LineOfBusiness = lineOfBusiness, AdjudicatedFrom = from, AdjudicatedBefore = to,
+            }) & Builders<Claim>.Filter.In(c => c.Status, ClaimStatusSets.Denied))
+            .Project(c => new
+            {
+                Code = c.AdjudicationResult == null ? null : c.AdjudicationResult.DenialReasonCode,
+                Reason = c.AdjudicationResult == null ? null : c.AdjudicationResult.DenialReason,
+            })
+            .ToListAsync(ct);
+        var denialReasons = deniedDocs
+            .GroupBy(d => string.IsNullOrWhiteSpace(d.Code) ? ClaimCriteria.UnspecifiedDenialCode : d.Code!.Trim())
+            .Select(g => new ClaimDenialReasonInsight
+            {
+                Code = g.Key, Count = g.Count(),
+                Description = g.Select(d => d.Reason).FirstOrDefault(r => !string.IsNullOrWhiteSpace(r)),
+            })
+            .OrderByDescending(r => r.Count).ThenBy(r => r.Code)
+            .Take(10)
+            .ToList();
+
+        // ── Receipt to adjudication ──
+        var spans = await _collection.Find(Where(adjudicated))
+            .Project(c => new { c.SubmittedDate, c.AdjudicatedDate })
+            .Limit(ClaimTurnaroundInsight.SampleLimit)
+            .ToListAsync(ct);
+        var days = spans.Where(s => s.AdjudicatedDate.HasValue && s.AdjudicatedDate.Value >= s.SubmittedDate)
+            .Select(s => (decimal)(s.AdjudicatedDate!.Value - s.SubmittedDate).TotalDays)
+            .OrderBy(d => d)
+            .ToList();
+
+        return new ClaimInsights
+        {
+            AsOf = asOf, From = from, To = to, LineOfBusiness = lineOfBusiness,
+            Inventory = new ClaimInventoryInsight
+            {
+                Total = byStatus.Sum(r => r.Count),
+                TotalCharge = byStatus.Sum(r => r.Charge),
+                ByStatus = byStatus.OrderBy(r => r.Status).Select(r => new ClaimStatusCount { Status = r.Status, Count = r.Count, Charge = r.Charge }).ToList(),
+                Aging = aging,
+            },
+            PendReasons = pendReasons,
+            Outcomes = new ClaimOutcomeInsight
+            {
+                Adjudicated = adjudicatedCount,
+                AutoAdjudicated = autoCount,
+                AutoAdjudicationRate = adjudicatedCount == 0 ? null : Math.Round((decimal)autoCount / adjudicatedCount, 4),
+                ByStatus = outcomeRows.OrderBy(r => r.Status).Select(r => new ClaimStatusCount { Status = r.Status, Count = r.Count, Charge = r.Charge }).ToList(),
+                TotalCharge = outcomeRows.Sum(r => r.Charge),
+                TotalPaid = outcomeRows.Sum(r => r.Paid),
+            },
+            DenialReasons = denialReasons,
+            Turnaround = new ClaimTurnaroundInsight
+            {
+                Count = days.Count,
+                AverageDays = days.Count == 0 ? null : Math.Round(days.Average(), 1),
+                MedianDays = days.Count == 0 ? null : Math.Round(Percentile(days, 0.5m), 1),
+                P90Days = days.Count == 0 ? null : Math.Round(Percentile(days, 0.9m), 1),
+                Sampled = spans.Count >= ClaimTurnaroundInsight.SampleLimit,
+            },
+        };
+    }
+
+    // Nearest-rank percentile of an ascending list.
+    private static decimal Percentile(IReadOnlyList<decimal> ascending, decimal p)
+    {
+        var rank = (int)Math.Ceiling(p * ascending.Count);
+        return ascending[Math.Clamp(rank - 1, 0, ascending.Count - 1)];
     }
 
     public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(

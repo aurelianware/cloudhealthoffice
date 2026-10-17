@@ -1,0 +1,11 @@
+.insight-bars { display: flex; flex-direction: column; gap: 10px; }
+.insight-bar-row { display: grid; grid-template-columns: minmax(120px, 38%) 1fr auto; align-items: center; gap: 12px; }
+.insight-bar-label { display: flex; flex-direction: column; min-width: 0; font-size: 0.875rem; color: var(--mud-palette-text-primary); }
+.insight-bar-label > span:first-child { overflow-wrap: anywhere; }
+.insight-bar-sub { font-size: 0.75rem; font-weight: 400; color: var(--mud-palette-text-secondary); }
+.insight-bar-track { height: 8px; border-radius: 4px; background: var(--mud-palette-lines-default); overflow: hidden; }
+.insight-bar-fill { height: 100%; border-radius: 0 4px 4px 0; background: var(--mud-palette-primary); }
+.insight-bar-value { display: flex; flex-direction: column; align-items: flex-end; min-width: 64px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.insight-bar-value a { color: var(--mud-palette-text-primary); text-decoration: underline; text-underline-offset: 2px; }
+.insight-bar-value a:hover, .insight-bar-value a:focus-visible { color: var(--mud-palette-primary); }
+@media (max-width: 600px) { .insight-bar-row { grid-template-columns: 1fr auto; } .insight-bar-track { grid-column: 1 / -1; order: 3; } }
