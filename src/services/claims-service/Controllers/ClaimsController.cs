@@ -627,24 +627,36 @@ public class ClaimsController : ControllerBase
             return Ok(new { claims = runPage, totalCount = runTotalCount, pageNumber = body.PageNumber, pageSize = body.PageSize });
         }
 
-        // A claim number or authorization number narrows the search to the
-        // claims that carry it; until this branch existed both were silently
-        // ignored and the search returned unrelated claims.
-        if (!string.IsNullOrWhiteSpace(body.ClaimNumber) || !string.IsNullOrWhiteSpace(body.AuthorizationNumber))
+        // Claim number, authorization number and the Claims Insights
+        // drill-down filters go through ClaimCriteria, the same definition
+        // the Insights figures are counted with. (Before it existed the
+        // claim and auth number were silently ignored.)
+        if (body.UsesCriteria)
         {
-            var (byReference, referenceCount) = await _claimRepository.SearchByReferenceAsync(
-                body.ClaimNumber,
-                body.AuthorizationNumber,
-                body.MemberId,
-                body.ProviderId,
-                body.ServiceDateFrom,
-                body.ServiceDateTo,
-                status,
-                body.PageNumber,
-                body.PageSize);
+            var criteria = new ClaimCriteria
+            {
+                ClaimNumber = body.ClaimNumber,
+                AuthorizationNumber = body.AuthorizationNumber,
+                MemberId = body.MemberId,
+                ProviderNpi = body.ProviderId,
+                ServiceDateFrom = body.ServiceDateFrom,
+                ServiceDateTo = body.ServiceDateTo,
+                Status = status,
+                Open = body.Open == true,
+                Adjudicated = body.Adjudicated == true,
+                ReceivedAfter = body.ReceivedAfter,
+                ReceivedOnOrBefore = body.ReceivedOnOrBefore,
+                AdjudicatedFrom = body.AdjudicatedFrom,
+                AdjudicatedBefore = body.AdjudicatedBefore,
+                PendCode = body.PendCode,
+                DenialReasonCode = body.DenialReasonCode,
+                AutoAdjudicated = body.AutoAdjudicated,
+                LineOfBusiness = body.LineOfBusiness,
+            };
+            var (matched, matchedCount) = await _claimRepository.SearchByCriteriaAsync(criteria, body.PageNumber, body.PageSize);
 
-            await _diagnosisMetadataEnricher.EnrichAsync(byReference, ct);
-            return Ok(new { claims = byReference, totalCount = referenceCount, pageNumber = body.PageNumber, pageSize = body.PageSize });
+            await _diagnosisMetadataEnricher.EnrichAsync(matched, ct);
+            return Ok(new { claims = matched, totalCount = matchedCount, pageNumber = body.PageNumber, pageSize = body.PageSize });
         }
 
         var (claims, totalCount) = await _claimRepository.SearchWithCountAsync(
@@ -1245,6 +1257,34 @@ public class ClaimsController : ControllerBase
     private string? TryGetCorrelationId() =>
         HttpContext?.Request?.Headers["X-Correlation-Id"].FirstOrDefault()
         ?? Activity.Current?.Id;
+
+    /// <summary>
+    /// Claims Insights (portal-navigation.md §5.1): open inventory and aging
+    /// now, pend reasons now, and outcomes, auto-adjudication rate, denial
+    /// reasons and receipt-to-adjudication turnaround for claims adjudicated
+    /// in [from, to). Aggregates only: no member or claim detail. Each figure
+    /// counts <see cref="ClaimCriteria"/> matches, which the claims search
+    /// accepts as its drill-down.
+    /// </summary>
+    [HttpGet("insights")]
+    [ProducesResponseType(typeof(ClaimInsights), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ClaimInsights>> GetClaimInsights(
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] LineOfBusiness? lineOfBusiness = null,
+        CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var toDate = (to ?? now).ToUniversalTime();
+        var fromDate = (from ?? toDate.AddDays(-30)).ToUniversalTime();
+        if (fromDate >= toDate)
+            return BadRequest("from must be before to.");
+        if (toDate - fromDate > TimeSpan.FromDays(366))
+            return BadRequest("The period can be at most a year.");
+
+        return Ok(await _claimRepository.GetInsightsAsync(fromDate, toDate, lineOfBusiness, now, ct));
+    }
 
     /// <summary>
     /// Get claims summary statistics

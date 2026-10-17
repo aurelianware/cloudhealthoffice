@@ -235,6 +235,23 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<ClaimInsightsView> GetClaimInsightsAsync(DateTime from, DateTime to, string? lineOfBusiness = null)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        var query = $"from={Uri.EscapeDataString(from.ToUniversalTime().ToString("o"))}&to={Uri.EscapeDataString(to.ToUniversalTime().ToString("o"))}"
+                    + (string.IsNullOrWhiteSpace(lineOfBusiness) ? "" : $"&lineOfBusiness={Uri.EscapeDataString(lineOfBusiness)}");
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ClaimInsightsView>($"{baseUrl}/claims/insights?{query}", JsonOptions)
+                   ?? new ClaimInsightsView();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
     public async Task<ClaimSearchResult> SearchClaimsAsync(ClaimSearchRequest request)
     {
         var baseUrl = _configuration["Services:ClaimsService"];

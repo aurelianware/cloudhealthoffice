@@ -172,6 +172,27 @@ public class ClaimSearchBody
     public DateTime? ServiceDateTo { get; set; }
     public string? Status { get; set; }
     public string? AuthorizationNumber { get; set; }
+
+    // ── Claims Insights drill-down (see ClaimCriteria) ──
+    public bool? Open { get; set; }
+    public bool? Adjudicated { get; set; }
+    public DateTime? ReceivedAfter { get; set; }
+    public DateTime? ReceivedOnOrBefore { get; set; }
+    public DateTime? AdjudicatedFrom { get; set; }
+    public DateTime? AdjudicatedBefore { get; set; }
+    public string? PendCode { get; set; }
+    public string? DenialReasonCode { get; set; }
+    public bool? AutoAdjudicated { get; set; }
+    public LineOfBusiness? LineOfBusiness { get; set; }
+
+    /// <summary>True when a filter only the criteria search applies is set.</summary>
+    public bool UsesCriteria =>
+        !string.IsNullOrWhiteSpace(ClaimNumber) || !string.IsNullOrWhiteSpace(AuthorizationNumber)
+        || Open == true || Adjudicated == true || ReceivedAfter.HasValue || ReceivedOnOrBefore.HasValue
+        || AdjudicatedFrom.HasValue || AdjudicatedBefore.HasValue
+        || !string.IsNullOrWhiteSpace(PendCode) || !string.IsNullOrWhiteSpace(DenialReasonCode)
+        || AutoAdjudicated.HasValue || LineOfBusiness.HasValue;
+
     public int PageNumber { get; set; } = 1;
     public int PageSize { get; set; } = 25;
     public string? SortBy { get; set; }

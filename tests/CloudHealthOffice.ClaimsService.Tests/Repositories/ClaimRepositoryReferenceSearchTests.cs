@@ -66,7 +66,7 @@ public class ClaimRepositoryReferenceSearchTests : IAsyncLifetime
     [Fact]
     public async Task An_authorization_number_finds_claims_carrying_it_on_the_header_or_a_line()
     {
-        var (page, total) = await Repo(Tenant).SearchByReferenceAsync(null, " PA-1 ", null, null, null, null, null, 1, 25);
+        var (page, total) = await Repo(Tenant).SearchByCriteriaAsync(new ClaimCriteria { AuthorizationNumber = " PA-1 " }, 1, 25);
 
         page.Select(c => c.Id).Should().BeEquivalentTo(["c-header", "c-line"]);
         total.Should().Be(2);
@@ -75,7 +75,7 @@ public class ClaimRepositoryReferenceSearchTests : IAsyncLifetime
     [Fact]
     public async Task A_claim_number_finds_only_that_claim()
     {
-        var (page, total) = await Repo(Tenant).SearchByReferenceAsync("CN-c-other", null, null, null, null, null, null, 1, 25);
+        var (page, total) = await Repo(Tenant).SearchByCriteriaAsync(new ClaimCriteria { ClaimNumber = "CN-c-other" }, 1, 25);
 
         page.Should().ContainSingle().Which.Id.Should().Be("c-other");
         total.Should().Be(1);
@@ -84,7 +84,7 @@ public class ClaimRepositoryReferenceSearchTests : IAsyncLifetime
     [Fact]
     public async Task Other_filters_still_narrow_the_result()
     {
-        var (page, _) = await Repo(Tenant).SearchByReferenceAsync(null, "PA-1", "M-nobody", null, null, null, null, 1, 25);
+        var (page, _) = await Repo(Tenant).SearchByCriteriaAsync(new ClaimCriteria { AuthorizationNumber = "PA-1", MemberId = "M-nobody" }, 1, 25);
 
         page.Should().BeEmpty();
     }

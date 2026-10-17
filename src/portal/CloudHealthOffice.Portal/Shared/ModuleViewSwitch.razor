@@ -1,0 +1,16 @@
+@* A module's two views, List and Insights (portal-navigation.md §5), as real
+   links so either can open in a new browser tab. *@
+<MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" data-testid="module-view-switch">
+    <MudButton Href="@ListHref" Variant="@(Active == "list" ? Variant.Filled : Variant.Outlined)" StartIcon="@Icons.Material.Filled.List"
+               data-testid="module-view-list" aria-current="@(Active == "list" ? "page" : null)">List</MudButton>
+    <MudButton Href="@InsightsHref" Variant="@(Active == "insights" ? Variant.Filled : Variant.Outlined)" StartIcon="@Icons.Material.Filled.Insights"
+               data-testid="module-view-insights" aria-current="@(Active == "insights" ? "page" : null)">Insights</MudButton>
+</MudButtonGroup>
+
+@code {
+    [Parameter, EditorRequired] public string ListHref { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string InsightsHref { get; set; } = string.Empty;
+
+    /// <summary>"list" or "insights".</summary>
+    [Parameter, EditorRequired] public string Active { get; set; } = "list";
+}
