@@ -120,6 +120,20 @@ public class PaymentsController : ControllerBase
     /// <summary>
     /// Get payments for a specific claim
     /// </summary>
+    /// <summary>
+    /// A payee's payments by NPI, newest first (provider record Payments tab).
+    /// </summary>
+    [AuditRecordAccess("Payment", RecordAccessActions.List)]
+    [HttpGet("payee/{npi}")]
+    [ProducesResponseType(typeof(IEnumerable<Payment>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IEnumerable<Payment>>> GetPaymentsByPayee(string npi, [FromQuery] int limit = 100)
+    {
+        if (npi.Length != 10 || !npi.All(char.IsDigit))
+            return BadRequest("An NPI is 10 digits.");
+        return Ok(await _paymentRepository.GetByPayeeNpiAsync(npi, limit));
+    }
+
     [AuditRecordAccess("Payment", RecordAccessActions.List)]
     [HttpGet("claim/{claimId}")]
     [ProducesResponseType(typeof(IEnumerable<Payment>), StatusCodes.Status200OK)]

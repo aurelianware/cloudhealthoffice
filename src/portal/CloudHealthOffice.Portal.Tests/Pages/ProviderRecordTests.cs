@@ -51,7 +51,7 @@ public class ProviderRecordTests : TestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("Lakeside Orthopedics"));
         cut.FindAll("[data-testid^=record-tab-]").Select(t => t.GetAttribute("href")).Should().Equal(
             "/providers/P1/overview", "/providers/P1/locations", "/providers/P1/networks", "/providers/P1/credentials",
-            "/providers/P1/contract", "/providers/P1/claims", "/providers/P1/performance", "/providers/P1/access-log");
+            "/providers/P1/contract", "/providers/P1/claims", "/providers/P1/payments", "/providers/P1/performance", "/providers/P1/access-log");
         cut.FindAll("[data-testid=provider-tab-overview]").Should().ContainSingle();
         cut.Find("[data-testid=provider-edit]");
     }
@@ -122,5 +122,35 @@ public class ProviderRecordTests : TestContext
         var cut = RenderComponent<ProviderByNpi>(p => p.Add(x => x.Npi, "9999999999"));
 
         cut.Find("[data-testid=provider-npi-missing]").TextContent.Should().Contain("9999999999");
+    }
+
+    [Fact]
+    public void Payments_list_the_providers_checks_and_efts_by_npi_and_link_to_each()
+    {
+        var payments = new Mock<IPaymentService>();
+        payments.Setup(p => p.GetPaymentsForPayeeAsync("1234567893", It.IsAny<int>())).ReturnsAsync(new List<PaymentView>
+        {
+            new() { Id = "pay-2", CheckNumber = "EFT0002", PaymentMethod = "ACH", TotalPaymentAmount = 500m, PaymentDate = new DateTime(2026, 10, 9), Status = "Posted" },
+            new() { Id = "pay-1", CheckNumber = "100231", PaymentMethod = "CHK", TotalPaymentAmount = 250m, PaymentDate = new DateTime(2026, 9, 9), Status = "Posted", IsReversal = true },
+        });
+        Services.AddSingleton(payments.Object);
+
+        var cut = Render("payments");
+
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=provider-payment]").Should().HaveCount(2));
+        cut.FindAll("[data-testid=provider-payment] a.record-link-main").Select(a => a.GetAttribute("href")).Should().Equal("/payments/pay-2", "/payments/pay-1");
+        cut.Find("[data-testid=provider-tab-payments]").TextContent.Should().Contain("750.00").And.Contain("EFT EFT0002").And.Contain("Reversal");
+    }
+
+    [Fact]
+    public void Payments_are_hidden_without_payments_read()
+    {
+        _user.Setup(u => u.HasPermission("payments:read")).Returns(false);
+
+        var cut = Render("payments");
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Lakeside Orthopedics"));
+        cut.FindAll("[data-testid=record-tab-payments]").Should().BeEmpty();
+        cut.FindAll("[data-testid=provider-tab-overview]").Should().ContainSingle();
     }
 }
