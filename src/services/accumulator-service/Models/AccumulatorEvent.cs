@@ -20,10 +20,9 @@ public class AccumulatorEvent
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
-    /// Partition key. Every query must include it; uniqueness is enforced on
+    /// Tenant scope. Every query must include it; uniqueness is enforced on
     /// <c>(TenantId, EventId)</c> and <c>(TenantId, AggregateId, Version)</c>.
-    /// The document id in Mongo is the GUID in <see cref="Id"/>; in Cosmos the
-    /// partition key is TenantId and the id is also <see cref="Id"/>.
+    /// The document id is <see cref="Id"/>.
     /// </summary>
     public string TenantId { get; set; } = string.Empty;
 
@@ -93,7 +92,7 @@ public class AccumulatorEvent
     /// <summary>
     /// Deterministic document id for an event row: one per
     /// (snapshot, version), so the store's id uniqueness serializes writers
-    /// on every backend (Cosmos has no secondary unique index here).
+    /// even without the secondary unique index.
     /// </summary>
     public static string BuildId(string aggregateId, long version) => $"{aggregateId}:v{version}";
 }

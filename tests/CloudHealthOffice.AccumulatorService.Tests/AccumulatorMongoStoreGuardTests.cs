@@ -9,8 +9,8 @@ using MongoDB.Driver;
 namespace CloudHealthOffice.AccumulatorService.Tests;
 
 /// <summary>
-/// The store guards only the Cosmos emulator suite covered, on the real Mongo
-/// stores (EphemeralMongo): a void backed out with a Void reversal row, the
+/// Store guards on the real Mongo stores (EphemeralMongo), ported from the
+/// removed Cosmos emulator suite: a void backed out with a Void reversal row, the
 /// replacement tombstone's reversal kind, a concurrent takeover of an expired
 /// lease, lease-token-conditional completion, release of a Pending marker
 /// only, concurrent version-conditional snapshot writes, one event row per

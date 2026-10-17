@@ -14,7 +14,7 @@ namespace CloudHealthOffice.AccumulatorService.Tests;
 
 /// <summary>
 /// Integration tests for AccumulatorsController via WebApplicationFactory.
-/// Mongo/Cosmos/Kafka are replaced with in-memory fixtures so the test run is
+/// Mongo/Kafka are replaced with in-memory fixtures so the test run is
 /// hermetic — no external infra required.
 /// </summary>
 public class AccumulatorsControllerTests : IClassFixture<AccumulatorsControllerTests.Factory>
@@ -167,8 +167,8 @@ public class AccumulatorsControllerTests : IClassFixture<AccumulatorsControllerT
             builder.UseEnvironment("Development");
             builder.ConfigureAppConfiguration((_, cfg) =>
             {
-                // Provide a dummy Mongo connection so Program.cs takes the Mongo branch
-                // (the other branch throws when both stores are unset). The actual Mongo
+                // Provide a dummy Mongo connection (Program.cs throws without one).
+                // The actual Mongo
                 // client is never dialed — we remove the IAccumulatorRepository registration
                 // before any request runs and replace it with the in-memory fake.
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
@@ -193,8 +193,7 @@ public class AccumulatorsControllerTests : IClassFixture<AccumulatorsControllerT
 
                 // Remove DB client registrations that would try to connect.
                 var toDrop = services.Where(d =>
-                    d.ServiceType.FullName?.Contains("Mongo") == true ||
-                    d.ServiceType.FullName?.Contains("Cosmos") == true).ToList();
+                    d.ServiceType.FullName?.Contains("Mongo") == true).ToList();
                 foreach (var d in toDrop) services.Remove(d);
 
                 services.AddSingleton<IAccumulatorRepository, InMemoryAccumulatorRepository>();

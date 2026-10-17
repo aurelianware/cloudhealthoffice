@@ -6,7 +6,6 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -36,32 +35,18 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ── Database ─────────────────────────────────────────────────────────
-// Mirrors eligibility-service's auto-detect pattern: Mongo if configured, else Cosmos.
-var mongoConnection = builder.Configuration["MongoDb:ConnectionString"];
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+// MongoDB is the only accumulator store (ADR 006); the client is registered by
+// the shared lib.
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
-    builder.Services.AddScoped<IProcessedClaimStore, ProcessedClaimStoreMongo>();
-    // Indexes once at startup (not per scoped repository).
-    builder.Services.AddHostedService<AccumulatorMongoIndexInitializer>();
-    Console.WriteLine("Using MongoDB database provider");
+    throw new InvalidOperationException(
+        "Accumulator Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
-{
-    var cosmosConnection = builder.Configuration["CosmosDb:ConnectionString"]
-        ?? throw new InvalidOperationException("Database connection not configured: set MongoDb:ConnectionString or CosmosDb:ConnectionString");
 
-    builder.Services.AddSingleton(_ => new CosmosClient(cosmosConnection, new CosmosClientOptions
-    {
-        SerializerOptions = new CosmosSerializationOptions
-        {
-            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-        }
-    }));
-    builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryCosmos>();
-    builder.Services.AddScoped<IProcessedClaimStore, ProcessedClaimStoreCosmos>();
-}
+builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
+builder.Services.AddScoped<IProcessedClaimStore, ProcessedClaimStoreMongo>();
+// Indexes once at startup (not per scoped repository).
+builder.Services.AddHostedService<AccumulatorMongoIndexInitializer>();
 
 // ── Domain service ───────────────────────────────────────────────────
 builder.Services.AddScoped<IAccumulatorService, AccumulatorService.Services.AccumulatorService>();
@@ -80,9 +65,6 @@ builder.Services.AddHostedService<ClaimFinalizedConsumer>();
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);
