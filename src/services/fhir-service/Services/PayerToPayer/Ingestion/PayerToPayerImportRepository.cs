@@ -71,15 +71,13 @@ public interface IPayerToPayerImportRepository
 public readonly record struct StageOutcome(int Written, int UnchangedDuplicates);
 
 /// <summary>
-/// In-process implementation, used when no durable store is configured — the same
-/// Demo-mode posture the rest of fhir-service takes (see <c>DtrService</c>, which
-/// falls back to in-memory when <c>MongoDb:ConnectionString</c> is absent).
+/// In-process implementation, kept as a test double. fhir-service itself never
+/// registers it: the host requires MongoDB in every environment and binds
+/// <see cref="MongoPayerToPayerImportRepository"/>.
 ///
-/// LIMITATION, stated plainly: this does not survive a restart and is not shared
-/// across instances. It exists so the ingestion workflow is exercisable and
-/// testable end to end; a deployment that needs durability configures MongoDB and
-/// gets <see cref="MongoPayerToPayerImportRepository"/> instead, with no change
-/// to the workflow above it.
+/// It does not survive a restart and is not shared across instances. It exists so
+/// the ingestion workflow is testable end to end without a database, with the same
+/// contract the Mongo repository honours.
 ///
 /// It also serves <see cref="IClinicalResourceStore"/> — the SAME rows, read
 /// through the clinical contract. There is no second copy of a clinical resource

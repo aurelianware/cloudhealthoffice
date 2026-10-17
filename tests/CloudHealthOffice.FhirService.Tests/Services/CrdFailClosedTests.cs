@@ -117,7 +117,7 @@ public class CrdFailClosedTests
     [Fact]
     public async Task UnknownCode_NoOpEngine_IsUnknownNotNoAuth()
     {
-        // The engine registered when there is no database (NoOpPriorAuthRuleEngine).
+        // An engine that evaluates nothing (the test hosts' NoOpPriorAuthRuleEngine).
         EngineReturns(PaDecisionOutcome.Pend, "NoOp");
         ShouldBeUnknown(await OnlyCardAsync(CptSystem, "99999"));
     }

@@ -68,22 +68,20 @@ builder.Services.AddFhirAccessPolicies();
 // it. See docs/architecture/shared-cache.md.
 builder.Services.AddChoCaching(builder.Configuration, builder.Environment);
 
-// Database: MongoDB (ADR 006). With no database configured, only a Development /
-// Testing host may start: the engine wiring below is then skipped and the
-// in-process fallbacks are used. Any other host refuses to start.
+// Database: MongoDB (ADR 017). Required in every environment, Development and
+// Testing included: there is no in-process fallback, so a host without
+// MongoDb:ConnectionString refuses to start.
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-if (databaseProvider is not null && databaseProvider != ChoDatabaseProvider.MongoDb)
-{
-    throw new InvalidOperationException(
-        "fhir-service supports MongoDB only. Remove Database:Provider or set it to MongoDb.");
-}
-if (databaseProvider is null && !ChoTestingEnvironment.AllowsDevelopmentSecrets(builder.Environment))
+if (databaseProvider is null)
 {
     throw new InvalidOperationException(
         "fhir-service requires a database. Configure MongoDb:ConnectionString.");
 }
-
-var useMongo = databaseProvider == ChoDatabaseProvider.MongoDb;
+if (databaseProvider != ChoDatabaseProvider.MongoDb)
+{
+    throw new InvalidOperationException(
+        "fhir-service supports MongoDB only. Remove Database:Provider or set it to MongoDb.");
+}
 
 // ── Provider Enrollment Service ───────────────────────────────────────────────
 // Supplies IEnrollmentDecisionGate → PasAutoAdjudicator Rule 0.
@@ -97,38 +95,25 @@ var useMongo = databaseProvider == ChoDatabaseProvider.MongoDb;
 //   }
 // Cache backend presence is decided by AddChoCaching (Redis when a
 // connection string is configured AND env is Production; InMemory
-// otherwise). Either resolves to a working ICacheProvider, so the
-// engine wiring no longer hinges on "hasRedis" — only on the database.
-if (useMongo)
-{
-    builder.Services.AddProviderEnrollmentService(builder.Configuration)
-        .UseMongoRepositories().WithTenantConfigCache()
-        .WithTexasSource().WithCaqhSource();
+// otherwise). Either resolves to a working ICacheProvider.
+builder.Services.AddProviderEnrollmentService(builder.Configuration)
+    .UseMongoRepositories().WithTenantConfigCache()
+    .WithTexasSource().WithCaqhSource();
 
-    // ── Prior Auth Rule Engine ────────────────────────────────────────────────────
-    // Supplies IPriorAuthRuleEngine → PasAutoAdjudicator Rule 5.
-    // Rule sets cached via ICacheProvider (15 min TTL, invalidated on admin write).
-    // Seeds TX platform rules (STAR / STARPlus / STARKids) on first deployment.
-    //
-    // Required appsettings.json:
-    //   "PriorAuthRuleEngine": {
-    //     "RuleSetCacheTtl": "00:15:00",
-    //     "GoldCardLookbackDays": 180,
-    //     "PendOnRuleError": true
-    //   }
-    builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-        .UseMongoRepository().WithRuleCache()
-        .WithPlatformRules().SeedOnStartup();
-}
-else
-{
-    // Development / Testing without a database: register passthrough implementations
-    // so DI resolution of PasAutoAdjudicator doesn't fail.
-    builder.Services.AddSingleton<CloudHealthOffice.ProviderEnrollmentService.Abstractions.IEnrollmentDecisionGate,
-        CloudHealthOffice.ProviderEnrollmentService.Gates.PassthroughEnrollmentGate>();
-    builder.Services.AddSingleton<CloudHealthOffice.PriorAuthRuleEngine.Abstractions.IPriorAuthRuleEngine,
-        FhirService.Services.NoOpPriorAuthRuleEngine>();
-}
+// ── Prior Auth Rule Engine ────────────────────────────────────────────────────
+// Supplies IPriorAuthRuleEngine → PasAutoAdjudicator Rule 5.
+// Rule sets cached via ICacheProvider (15 min TTL, invalidated on admin write).
+// Seeds TX platform rules (STAR / STARPlus / STARKids) on first deployment.
+//
+// Required appsettings.json:
+//   "PriorAuthRuleEngine": {
+//     "RuleSetCacheTtl": "00:15:00",
+//     "GoldCardLookbackDays": 180,
+//     "PendOnRuleError": true
+//   }
+builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
+    .UseMongoRepository().WithRuleCache()
+    .WithPlatformRules().SeedOnStartup();
 
 // ── FHIR data adapters ────────────────────────────────────────────────────────
 builder.Services.Configure<FhirAdapterOptions>(
@@ -252,24 +237,14 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.Outbound.IPayerToPa
 // Durable ingestion of a validated Payer-to-Payer package into CHO's imported
 // member record. The import store is deliberately separate from CHO's
 // authoritative member/enrollment/claim stores, so a prior payer's data can
-// never become CHO-owned. MongoDB when configured (the same switch the rest of
-// the service uses); in-process otherwise, matching DtrService's Demo-mode
-// fallback.
-if (useMongo)
-{
-    // Singleton: the repository ensures its indexes at construction, so a
-    // per-request instance would re-issue createIndex on every call. It holds
-    // only collection handles and is safe to share.
-    builder.Services.AddSingleton<
-        FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository,
-        FhirService.Services.PayerToPayer.Ingestion.MongoPayerToPayerImportRepository>();
-}
-else
-{
-    builder.Services.AddSingleton<
-        FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository,
-        FhirService.Services.PayerToPayer.Ingestion.InMemoryPayerToPayerImportRepository>();
-}
+// never become CHO-owned.
+//
+// Singleton: the repository ensures its indexes at construction, so a
+// per-request instance would re-issue createIndex on every call. It holds
+// only collection handles and is safe to share.
+builder.Services.AddSingleton<
+    FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository,
+    FhirService.Services.PayerToPayer.Ingestion.MongoPayerToPayerImportRepository>();
 builder.Services.AddScoped<
     FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerPackageIngestionService,
     FhirService.Services.PayerToPayer.Ingestion.PayerToPayerPackageIngestionService>();
