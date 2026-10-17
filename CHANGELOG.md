@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`claims.finalized.v1` is no longer lost when Kafka is down or the
+  process dies.** claims-service published the event right after the
+  finalize write and logged and dropped any failure, so accumulator-service
+  could silently miss a Paid or Voided claim. The event is now stored on the
+  claim (`PendingClaimEvents`) in the same write as the status change.
+  - It is published inline and retried with backoff by
+    `ClaimEventOutboxDispatcher` (`Claims:EventOutbox`) until Kafka
+    acknowledges it.
+  - A claim's events are published in order.
+  - Delivery is at least once with a stable `eventId`. accumulator-service
+    and work-management-service already deduplicate.
+
+  See `docs/architecture/claim-event-outbox.md`.
+- **The claim-event outbox refuses tenant-scoped databases.** Its dispatcher
+  scans only the base claims database, so with `MongoDb:UseTenantScoping` a
+  tenant's pending events were never retried. claims-service now fails at
+  start-up in that configuration (Kafka configured, dispatcher enabled)
+  instead of running without retries. Tenant-scoped deployments are not
+  supported by the outbox yet; `Claims:EventOutbox:Enabled=false` starts
+  without the dispatcher.
+- **The claim-event outbox age query no longer scans every claim.**
+  `OldestClaimEventAsync` filtered on `PendingClaimEvents.0` and sorted on
+  `PendingClaimEvents.CreatedAtMs`, neither indexed, so every dispatcher
+  poll scanned the whole Claims collection. A sparse multikey index
+  `claim_event_outbox_created` is now created at start-up and the filter is
+  `$exists` on the indexed path. On MongoDB the query reads one claim. Azure
+  DocumentDB sorts in memory (ADR 017), over the pending claims only; this
+  is not verified on a DocumentDB cluster.
+- **Shared Kafka producer.** `CloudHealthOffice.Events.Kafka.ChoKafkaProducer`
+  has idempotence on, `acks=all` and a bounded delivery timeout.
+  claims-service now publishes all its claim events through it. Six other
+  services still build their own producer; they are listed in the outbox
+  doc.
+
 ### Changed
 
 - **Redis accumulators store integer cents.** `RedisAccumulatorService`

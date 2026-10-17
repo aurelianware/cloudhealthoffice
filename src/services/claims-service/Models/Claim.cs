@@ -368,6 +368,18 @@ public class Claim
     public AccumulatorOutboxItem? PendingAccumulatorReversal { get; set; }
 
     /// <summary>
+    /// Claim-event outbox: the <c>claims.finalized.v1</c> events this claim
+    /// owes its consumers (accumulator-service, analytics), oldest first. Each
+    /// is written in the same document write as the status change it reports
+    /// and removed only once Kafka has acknowledged it
+    /// (<c>ClaimEventOutboxDispatcher</c>), so a crash or a broker outage
+    /// between the write and the publish loses nothing. Delivery is at least
+    /// once with a stable event id.
+    /// </summary>
+    [BsonIgnoreIfNull]
+    public List<ClaimEventOutboxItem>? PendingClaimEvents { get; set; }
+
+    /// <summary>
     /// Set when the engine store clamped this claim's commit at a limit (a
     /// concurrent claim for the member or family took the room its pricing
     /// saw): the member's priced cost share was not changed — an examiner
@@ -1504,6 +1516,50 @@ public class PendingExaminerApproval
 
     /// <summary>After this the first approval no longer counts (configurable TTL, default 72 h).</summary>
     public DateTime ExpiresAt { get; set; }
+}
+
+/// <summary>One claim event awaiting publication (see <see cref="Claim.PendingClaimEvents"/>).</summary>
+[BsonIgnoreExtraElements]
+public class ClaimEventOutboxItem
+{
+    /// <summary>The event's own id (<c>EventId</c> in the payload): the clear key and the consumers' dedupe key.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    public string Topic { get; set; } = string.Empty;
+
+    /// <summary>The message key (the claim id: a claim's events stay ordered on one partition).</summary>
+    public string Key { get; set; } = string.Empty;
+
+    /// <summary>The serialized event, fixed at the time of the state change.</summary>
+    public string Payload { get; set; } = string.Empty;
+
+    public Dictionary<string, string> Headers { get; set; } = new();
+
+    public long CreatedAtMs { get; set; }
+    public long DueAtMs { get; set; }
+    public int Attempts { get; set; }
+
+    /// <summary>The last failure's exception type and broker error code (no claim data).</summary>
+    public string? LastError { get; set; }
+
+    /// <summary>
+    /// How long a new entry is left to the request that wrote it (which
+    /// publishes at once) before the dispatcher drives it too. A race would
+    /// only publish it twice, which consumers tolerate; the grace keeps that rare.
+    /// </summary>
+    public static readonly TimeSpan InlineGrace = TimeSpan.FromSeconds(30);
+
+    public static ClaimEventOutboxItem Create(
+        string eventId, string topic, string key, string payload, Dictionary<string, string> headers, DateTime now) => new()
+    {
+        Id = eventId,
+        Topic = topic,
+        Key = key,
+        Payload = payload,
+        Headers = headers,
+        CreatedAtMs = AccumulatorOutboxItem.ToMs(now),
+        DueAtMs = AccumulatorOutboxItem.ToMs(now + InlineGrace),
+    };
 }
 
 /// <summary>One accumulator outbox entry (see <see cref="Claim.PendingAccumulatorCommit"/>).</summary>

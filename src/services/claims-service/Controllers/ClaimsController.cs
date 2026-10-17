@@ -772,6 +772,10 @@ public class ClaimsController : ControllerBase
             }
         }
 
+        // The finalized event is stored with this write (outbox). The status
+        // itself was written just above by TryTransitionStatusAsync.
+        if (statusResult.Outcome == StatusWriteOutcome.Applied && IsTerminalStatus(claim.Status))
+            claim.AddPendingClaimEvent(_eventPublisher.PrepareClaimFinalized(claim, GetTenantId()));
         var updated = await _claimRepository.UpdateAsync(claim);
 
         if (statusResult.Outcome == StatusWriteOutcome.Applied && IsTerminalStatus(updated.Status))
@@ -2035,7 +2039,9 @@ public class ClaimsController : ControllerBase
             }
 
             // Fenced on the lock token (L6): a resolver whose lock was taken
-            // over cannot finalize, and nothing is published.
+            // over cannot finalize, and nothing is published. The finalized
+            // event is stored with this write (outbox).
+            claim.AddPendingClaimEvent(_eventPublisher.PrepareClaimFinalized(claim, tenantId));
             var updated = await _claimRepository.UpdateHoldingResolutionLockAsync(claim, lockToken, CancellationToken.None);
             if (updated is null) return LostLock(claimId);
 
