@@ -9,9 +9,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AppealsService.Tests.Outbox;
 
 /// <summary>
-/// The transactional outbox against a real store, run once per backend
-/// (<see cref="AppealOutboxMongoTests"/> on a standalone mongod,
-/// <see cref="AppealOutboxCosmosEmulatorTests"/> on the Cosmos DB emulator):
+/// The transactional outbox against a real store
+/// (<see cref="AppealOutboxMongoTests"/> on a standalone mongod):
 /// every appeal change carries its Kafka event in the same single-document
 /// write, and <see cref="AppealOutboxDispatcher"/> relays it with retry,
 /// backoff, ordering, sequencing, lease fencing, dead-lettering and
@@ -124,7 +123,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
 
     // ── Writing: the event commits with the change ──────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task Every_Change_Writes_Its_Event_Into_The_Appeal_Document()
     {
         var appeal = await CreateAsync();
@@ -145,7 +144,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         await AssertStoredDocumentAsync(appeal.Id);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task A_Change_Without_An_Outbox_Message_Is_Refused()
     {
         var appeal = await CreateAsync();
@@ -157,7 +156,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         (await StoredAsync(appeal.Id)).Notes.Should().BeEmpty("nothing was written");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task A_Rejected_Transition_Writes_No_Event()
     {
         var appeal = await CreateAsync();
@@ -171,7 +170,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
 
     // ── BLOCKER fix: duplicate EventId ──────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task Retry_With_The_Same_EventId_Appends_Nothing_And_Publishes_Once()
     {
         var appeal = await CreateAsync();
@@ -189,7 +188,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         (await StoredAsync(appeal.Id)).Outbox!.Should().OnlyContain(m => m.Status == AppealOutboxStatus.Sent);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Rows_Sharing_An_EventId_Are_Tracked_By_Their_Own_Id_And_Never_Republished_Forever()
     {
         // Rows written before the idempotency guard could share an event id.
@@ -205,7 +204,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
 
     // ── Relay ───────────────────────────────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task Kafka_Down_At_Publish_Time_Then_The_Event_Is_Published_Later()
     {
         var appeal = await CreateAsync();
@@ -234,7 +233,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         (await _repo.FindDueAsync(Now, 10)).Should().BeEmpty();
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData(Confluent.Kafka.ErrorCode.UnknownTopicOrPart)]
     [InlineData(Confluent.Kafka.ErrorCode.Local_UnknownTopic)]
     [InlineData(Confluent.Kafka.ErrorCode.TopicAuthorizationFailed)]
@@ -261,7 +260,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         Produced(appeal.Id).Should().ContainSingle("published once the broker-side cause is fixed");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Crash_Between_The_State_Write_And_The_Publish_Loses_Nothing()
     {
         var appeal = await CreateAsync();
@@ -273,7 +272,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
             .And.HaveElementAt(1, AppealOutbox.WireEventId(Tenant, appeal.Id, transition.EventId));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Crash_While_Holding_The_Lease_Is_Taken_Over_After_It_Lapses()
     {
         var appeal = await CreateAsync();
@@ -287,7 +286,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         (await StoredAsync(appeal.Id)).OutboxLeaseOwner.Should().BeNull("the lease is released after the run");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task A_Stale_Lease_Holder_Cannot_Overwrite_The_New_Holders_Result()
     {
         var appeal = await CreateAsync();
@@ -309,7 +308,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         stored.Attempts.Should().Be(0);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Duplicate_Dispatch_After_A_Lost_Ack_Carries_The_Same_Event_Id_And_Sequence()
     {
         var appeal = await CreateAsync();
@@ -333,7 +332,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         produced[0].PayloadJson.Should().Contain($"\"eventId\":\"{produced[0].EventId}\"").And.Contain("\"sequence\":1");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Events_Of_One_Appeal_Are_Published_In_Write_Order_With_Increasing_Sequence()
     {
         var appeal = await CreateAsync();
@@ -358,7 +357,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         (await StoredAsync(appeal.Id)).OutboxSequence.Should().Be(4);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Ordering_Holds_Across_Appeals_Independently()
     {
         var first = await CreateAsync();
@@ -373,7 +372,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         ProducedIds(second.Id).Should().HaveCount(2);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Poison_Event_Is_Dead_Lettered_After_Max_Attempts_With_A_Metric_And_Replay_Delivers_It()
     {
         var appeal = await CreateAsync();
@@ -407,7 +406,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         outcomes.Dispose();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Bulk_Replay_Requeues_Dead_Letters_Tenant_Wide_Or_Platform_Wide()
     {
         var a = await CreateAsync();
@@ -430,7 +429,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
 
     // ── MAJOR: bounded growth, gauges ───────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task Stale_And_Overflowing_Pending_Events_Are_Dead_Lettered_And_Old_Dead_Letters_Pruned()
     {
         var appeal = await CreateAsync();
@@ -461,7 +460,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         outcomes.Dispose();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Completed_Entries_Are_Capped_Per_Appeal()
     {
         var appeal = await CreateAsync();
@@ -476,7 +475,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         (await StoredAsync(appeal.Id)).Outbox!.Should().HaveCount(2).And.OnlyContain(m => m.Status == AppealOutboxStatus.Sent);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Backlog_Stats_Report_Pending_Count_And_Oldest_Age()
     {
         var appeal = await CreateAsync();
@@ -492,7 +491,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
 
     // ── Kafka-disabled modes ────────────────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task Kafka_Disabled_Keeps_Events_Pending_Until_Kafka_Is_Configured()
     {
         var appeal = await CreateAsync();
@@ -506,7 +505,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         ProducedIds(appeal.Id).Should().ContainSingle();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Kafka_Disabled_With_Skip_Marks_Events_Skipped_And_Prunes_Them()
     {
         var appeal = await CreateAsync();
@@ -527,7 +526,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
             .Which.EventType.Should().Be(AppealEventPublisher.AppealStatusChangedType, "the old skipped entry was pruned");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Relay_Updates_Never_Overwrite_Concurrent_Appeal_Changes()
     {
         var appeal = await CreateAsync();
@@ -562,7 +561,7 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
     /// Counts cho.appeals.outbox.outcomes.total by outcome. Filters on event
     /// ids is not possible on the metric (no identity labels), so counts are
     /// only meaningful within a collection whose tests run sequentially and
-    /// apart from other collections (EphemeralMongo, CosmosEmulator).
+    /// apart from other collections (EphemeralMongo).
     /// </summary>
     protected sealed class OutcomeListener : IDisposable
     {

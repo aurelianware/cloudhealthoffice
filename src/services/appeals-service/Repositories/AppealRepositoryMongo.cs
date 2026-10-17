@@ -153,7 +153,7 @@ public sealed class AppealRepositoryMongo : IAppealRepository, IAppealOutboxStor
     {
         // TODO(appeals-followup-summary-perf): in-memory aggregation over all
         // rows scans poorly at scale. A follow-up PR will migrate this to a
-        // Mongo aggregation pipeline / Cosmos GROUP BY. Correctness is fine;
+        // Mongo aggregation pipeline. Correctness is fine;
         // only performance is deferred.
         var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)
                    & Builders<Appeal>.Filter.Gte(a => a.SubmittedDate, from)
@@ -252,13 +252,18 @@ public sealed class AppealRepositoryMongo : IAppealRepository, IAppealOutboxStor
             // Not written: either a different extension / closed appeal, or
             // a replay of this very extension whose follow-up steps failed.
             var persisted = await _appeals.Find(idFilter).FirstOrDefaultAsync(ct);
-            if (persisted is null || !AppealRepository.IsSameExtension(persisted, appeal)) return null;
+            if (persisted is null || !IsSameExtension(persisted, appeal)) return null;
             updated = persisted;
         }
 
         foreach (var evt in buildAuditEvents(updated)) await _events.AppendAsync(evt, ct);
         return updated;
     }
+
+    /// <summary>True when the stored extension is this request's (a replay).</summary>
+    internal static bool IsSameExtension(Appeal persisted, Appeal requested) =>
+        persisted.DeadlineExtension?.EventId is { Length: > 0 } stored
+        && stored == requested.DeadlineExtension?.EventId;
 
     public async Task<Appeal> AppendNoteAsync(Appeal appeal, AppealNote note, AppealEvent auditEvent, CancellationToken ct = default)
     {

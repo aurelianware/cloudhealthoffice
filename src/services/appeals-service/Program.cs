@@ -9,7 +9,6 @@ using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
 using MongoDB.Bson;
@@ -18,9 +17,7 @@ using MongoDB.Bson.Serialization.Conventions;
 // ── BSON convention: enums stored as strings ─────────────────────────
 // Register BEFORE any IMongoClient is constructed. Ensures enum values on
 // Appeal (Status, ClosureReasonCode, AppealType, etc.) are persisted as
-// human-readable strings rather than integers. Matches the Cosmos
-// serializer's enum representation (JsonStringEnumConverter), so the two
-// storage backends produce comparable shapes. Also future-proofs against
+// human-readable strings rather than integers. Also future-proofs against
 // enum-value reordering: adding a new status value doesn't silently
 // re-map existing data.
 MongoDB.Bson.Serialization.Conventions.ConventionRegistry.Register(
@@ -78,65 +75,25 @@ builder.Services.AddSingleton<IAppealOutboxDispatcher>(sp => sp.GetRequiredServi
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AppealOutboxDispatcher>());
 
 // ── Database Configuration ───────────────────────────────────────────
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+// MongoDB is the only appeal store (ADR 006); AddChoDatabase registers the client.
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<IAppealEventRepository, AppealEventRepositoryMongo>();
-    builder.Services.AddSingleton<IAppealEventSink>(sp => (IAppealEventSink)sp.GetRequiredService<IAppealEventRepository>());
-    builder.Services.AddSingleton<AppealRepositoryMongo>();
-    builder.Services.AddSingleton<IAppealRepository>(sp => sp.GetRequiredService<AppealRepositoryMongo>());
-    builder.Services.AddSingleton<IAppealOutboxStore>(sp => sp.GetRequiredService<AppealRepositoryMongo>());
-
-    // Registration order matters for IHostedService.StartAsync sequencing:
-    // migration runs first so the index initializer sees a consistent
-    // schema and duplicate-AppealNumber warnings fire before the unique
-    // index build.
-    builder.Services.AddHostedService<AppealStatusMigrationHostedService>();
-    builder.Services.AddHostedService<AppealIndexInitializer>();
-
-    Console.WriteLine("[appeals-service] Using MongoDB database provider");
+    throw new InvalidOperationException(
+        "Appeals Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"]
-            ?? configuration["CosmosDb:AccountEndpoint"]
-            ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-        var key = configuration["CosmosDb:Key"]
-            ?? configuration["CosmosDb:AccountKey"]
-            ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
 
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer()
-        });
-    });
+builder.Services.AddSingleton<IAppealEventRepository, AppealEventRepositoryMongo>();
+builder.Services.AddSingleton<IAppealEventSink>(sp => (IAppealEventSink)sp.GetRequiredService<IAppealEventRepository>());
+builder.Services.AddSingleton<AppealRepositoryMongo>();
+builder.Services.AddSingleton<IAppealRepository>(sp => sp.GetRequiredService<AppealRepositoryMongo>());
+builder.Services.AddSingleton<IAppealOutboxStore>(sp => sp.GetRequiredService<AppealRepositoryMongo>());
 
-    builder.Services.AddScoped<IAppealEventRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new AppealEventRepository(cosmosClient, databaseName);
-    });
-    builder.Services.AddScoped<IAppealEventSink>(sp => (IAppealEventSink)sp.GetRequiredService<IAppealEventRepository>());
-    builder.Services.AddScoped<AppealRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        var sink = sp.GetRequiredService<IAppealEventSink>();
-        return new AppealRepository(cosmosClient, databaseName, sink);
-    });
-    builder.Services.AddScoped<IAppealRepository>(sp => sp.GetRequiredService<AppealRepository>());
-    builder.Services.AddScoped<IAppealOutboxStore>(sp => sp.GetRequiredService<AppealRepository>());
-
-    Console.WriteLine("[appeals-service] Using Cosmos DB database provider");
-}
+// Registration order matters for IHostedService.StartAsync sequencing:
+// migration runs first so the index initializer sees a consistent
+// schema and duplicate-AppealNumber warnings fire before the unique
+// index build.
+builder.Services.AddHostedService<AppealStatusMigrationHostedService>();
+builder.Services.AddHostedService<AppealIndexInitializer>();
 
 // ── Appeal body encryption ───────────────────────────────────────────
 // Non-dev startup guard: no AppealEncryption section = startup error.
@@ -193,14 +150,11 @@ builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
 // No CORS: this service is called server-to-server only (the portal is
 // Blazor Server), so browsers on other origins get no CORS grant.
 
-// Health checks: Mongo / Cosmos via the shared bootstrap, plus the
+// Health checks: Mongo via the shared bootstrap, plus the
 // local appeal-encryption-key readiness check.
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 })
 .AddCheck<AppealEncryptionKeyHealthCheck>(
     "appeal-encryption-key",

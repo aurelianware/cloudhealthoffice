@@ -41,7 +41,7 @@ public sealed class AppealOutboxMongoTests : AppealOutboxStoreScenarios<AppealRe
             .Find(new BsonDocument("_id", appealId)).SingleAsync();
         raw["Outbox"].AsBsonArray.Should().HaveCount(3);
         raw["Outbox"][0]["Status"].Should().Be(new BsonString("Pending"));
-        raw.Contains("OutboxNextDueAt").Should().BeFalse("the Cosmos sweep fields are not stored in Mongo");
+        raw.Contains("OutboxNextDueAt").Should().BeFalse("no top-level sweep fields are stored");
     }
 
     protected override Task AppendLegacyTwinAsync(string appealId, AppealOutboxMessage first)

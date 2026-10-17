@@ -23,19 +23,15 @@ single-document write** as the change. This covers create, transition, close,
 note, attachment, acknowledgment, reviewer assignment, overdue observation,
 deadline extension, 275 ingress and the legacy-status migration.
 
-| Store  | Write                                                                    |
-|--------|--------------------------------------------------------------------------|
-| Mongo  | `$push` to `Outbox` in the same `FindOneAndUpdate` / `InsertOne` as the change |
-| Cosmos | added to the same ETag-pinned `CreateItem` / `ReplaceItem` as the change |
+The Mongo repository `$push`es to `Outbox` in the same `FindOneAndUpdate` /
+`InsertOne` as the change.
 
 Why the outbox lives on the document, and not in a separate collection:
 
 - Mongo multi-document transactions need a replica set. Our dev deployment and
   `infrastructure/k8s/mongodb-deployment.yaml` run a standalone `mongod`, which
   has none.
-- A single-document write is atomic on a standalone `mongod` and in Cosmos alike.
-- In Cosmos, a single-document write is a stronger guarantee than a
-  same-partition transactional batch.
+- A single-document write is atomic even on a standalone `mongod`.
 - The state change and its event commit together or not at all.
 
 A repository refuses a mutating call whose audit event carries no outbox
@@ -61,9 +57,8 @@ How these behave:
   acknowledgment and reviewer-assignment requests are idempotent on it: when the
   appeal's outbox already holds that key, the call is a replay. It returns the
   stored appeal and appends nothing.
-  - The repositories re-check this inside the write, so concurrent retries are
-    caught too. Mongo puts `Outbox.IdempotencyKey $ne key` in the update filter.
-    Cosmos checks inside the ETag-pinned read-modify-replace.
+  - The repository re-checks this inside the write, so concurrent retries are
+    caught too: it puts `Outbox.IdempotencyKey $ne key` in the update filter.
   - The replay window is as long as the entry is retained (see Bounds).
 - **Sequence assignment.** A sequence is assigned in write order by the lease
   holder, just before an entry's first publish attempt. The write is conditional
@@ -119,32 +114,20 @@ Every visit to an appeal enforces these limits, including in Kafka-disabled mode
 | `DeadLetterRetention` (30 days), `MaxDeadLetteredPerAppeal` (50) | Dead letters beyond these are pruned (warning log + `dead_letter_pruned` metric). The audit trail (AppealEvents) still records the change. |
 
 Worst case, an appeal holds 100 + 25 + 50 entries. At roughly 1–1.5 KB each,
-that is under 300 KB, far below Cosmos's 2 MB item limit.
+that is under 300 KB, far below the 16 MB document limit.
 
 ### Sweep queries
 
-**Mongo.** Element names are the PascalCase class-map names.
+Element names are the PascalCase class-map names.
 
 - The sweep filters `{"Outbox.Status": "Pending"}` at top level, next to an
   `$elemMatch` on due time. This lets the planner use the partial index
   `ix_outbox_pending`; a test asserts IXSCAN with no COLLSCAN.
 - Dead-letter retention and bulk replay use the partial index
   `ix_outbox_dead_lettered`.
-
-**Cosmos.** Every write recomputes these top-level numbers from the outbox:
-
-- `outboxNextDueAt`: epoch ms of the earliest due pending entry or dead-letter
-  expiry; null when there is nothing to do.
-- `outboxLeaseUntilMs`
-- `outboxPendingCount`
-- `outboxOldestPendingAt`
-- `outboxDeadLetteredCount`
-
-The cross-partition sweep runs
-`WHERE c.outboxNextDueAt <= @now AND lease free ORDER BY c.outboxNextDueAt`.
-Appeals whose entries are only backing off are therefore never returned and
-cannot starve due ones. A lease is not taken, and nothing is written, when
-nothing is due.
+- Appeals whose entries are only backing off are never returned and cannot
+  starve due ones. A lease is not taken, and nothing is written, when nothing
+  is due.
 
 ## Observability and alerts
 
@@ -204,18 +187,9 @@ does not wait for the Kafka producer.
 
 ## Inspecting the outbox
 
-Mongo:
-
 ```js
 db.Appeals.find({ "Outbox.Status": "Pending" }, { TenantId: 1, Outbox: 1 })
 db.Appeals.find({ "Outbox.Status": "DeadLettered" }, { TenantId: 1, "Outbox.$": 1 })
-```
-
-Cosmos:
-
-```sql
-SELECT c.tenantId, c.id, o.eventId, o.eventType, o.attempts, o.lastError
-FROM c JOIN o IN c.outbox WHERE o.status = 'deadLettered'
 ```
 
 ## Replaying dead-lettered events
@@ -240,7 +214,7 @@ only in the audit trail.
 
 ## Limitations
 
-- The relay polls. It does not use the Cosmos change feed or Mongo change streams.
+- The relay polls. It does not use Mongo change streams.
 - The idempotency replay window for a client `eventId` is the entry's retention
   in the outbox. A retry after the entry was pruned is treated as a new change.
   The audit row is still de-duplicated on `EventId`.
