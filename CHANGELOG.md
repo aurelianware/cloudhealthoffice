@@ -54,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   claim-status and attachment submission by transmission id, remittance
   posting and acknowledgment replay. Another tenant's transmission id is
   answered "not found", and attachment submission now requires a tenant.
+- **Stedi attachment submission resolves the payer within the caller's
+  tenant.** Before, it read the transmission by id across tenants and
+  resolved the payer under the stored record's tenant, so another tenant's
+  transmission id returned a different error than an unknown one.
 
 ### Fixed
 
