@@ -126,6 +126,28 @@ public sealed class AppealRepositoryMongo : IAppealRepository, IAppealOutboxStor
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<Appeal>> ListInsightActivityAsync(string tenantId, DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        var b = Builders<Appeal>.Filter;
+        FilterDefinition<Appeal> Within(System.Linq.Expressions.Expression<Func<Appeal, DateTime?>> field) => b.Gte(field, from) & b.Lte(field, to);
+        var filter = b.Eq(a => a.TenantId, tenantId)
+                     & b.Ne(a => a.Status, AppealStatus.Draft)
+                     & b.Or(
+                         Within(a => a.ReceivedDate),
+                         b.Eq(a => a.ReceivedDate, null) & b.Gte(a => a.SubmittedDate, from) & b.Lte(a => a.SubmittedDate, to),
+                         Within(a => a.DecisionDate),
+                         Within(a => a.ClosedAt));
+        return await _appeals.Find(filter).ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Appeal>> ListOpenAsync(string tenantId, CancellationToken ct = default)
+    {
+        var b = Builders<Appeal>.Filter;
+        var filter = b.Eq(a => a.TenantId, tenantId)
+                     & b.In(a => a.Status, new[] { AppealStatus.Submitted, AppealStatus.InReview, AppealStatus.PendingInfo });
+        return await _appeals.Find(filter).ToListAsync(ct);
+    }
+
     public async Task<AppealsSummary> GetAppealsSummaryAsync(
         string tenantId, DateTime from, DateTime to, CancellationToken ct = default)
     {
