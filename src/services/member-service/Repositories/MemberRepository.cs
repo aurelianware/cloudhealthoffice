@@ -78,10 +78,11 @@ public class MemberRepository : IMemberRepository
             parameters.Add(("@groupNumber", groupNumber));
         }
 
-        if (!string.IsNullOrEmpty(lastName))
+        // Prefix match, as on the MongoDB path.
+        if (!string.IsNullOrWhiteSpace(lastName))
         {
-            queryText += " AND CONTAINS(LOWER(c.lastName), LOWER(@lastName))";
-            parameters.Add(("@lastName", lastName));
+            queryText += " AND STARTSWITH(LOWER(c.lastName), LOWER(@lastName))";
+            parameters.Add(("@lastName", lastName.Trim()));
         }
 
         if (dateOfBirth.HasValue)

@@ -230,6 +230,32 @@ public class BatchEligibilityServiceTests
         }
     }
 
+    [Fact]
+    public async Task RowThatThrows_ReportsAGenericError_NotTheExceptionText()
+    {
+        var svc = CreateService(new ThrowingAdapter(), out var store, out _);
+        var csv = "memberId,serviceDate\nM-1,2026-01-15\n";
+
+        using var body = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+        var job = await svc.SubmitAsync("tenant-1", body, "text/csv");
+
+        Assert.Equal(1, job.FailedRows);
+        var error = Assert.Single(job.Errors);
+        Assert.Equal(BatchEligibilityService.BatchRowFailedMessage, error.Message);
+        var resultCsv = Encoding.UTF8.GetString((await store.GetResultAsync("tenant-1", job.Id))!);
+        Assert.DoesNotContain("hunter2", resultCsv);
+        Assert.DoesNotContain("hunter2", error.Message);
+    }
+
+    private class ThrowingAdapter : IEligibilityAdapter
+    {
+        public string Platform => "cho";
+
+        public Task<EligibilityAdapterResponse> VerifyEligibilityAsync(
+            EligibilityAdapterRequest request, CancellationToken ct = default)
+            => throw new InvalidOperationException("mongodb://admin:hunter2@db:27017 timed out");
+    }
+
     private class FailingHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(

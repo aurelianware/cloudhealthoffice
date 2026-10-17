@@ -182,7 +182,9 @@ public class Rf2MapLoader : IMapLoader
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load RF2 map file");
-            result.Errors.Add($"Fatal: {ex.Message}");
+            // The result is returned to the caller: the exception text (a database
+            // host, a driver message) stays in the log.
+            result.Errors.Add(MapLoadResult.FatalLoadError);
         }
 
         stopwatch.Stop();

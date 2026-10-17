@@ -145,6 +145,19 @@ public class SponsorCallDefectTests
     }
 
     [Fact]
+    public async Task BillingRun_UnexpectedSponsorCallFailure_DoesNotRecordTheExceptionText()
+    {
+        PendingRun();
+        SponsorService(_ => throw new HttpRequestException("Connection refused (mongodb://admin:hunter2@db:27017)"));
+
+        var result = await Service().ExecuteBillingRunAsync("br-1");
+
+        result.Status.Should().Be(BillingRunStatus.Failed);
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Contain("Failed to fetch active sponsors").And.NotContain("hunter2");
+    }
+
+    [Fact]
     public async Task BillingRun_SponsorServiceRefusal_FailsTheRunWithTheStatus()
     {
         PendingRun();

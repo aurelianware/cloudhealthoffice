@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Attachment uploads are validated before anything is stored.**
+  `POST api/attachments` built the blob path from client-supplied parent ids
+  and the file extension, and the Content-Type from `DocumentFormat`. Now:
+  - Parent ids must be plain ids (letters, digits, `-`, `_`), and every path
+    segment is also sanitized.
+  - Only PDF, TIFF, JPEG and PNG are accepted. DocumentFormat, file
+    extension and file signature must agree, and stored and served
+    Content-Types come from that allowlist.
+  - Size is capped by `Attachments:Upload:MaxFileSizeBytes`, 64 MB by
+    default (the outbound gateway's limit).
+  - The parent claim, authorization or appeal must exist for the caller's
+    tenant, read from the service that owns it. If that check cannot be
+    made, the upload is refused with 502.
+- **Member last-name search is an escaped, case-insensitive prefix match**
+  of at most 100 characters. Before, the caller's text was run as a
+  MongoDB `$regex`, so `.*` matched every member of the tenant. The Cosmos
+  path changes from `CONTAINS` to `STARTSWITH` to match.
+- **834 enrollment events no longer store SSN or date of birth.** The raw
+  snapshot on `EnrollmentEvent.RawSegment` replaces NM109 and DMG02 with
+  `[REDACTED]` for the subscriber and every dependent. Names and addresses
+  remain. Events stored before this change are not rewritten.
+- **Development hosts refuse to start on a deployed platform**
+  (Kubernetes, App Service or Container Apps) unless
+  `CHO_ALLOW_DEV_ON_DEPLOYED_HOST=true`, and then warn on stderr. The portal
+  now runs the same check. The GKE demo renderer and
+  `scripts/deploy-local.sh` set the override.
+- **Unexpected errors no longer return exception text.** The affected
+  services are attachment, eligibility, member, provider, premium-billing,
+  payment, benefit-plan, capitation, trading-partner, fhir, idcard,
+  enrollment-import and terminology, plus the migration-wizard UI. They now
+  return an RFC 7807 problem with a `traceId` (new `ChoProblemResults`
+  helper), or record a fixed message on run, batch and row results, and log
+  the exception server-side. Messages from the services' own validation and
+  state exceptions are unchanged. Converted error bodies are now problem
+  documents rather than `{ error | message }` objects. For example, the
+  provider credentialing 503 no longer carries
+  `error: "credentialing_publish_failed"`. The portal still shows raw
+  exception text in about 200 places; that is not yet changed.
+- **Secret scanning covers service `appsettings*.json` files.** The
+  path-based exemption in `.gitleaks.toml` is removed, and
+  `verify-gitleaks-rules.sh` fails if it returns.
+- **Claim transmissions are read within the caller's tenant.** This covers
+  claim-status and attachment submission by transmission id, remittance
+  posting and acknowledgment replay. Another tenant's transmission id is
+  answered "not found", and attachment submission now requires a tenant.
+- **Stedi attachment submission resolves the payer within the caller's
+  tenant.** Before, it read the transmission by id across tenants and
+  resolved the payer under the stored record's tenant, so another tenant's
+  transmission id returned a different error than an unknown one.
+
 ### Fixed
 
 - **Accumulator plan-year dates no longer shift with the host time zone.**

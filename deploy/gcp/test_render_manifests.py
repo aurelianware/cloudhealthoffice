@@ -69,6 +69,8 @@ def test_host_environments():
     assert env(deps["member-service"])["ASPNETCORE_ENVIRONMENT"] == "Development"
     assert env(deps["portal"])["ASPNETCORE_ENVIRONMENT"] == "Development"
     for name, dep in deps.items():
+        # Development (and Testing) hosts refuse to start in a pod without their override.
+        assert env(dep)["CHO_ALLOW_DEV_ON_DEPLOYED_HOST"] == "true", name
         if name == "portal":
             continue
         env_from = dep["spec"]["template"]["spec"]["containers"][0].get("envFrom", [])

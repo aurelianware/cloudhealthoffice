@@ -4,6 +4,7 @@ using MemberService.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace MemberService.Repositories;
@@ -56,8 +57,11 @@ public class MemberRepositoryMongo : IMemberRepository
         if (!string.IsNullOrEmpty(groupNumber))
             filter &= builder.Eq(x => x.GroupNumber, groupNumber);
             
-        if (!string.IsNullOrEmpty(lastName))
-            filter &= builder.Regex(x => x.LastName, new BsonRegularExpression(lastName, "i"));
+        // Case-insensitive prefix match on the literal text: the input is escaped, so
+        // ".*" or "(a+)+$" match only names that start with those characters.
+        var lastNamePrefix = lastName?.Trim();
+        if (!string.IsNullOrEmpty(lastNamePrefix))
+            filter &= builder.Regex(x => x.LastName, new BsonRegularExpression("^" + Regex.Escape(lastNamePrefix), "i"));
 
         // If DateOfBirth is in the model (Member.cs didn't show it but it's likely there in omitted lines)
         // Assuming it exists based on signature

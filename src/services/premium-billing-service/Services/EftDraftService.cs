@@ -394,7 +394,7 @@ public class EftDraftService : IEftDraftService
             catch (Exception ex)
             {
                 result.Errors++;
-                result.ErrorMessages.Add($"Invoice {invoiceId}: {ex.Message}");
+                result.ErrorMessages.Add($"Invoice {invoiceId}: {ClientErrorText.For(ex)}");
                 _logger.LogWarning(ex, "Failed to initiate EFT draft for invoice {InvoiceId}", invoiceId);
             }
         }

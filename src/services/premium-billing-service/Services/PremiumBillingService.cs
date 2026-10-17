@@ -169,7 +169,7 @@ public class PremiumBillingService : IPremiumBillingService
                 }
                 catch (Exception ex)
                 {
-                    var msg = $"Failed to generate invoice for group {sponsor.GroupNumber}: {ex.Message}";
+                    var msg = $"Failed to generate invoice for group {sponsor.GroupNumber}: {ClientErrorText.For(ex)}";
                     billingRun.Warnings.Add(msg);
                     _logger.LogWarning(ex, "Failed to generate invoice for group {GroupNumber}", sponsor.GroupNumber);
                 }
@@ -190,7 +190,7 @@ public class PremiumBillingService : IPremiumBillingService
         catch (Exception ex)
         {
             billingRun.Status = BillingRunStatus.Failed;
-            billingRun.Errors.Add(ex.Message);
+            billingRun.Errors.Add(ClientErrorText.For(ex));
             billingRun.ExecutionCompletedAt = DateTime.UtcNow;
             _logger.LogError(ex, "Billing run {BillingRunNumber} failed", billingRun.BillingRunNumber);
         }
@@ -375,12 +375,13 @@ public class PremiumBillingService : IPremiumBillingService
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                var error = ClientErrorText.For(ex);
                 result.InvoiceFailures.Add(new DelinquencyInvoiceFailure
                 {
                     InvoiceId = invoice.Id,
                     InvoiceNumber = invoice.InvoiceNumber,
                     GroupNumber = invoice.GroupNumber,
-                    Error = ex.Message.Length > 1000 ? ex.Message[..1000] : ex.Message
+                    Error = error.Length > 1000 ? error[..1000] : error
                 });
                 _logger.LogError(ex, "Delinquency processing failed for invoice {InvoiceNumber}; the run continues",
                     SanitizeForLog(invoice.InvoiceNumber));
@@ -579,7 +580,7 @@ public class PremiumBillingService : IPremiumBillingService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to fetch sponsors from sponsor-service");
-            throw new InvalidOperationException($"Failed to fetch active sponsors: {ex.Message}", ex);
+            throw new InvalidOperationException($"Failed to fetch active sponsors: {ClientErrorText.For(ex)}", ex);
         }
 
         // Apply criteria filters

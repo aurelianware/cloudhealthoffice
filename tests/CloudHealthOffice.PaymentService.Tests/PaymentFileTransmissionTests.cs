@@ -682,7 +682,9 @@ public class PaymentFileTransmissionTests
 
         var stored = (await _h.Runs.GetByIdAsync(created.Id))!;
         Assert.Equal(PaymentRunStatus.Failed, stored.Status);
-        Assert.Contains(stored.Errors, e => e.Contains("database"));
+        // The run records that it failed; the driver's exception text stays in the log.
+        Assert.Contains(stored.Errors, e => e.StartsWith("Execution failed"));
+        Assert.DoesNotContain(stored.Errors, e => e.Contains("database"));
         Assert.Empty(_h.Payments.All);
         Assert.Empty(_h.Envelopes);
     }

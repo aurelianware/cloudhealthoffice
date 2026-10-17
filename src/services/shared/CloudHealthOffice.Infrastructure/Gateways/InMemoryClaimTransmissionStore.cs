@@ -32,6 +32,15 @@ public sealed class InMemoryClaimTransmissionStore : IClaimTransmissionStore
         return Task.FromResult(Clone(record));
     }
 
+    public Task<ClaimTransmissionRecord?> GetByTenantAndIdAsync(
+        string tenantId, string transmissionId, CancellationToken ct = default)
+    {
+        _byId.TryGetValue(transmissionId, out var record);
+        return Task.FromResult(record is not null && string.Equals(record.TenantId, tenantId, StringComparison.Ordinal)
+            ? Clone(record)
+            : null);
+    }
+
     public Task<IReadOnlyList<ClaimTransmissionRecord>> FindBySubmissionIdAsync(
         string gatewayName, string submissionId, CancellationToken ct = default) =>
         Task.FromResult(Find(r =>

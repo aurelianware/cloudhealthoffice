@@ -73,3 +73,24 @@ MSG
 fi
 
 echo "OK: gitleaks detected the canary (exit ${RC}) — rules are active."
+
+# Service configuration files are scanned too. A blanket path allowlist for
+# services/*/appsettings*.json once exempted every service's config, so a real
+# connection string or key committed there would never have been reported.
+# Exemptions for those files must be by value, not by path.
+for config_file in appsettings.json appsettings.Development.json; do
+  CASE_DIR="$WORKDIR/path-$config_file"
+  mkdir -p "$CASE_DIR/src/services/canary-service"
+  printf '{ "Stripe": { "SecretKey": "%s" } }\n' "$STRIPE_CANARY" \
+    > "$CASE_DIR/src/services/canary-service/$config_file"
+
+  set +e
+  gitleaks detect --no-git --source "$CASE_DIR" --config "$CONFIG" --redact --no-banner --exit-code 1 >/dev/null 2>&1
+  RC=$?
+  set -e
+  if [ "$RC" -eq 0 ]; then
+    echo "FAIL: a secret in src/services/<service>/$config_file is not detected; .gitleaks.toml exempts that path." >&2
+    exit 1
+  fi
+  echo "OK: secrets in src/services/<service>/$config_file are detected."
+done

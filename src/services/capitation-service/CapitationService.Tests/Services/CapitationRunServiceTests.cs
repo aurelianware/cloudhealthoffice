@@ -678,7 +678,8 @@ public class CapitationRunServiceTests
         var result = await _service.ExecuteRunAsync("run-1");
 
         result.Status.Should().Be(CapitationRunStatus.Failed);
-        result.Errors.Should().ContainSingle().Which.Should().Contain("Database connection lost");
+        // The run is returned to the caller: the driver's exception text stays in the log.
+        result.Errors.Should().ContainSingle().Which.Should().NotContain("Database connection lost");
     }
 
     [Fact]

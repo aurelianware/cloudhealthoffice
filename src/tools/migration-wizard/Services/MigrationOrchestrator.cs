@@ -12,6 +12,9 @@ public class MigrationOrchestrator : IDisposable
     private readonly MappingReportGenerator _reportGenerator;
     private readonly ApiManagementCutoverService _cutoverService;
     private readonly ILogger<MigrationOrchestrator> _logger;
+
+    /// <summary>What the wizard shows for a migration that failed unexpectedly; the exception is logged.</summary>
+    public const string MigrationFailedMessage = "Migration failed. See the migration wizard log for details.";
     
     private MigrationStatus _status = new();
     private MappingReport? _latestReport;
@@ -219,10 +222,11 @@ public class MigrationOrchestrator : IDisposable
         {
             _logger.LogError(ex, "Migration failed");
             _status.CurrentPhase = MigrationPhase.Failed;
-            _status.LastError = ex.Message;
+            // Shown in the browser: the exception text stays in the log.
+            _status.LastError = MigrationFailedMessage;
             _status.Errors.Add(new MigrationError
             {
-                ErrorMessage = ex.Message,
+                ErrorMessage = MigrationFailedMessage,
                 OccurredAt = DateTime.UtcNow
             });
             NotifyStatusChanged();
@@ -270,10 +274,11 @@ public class MigrationOrchestrator : IDisposable
             NotifyStatusChanged();
             return result;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
+            // Shown in the browser: the exception text stays in the log (the caller logs it).
             _status.CurrentPhase = MigrationPhase.ReadyForCutover;
-            _status.LastError = ex.Message;
+            _status.LastError = "Cutover failed. See the migration wizard log for details.";
             NotifyStatusChanged();
             throw;
         }

@@ -453,7 +453,7 @@ public class PaymentRunService : IPaymentRunService
             }
 
             paymentRun.Status = PaymentRunStatus.Failed;
-            paymentRun.Errors.Add($"Execution failed: {ex.Message}");
+            paymentRun.Errors.Add($"Execution failed: {ClientErrorText.For(ex)}");
             paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
             paymentRun.ExecutionDurationSeconds = paymentRun.ExecutionStartedAt.HasValue
                 ? (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds
@@ -1024,7 +1024,7 @@ public class PaymentRunService : IPaymentRunService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error finalizing denied claim {ClaimId}", SanitizeForLog(claimId));
-            return $"finalize call threw: {ex.Message}";
+            return ClientErrorText.FinalizeCallFailed;
         }
     }
 
@@ -1490,7 +1490,7 @@ public class PaymentRunService : IPaymentRunService
         }
         catch (Exception ex)
         {
-            cp.FinalizeError = $"finalize call threw: {ex.Message}";
+            cp.FinalizeError = ClientErrorText.FinalizeCallFailed;
             _logger.LogError(ex, "Error finalizing claim {ClaimId}", SanitizeForLog(cp.ClaimId));
             return false;
         }
