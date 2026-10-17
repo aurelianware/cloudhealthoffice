@@ -36,30 +36,17 @@ builder.Services.AddScoped<ReferenceDataSchemaMigrator>();
 builder.Services.AddScoped<IReferenceDataRepository, ReferenceDataRepository>();
 builder.Services.AddScoped<CloudHealthOffice.ReferenceData.Persistence.IReferenceDataRepository, CanonicalReferenceDataRepository>();
 
-// Compliance configuration lives in MongoDB (ADR 006). With no database configured,
-// only a Development / Testing host may use the in-memory repository (it does not
-// survive a restart); any other host refuses to start.
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
-{
-    // Scoped, not singleton: IMongoDatabase is resolved per request so tenant-scoped database
-    // names stay correct.
-    builder.Services.AddScoped<IComplianceConfigRepository, MongoComplianceConfigRepository>();
-}
-else if (databaseProvider is not null)
+// Compliance configuration lives in MongoDB (ADR 006, ADR 017). A host with no database
+// configured refuses to start, in every environment.
+if (builder.Services.AddChoDatabase(builder.Configuration) is null)
 {
     throw new InvalidOperationException(
-        "reference-data-service supports MongoDB only for compliance configuration. " +
-        "Remove Database:Provider or set it to MongoDb.");
+        "Reference Data Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
-{
-    if (!ChoTestingEnvironment.AllowsDevelopmentSecrets(builder.Environment))
-        throw new InvalidOperationException(
-            "reference-data-service requires a database for compliance configuration. " +
-            "Configure MongoDb:ConnectionString.");
-    builder.Services.AddSingleton<IComplianceConfigRepository, InMemoryComplianceConfigRepository>();
-}
+
+// Scoped, not singleton: IMongoDatabase is resolved per request so tenant-scoped database
+// names stay correct.
+builder.Services.AddScoped<IComplianceConfigRepository, MongoComplianceConfigRepository>();
 
 // ── Authentication ──────────────────────────────────────────────────
 // Every caller presents a CHO token; the tenant and the acting user come from that token.
