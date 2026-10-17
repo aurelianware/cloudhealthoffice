@@ -137,7 +137,7 @@ public class EraGeneratorService : IEraGeneratorService
 
         // ── 1000A — Payer Identification ────────────────────────────────
         sb.Append(Seg(ref segmentCount, true,
-            $"N1*PR*{Esc(payment.PayerName)}*XV*{payment.PayerId ?? "UNASSIGNED"}~"));
+            CloudHealthOffice.Infrastructure.Edi.Era835FinancialSegmentBuilder.BuildPayerN1(payment.PayerName, payment.PayerId)));
 
         // ── 1000B — Payee Identification ────────────────────────────────
         // NM109 qualifier: XX=NPI

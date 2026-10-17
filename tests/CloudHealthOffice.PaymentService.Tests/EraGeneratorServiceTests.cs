@@ -173,6 +173,20 @@ public class EraGeneratorServiceTests
     }
 
     [Fact]
+    public void Generate835_WithoutAPayerPlanId_OmitsN103AndN104InsteadOfAPlaceholder()
+    {
+        var payment = CreateTestPayment();
+        payment.PayerId = null;
+
+        var era = _generator.Generate835(payment, CreateTestTradingPartner());
+
+        // N103/N104 (XV CMS Plan ID) are situational; never "UNASSIGNED".
+        Assert.Contains("N1*PR*Blue Cross~", era);
+        Assert.DoesNotContain("UNASSIGNED", era);
+        Assert.DoesNotContain("N1*PR*Blue Cross*XV", era);
+    }
+
+    [Fact]
     public void Generate835_ContainsCLPClaimLoop()
     {
         var payment = CreateTestPayment();

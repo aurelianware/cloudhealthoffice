@@ -143,7 +143,7 @@ public class CapitationEraService : ICapitationEraService
 
         // ── 1000A — Payer Identification (Health Plan) ───────────────────
         sb.Append(Seg(ref segmentCount, true,
-            $"N1*PR*{Esc(tp.PayerName)}*XV*{tp.PayerId}~"));
+            Era835FinancialSegmentBuilder.BuildPayerN1(tp.PayerName, tp.PayerId)));
 
         // ── 1000B — Payee Identification (Provider) ──────────────────────
         sb.Append(Seg(ref segmentCount, true,
