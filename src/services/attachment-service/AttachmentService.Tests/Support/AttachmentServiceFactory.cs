@@ -24,9 +24,17 @@ public sealed class AttachmentServiceFactory : WebApplicationFactory<Attachments
     public Mock<ITradingPartnerLookup> TradingPartners { get; } = new();
     public StubParentServices Parents { get; } = new();
 
+    /// <summary>A MongoDB address that is never listening; the driver connects lazily.</summary>
+    public const string UnreachableMongo =
+        "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=100&connectTimeoutMS=100";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+        // Program.cs requires MongoDB in every environment and reads the
+        // setting while registering services, so it goes in as a host setting.
+        // Nothing reaches this server: the repository is replaced below.
+        builder.UseSetting("MongoDb:ConnectionString", UnreachableMongo);
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<IAttachmentRepository>();
