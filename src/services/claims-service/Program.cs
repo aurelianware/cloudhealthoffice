@@ -110,6 +110,18 @@ builder.Services.AddScoped<IClaimDiagnosisMetadataEnricher, ClaimDiagnosisMetada
 // POST {id}/void all void through VoidAsync.
 builder.Services.AddScoped<IClaimFinalizationService, ClaimFinalizationService>();
 
+// ClaimsController application services: the examiner resolution of a pended
+// claim (work-queue/{id}/resolve and /override), the operational status
+// transitions of PUT {id}/status, and the void actions (through VoidAsync).
+// Factory registrations on purpose: their dependencies are resolved when the
+// controller is activated, exactly as when the controller took them itself,
+// and not at host build (ValidateOnBuild checks typed registrations only),
+// so a host that omits a dependency only the controller uses still starts.
+builder.Services.AddScoped<IClaimVoidService>(sp => ActivatorUtilities.CreateInstance<ClaimVoidService>(sp));
+builder.Services.AddScoped<IClaimStatusTransitionService>(sp =>
+    ActivatorUtilities.CreateInstance<ClaimStatusTransitionService>(sp));
+builder.Services.AddScoped<IClaimResolutionService>(sp => ActivatorUtilities.CreateInstance<ClaimResolutionService>(sp));
+
 // 5.12a — Adjustment workflow service. Owns the supersession transition,
 // invokes IClaimSubmissionService for re-adjudication, emits
 // ClaimVersionSuperseded + ClaimVersionReversed events. Lifecycle ratified

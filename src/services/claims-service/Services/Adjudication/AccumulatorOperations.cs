@@ -272,7 +272,7 @@ public sealed class AccumulatorOperationsService
         var lockToken = Guid.NewGuid().ToString("N");
         var now = DateTime.UtcNow;
         if (!await _claims.TryAcquireResolutionLockAsync(
-                tenantId, claim.Id, lockToken, actor, now, Controllers.ClaimsController.ResolutionLockDuration, ct))
+                tenantId, claim.Id, lockToken, actor, now, ClaimResolutionService.ResolutionLockDuration, ct))
             return Item("Skipped", "being resolved, or no longer Pended");
         var failed = false;
         var stillPended = false;
