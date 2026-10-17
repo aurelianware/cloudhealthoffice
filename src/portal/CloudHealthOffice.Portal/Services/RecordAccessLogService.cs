@@ -39,6 +39,7 @@ public sealed class RecordAccessEntry
         "Provider" => $"/providers/{Uri.EscapeDataString(RecordId)}",
         "Authorization" => $"/authorizations/{Uri.EscapeDataString(RecordId)}",
         "Payment" => $"/payments/{Uri.EscapeDataString(RecordId)}",
+        "Appeal" => $"/appeals/{Uri.EscapeDataString(RecordId)}",
         _ => null,
     };
 
@@ -56,6 +57,7 @@ public sealed class RecordAccessEntry
         "BankAccount" => "Read bank details",
         "Era" => "Downloaded the 835",
         "Validate" => "Checked the authorization (claim adjudication)",
+        "History" => "Read history",
         "Rates" => "Read contracted rates",
         "Versions" => "Read record history",
         "Notes" or "Edits" or "Eligibility" or "Events" or "Coverage" or "Enrollment" or "Accumulators"
@@ -99,6 +101,9 @@ public interface IRecordAccessLogService
 
     /// <summary>Who read this payment and its 835 (payment-service).</summary>
     Task<RecordAccessLog> GetPaymentAccessLogAsync(string paymentId, int limit = 200);
+
+    /// <summary>Who read this appeal, its history, notes and documents (appeals-service).</summary>
+    Task<RecordAccessLog> GetAppealAccessLogAsync(string appealId, int limit = 200);
 }
 
 public sealed class RecordAccessLogService : IRecordAccessLogService
@@ -169,6 +174,10 @@ public sealed class RecordAccessLogService : IRecordAccessLogService
     public async Task<RecordAccessLog> GetPaymentAccessLogAsync(string paymentId, int limit = 200) =>
         Merge([await Fetch<RecordAccessEntry>("Payment Service",
             $"{Base("PaymentService", "http://payment-service.cloudhealthoffice/api")}/payments/{E(paymentId)}/access-log?limit={limit}")], limit);
+
+    public async Task<RecordAccessLog> GetAppealAccessLogAsync(string appealId, int limit = 200) =>
+        Merge([await Fetch<RecordAccessEntry>("Appeals Service",
+            $"{Base("AppealsService", "http://appeals-service.cloudhealthoffice/api")}/appeals/{E(appealId)}/access-log?limit={limit}")], limit);
 
     private static RecordAccessLog Merge(IEnumerable<(List<RecordAccessEntry>? Entries, string? Unavailable)> parts, int limit)
     {

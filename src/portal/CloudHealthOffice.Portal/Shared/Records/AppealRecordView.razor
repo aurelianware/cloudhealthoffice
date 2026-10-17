@@ -1,6 +1,7 @@
 @namespace CloudHealthOffice.Portal.Shared.Records
 @using CloudHealthOffice.Portal.Services
 @inject IAppealsService AppealsService
+@inject IServiceProvider ServiceProvider
 
 @* The appeal / grievance record (docs/architecture/portal-navigation.md
    §4): due clock, member and original decision in the header, tabs with
@@ -198,6 +199,10 @@
                     }
                 </div>
             }
+            else if (ActiveTab == "access-log")
+            {
+                <RecordAccessLogTab Kind="Appeal" RecordId="@(string.IsNullOrEmpty(Detail.RecordId) ? AppealId : Detail.RecordId)" />
+            }
         }
 </div>
 
@@ -217,6 +222,7 @@
         new("case", "Case", Icons.Material.Filled.Description),
         new("timeline", "Timeline", Icons.Material.Filled.Timeline, Detail is { Timeline.Count: > 0 } dt ? dt.Timeline.Count : null),
         new("documents", "Documents", Icons.Material.Filled.AttachFile, Detail is { Documents.Count: > 0 } dd ? dd.Documents.Count : null),
+        new("access-log", "Access log", Icons.Material.Filled.Visibility, Visible: RecordAccessLogTab.CanRead(ServiceProvider)),
     ];
 
     private string ActiveTab => RecordTabs.Resolve(AppealTabs, Tab, "case");
