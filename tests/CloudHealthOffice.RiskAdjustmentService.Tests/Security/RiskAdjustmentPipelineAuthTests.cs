@@ -33,6 +33,9 @@ public class RiskAdjustmentPipelineAuthTests : IClassFixture<RiskAdjustmentPipel
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            // Program requires a Mongo connection string; the repository is
+            // replaced below, so nothing connects to it.
+            builder.UseSetting("MongoDb:ConnectionString", "mongodb://fake-host:27017");
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IRiskScoreRepository>();
@@ -463,7 +466,7 @@ public sealed class InMemoryRiskScoreStore
 }
 
 /// <summary>
-/// Same tenant rules as the Mongo and Cosmos repositories: the tenant is
+/// Same tenant rules as the Mongo repository: the tenant is
 /// <c>HttpContext.Items["TenantId"]</c>, a missing tenant throws, reads filter
 /// on it and writes stamp it.
 /// </summary>
