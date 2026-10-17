@@ -10,11 +10,10 @@ using MongoDB.Driver;
 namespace CloudHealthOffice.ProviderEnrollmentService.Tests;
 
 /// <summary>
-/// <see cref="EnrollmentRepositoryMongo"/> on a real mongod: the behaviours
-/// <see cref="EnrollmentRepositoryCosmosTests"/> pins on a mocked Cosmos
-/// container (read-through hit and miss, one record per NPI and state,
-/// state-scoped revalidation and MCO panel queries, idempotent delete),
-/// ported ahead of the Cosmos repository's removal.
+/// <see cref="EnrollmentRepositoryMongo"/> on a real mongod: read-through hit
+/// and miss, one record per NPI and state, state-scoped revalidation and MCO
+/// panel queries, idempotent delete. Ported from the removed Cosmos
+/// repository's tests (Phase 5b).
 /// </summary>
 [Collection(MongoRunnerFixture.CollectionName)]
 public sealed class EnrollmentRepositoryMongoTests(MongoRunnerFixture mongo) : IAsyncLifetime

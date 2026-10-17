@@ -7,9 +7,7 @@ namespace CloudHealthOffice.ProviderEnrollmentService.Cache;
 /// live state APIs so subsequent lookups within the TTL window avoid
 /// redundant external API calls.
 ///
-/// Partition strategy:
-///   Cosmos: /stateCode  (query patterns are always state-scoped)
-///   Mongo:  { npi: 1, stateCode: 1 }  compound index
+/// Index: { npi: 1, stateCode: 1 } (query patterns are always state-scoped).
 /// </summary>
 public interface IEnrollmentRepository
 {
