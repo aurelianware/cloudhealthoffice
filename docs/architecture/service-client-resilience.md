@@ -81,7 +81,6 @@ happen only for idempotent requests. `HttpClient.Timeout` is the total plus
 | claims-examiner-service | `AnthropicConnectivityCheck` | max(`Anthropic:TimeoutSeconds`, 5 s) | 60 s | 181.5 s |
 | claims-examiner-service | `IClaimsServiceClient` | 15 s | 15 s | 46.5 s |
 | eligibility-service | `EligibilityDefault`, `IEligibilityService` | 5 s | 5 s | 30 s |
-| eligibility-service, provider-eligibility-api | Stedi: `StediHealthcare` (270/271, 837, 276/277, 835), `StediClaims`, `StediClaimAttachmentUpload`, `StediCore`, `StediPayerDirectory` | `Stedi:TimeoutSeconds` (30 s) | 30 s | 91.5 s |
 | fhir-service | Payer-to-Payer remote | `PayerToPayer` transport `TimeoutSeconds` (30 s, 1–300 s) | same | 91.5 s (901.5 s at 300 s) |
 | fhir-service | `HttpFhirAppealAdapter`, `ProviderService`, `BenefitPlanService`, `ClaimsService` | 30 s | 30 s | 91.5 s |
 | fhir-service | SMART issuer metadata | 10 s | 10 s | 31.5 s |
@@ -92,9 +91,6 @@ happen only for idempotent requests. `HttpClient.Timeout` is the total plus
 | premium-billing-service | coverage, member, sponsor, sponsor bank accounts | 30 s | 30 s | 91.5 s |
 | capitation-service | `CoverageService`, `ProviderService`, provider bank accounts, `RiskAdjustmentService` | 30 s | 30 s | 91.5 s |
 | capitation-service | tenant payment controls | 10 s | 10 s | 31.5 s |
-| provider-verification-service | NPPES | 30 s | 30 s | 91.5 s |
-| provider-verification-service | exclusion dataset download | `DownloadTimeout` + 1 min (11 min) | 11 min | 33 min |
-| provider-verification-service | SAM.gov exclusions API | infinite (the screener times each request) | none | none |
 | provider-service | `IProviderVerificationClient` | `ProviderVerification:TimeoutSeconds` (30 s) | 30 s | 91.5 s |
 | provider-service | tenant config | 5 s | 5 s | 30 s |
 | benefit-plan-service | tenant config, operating mode, provider integrity (provider-service), terminology crosswalk | 5 s | 5 s | 30 s |
@@ -114,12 +110,66 @@ happen only for idempotent requests. `HttpClient.Timeout` is the total plus
 
 These are outside the pipeline, so their own `HttpClient.Timeout` applies
 unchanged:
+- clients that bring their own retries and opt out (see
+  [One retry layer](#one-retry-layer)):
+  - Stedi `StediHealthcare` (270/271, 837, 276/277, 835), `StediClaims`,
+    `StediCore` and `StediPayerDirectory`: `Stedi:TimeoutSeconds` (30 s)
+    per attempt;
+  - Stedi `StediClaimAttachmentUpload`: 30 s;
+  - provider-verification-service NPPES: 30 s, under its standard handler's
+    timeouts;
+  - the exclusion dataset download: `DownloadTimeout` + 1 min (11 min);
+  - the SAM.gov exclusions API: infinite, because the screener times each
+    request (`Sam:RequestTimeout`, 20 s);
+  - the five ProviderEnrollment engine sources;
 - `new HttpClient { Timeout = ... }`: the two token-service signing-key
   fetchers (10 s) and `HttpDependencyHealthCheck` (5 s);
 - the capitation contract-split migration's own service provider (30 s);
 - `src/engines/cho-enrollment-wiring` hosts, which do not call
   `AddChoAuthentication`;
 - tools (`mcc-platform-validator`, `migration-wizard`).
+
+## One retry layer
+
+A client with a retry layer of its own opts out of the shared pipeline
+(`WithoutChoResilience`), so a failing call is not retried by both. Before
+this was fixed, a failing Stedi claim submission or report fetch made 9
+attempts: Stedi's 3, each retried 3 times by the pipeline. NPPES and SAM.gov
+made 12.
+
+**Stedi keeps its own loop (`StediHttpSender`) and leaves the pipeline.**
+The loop is kept because:
+- it reports the retry count on the gateway transaction;
+- it classifies Stedi's errors: authentication, authorization and
+  validation are never retried;
+- it honours `Retry-After`;
+- it retries the 270 eligibility POST, which the pipeline would not, since
+  the POST carries no idempotency key;
+- it is configured by `Stedi:MaxRetries`.
+
+The attachment upload is a PUT of a one-shot stream, which cannot be sent
+twice, so it is not retried at all. The pipeline used to retry it. What
+Stedi gives up by leaving is a circuit breaker.
+
+Every client that has a retry or resilience layer of its own:
+
+| Client | Where | Its own layer | Shared pipeline |
+|---|---|---|---|
+| Stedi `StediHealthcare`, `StediClaims`, `StediCore` | `Gateways/Stedi/StediHttpSender.cs`, registered in `StediHealthcareGatewayServiceCollectionExtensions.cs` | Retry loop: `Stedi:MaxRetries` (2), 429/5xx/timeout/transport, `Retry-After` | No (opted out in this change) |
+| Stedi `StediPayerDirectory` | `ReferenceData/Payers/Stedi/StediPayerDirectoryClient.cs` (`StediHttpSender`), registered in `PayerReferenceServiceCollectionExtensions.cs` | Same loop | No (this change) |
+| Stedi `StediClaimAttachmentUpload` | `StediClaimAttachmentApiClient.UploadAsync` | None. The PUT is never retried. | No (this change) |
+| NPPES (`INppesAdapter`) | `provider-verification-service/Program.cs` | `AddStandardResilienceHandler` (3 retries, circuit breaker, 30 s total) | No (this change) |
+| SAM.gov exclusions API | `SamExclusionsApiScreener.cs`, registered in `ExclusionScreeningRegistration.cs` | Retry loop: `Sam:MaxRetries` (3), per-request timeout, `Retry-After` up to `MaxServerRetryDelay` | No (this change) |
+| Exclusion dataset download (LEIE, SAM extract) | `ExclusionScreeningRegistration.cs`, `ExclusionDatasetSyncHostedService` | The sync worker runs again on its schedule | No (this change) |
+| ProviderEnrollment engine: `TmhpPemsSource`, `DhcsPaveSource`, `AhcaFmmisSource`, `EMedNySource`, `CaqhProViewSource` | `ProviderEnrollmentServiceRegistration.cs` | `AddStandardResilienceHandler` | No (opted out before this change) |
+| claims-examiner `IClaimsServiceClient` | `claims-examiner-service/Services/ClaimsServiceClient.cs` | `GetClaimAsync` retries only a 404 (3 attempts), for the pend-before-persist race | Yes. The conditions do not overlap: the pipeline retries 408, 429, 5xx and transport failures. |
+| claims-examiner Kafka consumer | `ClaimPendedMessageProcessor.cs` | Retries the whole examination on `ExaminerTransientException` (`MaxAttempts`, back-off), then dead-letters | Yes, on the Anthropic and claims-service clients inside it. This layer is per message, seconds to minutes apart, not per HTTP call. |
+| claims-examiner `IAnthropicClient` | `claims-examiner-service/Program.cs` | None besides the shared pipeline, which it configures (429/529, POST, 3 retries) | Yes |
+
+These retry loops are not around an HTTP call, so they are not listed:
+capitation disbursement and premium-billing EFT draft "auto-retry" (business
+records), optimistic-concurrency loops in repositories, and the Kafka/Service
+Bus producers.
 
 ## Per-client settings
 
@@ -131,8 +181,9 @@ services.AddHttpClient("vendor").WithoutChoResilience().AddStandardResilienceHan
 ```
 
 These clients have their own settings:
-- **ProviderEnrollment engine (5 clients):** they keep their
-  `AddStandardResilienceHandler` and opt out of the default.
+- **Opted out (their own retry layer):** Stedi, NPPES, SAM.gov, the
+  exclusion dataset download and the ProviderEnrollment engine (5 clients).
+  See [One retry layer](#one-retry-layer).
 - **claims-examiner-service Anthropic client:**
   - 429 and 529 are retried (3 times, from 2 s), POST included;
   - one attempt may take the configured model timeout (`Anthropic:TimeoutSeconds`,
