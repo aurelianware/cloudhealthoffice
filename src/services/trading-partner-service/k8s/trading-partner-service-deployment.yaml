@@ -46,18 +46,6 @@ spec:
           value: "trading-partner-service"
         - name: ASPNETCORE_ENVIRONMENT
           value: "Production"
-        - name: COSMOS_ENDPOINT
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: endpoint
-        - name: COSMOS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: key
-        - name: COSMOS_DATABASE
-          value: "CloudHealthOffice"
         - name: COSMOS_CONTAINER_TRADING_PARTNERS
           value: "TradingPartners"
         - name: MongoDb__ConnectionString

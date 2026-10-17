@@ -40,10 +40,20 @@ spec:
           env:
             - name: PORT
               value: {{ .Values.config.port | quote }}
-            - name: COSMOS_DATABASE
-              value: {{ .Values.config.cosmosDb.database | quote }}
-            - name: COSMOS_CONTAINER
-              value: {{ .Values.config.cosmosDb.container | quote }}
+            # MongoDB (Azure DocumentDB in Azure) is the only document store (ADR 017).
+            # The batch job store reads the same connection string.
+            - name: MongoDb__ConnectionString
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "existingSecrets.mongo must name the Secret holding the MongoDB connection string" .Values.existingSecrets.mongo }}
+                  key: connectionString
+            - name: MongoDb__DatabaseName
+              value: {{ .Values.config.mongoDb.database | quote }}
+            - name: BatchEligibility__MongoDb__ConnectionString
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.mongo }}
+                  key: connectionString
             - name: CACHE_ENABLED
               value: {{ .Values.config.cache.enabled | quote }}
             - name: CACHE_ACTIVE_TTL
@@ -64,21 +74,6 @@ spec:
               value: {{ .Values.config.dapr.stateStoreName | quote }}
             - name: DAPR_PUBSUB
               value: {{ .Values.config.dapr.pubSubName | quote }}
-            {{- if .Values.config.cosmosDb.endpoint }}
-            - name: COSMOS_ENDPOINT
-              value: {{ .Values.config.cosmosDb.endpoint | quote }}
-            {{- else if .Values.existingSecrets.cosmos }}
-            - name: COSMOS_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.existingSecrets.cosmos }}
-                  key: endpoint
-            - name: COSMOS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.existingSecrets.cosmos }}
-                  key: key
-            {{- end }}
             {{- if .Values.config.eventGrid.endpoint }}
             - name: EVENT_GRID_ENDPOINT
               value: {{ .Values.config.eventGrid.endpoint | quote }}
