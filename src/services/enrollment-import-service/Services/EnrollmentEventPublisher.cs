@@ -26,7 +26,7 @@ public sealed class EnrollmentConcurrencyException : Exception
 
 /// <summary>
 /// Default <see cref="IEnrollmentEventPublisher"/>. Mirrors
-/// <c>CosmosMemberEventPublisher</c>: idempotent on EventId, retries up to
+/// <c>MemberEventPublisher</c>: idempotent on EventId, retries up to
 /// <see cref="MaxVersionRetries"/> on version conflict with bounded backoff.
 ///
 /// Replay observability: every dedup short-circuit (caller re-submitted an EventId we

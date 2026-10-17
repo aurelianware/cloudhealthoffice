@@ -1,5 +1,13 @@
 # 834 Enrollment Import Pipeline - Deployment Guide
 
+> **Storage has changed.** enrollment-import-service, member-service,
+> coverage-service and sponsor-service store their data in MongoDB only (Azure
+> Cosmos DB for MongoDB vCore when deployed) and refuse to start without
+> `MongoDb:ConnectionString`. The Cosmos DB for NoSQL containers, RU/s figures,
+> `az cosmosdb sql` commands and `CosmosDb` connection settings below describe the
+> original Cosmos SDK build and no longer apply; enrollment-import-service now
+> writes members, coverage and sponsors through those services' APIs.
+
 ## Overview
 
 The 834 Enrollment Import Pipeline processes X12 834 Benefit Enrollment and Maintenance transactions from employers and health plans. It automates member enrollment lifecycle (additions, changes, terminations), populating Cosmos DB with real member, coverage, and sponsor data.

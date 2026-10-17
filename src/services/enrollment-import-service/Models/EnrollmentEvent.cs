@@ -13,11 +13,10 @@ namespace EnrollmentImportService.Models;
 /// from <c>(BatchId, TransactionId, MemberId)</c> so replaying a batch yields zero new events.
 ///
 /// Ordering: <see cref="Version"/> is monotonically increasing per (TenantId, MemberId).
-/// Concurrent writers conflict on the unique-key policy on <c>/version</c>; the publisher
-/// re-fetches the next version and retries.
+/// Concurrent writers conflict on the unique index on <c>(tenantId, memberId, version)</c>;
+/// the publisher re-fetches the next version and retries.
 ///
-/// Partition: Cosmos container <c>enrollment-events</c> uses partition key
-/// <c>{tenantId}:{memberId}</c> so per-member change-feed consumers read in order.
+/// <see cref="PartitionKey"/> (<c>{tenantId}:{memberId}</c>) groups a member's stream.
 /// </summary>
 [BsonIgnoreExtraElements]
 public class EnrollmentEvent
@@ -130,7 +129,7 @@ public class EnrollmentEvent
 
     /// <summary>
     /// Raw 834 snippet (or JSON form of the manual request) for audit / display.
-    /// Truncated to keep documents under Cosmos's 2MB limit.
+    /// Truncated to keep event documents small.
     /// </summary>
     [JsonPropertyName("rawSegment")]
     public string? RawSegment { get; set; }
@@ -156,7 +155,7 @@ public class EnrollmentEvent
 
 /// <summary>
 /// Event types covered by the enrollment stream. Keep numeric values stable — they are
-/// persisted in Cosmos.
+/// persisted.
 /// </summary>
 public enum EnrollmentEventType
 {
