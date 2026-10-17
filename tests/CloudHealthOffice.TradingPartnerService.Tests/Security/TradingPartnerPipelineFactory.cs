@@ -23,7 +23,9 @@ public sealed class TradingPartnerPipelineFactory : WebApplicationFactory<Tradin
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        builder.UseSetting("MongoDb:ConnectionString", "");
+        // Program requires a Mongo connection string; the repository is
+        // replaced below, so nothing connects to it.
+        builder.UseSetting("MongoDb:ConnectionString", "mongodb://fake-host:27017");
         builder.UseSetting("Database:Provider", "");
         builder.ConfigureServices(services =>
         {
