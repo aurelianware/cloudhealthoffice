@@ -230,7 +230,7 @@ describe('837 Claim Generator', () => {
       const isaLine = claim.split('\n').find(line => line.startsWith('ISA*'));
       
       expect(isaLine).toBeDefined();
-      expect(isaLine).toMatch(/^ISA\*00\*          \*00\*          \*ZZ\*/);
+      expect(isaLine).toMatch(/^ISA\*00\* {10}\*00\* {10}\*ZZ\*/);
       expect(isaLine).toContain('*^*00501*');
       expect(isaLine).toMatch(/~$/);
     });
