@@ -21,7 +21,6 @@
   <ItemGroup>
     <PackageReference Include="Azure.Core" VersionOverride="1.55.0" />
     <PackageReference Include="Azure.Storage.Blobs" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" />

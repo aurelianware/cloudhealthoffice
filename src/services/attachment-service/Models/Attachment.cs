@@ -9,7 +9,7 @@ namespace AttachmentService.Models;
 public class Attachment
 {
     /// <summary>
-    /// Unique identifier for the attachment (Cosmos DB 'id')
+    /// Unique identifier for the attachment (Mongo <c>_id</c>)
     /// </summary>
     [Required]
     [StringLength(100)]
