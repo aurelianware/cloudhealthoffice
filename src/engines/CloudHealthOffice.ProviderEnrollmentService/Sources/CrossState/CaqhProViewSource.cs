@@ -7,6 +7,7 @@ using CloudHealthOffice.ProviderEnrollmentService.Cache;
 using CloudHealthOffice.ProviderEnrollmentService.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.ProviderEnrollmentService.Sources.CrossState;
 
@@ -72,7 +73,7 @@ public sealed class CaqhProViewSource : IStateEnrollmentSource
             var caqhId = await ResolveCaqhIdAsync(npi, ct);
             if (caqhId is null)
             {
-                _logger.LogDebug("CAQH: no provider ID found for NPI {Npi}", SanitizeForLog(npi));
+                _logger.LogDebug("CAQH: no provider ID found for NPI {Npi}", LogSanitizer.Sanitize(npi));
                 return null;
             }
 
@@ -89,7 +90,7 @@ public sealed class CaqhProViewSource : IStateEnrollmentSource
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "CAQH API unavailable for NPI {Npi}", SanitizeForLog(npi));
+            _logger.LogWarning(ex, "CAQH API unavailable for NPI {Npi}", LogSanitizer.Sanitize(npi));
             return cached;
         }
     }
@@ -205,11 +206,5 @@ public sealed class CaqhProViewSource : IStateEnrollmentSource
         public string TaxonomyCode { get; init; } = string.Empty;
         [JsonPropertyName("isPrimary")]
         public bool IsPrimary      { get; init; }
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

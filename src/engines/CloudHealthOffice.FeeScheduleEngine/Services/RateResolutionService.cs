@@ -3,6 +3,7 @@ using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.FeeScheduleEngine.Persistence;
 using CloudHealthOffice.ReferenceData.Domain;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Services;
 
@@ -163,8 +164,8 @@ public class RateResolutionService : IRateResolutionService
             // pend the line, rather than silently substituting billed charges.
             _logger.LogWarning(
                 "Rate unresolved for {ProcedureCode} on schedule {ScheduleId}: {Reason}",
-                LogSanitizer.SafeForLog(request.ProcedureCode), LogSanitizer.SafeForLog(schedule?.Id),
-                LogSanitizer.SafeForLog(unresolvedReason));
+                LogSanitizer.Sanitize(request.ProcedureCode, 256), LogSanitizer.Sanitize(schedule?.Id, 256),
+                LogSanitizer.Sanitize(unresolvedReason, 256));
 
             return new LineResolution(new PricingResult
             {
@@ -315,7 +316,7 @@ public class RateResolutionService : IRateResolutionService
                 _logger.LogWarning(
                     "Multiple procedure rank {Rank} for line {LineNumber} ({ProcedureCode}) is by report; " +
                     "priced at {Factor:P0} pending review",
-                    rank + 1, result.LineNumber, LogSanitizer.SafeForLog(result.ProcedureCode), reductionFactor);
+                    rank + 1, result.LineNumber, LogSanitizer.Sanitize(result.ProcedureCode, 256), reductionFactor);
             }
 
             var adjustments = new List<RateAdjustment>(result.Adjustments);
@@ -580,7 +581,7 @@ public class RateResolutionService : IRateResolutionService
 
         _logger.LogWarning(
             "Line {LineNumber} ({ProcedureCode}): {Warning}",
-            request.LineNumber, LogSanitizer.SafeForLog(request.ProcedureCode), LogSanitizer.SafeForLog(warning));
+            request.LineNumber, LogSanitizer.Sanitize(request.ProcedureCode, 256), LogSanitizer.Sanitize(warning, 256));
 
         return [warning];
     }
@@ -877,7 +878,7 @@ public class RateResolutionService : IRateResolutionService
                     _logger.LogDebug(
                         "Medicaid cross-schedule: {ProcedureCode} Medicare={MedicareRate:C} " +
                         "× {Percent:P0} = {MedicaidRate:C}",
-                        LogSanitizer.SafeForLog(request.ProcedureCode), medicareRate,
+                        LogSanitizer.Sanitize(request.ProcedureCode, 256), medicareRate,
                         medicaidSchedule.PercentOfMedicare.Value, medicaidRate);
 
                     return (Math.Round(medicaidRate, 2), null);
@@ -886,15 +887,15 @@ public class RateResolutionService : IRateResolutionService
                 _logger.LogWarning(
                     "Medicaid cross-schedule: base MPFS schedule {ScheduleId} has no line " +
                     "for {ProcedureCode}; falling back to Medicaid line rate",
-                    LogSanitizer.SafeForLog(medicaidSchedule.BaseMpfsFeeScheduleId),
-                    LogSanitizer.SafeForLog(request.ProcedureCode));
+                    LogSanitizer.Sanitize(medicaidSchedule.BaseMpfsFeeScheduleId, 256),
+                    LogSanitizer.Sanitize(request.ProcedureCode, 256));
             }
             else
             {
                 _logger.LogWarning(
                     "Medicaid cross-schedule: base MPFS schedule {ScheduleId} not found; " +
                     "falling back to Medicaid line rate",
-                    LogSanitizer.SafeForLog(medicaidSchedule.BaseMpfsFeeScheduleId));
+                    LogSanitizer.Sanitize(medicaidSchedule.BaseMpfsFeeScheduleId, 256));
             }
         }
 
@@ -968,7 +969,7 @@ public class RateResolutionService : IRateResolutionService
             {
                 _logger.LogWarning(
                     "Percent-of-Medicare for {ProcedureCode}: {Reason}; using inline RVUs",
-                    LogSanitizer.SafeForLog(request.ProcedureCode), LogSanitizer.SafeForLog(referenceFailure));
+                    LogSanitizer.Sanitize(request.ProcedureCode, 256), LogSanitizer.Sanitize(referenceFailure, 256));
             }
 
             return (CalculateRvuAmount(schedule, line, IsFacilitySetting(request)), null);

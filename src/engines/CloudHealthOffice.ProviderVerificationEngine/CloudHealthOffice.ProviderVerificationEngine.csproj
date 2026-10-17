@@ -13,4 +13,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="MongoDB.Driver" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- LogSanitizer (log-forging guard and member-id masking), shared with every service. -->
+    <ProjectReference Include="..\..\services\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+  </ItemGroup>
 </Project>

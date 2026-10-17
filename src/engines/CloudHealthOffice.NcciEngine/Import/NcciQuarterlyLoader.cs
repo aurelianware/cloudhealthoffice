@@ -8,6 +8,7 @@ using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Persistence;
 using CloudHealthOffice.NcciEngine.Services;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.NcciEngine.Import;
 
@@ -112,7 +113,7 @@ internal sealed partial class NcciQuarterlyLoader : INcciQuarterlyLoader
         {
             _logger.LogInformation(
                 "NCCI {Kind} {Setting} file for {Quarter} already loaded (sha256 {Sha}); skipping",
-                request.FileKind, SanitizeForLog(setting), SanitizeForLog(request.Quarter), sha256);
+                request.FileKind, LogSanitizer.Sanitize(setting), LogSanitizer.Sanitize(request.Quarter), sha256);
             return new NcciLoadResult
             {
                 Quarter = request.Quarter,
@@ -162,7 +163,7 @@ internal sealed partial class NcciQuarterlyLoader : INcciQuarterlyLoader
 
         _logger.LogInformation(
             "NCCI {Kind} {Setting} load for {Quarter}: {Loaded} rows loaded, {Rejected} rejected, {Expired} expired, {Deleted} deleted",
-            request.FileKind, SanitizeForLog(setting), SanitizeForLog(request.Quarter),
+            request.FileKind, LogSanitizer.Sanitize(setting), LogSanitizer.Sanitize(request.Quarter),
             outcome.Loaded, rejections.Count, outcome.Expired, outcome.Deleted);
 
         return new NcciLoadResult
@@ -355,9 +356,6 @@ internal sealed partial class NcciQuarterlyLoader : INcciQuarterlyLoader
 
         await _repository.SaveVersionAsync(version, ct);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
     [GeneratedRegex(@"^(\d{4})Q([1-4])$")]
     private static partial Regex QuarterRegex();

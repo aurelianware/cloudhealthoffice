@@ -11,6 +11,7 @@ using PriorPayerLineAdjudication = CloudHealthOffice.CobEngine.Domain.PriorPayer
 using CobClaimInput = CloudHealthOffice.CobEngine.Domain.CobClaimInput;
 using CobClaimUnit = CloudHealthOffice.CobEngine.Domain.CobClaimUnit;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.BenefitEngine.Services;
 
@@ -112,9 +113,6 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
     private static ServiceCategoryClaimContext ClaimContext(BenefitResolutionRequest request) =>
         new(request.ClaimType, request.TypeOfBill, request.PlaceOfServiceIsFacilityType);
 
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
-
     public BenefitCalculationEngine(
         IServiceCategoryResolver categoryResolver,
         IBenefitPlanProvider planProvider,
@@ -180,7 +178,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         _logger.LogInformation(
             "Calculating benefits for member {MemberId}, plan {PlanId}, " +
             "{LineCount} lines, service date {ServiceDate}",
-            SanitizeForLog(request.MemberId), request.BenefitPlanId,
+            LogSanitizer.Sanitize(request.MemberId), request.BenefitPlanId,
             request.Lines.Count, request.ServiceDate);
 
         // ── Step 1: Load plan configuration ──
@@ -350,7 +348,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         var result = await _accumulatorService.CommitAsync(commit, ct);
         _logger.LogInformation(
             "Accumulator commit {CommitId} for claim {ClaimId} (plan year {PlanYear}): {Outcome}, {Clamped} update(s) clamped at a limit",
-            SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId), SanitizeForLog(commit.PlanYear),
+            LogSanitizer.Sanitize(commit.CommitId), LogSanitizer.Sanitize(commit.ClaimId), LogSanitizer.Sanitize(commit.PlanYear),
             result.Outcome, result.Clamped.Count);
         return result;
     }
@@ -543,7 +541,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         if (plan is null)
         {
             _logger.LogWarning("Cannot reverse claim {ClaimId}: plan {PlanId} not found",
-                SanitizeForLog(originalClaimId), benefitPlanId);
+                LogSanitizer.Sanitize(originalClaimId), benefitPlanId);
             return AccumulatorReversalOutcome.Reversed;
         }
 
@@ -551,7 +549,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         _logger.LogInformation(
             "Reversing accumulators (non-terminal, claim may re-commit) for claim {ClaimId}, member {MemberId}, plan year {PlanYear}",
-            SanitizeForLog(originalClaimId), SanitizeForLog(memberId), SanitizeForLog(planYear));
+            LogSanitizer.Sanitize(originalClaimId), LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(planYear));
 
         return await _accumulatorService.ReverseCommitAsync(
             memberId, subscriberId, benefitPlanId, planYear, originalClaimId, commitId, ct);
@@ -598,7 +596,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 $"line {x.Line.LineNumber} allowed {x.Allowed:0.00} > billed {x.Line.BilledAmount:0.00}"));
             _logger.LogWarning(
                 "Claim {ClaimId}: per-stay allowed exceeds billed on {LineCount} line(s); pending for pricing review",
-                SanitizeForLog(request.ClaimId), overBilled.Count);
+                LogSanitizer.Sanitize(request.ClaimId), overBilled.Count);
             return new BenefitResolutionResult
             {
                 Success = false,

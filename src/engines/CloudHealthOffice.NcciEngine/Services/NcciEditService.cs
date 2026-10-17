@@ -2,6 +2,7 @@ using CloudHealthOffice.NcciEngine.Domain;
 using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Persistence;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.NcciEngine.Services;
 
@@ -91,7 +92,7 @@ internal class NcciEditService : INcciEditService
 
         _logger.LogDebug(
             "NCCI scrub for claim {ClaimId}: {PairChecks} pair checks, {MueChecks} MUE checks, {Failures} failures",
-            SanitizeForLog(request.ClaimId), result.NcciPairsChecked, result.MueChecked, result.EditFailures.Count);
+            LogSanitizer.Sanitize(request.ClaimId), result.NcciPairsChecked, result.MueChecked, result.EditFailures.Count);
 
         return result;
     }
@@ -109,7 +110,7 @@ internal class NcciEditService : INcciEditService
         _logger.LogInformation(
             "Importing NCCI quarterly update for tenant {TenantId}, quarter {Quarter}: " +
             "{PairCount} pairs, {MueCount} MUE entries",
-            SanitizeForLog(tenantId), SanitizeForLog(quarter), pairs.Count, entries.Count);
+            LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(quarter), pairs.Count, entries.Count);
 
         var (pairsWritten, mueWritten) = await _repository.UpsertQuarterAsync(
             tenantId, quarter, pairs, entries, ct);
@@ -125,16 +126,9 @@ internal class NcciEditService : INcciEditService
 
         _logger.LogInformation(
             "NCCI import complete for {Quarter}: {PairsWritten} pairs, {MueWritten} MUE entries written",
-            SanitizeForLog(quarter), pairsWritten, mueWritten);
+            LogSanitizer.Sanitize(quarter), pairsWritten, mueWritten);
 
         return (pairsWritten, mueWritten);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     private static string NormalizeCode(string code) => code.Trim().ToUpperInvariant();

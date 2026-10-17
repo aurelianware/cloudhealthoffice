@@ -30,4 +30,8 @@
          (pend / lock / commit) end-to-end tests. -->
     <InternalsVisibleTo Include="CloudHealthOffice.GoldenPath.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- LogSanitizer (log-forging guard and member-id masking), shared with every service. -->
+    <ProjectReference Include="..\..\services\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+  </ItemGroup>
 </Project>
