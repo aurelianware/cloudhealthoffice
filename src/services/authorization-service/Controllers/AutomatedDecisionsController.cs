@@ -4,6 +4,7 @@ using AuthorizationService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AuthorizationService.Controllers;
 
@@ -88,13 +89,13 @@ public sealed class AutomatedDecisionsController : ControllerBase
             {
                 _logger.LogInformation(
                     "Automated decision for authorization {AuthNumber} in tenant {Tenant} already recorded; returning it",
-                    SanitizeForLog(number), SanitizeForLog(_actor.TenantId));
+                    LogSanitizer.Sanitize(number), LogSanitizer.Sanitize(_actor.TenantId));
                 return Ok(existing);
             }
 
             _logger.LogWarning(
                 "Automated decision refused: authorization {AuthNumber} already exists in tenant {Tenant}",
-                SanitizeForLog(number), SanitizeForLog(_actor.TenantId));
+                LogSanitizer.Sanitize(number), LogSanitizer.Sanitize(_actor.TenantId));
             return Conflict($"Authorization {number} already exists.");
         }
 
@@ -149,8 +150,8 @@ public sealed class AutomatedDecisionsController : ControllerBase
 
         _logger.LogInformation(
             "Automated decision recorded: authorization {AuthNumber} tenant {Tenant} status {Status} by {Actor}",
-            SanitizeForLog(stored.AuthorizationNumber), SanitizeForLog(stored.TenantId), stored.Status,
-            SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(stored.AuthorizationNumber), LogSanitizer.Sanitize(stored.TenantId), stored.Status,
+            LogSanitizer.Sanitize(_actor.UserId));
 
         return StatusCode(StatusCodes.Status201Created, stored);
     }
@@ -252,7 +253,4 @@ public sealed class AutomatedDecisionsController : ControllerBase
 
         return errors.Count == 0 ? null : new ValidationProblemDetails(errors);
     }
-
-    private static string SanitizeForLog(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

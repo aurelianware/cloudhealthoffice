@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Options;
 using ProviderService.Models;
 using ProviderService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Services;
 
@@ -81,7 +82,7 @@ public sealed class NetworkParticipationBackfillService : INetworkParticipationB
 
         _logger.LogInformation(
             "panel-gating backfill run starting tenant={Tenant} runId={RunId} pageSize={PageSize} maxProviders={Max}",
-            Sanitize(tenantId), backfillRunId, pageSize, maxProviders);
+            LogSanitizer.Sanitize(tenantId), backfillRunId, pageSize, maxProviders);
 
         var skip = 0;
         while (true)
@@ -121,7 +122,7 @@ public sealed class NetworkParticipationBackfillService : INetworkParticipationB
 
         _logger.LogInformation(
             "panel-gating backfill run complete tenant={Tenant} runId={RunId} providersInspected={ProvIn} participationsInspected={PartIn} backfilled={Bf} skipped={Sk} failed={Fa} etagConflicts={Etag}",
-            Sanitize(tenantId), backfillRunId,
+            LogSanitizer.Sanitize(tenantId), backfillRunId,
             result.ProvidersInspected, result.ParticipationsInspected,
             result.ParticipationsBackfilled, result.ParticipationsSkipped,
             result.ParticipationsFailed, result.EtagConflicts);
@@ -171,7 +172,7 @@ public sealed class NetworkParticipationBackfillService : INetworkParticipationB
             {
                 _logger.LogWarning(ex,
                     "panel-gating patch failed tenant={Tenant} providerId={ProviderId} index={Index}",
-                    Sanitize(tenantId), Sanitize(provider.ProviderId), i);
+                    LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(provider.ProviderId), i);
                 result.ParticipationsFailed++;
                 ChoMetrics.NetworkParticipationBackfillOutcomes.Add(1,
                     new KeyValuePair<string, object?>("cho.outcome", "failed"),
@@ -224,13 +225,10 @@ public sealed class NetworkParticipationBackfillService : INetworkParticipationB
                 // "Rerun behavior").
                 _logger.LogWarning(ex,
                     "panel-gating-backfilled event publication failed tenant={Tenant} providerId={ProviderId} index={Index} runId={RunId}; patch already applied",
-                    Sanitize(tenantId), Sanitize(provider.ProviderId), i, backfillRunId);
+                    LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(provider.ProviderId), i, backfillRunId);
             }
         }
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>

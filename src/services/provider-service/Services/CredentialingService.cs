@@ -4,6 +4,7 @@ using CloudHealthOffice.Infrastructure.Json;
 using ProviderService.Models;
 using ProviderService.Models.CredentialingPayloads;
 using ProviderService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Services;
 
@@ -532,7 +533,7 @@ public sealed class CredentialingService : ICredentialingService
                 _logger.LogWarning(
                     "CredentialingProjection patch returned false for {Tenant}:{Provider}; " +
                     "no Active head row found. Event {EventId} ({EventType}) was still appended.",
-                    Sanitize(tenantId), Sanitize(providerId), Sanitize(published.EventId), published.EventType);
+                    LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(providerId), LogSanitizer.Sanitize(published.EventId), published.EventType);
             }
         }
         catch (Exception ex)
@@ -540,7 +541,7 @@ public sealed class CredentialingService : ICredentialingService
             _logger.LogError(ex,
                 "CredentialingProjection patch failed for {Tenant}:{Provider}; " +
                 "event {EventId} ({EventType}) is appended but the flat projection is stale.",
-                Sanitize(tenantId), Sanitize(providerId), Sanitize(published.EventId), published.EventType);
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(providerId), LogSanitizer.Sanitize(published.EventId), published.EventType);
         }
     }
 
@@ -550,7 +551,4 @@ public sealed class CredentialingService : ICredentialingService
         var json = JsonSerializer.Serialize(payload, CloudHealthOfficeJsonOptions.DefaultOptions);
         return JsonNode.Parse(json) as JsonObject;
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

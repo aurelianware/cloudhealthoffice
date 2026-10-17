@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using CloudHealthOffice.OperatingMode;
 using Microsoft.Extensions.Caching.Memory;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -69,7 +70,7 @@ public class HttpOperatingModeProvider : IOperatingModeProvider
                 _logger.LogWarning(
                     "tenant-service answered {StatusCode} for the operating mode of tenant {TenantId}; " +
                     "defaulting to Replace for all engines for this call only (not cached)",
-                    (int)response.StatusCode, SanitizeForLog(tenantId));
+                    (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
                 return new OperatingModeConfiguration { TenantId = tenantId };
             }
             else
@@ -90,19 +91,16 @@ public class HttpOperatingModeProvider : IOperatingModeProvider
             _logger.LogWarning(ex,
                 "Failed to fetch operating mode for tenant {TenantId}; defaulting to Replace for all engines " +
                 "for this call only (not cached)",
-                SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(tenantId));
             return new OperatingModeConfiguration { TenantId = tenantId };
         }
 
         _logger.LogError(
             "tenant-service refused the operating mode lookup for tenant {TenantId} with {StatusCode}; " +
             "benefit-plan-service is not authenticated or not authorized there. No default is used.",
-            SanitizeForLog(tenantId), (int)refusal);
+            LogSanitizer.Sanitize(tenantId), (int)refusal);
         throw new OperatingModeUnavailableException(tenantId, refusal);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>

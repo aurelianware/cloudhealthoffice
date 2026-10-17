@@ -5,6 +5,7 @@ using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EnrollmentImportService.Controllers;
 
@@ -57,7 +58,7 @@ public class EnrollmentController : ControllerBase
         var tenantId = TenantId;
 
         _logger.LogInformation("Importing 834 file {FileName} for tenant {TenantId} with {Count} enrollments",
-            SanitizeForLog(enrollment.FileName), SanitizeForLog(tenantId), enrollment.TransactionCount);
+            LogSanitizer.Sanitize(enrollment.FileName), LogSanitizer.Sanitize(tenantId), enrollment.TransactionCount);
 
         // The importing user is the token subject; nothing in the body can claim it.
         enrollment.ActorId = _actor.UserId;
@@ -107,7 +108,7 @@ public class EnrollmentController : ControllerBase
             if (envelope.IsRejected)
             {
                 _logger.LogWarning("Uploaded 834 file {FileName} for tenant {TenantId} rejected at the interchange envelope",
-                    SanitizeForLog(file.FileName), SanitizeForLog(tenantId));
+                    LogSanitizer.Sanitize(file.FileName), LogSanitizer.Sanitize(tenantId));
                 return BadRequest(new
                 {
                     error = "The interchange envelope (ISA/IEA) was rejected: " + string.Join("; ", envelope.RejectionReasons),
@@ -146,12 +147,12 @@ public class EnrollmentController : ControllerBase
         catch (X12FormatException ex)
         {
             _logger.LogWarning(ex, "Failed to parse uploaded 834 file {FileName} for tenant {TenantId}",
-                SanitizeForLog(file.FileName), SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(file.FileName), LogSanitizer.Sanitize(tenantId));
             return BadRequest($"Could not parse 834 file: {ex.Message}");
         }
 
         _logger.LogInformation("Parsed uploaded 834 file {FileName} for tenant {TenantId} with {Count} enrollments",
-            SanitizeForLog(enrollment.FileName), SanitizeForLog(tenantId), enrollment.TransactionCount);
+            LogSanitizer.Sanitize(enrollment.FileName), LogSanitizer.Sanitize(tenantId), enrollment.TransactionCount);
 
         // The importing user is the token subject; nothing in the body can claim it.
         enrollment.ActorId = _actor.UserId;
@@ -219,7 +220,7 @@ public class EnrollmentController : ControllerBase
         catch (X12FormatException ex)
         {
             _logger.LogWarning(ex, "Failed to parse uploaded 834 file {FileName} for tenant {TenantId}",
-                SanitizeForLog(file.FileName), SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(file.FileName), LogSanitizer.Sanitize(tenantId));
             return BadRequest($"Could not parse 834 file: {ex.Message}");
         }
 
@@ -254,12 +255,5 @@ public class EnrollmentController : ControllerBase
     public IActionResult Health()
     {
         return Ok(new { status = "healthy", service = "enrollment-import" });
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

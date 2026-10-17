@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using CloudHealthOffice.Appeals.Contracts;
 using FhirService.Middleware;
 using Microsoft.AspNetCore.Http;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services;
 
@@ -54,7 +55,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
         {
             _logger.LogWarning(
                 "Tenant parameter ({ParamTenant}) differs from HttpContext tenant ({CtxTenant}); using parameter.",
-                Sanitize(tenantId), Sanitize(handlerTenant));
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(handlerTenant));
         }
     }
 
@@ -73,7 +74,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
         {
             _logger.LogError(ex,
                 "appeals-service GET failed for id={AppealId} tenant={TenantId}",
-                Sanitize(id), Sanitize(tenantId));
+                LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(tenantId));
             throw;
         }
 
@@ -220,7 +221,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
 
             _logger.LogWarning(
                 "Appeal submit child {Kind} {ChildRef} failed with {Status}: {Diag}",
-                kind, Sanitize(childRef), (int)response.StatusCode, Sanitize(diagnostics));
+                kind, LogSanitizer.Sanitize(childRef), (int)response.StatusCode, LogSanitizer.Sanitize(diagnostics));
 
             return new AppealSubmitChildOutcome
             {
@@ -238,7 +239,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
         {
             _logger.LogWarning(ex,
                 "Appeal submit child {Kind} {ChildRef} network/timeout failure",
-                kind, Sanitize(childRef));
+                kind, LogSanitizer.Sanitize(childRef));
 
             return new AppealSubmitChildOutcome
             {
@@ -382,7 +383,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
         {
             _logger.LogError(ex,
                 "appeals-service GET notes/{NoteId} failed for tenant={TenantId}",
-                Sanitize(noteId), Sanitize(tenantId));
+                LogSanitizer.Sanitize(noteId), LogSanitizer.Sanitize(tenantId));
             throw;
         }
 
@@ -418,7 +419,7 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
         {
             _logger.LogError(ex,
                 "appeals-service GET attachments/{AttachmentId} failed for tenant={TenantId}",
-                Sanitize(attachmentId), Sanitize(tenantId));
+                LogSanitizer.Sanitize(attachmentId), LogSanitizer.Sanitize(tenantId));
             throw;
         }
 
@@ -448,10 +449,6 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
         };
         return (appeal, attachment);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty
-            : value.Replace("\r", "").Replace("\n", "");
 
     /// <summary>
     /// Response envelope for appeals-service's list endpoints. Mirrors

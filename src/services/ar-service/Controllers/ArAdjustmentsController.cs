@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using ArService.Models;
 using ArService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ArService.Controllers;
 
@@ -77,7 +78,7 @@ public class ArAdjustmentsController : ControllerBase
         adjustment.AuthorizedAt = null;
 
         _logger.LogInformation("Creating AR adjustment {AdjustmentNumber}, type={Type}, amount={Amount}",
-            SanitizeForLog(adjustment.AdjustmentNumber), adjustment.AdjustmentType, adjustment.Amount);
+            LogSanitizer.Sanitize(adjustment.AdjustmentNumber), adjustment.AdjustmentType, adjustment.Amount);
 
         var created = await _adjustmentRepository.CreateAsync(adjustment);
         return CreatedAtAction(nameof(GetAdjustmentById), new { id = created.Id }, created);
@@ -107,7 +108,7 @@ public class ArAdjustmentsController : ControllerBase
         adjustment.LastUpdatedAt = DateTime.UtcNow;
 
         _logger.LogInformation("Approved AR adjustment {AdjustmentNumber} by {AuthorizedBy}",
-            SanitizeForLog(adjustment.AdjustmentNumber), SanitizeForLog(authorizedBy));
+            LogSanitizer.Sanitize(adjustment.AdjustmentNumber), LogSanitizer.Sanitize(authorizedBy));
 
         var updated = await _adjustmentRepository.UpdateAsync(adjustment);
         return Ok(updated);
@@ -134,7 +135,7 @@ public class ArAdjustmentsController : ControllerBase
         adjustment.LastUpdatedAt = DateTime.UtcNow;
 
         _logger.LogInformation("Rejected AR adjustment {AdjustmentNumber}: {Reason}",
-            adjustment.AdjustmentNumber, SanitizeForLog(request.Reason));
+            adjustment.AdjustmentNumber, LogSanitizer.Sanitize(request.Reason));
 
         var updated = await _adjustmentRepository.UpdateAsync(adjustment);
         return Ok(updated);
@@ -231,7 +232,7 @@ public class ArAdjustmentsController : ControllerBase
         adjustment.LastUpdatedAt = DateTime.UtcNow;
 
         _logger.LogInformation("Reversed AR adjustment {AdjustmentNumber}",
-            SanitizeForLog(adjustment.AdjustmentNumber));
+            LogSanitizer.Sanitize(adjustment.AdjustmentNumber));
 
         var updated = await _adjustmentRepository.UpdateAsync(adjustment);
         return Ok(updated);
@@ -253,13 +254,6 @@ public class ArAdjustmentsController : ControllerBase
         balance.ClosingBalance = balance.OpeningBalance + balance.TotalDebits - balance.TotalCredits;
         balance.LastUpdatedAt = DateTime.UtcNow;
         return true;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

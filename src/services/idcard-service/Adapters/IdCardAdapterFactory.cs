@@ -3,6 +3,7 @@ using System.Net;
 using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Tenancy;
 using IdCardService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace IdCardService.Adapters;
 
@@ -68,7 +69,7 @@ public class IdCardAdapterFactory
         if (adapter == null)
         {
             _logger.LogWarning(
-                "No id-card adapter found for platform '{Platform}', falling back to 'cho'", Sanitize(platform));
+                "No id-card adapter found for platform '{Platform}', falling back to 'cho'", LogSanitizer.Sanitize(platform));
             adapter = _adapters.First(a =>
                 string.Equals(a.Platform, "cho", StringComparison.OrdinalIgnoreCase));
         }
@@ -129,9 +130,6 @@ public class IdCardAdapterFactory
 
         return null;
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }
 
 /// <summary>

@@ -2,31 +2,9 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace IdCardService.Services;
-
-/// <summary>
-/// Strips CR/LF/NUL and other control characters from values that flow
-/// into log messages. All caller-supplied identifiers are routed through
-/// this helper before being logged so an attacker can't inject forged log
-/// entries via newline-bearing request fields.
-/// </summary>
-internal static class LogSafe
-{
-    public static string Of(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        const int maxLen = 256;
-        var sb = new System.Text.StringBuilder(Math.Min(value.Length, maxLen));
-        var limit = Math.Min(value.Length, maxLen);
-        for (var i = 0; i < limit; i++)
-        {
-            var c = value[i];
-            if (!char.IsControl(c)) sb.Append(c);
-        }
-        return sb.ToString();
-    }
-}
 
 /// <summary>
 /// Prepares every outbound call to another CHO service: names the tenant in
@@ -87,11 +65,11 @@ public sealed class UpstreamAuthorization
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
             logger.LogError("{Service} refused the call for {Subject} with {Status}; check service authentication",
-                service, LogSafe.Of(subject), status);
+                service, LogSanitizer.Sanitize(subject, 256), status);
         }
         else
         {
-            logger.LogWarning("{Service} responded {Status} for {Subject}", service, status, LogSafe.Of(subject));
+            logger.LogWarning("{Service} responded {Status} for {Subject}", service, status, LogSanitizer.Sanitize(subject, 256));
         }
         return new HttpRequestException($"{service} responded {status}.", null, response.StatusCode);
     }

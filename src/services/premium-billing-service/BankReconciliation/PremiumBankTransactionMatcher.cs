@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
 using PremiumBillingService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PremiumBillingService.BankReconciliation;
 
@@ -68,12 +69,6 @@ public sealed class PremiumBankReconciliationOptions
 /// </summary>
 public sealed class PremiumBankTransactionMatcher : IBankTransactionMatcher
 {
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
-
     public const string BankPayerId = "BANK";
 
     private readonly ICashApplicationService _cash;
@@ -170,7 +165,7 @@ public sealed class PremiumBankTransactionMatcher : IBankTransactionMatcher
                 $"Applied to invoice {application.InvoiceNumber} ({application.Outcome}).", "RemittanceBatch", [batch.Id]);
 
         // Cash application held it (e.g. a possible duplicate of an 820): it is in that exceptions queue now.
-        _logger.LogWarning("Bank line batch {BatchId} was recorded but cash application queued it as an exception", SanitizeForLog(batch.Id));
+        _logger.LogWarning("Bank line batch {BatchId} was recorded but cash application queued it as an exception", LogSanitizer.Sanitize(batch.Id));
         return new MatchDecision("PremiumCash", ReconciliationStatus.Matched,
             $"Recorded through cash application, which put it in the remittance exceptions queue ({string.Join(", ", batch.Exceptions.Select(e => e.Id))}).",
             "RemittanceBatch", [batch.Id]);

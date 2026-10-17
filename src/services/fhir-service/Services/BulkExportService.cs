@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using FhirService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services;
 
@@ -64,7 +65,7 @@ public class BulkExportService : IBulkExportService
 
         _logger.LogInformation(
             "Bulk export job {JobId} created for tenant {TenantId}, types={Types}",
-            jobId, Sanitize(tenantId), Sanitize(string.Join(",", resourceTypes)));
+            jobId, LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(string.Join(",", resourceTypes)));
 
         return Task.FromResult(job);
     }
@@ -84,12 +85,7 @@ public class BulkExportService : IBulkExportService
             return Task.FromResult(false);
 
         job.Status = BulkExportStatus.Cancelled;
-        _logger.LogInformation("Bulk export job {JobId} cancelled for tenant {TenantId}", Sanitize(jobId), Sanitize(tenantId));
+        _logger.LogInformation("Bulk export job {JobId} cancelled for tenant {TenantId}", LogSanitizer.Sanitize(jobId), LogSanitizer.Sanitize(tenantId));
         return Task.FromResult(true);
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty
-           : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                  .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

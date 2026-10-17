@@ -4,6 +4,7 @@ using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Controllers;
 
@@ -274,7 +275,7 @@ public class FhirEndpointController : ControllerBase
             {
                 _logger.LogError(ex,
                     "Endpoint search failed for tenant {TenantId} (repo page {RepoPage})",
-                    SanitizeForLog(TenantId), repoPage);
+                    LogSanitizer.Sanitize(TenantId), repoPage);
                 throw;
             }
 
@@ -381,11 +382,5 @@ public class FhirEndpointController : ControllerBase
         var value  = token[(pipe + 1)..];
         if (string.IsNullOrEmpty(system)) return value;
         return null;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

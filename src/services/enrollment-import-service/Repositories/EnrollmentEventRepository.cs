@@ -1,5 +1,6 @@
 using EnrollmentImportService.Models;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EnrollmentImportService.Repositories;
 
@@ -49,7 +50,7 @@ public class EnrollmentEventRepository : IEnrollmentEventRepository
             {
                 _logger?.LogWarning(
                     "Version collision on enrollment-events append for {PartitionKey} v{Version}; caller should retry with a fresh version.",
-                    SanitizeForLog(evt.PartitionKey), evt.Version);
+                    LogSanitizer.Sanitize(evt.PartitionKey), evt.Version);
             }
             return new EnrollmentEventAppendResult(existing ?? evt, Appended: false);
         }
@@ -119,7 +120,4 @@ public class EnrollmentEventRepository : IEnrollmentEventRepository
         if (string.IsNullOrEmpty(evt.PartitionKey))
             evt.PartitionKey = EnrollmentEvent.BuildPartitionKey(evt.TenantId, evt.MemberId);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Controllers;
 
@@ -81,15 +82,15 @@ public class PasController : FhirControllerBase
 
             _logger.LogInformation(
                 "PAS $submit received for tenant {TenantId}, claim type {ClaimType}",
-                SanitizeForLog(TenantId),
-                SanitizeForLog(claim.Type?.Coding?.FirstOrDefault()?.Code ?? "unknown"));
+                LogSanitizer.Sanitize(TenantId),
+                LogSanitizer.Sanitize(claim.Type?.Coding?.FirstOrDefault()?.Code ?? "unknown"));
 
             // 2. Validate compliance
             var compliance = _complianceChecker.ValidateCompliance(claim);
             if (!compliance.Compliant)
             {
                 var issues = string.Join("; ", compliance.Issues.Select(i => i.Message));
-                _logger.LogWarning("PAS $submit compliance validation failed: {Issues}", SanitizeForLog(issues));
+                _logger.LogWarning("PAS $submit compliance validation failed: {Issues}", LogSanitizer.Sanitize(issues));
                 return FhirBadRequest($"Claim does not meet CMS-0057-F compliance requirements: {issues}");
             }
 
@@ -106,15 +107,15 @@ public class PasController : FhirControllerBase
             {
                 _logger.LogWarning(
                     "PAS $submit for tenant {TenantId}: {Element}: {Warning} (system {System}, code {Code})",
-                    SanitizeForLog(TenantId), SanitizeForLog(warning.Expression), warning.Message,
-                    SanitizeForLog(warning.System ?? "none"), SanitizeForLog(warning.Code));
+                    LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(warning.Expression), warning.Message,
+                    LogSanitizer.Sanitize(warning.System ?? "none"), LogSanitizer.Sanitize(warning.Code));
             }
             if (!mapping.IsValid)
             {
                 _logger.LogWarning(
                     "PAS $submit refused for tenant {TenantId}: request incomplete at {Elements}",
-                    SanitizeForLog(TenantId),
-                    SanitizeForLog(string.Join(", ", mapping.Errors.Select(e => e.Expression))));
+                    LogSanitizer.Sanitize(TenantId),
+                    LogSanitizer.Sanitize(string.Join(", ", mapping.Errors.Select(e => e.Expression))));
                 RecordMetrics(sw, "rejected", "incomplete-request");
                 return IncompleteRequest(mapping.Errors);
             }
@@ -144,7 +145,7 @@ public class PasController : FhirControllerBase
 
                     _logger.LogWarning(
                         "PAS $submit auto-denied: excluded provider NPI {Npi}, source={Source}",
-                        SanitizeForLog(providerNpi), SanitizeForLog(verificationResult.ExclusionSource));
+                        LogSanitizer.Sanitize(providerNpi), LogSanitizer.Sanitize(verificationResult.ExclusionSource));
 
                     return await RecordAndRespondAsync(claim, record, mapping, deniedDecision, sw);
                 }
@@ -153,8 +154,8 @@ public class PasController : FhirControllerBase
                 {
                     _logger.LogWarning(
                         "PAS $submit: provider NPI {Npi} has low integrity score {Score} ({Rating})",
-                        SanitizeForLog(providerNpi), verificationResult.IntegrityScore,
-                        SanitizeForLog(verificationResult.Rating));
+                        LogSanitizer.Sanitize(providerNpi), verificationResult.IntegrityScore,
+                        LogSanitizer.Sanitize(verificationResult.Rating));
                 }
             }
 
@@ -166,7 +167,7 @@ public class PasController : FhirControllerBase
             {
                 _logger.LogInformation(
                     "PAS $submit for tenant {TenantId}: line of business undetermined, pended without adjudication",
-                    SanitizeForLog(TenantId));
+                    LogSanitizer.Sanitize(TenantId));
                 return await RecordAndRespondAsync(claim, record, mapping, new PasDecisionResult
                 {
                     HasDecision = false,
@@ -246,7 +247,7 @@ public class PasController : FhirControllerBase
             _logger.LogError(
                 "PAS $submit for tenant {TenantId} failed: authorization {AuthNumber} was not stored ({Failure}); "
                 + "no preAuthRef issued",
-                SanitizeForLog(TenantId), SanitizeForLog(decision.AuthorizationNumber), stored.Failure);
+                LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(decision.AuthorizationNumber), stored.Failure);
             return NotRecorded(stored.Failure);
         }
 
@@ -289,7 +290,7 @@ public class PasController : FhirControllerBase
                 _logger.LogError(
                     "PAS $submit for tenant {TenantId}: authorization {AuthNumber} was stored as {Status}, "
                     + "which $submit cannot answer; no preAuthRef issued",
-                    SanitizeForLog(TenantId), SanitizeForLog(kept.AuthorizationNumber), kept.Status);
+                    LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(kept.AuthorizationNumber), kept.Status);
                 return NotRecorded(PasRecordFailure.Rejected);
         }
 
@@ -298,8 +299,8 @@ public class PasController : FhirControllerBase
 
         _logger.LogInformation(
             "PAS $submit completed in {ElapsedMs}ms, authorization={AuthNumber}, decision={Decision}, rule={Rule}",
-            sw.ElapsedMilliseconds, SanitizeForLog(kept.AuthorizationNumber), answered,
-            SanitizeForLog(answer.RuleName));
+            sw.ElapsedMilliseconds, LogSanitizer.Sanitize(kept.AuthorizationNumber), answered,
+            LogSanitizer.Sanitize(answer.RuleName));
 
         return Ok(responseBundle);
     }
@@ -455,8 +456,8 @@ public class PasController : FhirControllerBase
             _logger.LogInformation(
                 "PAS $inquire: tenant={Tenant} caller={Caller} authorization={Auth} "
                 + "outcome={Outcome} status={Status} at={At}",
-                SanitizeForLog(TenantId), SanitizeForLog(caller),
-                SanitizeForLog(result.Authorization!.AuthorizationNumber),
+                LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(caller),
+                LogSanitizer.Sanitize(result.Authorization!.AuthorizationNumber),
                 result.Outcome, result.Authorization.Status, DateTime.UtcNow);
             return;
         }
@@ -464,8 +465,8 @@ public class PasController : FhirControllerBase
         _logger.LogWarning(
             "PAS $inquire refused: tenant={Tenant} caller={Caller} authorization={Auth} "
             + "outcome={Outcome} at={At}",
-            SanitizeForLog(TenantId), SanitizeForLog(caller),
-            SanitizeForLog(result.RequestedAuthorizationNumber),
+            LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(caller),
+            LogSanitizer.Sanitize(result.RequestedAuthorizationNumber),
             result.Outcome, DateTime.UtcNow);
     }
 
@@ -489,7 +490,7 @@ public class PasController : FhirControllerBase
             if (entry.Resource != null && !AllowedResourceTypes.Contains(entry.Resource.TypeName))
             {
                 _logger.LogWarning("PAS $inquire rejected unexpected resource type: {Type}",
-                    SanitizeForLog(entry.Resource.TypeName));
+                    LogSanitizer.Sanitize(entry.Resource.TypeName));
                 return (null, FhirBadRequest(
                     $"Bundle contains disallowed resource type: {entry.Resource.TypeName}"));
             }
@@ -568,7 +569,7 @@ public class PasController : FhirControllerBase
             if (entry.Resource != null && !AllowedResourceTypes.Contains(entry.Resource.TypeName))
             {
                 _logger.LogWarning("PAS $submit rejected unexpected resource type: {Type}",
-                    SanitizeForLog(entry.Resource.TypeName));
+                    LogSanitizer.Sanitize(entry.Resource.TypeName));
                 return (null, FhirBadRequest(
                     $"Bundle contains disallowed resource type: {entry.Resource.TypeName}"));
             }
@@ -642,7 +643,7 @@ public class PasController : FhirControllerBase
 
             _logger.LogWarning(
                 "Provider Verification Service returned {StatusCode} for NPI {Npi} — proceeding without verification",
-                response.StatusCode, SanitizeForLog(npi));
+                response.StatusCode, LogSanitizer.Sanitize(npi));
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -652,7 +653,7 @@ public class PasController : FhirControllerBase
         {
             _logger.LogWarning(ex,
                 "Provider Verification Service unavailable for NPI {Npi} — proceeding without verification",
-                SanitizeForLog(npi));
+                LogSanitizer.Sanitize(npi));
         }
 
         // Graceful degradation: if verification service is down, proceed without blocking

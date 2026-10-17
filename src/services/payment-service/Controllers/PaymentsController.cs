@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using PaymentService.Models;
 using PaymentService.Repositories;
 using PaymentService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Controllers;
 
@@ -48,7 +49,7 @@ public class PaymentsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Payment>> ProcessPayment([FromBody] Payment payment)
     {
-        _logger.LogInformation("Processing 835 ERA payment for check {CheckNumber}", SanitizeForLog(payment.CheckNumber));
+        _logger.LogInformation("Processing 835 ERA payment for check {CheckNumber}", LogSanitizer.Sanitize(payment.CheckNumber));
 
         // Validation
         if (string.IsNullOrEmpty(payment.CheckNumber))
@@ -159,7 +160,7 @@ public class PaymentsController : ControllerBase
         [FromQuery] int pageSize = 50)
     {
         _logger.LogInformation("Searching payments: date range {From} to {To}, payer {Payer}, status {Status}",
-            paymentDateFrom, paymentDateTo, SanitizeForLog(payerId), status);
+            paymentDateFrom, paymentDateTo, LogSanitizer.Sanitize(payerId), status);
 
         var payments = await _paymentRepository.SearchAsync(
             paymentDateFrom, paymentDateTo, payerId, status, page, pageSize);
@@ -190,7 +191,7 @@ public class PaymentsController : ControllerBase
 
         var updated = await _paymentRepository.UpdateAsync(payment);
 
-        _logger.LogInformation("Payment {PaymentId} posted by {User}", SanitizeForLog(id), SanitizeForLog(payment.PostedBy));
+        _logger.LogInformation("Payment {PaymentId} posted by {User}", LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(payment.PostedBy));
 
         return Ok(updated);
     }
@@ -220,7 +221,7 @@ public class PaymentsController : ControllerBase
 
         var updated = await _paymentRepository.UpdateAsync(payment);
 
-        _logger.LogInformation("Payment {PaymentId} reconciled", SanitizeForLog(id));
+        _logger.LogInformation("Payment {PaymentId} reconciled", LogSanitizer.Sanitize(id));
 
         return Ok(updated);
     }
@@ -259,7 +260,7 @@ public class PaymentsController : ControllerBase
         };
 
         _logger.LogInformation("Generating 835 ERA download for payment {PaymentId} check {CheckNumber}",
-            SanitizeForLog(id), SanitizeForLog(payment.CheckNumber));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(payment.CheckNumber));
 
         // The BPR segment carries the payer's and payee's bank routing and
         // account numbers; a download never returns them in full.
@@ -273,7 +274,7 @@ public class PaymentsController : ControllerBase
             // An ACH BPR that configuration cannot fill (e.g. no BPR10
             // originating company id) is refused, never emitted misaligned.
             _logger.LogError(ex, "Cannot generate 835 for payment {PaymentId} (trace id {TraceId})",
-                SanitizeForLog(id), ChoProblemResults.TraceId(HttpContext));
+                LogSanitizer.Sanitize(id), ChoProblemResults.TraceId(HttpContext));
             await RecordEraAsync(accessLog, id, payment, StatusCodes.Status500InternalServerError);
             return this.ServerError("835 cannot be generated");
         }
@@ -316,13 +317,6 @@ public class PaymentsController : ControllerBase
         var summary = await _paymentRepository.GetPaymentsSummaryAsync(fromDate, toDate);
 
         return Ok(summary);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

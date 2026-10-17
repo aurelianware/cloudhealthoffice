@@ -1,5 +1,6 @@
 using BenefitPlanService.Models;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -195,8 +196,8 @@ public sealed class PlanLimitValidator : IPlanLimitValidator
 
         _logger.LogDebug(
             "PlanLimitValidator passed for plan {PlanId} version {VersionId} caller={Caller} planYear={PlanYear}",
-            SanitizeForLog(plan.PlanId),
-            SanitizeForLog(plan.VersionId),
+            LogSanitizer.Sanitize(plan.PlanId),
+            LogSanitizer.Sanitize(plan.VersionId),
             caller,
             planYear);
     }
@@ -240,9 +241,9 @@ public sealed class PlanLimitValidator : IPlanLimitValidator
             "PlanLimitWarning {Reason} on plan write. caller={Caller} tenantId={TenantId} planId={PlanId} versionId={VersionId} field={Field}: {Detail}",
             reason,
             caller,
-            SanitizeForLog(plan.TenantId),
-            SanitizeForLog(plan.PlanId),
-            SanitizeForLog(plan.VersionId),
+            LogSanitizer.Sanitize(plan.TenantId),
+            LogSanitizer.Sanitize(plan.PlanId),
+            LogSanitizer.Sanitize(plan.VersionId),
             field,
             AmbiguousAggregateLimitMessage(limitName, individualLimit));
     }
@@ -251,12 +252,6 @@ public sealed class PlanLimitValidator : IPlanLimitValidator
         => $"Aggregate plan has a $0 family {limitName}. $0 is treated as \"not set\": the individual " +
            $"{limitName} ({individualLimit:C0}) will be applied per member. A true $0 family {limitName} " +
            "cannot currently be expressed.";
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }
 
 /// <summary>

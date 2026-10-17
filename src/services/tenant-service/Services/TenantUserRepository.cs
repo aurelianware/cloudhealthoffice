@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using TenantService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace TenantService.Services;
 
@@ -82,7 +83,7 @@ public class TenantUserRepository : ITenantUserRepository
 
         await _collection.InsertOneAsync(user);
         _logger.LogInformation("Created tenant user {Email} for tenant {TenantId}",
-            SanitizeForLog(user.Email), SanitizeForLog(user.TenantId));
+            LogSanitizer.Sanitize(user.Email), LogSanitizer.Sanitize(user.TenantId));
 
         return user;
     }
@@ -129,7 +130,7 @@ public class TenantUserRepository : ITenantUserRepository
         if (result.MatchedCount == 0)
             throw new UserChangedConcurrentlyException(user.Id);
         user.Revision = expected + 1;
-        _logger.LogInformation("Updated tenant user {UserId}", SanitizeForLog(user.Id));
+        _logger.LogInformation("Updated tenant user {UserId}", LogSanitizer.Sanitize(user.Id));
 
         return user;
     }
@@ -160,7 +161,7 @@ public class TenantUserRepository : ITenantUserRepository
     public async Task DeleteAsync(string id)
     {
         await _collection.DeleteOneAsync(u => u.Id == id);
-        _logger.LogInformation("Deleted tenant user {UserId}", SanitizeForLog(id));
+        _logger.LogInformation("Deleted tenant user {UserId}", LogSanitizer.Sanitize(id));
     }
 
     public async Task<bool> ExistsAsync(string tenantId, string email)
@@ -168,12 +169,5 @@ public class TenantUserRepository : ITenantUserRepository
         var normalizedEmail = email.ToLowerInvariant();
         return await _collection.Find(u =>
             u.TenantId == tenantId && u.EmailNormalized == normalizedEmail).AnyAsync();
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

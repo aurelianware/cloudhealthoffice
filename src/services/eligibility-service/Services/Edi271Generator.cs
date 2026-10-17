@@ -1,5 +1,6 @@
 using System.Text;
 using EligibilityService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EligibilityService.Services;
 
@@ -249,7 +250,7 @@ public class Edi271Generator : IEdi271Generator
 
         _logger.LogInformation(
             "Generated 271 for subscriber {SubscriberId}: covered={IsCovered}, {BenefitCount} EB segments",
-            SanitizeForLog(inquiry.SubscriberId), response.IsCovered, response.Benefits.Count);
+            LogSanitizer.Sanitize(inquiry.SubscriberId), response.IsCovered, response.Benefits.Count);
 
         return sb.ToString();
     }
@@ -388,9 +389,6 @@ public class Edi271Generator : IEdi271Generator
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private static string Seg(ref int count, bool counted, string segment)
     {

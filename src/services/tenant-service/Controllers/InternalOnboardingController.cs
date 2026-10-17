@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using TenantService.Security;
 using TenantService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace TenantService.Controllers;
 
@@ -84,7 +85,7 @@ public class InternalOnboardingController : ControllerBase
             }
         }
 
-        _audit.Record(Action, tenantId, $"refused: tenant_not_pending (status={TenantAuditLog.Sanitize(tenant?.Status)})");
+        _audit.Record(Action, tenantId, $"refused: tenant_not_pending (status={LogSanitizer.Sanitize(tenant?.Status)})");
         return Conflict(new { error = "tenant_not_pending", status = tenant?.Status });
     }
 

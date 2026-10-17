@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using ProviderService.Models;
 using ProviderService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Services;
 
@@ -111,7 +112,7 @@ public sealed class ProviderIntegrityProjectionService : IProviderIntegrityProje
         {
             _logger.LogInformation(
                 "verification refresh produced no result for {ProviderId}; preserving cached projection",
-                Sanitize(providerId));
+                LogSanitizer.Sanitize(providerId));
             return new IntegrityProjectionRefreshResult
             {
                 ProviderId = head.ProviderId,
@@ -199,7 +200,7 @@ public sealed class ProviderIntegrityProjectionService : IProviderIntegrityProje
                 {
                     _logger.LogWarning(ex,
                         "integrity projection write-back failed for {Tenant}/{Provider}",
-                        Sanitize(tenantId), Sanitize(p.ProviderId));
+                        LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(p.ProviderId));
                     result.Failed++;
                 }
             }
@@ -258,7 +259,7 @@ public sealed class ProviderIntegrityProjectionService : IProviderIntegrityProje
             // EventId on (providerId, verifiedAt)).
             _logger.LogWarning(ex,
                 "verification event publication failed for {Tenant}/{Provider}; patch already applied",
-                Sanitize(tenantId), Sanitize(providerId));
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(providerId));
         }
 
         return new IntegrityProjectionRefreshResult
@@ -270,9 +271,6 @@ public sealed class ProviderIntegrityProjectionService : IProviderIntegrityProje
             NextVerificationDue = nextDue,
         };
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>

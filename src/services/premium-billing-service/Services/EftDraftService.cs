@@ -3,6 +3,7 @@ using CloudHealthOffice.NachaTransmission;
 using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PremiumBillingService.Services;
 
@@ -857,8 +858,8 @@ public class EftDraftService : IEftDraftService
             fileStillHeld = false;
             _logger.LogWarning(
                 "AUDIT NACHA file {FileReference}: held file expired; {User} recorded that the bank {Answer} it (released by {ReleasedBy}): {Reason}",
-                SanitizeForLog(fileReference), SanitizeForLog(ActorId), bankReceived ? "received" : "did not receive",
-                SanitizeForLog(string.Join(",", drafts.Select(d => d.ReleasedBy).Distinct())), SanitizeForLog(reason));
+                LogSanitizer.Sanitize(fileReference), LogSanitizer.Sanitize(ActorId), bankReceived ? "received" : "did not receive",
+                LogSanitizer.Sanitize(string.Join(",", drafts.Select(d => d.ReleasedBy).Distinct())), LogSanitizer.Sanitize(reason));
         }
 
         var now = DateTime.UtcNow;
@@ -948,7 +949,7 @@ public class EftDraftService : IEftDraftService
                 "Separation of duties: resolving a stuck debit needs a user with payments:approve, not a service token");
         if (string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("A reason (what the bank or Stripe said) is required.");
-        reason = SanitizeForLog(reason.Trim());
+        reason = StripLineBreaks(reason.Trim());
         if (reason.Length > 500) reason = reason[..500];
 
         var draft = await _draftRepository.GetByIdAsync(draftId)
@@ -1007,7 +1008,7 @@ public class EftDraftService : IEftDraftService
         _logger.LogWarning(
             "AUDIT stuck EFT draft {DraftId} (invoice {InvoiceNumber}, {Method}, released by {ReleasedBy}) resolved by {User}: was {Previous}, " +
             "the debit {Answer}; now {Status}. Reason: {Reason}",
-            draft.Id, SanitizeForLog(draft.InvoiceNumber), draft.Method, SanitizeForLog(releaser), SanitizeForLog(ActorId), previous,
+            draft.Id, LogSanitizer.Sanitize(draft.InvoiceNumber), draft.Method, LogSanitizer.Sanitize(releaser), LogSanitizer.Sanitize(ActorId), previous,
             sent ? "went out" : "did not go out", draft.Status, reason);
         return draft;
     }
@@ -1080,7 +1081,7 @@ public class EftDraftService : IEftDraftService
 
         _logger.LogWarning(
             "ACH return processed for draft {DraftId}, invoice {InvoiceNumber}: {ReturnCode} - {ReturnReason}",
-            draft.Id, draft.InvoiceNumber, SanitizeForLog(draft.ReturnCode), SanitizeForLog(draft.ReturnReason));
+            draft.Id, draft.InvoiceNumber, LogSanitizer.Sanitize(draft.ReturnCode), LogSanitizer.Sanitize(draft.ReturnReason));
 
         // Check if auto-retry is appropriate
         if (ShouldRetry(draft))
@@ -1293,13 +1294,6 @@ public class EftDraftService : IEftDraftService
         return !nonRetryableCodes.Contains(draft.ReturnCode);
     }
 
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
-
     private static string MapReturnCodeToReason(string returnCode)
     {
         return returnCode switch
@@ -1320,4 +1314,11 @@ public class EftDraftService : IEftDraftService
             _ => $"ACH Return Code {returnCode}"
         };
     }
+
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

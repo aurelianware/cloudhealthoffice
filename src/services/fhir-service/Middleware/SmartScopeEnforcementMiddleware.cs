@@ -4,6 +4,7 @@ using FhirService.Services.Clinical;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Task = System.Threading.Tasks.Task;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Middleware;
 
@@ -154,7 +155,7 @@ public class SmartScopeEnforcementMiddleware
                 "SMART scope denied — resource: {Resource}, access: {Access}, scopes: {Scopes}",
                 // Scopes come from the token (`scope` or, since D-32, `scp`)
                 // and the resource from the path: both caller-controlled.
-                SanitizeForLog(resourceType), interaction.Access, SanitizeForLog(string.Join(" ", scopes)));
+                LogSanitizer.Sanitize(resourceType), interaction.Access, LogSanitizer.Sanitize(string.Join(" ", scopes)));
 
             await WriteFhirError(context, 403,
                 OperationOutcome.IssueSeverity.Error,
@@ -218,8 +219,8 @@ public class SmartScopeEnforcementMiddleware
 
                     _logger.LogWarning(
                         "Patient binding violation — token bound to {Bound}, {Parameter}={Query}",
-                        SanitizeForLog(normalizedPatient), SanitizeForLog(parameter),
-                        SanitizeForLog(queryMember));
+                        LogSanitizer.Sanitize(normalizedPatient), LogSanitizer.Sanitize(parameter),
+                        LogSanitizer.Sanitize(queryMember));
 
                     await WriteFhirError(context, 403,
                         OperationOutcome.IssueSeverity.Error,
@@ -552,9 +553,6 @@ public class SmartScopeEnforcementMiddleware
         OperationOutcome.IssueType code,
         string diagnostics)
         => FhirErrorResponse.WriteAsync(context, statusCode, severity, code, diagnostics);
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "").Replace("\t", " ");
 
     private static string StripPrefix(string prefix, string value)
         => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)

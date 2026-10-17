@@ -1,5 +1,6 @@
 using IdCardService.Models;
 using IdCardService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace IdCardService.Adapters;
 
@@ -145,7 +146,7 @@ public class ChoIdCardAdapter : IIdCardAdapter
 
         _logger.LogInformation(
             "Issued ID card {CardId} for member {MemberId} template {TemplateId} doc {DocId}",
-            cardId, Sanitize(memberId), template.Id, pdfDocId);
+            cardId, LogSanitizer.Sanitize(memberId), template.Id, pdfDocId);
 
         return new IdCardIssueResult { Success = true, Record = record };
     }
@@ -189,7 +190,4 @@ public class ChoIdCardAdapter : IIdCardAdapter
         FailureCode = code,
         FailureReason = reason
     };
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

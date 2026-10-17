@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Controllers;
 
@@ -71,7 +72,7 @@ public class FhirPractitionerRoleController : ControllerBase
         var decoded = _projector.DecodeId(id);
         if (decoded is null)
         {
-            return FhirOperationOutcome(404, "not-found", $"PractitionerRole/{SanitizeForLog(id)} not found.");
+            return FhirOperationOutcome(404, "not-found", $"PractitionerRole/{StripLineBreaks(id)} not found.");
         }
 
         var provider = await _providerRepository.GetByNPIAsync(decoded.Npi);
@@ -80,7 +81,7 @@ public class FhirPractitionerRoleController : ControllerBase
             || provider.VersionState != ProviderVersionState.Active
             || provider.Status != ProviderStatus.Active)
         {
-            return FhirOperationOutcome(404, "not-found", $"PractitionerRole/{SanitizeForLog(id)} not found.");
+            return FhirOperationOutcome(404, "not-found", $"PractitionerRole/{StripLineBreaks(id)} not found.");
         }
 
         var participation = provider.NetworkParticipations.FirstOrDefault(p =>
@@ -92,14 +93,14 @@ public class FhirPractitionerRoleController : ControllerBase
             && DateTime.SpecifyKind(p.EffectiveDate, DateTimeKind.Utc).Date == decoded.EffectiveDate.Date);
         if (participation is null)
         {
-            return FhirOperationOutcome(404, "not-found", $"PractitionerRole/{SanitizeForLog(id)} not found.");
+            return FhirOperationOutcome(404, "not-found", $"PractitionerRole/{StripLineBreaks(id)} not found.");
         }
 
         var network = await _organizationRepository.GetByIdAsync(decoded.NetworkId);
         var resource = _projector.Project(participation, provider, network);
         if (resource == null)
         {
-            return FhirOperationOutcome(404, "not-found", $"PractitionerRole/{SanitizeForLog(id)} not found.");
+            return FhirOperationOutcome(404, "not-found", $"PractitionerRole/{StripLineBreaks(id)} not found.");
         }
 
         return new ContentResult
@@ -138,22 +139,22 @@ public class FhirPractitionerRoleController : ControllerBase
         if (!string.IsNullOrEmpty(practitioner) && string.IsNullOrEmpty(practitionerNpi))
         {
             return FhirOperationOutcome(400, "invalid",
-                $"practitioner '{SanitizeForLog(practitioner)}' is not a recognized Practitioner reference.");
+                $"practitioner '{StripLineBreaks(practitioner)}' is not a recognized Practitioner reference.");
         }
         if (!string.IsNullOrEmpty(practitionerNpi) && !NpiPattern.IsMatch(practitionerNpi))
         {
             return FhirOperationOutcome(400, "invalid",
-                $"practitioner '{SanitizeForLog(practitioner!)}' does not contain a 10-digit NPI.");
+                $"practitioner '{StripLineBreaks(practitioner!)}' does not contain a 10-digit NPI.");
         }
         if (!string.IsNullOrEmpty(organization) && string.IsNullOrEmpty(organizationId))
         {
             return FhirOperationOutcome(400, "invalid",
-                $"organization '{SanitizeForLog(organization)}' is not a recognized Organization reference.");
+                $"organization '{StripLineBreaks(organization)}' is not a recognized Organization reference.");
         }
         if (!string.IsNullOrEmpty(organizationId) && !NetworkIdPattern.IsMatch(organizationId))
         {
             return FhirOperationOutcome(400, "invalid",
-                $"organization '{SanitizeForLog(organization!)}' references an unsupported network id shape.");
+                $"organization '{StripLineBreaks(organization!)}' references an unsupported network id shape.");
         }
 
         var entries = new JsonArray();
@@ -440,7 +441,10 @@ public class FhirPractitionerRoleController : ControllerBase
         };
     }
 
-    private static string SanitizeForLog(string value)
-        => value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                .Replace("\n", string.Empty, StringComparison.Ordinal);
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

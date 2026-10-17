@@ -5,6 +5,7 @@ using ClaimsService.Services.Adjudication.Mapping;
 using Microsoft.Extensions.Options;
 using EngineModels = CloudHealthOffice.NcciEngine.Models;
 using EngineServices = CloudHealthOffice.NcciEngine.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication.Stages;
 
@@ -110,7 +111,7 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
             // or missing service dates).
             _logger.LogInformation(
                 "NcciEditsStage soft-pass for claim {ClaimVersionId}: no engine-valid lines after mapper filtering",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
             activity?.SetTag("ncci.outcome", "softpass");
             activity?.SetTag("ncci.engine_status", "mapper_invalid_lines");
             return ClaimAdjudicationStageResult.Pass(StageName);
@@ -129,7 +130,7 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
         {
             _logger.LogError(ex,
                 "NCCI engine threw for claim {ClaimVersionId}; degrading to mode-driven outcome",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
             activity?.SetTag("ncci.engine_status", "exception");
 
             ApplyEngineExceptionSnapshot(context, ex);
@@ -225,7 +226,7 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
         _logger.LogInformation(
             "NcciEditsStage recorded {Count} edit failure(s) on claim {ClaimVersionId} (mode={Mode}, pendCode={PendCode})",
             snapshots.Count,
-            SanitizeForLog(context.ClaimVersionId),
+            LogSanitizer.Sanitize(context.ClaimVersionId),
             _options.NcciMode,
             pendCode);
     }
@@ -384,7 +385,4 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
         // PendDetails.PendReason has [StringLength(500)]
         return reason.Length <= 500 ? reason : reason.Substring(0, 500);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

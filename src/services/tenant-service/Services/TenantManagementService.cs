@@ -3,6 +3,7 @@ using System.Text;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.OperatingMode;
 using TenantService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace TenantService.Services;
 
@@ -62,12 +63,12 @@ public class TenantManagementService : ITenantService
         };
 
         var created = await _repository.CreateAsync(tenant);
-        _logger.LogInformation("Created tenant {TenantId} for {OrganizationName}", SanitizeForLog(tenantId), SanitizeForLog(request.OrganizationName));
+        _logger.LogInformation("Created tenant {TenantId} for {OrganizationName}", LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(request.OrganizationName));
 
         // Provision SFTP access with multi-environment support
         var environments = request.Environments ?? new List<string> { "prod" };
         _logger.LogInformation("Provisioning SFTP for tenant {TenantId} with environments: {Environments}",
-            SanitizeForLog(tenantId), string.Join(",", environments));
+            LogSanitizer.Sanitize(tenantId), string.Join(",", environments));
         
         try
         {
@@ -159,7 +160,7 @@ public class TenantManagementService : ITenantService
         tenant.UpdatedBy = Actor;
         
         await _repository.UpdateAsync(tenant);
-        _logger.LogInformation("Activated tenant {TenantId}", SanitizeForLog(tenantId));
+        _logger.LogInformation("Activated tenant {TenantId}", LogSanitizer.Sanitize(tenantId));
     }
 
     public async Task SuspendTenantAsync(string tenantId)
@@ -174,13 +175,13 @@ public class TenantManagementService : ITenantService
         tenant.UpdatedBy = Actor;
         
         await _repository.UpdateAsync(tenant);
-        _logger.LogWarning("Suspended tenant {TenantId}", SanitizeForLog(tenantId));
+        _logger.LogWarning("Suspended tenant {TenantId}", LogSanitizer.Sanitize(tenantId));
     }
 
     public async Task DeleteTenantAsync(string tenantId)
     {
         await _repository.DeleteAsync(tenantId);
-        _logger.LogWarning("Deleted tenant {TenantId}", SanitizeForLog(tenantId));
+        _logger.LogWarning("Deleted tenant {TenantId}", LogSanitizer.Sanitize(tenantId));
     }
 
     public async Task<ApiKeyResponse> CreateApiKeyAsync(string tenantId, CreateApiKeyRequest request)
@@ -211,7 +212,7 @@ public class TenantManagementService : ITenantService
         tenant.ApiKeys.Add(apiKeyRecord);
         await _repository.UpdateAsync(tenant);
 
-        _logger.LogInformation("Created API key {KeyId} for tenant {TenantId}", SanitizeForLog(apiKeyRecord.KeyId), SanitizeForLog(tenantId));
+        _logger.LogInformation("Created API key {KeyId} for tenant {TenantId}", LogSanitizer.Sanitize(apiKeyRecord.KeyId), LogSanitizer.Sanitize(tenantId));
 
         return new ApiKeyResponse
         {
@@ -251,7 +252,7 @@ public class TenantManagementService : ITenantService
             apiKey.RevokedAt = DateTime.UtcNow;
             tenant.UpdatedBy = Actor;
             await _repository.UpdateAsync(tenant);
-            _logger.LogInformation("Revoked API key {KeyId} for tenant {TenantId}", SanitizeForLog(keyId), SanitizeForLog(tenantId));
+            _logger.LogInformation("Revoked API key {KeyId} for tenant {TenantId}", LogSanitizer.Sanitize(keyId), LogSanitizer.Sanitize(tenantId));
         }
     }
 
@@ -384,17 +385,10 @@ public class TenantManagementService : ITenantService
 
         _logger.LogInformation(
             "Updated operating mode for tenant {TenantId}: {Engines}",
-            SanitizeForLog(tenantId),
-            string.Join(", ", tenant.OperatingMode.Engines.Select(e => $"{SanitizeForLog(e.Key)}={SanitizeForLog(e.Value)}")));
+            LogSanitizer.Sanitize(tenantId),
+            string.Join(", ", tenant.OperatingMode.Engines.Select(e => $"{LogSanitizer.Sanitize(e.Key)}={LogSanitizer.Sanitize(e.Value)}")));
 
         return tenant.OperatingMode;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     // Helper methods

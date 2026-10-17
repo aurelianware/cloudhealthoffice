@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using EncounterSubmissionService.Models;
 using EncounterSubmissionService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EncounterSubmissionService.Controllers;
 
@@ -51,7 +52,7 @@ public class EncounterSubmissionController : ControllerBase
         tenantId = _actor.TenantId;
         _logger.LogInformation(
             "Fetching pending submissions for tenant {TenantId} (page {Page}, size {PageSize})",
-            SanitizeForLog(tenantId), page, pageSize);
+            LogSanitizer.Sanitize(tenantId), page, pageSize);
 
         var submissions = await _service.GetPendingSubmissionsAsync(tenantId, page, pageSize);
         return Ok(submissions);
@@ -69,7 +70,7 @@ public class EncounterSubmissionController : ControllerBase
         tenantId = _actor.TenantId;
         _logger.LogInformation(
             "Fetching encounter status summary for tenant {TenantId}",
-            SanitizeForLog(tenantId));
+            LogSanitizer.Sanitize(tenantId));
 
         var summary = await _service.GetStatusSummaryAsync(tenantId);
         return Ok(summary);
@@ -88,7 +89,7 @@ public class EncounterSubmissionController : ControllerBase
         tenantId = _actor.TenantId;
         _logger.LogInformation(
             "Fetching deadline warnings for tenant {TenantId} (within {Days} days)",
-            SanitizeForLog(tenantId), warningDays);
+            LogSanitizer.Sanitize(tenantId), warningDays);
 
         var submissions = await _service.GetDeadlineWarningsAsync(tenantId, warningDays);
         return Ok(submissions);
@@ -119,7 +120,7 @@ public class EncounterSubmissionController : ControllerBase
 
         _logger.LogInformation(
             "Processing 999 acknowledgment for batch {BatchId}, tenant {TenantId}",
-            SanitizeForLog(request.BatchId), SanitizeForLog(tenantId));
+            LogSanitizer.Sanitize(request.BatchId), LogSanitizer.Sanitize(tenantId));
 
         await _service.ProcessAcknowledgmentAsync(request.BatchId, request.Content, tenantId);
         return Ok(new { message = $"Acknowledgment processed for batch {request.BatchId}" });
@@ -141,7 +142,7 @@ public class EncounterSubmissionController : ControllerBase
         tenantId = _actor.TenantId;
         _logger.LogInformation(
             "Manual retry requested for submission {SubmissionId}, tenant {TenantId}",
-            SanitizeForLog(submissionId), SanitizeForLog(tenantId));
+            LogSanitizer.Sanitize(submissionId), LogSanitizer.Sanitize(tenantId));
 
         try
         {
@@ -168,15 +169,9 @@ public class EncounterSubmissionController : ControllerBase
 
         _logger.LogWarning(
             "Encounter request refused: path tenant {PathTenant} does not match the authenticated tenant {TokenTenant} (subject {Subject})",
-            SanitizeForLog(pathTenantId), SanitizeForLog(_actor.TenantId), SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(pathTenantId), LogSanitizer.Sanitize(_actor.TenantId), LogSanitizer.Sanitize(_actor.UserId));
         return StatusCode(StatusCodes.Status403Forbidden,
             new { message = "The tenant in the path does not match the authenticated tenant." });
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

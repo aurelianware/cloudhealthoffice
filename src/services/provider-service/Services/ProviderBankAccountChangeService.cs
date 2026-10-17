@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ProviderService.Models;
 using ProviderService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Services;
 
@@ -209,7 +210,7 @@ public sealed class ProviderBankAccountChangeService : IProviderBankAccountChang
             _logger.LogWarning(RefusedEvent,
                 "AUDIT bank-account change refused: user {UserId} tried to approve change {ChangeId} for provider {ProviderId} " +
                 "in tenant {TenantId} that they proposed (separation of duties)",
-                Sanitize(actor.UserId), change.Id, Sanitize(provider.ProviderId), Sanitize(provider.TenantId));
+                LogSanitizer.Sanitize(actor.UserId), change.Id, LogSanitizer.Sanitize(provider.ProviderId), LogSanitizer.Sanitize(provider.TenantId));
             throw new BankAccountChangeForbiddenException("Separation of duties",
                 "Separation of duties: you proposed this bank-account change, so you cannot approve it. " +
                 "Another user with payments:approve must approve it.");
@@ -302,7 +303,7 @@ public sealed class ProviderBankAccountChangeService : IProviderBankAccountChang
 
         _logger.LogWarning(RefusedEvent,
             "AUDIT bank-account change refused: service {UserId} tried to {Action} change {ChangeId} for provider {ProviderId} in tenant {TenantId}",
-            Sanitize(actor.UserId), action, change.Id, Sanitize(change.ProviderId), Sanitize(tenantId));
+            LogSanitizer.Sanitize(actor.UserId), action, change.Id, LogSanitizer.Sanitize(change.ProviderId), LogSanitizer.Sanitize(tenantId));
         throw new BankAccountChangeForbiddenException("Separation of duties",
             $"A bank-account change must be decided by a user holding payments:approve; a service token cannot {action} it.");
     }
@@ -370,8 +371,8 @@ public sealed class ProviderBankAccountChangeService : IProviderBankAccountChang
         _logger.LogInformation(eventId,
             "AUDIT bank-account change {Action}: change {ChangeId} for provider {ProviderId} (NPI {Npi}) in tenant {TenantId} " +
             "by {UserId}; requested by {RequestedBy}; status {Status}",
-            action, change.Id, Sanitize(change.ProviderId), Sanitize(change.ProviderNpi), Sanitize(tenantId),
-            Sanitize(actor), Sanitize(change.RequestedBy), change.Status);
+            action, change.Id, LogSanitizer.Sanitize(change.ProviderId), LogSanitizer.Sanitize(change.ProviderNpi), LogSanitizer.Sanitize(tenantId),
+            LogSanitizer.Sanitize(actor), LogSanitizer.Sanitize(change.RequestedBy), change.Status);
     }
 
     private static ProviderBankAccount Clone(ProviderBankAccount account)
@@ -386,7 +387,4 @@ public sealed class ProviderBankAccountChangeService : IProviderBankAccountChang
         var r = reason.Trim();
         return r.Length > 500 ? r[..500] : r;
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -51,7 +52,7 @@ public class HttpProviderIntegrityClient : IProviderIntegrityClient
             {
                 _logger.LogWarning(
                     "Benefit-plan-service returned {StatusCode} resolving provider integrity for NPI {Npi}",
-                    response.StatusCode, SanitizeForLog(npi));
+                    response.StatusCode, LogSanitizer.Sanitize(npi));
                 return null;
             }
 
@@ -63,11 +64,8 @@ public class HttpProviderIntegrityClient : IProviderIntegrityClient
         {
             _logger.LogWarning(ex,
                 "Provider integrity lookup failed for NPI {Npi} tenant {Tenant}",
-                SanitizeForLog(npi), SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(npi), LogSanitizer.Sanitize(tenantId));
             return null;
         }
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

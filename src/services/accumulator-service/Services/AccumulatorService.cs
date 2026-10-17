@@ -1,6 +1,7 @@
 using AccumulatorService.Models;
 using AccumulatorService.Repositories;
 using CloudHealthOffice.Events;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AccumulatorService.Services;
 
@@ -136,7 +137,7 @@ public class AccumulatorService : IAccumulatorService
             var reason = marker?.Outcome == ReversedBeforeApplyOutcome ? ReversedBeforeApplyOutcome : "DuplicateClaim";
             _logger.LogInformation(
                 "ClaimFinalizedEvent for claim {ClaimId} tenant {TenantId} not applied: {Reason}",
-                SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.TenantId), reason);
+                LogSanitizer.Sanitize(evt.ClaimId), LogSanitizer.Sanitize(evt.TenantId), reason);
             return new ApplyResult(ApplyOutcome.Duplicate, null, null, reason);
         }
         if (begin == BeginClaimOutcome.InProgress)
@@ -249,7 +250,7 @@ public class AccumulatorService : IAccumulatorService
                 _logger.LogWarning(
                     "Claim {ClaimId} tenant {TenantId}: applied, but its marker lease was taken over meanwhile; " +
                     "the reversal that took it over reverses this row",
-                    SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.TenantId));
+                    LogSanitizer.Sanitize(evt.ClaimId), LogSanitizer.Sanitize(evt.TenantId));
             }
 
             await _publisher.PublishAdjustedAsync(new AccumulatorAdjustedEvent
@@ -288,13 +289,13 @@ public class AccumulatorService : IAccumulatorService
             if (reversal is null || string.Equals(reversal.Outcome, "Pending", StringComparison.Ordinal)) return null;
             _logger.LogWarning(
                 "Claim {ClaimId} tenant {TenantId}: a reversal of it completed ({Outcome}) before its apply; not applied",
-                SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.TenantId), reversal.Outcome);
+                LogSanitizer.Sanitize(evt.ClaimId), LogSanitizer.Sanitize(evt.TenantId), reversal.Outcome);
             return new ApplyResult(ApplyOutcome.Duplicate, null, null, ReversedBeforeApplyOutcome);
         }
 
         _logger.LogWarning(
             "Claim {ClaimId} tenant {TenantId}: this apply's lease was taken over ({Outcome}); not applied",
-            SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.TenantId), marker?.Outcome ?? "gone");
+            LogSanitizer.Sanitize(evt.ClaimId), LogSanitizer.Sanitize(evt.TenantId), marker?.Outcome ?? "gone");
         return marker switch
         {
             { Outcome: "Pending" } => new ApplyResult(ApplyOutcome.InProgress, null, null, "ApplyInProgress"),
@@ -307,7 +308,7 @@ public class AccumulatorService : IAccumulatorService
     {
         _logger.LogWarning(
             "Orphan claim: ServiceDate {ServiceDate} does not map to any known plan-year snapshot for member {MemberId} tenant {TenantId}. ClaimId={ClaimId}",
-            evt.ServiceDate, SanitizeForLog(evt.MemberId), SanitizeForLog(evt.TenantId), SanitizeForLog(evt.ClaimId));
+            evt.ServiceDate, LogSanitizer.Sanitize(evt.MemberId), LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.ClaimId));
 
         await _publisher.PublishOrphanAsync(new OrphanAccumulatorClaimEvent
         {
@@ -468,7 +469,7 @@ public class AccumulatorService : IAccumulatorService
         }
         _logger.LogWarning(
             "Accumulator snapshot {SnapshotId} was behind its event log (v{From} → v{To}); projected the missing rows",
-            SanitizeForLog(snapshot.Id), expectedVersion, snapshot.Version);
+            LogSanitizer.Sanitize(snapshot.Id), expectedVersion, snapshot.Version);
         await _repo.TryReplaceSnapshotAsync(snapshot, expectedVersion, ct);
         return true;
     }
@@ -484,7 +485,7 @@ public class AccumulatorService : IAccumulatorService
         {
             _logger.LogInformation(
                 "Accumulator snapshot {SnapshotId} v{Version} was already projected by another worker",
-                SanitizeForLog(snapshot.Id), snapshot.Version);
+                LogSanitizer.Sanitize(snapshot.Id), snapshot.Version);
         }
     }
 
@@ -598,7 +599,7 @@ public class AccumulatorService : IAccumulatorService
 
         _logger.LogWarning(
             "Claim {ClaimId} replaces {OriginalClaimId}, which {Replacer} already replaced; not applied",
-            SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.OriginalClaimId), SanitizeForLog(replacer));
+            LogSanitizer.Sanitize(evt.ClaimId), LogSanitizer.Sanitize(evt.OriginalClaimId), LogSanitizer.Sanitize(replacer));
         await _publisher.PublishOrphanAsync(new OrphanAccumulatorClaimEvent
         {
             TenantId = evt.TenantId,
@@ -704,7 +705,7 @@ public class AccumulatorService : IAccumulatorService
                     }
                     _logger.LogWarning(
                         "Reversal for claim {ClaimId} tenant {TenantId}: marked Applied but no ClaimApplied row; nothing reversed",
-                        SanitizeForLog(claimId), SanitizeForLog(tenantId));
+                        LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(tenantId));
                 }
 
                 if (original is null or { Outcome: "Pending" })
@@ -759,7 +760,7 @@ public class AccumulatorService : IAccumulatorService
                     _logger.LogInformation(
                         "Reversal for claim {ClaimId} tenant {TenantId} arrived before its apply; " +
                         "the apply will be skipped",
-                        SanitizeForLog(claimId), SanitizeForLog(tenantId));
+                        LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(tenantId));
                     return new ApplyResult(ApplyOutcome.Duplicate, null, null, ReversedBeforeApplyOutcome);
                 }
 
@@ -767,7 +768,7 @@ public class AccumulatorService : IAccumulatorService
                 // it never counted and never will.
                 _logger.LogInformation(
                     "Reversal for claim {ClaimId} tenant {TenantId}: nothing applied ({Outcome}); nothing to reverse",
-                    SanitizeForLog(claimId), SanitizeForLog(tenantId), original.Outcome);
+                    LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(tenantId), original.Outcome);
                 await _processed.CompleteLeaseAsync(tenantId, key, keyToken, string.Empty, "NothingToReverse", kind, ct);
                 return new ApplyResult(ApplyOutcome.Duplicate, null, null, "NothingToReverse");
             }
@@ -776,7 +777,7 @@ public class AccumulatorService : IAccumulatorService
             {
                 _logger.LogWarning(
                     "Reversal for claim {ClaimId} tenant {TenantId}: its snapshot is gone; nothing to reverse",
-                    SanitizeForLog(claimId), SanitizeForLog(tenantId));
+                    LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(tenantId));
                 await _processed.CompleteLeaseAsync(tenantId, key, keyToken, string.Empty, "NothingToReverse", kind, ct);
                 await CompleteTakenOverOriginalAsync(tenantId, claimId, originalToken, applied.Id, ct);
                 return new ApplyResult(ApplyOutcome.Duplicate, null, null, "NothingToReverse");
@@ -981,7 +982,7 @@ public class AccumulatorService : IAccumulatorService
 
         _logger.LogInformation(
             "Reversing legacy ClaimApplied row {EventId} (claim {ClaimId}): replaying {Count} event(s) of snapshot {SnapshotId}",
-            SanitizeForLog(target.Id), SanitizeForLog(target.SourceClaimId), log.Count, SanitizeForLog(snapshot.Id));
+            LogSanitizer.Sanitize(target.Id), LogSanitizer.Sanitize(target.SourceClaimId), log.Count, LogSanitizer.Sanitize(snapshot.Id));
 
         return new AppliedAmounts(
             Replay(log, target, snapshot.IndividualDeductibleUsed, snapshot.IndividualDeductibleLimit, e => e.DeductibleDelta),
@@ -1179,12 +1180,6 @@ public class AccumulatorService : IAccumulatorService
         Reason = e.Reason,
         ActorId = e.ActorId
     };
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }
 
 /// <summary>

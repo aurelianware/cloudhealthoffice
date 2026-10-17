@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using ProviderService.Models;
 using ProviderService.Security;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Controllers;
 
@@ -57,7 +58,7 @@ public class MpipController : ControllerBase
 
         _logger.LogInformation(
             "Listing MPIP qualifications for tenant {TenantId}, period {Period}",
-            SanitizeForLog(tenantId), SanitizeForLog(effectivePeriod));
+            LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(effectivePeriod));
 
         var providers = await _mpipService.GetQualifiedProvidersAsync(tenantId, effectivePeriod);
         return Ok(providers);
@@ -80,7 +81,7 @@ public class MpipController : ControllerBase
 
         _logger.LogInformation(
             "Fetching MPIP qualification for provider {ProviderId}, tenant {TenantId}, period {Period}",
-            SanitizeForLog(providerId), SanitizeForLog(tenantId), SanitizeForLog(effectivePeriod));
+            LogSanitizer.Sanitize(providerId), LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(effectivePeriod));
 
         var qualification = await _mpipService.GetQualificationAsync(providerId, tenantId, effectivePeriod);
 
@@ -117,8 +118,8 @@ public class MpipController : ControllerBase
         _logger.LogInformation(
             "Upserting MPIP qualification for provider {ProviderId}, tenant {TenantId}, " +
             "period {Period}, type={Type}, qualified={Qualified}",
-            SanitizeForLog(providerId), SanitizeForLog(tenantId),
-            SanitizeForLog(qualification.QualificationPeriod),
+            LogSanitizer.Sanitize(providerId), LogSanitizer.Sanitize(tenantId),
+            LogSanitizer.Sanitize(qualification.QualificationPeriod),
             qualification.ProviderType, qualification.IsQualified);
 
         await _mpipService.UpsertQualificationAsync(qualification);
@@ -146,7 +147,7 @@ public class MpipController : ControllerBase
 
         _logger.LogInformation(
             "Bulk importing {Count} MPIP qualifications for tenant {TenantId}",
-            qualifications.Count, SanitizeForLog(tenantId));
+            qualifications.Count, LogSanitizer.Sanitize(tenantId));
 
         var imported = 0;
         var errors = new List<string>();
@@ -164,13 +165,13 @@ public class MpipController : ControllerBase
                 var msg = $"Provider {qualification.ProviderId}: {BulkImportRowFailedMessage}";
                 errors.Add(msg);
                 _logger.LogWarning(ex, "MPIP bulk import error for provider {ProviderId} (trace id {TraceId})",
-                    SanitizeForLog(qualification.ProviderId), ChoProblemResults.TraceId(HttpContext));
+                    LogSanitizer.Sanitize(qualification.ProviderId), ChoProblemResults.TraceId(HttpContext));
             }
         }
 
         _logger.LogInformation(
             "MPIP bulk import complete for tenant {TenantId}: {Imported}/{Total} imported, {Errors} errors",
-            SanitizeForLog(tenantId), imported, qualifications.Count, errors.Count);
+            LogSanitizer.Sanitize(tenantId), imported, qualifications.Count, errors.Count);
 
         return Ok(new BulkImportResult
         {
@@ -203,7 +204,7 @@ public class MpipController : ControllerBase
         _logger.LogInformation(
             "MPIP rate check: provider {ProviderId}, tenant {TenantId}, " +
             "serviceDate {ServiceDate:yyyy-MM-dd}, memberAge {MemberAge}",
-            SanitizeForLog(providerId), SanitizeForLog(tenantId), serviceDate, memberAge);
+            LogSanitizer.Sanitize(providerId), LogSanitizer.Sanitize(tenantId), serviceDate, memberAge);
 
         var multiplier = await _mpipService.GetEnhancedRateMultiplierAsync(
             providerId, tenantId, serviceDate, memberAge);
@@ -231,15 +232,9 @@ public class MpipController : ControllerBase
 
         _logger.LogWarning(
             "MPIP request refused: path tenant {PathTenant} does not match the authenticated tenant {TokenTenant}",
-            SanitizeForLog(pathTenantId), SanitizeForLog(tokenTenant));
+            LogSanitizer.Sanitize(pathTenantId), LogSanitizer.Sanitize(tokenTenant));
         return StatusCode(StatusCodes.Status403Forbidden,
             new { message = "The tenant in the path does not match the authenticated tenant." });
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

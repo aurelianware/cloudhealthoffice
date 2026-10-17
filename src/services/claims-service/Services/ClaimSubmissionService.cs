@@ -3,6 +3,7 @@ using ClaimsService.Adapters;
 using ClaimsService.Models;
 using ClaimsService.Models.Messaging;
 using CloudHealthOffice.Infrastructure.Messaging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services;
 
@@ -192,7 +193,7 @@ public class ClaimSubmissionService : IClaimSubmissionService
         {
             _logger.LogInformation(
                 "Claim submission rejected: {ErrorCount} validation error(s) for member {Member}",
-                validationErrors.Count, SanitizeForLog(claim.MemberId));
+                validationErrors.Count, LogSanitizer.Sanitize(claim.MemberId));
             return ClaimSubmissionResult.ValidationFailed(validationErrors);
         }
 
@@ -228,7 +229,7 @@ public class ClaimSubmissionService : IClaimSubmissionService
             // tenant configuration is the gap.
             _logger.LogWarning(ex,
                 "Adapter for tenant {TenantId} does not implement claim submission",
-                SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(tenantId));
             return ClaimSubmissionResult.AdapterNotImplemented(ex.Message);
         }
 
@@ -259,7 +260,7 @@ public class ClaimSubmissionService : IClaimSubmissionService
             _logger.LogError(ex,
                 "ClaimVersionSubmitted event emission failed for claim {ClaimId} (chain {ClaimVersionId}); " +
                 "submission persisted, audit chain has a gap",
-                SanitizeForLog(created.Id), SanitizeForLog(created.ClaimVersionId));
+                LogSanitizer.Sanitize(created.Id), LogSanitizer.Sanitize(created.ClaimVersionId));
         }
         var eventPublishMs = profileSw.Elapsed.TotalMilliseconds;
 
@@ -297,7 +298,7 @@ public class ClaimSubmissionService : IClaimSubmissionService
             _logger.LogError(ex,
                 "ClaimVersionSubmitted Service Bus emission failed for claim {ClaimId} (chain {ClaimVersionId}); " +
                 "submission persisted, adjudication will not auto-trigger",
-                SanitizeForLog(created.Id), SanitizeForLog(created.ClaimVersionId));
+                LogSanitizer.Sanitize(created.Id), LogSanitizer.Sanitize(created.ClaimVersionId));
         }
         var sbSendMs = profileSw.Elapsed.TotalMilliseconds;
 
@@ -307,8 +308,8 @@ public class ClaimSubmissionService : IClaimSubmissionService
 
         _logger.LogInformation(
             "Claim {ClaimId} submitted via adapter {Platform} (chain {ClaimVersionId} v{VersionNumber}) for tenant {TenantId}",
-            SanitizeForLog(created.Id), SanitizeForLog(adapterResponse.Platform),
-            SanitizeForLog(created.ClaimVersionId), created.VersionNumber, SanitizeForLog(tenantId));
+            LogSanitizer.Sanitize(created.Id), LogSanitizer.Sanitize(adapterResponse.Platform),
+            LogSanitizer.Sanitize(created.ClaimVersionId), created.VersionNumber, LogSanitizer.Sanitize(tenantId));
 
         return ClaimSubmissionResult.Ok(created);
     }
@@ -402,11 +403,5 @@ public class ClaimSubmissionService : IClaimSubmissionService
         }
 
         return errors;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

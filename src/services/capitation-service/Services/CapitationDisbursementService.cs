@@ -3,6 +3,7 @@ using CapitationService.Models;
 using CapitationService.Repositories;
 using CloudHealthOffice.Infrastructure.Data;
 using CloudHealthOffice.NachaTransmission;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CapitationService.Services;
 
@@ -589,7 +590,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     // Back to Pending, with the reason on the record.
                     await ReleaseClaimsAsync(new[] { disbursement }, claimId, reason);
                     _logger.LogWarning("Disbursement {DisbursementId} for provider {NPI} left out of the NACHA file: needs attention",
-                        SanitizeForLog(disbursement.Id), SanitizeForLog(disbursement.ProviderNPI));
+                        LogSanitizer.Sanitize(disbursement.Id), LogSanitizer.Sanitize(disbursement.ProviderNPI));
                     continue;
                 }
 
@@ -653,7 +654,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             {
                 _logger.LogError(ex,
                     "Disbursement {DisbursementId} could not be released from NACHA release {ClaimId}; it stays Releasing and needs attention",
-                    SanitizeForLog(disbursement.Id), claimId);
+                    LogSanitizer.Sanitize(disbursement.Id), claimId);
             }
         }
     }
@@ -824,7 +825,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                 _logger.LogCritical(
                     "Disbursement {DisbursementId}: {What} not recorded, another write moved it on first (now {Status}); " +
                     "that change stands. Reconcile it if the two disagree",
-                    SanitizeForLog(disbursement.Id), SanitizeForLog(what), current?.Status.ToString() ?? "missing");
+                    LogSanitizer.Sanitize(disbursement.Id), LogSanitizer.Sanitize(what), current?.Status.ToString() ?? "missing");
                 if (throwIfMovedOn) throw;
                 return current ?? disbursement;
             }
@@ -949,8 +950,8 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             fileStillHeld = false;
             _logger.LogWarning(
                 "AUDIT NACHA file {FileReference}: held file expired; {User} recorded that the bank {Answer} it (released by {ReleasedBy}): {Reason}",
-                SanitizeForLog(fileReference), SanitizeForLog(actor.UserId), bankReceived ? "received" : "did not receive",
-                SanitizeForLog(string.Join(",", disbursements.Select(d => d.ReleasedBy).Distinct())), SanitizeForLog(reason));
+                LogSanitizer.Sanitize(fileReference), LogSanitizer.Sanitize(actor.UserId), bankReceived ? "received" : "did not receive",
+                LogSanitizer.Sanitize(string.Join(",", disbursements.Select(d => d.ReleasedBy).Distinct())), LogSanitizer.Sanitize(reason));
         }
 
         var now = DateTime.UtcNow;
@@ -1051,7 +1052,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                 "Separation of duties: resolving a stuck payment needs a user with payments:approve, not a service token");
         if (string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("A reason (what the bank or Stripe said) is required.");
-        reason = SanitizeForLog(reason.Trim());
+        reason = StripLineBreaks(reason.Trim());
         if (reason.Length > 500) reason = reason[..500];
 
         var disbursement = await _disbursementRepository.GetByIdAsync(id)
@@ -1096,7 +1097,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             if (previous == DisbursementStatus.PaymentUnknown
                 && !await _statementRepository.ResolvePaymentUnknownAsync(disbursement.StatementId, disbursement.Id, paid: sent))
                 _logger.LogWarning("Statement {StatementId} of disbursement {DisbursementId} was not PaymentUnknown for it; left as it is",
-                    SanitizeForLog(disbursement.StatementId), SanitizeForLog(disbursement.Id));
+                    LogSanitizer.Sanitize(disbursement.StatementId), LogSanitizer.Sanitize(disbursement.Id));
 
             if (sent)
             {
@@ -1116,7 +1117,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         _logger.LogWarning(
             "AUDIT stuck capitation disbursement {DisbursementId} (statement {StatementNumber}, {Method}, released by {ReleasedBy}) resolved by {User}: " +
             "was {Previous}, the payment {Answer}; now {Status}. Reason: {Reason}",
-            disbursement.Id, SanitizeForLog(disbursement.StatementNumber), disbursement.Method, SanitizeForLog(releaser), SanitizeForLog(actor.UserId),
+            disbursement.Id, LogSanitizer.Sanitize(disbursement.StatementNumber), disbursement.Method, LogSanitizer.Sanitize(releaser), LogSanitizer.Sanitize(actor.UserId),
             previous, sent ? "went out" : "did not go out", disbursement.Status, reason);
         return disbursement;
     }
@@ -1176,7 +1177,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         _logger.LogWarning(
             "ACH return processed for disbursement {DisbursementId}, statement {StatementNumber}: {ReturnCode} - {ReturnReason}",
             disbursement.Id, disbursement.StatementNumber,
-            SanitizeForLog(disbursement.ReturnCode), SanitizeForLog(disbursement.ReturnReason));
+            LogSanitizer.Sanitize(disbursement.ReturnCode), LogSanitizer.Sanitize(disbursement.ReturnReason));
 
         // Check if auto-retry is appropriate
         if (ShouldRetry(disbursement))
@@ -1237,7 +1238,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         {
             _logger.LogInformation(
                 "Stripe {EventType} event for payout {PayoutId}: payouts are not matched to disbursements (settlement comes from transfer events); acknowledged",
-                SanitizeForLog(webhookResult.EventType), SanitizeForLog(webhookResult.TransferId));
+                LogSanitizer.Sanitize(webhookResult.EventType), LogSanitizer.Sanitize(webhookResult.TransferId));
             return;
         }
 
@@ -1251,7 +1252,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             _logger.LogWarning(
                 "Stripe {EventType} event for {StripeObjectId} carries no tenant_id metadata; acknowledged but not processed. " +
                 "Reconcile the disbursement by hand",
-                SanitizeForLog(webhookResult.EventType), SanitizeForLog(webhookResult.TransferId));
+                LogSanitizer.Sanitize(webhookResult.EventType), LogSanitizer.Sanitize(webhookResult.TransferId));
             return;
         }
         var http = _httpContextAccessor?.HttpContext
@@ -1278,7 +1279,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                 // disbursement is written): fail, so Stripe delivers it again.
                 throw new InvalidOperationException(
                     $"Transfer {webhookResult.TransferId} for disbursement {webhookResult.DisbursementId} is not recorded yet; Stripe will retry");
-            _logger.LogWarning("No disbursement found for Transfer {TransferId}", SanitizeForLog(webhookResult.TransferId));
+            _logger.LogWarning("No disbursement found for Transfer {TransferId}", LogSanitizer.Sanitize(webhookResult.TransferId));
             return;
         }
 
@@ -1320,7 +1321,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                 await _statementRepository.ResolvePaymentUnknownAsync(disbursement.StatementId, disbursement.Id, paid: true);
                 await _disbursementRepository.UpdateAsync(disbursement);
                 _logger.LogWarning("Disbursement {DisbursementId}: outcome was unknown; Stripe confirmed transfer {TransferId}",
-                    SanitizeForLog(disbursement.Id), SanitizeForLog(transferId));
+                    LogSanitizer.Sanitize(disbursement.Id), LogSanitizer.Sanitize(transferId));
                 await SettleDisbursementAsync(disbursement.Id);
                 return;
             case DisbursementStatus.Submitted:
@@ -1330,7 +1331,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             default:
                 _logger.LogCritical(
                     "Stripe transfer {TransferId} exists for disbursement {DisbursementId}, which is {Status}; not settled. Reconcile by hand",
-                    SanitizeForLog(transferId), SanitizeForLog(disbursement.Id), disbursement.Status);
+                    LogSanitizer.Sanitize(transferId), LogSanitizer.Sanitize(disbursement.Id), disbursement.Status);
                 return;
         }
     }
@@ -1407,7 +1408,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning("Failed to fetch bank account for provider {NPI}: {Error}", SanitizeForLog(providerNpi), ex.GetType().Name);
+            _logger.LogWarning("Failed to fetch bank account for provider {NPI}: {Error}", LogSanitizer.Sanitize(providerNpi), ex.GetType().Name);
             return (null, $"The bank-account read for provider {providerNpi} from provider-service failed ({ex.GetType().Name}). Needs attention.");
         }
     }
@@ -1424,7 +1425,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             Reason = reason
         });
         _logger.LogWarning("Statement {StatementId} for provider {NPI} was not disbursed: needs attention",
-            SanitizeForLog(statementId), SanitizeForLog(providerNpi));
+            LogSanitizer.Sanitize(statementId), LogSanitizer.Sanitize(providerNpi));
     }
 
     private static void ValidateBankAccountForMethod(ProviderBankAccountDto bankAccount, DisbursementMethod method, string providerNpi)
@@ -1492,13 +1493,6 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         return !nonRetryableCodes.Contains(disbursement.ReturnCode);
     }
 
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
-
     private static string MapReturnCodeToReason(string returnCode)
     {
         return returnCode switch
@@ -1519,6 +1513,13 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             _ => $"ACH Return Code {returnCode}"
         };
     }
+
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>

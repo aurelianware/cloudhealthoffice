@@ -2,6 +2,7 @@ using CHO.TerminologyService.Configuration;
 using CHO.TerminologyService.Models;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CHO.TerminologyService.Services;
 
@@ -39,9 +40,6 @@ public class TerminologyTranslationService : ITerminologyTranslationService
         _options = options;
     }
 
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
-
     public async Task<TranslateResponse> TranslateAsync(TranslateRequest request, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(request.System, nameof(request.System));
@@ -71,7 +69,7 @@ public class TerminologyTranslationService : ITerminologyTranslationService
             response.Result = false;
             response.Message = $"No mapping found for {request.System}|{request.Code} → {request.TargetSystem}";
             _logger.LogInformation("No mapping found: {System}|{Code} → {Target}",
-                SanitizeForLog(request.System), SanitizeForLog(request.Code), SanitizeForLog(request.TargetSystem));
+                LogSanitizer.Sanitize(request.System), LogSanitizer.Sanitize(request.Code), LogSanitizer.Sanitize(request.TargetSystem));
             return response;
         }
 
@@ -109,7 +107,7 @@ public class TerminologyTranslationService : ITerminologyTranslationService
         }
 
         _logger.LogDebug("Translated {System}|{Code} → {Target}: {MatchCount} matches (overrides: {OverrideCount})",
-            SanitizeForLog(request.System), SanitizeForLog(request.Code), SanitizeForLog(request.TargetSystem), matches.Count, overrides.Count);
+            LogSanitizer.Sanitize(request.System), LogSanitizer.Sanitize(request.Code), LogSanitizer.Sanitize(request.TargetSystem), matches.Count, overrides.Count);
 
         return response;
     }

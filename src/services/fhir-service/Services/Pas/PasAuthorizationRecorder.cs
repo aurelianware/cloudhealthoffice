@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.Pas;
 
@@ -117,7 +118,7 @@ public sealed class HttpPasAuthorizationRecorder : IPasAuthorizationRecorder
         if (tokens is null)
         {
             _logger.LogError("PAS authorization {AuthNumber} not recorded: no service token is configured.",
-                Sanitize(request.AuthorizationNumber));
+                LogSanitizer.Sanitize(request.AuthorizationNumber));
             return PasRecordOutcome.Failed(PasRecordFailure.Unavailable);
         }
 
@@ -137,7 +138,7 @@ public sealed class HttpPasAuthorizationRecorder : IPasAuthorizationRecorder
         {
             _logger.LogWarning(
                 "PAS authorization {AuthNumber}: the write's answer was lost; the stored record was read back and matches.",
-                Sanitize(request.AuthorizationNumber));
+                LogSanitizer.Sanitize(request.AuthorizationNumber));
             return new PasRecordOutcome { Stored = readBack };
         }
 
@@ -168,7 +169,7 @@ public sealed class HttpPasAuthorizationRecorder : IPasAuthorizationRecorder
         {
             // Category only: never the payload, which carries demographics.
             _logger.LogError("PAS authorization {AuthNumber} not recorded: authorization-service unavailable ({Fault}).",
-                Sanitize(request.AuthorizationNumber), ex.GetType().Name);
+                LogSanitizer.Sanitize(request.AuthorizationNumber), ex.GetType().Name);
             return PasRecordOutcome.Failed(PasRecordFailure.Unavailable);
         }
 
@@ -177,7 +178,7 @@ public sealed class HttpPasAuthorizationRecorder : IPasAuthorizationRecorder
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError("PAS authorization {AuthNumber} not recorded: authorization-service answered {Status}.",
-                    Sanitize(request.AuthorizationNumber), (int)response.StatusCode);
+                    LogSanitizer.Sanitize(request.AuthorizationNumber), (int)response.StatusCode);
                 return PasRecordOutcome.Failed((int)response.StatusCode >= 500
                     ? PasRecordFailure.Unavailable
                     : PasRecordFailure.Rejected);
@@ -196,13 +197,13 @@ public sealed class HttpPasAuthorizationRecorder : IPasAuthorizationRecorder
             {
                 // Timed out reading the answer: as good as lost.
                 _logger.LogError("PAS authorization {AuthNumber}: the write's answer timed out.",
-                    Sanitize(request.AuthorizationNumber));
+                    LogSanitizer.Sanitize(request.AuthorizationNumber));
                 return PasRecordOutcome.Failed(PasRecordFailure.Unavailable);
             }
             catch (Exception ex) when (ex is JsonException or NotSupportedException)
             {
                 _logger.LogError("PAS authorization {AuthNumber}: the stored record could not be read ({Fault}).",
-                    Sanitize(request.AuthorizationNumber), ex.GetType().Name);
+                    LogSanitizer.Sanitize(request.AuthorizationNumber), ex.GetType().Name);
                 return PasRecordOutcome.Failed(PasRecordFailure.Rejected);
             }
 
@@ -210,7 +211,7 @@ public sealed class HttpPasAuthorizationRecorder : IPasAuthorizationRecorder
             if (!IsThisRequest(stored, request, tenantId, requireHash: false))
             {
                 _logger.LogError("PAS authorization {AuthNumber}: authorization-service returned a different record.",
-                    Sanitize(request.AuthorizationNumber));
+                    LogSanitizer.Sanitize(request.AuthorizationNumber));
                 return PasRecordOutcome.Failed(PasRecordFailure.Rejected);
             }
 
@@ -244,7 +245,7 @@ public sealed class HttpPasAuthorizationRecorder : IPasAuthorizationRecorder
         catch (Exception ex)
         {
             _logger.LogError("PAS authorization {AuthNumber}: the compensating read failed ({Fault}).",
-                Sanitize(request.AuthorizationNumber), ex.GetType().Name);
+                LogSanitizer.Sanitize(request.AuthorizationNumber), ex.GetType().Name);
             return null;
         }
     }
@@ -286,7 +287,4 @@ public sealed class HttpPasAuthorizationRecorder : IPasAuthorizationRecorder
             request.RequestHash = previous;
         }
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

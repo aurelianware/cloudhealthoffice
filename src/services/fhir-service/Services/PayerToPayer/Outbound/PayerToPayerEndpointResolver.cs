@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.PayerToPayer.Outbound;
 
@@ -159,7 +160,7 @@ public sealed class ConfiguredPayerToPayerEndpointResolver : IPayerToPayerEndpoi
         {
             _logger.LogWarning(
                 "Payer-to-Payer directory entry for payer {PayerId} in tenant {Tenant} has an unusable base URL and was ignored.",
-                Clean(payerId), Clean(tenant));
+                LogSanitizer.Sanitize(payerId), LogSanitizer.Sanitize(tenant));
             return null;
         }
 
@@ -202,11 +203,4 @@ public sealed class ConfiguredPayerToPayerEndpointResolver : IPayerToPayerEndpoi
         baseUri = parsed.AbsolutePath.EndsWith('/') ? parsed : new Uri(parsed.OriginalString.TrimEnd() + "/");
         return true;
     }
-
-    /// <summary>Strips CR/LF so config/caller-derived values cannot forge log entries (CWE-117).</summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

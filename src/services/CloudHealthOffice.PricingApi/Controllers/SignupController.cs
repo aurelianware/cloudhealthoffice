@@ -3,6 +3,7 @@ using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Models;
 using CloudHealthOffice.PricingApi.Security;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.PricingApi.Controllers;
 
@@ -56,7 +57,7 @@ public class SignupController : ControllerBase
 
         // The contact email stays in the key record; the log names the key.
         _logger.LogInformation("AUDIT pricing free-tier signup: {Org} key {KeyId} by {Actor}",
-            SanitizeForLog(record.TenantName), record.KeyId, SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(record.TenantName), record.KeyId, LogSanitizer.Sanitize(_actor.UserId));
 
         return StatusCode(StatusCodes.Status201Created, new SignupResponse
         {
@@ -67,9 +68,6 @@ public class SignupController : ControllerBase
             Message = "Your API key has been created. Include it in the X-API-Key header with every request."
         });
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }
 
 public record SignupRequest

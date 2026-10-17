@@ -4,6 +4,7 @@ using IdCardService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace IdCardService.Controllers;
 
@@ -100,7 +101,7 @@ public class IdCardScanController : ControllerBase
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
             // Not "coverage inactive": the answer is unknown.
-            _logger.LogError(ex, "Coverage lookup failed during scan of card {CardId}", LogSafe.Of(payload.CardId));
+            _logger.LogError(ex, "Coverage lookup failed during scan of card {CardId}", LogSanitizer.Sanitize(payload.CardId, 256));
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new
             {
                 code = ScanErrorCodes.UpstreamUnavailable,
@@ -125,7 +126,7 @@ public class IdCardScanController : ControllerBase
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
-            _logger.LogError(ex, "Eligibility snapshot failed during scan of card {CardId}", LogSafe.Of(payload.CardId));
+            _logger.LogError(ex, "Eligibility snapshot failed during scan of card {CardId}", LogSanitizer.Sanitize(payload.CardId, 256));
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new
             {
                 code = ScanErrorCodes.UpstreamUnavailable,

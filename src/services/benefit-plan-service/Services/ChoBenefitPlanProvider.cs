@@ -11,6 +11,7 @@ using ModelFamilyAccumulatorModel = BenefitPlanService.Models.FamilyAccumulatorM
 using EngineCobDeductibleCredit = CloudHealthOffice.BenefitEngine.Domain.CobDeductibleCredit;
 using ModelCobDeductibleCredit = BenefitPlanService.Models.CobDeductibleCredit;
 using Microsoft.Extensions.Caching.Memory;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -113,8 +114,8 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
             _logger.LogWarning(
                 "ACA OOP limits not configured for plan year {PlanYear}; engine will receive null AcaIndividualCap for plan {PlanId} version {VersionId}",
                 planYear,
-                SanitizeForLog(plan.PlanId),
-                SanitizeForLog(plan.VersionId));
+                LogSanitizer.Sanitize(plan.PlanId),
+                LogSanitizer.Sanitize(plan.VersionId));
         }
 
         return new BenefitPlanConfig
@@ -201,10 +202,10 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
                 new KeyValuePair<string, object?>("cho.tenant_id", plan.TenantId));
             _logger.LogWarning(
                 "Benefit projection collapsed multi-predicate rules to first entry (Phase 2): tenant={Tenant} planId={PlanId} versionId={VersionId} benefitId={BenefitId} ruleCount={RuleCount}",
-                SanitizeForLog(plan.TenantId),
-                SanitizeForLog(plan.PlanId),
-                SanitizeForLog(plan.VersionId),
-                SanitizeForLog(benefit.Id),
+                LogSanitizer.Sanitize(plan.TenantId),
+                LogSanitizer.Sanitize(plan.PlanId),
+                LogSanitizer.Sanitize(plan.VersionId),
+                LogSanitizer.Sanitize(benefit.Id),
                 rules.Count);
         }
 
@@ -229,12 +230,6 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
             ModelCobDeductibleCredit.NoDeductible => EngineCobDeductibleCredit.NoDeductible,
             _ => EngineCobDeductibleCredit.NaicFullCredit,
         };
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 
     /// <summary>
     /// Seeds a tier's rule list with an explicit <see cref="CostShareType.Deductible"/>

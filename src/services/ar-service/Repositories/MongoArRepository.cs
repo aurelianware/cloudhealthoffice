@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using ArService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ArService.Repositories;
 
@@ -105,7 +106,7 @@ public class MongoGlAccountRepository : IGlAccountRepository
         account.CreatedAt = DateTime.UtcNow;
         account.LastUpdatedAt = DateTime.UtcNow;
         await _collection.InsertOneAsync(account);
-        _logger.LogInformation("Created GL account {AccountNumber}", SanitizeForLog(account.AccountNumber));
+        _logger.LogInformation("Created GL account {AccountNumber}", LogSanitizer.Sanitize(account.AccountNumber));
         return account;
     }
 
@@ -116,15 +117,8 @@ public class MongoGlAccountRepository : IGlAccountRepository
             Builders<GlAccount>.Filter.Eq(x => x.Id, account.Id),
             Builders<GlAccount>.Filter.Eq(x => x.TenantId, account.TenantId));
         await _collection.ReplaceOneAsync(filter, account);
-        _logger.LogInformation("Updated GL account {AccountNumber}", SanitizeForLog(account.AccountNumber));
+        _logger.LogInformation("Updated GL account {AccountNumber}", LogSanitizer.Sanitize(account.AccountNumber));
         return account;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 
@@ -224,7 +218,7 @@ public class MongoArBalanceRepository : IArBalanceRepository
         balance.LastUpdatedAt = DateTime.UtcNow;
         await _collection.InsertOneAsync(balance);
         _logger.LogInformation("Created AR balance for account {AccountId} period {Period}",
-            SanitizeForLog(balance.GlAccountId), balance.Period.ToString("yyyy-MM"));
+            LogSanitizer.Sanitize(balance.GlAccountId), balance.Period.ToString("yyyy-MM"));
         return balance;
     }
 
@@ -246,7 +240,7 @@ public class MongoArBalanceRepository : IArBalanceRepository
             balance.Version = expected;
             throw new ArConcurrencyException($"AR balance {balance.Id} was changed by someone else; re-read it and retry");
         }
-        _logger.LogInformation("Updated AR balance {BalanceId}", SanitizeForLog(balance.Id));
+        _logger.LogInformation("Updated AR balance {BalanceId}", LogSanitizer.Sanitize(balance.Id));
         return balance;
     }
 
@@ -262,13 +256,6 @@ public class MongoArBalanceRepository : IArBalanceRepository
         return await _collection.Find(filter)
             .SortByDescending(b => b.Period)
             .ToListAsync();
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 
@@ -357,7 +344,7 @@ public class MongoCashPostingRepository : ICashPostingRepository
         posting.Revision = 0;
         posting.LastUpdatedAt = DateTime.UtcNow;
         await _collection.InsertOneAsync(posting);
-        _logger.LogInformation("Created cash posting {PostingNumber}", SanitizeForLog(posting.PostingNumber));
+        _logger.LogInformation("Created cash posting {PostingNumber}", LogSanitizer.Sanitize(posting.PostingNumber));
         return posting;
     }
 
@@ -391,15 +378,8 @@ public class MongoCashPostingRepository : ICashPostingRepository
                 throw new ArConcurrencyException($"Cash posting {posting.Id} was changed by someone else; re-read it and retry");
             return posting;
         }
-        _logger.LogInformation("Updated cash posting {PostingNumber}", SanitizeForLog(posting.PostingNumber));
+        _logger.LogInformation("Updated cash posting {PostingNumber}", LogSanitizer.Sanitize(posting.PostingNumber));
         return posting;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 
@@ -489,7 +469,7 @@ public class MongoArAdjustmentRepository : IArAdjustmentRepository
         adjustment.Revision = 0;
         adjustment.LastUpdatedAt = DateTime.UtcNow;
         await _collection.InsertOneAsync(adjustment);
-        _logger.LogInformation("Created AR adjustment {AdjustmentNumber}", SanitizeForLog(adjustment.AdjustmentNumber));
+        _logger.LogInformation("Created AR adjustment {AdjustmentNumber}", LogSanitizer.Sanitize(adjustment.AdjustmentNumber));
         return adjustment;
     }
 
@@ -523,15 +503,8 @@ public class MongoArAdjustmentRepository : IArAdjustmentRepository
                 throw new ArConcurrencyException($"AR adjustment {adjustment.Id} was changed by someone else; re-read it and retry");
             return adjustment;
         }
-        _logger.LogInformation("Updated AR adjustment {AdjustmentNumber}", SanitizeForLog(adjustment.AdjustmentNumber));
+        _logger.LogInformation("Updated AR adjustment {AdjustmentNumber}", LogSanitizer.Sanitize(adjustment.AdjustmentNumber));
         return adjustment;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 
@@ -613,7 +586,7 @@ public class MongoArBatchRuleRepository : IArBatchRuleRepository
         rule.CreatedAt = DateTime.UtcNow;
         rule.LastUpdatedAt = DateTime.UtcNow;
         await _collection.InsertOneAsync(rule);
-        _logger.LogInformation("Created batch rule {RuleCode}", SanitizeForLog(rule.RuleCode));
+        _logger.LogInformation("Created batch rule {RuleCode}", LogSanitizer.Sanitize(rule.RuleCode));
         return rule;
     }
 
@@ -624,14 +597,7 @@ public class MongoArBatchRuleRepository : IArBatchRuleRepository
             Builders<ArBatchRule>.Filter.Eq(x => x.Id, rule.Id),
             Builders<ArBatchRule>.Filter.Eq(x => x.TenantId, rule.TenantId));
         await _collection.ReplaceOneAsync(filter, rule);
-        _logger.LogInformation("Updated batch rule {RuleCode}", SanitizeForLog(rule.RuleCode));
+        _logger.LogInformation("Updated batch rule {RuleCode}", LogSanitizer.Sanitize(rule.RuleCode));
         return rule;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using CloudHealthOffice.Infrastructure.Configuration;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace MemberService.Services;
 
@@ -79,7 +80,7 @@ public sealed class HmacSha256IdentifierFingerprinter : IIdentifierFingerprinter
                 // check with a partial candidate set.
                 _logger.LogError(ex,
                     "Fingerprint key version {Version} listed in AcceptedKeyVersions could not be resolved; failing closed on the candidate set",
-                    Sanitize(version));
+                    LogSanitizer.Sanitize(version));
                 throw new StaleFingerprintKeyException(version,
                     $"Accepted fingerprint key version '{version}' cannot be resolved. " +
                     "Publish the secret or drop the version from AcceptedKeyVersions.",
@@ -139,7 +140,4 @@ public sealed class HmacSha256IdentifierFingerprinter : IIdentifierFingerprinter
         var hash = HMACSHA256.HashData(key, data);
         return Convert.ToHexString(hash);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

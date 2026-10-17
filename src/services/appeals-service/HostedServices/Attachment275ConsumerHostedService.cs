@@ -4,6 +4,7 @@ using AppealsService.Models;
 using AppealsService.Repositories;
 using AppealsService.Services;
 using Confluent.Kafka;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AppealsService.HostedServices;
 
@@ -131,9 +132,9 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
             consumer.Subscribe(topic);
             _logger.LogInformation(
                 "275 attachment consumer subscribed to {Topic} (group={Group}, bootstrap={Bootstrap})",
-                LogSanitizer.SafeForLog(topic),
-                LogSanitizer.SafeForLog(groupId),
-                LogSanitizer.SafeForLog(bootstrap));
+                LogSanitizer.Sanitize(topic, 256),
+                LogSanitizer.Sanitize(groupId, 256),
+                LogSanitizer.Sanitize(bootstrap, 256));
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -149,7 +150,7 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
                 catch (ConsumeException ex)
                 {
                     _logger.LogError(ex, "Kafka consume error: {Reason}",
-                        LogSanitizer.SafeForLog(ex.Error.Reason));
+                        LogSanitizer.Sanitize(ex.Error.Reason, 256));
                     continue;
                 }
 
@@ -231,7 +232,7 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
             // production message — keep at debug to avoid log spam.
             _logger.LogDebug(
                 "275 envelope context={Context} is not '{AppealContext}'; skipping",
-                LogSanitizer.SafeForLog(envelope.Context),
+                LogSanitizer.Sanitize(envelope.Context, 256),
                 AppealContext);
             return Attachment275HandleOutcome.SkippedNonAppealContext;
         }
@@ -295,9 +296,9 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
             {
                 _logger.LogWarning(
                     "275 envelope: no open appeal for tenantId={TenantId} claimId={ClaimId} controlNumber={ControlNumber}",
-                    LogSanitizer.SafeForLog(envelope.TenantId),
-                    LogSanitizer.SafeForLog(envelope.ClaimId),
-                    LogSanitizer.SafeForLog(envelope.ControlNumber));
+                    LogSanitizer.Sanitize(envelope.TenantId, 256),
+                    LogSanitizer.Sanitize(envelope.ClaimId, 256),
+                    LogSanitizer.Sanitize(envelope.ControlNumber, 256));
                 await deadLetterSink.DeadLetterAsync(envelope, "no-open-appeal-for-claim", ct);
                 return Attachment275HandleOutcome.DeadLetteredNoOpenAppeal;
             }
@@ -337,10 +338,10 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
 
             _logger.LogInformation(
                 "275 attachment routed: tenantId={TenantId} appealId={AppealId} attachmentId={AttachmentId} controlNumber={ControlNumber}",
-                LogSanitizer.SafeForLog(updated.TenantId),
-                LogSanitizer.SafeForLog(updated.Id),
-                LogSanitizer.SafeForLog(attachment.AttachmentId),
-                LogSanitizer.SafeForLog(envelope.ControlNumber));
+                LogSanitizer.Sanitize(updated.TenantId, 256),
+                LogSanitizer.Sanitize(updated.Id, 256),
+                LogSanitizer.Sanitize(attachment.AttachmentId, 256),
+                LogSanitizer.Sanitize(envelope.ControlNumber, 256));
 
             return Attachment275HandleOutcome.Routed;
         }
@@ -348,9 +349,9 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
         {
             _logger.LogError(ex,
                 "275 envelope routing failed: tenantId={TenantId} claimId={ClaimId} controlNumber={ControlNumber}; dead-lettering and advancing offset",
-                LogSanitizer.SafeForLog(envelope.TenantId),
-                LogSanitizer.SafeForLog(envelope.ClaimId),
-                LogSanitizer.SafeForLog(envelope.ControlNumber));
+                LogSanitizer.Sanitize(envelope.TenantId, 256),
+                LogSanitizer.Sanitize(envelope.ClaimId, 256),
+                LogSanitizer.Sanitize(envelope.ControlNumber, 256));
             await deadLetterSink.DeadLetterAsync(envelope, "handler-exception", ct);
             return Attachment275HandleOutcome.DeadLetteredHandlerException;
         }

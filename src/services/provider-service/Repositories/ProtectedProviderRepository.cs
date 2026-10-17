@@ -1,6 +1,7 @@
 using CloudHealthOffice.FieldProtection;
 using ProviderService.Models;
 using ProviderService.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Repositories;
 
@@ -187,7 +188,7 @@ public sealed class ProtectedProviderRepository : IProviderRepository
             _logger.LogError(UndecryptableEvent,
                 "The bank-account copy on provider {ProviderId} (version {VersionId}) in tenant {TenantId} could not be decrypted " +
                 "({Reason}); it stays encrypted on this read and nothing that needs the numbers can use it",
-                Sanitize(provider!.ProviderId), Sanitize(provider.VersionId), Sanitize(provider.TenantId), ex.Message);
+                LogSanitizer.Sanitize(provider!.ProviderId), LogSanitizer.Sanitize(provider.VersionId), LogSanitizer.Sanitize(provider.TenantId), ex.Message);
         }
         return provider;
     }
@@ -207,7 +208,4 @@ public sealed class ProtectedProviderRepository : IProviderRepository
             return value;
         }
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

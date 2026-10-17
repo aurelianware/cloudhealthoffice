@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EnrollmentImportService.Clients;
 
@@ -42,7 +43,7 @@ public class HttpBenefitPlanServiceClient : IBenefitPlanServiceClient
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning(
                 "benefit-plan-service rejected plan-code resolve for group {GroupNumber} code {ExternalCode}: {Status} {Body}",
-                SanitizeForLog(groupNumber), SanitizeForLog(externalPlanCode), response.StatusCode, SanitizeForLog(body));
+                LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(externalPlanCode), response.StatusCode, LogSanitizer.Sanitize(body));
             throw new HttpRequestException(
                 $"benefit-plan-service plan-code resolve failed with {(int)response.StatusCode}.",
                 null, response.StatusCode);
@@ -52,9 +53,6 @@ public class HttpBenefitPlanServiceClient : IBenefitPlanServiceClient
             .ConfigureAwait(false);
         return result?.PlanId;
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
     /// <summary>Mirrors benefit-plan-service's PlanCodeMappingResponse — only PlanId is needed here.</summary>
     private sealed class PlanCodeMappingResponseDto

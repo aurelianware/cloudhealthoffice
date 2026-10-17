@@ -5,6 +5,7 @@ using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.OperatingMode;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication;
 
@@ -102,7 +103,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning(
                 "Benefit-plan-service calculate-benefits returned {StatusCode} for claim {ClaimId}: {Body}",
-                response.StatusCode, SanitizeForLog(request.ClaimId), SanitizeForLog(body));
+                response.StatusCode, LogSanitizer.Sanitize(request.ClaimId), LogSanitizer.Sanitize(body));
             return new BenefitResolutionResult
             {
                 Success = false,
@@ -201,7 +202,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogError(
                 "Benefit-plan-service reverse-claim returned {StatusCode} for original claim {OriginalClaimId}: {Body}",
-                response.StatusCode, SanitizeForLog(originalClaimId), SanitizeForLog(body));
+                response.StatusCode, LogSanitizer.Sanitize(originalClaimId), LogSanitizer.Sanitize(body));
             // The engine contract is "throws on failure" — caller (5.12b
             // ReversalRunService) catches and surfaces as ClaimAdjustment
             // failure with manual triage required.
@@ -219,7 +220,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
 
         _logger.LogInformation(
             "Reversal for original claim {OriginalClaimId} (member {MemberId}, plan {PlanId}, terminal {Terminal}): {Outcome}",
-            SanitizeForLog(originalClaimId), SanitizeForLog(memberId), benefitPlanId, terminal, outcome);
+            LogSanitizer.Sanitize(originalClaimId), LogSanitizer.Sanitize(memberId), benefitPlanId, terminal, outcome);
         return outcome;
     }
 
@@ -311,7 +312,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
             // Ids and the status only: the body may echo the commit (member, amounts).
             _logger.LogError(
                 "Benefit-plan-service commit-accumulators returned {StatusCode} for claim {ClaimId} (commit {CommitId})",
-                response.StatusCode, SanitizeForLog(commit.ClaimId), SanitizeForLog(commit.CommitId));
+                response.StatusCode, LogSanitizer.Sanitize(commit.ClaimId), LogSanitizer.Sanitize(commit.CommitId));
             throw new HttpRequestException(
                 $"Benefit calculation engine accumulator commit returned HTTP {(int)response.StatusCode}",
                 null, response.StatusCode);
@@ -361,7 +362,4 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
         if (ctx.Items.TryGetValue("TenantId", out var value) && value is string s) return s;
         return null;
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

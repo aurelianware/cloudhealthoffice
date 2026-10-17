@@ -4,6 +4,7 @@ using BenefitPlanService.Models;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -257,7 +258,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
             {
                 _logger.LogWarning(
                     "Provider service returned {StatusCode} for NPI {Npi}; falling back to live verification",
-                    response.StatusCode, SanitizeForLog(npi));
+                    response.StatusCode, LogSanitizer.Sanitize(npi));
                 return null;
             }
 
@@ -267,7 +268,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         {
             _logger.LogWarning(ex,
                 "Provider service unreachable for NPI {Npi}; falling back to live verification",
-                SanitizeForLog(npi));
+                LogSanitizer.Sanitize(npi));
             return null;
         }
     }
@@ -291,7 +292,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
             {
                 _logger.LogWarning(
                     "Provider verification service returned {StatusCode} for NPI {Npi}; treating as unavailable",
-                    response.StatusCode, SanitizeForLog(npi));
+                    response.StatusCode, LogSanitizer.Sanitize(npi));
                 return null;
             }
 
@@ -334,7 +335,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         {
             _logger.LogWarning(ex,
                 "Provider verification service unreachable for NPI {Npi}; treating as unavailable",
-                SanitizeForLog(npi));
+                LogSanitizer.Sanitize(npi));
             return null;
         }
     }
@@ -396,13 +397,6 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         DenialCode = "PROVIDER_VERIFICATION_UNAVAILABLE",
         DenialReason = "Provider integrity could not be verified against any data source; manual review required"
     };
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 
     private static string? NormalizeRating(JsonElement value)
         => NormalizeEnumValue(value, ["Unknown", "Clear", "Advisory", "Caution", "Alert", "Blocked"]);

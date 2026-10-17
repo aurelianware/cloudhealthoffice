@@ -5,6 +5,7 @@ using Hl7.Fhir.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.ProviderAccess;
 
@@ -286,17 +287,17 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
             _logger.LogInformation(
                 "Provider Access granted: tenant={Tenant} provider={Provider} member={Member} "
                 + "resource={Resource} consent={Consent} at={At}",
-                Clean(decision.TenantId), Clean(decision.ProviderId), Clean(decision.MemberId),
-                Clean(resourceType), Clean(decision.AuthorizingConsentId), decision.EvaluatedAtUtc);
+                LogSanitizer.Sanitize(decision.TenantId), LogSanitizer.Sanitize(decision.ProviderId), LogSanitizer.Sanitize(decision.MemberId),
+                LogSanitizer.Sanitize(resourceType), LogSanitizer.Sanitize(decision.AuthorizingConsentId), decision.EvaluatedAtUtc);
             return;
         }
 
         _logger.LogWarning(
             "Provider Access denied: tenant={Tenant} provider={Provider} member={Member} "
             + "resource={Resource} reason={Reason} attributed={Attributed} consent={ConsentReason} at={At}",
-            Clean(decision.TenantId), Clean(decision.ProviderId), Clean(decision.MemberId),
-            Clean(resourceType), decision.Reason, decision.Attributed,
-            Clean(decision.ConsentDecisionReason), decision.EvaluatedAtUtc);
+            LogSanitizer.Sanitize(decision.TenantId), LogSanitizer.Sanitize(decision.ProviderId), LogSanitizer.Sanitize(decision.MemberId),
+            LogSanitizer.Sanitize(resourceType), decision.Reason, decision.Attributed,
+            LogSanitizer.Sanitize(decision.ConsentDecisionReason), decision.EvaluatedAtUtc);
     }
 
     private static string? ParseResourceType(PathString path)
@@ -316,11 +317,4 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
         => value.StartsWith(prefix, StringComparison.Ordinal)
             ? value[prefix.Length..]
             : value;
-
-    /// <summary>Strips CR/LF so an id cannot forge a log entry (CWE-117).</summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

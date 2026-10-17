@@ -5,6 +5,7 @@ using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.FeeScheduleEngine.Persistence;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Controllers;
 
@@ -131,7 +132,7 @@ public sealed class PlanDefaultFeeScheduleController : ControllerBase
         _logger.LogInformation(
             "plan default fee schedule {Action} tenant={Tenant} plan={Plan} lines={Lines}",
             existing is null ? "created" : "replaced",
-            Sanitize(tenantId), planId, schedule.Lines.Count);
+            LogSanitizer.Sanitize(tenantId, 256), planId, schedule.Lines.Count);
 
         return Ok(saved);
     }
@@ -197,9 +198,6 @@ public sealed class PlanDefaultFeeScheduleController : ControllerBase
 
         return errors;
     }
-
-    private static string Sanitize(string value)
-        => new(value.Select(c => char.IsControl(c) ? '_' : c).Take(256).ToArray());
 }
 
 /// <summary>Body of <c>PUT /api/v1/plans/{planId}/default-fee-schedule</c>.</summary>

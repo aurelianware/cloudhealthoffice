@@ -5,6 +5,7 @@ using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using FhirService.Models;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services;
 
@@ -61,7 +62,7 @@ public class CrdService : ICrdService
                 // One code failing to evaluate is an UNKNOWN answer for that
                 // code, never a missing card or a failed hook (D-21).
                 _logger.LogWarning(ex, "CRD evaluation failed for code {Code}; answering unknown",
-                    SanitizeForLog(effectiveCode));
+                    LogSanitizer.Sanitize(effectiveCode, 256));
                 cards.Add(BuildRequirementsUnknownCard(display));
             }
         }
@@ -181,7 +182,7 @@ public class CrdService : ICrdService
         {
             _logger.LogWarning(ex,
                 "Prior Auth Rule Engine unavailable for CRD code {Code}; falling back to CRD classification",
-                SanitizeForLog(procedureCode));
+                LogSanitizer.Sanitize(procedureCode, 256));
             return null;
         }
     }
@@ -222,21 +223,6 @@ public class CrdService : ICrdService
         AutoApprovedCodes = new HashSet<string>(config.AutoApprovedCodes, StringComparer.Ordinal),
         DocumentationRequiredCodes = new HashSet<string>(config.DocumentationRequiredCodes, StringComparer.Ordinal),
     };
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        // CR/LF removed in the form CodeQL recognises, then any other control
-        // character replaced.
-        value = value.Replace("\r", "").Replace("\n", "");
-        var buffer = new System.Text.StringBuilder(value.Length);
-        foreach (var ch in value)
-        {
-            buffer.Append(char.IsControl(ch) ? '_' : ch);
-        }
-        if (buffer.Length > 256) buffer.Length = 256;
-        return buffer.ToString();
-    }
 
     // ── Code extraction ──────────────────────────────────────────────────────
 

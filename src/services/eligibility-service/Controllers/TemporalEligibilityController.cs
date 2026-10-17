@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using CloudHealthOffice.Infrastructure.Middleware;
 using EligibilityService.Models;
 using EligibilityService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EligibilityService.Controllers;
 
@@ -44,12 +45,9 @@ public class TemporalEligibilityController : ControllerBase
 
         _logger.LogInformation(
             "Temporal eligibility lookup for member {Member} on {Date}",
-            SanitizeForLog(memberId), serviceDate.ToString("yyyy-MM-dd"));
+            LogSanitizer.Sanitize(memberId), serviceDate.ToString("yyyy-MM-dd"));
 
         var result = await _temporal.GetAsOfAsync(TenantId, memberId, serviceDate, ct);
         return Ok(result);
     }
-
-    private static string SanitizeForLog(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

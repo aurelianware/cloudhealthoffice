@@ -3,6 +3,7 @@ using ClaimsService.Models.Adjudication;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.FeeScheduleEngine.Domain;
 using CloudHealthOffice.FeeScheduleEngine.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication.Stages;
 
@@ -128,7 +129,7 @@ public sealed class PricingStage : IClaimAdjudicationStage
         {
             _logger.LogError(ex,
                 "Fee schedule pricing threw for claim {ClaimVersionId}",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
             priced = null;
         }
 
@@ -136,7 +137,7 @@ public sealed class PricingStage : IClaimAdjudicationStage
         {
             _logger.LogWarning(
                 "Fee schedule pricing unavailable for claim {ClaimVersionId}; pending",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
             context.PricingResult = new PricingOutcome { PricingUnavailable = true };
             return Pend(context, PricingUnavailablePendCode,
                 "Fee schedule pricing service unavailable; claim lines could not be priced.");
@@ -339,7 +340,4 @@ public sealed class PricingStage : IClaimAdjudicationStage
         };
         return ClaimAdjudicationStageResult.Pend(StageName, reason);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

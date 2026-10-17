@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using ProviderService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Repositories;
 
@@ -400,7 +401,7 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
     {
         _logger.LogWarning(
             "Mongo deployment does not support transactions; activating organization {OrgId} version {VersionId} non-atomically.",
-            SanitizeForLog(draftToActivate.OrganizationId), SanitizeForLog(draftToActivate.VersionId));
+            LogSanitizer.Sanitize(draftToActivate.OrganizationId), LogSanitizer.Sanitize(draftToActivate.VersionId));
 
         if (predecessor == null)
         {
@@ -432,18 +433,12 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
             {
                 _logger.LogError(
                     "Activating organization {OrgId} version {VersionId} failed after its predecessor {PredecessorVersionId} was superseded, and the predecessor could not be restored; the chain has no head until it is repaired.",
-                    SanitizeForLog(draftToActivate.OrganizationId), SanitizeForLog(draftToActivate.VersionId), SanitizeForLog(predecessor.VersionId));
+                    LogSanitizer.Sanitize(draftToActivate.OrganizationId), LogSanitizer.Sanitize(draftToActivate.VersionId), LogSanitizer.Sanitize(predecessor.VersionId));
             }
             throw await NoMatchAsync(null, draftToActivate, draftExpected, () => VersionNotFound(draftToActivate));
         }
 
         return draftToActivate;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     public async Task<Organization> ReplaceVersionRowAsync(Organization version)

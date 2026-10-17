@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using TenantService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace TenantService.Services;
 
@@ -29,21 +30,21 @@ public class TenantRoleRepository : ITenantRoleRepository
     public async Task<TenantRole> CreateAsync(TenantRole role)
     {
         await _collection.InsertOneAsync(role);
-        _logger.LogInformation("Created role {RoleName}", SanitizeForLog(role.RoleName));
+        _logger.LogInformation("Created role {RoleName}", LogSanitizer.Sanitize(role.RoleName));
         return role;
     }
 
     public async Task<TenantRole> UpdateAsync(TenantRole role)
     {
         await _collection.ReplaceOneAsync(r => r.Id == role.Id, role);
-        _logger.LogInformation("Updated role {RoleName}", SanitizeForLog(role.RoleName));
+        _logger.LogInformation("Updated role {RoleName}", LogSanitizer.Sanitize(role.RoleName));
         return role;
     }
 
     public async Task DeleteAsync(string roleName)
     {
         await _collection.DeleteOneAsync(r => r.RoleName == roleName);
-        _logger.LogInformation("Deleted role {RoleName}", SanitizeForLog(roleName));
+        _logger.LogInformation("Deleted role {RoleName}", LogSanitizer.Sanitize(roleName));
     }
 
     public async Task SeedStandardRolesAsync()
@@ -62,7 +63,7 @@ public class TenantRoleRepository : ITenantRoleRepository
                 };
 
                 await CreateAsync(role);
-                _logger.LogInformation("Seeded standard role {RoleName}", SanitizeForLog(role.RoleName));
+                _logger.LogInformation("Seeded standard role {RoleName}", LogSanitizer.Sanitize(role.RoleName));
             }
             else
             {
@@ -72,12 +73,5 @@ public class TenantRoleRepository : ITenantRoleRepository
                 await UpdateAsync(existing);
             }
         }
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EnrollmentImportService.Clients;
 
@@ -49,7 +50,7 @@ public class HttpMemberServiceClient : IMemberServiceClient
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning("member-service rejected member creation for {MemberId}: {Status} {Body}",
-                SanitizeForLog(request.MemberId), response.StatusCode, SanitizeForLog(body));
+                LogSanitizer.Sanitize(request.MemberId), response.StatusCode, LogSanitizer.Sanitize(body));
             throw new MemberServiceException(
                 $"member-service create failed for {request.MemberId}: {response.StatusCode}", response.StatusCode);
         }
@@ -69,7 +70,7 @@ public class HttpMemberServiceClient : IMemberServiceClient
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning("member-service rejected member update for {MemberId}: {Status} {Body}",
-                SanitizeForLog(memberId), response.StatusCode, SanitizeForLog(body));
+                LogSanitizer.Sanitize(memberId), response.StatusCode, LogSanitizer.Sanitize(body));
             throw new MemberServiceException(
                 $"member-service update failed for {memberId}: {response.StatusCode}", response.StatusCode);
         }
@@ -101,12 +102,9 @@ public class HttpMemberServiceClient : IMemberServiceClient
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning("member-service rejected member termination for {MemberId}: {Status} {Body}",
-                SanitizeForLog(memberId), response.StatusCode, SanitizeForLog(body));
+                LogSanitizer.Sanitize(memberId), response.StatusCode, LogSanitizer.Sanitize(body));
             throw new MemberServiceException(
                 $"member-service terminate failed for {memberId}: {response.StatusCode}", response.StatusCode);
         }
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

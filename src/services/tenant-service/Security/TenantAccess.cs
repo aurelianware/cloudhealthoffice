@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace TenantService.Security;
 
@@ -60,7 +61,7 @@ public sealed class TenantAuditLog
     {
         _logger.LogWarning(
             "Tenant audit: {Action} on tenant {TargetTenant} by {Actor} (token tenant {ActorTenant}, service {IsService}): {Outcome}",
-            Sanitize(action), Sanitize(targetTenant), Sanitize(SafeActor()), Sanitize(SafeTenant()),
+            LogSanitizer.Sanitize(action), LogSanitizer.Sanitize(targetTenant), LogSanitizer.Sanitize(SafeActor()), LogSanitizer.Sanitize(SafeTenant()),
             _actor.IsAuthenticated && _actor.IsService, outcome);
     }
 
@@ -75,9 +76,6 @@ public sealed class TenantAuditLog
         try { return _actor.TenantId; }
         catch (UnauthorizedAccessException) { return string.Empty; }
     }
-
-    internal static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>
@@ -138,8 +136,8 @@ public sealed class RouteTenantFilter : IAsyncActionFilter
 
         _logger.LogWarning(
             "Tenant route refused: path tenant {PathTenant} does not match token tenant {TokenTenant} (subject {Subject}, {Action})",
-            TenantAuditLog.Sanitize(routeTenant), TenantAuditLog.Sanitize(tokenTenant),
-            TenantAuditLog.Sanitize(_actor.UserId), TenantAuditLog.Sanitize(action));
+            LogSanitizer.Sanitize(routeTenant), LogSanitizer.Sanitize(tokenTenant),
+            LogSanitizer.Sanitize(_actor.UserId), LogSanitizer.Sanitize(action));
         context.Result = new ObjectResult(new { error = "tenant_mismatch", message = "The tenant in the path does not match the authenticated tenant." })
         {
             StatusCode = StatusCodes.Status403Forbidden,

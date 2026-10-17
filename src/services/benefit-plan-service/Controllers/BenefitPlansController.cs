@@ -7,6 +7,7 @@ using BenefitPlanService.Services;
 using ChoProblemResults = CloudHealthOffice.Infrastructure.Middleware.ChoProblemResults;
 using CloudHealthOffice.Infrastructure.Security;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Controllers;
 
@@ -55,7 +56,7 @@ public class BenefitPlansController : ControllerBase
         [FromQuery] bool? activeOnly = true)
     {
         _logger.LogInformation("Getting benefit plans for tenant {TenantId}: payer={Payer}, planType={PlanType}, activeOnly={ActiveOnly}", 
-            SanitizeForLog(TenantId), SanitizeForLog(payer), SanitizeForLog(planType), activeOnly);
+            LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(payer), LogSanitizer.Sanitize(planType), activeOnly);
         
         var plans = await _service.GetPlansAsync(TenantId, payer, planType, activeOnly ?? true);
         return Ok(plans);
@@ -582,13 +583,6 @@ public class BenefitPlansController : ControllerBase
         supplied = ex.Supplied,
         cap = ex.Cap
     };
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }
 
 /// <summary>Body for POST <c>/{planId}/versions/{versionId}/publish</c>.</summary>

@@ -5,6 +5,7 @@ using MemberDocumentService.Repositories;
 using MemberDocumentService.Services;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace MemberDocumentService.Controllers;
 
@@ -570,7 +571,7 @@ public class MemberDocumentsController : ControllerBase
     {
         _logger.LogInformation(
             "AUDIT member document legal hold {Action}: {TenantId}/{DocumentId} by {Actor}; reason: {Reason}",
-            action, ForLog(doc.TenantId), ForLog(doc.Id), ForLog(_actor.UserId), ForLog(reason) ?? "(none)");
+            action, LogSanitizer.Sanitize(doc.TenantId), LogSanitizer.Sanitize(doc.Id), LogSanitizer.Sanitize(_actor.UserId), reason is null ? "(none)" : LogSanitizer.Sanitize(reason));
     }
 
     private static string? NormalizeReason(string? reason)
@@ -578,10 +579,6 @@ public class MemberDocumentsController : ControllerBase
         var trimmed = reason?.Trim();
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
-
-    /// <summary>One log line per entry: control characters (newlines) cannot forge another.</summary>
-    private static string? ForLog(string? value)
-        => value == null ? null : new string(value.Select(c => char.IsControl(c) ? ' ' : c).ToArray());
 
     private static IDictionary<string, string> BuildLifecycleTags(string retentionPolicyId, DateTime retentionUntilDate, bool legalHold)
     {

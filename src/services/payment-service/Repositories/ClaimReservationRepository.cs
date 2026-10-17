@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Repositories;
 
@@ -139,7 +140,7 @@ public sealed class ClaimReservationRepositoryMongo : IClaimReservationRepositor
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
             _logger.LogWarning("Claim {ClaimId} already reserved for {Kind}; run {RunId} skips it",
-                Sanitize(reservation.ClaimId), reservation.Kind, Sanitize(reservation.RunId));
+                LogSanitizer.Sanitize(reservation.ClaimId), reservation.Kind, LogSanitizer.Sanitize(reservation.RunId));
             return false;
         }
     }
@@ -197,7 +198,4 @@ public sealed class ClaimReservationRepositoryMongo : IClaimReservationRepositor
             Builders<ClaimReservation>.Filter.Eq(x => x.TenantId, observed.TenantId),
             Builders<ClaimReservation>.Filter.Eq(x => x.RunId, observed.RunId),
             Builders<ClaimReservation>.Filter.Eq(x => x.Version, observed.Version));
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CoverageService.Services;
 
@@ -252,15 +253,9 @@ public sealed class PcpAssignmentService : IPcpAssignmentService
 
         _logger.LogInformation(
             "PCP assigned tenant={TenantId} member={MemberId} npi={Npi} source={Source}",
-            Sanitize(tenantId), Sanitize(memberId), Sanitize(cmd.ProviderNpi), cmd.Source);
+            LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(cmd.ProviderNpi), cmd.Source);
 
         return PcpAssignmentResult.Ok(assignment);
-    }
-
-    private static string Sanitize(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     private static NetworkParticipationDto? SelectParticipation(ProviderDto provider, Coverage coverage, DateTime asOf)

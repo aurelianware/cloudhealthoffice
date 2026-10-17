@@ -1,4 +1,5 @@
 using Microsoft.IdentityModel.Tokens;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.Identity;
 
@@ -87,7 +88,7 @@ public sealed class SmartSigningKeyRing
         {
             _logger.LogWarning(
                 "Signing keys for issuer {Issuer} exceeded the {Hours}h staleness bound and were dropped.",
-                Sanitize(issuerName), MaxStaleAge.TotalHours);
+                LogSanitizer.Sanitize(issuerName), MaxStaleAge.TotalHours);
             entry.Metadata = null;
             cached = null;
         }
@@ -160,14 +161,14 @@ public sealed class SmartSigningKeyRing
                 _logger.LogWarning(
                     "Timed out waiting for a signing-key refresh of issuer {Issuer}; "
                     + "continuing on cached keys.",
-                    Sanitize(entry.Options.Issuer));
+                    LogSanitizer.Sanitize(entry.Options.Issuer));
             }
             else
             {
                 _logger.LogError(
                     "Timed out waiting for a signing-key refresh of issuer {Issuer} and no keys "
                     + "are cached; tokens from this issuer cannot be validated.",
-                    Sanitize(entry.Options.Issuer));
+                    LogSanitizer.Sanitize(entry.Options.Issuer));
             }
 
             return;
@@ -201,7 +202,7 @@ public sealed class SmartSigningKeyRing
 
             _logger.LogInformation(
                 "Refreshed signing keys for issuer {Issuer}: {KeyCount} key(s).",
-                Sanitize(entry.Options.Issuer), metadata.SigningKeys.Count);
+                LogSanitizer.Sanitize(entry.Options.Issuer), metadata.SigningKeys.Count);
         }
         catch (Exception ex)
         {
@@ -214,20 +215,17 @@ public sealed class SmartSigningKeyRing
                 _logger.LogWarning(
                     "Signing-key refresh failed for issuer {Issuer}; continuing on cached keys "
                     + "retrieved {Retrieved:o}. Reason: {Reason}",
-                    Sanitize(entry.Options.Issuer), entry.Metadata.RetrievedAtUtc, Sanitize(ex.Message));
+                    LogSanitizer.Sanitize(entry.Options.Issuer), entry.Metadata.RetrievedAtUtc, LogSanitizer.Sanitize(ex.Message));
             }
             else
             {
                 _logger.LogError(
                     "Signing-key retrieval failed for issuer {Issuer} with no cached keys; "
                     + "tokens from this issuer cannot be validated. Reason: {Reason}",
-                    Sanitize(entry.Options.Issuer), Sanitize(ex.Message));
+                    LogSanitizer.Sanitize(entry.Options.Issuer), LogSanitizer.Sanitize(ex.Message));
             }
         }
     }
-
-    private static string Sanitize(string value)
-        => value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>Per-issuer trust state for health reporting. Deliberately carries no keys.</summary>

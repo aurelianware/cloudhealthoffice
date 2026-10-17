@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using ClaimsService.Models.Adjudication;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication.Stages;
 
@@ -227,7 +228,7 @@ public sealed class AiExaminationStage : IClaimAdjudicationStage
             // thing lost.
             _logger.LogWarning(ex,
                 "Unexpected exception from PublishClaimPendedAsync for claim {ClaimVersionId}; recording as Triggered (advisory may not arrive)",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
             activity?.SetTag("ai_examination.kafka_emission", "exception");
         }
 
@@ -241,7 +242,4 @@ public sealed class AiExaminationStage : IClaimAdjudicationStage
 
         return ClaimAdjudicationStageResult.Pend(StageName, PendingAiExaminationReason);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Configuration;
 using IdCardService.Models;
 using QRCoder;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace IdCardService.Services;
 
@@ -133,7 +134,7 @@ public class QrCodeService : IQrCodeService
         {
             // Configured as accepted but secret missing — treat as stale so
             // the client gets a clear "request a new card" response.
-            _logger.LogWarning(ex, "Accepted key version {Version} has no secret value", Sanitize(payload.KeyVersion));
+            _logger.LogWarning(ex, "Accepted key version {Version} has no secret value", LogSanitizer.Sanitize(payload.KeyVersion));
             return (null, ScanErrorCodes.StaleKey, "Signing key unavailable for payload key version");
         }
 
@@ -173,7 +174,4 @@ public class QrCodeService : IQrCodeService
         }
         return Convert.FromBase64String(padded);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

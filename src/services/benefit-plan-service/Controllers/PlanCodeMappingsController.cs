@@ -4,6 +4,7 @@ using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Controllers;
 
@@ -124,7 +125,7 @@ public class PlanCodeMappingsController : ControllerBase
 
         _logger.LogInformation(
             "Created 834 plan-code mapping for group {GroupNumber}: {ExternalCode} -> {PlanId}",
-            SanitizeForLog(request.GroupNumber), SanitizeForLog(request.ExternalPlanCode), SanitizeForLog(request.PlanId));
+            LogSanitizer.Sanitize(request.GroupNumber), LogSanitizer.Sanitize(request.ExternalPlanCode), LogSanitizer.Sanitize(request.PlanId));
 
         return CreatedAtAction(nameof(List), new { groupNumber = created.GroupNumber }, PlanCodeMappingResponse.From(created));
     }
@@ -221,9 +222,6 @@ public class PlanCodeMappingsController : ControllerBase
 
         return NoContent();
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 public class CreatePlanCodeMappingRequest

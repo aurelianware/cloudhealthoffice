@@ -1,5 +1,6 @@
 using PaymentService.Models;
 using PaymentService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Services;
 
@@ -171,7 +172,7 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
         var stored = await _repository.CreateIfAbsentAsync(record);
         _logger.LogInformation(
             "AUDIT provider receivable {ReceivableId} opened for NPI {Npi} in tenant {TenantId}: {Amount:F2} from reversal run {RunNumber} (835 {EnvelopeId}) by {By}",
-            stored.Id, Sanitize(providerNpi), Sanitize(tenantId), stored.OriginalAmount, run.ReversalRunNumber, Sanitize(eraEnvelopeId), Sanitize(recordedBy));
+            stored.Id, LogSanitizer.Sanitize(providerNpi), LogSanitizer.Sanitize(tenantId), stored.OriginalAmount, run.ReversalRunNumber, LogSanitizer.Sanitize(eraEnvelopeId), LogSanitizer.Sanitize(recordedBy));
         return stored;
     }
 
@@ -277,7 +278,7 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
             {
                 _logger.LogInformation(
                     "AUDIT provider receivable {ReceivableId} (NPI {Npi}): {Amount:F2} recovered by payment {PaymentId} (trace {Trace}) in payment run {RunNumber} by {By}; {Outstanding:F2} outstanding",
-                    current.Id, Sanitize(current.ProviderNpi), amount, payment.Id, Sanitize(payment.CheckNumber), runNumber, Sanitize(by), current.OutstandingAmount);
+                    current.Id, LogSanitizer.Sanitize(current.ProviderNpi), amount, payment.Id, LogSanitizer.Sanitize(payment.CheckNumber), runNumber, LogSanitizer.Sanitize(by), current.OutstandingAmount);
                 return new ReceivableOffset
                 {
                     ReceivableId = current.Id,
@@ -331,7 +332,7 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
                     {
                         _logger.LogWarning(
                             "AUDIT provider receivable {ReceivableId}: recovery by payment {PaymentId} reversed ({Reason}); {Outstanding:F2} outstanding",
-                            current.Id, paymentId, Sanitize(reason), current.OutstandingAmount);
+                            current.Id, paymentId, LogSanitizer.Sanitize(reason), current.OutstandingAmount);
                         done = true;
                     }
                 }
@@ -367,7 +368,7 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
             {
                 _logger.LogWarning(
                     "AUDIT provider receivable {ReceivableId}: {Amount:F2} cancelled, payment {PaymentId} was never paid ({Reason}); {Outstanding:F2} outstanding",
-                    Sanitize(current.Id), amount, Sanitize(paymentId), Sanitize(reason), current.OutstandingAmount);
+                    LogSanitizer.Sanitize(current.Id), amount, LogSanitizer.Sanitize(paymentId), LogSanitizer.Sanitize(reason), current.OutstandingAmount);
                 return;
             }
         }
@@ -418,14 +419,14 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
             if (current == null)
                 return null;
             var expected = current.Version;
-            if (!current.Activate(paymentId, by, _time.GetUtcNow().UtcDateTime, Sanitize(reason)))
+            if (!current.Activate(paymentId, by, _time.GetUtcNow().UtcDateTime, StripLineBreaks(reason)))
                 return null;
             current.Version = expected + 1;
             if (await _repository.TryReplaceAsync(current, expected))
             {
                 _logger.LogWarning(
                     "AUDIT provider receivable {ReceivableId}: pending payment {PaymentId} released by {By} ({Reason}); now {Status}, {Outstanding:F2} outstanding",
-                    Sanitize(current.Id), Sanitize(paymentId ?? "all"), Sanitize(by), Sanitize(reason), current.Status, current.OutstandingAmount);
+                    LogSanitizer.Sanitize(current.Id), LogSanitizer.Sanitize(paymentId ?? "all"), LogSanitizer.Sanitize(by), LogSanitizer.Sanitize(reason), current.Status, current.OutstandingAmount);
                 return current;
             }
         }
@@ -471,6 +472,10 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
         return report;
     }
 
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

@@ -4,6 +4,7 @@ using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Controllers;
 
@@ -89,7 +90,7 @@ public class FhirInsurancePlanController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "InsurancePlan read failed for PlanId {PlanId}", SanitizeForLog(id));
+            _logger.LogError(ex, "InsurancePlan read failed for PlanId {PlanId}", LogSanitizer.Sanitize(id));
             return FhirOperationOutcome(500, "exception", "InsurancePlan read failed.");
         }
 
@@ -232,7 +233,7 @@ public class FhirInsurancePlanController : ControllerBase
             {
                 _logger.LogError(ex,
                     "InsurancePlan search failed for tenant {TenantId} (repo page {RepoPage})",
-                    SanitizeForLog(TenantId), repoPage);
+                    LogSanitizer.Sanitize(TenantId), repoPage);
                 throw;
             }
 
@@ -332,7 +333,7 @@ public class FhirInsurancePlanController : ControllerBase
                 // gate the InsurancePlan surface.
                 _logger.LogWarning(ex,
                     "Organization lookup failed for network {NetworkId}; projecting without display enrichment",
-                    SanitizeForLog(id));
+                    LogSanitizer.Sanitize(id));
             }
         }
 
@@ -423,11 +424,5 @@ public class FhirInsurancePlanController : ControllerBase
             return null;
         }
         return identifier;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
