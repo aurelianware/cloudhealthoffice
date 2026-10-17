@@ -33,7 +33,15 @@ public sealed class RedisAccumulatorCentsTests : IClassFixture<RedisServerFixtur
             NullLogger<RedisAccumulatorService>.Instance, audit);
     }
 
-    private IDatabase Db => _redis.Connection!.GetDatabase();
+    private IDatabase Db
+    {
+        get
+        {
+            // Tests that seed raw hashes reach Redis before Store(), so they skip here too.
+            Skip.If(_redis.Unavailable is not null, _redis.Unavailable);
+            return _redis.Connection!.GetDatabase();
+        }
+    }
     private RedisKey IndividualKey => $"accum:{_tenant}:IND:M1:{Plan}:{Year}";
     private const string DeductibleField = "IndividualDeductible:InNetwork";
 
