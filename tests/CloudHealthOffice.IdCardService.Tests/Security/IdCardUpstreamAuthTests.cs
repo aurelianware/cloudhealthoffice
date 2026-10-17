@@ -31,7 +31,6 @@ public class IdCardUpstreamAuthTests : IClassFixture<IdCardUpstreamAuthTests.Fac
             builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MongoDb:ConnectionString"] = "",
-                ["CosmosDb:ConnectionString"] = "",
                 ["ProviderJwt:Authority"] = "",
                 ["IdCard:SigningKeySecretPrefix"] = "idcard-signing-key",
                 ["IdCard:CurrentKeyVersion"] = "v1",

@@ -231,7 +231,6 @@ public class OrderToDocumentFlowTests : IClassFixture<OrderToDocumentFlowTests.F
                     ["IdCard:AcceptedKeyVersions:0"] = "v1",
                     ["IdCard:DevSigningKeys:v1"] = "dev-key-v1-bytes-for-hmac-signing",
                     ["MongoDb:ConnectionString"] = "",
-                    ["CosmosDb:ConnectionString"] = "",
                     ["ProviderJwt:Authority"] = "",
                     ["IdCard:Qr:PixelsPerModule"] = "4"
                 });

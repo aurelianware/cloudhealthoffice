@@ -47,9 +47,9 @@ overridden via environment variables (`IdCard__CurrentKeyVersion` etc.).
 
 ## Storage
 
-Auto-detects MongoDB → Cosmos DB → in-memory (dev only) based on connection
-strings. Collections / containers: `idcard_orders`, `idcard_records`,
-`idcard_templates`.
+MongoDB (`MongoDb:ConnectionString`). Without it, Development / Testing hosts
+use an in-memory store and any other host refuses to start. Collections:
+`idcard_orders`, `idcard_records`, `idcard_templates`.
 
 ## Key rotation
 
