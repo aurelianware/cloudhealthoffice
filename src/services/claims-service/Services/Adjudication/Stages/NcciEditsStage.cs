@@ -254,7 +254,7 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
     /// NCCI pend is the claim's pend, as before.
     /// </summary>
     private static void RecordPend(
-        ClaimAdjudicationContext context, string pendCode, string pendReason, List<NcciEditFailureSnapshot> snapshots)
+        ClaimAdjudicationContext context, string pendCode, string? pendReason, List<NcciEditFailureSnapshot> snapshots)
     {
         if (context.PendDetails is { } existing
             && !string.IsNullOrWhiteSpace(existing.PendCode)
