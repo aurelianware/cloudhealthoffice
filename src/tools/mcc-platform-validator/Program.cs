@@ -3039,14 +3039,6 @@ static bool IsKnownBusinessDenialCode(string errorCode)
 static string? NormalizeBusinessDenialCode(string? code)
     => MccWorkflowValidation.NormalizeBusinessDenialCode(code);
 
-static bool RequiresClaimsServiceWorkflowObservation(SyntheticClaim claim, ExpectedValidation expected)
-    => expected.ExpectedOutcome is ClaimValidationOutcome.BusinessDenial
-        && string.Equals(
-            expected.ExpectedBusinessDenialCode,
-            MccWorkflowValidation.PriorAuthRequiredCode,
-            StringComparison.OrdinalIgnoreCase)
-        && !string.IsNullOrWhiteSpace(claim.PriorAuthNumber);
-
 static string LineOfBusinessName(int lineOfBusiness) => lineOfBusiness switch
 {
     1 => "Commercial",
