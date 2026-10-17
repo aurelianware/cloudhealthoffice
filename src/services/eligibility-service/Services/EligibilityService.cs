@@ -303,7 +303,7 @@ public class EligibilityServiceImpl : IEligibilityService
             
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Member {SubscriberId} not found", subscriberId);
+                _logger.LogWarning("Member {SubscriberId} not found", LogSanitizer.MaskId(subscriberId));
                 return null;
             }
 
@@ -334,7 +334,7 @@ public class EligibilityServiceImpl : IEligibilityService
             
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Benefits not found for plan {BenefitPlanId}", benefitPlanId);
+                _logger.LogWarning("Benefits not found for plan {BenefitPlanId}", LogSanitizer.Sanitize(benefitPlanId));
                 return new List<EligibilityBenefit>();
             }
 
