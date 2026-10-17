@@ -1090,7 +1090,10 @@ public class ClaimRepositoryMongo : IClaimRepository
 
     public async Task<long?> OldestClaimEventAsync(CancellationToken ct = default)
     {
-        var filter = Builders<Claim>.Filter.SizeGt(c => c.PendingClaimEvents, 0);
+        // $exists on the indexed path, so the sparse claim_event_outbox_created
+        // index answers the filter (only claims with a pending event are read);
+        // a $size / "PendingClaimEvents.0" filter scanned the whole collection.
+        var filter = Builders<Claim>.Filter.Exists("PendingClaimEvents.CreatedAtMs");
         var claim = await _collection.Find(filter)
             .Sort(Builders<Claim>.Sort.Ascending("PendingClaimEvents.CreatedAtMs"))
             .Limit(1).FirstOrDefaultAsync(ct);
