@@ -194,6 +194,16 @@ builder.Services.AddChoObservability(builder.Configuration);
 // Who read which authorization (HIPAA access accounting): GET api/authorizations/{id}/access-log.
 builder.Services.AddRecordAccessAudit();
 
+// "Approved but unused" (Authorization Insights) asks claims-service which
+// auth numbers claims carry, with the caller's token (ChoOutboundTokenHandler).
+builder.Services.AddHttpClient(AuthorizationService.Services.Insights.HttpClaimsUsageClient.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:ClaimsServiceUrl"] ?? "http://claims-service.cloudhealthoffice/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+builder.Services.AddScoped<AuthorizationService.Services.Insights.IClaimsUsageClient, AuthorizationService.Services.Insights.HttpClaimsUsageClient>();
+builder.Services.AddScoped<AuthorizationService.Services.Insights.UnusedAuthorizations>();
+
 var app = builder.Build();
 
 app.UseChoObservability();

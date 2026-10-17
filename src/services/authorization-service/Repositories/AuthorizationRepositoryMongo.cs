@@ -237,6 +237,17 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         return await _collection.Find(filter).ToListAsync();
     }
 
+    public async Task<IReadOnlyList<Authorization>> ListApprovedEndingBetweenAsync(DateTime from, DateTime to)
+    {
+        var b = Builders<Authorization>.Filter;
+        var filter = b.Eq(x => x.TenantId, GetTenantId())
+                     & b.In(x => x.Status, new[] { AuthorizationStatus.Approved, AuthorizationStatus.Modified })
+                     & b.Or(
+                         b.And(b.Gte(x => x.ApprovedServiceDateTo, from), b.Lte(x => x.ApprovedServiceDateTo, to)),
+                         b.And(b.Eq(x => x.ApprovedServiceDateTo, null), b.Gte(x => x.ExpirationDate, from), b.Lte(x => x.ExpirationDate, to)));
+        return await _collection.Find(filter).ToListAsync();
+    }
+
     public async Task<IEnumerable<Authorization>> ListActivityBetweenAsync(DateTime from, DateTime to)
     {
         var tenantId = GetTenantId();

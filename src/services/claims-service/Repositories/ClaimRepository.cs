@@ -60,6 +60,13 @@ public interface IClaimRepository
     Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByCriteriaAsync(ClaimCriteria criteria, int page, int pageSize)
         => throw new NotSupportedException("Searching by claim reference or Insights criteria needs the MongoDB claim store.");
 
+    /// <summary>
+    /// How many current claims (header or any line, 837 REF*G1) carry each of
+    /// these prior authorization numbers; numbers no claim carries are absent.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, int>> GetAuthorizationUsageAsync(IReadOnlyCollection<string> authorizationNumbers, CancellationToken ct = default)
+        => throw new NotSupportedException("Authorization usage needs the MongoDB claim store.");
+
     /// <summary>Claims Insights for claims adjudicated in [from, to), and the open inventory at <paramref name="asOf"/>.</summary>
     Task<ClaimInsights> GetInsightsAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness, DateTime asOf, CancellationToken ct = default)
         => throw new NotSupportedException("Claims Insights needs the MongoDB claim store.");

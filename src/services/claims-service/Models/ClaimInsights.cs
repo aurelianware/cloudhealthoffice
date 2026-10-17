@@ -171,3 +171,12 @@ public sealed class ClaimTurnaroundInsight
 
     public const int SampleLimit = 100_000;
 }
+
+public sealed class AuthorizationUsageRequest
+{
+    public const int MaxNumbers = 2000;
+    public List<string> AuthorizationNumbers { get; init; } = new();
+}
+
+/// <summary>A prior authorization number and how many current claims carry it.</summary>
+public sealed record AuthorizationUsage(string AuthorizationNumber, int ClaimCount);

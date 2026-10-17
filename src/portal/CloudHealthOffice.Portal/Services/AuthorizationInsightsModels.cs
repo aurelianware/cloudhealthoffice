@@ -13,6 +13,18 @@ public sealed class AuthorizationInsightsView
 
     public AuthorizationQueueView Queue { get; set; } = new();
     public List<AuthorizationDenialReasonView> DenialReasons { get; set; } = new();
+    public AuthorizationUnusedView Unused { get; set; } = new();
+}
+
+/// <summary>Approved authorizations whose service period ended in the period, and those with no claim yet.</summary>
+public sealed class AuthorizationUnusedView
+{
+    public int Ended { get; set; }
+
+    /// <summary>Null when claim usage couldn't be checked (see <see cref="UnavailableReason"/>).</summary>
+    public int? WithoutClaim { get; set; }
+
+    public string? UnavailableReason { get; set; }
 }
 
 public sealed class AuthorizationQueueView
@@ -53,6 +65,10 @@ public static class AuthorizationDrillDown
         Url(("scope", "period"), ("from", Iso(from)), ("to", Iso(to)), ("lob", lob), ("requestType", requestType), ("outcome", outcome),
             ("withinTimeframe", withinTimeframe?.ToString().ToLowerInvariant()), ("automated", automated?.ToString().ToLowerInvariant()),
             ("denialReasonCode", denialReasonCode));
+
+    /// <summary>Approved, service period ended in the period, no claim yet.</summary>
+    public static string Unused(DateTime from, DateTime to, string? lob) =>
+        Url(("scope", "unused"), ("from", Iso(from)), ("to", Iso(to)), ("lob", lob));
 
     public static string Queue(string? lob, string? status = null, string? sla = null) =>
         Url(("scope", "queue"), ("lob", lob), ("status", status), ("sla", sla));
