@@ -1,0 +1,62 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@using CloudHealthOffice.Portal.Services
+@* The payments (checks / EFTs) that paid or recouped a claim: the claim's
+   Payments tab, shown with payments:read. Each links to its payment record. *@
+@inject IPaymentService Payments
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Warning" data-testid="claim-payments-error">@_error</MudAlert>
+}
+else if (_payments is null)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_payments.Count == 0)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" data-testid="claim-payments-empty">No payment has been issued for this claim yet.</MudText>
+}
+else
+{
+    <MudSimpleTable Dense="true" Hover="true">
+        <thead>
+            <tr><th>Payment</th><th>Date</th><th>Payee</th><th>Status</th><th style="text-align:right;">Paid on this claim</th><th style="text-align:right;">Payment total</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var payment in _payments)
+            {
+                var line = payment.ClaimPayments.FirstOrDefault(c => c.ClaimId == ClaimId);
+                <tr data-testid="claim-payment-row">
+                    <td>
+                        <RecordLink Href="@($"/payments/{Uri.EscapeDataString(payment.Id)}")">@payment.Label</RecordLink>
+                        @if (payment.IsReversal) { <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-1">Reversal</MudChip> }
+                    </td>
+                    <td>@payment.PaymentDate.ToString("MM/dd/yyyy")</td>
+                    <td>@payment.PayeeName</td>
+                    <td><MudChip T="string" Size="Size.Small">@payment.Status</MudChip></td>
+                    <td style="text-align:right;">@(line?.PaymentAmount.ToString("C") ?? "—")</td>
+                    <td style="text-align:right;">@payment.TotalPaymentAmount.ToString("C")</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    [Parameter, EditorRequired] public string ClaimId { get; set; } = string.Empty;
+
+    private List<PaymentView>? _payments;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _payments = (await Payments.GetPaymentsForClaimAsync(ClaimId) ?? new()).OrderByDescending(p => p.PaymentDate).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Payments couldn't be loaded: {ex.Message}";
+        }
+    }
+}

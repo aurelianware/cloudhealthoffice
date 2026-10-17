@@ -1,0 +1,30 @@
+@page "/payments/{PaymentId}"
+@page "/payments/{PaymentId}/{Tab}"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+
+<PageTitle>Payment @PaymentId - Cloud Health Office</PageTitle>
+
+<PermissionGate Permission="payments:read" RoleName="Finance">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudBreadcrumbs Items="_breadcrumbs" Class="mb-4" />
+    <PaymentRecordView @key="PaymentId" PaymentId="@PaymentId" Tab="@Tab" BaseHref="@BaseHref" />
+</MudContainer>
+</PermissionGate>
+
+@code {
+    [Parameter] public string PaymentId { get; set; } = string.Empty;
+    [Parameter] public string? Tab { get; set; }
+
+    private string BaseHref => $"/payments/{Uri.EscapeDataString(PaymentId)}";
+
+    private List<BreadcrumbItem> _breadcrumbs = new();
+
+    protected override void OnParametersSet() =>
+        _breadcrumbs =
+        [
+            new("Home", href: "/home"),
+            new("Payment runs", href: "/payment-runs"),
+            new($"Payment {PaymentId}", href: null, disabled: true),
+        ];
+}
