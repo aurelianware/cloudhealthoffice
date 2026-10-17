@@ -11,7 +11,7 @@ namespace CloudHealthOffice.CapitationService.Tests;
 /// <summary>
 /// WebApplicationFactory for capitation-service smoke tests.
 /// Replaces all repository and external-service dependencies with NSubstitute mocks
-/// so tests run without Cosmos/Mongo/Stripe/external services.
+/// so tests run without Mongo/Stripe/external services.
 /// The CHO authentication pipeline is real: the host runs in Development, so it
 /// trusts the development issuers from appsettings.Development.json, and clients
 /// made with <see cref="CreateTenantClient"/> carry a development token for the
@@ -63,10 +63,9 @@ public class CapitationApiFactory : WebApplicationFactory<Program>
             foreach (var descriptor in descriptorsToRemove)
                 services.Remove(descriptor);
 
-            // Remove Cosmos/Mongo registrations that would fail without config
+            // Remove Mongo registrations so nothing reaches a real server
             var infraDescriptors = services
-                .Where(d => d.ServiceType.FullName?.Contains("Cosmos") == true
-                         || d.ServiceType.FullName?.Contains("Mongo") == true)
+                .Where(d => d.ServiceType.FullName?.Contains("Mongo") == true)
                 .ToList();
 
             foreach (var descriptor in infraDescriptors)
