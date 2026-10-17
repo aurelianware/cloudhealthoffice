@@ -98,7 +98,7 @@ public class MemberDocument
 
     /// <summary>
     /// Incremented by every save. A save only replaces the version it read
-    /// (MongoDB: conditional replace on this field; Cosmos DB: the item's ETag),
+    /// (a conditional replace on this field),
     /// so a legal-hold change and another write cannot silently overwrite each
     /// other: the later one gets <see cref="MemberDocumentConcurrencyException"/>
     /// (409). Documents saved before this field existed read as 0.
