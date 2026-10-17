@@ -370,6 +370,36 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
         Assert.Equal(1, doc.RootElement.GetProperty("claims").GetArrayLength());
     }
 
+    [Fact]
+    public async Task SearchClaimsPost_ByAuthorizationNumber_ReturnsOnlyClaimsCarryingIt()
+    {
+        var claim = CreateValidClaim();
+        claim.Id = "auth-claim-1";
+        claim.PriorAuthorizationNumber = "PA-77";
+        _repo.SearchByReferenceAsync(null, "PA-77", null, null, null, null, null, 1, 25)
+            .Returns((new List<Claim> { claim }, 11));
+
+        var response = await _client.PostAsJsonAsync("/api/claims/search", new ClaimSearchBody { AuthorizationNumber = "PA-77" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(11, doc.RootElement.GetProperty("totalCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task SearchClaimsPost_ByClaimNumber_NoLongerIgnoresIt()
+    {
+        var claim = CreateValidClaim();
+        claim.Id = "by-number-1";
+        _repo.SearchByReferenceAsync("CLM-REF-9", null, null, null, null, null, null, 1, 25)
+            .Returns((new List<Claim> { claim }, 7));
+
+        var response = await _client.PostAsJsonAsync("/api/claims/search", new ClaimSearchBody { ClaimNumber = "CLM-REF-9" });
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(7, doc.RootElement.GetProperty("totalCount").GetInt32());
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // 277CA ACKNOWLEDGMENT
     // ═══════════════════════════════════════════════════════════════════

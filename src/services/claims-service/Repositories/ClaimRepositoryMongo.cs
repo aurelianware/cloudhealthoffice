@@ -180,6 +180,52 @@ public class ClaimRepositoryMongo : IClaimRepository
         return (docs.Select(Hydrate).ToList(), totalCount);
     }
 
+    public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByReferenceAsync(
+        string? claimNumber,
+        string? authorizationNumber,
+        string? memberId,
+        string? providerNPI,
+        DateTime? serviceDateFrom,
+        DateTime? serviceDateTo,
+        ClaimStatus? status,
+        int page,
+        int pageSize)
+    {
+        var builder = Builders<Claim>.Filter;
+        var filter = builder.Eq(c => c.TenantId, GetTenantId());
+
+        if (!string.IsNullOrWhiteSpace(claimNumber))
+            filter &= builder.Eq(c => c.ClaimNumber, claimNumber.Trim());
+        if (!string.IsNullOrWhiteSpace(authorizationNumber))
+        {
+            var auth = authorizationNumber.Trim();
+            filter &= builder.Or(
+                builder.Eq(c => c.PriorAuthorizationNumber, auth),
+                builder.ElemMatch(c => c.ClaimLines, Builders<ClaimLine>.Filter.Eq(l => l.PriorAuthorizationNumber, auth)));
+        }
+        if (!string.IsNullOrEmpty(memberId))
+            filter &= builder.Eq(c => c.MemberId, memberId);
+        if (!string.IsNullOrEmpty(providerNPI))
+            filter &= builder.Or(builder.Eq(c => c.BillingProviderNPI, providerNPI), builder.Eq(c => c.RenderingProviderNPI, providerNPI));
+        if (serviceDateFrom.HasValue)
+            filter &= builder.Gte(c => c.ServiceDateFrom, serviceDateFrom.Value);
+        if (serviceDateTo.HasValue)
+            filter &= builder.Lte(c => c.ServiceDateTo, serviceDateTo.Value);
+        if (status.HasValue)
+            filter &= builder.Eq(c => c.Status, status.Value);
+
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 1000);
+        var totalCount = (int)await _collection.CountDocumentsAsync(filter);
+        var docs = await _collection.Find(filter)
+            .SortByDescending(c => c.SubmittedDate)
+            .Skip((safePage - 1) * safePageSize)
+            .Limit(safePageSize)
+            .ToListAsync();
+
+        return (docs.Select(Hydrate).ToList(), totalCount);
+    }
+
     public async Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
         IReadOnlyCollection<string> claimIds,
         string? memberId,

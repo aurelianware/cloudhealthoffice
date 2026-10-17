@@ -1,0 +1,99 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@inject IClaimsService ClaimsService
+@* The claims that carry this prior authorization number (claim header or any
+   line, 837 REF*G1): what UM and claims staff check before approving more
+   units or adjudicating against the auth. *@
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="authorization-claims-error">@_error</MudAlert>
+}
+else if (_result is null)
+{
+    <div class="d-flex justify-center pa-8"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+}
+else if (_result.Claims.Count == 0)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" data-testid="authorization-claims-empty">No claims have been billed against @AuthorizationNumber.</MudText>
+}
+else
+{
+    <MudStack Row="true" Spacing="6" Class="mb-3" data-testid="authorization-claims-summary">
+        <div>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Claims</MudText>
+            <MudText Typo="Typo.h6">@_result.TotalCount</MudText>
+        </div>
+        <div>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Billed</MudText>
+            <MudText Typo="Typo.h6">@_result.Claims.Sum(c => c.TotalChargeAmount).ToString("C")</MudText>
+        </div>
+        <div>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Paid</MudText>
+            <MudText Typo="Typo.h6">@_result.Claims.Sum(c => c.PaidAmount).ToString("C")</MudText>
+        </div>
+        @if (UnitsApproved is { } approved)
+        {
+            <div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Units approved</MudText>
+                <MudText Typo="Typo.h6">@approved</MudText>
+            </div>
+        }
+    </MudStack>
+    @if (_result.TotalCount > _result.Claims.Count)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2" data-testid="authorization-claims-truncated">
+            Showing the @_result.Claims.Count most recent of @_result.TotalCount claims; totals cover those shown.
+        </MudText>
+    }
+    <MudSimpleTable Dense="true" Hover="true">
+        <thead>
+            <tr><th>Claim</th><th>Member</th><th>Service dates</th><th>Status</th><th style="text-align:right;">Billed</th><th style="text-align:right;">Paid</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var claim in _result.Claims)
+            {
+                <tr data-testid="authorization-claim">
+                    <td><RecordLink Href="@($"/claims/{Uri.EscapeDataString(claim.ClaimId)}")">@claim.DisplayClaimNumber</RecordLink></td>
+                    <td>
+                        @if (!string.IsNullOrWhiteSpace(claim.MemberId))
+                        {
+                            <RecordLink Href="@($"/members/{Uri.EscapeDataString(claim.MemberId)}")">@claim.MemberId</RecordLink>
+                        }
+                    </td>
+                    <td style="white-space:nowrap;">@claim.ServiceDateFrom.ToString("MM/dd/yyyy")@(claim.ServiceDateTo.Date != claim.ServiceDateFrom.Date ? $" – {claim.ServiceDateTo:MM/dd/yyyy}" : "")</td>
+                    <td><MudChip T="string" Size="Size.Small">@claim.Status</MudChip></td>
+                    <td style="text-align:right;">@claim.TotalChargeAmount.ToString("C")</td>
+                    <td style="text-align:right;">@claim.PaidAmount.ToString("C")</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    /// <summary>The authorization number claims carry (not the authorization's internal id).</summary>
+    [Parameter, EditorRequired] public string AuthorizationNumber { get; set; } = string.Empty;
+
+    [Parameter] public int? UnitsApproved { get; set; }
+
+    private const int PageSize = 100;
+    private ClaimSearchResult? _result;
+    private string? _error;
+    private string? _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == AuthorizationNumber) return;
+        _loadedFor = AuthorizationNumber;
+        _result = null;
+        _error = null;
+        try
+        {
+            _result = await ClaimsService.SearchClaimsAsync(new ClaimSearchRequest { AuthorizationNumber = AuthorizationNumber, PageSize = PageSize })
+                      ?? new ClaimSearchResult();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = $"Claims couldn't be loaded: {ex.Message}";
+        }
+    }
+}
