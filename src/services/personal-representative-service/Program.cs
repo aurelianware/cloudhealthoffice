@@ -8,7 +8,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using PersonalRepresentativeService.HostedServices;
 using PersonalRepresentativeService.Repositories;
 using PersonalRepresentativeService.Services;
-using Microsoft.Azure.Cosmos;
+
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -45,60 +45,30 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
 });
 
 // ── Database Configuration ───────────────────────────────────────────
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+// MongoDB is the only personal-representative store (ADR 006); AddChoDatabase
+// registers the client.
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+if (databaseProvider != ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<IPersonalRepEventRepository, PersonalRepEventRepositoryMongo>();
-    builder.Services.AddSingleton<IPersonalRepEventSink>(sp =>
-        (IPersonalRepEventSink)sp.GetRequiredService<IPersonalRepEventRepository>());
-    builder.Services.AddSingleton<IPersonalRepRepository, PersonalRepRepositoryMongo>();
+    const string noDatabase =
+        "Personal Representative Service requires a database. Configure MongoDb:ConnectionString.";
 
-    builder.Services.AddHostedService<PersonalRepIndexInitializer>();
+    // A deployed host (or one told to use the Cosmos DB native SDK, which this
+    // service no longer supports) refuses to start.
+    if (databaseProvider is not null
+        || (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing")))
+        throw new InvalidOperationException(noDatabase);
 
-    Console.WriteLine("[personal-representative-service] Using MongoDB database provider");
+    // Development and test hosts (which substitute the repositories) still
+    // build; a real call fails on first use with the same message.
+    builder.Services.AddSingleton<MongoDB.Driver.IMongoDatabase>(_ => throw new InvalidOperationException(noDatabase));
 }
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"]
-            ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-        var key = configuration["CosmosDb:Key"]
-            ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
 
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            SerializerOptions = new CosmosSerializationOptions
-            {
-                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-            }
-        });
-    });
-
-    builder.Services.AddScoped<IPersonalRepEventRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new PersonalRepEventRepository(cosmosClient, databaseName);
-    });
-    builder.Services.AddScoped<IPersonalRepEventSink>(sp =>
-        (IPersonalRepEventSink)sp.GetRequiredService<IPersonalRepEventRepository>());
-    builder.Services.AddScoped<IPersonalRepRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        var sink = sp.GetRequiredService<IPersonalRepEventSink>();
-        var logger = sp.GetRequiredService<ILogger<PersonalRepRepository>>();
-        return new PersonalRepRepository(cosmosClient, databaseName, sink, logger);
-    });
-
-    Console.WriteLine("[personal-representative-service] Using Cosmos DB database provider");
-}
+builder.Services.AddSingleton<IPersonalRepEventRepository, PersonalRepEventRepositoryMongo>();
+builder.Services.AddSingleton<IPersonalRepEventSink>(sp =>
+    (IPersonalRepEventSink)sp.GetRequiredService<IPersonalRepEventRepository>());
+builder.Services.AddSingleton<IPersonalRepRepository, PersonalRepRepositoryMongo>();
+builder.Services.AddHostedService<PersonalRepIndexInitializer>();
 
 // ── Personal Rep body encryption ────────────────────────────────────
 // Non-dev startup guard: no PersonalRepEncryption section = startup error.
@@ -166,9 +136,6 @@ builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 })
 .AddCheck<PersonalRepEncryptionKeyHealthCheck>(
     "personal-rep-encryption-key",

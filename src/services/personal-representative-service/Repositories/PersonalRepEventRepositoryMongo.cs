@@ -20,9 +20,23 @@ public class PersonalRepEventRepositoryMongo : IPersonalRepEventRepository, IPer
         _collection = database.GetCollection<PersonalRepEvent>(PersonalRepEventsCollectionName);
     }
 
+    /// <summary>Validates the client-supplied envelope and fills its id and partition key.</summary>
+    internal static void NormalizeEnvelope(PersonalRepEvent evt)
+    {
+        if (string.IsNullOrEmpty(evt.EventId))
+            throw new ArgumentException("EventId is required (client-supplied idempotency key)");
+        if (string.IsNullOrEmpty(evt.TenantId) || string.IsNullOrEmpty(evt.PersonalRepId))
+            throw new ArgumentException("TenantId and PersonalRepId are required");
+
+        if (string.IsNullOrEmpty(evt.Id))
+            evt.Id = evt.EventId;
+        if (string.IsNullOrEmpty(evt.PartitionKey))
+            evt.PartitionKey = PersonalRepEvent.BuildPartitionKey(evt.TenantId, evt.PersonalRepId);
+    }
+
     public async Task AppendAsync(PersonalRepEvent evt)
     {
-        PersonalRepEventRepository.NormalizeEnvelope(evt);
+        NormalizeEnvelope(evt);
         try
         {
             await _collection.InsertOneAsync(evt);

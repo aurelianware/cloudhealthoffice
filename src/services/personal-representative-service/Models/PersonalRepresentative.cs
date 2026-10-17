@@ -38,7 +38,7 @@ public class PersonalRepresentative
     [Required]
     public string TenantId { get; set; } = string.Empty;
 
-    /// <summary>Stable rep id. Cosmos document id and Mongo `_id`.</summary>
+    /// <summary>Stable rep id (Mongo `_id`).</summary>
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     [Required]

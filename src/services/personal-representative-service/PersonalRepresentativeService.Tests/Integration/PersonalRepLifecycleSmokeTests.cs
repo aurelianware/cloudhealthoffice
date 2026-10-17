@@ -21,7 +21,7 @@ namespace PersonalRepresentativeService.Tests.Integration;
 
 /// <summary>
 /// End-to-end smoke test over the real Program pipeline using in-memory
-/// fakes so the test does not require Cosmos, Mongo, Key Vault, or Kafka.
+/// fakes so the test does not require Mongo, Key Vault, or Kafka.
 /// Mirrors <c>ConsentService.Tests.Integration.ConsentLifecycleSmokeTests</c>.
 ///
 /// The golden-path lifecycle exercised here:
@@ -52,9 +52,9 @@ public class PersonalRepLifecycleSmokeTests : IClassFixture<PersonalRepLifecycle
             {
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    // Leave MongoDb/CosmosDb connection unset; swap repository
-                    // implementations below so the Cosmos branch in Program.cs
-                    // never resolves a CosmosClient. Kafka bootstrap empty so
+                    // Leave the MongoDb connection unset; swap repository
+                    // implementations below so nothing resolves the Mongo
+                    // database. Kafka bootstrap empty so
                     // the PersonalRepEventPublisher hosted service goes into
                     // degraded mode.
                     ["PersonalRepEncryption:KeySecretPrefix"] = "personal-rep-body-encryption-key",

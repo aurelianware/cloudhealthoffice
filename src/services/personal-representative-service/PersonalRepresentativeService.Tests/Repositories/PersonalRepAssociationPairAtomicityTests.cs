@@ -14,8 +14,7 @@ namespace PersonalRepresentativeService.Tests.Repositories;
 ///
 /// These tests exercise the in-memory fake. The fake stages the forward
 /// insert first; if the inverse hook throws, it rolls the forward back —
-/// matching the Cosmos TransactionalBatch "both or neither" semantics and
-/// the Mongo session-transaction abort semantics.
+/// matching the Mongo session-transaction "both or neither" abort semantics.
 /// </summary>
 public class PersonalRepAssociationPairAtomicityTests
 {
@@ -110,8 +109,8 @@ public class PersonalRepAssociationPairAtomicityTests
     // This is the compliance-visible case. Pair IS persisted. Audit row
     // is NOT. The repository must log at Error so ops can reconcile, and
     // the exception propagates to the caller. The in-memory fake exposes
-    // an AuditAppendFailureCount counter for the assertion; the Cosmos
-    // and Mongo implementations are required by
+    // an AuditAppendFailureCount counter for the assertion; the Mongo
+    // implementation is required by
     // IPersonalRepRepository.AddAssociationPairAsync's docstring to log
     // at ILogger.LogError with tenantId, pairId, eventId, correlationId.
 
