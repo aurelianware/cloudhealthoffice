@@ -144,24 +144,47 @@ public sealed class ClaimEventOutboxDrainer
 /// logs an error while an event is older than <see cref="ClaimEventOutboxOptions.AgeAlert"/>.
 /// Several replicas may run it: a claim drained twice at once publishes an
 /// event twice, which consumers tolerate (they deduplicate on the event id).
+/// It scans only the base claims database, so it refuses to start over
+/// tenant-scoped databases (<c>MongoDb:UseTenantScoping</c>), where it would
+/// never see a tenant's pending events.
 /// </summary>
 public sealed class ClaimEventOutboxDispatcher : BackgroundService
 {
+    public const string TenantScopingSetting = "MongoDb:UseTenantScoping";
+
     private readonly IServiceScopeFactory _scopes;
     private readonly ClaimEventOutboxDrainer _drainer;
     private readonly ClaimEventOutboxOptions _options;
     private readonly TimeProvider _clock;
     private readonly ILogger<ClaimEventOutboxDispatcher> _logger;
+    private readonly IConfiguration? _configuration;
 
     public ClaimEventOutboxDispatcher(
         IServiceScopeFactory scopes, ClaimEventOutboxDrainer drainer, IOptions<ClaimEventOutboxOptions> options,
-        ILogger<ClaimEventOutboxDispatcher> logger, TimeProvider? clock = null)
+        ILogger<ClaimEventOutboxDispatcher> logger, TimeProvider? clock = null, IConfiguration? configuration = null)
     {
         _scopes = scopes;
         _drainer = drainer;
         _options = options.Value;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
+        _configuration = configuration;
+    }
+
+    /// <summary>
+    /// Fails start-up when the dispatcher would run over tenant-scoped
+    /// databases: a tenant database's pending events would never be retried.
+    /// </summary>
+    public override Task StartAsync(CancellationToken cancellationToken)
+    {
+        if (_options.Enabled && _drainer.IsEnabled && _configuration?.GetValue(TenantScopingSetting, false) == true)
+            throw new InvalidOperationException(
+                $"{TenantScopingSetting} is on, but the claim-event outbox is not supported over tenant-scoped databases yet: " +
+                "its dispatcher scans only the base claims database, so a tenant database's pending claims.finalized.v1 " +
+                "events would never be retried. Turn tenant scoping off, or set Claims:EventOutbox:Enabled=false to start " +
+                "without the dispatcher (events are then published inline only; one Kafka does not acknowledge stays " +
+                "pending on the claim and is not retried).");
+        return base.StartAsync(cancellationToken);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

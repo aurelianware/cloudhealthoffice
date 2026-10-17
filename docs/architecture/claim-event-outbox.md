@@ -59,8 +59,19 @@ accumulator-service never heard about that claim. Nothing repaired it.
   atomic paths above.
 - **Cosmos SDK backend** (`Database:Provider=CosmosDb`, to be removed). The
   event list is changed by an ETag-fenced read-modify-patch.
-- **Tenant-scoped databases** (`MongoDb:UseTenantScoping`). As with the
-  accumulator outbox, the dispatcher scans only the base claims database.
+- **Tenant-scoped databases** (`MongoDb:UseTenantScoping`) are not
+  supported. The dispatcher scans only the base claims database, so a tenant
+  database's pending events would never be retried. With tenant scoping on,
+  Kafka configured and `Claims:EventOutbox:Enabled` true, claims-service
+  **fails at start-up** with an error saying so. Setting
+  `Claims:EventOutbox:Enabled=false` starts it without the dispatcher: events
+  are still queued and published inline, but one Kafka does not acknowledge
+  stays pending and is not retried. Looping over tenant databases was not
+  done: the service has no tenant registry, and the only enumeration in the
+  repository (listing `{base}_*` database names, in
+  `tools/ArLegacyPostingReconciliation`) is an offline tool's heuristic. The
+  accumulator outbox has the same gap and only reports it (Degraded health
+  check, critical log).
 - **Other claim topics.** These are not in the outbox:
   - `claims.pended.v1` is advisory, for claims-examiner-service;
   - `claims.work.v1` is repaired by work-management-service's reconcile
