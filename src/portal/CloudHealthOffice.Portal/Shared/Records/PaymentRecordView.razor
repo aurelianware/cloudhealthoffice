@@ -186,6 +186,10 @@
                 </MudButton>
             </div>
         }
+        else if (ActiveTab == "access-log")
+        {
+            <RecordAccessLogTab Kind="Payment" RecordId="@p.Id" />
+        }
     }
 </div>
 
@@ -205,6 +209,7 @@
         new("adjustments", "Adjustments & recoupments", Icons.Material.Filled.SwapVert,
             _payment is { } p && p.ProviderAdjustments.Count + p.ReceivableOffsets.Count > 0 ? p.ProviderAdjustments.Count + p.ReceivableOffsets.Count : null),
         new("era", "835", Icons.Material.Filled.Description),
+        new("access-log", "Access log", Icons.Material.Filled.Visibility, Visible: RecordAccessLogTab.CanRead(Services)),
     ];
 
     private string ActiveTab => RecordTabs.Resolve(PaymentTabs, Tab, "summary");

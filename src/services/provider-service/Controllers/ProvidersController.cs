@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderService.Adapters;
@@ -70,6 +71,7 @@ public class ProvidersController : ControllerBase
     /// <summary>
     /// Get provider by NPI
     /// </summary>
+    [AuditRecordAccess("Provider", RecordAccessActions.View, ResultIsRecord = true, ResultIdProperty = "ProviderId")]
     [HttpGet("npi/{npi}")]
     [ProducesResponseType(typeof(Provider), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -96,6 +98,7 @@ public class ProvidersController : ControllerBase
     /// <summary>
     /// Search providers (by name, specialty, location, network)
     /// </summary>
+    [AuditRecordAccess("Provider", RecordAccessActions.Search, ResultIdProperty = "ProviderId")]
     [HttpGet("search")]
     [ProducesResponseType(typeof(IEnumerable<Provider>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Provider>>> SearchProviders(
@@ -141,6 +144,7 @@ public class ProvidersController : ControllerBase
     /// <summary>
     /// List providers with filters (alternative to search — used by portal grid)
     /// </summary>
+    [AuditRecordAccess("Provider", RecordAccessActions.List, ResultIdProperty = "ProviderId")]
     [HttpGet("list")]
     [ProducesResponseType(typeof(IEnumerable<Provider>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Provider>>> ListProviders(
@@ -254,6 +258,7 @@ public class ProvidersController : ControllerBase
     /// <summary>
     /// Get contracted rates for provider (for claims adjudication)
     /// </summary>
+    [AuditRecordAccess("Provider", "Rates", RecordIdRouteValue = "id")]
     [HttpGet("{id}/rates")]
     [RequirePermission("contracts:read")]
     [ProducesResponseType(typeof(ContractedRates), StatusCodes.Status200OK)]
@@ -316,6 +321,7 @@ public class ProvidersController : ControllerBase
     /// <summary>
     /// Paginated, newest-first list of every version for a provider.
     /// </summary>
+    [AuditRecordAccess("Provider", "Versions", RecordIdRouteValue = "id")]
     [HttpGet("{id}/versions")]
     [ProducesResponseType(typeof(ProviderVersionPage), StatusCodes.Status200OK)]
     public async Task<ActionResult<ProviderVersionPage>> GetVersions(
@@ -330,6 +336,7 @@ public class ProvidersController : ControllerBase
     }
 
     /// <summary>Get a single version by <c>VersionId</c>.</summary>
+    [AuditRecordAccess("Provider", "Versions", RecordIdRouteValue = "id")]
     [HttpGet("{id}/versions/{versionId}")]
     [ProducesResponseType(typeof(Provider), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -527,6 +534,7 @@ public class ProvidersController : ControllerBase
     /// <summary>
     /// Get provider by ID
     /// </summary>
+    [AuditRecordAccess("Provider", RecordAccessActions.View, RecordIdRouteValue = "id")]
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(Provider), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

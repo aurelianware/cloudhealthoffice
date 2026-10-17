@@ -23,6 +23,9 @@ public class ProviderBankAccountEncryptionWiringTests : IClassFixture<ProviderBa
             builder.UseSetting("FieldProtection:KeyRing:LocalDirectory", KeyDirectory);
             builder.ConfigureServices(services =>
             {
+                // The access log stays in memory (the fake Mongo host would make each audited read wait out the append timeout).
+                Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<CloudHealthOffice.Infrastructure.Audit.IRecordAccessStore>(services);
+                services.AddSingleton<CloudHealthOffice.Infrastructure.Audit.IRecordAccessStore>(new CloudHealthOffice.Infrastructure.Audit.RecordAccessStoreInMemory());
                 foreach (var hosted in services.Where(d => d.ServiceType == typeof(IHostedService)
                                                            && d.ImplementationType?.Namespace?.StartsWith("ProviderService") == true).ToList())
                     services.Remove(hosted);

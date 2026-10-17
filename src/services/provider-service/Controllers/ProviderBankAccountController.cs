@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderService.Models;
@@ -53,6 +54,7 @@ public class ProviderBankAccountController : ControllerBase
     /// only. Used by capitation-service to choose the disbursement method.
     /// A pending change is never returned here.
     /// </summary>
+    [AuditRecordAccess("Provider", "BankAccount", RecordIdRouteValue = "npi")]
     [HttpGet("npi/{npi}/bank-account")]
     [RequirePermission("providers:read,payments:read")]
     [ProducesResponseType(typeof(ProviderBankAccount), StatusCodes.Status200OK)]
@@ -99,6 +101,7 @@ public class ProviderBankAccountController : ControllerBase
         => ProposeAsync(npi, bankAccount, "POST bank-account-changes", ct);
 
     /// <summary>The pending change for review, masked.</summary>
+    [AuditRecordAccess("Provider", "BankAccount", RecordIdRouteValue = "npi")]
     [HttpGet("npi/{npi}/bank-account-changes/pending")]
     [RequirePermission("payments:approve,providers:read")]
     [ProducesResponseType(typeof(BankAccountChangeView), StatusCodes.Status200OK)]
@@ -118,6 +121,7 @@ public class ProviderBankAccountController : ControllerBase
     }
 
     /// <summary>Every bank-account change of the provider, newest first, masked (the history).</summary>
+    [AuditRecordAccess("Provider", "BankAccount", RecordIdRouteValue = "npi")]
     [HttpGet("npi/{npi}/bank-account-changes")]
     [RequirePermission("payments:approve,providers:read")]
     [ProducesResponseType(typeof(IEnumerable<BankAccountChangeView>), StatusCodes.Status200OK)]
