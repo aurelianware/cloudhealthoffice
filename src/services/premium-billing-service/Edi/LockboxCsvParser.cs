@@ -1,4 +1,5 @@
 using System.Globalization;
+using CloudHealthOffice.Infrastructure.Money;
 using System.Text;
 using PremiumBillingService.Models;
 
@@ -106,7 +107,7 @@ public static class LockboxCsvParser
         var cleaned = value.Replace("$", string.Empty).Replace(",", string.Empty);
         if (!decimal.TryParse(cleaned, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var amount))
             throw new FormatException($"Line {line}: {column} '{value}' is not an amount");
-        return Math.Round(amount, 2, MidpointRounding.AwayFromZero);
+        return MoneyRounding.ToCents(amount);
     }
 
     private static DateTime Date(string value, int line)

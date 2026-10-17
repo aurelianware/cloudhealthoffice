@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using ClaimsService.Models;
+using CloudHealthOffice.Infrastructure.Money;
 
 namespace ClaimsService.Fhir;
 
@@ -215,8 +216,7 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
                 // quantity is zero rather than dividing by zero.
                 if (line.Units > 0)
                 {
-                    item["unitPrice"] = Money(
-                        Math.Round(line.ChargeAmount / line.Units, 2, MidpointRounding.AwayFromZero));
+                    item["unitPrice"] = Money(MoneyRounding.ToCents(line.ChargeAmount / line.Units));
                 }
 
                 // item[].adjudication[] — Decision 9. Each NCCI/MUE failure

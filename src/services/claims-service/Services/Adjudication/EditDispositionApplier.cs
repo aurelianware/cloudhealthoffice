@@ -1,4 +1,5 @@
 using ClaimsService.Models;
+using CloudHealthOffice.Infrastructure.Money;
 
 namespace ClaimsService.Services.Adjudication;
 
@@ -150,7 +151,7 @@ public static class EditDispositionApplier
         {
             if (allowedAmounts.TryGetValue(denial.LineNumber, out var allowed))
             {
-                allowedAmounts[denial.LineNumber] = decimal.Round(allowed * denial.PayableFraction, 2, MidpointRounding.AwayFromZero);
+                allowedAmounts[denial.LineNumber] = MoneyRounding.ToCents(allowed * denial.PayableFraction);
             }
         }
     }
@@ -171,8 +172,7 @@ public static class EditDispositionApplier
             var denial = denials.FirstOrDefault(d => d.LineNumber == line.LineNumber);
             if (denial is null) continue;
 
-            var deniedCharge = decimal.Round(
-                line.ChargeAmount * (1m - denial.PayableFraction), 2, MidpointRounding.AwayFromZero);
+            var deniedCharge = MoneyRounding.ToCents(line.ChargeAmount * (1m - denial.PayableFraction));
             if (deniedCharge <= 0) continue;
 
             var reasons = lineResults[i].AdjustmentReasons;

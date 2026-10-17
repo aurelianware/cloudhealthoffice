@@ -1,4 +1,5 @@
 using System.Globalization;
+using CloudHealthOffice.Infrastructure.Money;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Models;
 using CsvHelper;
@@ -449,8 +450,8 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
             TotalRvuNonFacility = totalNonFac,
             TotalRvuFacility = totalFac,
             ConversionFactor = convFactor,
-            NonFacilityRate = Math.Round(totalNonFac * convFactor, 2),
-            FacilityRate = Math.Round(totalFac * convFactor, 2),
+            NonFacilityRate = MoneyRounding.ToCents(totalNonFac * convFactor),
+            FacilityRate = MoneyRounding.ToCents(totalFac * convFactor),
             MultiProcRank = code.StartsWith("99") ? null : 0, // E/M codes exempt from MPPR
             MultipleProcedureIndicator = multProc
         };
@@ -482,8 +483,8 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
             Description = desc,
             DrgWeight = weight,
             DrgBaseRate = baseRate,
-            NonFacilityRate = Math.Round(weight * baseRate, 2),
-            FacilityRate = Math.Round(weight * baseRate, 2)
+            NonFacilityRate = MoneyRounding.ToCents(weight * baseRate),
+            FacilityRate = MoneyRounding.ToCents(weight * baseRate)
         };
     }
 

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CloudHealthOffice.Finance.Contracts;
+using CloudHealthOffice.Infrastructure.Money;
 
 namespace ArService.Gl;
 
@@ -240,7 +241,7 @@ public static class GlEntryBuilder
     {
         if (amount < 0m)
             throw new GlInvalidPayloadException($"The {what} is negative ({amount}).");
-        if (decimal.Round(amount, 2) != amount)
+        if (MoneyRounding.ToCents(amount) != amount)
             throw new GlInvalidPayloadException($"The {what} is not a money amount ({amount}).");
     }
 
@@ -277,7 +278,7 @@ public static class GlJournal
                 throw new InvalidOperationException($"GL entry {entry.Id} line {line.LineNumber} has a negative amount.");
             if ((line.Debit > 0m) == (line.Credit > 0m))
                 throw new InvalidOperationException($"GL entry {entry.Id} line {line.LineNumber} must have exactly one of debit or credit.");
-            if (decimal.Round(line.Debit, 2) != line.Debit || decimal.Round(line.Credit, 2) != line.Credit)
+            if (MoneyRounding.ToCents(line.Debit) != line.Debit || MoneyRounding.ToCents(line.Credit) != line.Credit)
                 throw new InvalidOperationException($"GL entry {entry.Id} line {line.LineNumber} is not a money amount.");
             if (string.IsNullOrEmpty(line.AccountId) || string.IsNullOrEmpty(line.AccountNumber))
                 throw new InvalidOperationException($"GL entry {entry.Id} line {line.LineNumber} has no account.");

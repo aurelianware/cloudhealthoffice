@@ -4,6 +4,7 @@ using CloudHealthOffice.FeeScheduleEngine.Persistence;
 using CloudHealthOffice.ReferenceData.Domain;
 using Microsoft.Extensions.Logging;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Money;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Services;
 
@@ -206,7 +207,7 @@ public class RateResolutionService : IRateResolutionService
 
         // Allowed amounts are money: rounded to cents once, here, so every caller
         // (adjudication, estimates, the Pricing API) sees the same figure.
-        finalAmount = Math.Round(finalAmount, 2);
+        finalAmount = MoneyRounding.ToCents(finalAmount);
 
         // Per-stay amounts are paid once per claim (ResolveBatchAsync): a DRG case
         // rate, or an all-inclusive per diem priced for the length of stay.
@@ -308,7 +309,7 @@ public class RateResolutionService : IRateResolutionService
             // Rank 2–5 = 50%; rank 6+ is "by report" under CMS — priced at 50% and flagged
             const decimal reductionFactor = 0.50m;
             var byReport = rank >= 5;
-            var reducedAmount = Math.Round(result.AllowedAmount * reductionFactor, 2);
+            var reducedAmount = MoneyRounding.ToCents(result.AllowedAmount * reductionFactor);
             var reductionAmount = reducedAmount - result.AllowedAmount;
 
             if (byReport)
@@ -524,7 +525,7 @@ public class RateResolutionService : IRateResolutionService
     /// rounded to cents, so an allowed amount derived from it stays in whole cents.
     /// </summary>
     private static decimal BilledInCents(decimal billedAmount)
-        => Math.Round(Math.Max(billedAmount, 0m), 2);
+        => MoneyRounding.ToCents(Math.Max(billedAmount, 0m));
 
     private static RateAdjustment LesserOfAdjustment(string rateName, decimal rate, decimal billed) => new()
     {
@@ -762,7 +763,7 @@ public class RateResolutionService : IRateResolutionService
                 // If DRG weight is specified, rate = base rate × weight
                 if (line.DrgWeight.HasValue && line.DrgWeight.Value > 0)
                     drgRate = (schedule.DrgBaseRate ?? line.Rate) * line.DrgWeight.Value;
-                return (Math.Round(drgRate, 2), RateSource.Drg, FeeScheduleType.Drg, null, false);
+                return (MoneyRounding.ToCents(drgRate), RateSource.Drg, FeeScheduleType.Drg, null, false);
             }
 
             case FeeScheduleType.MedicareMpfs:
@@ -795,7 +796,7 @@ public class RateResolutionService : IRateResolutionService
                     if (medicareRate is null)
                         return (0m, source, schedule.Type, failure, false);
 
-                    return (Math.Round(medicareRate.Value * line.Rate, 2), source, schedule.Type, null, false);
+                    return (MoneyRounding.ToCents(medicareRate.Value * line.Rate), source, schedule.Type, null, false);
                 }
 
                 if (line.RateType == FeeScheduleRateType.PercentOfBilled)
@@ -845,7 +846,7 @@ public class RateResolutionService : IRateResolutionService
             var rvuAmount = CalculateRvuAmount(medicaidSchedule, medicaidLine, IsFacilitySetting(request));
             if (medicaidSchedule.PercentOfMedicare.HasValue)
                 rvuAmount *= medicaidSchedule.PercentOfMedicare.Value;
-            return (Math.Round(rvuAmount, 2), null);
+            return (MoneyRounding.ToCents(rvuAmount), null);
         }
 
         // Strategy 2: Cross-schedule lookup — load the base Medicare MPFS schedule
@@ -881,7 +882,7 @@ public class RateResolutionService : IRateResolutionService
                         LogSanitizer.Sanitize(request.ProcedureCode, 256), medicareRate,
                         medicaidSchedule.PercentOfMedicare.Value, medicaidRate);
 
-                    return (Math.Round(medicaidRate, 2), null);
+                    return (MoneyRounding.ToCents(medicaidRate), null);
                 }
 
                 _logger.LogWarning(
@@ -904,7 +905,7 @@ public class RateResolutionService : IRateResolutionService
         if (medicaidSchedule.PercentOfMedicare.HasValue)
             fallbackRate *= medicaidSchedule.PercentOfMedicare.Value;
 
-        return (Math.Round(fallbackRate, 2), null);
+        return (MoneyRounding.ToCents(fallbackRate), null);
     }
 
     // ── Percent-of-Medicare base resolution (Commercial / Custom) ──────
@@ -1012,7 +1013,7 @@ public class RateResolutionService : IRateResolutionService
                   + peRvu                 * schedule.PeGpci
                   + (line.MpRvu ?? 0m)   * schedule.MpGpci;
 
-        return Math.Round(total * schedule.ConversionFactor.Value, 2);
+        return MoneyRounding.ToCents(total * schedule.ConversionFactor.Value);
     }
 
     // ── Modifier adjustments ───────────────────────────────────────────

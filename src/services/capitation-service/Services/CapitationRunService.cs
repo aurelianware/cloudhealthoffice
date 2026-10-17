@@ -3,6 +3,7 @@ using CapitationService.Models;
 using CapitationService.Repositories;
 using CloudHealthOffice.Infrastructure.Data;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Money;
 
 namespace CapitationService.Services;
 
@@ -556,7 +557,7 @@ public class CapitationRunService : ICapitationRunService
                 riskScoreSource = RiskScoreSources.NotRiskAdjusted;
             }
 
-            var adjustedPmpm = Math.Round(basePmpm * riskScore, 2);
+            var adjustedPmpm = MoneyRounding.ToCents(basePmpm * riskScore);
 
             // Calculate proration for mid-month adds/terms
             var coverageStart = coverage.EffectiveDate > periodStart ? coverage.EffectiveDate : periodStart;
@@ -568,8 +569,8 @@ public class CapitationRunService : ICapitationRunService
             var prorationFactor = coveredDays >= daysInMonth ? 1.0m : (decimal)coveredDays / daysInMonth;
             prorationFactor = Math.Round(prorationFactor, 4);
 
-            var grossAmount = Math.Round(adjustedPmpm * prorationFactor, 2);
-            var withholdAmount = Math.Round(grossAmount * contract.WithholdPercentage, 2);
+            var grossAmount = MoneyRounding.ToCents(adjustedPmpm * prorationFactor);
+            var withholdAmount = MoneyRounding.ToCents(grossAmount * contract.WithholdPercentage);
             var netAmount = grossAmount - withholdAmount;
 
             var lineItem = new CapitationLineItem

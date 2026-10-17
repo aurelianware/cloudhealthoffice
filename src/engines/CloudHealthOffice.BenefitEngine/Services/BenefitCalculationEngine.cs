@@ -12,6 +12,7 @@ using CobClaimInput = CloudHealthOffice.CobEngine.Domain.CobClaimInput;
 using CobClaimUnit = CloudHealthOffice.CobEngine.Domain.CobClaimUnit;
 using Microsoft.Extensions.Logging;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Money;
 
 namespace CloudHealthOffice.BenefitEngine.Services;
 
@@ -1040,7 +1041,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 }
                 // Coinsurance on remainder
                 if (coinsurancePercent > 0 && remainingAllowed > 0)
-                    coinsuranceAmount = Math.Round(remainingAllowed * coinsurancePercent, 2);
+                    coinsuranceAmount = MoneyRounding.ToCents(remainingAllowed * coinsurancePercent);
                 break;
 
             case CopayApplicationMode.InAdditionToDeductible:
@@ -1059,7 +1060,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 }
                 // Coinsurance on remainder
                 if (coinsurancePercent > 0 && remainingAllowed > 0)
-                    coinsuranceAmount = Math.Round(remainingAllowed * coinsurancePercent, 2);
+                    coinsuranceAmount = MoneyRounding.ToCents(remainingAllowed * coinsurancePercent);
                 break;
 
             default: // AfterDeductible — standard waterfall
@@ -1075,7 +1076,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                     remainingAllowed -= finalCopay;
                 }
                 if (coinsurancePercent > 0 && remainingAllowed > 0)
-                    coinsuranceAmount = Math.Round(remainingAllowed * coinsurancePercent, 2);
+                    coinsuranceAmount = MoneyRounding.ToCents(remainingAllowed * coinsurancePercent);
                 break;
         }
 
