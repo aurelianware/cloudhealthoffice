@@ -17,12 +17,10 @@ as before. Design: [premium-rated-billing.md](../architecture/premium-rated-bill
    `member-service` in `ChoAuth:Outbound:Hosts` (in `appsettings.json`), and its own
    service token (`ChoAuth:ServiceToken`, as for the sponsor bank-details lookup): the
    census admits only premium-billing-service's service token, never a user's.
-2. **Cosmos DB only:** create container `RateTables` with partition key `/tenantId` in
-   the service's database (group billing leases are kept in the existing
-   `PremiumInvoices` container). **MongoDB:** run it as a replica set so lease-fenced
-   invoice writes are transactional (leases are kept in the `PremiumInvoices` collection,
-   so this works on Azure Cosmos DB for MongoDB too); Mongo creates the `RateTables`
-   collection on first write.
+2. **MongoDB:** run it as a replica set so lease-fenced invoice writes are
+   transactional (leases are kept in the `PremiumInvoices` collection, so this works on
+   Azure Cosmos DB for MongoDB too); Mongo creates the `RateTables` collection on first
+   write.
 3. **Load rate tables** for every plan the tenant's groups are enrolled in, covering
    at least the retro window (default 3 months) before the first rated period:
    `POST /api/v1/rate-tables` (finance:write) with `{ "table": { ... }, "changeReason": "..." }`.
@@ -89,11 +87,6 @@ so it is not billed twice.
 - **Line shape changes.** Unrated invoices had one line per covered member; rated
   invoices have one line per subscriber (dependents are in the household's tier or
   age-rated premium). Reports that count lines as members should use `memberCount`.
-- **Status filters on Cosmos DB.** `GET /premium-invoices?status=...`, the overdue list,
-  the aging report and delinquency processing now match the stored status. On Cosmos
-  DB they previously compared the stored string (`"voided"`) with the enum's number,
-  which never matches, so these status filters did not work as intended there; expect
-  their results to change (Mongo stores numbers and is unaffected).
 - **Data.** No existing document is rewritten. New fields on invoices are optional and
   absent on unrated invoices (`pricingSource` defaults to `CoveragePremium`).
 
