@@ -132,12 +132,10 @@ AI_EXAMINER=false
 [[ -n "${ANTHROPIC_API_KEY:-}" ]] && AI_EXAMINER=true
 
 upsert_secret mongodb-auth username="$MONGO_USER" password="$MONGO_PASS"
-upsert_secret database-secret connectionString="$MONGO_CONN" endpoint= key=
-upsert_secret cosmosdb-secret connectionString="$MONGO_CONN"
+upsert_secret database-secret connectionString="$MONGO_CONN"
 upsert_secret redis-secret connectionString="$REDIS_CONN"
 upsert_secret reference-data-service-secret POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
 upsert_secret azure-storage-secret connectionString="$STORAGE_CONN"
-upsert_secret batch-eligibility-secret cosmosConnectionString=
 upsert_secret kafka-secret bootstrapServers="$KAFKA_VALUE" saslUsername= saslPassword=
 upsert_secret anthropic-secret apiKey="${ANTHROPIC_API_KEY:-not-configured}"
 # Entra ID is not used in the demo (development tokens); placeholders keep pods starting.
@@ -159,7 +157,6 @@ upsert_secret smart-auth-service-secrets MongoDb__ConnectionString="$MONGO_CONN"
   MongoDb__DatabaseName=CloudHealthOffice
 upsert_secret provider-verification-service-secrets MongoDb__ConnectionString="$MONGO_CONN" \
   ProviderVerification__SamGovApiKey=not-configured
-upsert_secret risk-adjustment-service-secret MongoDb__ConnectionString="$MONGO_CONN"
 
 kubectl apply -f deploy/gcp/cho-service-tokens.demo.yaml >/dev/null
 ok "cho-service-tokens (demo development issuers)"
