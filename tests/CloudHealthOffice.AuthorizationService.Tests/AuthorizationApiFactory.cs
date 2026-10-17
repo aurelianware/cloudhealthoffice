@@ -33,10 +33,9 @@ public class AuthorizationApiFactory : WebApplicationFactory<Program>
             foreach (var descriptor in descriptorsToRemove)
                 services.Remove(descriptor);
 
-            // Remove Cosmos/Mongo registrations that would fail without config
+            // Remove Mongo registrations that would fail without config
             var infraDescriptors = services
-                .Where(d => d.ServiceType.FullName?.Contains("Cosmos") == true
-                         || d.ServiceType.FullName?.Contains("Mongo") == true)
+                .Where(d => d.ServiceType.FullName?.Contains("Mongo") == true)
                 .ToList();
 
             foreach (var descriptor in infraDescriptors)

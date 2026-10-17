@@ -7,13 +7,13 @@ namespace AuthorizationService.Backends;
 /// <summary>
 /// Cloud Health Office-native authorization backend — the Replace-mode
 /// system of record. A thin application layer over the existing
-/// <see cref="IAuthorizationRepository"/> (Cosmos DB / MongoDB in production),
+/// <see cref="IAuthorizationRepository"/> (MongoDB in production),
 /// so Cloud Health Office itself owns the authorization record without
 /// requiring QNXT, Facets, or HealthEdge.
 ///
 /// This is production code, not a test double: the acceptance suite exercises
 /// this exact class with an in-memory repository fixture, while the running
-/// service binds the same class to the Cosmos/Mongo repository.
+/// service binds the same class to the Mongo repository.
 /// </summary>
 public sealed class ChoAuthorizationBackend : IAuthorizationBackend
 {
@@ -22,7 +22,7 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
     private readonly IAuthorizationRepository _repository;
     private readonly IAuthorizationExclusionService? _exclusionService;
 
-    /// <param name="repository">The authoritative CHO record store (Cosmos/Mongo in production).</param>
+    /// <param name="repository">The authoritative CHO record store (Mongo in production).</param>
     /// <param name="exclusionService">
     /// Optional benefit drug/service exclusion determination. When supplied
     /// (wired by DI in the running service, and by the acceptance suite), a

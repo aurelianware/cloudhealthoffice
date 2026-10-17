@@ -1,9 +1,6 @@
 using AuthorizationService.Models;
-using CloudHealthOffice.Testing.Cosmos;
 using CloudHealthOffice.Testing.Mongo;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
-using SharedCosmosSerializer = CloudHealthOffice.Infrastructure.Serialization.CosmosSystemTextJsonSerializer;
 
 namespace AuthorizationService.Tests.Persistence;
 
@@ -40,7 +37,7 @@ public abstract class SlaWatchdogRealStoreTestsBase : IAsyncLifetime
         await CleanupAsync();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Watchdog_EscalatesOverdueAuthorizations_ForEveryTenant_WithNoRequestContext()
     {
         // Tenant A
@@ -79,7 +76,7 @@ public abstract class SlaWatchdogRealStoreTestsBase : IAsyncLifetime
         (await ReadAsync(_tenantA, bUrgentCritical, allowMissing: true)).Should().BeNull();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Watchdog_SecondRun_ChangesNothing()
     {
         var id = await SeedAsync(_tenantA, "U", AuthorizationStatus.Submitted, hoursAgo: 66);
@@ -97,7 +94,7 @@ public abstract class SlaWatchdogRealStoreTestsBase : IAsyncLifetime
         second.SlaEscalatedAt.Should().Be(first.SlaEscalatedAt);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Watchdog_NeverLowersAnEscalation()
     {
         // Already at Breach, but the (resumed) clock only reaches Warning now.
@@ -172,7 +169,7 @@ public abstract class SlaWatchdogRealStoreTestsBase : IAsyncLifetime
     };
 }
 
-/// <summary>The watchdog on MongoDB (the default provider), via EphemeralMongo.</summary>
+/// <summary>The watchdog on MongoDB, via EphemeralMongo.</summary>
 [Collection(MongoRunnerFixture.CollectionName)]
 public sealed class SlaWatchdogMongoTests(MongoRunnerFixture mongo) : SlaWatchdogRealStoreTestsBase
 {
@@ -182,19 +179,4 @@ public sealed class SlaWatchdogMongoTests(MongoRunnerFixture mongo) : SlaWatchdo
         Task.FromResult(AuthorizationServiceHost.Mongo(mongo.ConnectionString, _databaseName));
 
     private protected override Task CleanupAsync() => mongo.Client.DropDatabaseAsync(_databaseName);
-}
-
-/// <summary>The watchdog on Cosmos DB, via the emulator and the host's own client registration.</summary>
-[Trait("Category", CosmosEmulator.Category)]
-[Collection(CosmosEmulatorFixture.CollectionName)]
-public sealed class SlaWatchdogCosmosTests(CosmosEmulatorFixture cosmos) : SlaWatchdogRealStoreTestsBase
-{
-    private protected override async Task<AuthorizationServiceHost> CreateHostAsync()
-    {
-        cosmos.SkipIfUnavailable();
-        var admin = cosmos.CreateClient(new SharedCosmosSerializer());
-        var db = await cosmos.CreateDatabaseAsync(admin, "as_watchdog");
-        await CosmosEmulatorFixture.CreateContainerAsync(db, AuthorizationServiceHost.ContainerName);
-        return AuthorizationServiceHost.Cosmos(db.Id);
-    }
 }

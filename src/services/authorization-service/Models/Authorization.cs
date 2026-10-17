@@ -19,14 +19,14 @@ namespace AuthorizationService.Models;
 public class Authorization
 {
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation). Always set
+    /// Owning tenant (every query is scoped by it). Always set
     /// server-side from the caller's token; a value in a request body is ignored,
     /// so it is not a required request field.
     /// </summary>
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Unique authorization identifier (Cosmos DB document id)
+    /// Unique authorization identifier (Mongo <c>_id</c>)
     /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();

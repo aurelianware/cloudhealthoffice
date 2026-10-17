@@ -1,6 +1,5 @@
 using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Extensions;
-using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using AuthorizationService;
 using AuthorizationService.Consumers;
@@ -70,42 +69,26 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Database Configuration (Cosmos DB or MongoDB)
+// Database — MongoDB is the only authorization store (ADR 006); AddChoDatabase
+// registers the client.
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+if (databaseProvider != ChoDatabaseProvider.MongoDb)
 {
-    // Use MongoDB
-    builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepositoryMongo>();
-    Console.WriteLine("Using MongoDB repository");
+    const string noDatabase =
+        "No database is configured. Authorization Service requires MongoDb:ConnectionString.";
+
+    // A deployed host refuses to start rather than going Ready and failing
+    // every request; so does any host told to use the Cosmos DB native SDK,
+    // which this service no longer supports.
+    if (databaseProvider is not null
+        || (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing")))
+        throw new InvalidOperationException(noDatabase);
+
+    // Development and test hosts (which substitute the repository) still
+    // build; a real call fails on first use with the same message.
+    builder.Services.AddSingleton<IMongoDatabase>(_ => throw new InvalidOperationException(noDatabase));
 }
-else
-{
-    // Cosmos DB. The CosmosClient is the one AddChoDatabase registered above,
-    // with the shared CosmosSystemTextJsonSerializer (camelCase, enums as
-    // strings, nulls omitted). Registering another client here would override
-    // it; the service's own copy stored enums as numbers while every query
-    // compared strings, so search, summary, open authorizations and retention
-    // found nothing (D-18).
-    if (databaseProvider is null)
-    {
-        const string noDatabase =
-            "No database is configured. Set MongoDb:ConnectionString, or Database:Provider=CosmosDb " +
-            "with CosmosDb:ConnectionString or CosmosDb:Endpoint and CosmosDb:Key.";
-
-        // A deployed host refuses to start rather than going Ready and failing
-        // every request.
-        if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing"))
-            throw new InvalidOperationException(noDatabase);
-
-        // Development and test hosts (which substitute the repository) still
-        // build; a real call fails on first use with the same message.
-        builder.Services.AddSingleton<CosmosClient>(_ => throw new InvalidOperationException(noDatabase));
-    }
-
-    builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepository>();
-    Console.WriteLine("Using Cosmos DB repository");
-}
+builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepositoryMongo>();
 
 // ── Authorization backend seam (Replace / Augment) ──────────────────────────
 // The controller/PAS workflow resolves an IAuthorizationBackend by operating
@@ -138,13 +121,10 @@ builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackendSe
 // HTTP context accessor (repositories read the token tenant from HttpContext.Items)
 builder.Services.AddHttpContextAccessor();
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 // Kafka consumer for RFAI docs received events
@@ -221,7 +201,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-
 
 // Authentication, tenant from the token, then authorization.
 app.UseChoAuthentication();
