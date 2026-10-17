@@ -19,9 +19,13 @@ public class EligibilityController : ControllerBase
     private readonly ILogger<EligibilityController> _logger;
     private readonly IX12InterchangeIntake? _interchangeIntake;
     private readonly IOutboundInterchangeTracker? _outboundTracker;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>The tenant from the caller's validated token.</summary>
     private string TenantId => HttpContext.GetTenantId();
+
+    /// <summary>Today's date in UTC, independent of the host's time zone.</summary>
+    private DateTime TodayUtc => _timeProvider.GetUtcNow().UtcDateTime.Date;
 
     public EligibilityController(
         IEligibilityService eligibilityService,
@@ -31,8 +35,10 @@ public class EligibilityController : ControllerBase
         ILogger<EligibilityController> logger,
         IX12InterchangeIntake? interchangeIntake = null,
         IOutboundInterchangeTracker? outboundTracker = null,
-        Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null)
+        Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null,
+        TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _interchangeIntake = interchangeOptions?.Value.Enabled == false ? null : interchangeIntake;
         _outboundTracker = outboundTracker;
         _eligibilityService = eligibilityService;
@@ -79,7 +85,7 @@ public class EligibilityController : ControllerBase
         try
         {
             var isEligible = await _eligibilityService.QuickEligibilityCheckAsync(
-                TenantId, subscriberId, groupNumber, serviceDate ?? DateTime.Today);
+                TenantId, subscriberId, groupNumber, serviceDate ?? TodayUtc);
             
             return Ok(new QuickEligibilityResponse
             {
@@ -109,7 +115,7 @@ public class EligibilityController : ControllerBase
         try
         {
             var benefits = await _eligibilityService.GetBenefitDetailsAsync(
-                TenantId, subscriberId, serviceType, serviceDate ?? DateTime.Today);
+                TenantId, subscriberId, serviceType, serviceDate ?? TodayUtc);
             
             return Ok(benefits);
         }
@@ -365,7 +371,7 @@ public class AccumulationResponse
     public string SubscriberId { get; set; } = string.Empty;
     public DeductibleInfo? Deductible { get; set; }
     public OutOfPocketInfo? OutOfPocket { get; set; }
-    public DateTime AsOfDate { get; set; } = DateTime.Today;
+    public DateTime AsOfDate { get; set; } = DateTime.UtcNow.Date;
 }
 
 public class AuthRequirementRequest

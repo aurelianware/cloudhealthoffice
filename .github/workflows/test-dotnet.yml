@@ -24,8 +24,16 @@ on:
 
 jobs:
   test-dotnet:
-    name: .NET Unit Tests
+    # The UTC leg keeps the original check name, artifact and coverage. The
+    # America/Phoenix leg (UTC-7, no DST) reruns the same suite so code that
+    # depends on the host's local time zone (DateTime.Today, Mongo's
+    # Unspecified-kind DateTime handling) fails here instead of in production.
+    name: ${{ matrix.tz == 'UTC' && '.NET Unit Tests' || format('.NET Unit Tests (TZ={0})', matrix.tz) }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tz: ['UTC', 'America/Phoenix']
     services:
       postgres:
         image: postgres:16-alpine
@@ -54,6 +62,7 @@ jobs:
     env:
       REFERENCE_DATA_TEST_POSTGRES: Host=localhost;Port=5432;Database=referencedata_tests;Username=postgres;Password=postgres
       CHO_TEST_REDIS: localhost:6379
+      TZ: ${{ matrix.tz }}
 
     steps:
       - uses: actions/checkout@v7
@@ -78,6 +87,7 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "Host time zone: $(date +%Z%z) (TZ=$TZ)"
           echo "=========================================="
           echo "Discovering .NET test projects"
           echo "=========================================="
@@ -106,6 +116,12 @@ jobs:
           PASSED=0
           SKIPPED=0
 
+          # Coverage is collected once, on the UTC leg.
+          COVERAGE_ARGS=()
+          if [ "$TZ" = "UTC" ]; then
+            COVERAGE_ARGS=(--collect:"XPlat Code Coverage")
+          fi
+
           for PROJECT in "${TEST_PROJECTS[@]}"; do
             PROJECT_NAME=$(basename "$PROJECT" .csproj)
             echo ""
@@ -129,7 +145,7 @@ jobs:
             # Run tests
             if dotnet test "$PROJECT" --no-build --verbosity normal \
                 --logger "trx;LogFileName=${PROJECT_NAME}-results.trx" \
-                --collect:"XPlat Code Coverage" 2>&1; then
+                "${COVERAGE_ARGS[@]}" 2>&1; then
               echo "✅ $PROJECT_NAME passed"
               PASSED=$((PASSED + 1))
             else
@@ -178,7 +194,7 @@ jobs:
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: dotnet-test-results
+          name: ${{ matrix.tz == 'UTC' && 'dotnet-test-results' || 'dotnet-test-results-tz-phoenix' }}
           path: |
             **/TestResults/**/*.trx
             **/TestResults/**/coverage.cobertura.xml
