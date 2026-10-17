@@ -209,6 +209,10 @@ builder.Services.AddChoHealthChecks(options =>
 
 builder.Services.AddChoObservability(builder.Configuration);
 
+// Who read which appeal, its notes and its documents (HIPAA access
+// accounting): GET api/appeals/{id}/access-log.
+CloudHealthOffice.Infrastructure.Audit.RecordAccessAuditExtensions.AddRecordAccessAudit(builder.Services);
+
 var app = builder.Build();
 
 _ = app.Services.GetRequiredService<IAppealHolidayCalendarProvider>();
@@ -226,6 +230,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseChoAuthentication();
 app.MapControllers();
+CloudHealthOffice.Infrastructure.Audit.RecordAccessAuditExtensions.MapRecordAccessLog(app, "api/appeals", "Appeal");
 app.MapChoHealthChecks();
 
 app.Run();
