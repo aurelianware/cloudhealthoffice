@@ -126,8 +126,13 @@ How the module works with [correspondence.md](correspondence.md) (details in its
 **Rules for the integration:**
 - **Attributes, not records.** The routing API returns what the router needs to decide (flags, codes, a priority), never clinical detail or claim content. IVR prompts speak only what self-service needs after the caller is authenticated.
 - **IVR authentication** follows the same verification rules as a rep (member ID plus date of birth, or the plan's policy), recorded on the contact.
-- **One adapter per platform** behind a shared interface, the same pattern as CHO's other adapters. Amazon Connect first (§9, open question 1).
+- **One adapter per platform** behind a shared interface, the same pattern as CHO's other adapters. Google first (decided 2026-10-17, see below).
 - **Compliance:** a BAA with the platform vendor; call-recording consent where state law requires all parties to consent; outbound calling rules for prerecorded or autodialed calls, which is why notices use rep-initiated click-to-dial; disclosure limits when a call reaches voicemail. *The specific requirements are to confirm before building.*
+
+**Platform order (decided 2026-10-17): Google first.** CHO's demo already runs on GKE in Google Cloud, so the IVR's webhooks call CHO inside the same environment, IAM and BAA. Google's HIPAA covered products include Google Cloud Contact Center as a Service, Agent Assist for CCaaS, Conversational Agents, Speech-to-Text and Customer Experience Insights (no PHI in agent definitions; no Speech-to-Text data logging under a BAA).
+1. **IVR self-service and routing context on Conversational Agents (Dialogflow CX),** calling CHO's self-service and routing-context endpoints through webhooks. A virtual agent built this way can also sit in front of other contact-center platforms.
+2. **Routing, agent desktop, screen pop, recording and outbound on Google Cloud Contact Center as a Service** if procurement is quick (pricing goes through Google sales); otherwise **Amazon Connect** (pay-as-you-go) for this half. The CHO side is identical either way.
+3. **A second platform adapter before a sales push,** matched to what pilot plans run; Genesys, NICE, Five9 and Amazon Connect are likely more common in payer call centers than Google (*share not verified*).
 
 **Who distributes back-office work:** CHO's work management (Get Next) owns follow-ups, deadline work and returned mail, and remains the owner of record and deadlines. For plans that want one agent desktop, an optional adapter pushes CHO work items into the platform's task routing (Amazon Connect Tasks, Genesys work items) and syncs their completion back. See §9, open question 5.
 
@@ -145,13 +150,13 @@ How the module works with [correspondence.md](correspondence.md) (details in its
 3. **Follow-ups through work management:** a new `Inquiry` work type, plus appeals as a work source.
 4. **Reporting:** the grievance, coverage-request and appeal case lists, plus operating metrics.
 5. **AI wrap-up:** summary, suggested classification, complaint-language flag, supervisor sampling.
-6. **Phone integration** (§6.2), Amazon Connect first: screen pop, routing context API, recording and transcript intake, then outbound click-to-dial with outcomes, then IVR self-service.
+6. **Phone integration** (§6.2), Google first: IVR self-service and the routing context API on Conversational Agents; then screen pop, recording and transcript intake, and outbound click-to-dial with outcomes on Google CCaaS (or Amazon Connect); then a second platform adapter matched to pilot plans.
 7. **Standalone adapters for QNXT.**
 8. **Correspondence links** (§6.1), as the matching correspondence steps land: letter actions and the correspondence panel with the portal inbox and first mail channel; oral notice from outbound contacts with the appeal notices; consent capture with electronic delivery.
 
 ## 9. Open questions
 
-1. **Which phone platform first?** Amazon Connect is the easiest to demo; Genesys is common in plan call centers.
+1. **Which phone platform first?** *Decided 2026-10-17:* Google (Conversational Agents for IVR, then Google CCaaS or Amazon Connect for routing and the agent desktop); see §6.2. Still open: which platform is second, based on what pilot plans run.
 2. **Recordings:** store full recordings in the document store, or only transcripts plus a link to the phone platform's recording? Recordings are large and sensitive.
 3. **Who adds contacts and notes:** the `claims:note` permission from the workbench decisions covers notes; contacts need their own (`service:contact`).
 4. **Pricing and packaging:** per seat, per member per month, or included in CHO? This decides how the standalone version is positioned.
@@ -159,6 +164,8 @@ How the module works with [correspondence.md](correspondence.md) (details in its
 
 ## Sources
 
+- [Google Cloud Contact Center as a Service](https://cloud.google.com/solutions/contact-center-as-a-service)
+- [Google Cloud: HIPAA compliance and covered products](https://docs.cloud.google.com/docs/security/compliance/hipaa)
 - [42 CFR 422.564: MA grievance procedures](https://www.law.cornell.edu/cfr/text/42/422.564)
 - [Cognizant: Network Health call center on myQNXT (case study)](https://www.cognizant.com/en_us/case-studies/documents/3879600_network-health-five-star-call-center-member-experience-fueled-by-qnxt_printable.pdf)
 - [Cognizant: QNXT product page](https://www.cognizant.com/us/en/industries/healthcare-technology-solutions/trizetto/core-administration/qnxt)
