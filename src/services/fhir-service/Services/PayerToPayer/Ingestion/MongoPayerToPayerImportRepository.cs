@@ -46,7 +46,7 @@ public sealed class MongoPayerToPayerImportRepository
     public MongoPayerToPayerImportRepository(
         IMongoClient client, IConfiguration configuration, ILogger<MongoPayerToPayerImportRepository> logger)
     {
-        var database = client.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "cloudhealthoffice");
+        var database = client.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice");
         _resources = database.GetCollection<BsonDocument>(ResourceCollectionName);
         _ledger = database.GetCollection<BsonDocument>(LedgerCollectionName);
         _logger = logger;

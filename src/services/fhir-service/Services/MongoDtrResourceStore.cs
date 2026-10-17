@@ -9,8 +9,8 @@ namespace FhirService.Services;
 /// <summary>
 /// MongoDB-backed <see cref="IDtrResourceStore"/>. Uses the host's
 /// <see cref="IMongoClient"/> and the database named by
-/// <c>MongoDb:DatabaseName</c> (default <c>cloudhealthoffice</c>), the same
-/// database DtrService has always written to.
+/// <c>MongoDb:DatabaseName</c> (default <c>CloudHealthOffice</c>, the host's
+/// default: MongoDB refuses two databases differing only in case).
 ///
 /// Two collections, each holding the FHIR JSON of one resource per document:
 ///   * <c>dtr_questionnaires</c> — unique on (tenantId, resourceId).
@@ -33,7 +33,7 @@ public sealed class MongoDtrResourceStore : IDtrResourceStore
 
     public MongoDtrResourceStore(IMongoClient client, IConfiguration configuration, ILogger<MongoDtrResourceStore> logger)
     {
-        var database = client.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "cloudhealthoffice");
+        var database = client.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice");
         _questionnaires = database.GetCollection<BsonDocument>(QuestionnaireCollectionName);
         _responses = database.GetCollection<BsonDocument>(ResponseCollectionName);
         EnsureIndexes();
