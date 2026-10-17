@@ -14,7 +14,7 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 ///
 ///   Source of truth:  Finalized claim lines in claims-service
 ///   Hot cache:        Redis hash per member per plan year
-///   Audit trail:      MongoDB/Cosmos AccumulatorDocument (written before the operation returns)
+///   Audit trail:      MongoDB AccumulatorDocument (written before the operation returns)
 ///
 /// ── Why this approach ──────────────────────────────────────────────
 ///
@@ -764,7 +764,7 @@ return #fences
         // we'd scan for keys matching the pattern. But Redis SCAN is
         // expensive at scale, so we rely on TTL expiry for normal operation.
         //
-        // The audit trail in MongoDB/Cosmos is retained for compliance.
+        // The audit trail in MongoDB is retained for compliance.
 
         _logger.LogInformation(
             "Plan year reset for plan {PlanId}/{PlanYear}. " +
@@ -1094,7 +1094,7 @@ public sealed record ClaimAccumulatorContribution(string ClaimId, IReadOnlyList<
 /// per claim. Used for compliance reporting and portal display.
 ///
 /// If not registered in DI, no audit trail is written.
-/// The MongoDB/Cosmos AccumulatorDocument and ChoAccumulatorService
+/// The MongoDB AccumulatorDocument and ChoAccumulatorService
 /// can be repurposed as the audit writer implementation.
 /// </summary>
 public interface IAccumulatorAuditWriter

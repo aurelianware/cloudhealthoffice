@@ -53,7 +53,7 @@ public class BenefitEngineBuilder
     }
 
     /// <summary>
-    /// Use CHO's own MongoDB/Cosmos-backed benefit plan configuration.
+    /// Use CHO's own MongoDB-backed benefit plan configuration.
     /// Reads from the benefit-plan-service's data store.
     /// </summary>
     public BenefitEngineBuilder UseChoBenefitPlanProvider()
@@ -65,30 +65,16 @@ public class BenefitEngineBuilder
     }
 
     /// <summary>
-    /// Use CHO's own accumulator tracking store.
+    /// Use CHO's own accumulator tracking store (MongoDB, the only store).
     ///
-    /// Automatically selects the MongoDB or Cosmos DB repository based on
-    /// whether <c>MongoDb:ConnectionString</c> is present in configuration.
-    /// The host service must register the appropriate DB client before calling this:
-    /// <list type="bullet">
-    ///   <item>MongoDB mode: register <c>IMongoDatabase</c></item>
-    ///   <item>Cosmos mode: register <c>CosmosClient</c></item>
-    /// </list>
-    /// The host service must also register an <c>IBenefitEngineTenantContext</c>
-    /// implementation that provides the current tenant ID.
+    /// The host service must register <c>IMongoDatabase</c> and an
+    /// <c>IBenefitEngineTenantContext</c> implementation that provides the
+    /// current tenant ID. <paramref name="configuration"/> is accepted for
+    /// existing callers and no longer selects a backend.
     /// </summary>
     public BenefitEngineBuilder UseChoAccumulatorService(IConfiguration? configuration = null)
     {
-        if (configuration is not null &&
-            !string.IsNullOrEmpty(configuration["MongoDb:ConnectionString"]))
-        {
-            _services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
-        }
-        else
-        {
-            _services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryCosmos>();
-        }
-
+        _services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
         _services.AddScoped<IAccumulatorService, ChoAccumulatorService>();
         return this;
     }
@@ -213,14 +199,14 @@ public enum QnxtIntegrationMode
 
 /// <summary>
 /// CHO-native benefit plan provider — reads from CHO's own data store.
-/// TODO: Implement with actual MongoDB/Cosmos queries against benefit-plan-service's collections.
+/// TODO: Implement with actual MongoDB queries against benefit-plan-service's collections.
 /// </summary>
 internal class ChoBenefitPlanProvider : IBenefitPlanProvider
 {
     public Task<BenefitPlanConfig?> GetPlanAsync(Guid benefitPlanId, CancellationToken ct = default)
     {
         throw new NotImplementedException(
-            "ChoBenefitPlanProvider: Implement MongoDB/Cosmos queries against " +
+            "ChoBenefitPlanProvider: Implement MongoDB queries against " +
             "benefit-plan-service's BenefitPlan + BenefitCategory + CostShareRule collections.");
     }
 }
