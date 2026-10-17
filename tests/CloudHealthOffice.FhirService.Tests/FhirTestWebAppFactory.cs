@@ -4,13 +4,13 @@ using System.Security.Cryptography;
 using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
 using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
-using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
-using CloudHealthOffice.ProviderEnrollmentService.Gates;
+using CloudHealthOffice.Testing.FhirService;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using SecurityClaim = System.Security.Claims.Claim;
 
@@ -46,13 +46,18 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // fhir-service requires MongoDB in every environment. These tests never
+        // touch it: an unreachable connection string, with the Mongo-backed
+        // stores and the passthrough enrollment gate swapped in (see
+        // tests/Shared/FhirService).
+        builder.UseUnreachableMongoWithInMemoryStores();
+
         builder.ConfigureServices(services =>
         {
-            // ── Enrollment gate + rule engine stubs ─────────────────────
-            // PasAutoAdjudicator now requires IEnrollmentDecisionGate and
-            // IPriorAuthRuleEngine. Tests exercise the FHIR/PAS layer, not
-            // the rule engine — provide no-op implementations.
-            services.AddSingleton<IEnrollmentDecisionGate, PassthroughEnrollmentGate>();
+            // ── Rule engine stub ────────────────────────────────────────
+            // Tests exercise the FHIR/PAS layer, not the rule engine, which
+            // would read its rule sets from Mongo — provide a no-op one.
+            services.RemoveAll<IPriorAuthRuleEngine>();
             services.AddSingleton<IPriorAuthRuleEngine, NoOpPriorAuthRuleEngine>();
 
             // Override JWT Bearer validation parameters via PostConfigure

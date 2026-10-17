@@ -27,7 +27,7 @@ POST PayerToPayer/$member-data-export              ├─ member + prior coverag
                                                    │    (parse, member-consistency, Provenance)
                                                    └─ IPayerToPayerPackageIngestionService
                                                         └─ IPayerToPayerImportRepository
-                                                             (Mongo, or in-process)
+                                                             (MongoDB)
 ```
 
 Both directions share one wire format: CHO calls the same two operations it
@@ -121,8 +121,9 @@ is structural, not a convention**: an imported row physically cannot be read as 
 CHO-owned record, so "did CHO originate this?" is answered by which store the
 data lives in.
 
-MongoDB backs it when `MongoDb:ConnectionString` is configured; otherwise an
-in-process implementation is used, the same Demo-mode fallback `DtrService` takes.
+MongoDB backs it (`MongoPayerToPayerImportRepository`). fhir-service requires
+`MongoDb:ConnectionString` in every environment and refuses to start without it;
+the in-process implementation is a test double only.
 
 ### Supported resource types
 
