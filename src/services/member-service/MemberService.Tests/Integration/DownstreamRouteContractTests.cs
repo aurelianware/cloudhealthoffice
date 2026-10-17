@@ -24,17 +24,12 @@ public class DownstreamRouteContractTests
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
-            builder.ConfigureAppConfiguration((_, cfg) =>
-            {
-                cfg.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    // Coverage requires a Mongo connection string. Fake host so
-                    // the MongoClient constructor succeeds; no I/O runs because
-                    // we replace the repository below.
-                    ["MongoDb:ConnectionString"] = "mongodb://fake-contract-host:27017",
-                    ["MongoDb:DatabaseName"] = "contract"
-                });
-            });
+            // Coverage requires a Mongo connection string, read before app
+            // configuration applies, so it goes in as a host setting. Fake host
+            // so the MongoClient constructor succeeds; no I/O runs because we
+            // replace the repository below.
+            builder.UseSetting("MongoDb:ConnectionString", "mongodb://fake-contract-host:27017");
+            builder.UseSetting("MongoDb:DatabaseName", "contract");
             builder.ConfigureServices(services =>
             {
                 RemoveAll<CoverageSvc::CoverageService.Repositories.ICoverageRepository>(services);
