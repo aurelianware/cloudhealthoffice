@@ -47,6 +47,7 @@ public class AuthorizationsInsightsTests : TestContext
             BySla = [new() { Key = "None", Count = 8 }, new() { Key = "Warning", Count = 2 }, new() { Key = "Critical", Count = 1 }, new() { Key = "Breach", Count = 1 }],
         },
         DenialReasons = [new() { Code = "A1", Description = "Not medically necessary", Count = 14 }],
+        Unused = new() { Ended = 40, WithoutClaim = 6 },
     };
 
     private const string Period = "from=2026-09-17T12%3A00%3A00Z&to=2026-10-17T12%3A00%3A00Z";
@@ -102,5 +103,30 @@ public class AuthorizationsInsightsTests : TestContext
         cut.Find("[data-testid=authorizations-drilldown]").TextContent.Should().Contain("expedited").And.Contain("decided late").And.Contain("Medicaid");
         cut.Markup.Should().NotContain("Avg decision time");
         cut.Find("[data-testid=module-view-insights]").GetAttribute("href").Should().Be("/authorizations/insights");
+    }
+
+    [Fact]
+    public void Approved_but_unused_links_to_its_authorizations()
+    {
+        _auths.Setup(a => a.GetAuthorizationInsightsAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), null)).ReturnsAsync(Sample());
+
+        var cut = RenderComponent<AuthorizationsInsights>();
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=stat-unused]"));
+        cut.Find("[data-testid=stat-unused]").GetAttribute("href").Should().Be($"/authorizations?scope=unused&{Period}");
+        cut.Find("[data-testid=insights-unused]").TextContent.Should().Contain("of 40 ended").And.Contain("15.0%");
+    }
+
+    [Fact]
+    public void Approved_but_unused_says_why_when_claims_cant_be_checked()
+    {
+        var sample = Sample();
+        sample.Unused = new() { Ended = 40, WithoutClaim = null, UnavailableReason = "Your role can't read claims, so claim usage can't be checked." };
+        _auths.Setup(a => a.GetAuthorizationInsightsAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), null)).ReturnsAsync(sample);
+
+        var cut = RenderComponent<AuthorizationsInsights>();
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=insights-unused-unavailable]").TextContent.Should().Contain("can't read claims"));
+        cut.FindAll("[data-testid=stat-unused]").Should().BeEmpty();
     }
 }

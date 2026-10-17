@@ -1094,6 +1094,11 @@ public class AuthorizationService : IAuthorizationService
             return await _httpClient.GetFromJsonAsync<List<AuthorizationSummary>>($"{baseUrl}/authorizations/insights/list?{string.Join("&", parts)}")
                    ?? new List<AuthorizationSummary>();
         }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable)
+        {
+            // The "approved but unused" list needs claim usage from claims-service.
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "Authorization Service");

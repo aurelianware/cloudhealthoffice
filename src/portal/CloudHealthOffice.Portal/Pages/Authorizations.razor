@@ -258,7 +258,12 @@
             var d = _drillDown!;
             string? V(string k) => d.TryGetValue(k, out var v) ? v : null;
             var parts = new List<string>();
-            parts.Add(V("scope") == "queue" ? "open now" : "submitted in the period");
+            parts.Add(V("scope") switch
+            {
+                "queue" => "open now",
+                "unused" => "approved, service period ended in the period, no claim yet",
+                _ => "submitted in the period",
+            });
             if (V("requestType") is { } t) parts.Add(t.ToLowerInvariant());
             if (V("outcome") is { } o) parts.Add(o.ToLowerInvariant());
             if (V("withinTimeframe") == "true") parts.Add("decided within the timeframe");

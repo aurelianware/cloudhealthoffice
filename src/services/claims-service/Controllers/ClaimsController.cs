@@ -1259,6 +1259,25 @@ public class ClaimsController : ControllerBase
         ?? Activity.Current?.Id;
 
     /// <summary>
+    /// Which of these prior authorization numbers claims carry, and on how
+    /// many current claims: authorization-service's "approved but unused"
+    /// figure. Counts only, no claim detail; at most 2,000 numbers.
+    /// </summary>
+    [HttpPost("authorization-usage")]
+    [ProducesResponseType(typeof(IReadOnlyList<AuthorizationUsage>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IReadOnlyList<AuthorizationUsage>>> GetAuthorizationUsage(
+        [FromBody] AuthorizationUsageRequest request, CancellationToken ct = default)
+    {
+        if (request.AuthorizationNumbers.Count > AuthorizationUsageRequest.MaxNumbers)
+            return BadRequest($"At most {AuthorizationUsageRequest.MaxNumbers} authorization numbers per request.");
+
+        var usage = await _claimRepository.GetAuthorizationUsageAsync(request.AuthorizationNumbers, ct);
+        return Ok(usage.OrderBy(u => u.Key, StringComparer.Ordinal)
+            .Select(u => new AuthorizationUsage(u.Key, u.Value)).ToList());
+    }
+
+    /// <summary>
     /// Claims Insights (portal-navigation.md §5.1): open inventory and aging
     /// now, pend reasons now, and outcomes, auto-adjudication rate, denial
     /// reasons and receipt-to-adjudication turnaround for claims adjudicated

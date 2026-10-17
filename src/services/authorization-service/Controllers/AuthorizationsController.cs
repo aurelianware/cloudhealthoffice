@@ -656,8 +656,9 @@ public class AuthorizationsController : ControllerBase
     /// Authorization Insights (portal-navigation.md §5.1): the CMS-0057
     /// reporting figures for requests submitted in [from, to] (volume,
     /// approval and denial rates, decision timeliness standard vs expedited),
-    /// the review queue now by status and SLA escalation, and top denial
-    /// reasons. Aggregates only; each figure's authorizations are listed by
+    /// the review queue now by status and SLA escalation, top denial reasons,
+    /// and approved authorizations whose service period ended with no claim
+    /// yet (claim usage from claims-service, with the caller's token). Aggregates only; each figure's authorizations are listed by
     /// <c>insights/list</c> with the same criteria.
     /// </summary>
     [HttpGet("insights")]
@@ -666,13 +667,25 @@ public class AuthorizationsController : ControllerBase
     public async Task<ActionResult<AuthorizationInsights>> GetAuthorizationInsights(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
-        [FromQuery] LineOfBusiness? lineOfBusiness = null)
+        [FromQuery] LineOfBusiness? lineOfBusiness = null,
+        [FromServices] AuthorizationService.Services.Insights.UnusedAuthorizations unusedAuthorizations = null!)
     {
         if (InsightsPeriod(from, to) is not { } period) return BadRequest(new { error = "from must be before to, at most a year apart" });
 
+        var now = DateTime.UtcNow;
         var activity = await _authorizationRepository.ListActivityBetweenAsync(period.From, period.To);
         var open = await _authorizationRepository.GetOpenAuthorizationsAsync(_currentActor.TenantId);
-        return Ok(AuthorizationInsightSets.Build(activity, open, period.From, period.To, lineOfBusiness, DateTime.UtcNow));
+        var unused = await unusedAuthorizations.ComputeAsync(period.From, period.To, lineOfBusiness, now, HttpContext.RequestAborted);
+        var insights = AuthorizationInsightSets.Build(activity, open, period.From, period.To, lineOfBusiness, now);
+        return Ok(new AuthorizationInsights
+        {
+            AsOf = insights.AsOf, From = insights.From, To = insights.To, LineOfBusiness = insights.LineOfBusiness,
+            Reporting = insights.Reporting, Queue = insights.Queue, DenialReasons = insights.DenialReasons,
+            Unused = new AuthorizationUnusedInsight
+            {
+                Ended = unused.Ended.Count, WithoutClaim = unused.Unused?.Count, UnavailableReason = unused.UnavailableReason,
+            },
+        });
     }
 
     /// <summary>
@@ -695,11 +708,20 @@ public class AuthorizationsController : ControllerBase
         [FromQuery] string? denialReasonCode = null,
         [FromQuery] AuthorizationStatus? status = null,
         [FromQuery] SlaEscalationLevel? sla = null,
-        [FromQuery] int limit = 500)
+        [FromQuery] int limit = 500,
+        [FromServices] AuthorizationService.Services.Insights.UnusedAuthorizations unusedAuthorizations = null!)
     {
-        if (scope is not (AuthorizationInsightSets.PeriodScope or AuthorizationInsightSets.QueueScope))
-            return BadRequest(new { error = "scope is period or queue" });
+        if (scope is not (AuthorizationInsightSets.PeriodScope or AuthorizationInsightSets.QueueScope or AuthorizationInsightSets.UnusedScope))
+            return BadRequest(new { error = "scope is period, queue or unused" });
         if (InsightsPeriod(from, to) is not { } period) return BadRequest(new { error = "from must be before to, at most a year apart" });
+
+        if (scope == AuthorizationInsightSets.UnusedScope)
+        {
+            var result = await unusedAuthorizations.ComputeAsync(period.From, period.To, lineOfBusiness, DateTime.UtcNow, HttpContext.RequestAborted);
+            if (result.Unused is null)
+                return Problem(title: "Claim usage couldn't be checked", detail: result.UnavailableReason, statusCode: StatusCodes.Status503ServiceUnavailable);
+            return Ok(result.Unused.OrderByDescending(a => a.ApprovedServiceDateTo ?? a.ExpirationDate).Take(Math.Clamp(limit, 1, 1000)).ToList());
+        }
 
         var criteria = new AuthorizationInsightCriteria
         {

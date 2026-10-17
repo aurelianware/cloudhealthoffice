@@ -88,4 +88,13 @@ public class ClaimRepositoryReferenceSearchTests : IAsyncLifetime
 
         page.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task Authorization_usage_counts_claims_per_number_inside_the_tenant()
+    {
+        var usage = await Repo(Tenant).GetAuthorizationUsageAsync(["PA-1", "PA-2", "PA-unused", " "]);
+
+        // PA-1: one claim on the header, one on a line (the other tenant's claim is not counted).
+        usage.Should().BeEquivalentTo(new Dictionary<string, int> { ["PA-1"] = 2, ["PA-2"] = 1 });
+    }
 }

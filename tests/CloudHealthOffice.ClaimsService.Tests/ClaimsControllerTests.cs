@@ -429,6 +429,20 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task AuthorizationUsage_ReturnsCountsAndRejectsOversizedRequests()
+    {
+        _repo.GetAuthorizationUsageAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, int> { ["PA-2"] = 1, ["PA-1"] = 3 });
+
+        var ok = await _client.PostAsJsonAsync("/api/claims/authorization-usage", new { authorizationNumbers = new[] { "PA-1", "PA-2", "PA-3" } });
+        using var doc = JsonDocument.Parse(await ok.Content.ReadAsStringAsync());
+        Assert.Equal(new[] { "PA-1", "PA-2" }, doc.RootElement.EnumerateArray().Select(e => e.GetProperty("authorizationNumber").GetString()).ToArray());
+
+        var tooMany = await _client.PostAsJsonAsync("/api/claims/authorization-usage", new { authorizationNumbers = Enumerable.Range(0, 2001).Select(i => $"PA-{i}") });
+        Assert.Equal(HttpStatusCode.BadRequest, tooMany.StatusCode);
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // 277CA ACKNOWLEDGMENT
     // ═══════════════════════════════════════════════════════════════════
