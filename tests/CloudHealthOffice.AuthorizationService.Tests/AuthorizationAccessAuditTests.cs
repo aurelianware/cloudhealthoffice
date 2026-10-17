@@ -73,4 +73,36 @@ public class AuthorizationAccessAuditTests : IClassFixture<AuthorizationApiFacto
         Assert.Contains((await response.Content.ReadFromJsonAsync<List<RecordAccessEvent>>())!, e => e.ActorId == "um-3");
         Assert.Contains(_log.All, e => e.ActorId == "cv-1" && e.Action == RecordAccessActions.AccessLog);
     }
+
+    [Fact]
+    public async Task A_validation_lookup_is_logged_against_the_authorization_and_its_member()
+    {
+        var response = await As("svc-claims", ChoRolePermissions.UMCoordinator).GetAsync("/api/authorizations/PA-1/validate");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var e = Assert.Single(_log.All, x => x.ActorId == "svc-claims");
+        Assert.Equal("Validate", e.Action);
+        Assert.Equal("auth-1", e.RecordId);
+        Assert.Equal("MBR-9", e.MemberId);
+    }
+
+    [Fact]
+    public async Task A_validation_lookup_for_an_unknown_number_is_logged_as_not_found_under_the_number()
+    {
+        await As("svc-claims-2", ChoRolePermissions.UMCoordinator).GetAsync("/api/authorizations/PA-NOPE/validate");
+
+        var e = Assert.Single(_log.All, x => x.ActorId == "svc-claims-2");
+        Assert.Equal("PA-NOPE", e.RecordId);
+        Assert.Equal(RecordAccessOutcomes.NotFound, e.Outcome);
+    }
+
+    [Fact]
+    public async Task A_refused_validation_lookup_is_logged_as_denied()
+    {
+        await As("fin-v", ChoRolePermissions.Finance).GetAsync("/api/authorizations/PA-1/validate");
+
+        var e = Assert.Single(_log.All, x => x.ActorId == "fin-v");
+        Assert.Equal(RecordAccessOutcomes.Denied, e.Outcome);
+        Assert.Equal("PA-1", e.RecordId);
+    }
 }

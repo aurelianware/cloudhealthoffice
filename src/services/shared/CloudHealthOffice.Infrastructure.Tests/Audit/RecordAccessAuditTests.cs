@@ -13,9 +13,9 @@ public class RecordAccessAuditTests
     [Fact]
     public void Subjects_come_from_one_record_a_list_or_a_page()
     {
-        RecordSubjects.From(new Row("a", "M1")).Should().Equal(new RecordSubject("a", "M1"));
+        RecordSubjects.From(new Row("a", "M1")).Select(x => (x.RecordId, x.MemberId)).Should().Equal(("a", "M1"));
         RecordSubjects.From(new[] { new Row("a", "M1"), new Row("b", null) }).Select(s => s.RecordId).Should().Equal("a", "b");
-        RecordSubjects.From(new Page([new Row("c", "M2")], 1)).Should().Equal(new RecordSubject("c", "M2"));
+        RecordSubjects.From(new Page([new Row("c", "M2")], 1)).Select(x => (x.RecordId, x.MemberId)).Should().Equal(("c", "M2"));
         RecordSubjects.From("not a record").Should().BeEmpty();
         RecordSubjects.From(null).Should().BeEmpty();
     }
@@ -59,5 +59,30 @@ public class RecordAccessAuditTests
         await writer.AppendAsync(new DefaultHttpContext(), actor, new RecordAccessEvent { RecordType = "Member", Action = "View" });
 
         (DateTime.UtcNow - started).Should().BeLessThan(RecordAccessWriter.AppendTimeout + TimeSpan.FromSeconds(2));
+    }
+
+    private sealed record Line(string ClaimId, string? MemberId);
+    private sealed record PaymentLike(string Id, List<Line> ClaimPayments);
+
+    [Fact]
+    public void Members_named_inside_a_record_are_collected()
+    {
+        var subjects = RecordSubjects.From(
+            new PaymentLike("pay-1", [new("c1", "M1"), new("c2", "M2"), new("c3", "M1"), new("c4", null)]),
+            membersCollection: "ClaimPayments");
+
+        subjects.Should().ContainSingle().Which.NestedMemberIds.Should().Equal("M1", "M2");
+    }
+
+    [Fact]
+    public async Task A_member_search_matches_events_listing_the_member_among_several()
+    {
+        var store = new RecordAccessStoreInMemory();
+        await store.AppendAsync(new RecordAccessEvent { TenantId = "t1", RecordType = "Payment", RecordId = "pay-1", MemberIds = ["M1", "M2"] });
+        await store.AppendAsync(new RecordAccessEvent { TenantId = "t1", RecordType = "Payment", RecordId = "pay-2", MemberIds = ["M3", "M4"] });
+
+        var found = await store.QueryAsync(new RecordAccessQuery("t1", MemberId: "M2"));
+
+        found.Should().ContainSingle().Which.RecordId.Should().Be("pay-1");
     }
 }

@@ -28,6 +28,13 @@ public class RecordAccessEvent
     /// <summary>The member the read concerns, when known (for a member read, the member).</summary>
     public string? MemberId { get; set; }
 
+    /// <summary>
+    /// Every member whose data the read exposed, when it spans several (a
+    /// payment pays many members' claims). A member's access log matches
+    /// <see cref="MemberId"/> or any of these. Capped at <see cref="MaxRecordIds"/>.
+    /// </summary>
+    public List<string> MemberIds { get; set; } = new();
+
     /// <summary>For a search or list: the records returned (capped at <see cref="MaxRecordIds"/>).</summary>
     public List<string> RecordIds { get; set; } = new();
 

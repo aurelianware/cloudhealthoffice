@@ -82,7 +82,7 @@ public class PaymentsController : ControllerBase
     /// <summary>
     /// Get payment by ID
     /// </summary>
-    [AuditRecordAccess("Payment", RecordAccessActions.View, RecordIdRouteValue = "id")]
+    [AuditRecordAccess("Payment", RecordAccessActions.View, RecordIdRouteValue = "id", ResultMembersCollection = "ClaimPayments")]
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(Payment), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -101,7 +101,7 @@ public class PaymentsController : ControllerBase
     /// <summary>
     /// Get payment by check number
     /// </summary>
-    [AuditRecordAccess("Payment", RecordAccessActions.View, ResultIsRecord = true)]
+    [AuditRecordAccess("Payment", RecordAccessActions.View, ResultIsRecord = true, ResultMembersCollection = "ClaimPayments")]
     [HttpGet("check/{checkNumber}")]
     [ProducesResponseType(typeof(Payment), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -118,12 +118,9 @@ public class PaymentsController : ControllerBase
     }
 
     /// <summary>
-    /// Get payments for a specific claim
-    /// </summary>
-    /// <summary>
     /// A payee's payments by NPI, newest first (provider record Payments tab).
     /// </summary>
-    [AuditRecordAccess("Payment", RecordAccessActions.List)]
+    [AuditRecordAccess("Payment", RecordAccessActions.List, ResultMembersCollection = "ClaimPayments")]
     [HttpGet("payee/{npi}")]
     [ProducesResponseType(typeof(IEnumerable<Payment>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -134,7 +131,10 @@ public class PaymentsController : ControllerBase
         return Ok(await _paymentRepository.GetByPayeeNpiAsync(npi, limit));
     }
 
-    [AuditRecordAccess("Payment", RecordAccessActions.List)]
+    /// <summary>
+    /// Get payments for a specific claim
+    /// </summary>
+    [AuditRecordAccess("Payment", RecordAccessActions.List, ResultMembersCollection = "ClaimPayments")]
     [HttpGet("claim/{claimId}")]
     [ProducesResponseType(typeof(IEnumerable<Payment>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Payment>>> GetPaymentsByClaimId(string claimId)
@@ -146,7 +146,7 @@ public class PaymentsController : ControllerBase
     /// <summary>
     /// Search payments with filters
     /// </summary>
-    [AuditRecordAccess("Payment", RecordAccessActions.Search)]
+    [AuditRecordAccess("Payment", RecordAccessActions.Search, ResultMembersCollection = "ClaimPayments")]
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<Payment>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Payment>>> SearchPayments(
@@ -227,16 +227,19 @@ public class PaymentsController : ControllerBase
     /// <summary>
     /// Download the X12 835 ERA file for a payment
     /// </summary>
-    [AuditRecordAccess("Payment", "Era", RecordIdRouteValue = "id")]
+    // The 835 names every member on the payment; the action records the
+    // download against them (the response is EDI text, not a record).
+    [AuditRecordAccess("Payment", "Era", RecordIdRouteValue = "id", RecordedByAction = true)]
     [HttpGet("{id}/835")]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetEra835(string id)
+    public async Task<IActionResult> GetEra835(string id, [FromServices] RecordAccessWriter? accessLog = null)
     {
         var payment = await _paymentRepository.GetByIdAsync(id);
 
         if (payment == null)
         {
+            await RecordEraAsync(accessLog, id, null, StatusCodes.Status404NotFound);
             return NotFound($"Payment {id} not found");
         }
 
@@ -269,13 +272,32 @@ public class PaymentsController : ControllerBase
             // An ACH BPR that configuration cannot fill (e.g. no BPR10
             // originating company id) is refused, never emitted misaligned.
             _logger.LogError(ex, "Cannot generate 835 for payment {PaymentId}", SanitizeForLog(id));
+            await RecordEraAsync(accessLog, id, payment, StatusCodes.Status500InternalServerError);
             return Problem(title: "835 cannot be generated", detail: ex.Message,
                 statusCode: StatusCodes.Status500InternalServerError);
         }
 
         var filename = $"835_{payment.CheckNumber}.edi";
         Response.Headers["Content-Disposition"] = $"attachment; filename=\"{filename}\"";
+        await RecordEraAsync(accessLog, id, payment, StatusCodes.Status200OK);
         return Content(era, "text/plain");
+    }
+
+    private Task RecordEraAsync(RecordAccessWriter? accessLog, string id, Payment? payment, int statusCode)
+    {
+        if (accessLog is null) return Task.CompletedTask;
+        var members = payment?.ClaimPayments.Select(c => c.MemberId).OfType<string>()
+            .Where(m => m.Length > 0).Distinct().Take(RecordAccessEvent.MaxRecordIds).ToList() ?? [];
+        return accessLog.AppendAsync(HttpContext, _actor, new RecordAccessEvent
+        {
+            RecordType = "Payment",
+            RecordId = id,
+            MemberId = members.Count == 1 ? members[0] : null,
+            MemberIds = members.Count > 1 ? members : [],
+            Action = "Era",
+            Outcome = RecordAccessOutcomes.For(statusCode),
+            StatusCode = statusCode,
+        });
     }
 
     /// <summary>

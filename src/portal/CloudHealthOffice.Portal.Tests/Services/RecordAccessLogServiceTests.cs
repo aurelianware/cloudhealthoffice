@@ -30,10 +30,12 @@ public class RecordAccessLogServiceTests
         {
             ["Services:MemberService"] = "http://member-service/api/v1",
             ["Services:ClaimsService"] = "http://claims-service/api",
+            ["Services:PaymentService"] = "http://payment-service/api",
         }).Build(),
         Mock.Of<ILogger<RecordAccessLogService>>());
 
     private const string MemberLog = """[{"id":"1","recordType":"Member","recordId":"M 1","action":"View","outcome":"Allowed","actorId":"csr","occurredAt":"2026-10-01T10:00:00Z"}]""";
+    private const string PaymentLog = """[{"id":"3","recordType":"Payment","recordId":"pay-1","action":"Era","outcome":"Allowed","actorId":"fin","occurredAt":"2026-10-03T10:00:00Z"}]""";
     private const string ClaimLog = """[{"id":"2","claimId":"c1","action":"View","outcome":"Allowed","actorId":"ex","occurredAt":"2026-10-02T10:00:00Z"}]""";
 
     [Fact]
@@ -43,12 +45,16 @@ public class RecordAccessLogServiceTests
         {
             ["member-service"] = (HttpStatusCode.OK, MemberLog),
             ["claims-service"] = (HttpStatusCode.OK, ClaimLog),
+            ["payment-service"] = (HttpStatusCode.OK, PaymentLog),
         });
 
         var log = await Sut(handler).GetMemberAccessLogAsync("M 1");
 
-        handler.Paths.Should().BeEquivalentTo(["/api/v1/members/M%201/access-log?limit=200", "/api/claims/access-log?memberId=M%201&limit=200"]);
-        log.Entries.Select(e => (e.RecordType, e.RecordId)).Should().Equal(("Claim", "c1"), ("Member", "M 1"));
+        handler.Paths.Should().BeEquivalentTo([
+            "/api/v1/members/M%201/access-log?limit=200",
+            "/api/claims/access-log?memberId=M%201&limit=200",
+            "/api/payments/access-log?memberId=M%201&limit=200"]);
+        log.Entries.Select(e => (e.RecordType, e.RecordId)).Should().Equal(("Payment", "pay-1"), ("Claim", "c1"), ("Member", "M 1"));
         log.Unavailable.Should().BeEmpty();
     }
 
@@ -59,6 +65,7 @@ public class RecordAccessLogServiceTests
         {
             ["member-service"] = (HttpStatusCode.OK, MemberLog),
             ["claims-service"] = (HttpStatusCode.ServiceUnavailable, ""),
+            ["payment-service"] = (HttpStatusCode.OK, "[]"),
         });
 
         var log = await Sut(handler).GetMemberAccessLogAsync("M 1");

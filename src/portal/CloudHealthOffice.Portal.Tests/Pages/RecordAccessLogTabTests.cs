@@ -76,7 +76,7 @@ public class RecordAccessLogTabTests : TestContext
         var auths = new Mock<IAuthorizationService>();
         auths.Setup(a => a.GetAuthorizationByIdAsync("PA-77")).ReturnsAsync(new AuthorizationDetails { Id = "auth-1", AuthorizationNumber = "PA-77", MemberId = "M1" });
         Services.AddSingleton(auths.Object);
-        _logs.Setup(l => l.GetAuthorizationAccessLogAsync("auth-1", It.IsAny<int>())).ReturnsAsync(new RecordAccessLog([], ["Authorization Service"]));
+        _logs.Setup(l => l.GetAuthorizationAccessLogAsync("auth-1", "PA-77", It.IsAny<int>())).ReturnsAsync(new RecordAccessLog([], ["Authorization Service"]));
 
         var cut = RenderComponent<AuthorizationRecordView>(p => p.Add(x => x.AuthorizationId, "PA-77").Add(x => x.Tab, "access-log").Add(x => x.BaseHref, "/authorizations/PA-77"));
 
