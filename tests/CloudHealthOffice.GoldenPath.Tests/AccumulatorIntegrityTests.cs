@@ -126,7 +126,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
 
     /// <summary>
     /// A write made before deferred commits (a direct Production apply) can be undone by a
-    /// later commit. True for the journalled Mongo / Cosmos store; the Redis store kept no
+    /// later commit. True for the journalled Mongo store; the Redis store kept no
     /// journal for those writes (documented: counted twice in the cache until it is rebuilt).
     /// </summary>
     protected virtual bool UndoesLegacyWrites => true;
@@ -1234,7 +1234,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     }
 }
 
-/// <summary>Assertions on the journalled engine store (<see cref="AccumulatorDocument"/>, Mongo or Cosmos).</summary>
+/// <summary>Assertions on the journalled engine store (<see cref="AccumulatorDocument"/> on Mongo).</summary>
 public abstract class AccumulatorIntegrityChoTests : AccumulatorIntegrityTests
 {
     protected abstract Task<List<AccumulatorDocument>> AccumulatorDocumentsAsync();

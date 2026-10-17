@@ -521,7 +521,7 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
 
 /// <summary>
 /// Repository interface for service category mappings.
-/// Implementations can read from MongoDB, Cosmos DB, or QNXT extracts.
+/// Implementations can read from MongoDB or QNXT extracts.
 /// </summary>
 public interface IServiceCategoryMappingRepository
 {
