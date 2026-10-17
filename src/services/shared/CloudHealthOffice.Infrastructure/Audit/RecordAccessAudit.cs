@@ -118,8 +118,8 @@ public sealed class RecordAccessWriter
             MemberIds = members.Count > 1 ? members.Take(RecordAccessEvent.MaxRecordIds).ToList() : [],
             RecordIds = single
                 ? []
-                : subjects.Select(s => s.RecordId).Where(id => !string.IsNullOrWhiteSpace(id))
-                    .Distinct().Take(RecordAccessEvent.MaxRecordIds).ToList()!,
+                : subjects.Select(s => s.RecordId).OfType<string>().Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct().Take(RecordAccessEvent.MaxRecordIds).ToList(),
             ResultCount = single ? null : subjects.Count,
             Action = audit.Action,
             Outcome = outcome ?? RecordAccessOutcomes.For(statusCode),

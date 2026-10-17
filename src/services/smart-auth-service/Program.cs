@@ -58,10 +58,10 @@ builder.Services.AddOpenIddict()
     {
         if (!string.IsNullOrEmpty(mongoConnStr))
         {
-            options.UseMongoDb()
-                   .UseDatabase(builder.Services
-                       .BuildServiceProvider()
-                       .GetRequiredService<IMongoDatabase>());
+            // No UseDatabase(): the stores resolve the IMongoDatabase that
+            // AddChoDatabase registered, instead of a second container (and
+            // a second MongoClient) built here.
+            options.UseMongoDb();
         }
         else
         {

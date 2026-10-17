@@ -55,7 +55,7 @@ public sealed class CredentialingController : ControllerBase
     {
         _logger.LogInformation(
             "Submitting credentialing application for provider {Id}, source={Source}",
-            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request?.ApplicationSource));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request.ApplicationSource));
 
         try
         {
@@ -128,7 +128,7 @@ public sealed class CredentialingController : ControllerBase
     {
         _logger.LogInformation(
             "Recording primary-source verification for provider {Id}, vendor={Vendor}",
-            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request?.VerificationVendor));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request.VerificationVendor));
 
         try
         {
@@ -164,7 +164,7 @@ public sealed class CredentialingController : ControllerBase
     {
         _logger.LogInformation(
             "Scheduling committee review for provider {Id}, committee={Committee}",
-            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request?.CommitteeId));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request.CommitteeId));
 
         try
         {
@@ -200,7 +200,7 @@ public sealed class CredentialingController : ControllerBase
     {
         _logger.LogInformation(
             "Recording credentialing decision for provider {Id}, decision={Decision}, authority={Authority}",
-            LogSanitizer.Sanitize(id), request?.Decision, request?.DecisionAuthorityType);
+            LogSanitizer.Sanitize(id), request.Decision, request.DecisionAuthorityType);
 
         try
         {
@@ -236,7 +236,7 @@ public sealed class CredentialingController : ControllerBase
     {
         _logger.LogInformation(
             "Triggering re-credentialing for provider {Id}, reason={Reason}",
-            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request?.Reason));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request.Reason));
 
         try
         {
