@@ -51,13 +51,21 @@ public static class Cms0057Reporting
     public static bool IsAutomated(Authorization auth) =>
         DecisionEntry(auth)?.Source?.StartsWith("automated", StringComparison.OrdinalIgnoreCase) == true;
 
+    /// <summary>The requests a period's metrics count: submitted in [from, to], in the line of business.</summary>
+    public static IEnumerable<Authorization> InPeriod(
+        IEnumerable<Authorization> authorizations, DateTime from, DateTime to, LineOfBusiness? lineOfBusiness) =>
+        authorizations
+            .Where(a => a.SubmittedDate >= from && a.SubmittedDate <= to)
+            .Where(a => lineOfBusiness is null || a.LineOfBusiness == lineOfBusiness);
+
+    /// <summary>Decided within its request type's timeframe (72h expedited, 168h standard).</summary>
+    public static bool DecidedWithinTimeframe(Authorization auth) =>
+        DecisionHours(auth) is { } hours && hours <= TimeframeHours(auth);
+
     public static Cms0057Metrics ComputeMetrics(
         IEnumerable<Authorization> authorizations, DateTime from, DateTime to, LineOfBusiness? lineOfBusiness)
     {
-        var inPeriod = authorizations
-            .Where(a => a.SubmittedDate >= from && a.SubmittedDate <= to)
-            .Where(a => lineOfBusiness is null || a.LineOfBusiness == lineOfBusiness)
-            .ToList();
+        var inPeriod = InPeriod(authorizations, from, to, lineOfBusiness).ToList();
 
         var decided = inPeriod.Where(a => IsDecided(a.Status)).ToList();
         return new Cms0057Metrics
