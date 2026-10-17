@@ -389,13 +389,14 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
                 "Stedi claim attachment client is not registered.");
         }
 
-        var transmission = string.IsNullOrWhiteSpace(request.TransmissionId)
+        // Read within the caller's tenant only: another tenant's transmission is
+        // "not found", and the tenant always comes from the request, never the record.
+        var transmission = string.IsNullOrWhiteSpace(request.TransmissionId) || string.IsNullOrWhiteSpace(request.TenantId)
             ? null
-            : await _transmissions.GetByIdAsync(request.TransmissionId, cancellationToken).ConfigureAwait(false);
+            : await _transmissions.GetByTenantAndIdAsync(request.TenantId, request.TransmissionId, cancellationToken).ConfigureAwait(false);
         var payerId = request.PayerId ?? transmission?.PayerId;
-        var tenantId = !string.IsNullOrWhiteSpace(transmission?.TenantId) ? transmission.TenantId : request.TenantId;
         var resolution = await _payerResolver
-            .ResolveAsync(tenantId, payerId, HealthcareTransactionType.ClaimAttachment275, cancellationToken)
+            .ResolveAsync(request.TenantId, payerId, HealthcareTransactionType.ClaimAttachment275, cancellationToken)
             .ConfigureAwait(false);
         if (resolution.Status != PayerResolutionStatus.Found ||
             string.IsNullOrWhiteSpace(resolution.ExternalIdentifierValue))
