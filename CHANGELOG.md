@@ -26,7 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     instead. Incremental deployments do not delete an existing SQL-API
     account.
 
-  Only `src/tools/migration-wizard` still references `Microsoft.Azure.Cosmos`.
+  - `src/tools/migration-wizard`, which exported TriZetto data straight into
+    Cosmos SQL containers that no service read (no tenant ids).
+
+  Nothing references `Microsoft.Azure.Cosmos` any more; the package is gone
+  from `Directory.Packages.props`.
 
 ### Changed
 
