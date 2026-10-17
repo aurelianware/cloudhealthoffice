@@ -13,13 +13,13 @@ namespace ClaimsService.Models;
 public class Claim
 {
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation)
+    /// Owning tenant; every read and write filters on it.
     /// </summary>
     [Required]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Unique claim identifier (Cosmos DB document id)
+    /// Unique claim identifier (Mongo _id)
     /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -1264,8 +1264,8 @@ public enum ClaimType
 }
 
 /// <summary>
-/// Claim status (lifecycle). Values are persisted and on the wire (numbers in
-/// claims-service JSON, camelCase strings in Cosmos): append, never renumber.
+/// Claim status (lifecycle). Values are persisted and on the wire: append,
+/// never renumber.
 ///
 /// <para>Lifecycle (modeled on QNXT PAY/PAID, DENY/DENIED — see
 /// docs/architecture/claim-versioning.md and

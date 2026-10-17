@@ -93,7 +93,7 @@ public class ClaimAccumulatorTotals
 
 /// <summary>
 /// One counted claim row for <c>GET /api/claims/accumulator-totals</c>, and the shared
-/// rule (Mongo and Cosmos) that turns rows into totals and per-claim contributions.
+/// rule that turns rows into totals and per-claim contributions.
 /// </summary>
 public sealed record AccumulatorTotalsRow(
     string ClaimId, string? NetworkTier, decimal Deductible, decimal Coinsurance, decimal Copay, decimal Oop)

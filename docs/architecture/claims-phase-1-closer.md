@@ -29,10 +29,6 @@ For CMS-0057-F readiness posture, see
 For the canonical V1 API surface, see
 [`docs/api/claims-v1-surface.md`](../api/claims-v1-surface.md).
 
-For the 5.1b operator runbook (Cosmos partition migration to
-`/tenantId`), see
-[`docs/migrations/claims-cosmos-partition-migration.md`](../migrations/claims-cosmos-partition-migration.md).
-
 ---
 
 ## Capability matrix

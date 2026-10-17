@@ -6,11 +6,7 @@ namespace ClaimsService.Repositories;
 
 /// <summary>
 /// Persistence surface for the <see cref="ClaimAdjustment"/> aggregate
-/// (capability 5.12). Mongo-only with a Cosmos noop fallback per Gap 4
-/// ratification — adjustment rows are operational state best fit by
-/// Mongo's append/query semantics, not domain snapshots. The Cosmos noop
-/// throws on writes so deployments pinned to Cosmos surface the missing
-/// capability immediately rather than silently dropping audit data.
+/// (capability 5.12), stored in MongoDB like every other claim document.
 ///
 /// <para>
 /// Uniqueness key (Gap 5 ratification): <c>(TenantId, ClaimVersionId)</c>
@@ -227,64 +223,4 @@ public sealed class ClaimAdjustmentRepositoryMongo : IClaimAdjustmentRepository
         var result = await _collection.DeleteOneAsync(filter, ct);
         return result.DeletedCount > 0;
     }
-}
-
-/// <summary>
-/// Cosmos-environment fallback. Per Gap 4 ratification, ClaimAdjustment
-/// rows are Mongo-only in Phase 1 — the Cosmos write path is not
-/// implemented. This impl throws on writes (so a Cosmos-only deployment
-/// fails loudly the moment an operator submits an adjustment, rather
-/// than silently dropping audit data) and returns null/empty on reads
-/// (consistent with the no-data-here contract).
-/// </summary>
-public sealed class ClaimAdjustmentRepositoryCosmosNoop : IClaimAdjustmentRepository
-{
-    private readonly ILogger<ClaimAdjustmentRepositoryCosmosNoop> _logger;
-
-    public ClaimAdjustmentRepositoryCosmosNoop(ILogger<ClaimAdjustmentRepositoryCosmosNoop> logger)
-        => _logger = logger;
-
-    public Task<ClaimAdjustment> CreateAsync(ClaimAdjustment adjustment, CancellationToken ct = default)
-    {
-        _logger.LogError(
-            "ClaimAdjustment persistence is not implemented for Cosmos environments. " +
-            "Configure MongoDb:ConnectionString to enable capability 5.12.");
-        throw new NotImplementedException(
-            "ClaimAdjustment persistence requires MongoDB. Cosmos persistence is deferred (Gap 4 ratification).");
-    }
-
-    public Task<ClaimAdjustment?> GetByIdAsync(string tenantId, string id, CancellationToken ct = default)
-        => Task.FromResult<ClaimAdjustment?>(null);
-
-    public Task<ClaimAdjustment?> GetByClaimVersionIdAsync(string tenantId, string claimVersionId, CancellationToken ct = default)
-        => Task.FromResult<ClaimAdjustment?>(null);
-
-    public Task<ClaimAdjustment?> GetByIdempotencyKeyAsync(string tenantId, string idempotencyKey, CancellationToken ct = default)
-        => Task.FromResult<ClaimAdjustment?>(null);
-
-    public Task<ClaimAdjustment?> GetByNewClaimIdAsync(string tenantId, string newClaimId, CancellationToken ct = default)
-        => Task.FromResult<ClaimAdjustment?>(null);
-
-    public Task<ClaimAdjustment?> GetByPredecessorAndStatusAsync(
-        string tenantId,
-        string predecessorClaimId,
-        ClaimAdjustmentStatus status,
-        CancellationToken ct = default)
-        => Task.FromResult<ClaimAdjustment?>(null);
-
-    public Task<(IReadOnlyList<ClaimAdjustment> Page, int TotalCount)> ListAsync(
-        string tenantId, ClaimAdjustmentListFilter filter, CancellationToken ct = default)
-        => Task.FromResult<(IReadOnlyList<ClaimAdjustment>, int)>((Array.Empty<ClaimAdjustment>(), 0));
-
-    public Task<ClaimAdjustment> UpdateAsync(ClaimAdjustment adjustment, CancellationToken ct = default)
-    {
-        _logger.LogError(
-            "ClaimAdjustment update is not implemented for Cosmos environments. " +
-            "Configure MongoDb:ConnectionString to enable capability 5.12.");
-        throw new NotImplementedException(
-            "ClaimAdjustment persistence requires MongoDB. Cosmos persistence is deferred (Gap 4 ratification).");
-    }
-
-    public Task<bool> DeleteAsync(string tenantId, string id, CancellationToken ct = default)
-        => Task.FromResult(false);
 }

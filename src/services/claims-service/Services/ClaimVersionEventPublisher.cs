@@ -12,9 +12,8 @@ namespace ClaimsService.Services;
 /// idempotency, monotonic <see cref="ClaimVersionEvent.Version"/> per
 /// <c>(TenantId, ClaimVersionId)</c>.
 ///
-/// Mongo is the system-of-record for the version stream regardless of
-/// whether the main Claims store is Cosmos or Mongo — the event
-/// stream lives in the same Mongo instance the existing
+/// Mongo is the system-of-record for the version stream; it lives in
+/// the same Mongo instance the existing
 /// <c>ProviderVersionEvents</c> / <c>PlanVersionEvents</c> collections
 /// use, so audit consumers see one consistent surface.
 ///
@@ -79,15 +78,6 @@ public sealed class MongoClaimVersionEventReader : IClaimVersionEventReader
             .SortBy(evt => evt.Version)
             .ThenBy(evt => evt.OccurredAt)
             .ToListAsync(ct);
-}
-
-public sealed class NoopClaimVersionEventReader : IClaimVersionEventReader
-{
-    public Task<IReadOnlyList<ClaimVersionEvent>> GetAsync(
-        string tenantId,
-        string claimVersionId,
-        CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<ClaimVersionEvent>>(Array.Empty<ClaimVersionEvent>());
 }
 
 public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublisher
@@ -417,64 +407,4 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
 
     private static string Sanitize(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-}
-
-/// <summary>
-/// No-op fallback used when no Mongo instance is available (e.g. Cosmos-only
-/// dev environments without the events stream provisioned). Logs a warning so
-/// ops can spot the missing wiring; never blocks the claim write path.
-/// Mirrors <c>NoopProviderVersionEventPublisher</c>.
-/// </summary>
-public sealed class NoopClaimVersionEventPublisher : IClaimVersionEventPublisher
-{
-    private readonly ILogger<NoopClaimVersionEventPublisher> _logger;
-
-    public NoopClaimVersionEventPublisher(ILogger<NoopClaimVersionEventPublisher> logger) => _logger = logger;
-
-    public Task<ClaimVersionEvent> PublishVersionSubmittedAsync(Claim version, string? actorId, string? correlationId, CancellationToken ct = default)
-        => DropAndReturn(version, $"submitted:{version.Id}", ClaimVersionEventType.ClaimVersionSubmitted, actorId, correlationId);
-
-    public Task<ClaimVersionEvent> PublishVersionAdjudicatedAsync(Claim version, string? actorId, string? correlationId, CancellationToken ct = default)
-        => DropAndReturn(version, $"adjudicated:{version.Id}", ClaimVersionEventType.ClaimVersionAdjudicated, actorId, correlationId);
-
-    public Task<ClaimVersionEvent> PublishVersionPaidAsync(Claim version, string? actorId, string? correlationId, CancellationToken ct = default)
-        => DropAndReturn(version, $"paid:{version.Id}", ClaimVersionEventType.ClaimVersionPaid, actorId, correlationId);
-
-    public Task<ClaimVersionEvent> PublishVersionDeniedAsync(Claim version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default)
-        => DropAndReturn(version, $"denied:{version.Id}", ClaimVersionEventType.ClaimVersionDenied, actorId, correlationId);
-
-    public Task<ClaimVersionEvent> PublishVersionSupersededAsync(Claim from, Claim to, string? reason, string? actorId, string? correlationId, CancellationToken ct = default)
-        => DropAndReturn(from, $"superseded:{from.Id}->{to.Id}", ClaimVersionEventType.ClaimVersionSuperseded, actorId, correlationId);
-
-    public Task<ClaimVersionEvent> PublishVersionVoidedAsync(Claim version, string? reason, string? actorId, string? correlationId, CancellationToken ct = default)
-        => DropAndReturn(version, $"voided:{version.Id}", ClaimVersionEventType.ClaimVersionVoided, actorId, correlationId);
-
-    public Task<ClaimVersionEvent> PublishVersionResolvedAsync(Claim version, string disposition, string? reason, string? actorId, string? correlationId, CancellationToken ct = default)
-        => DropAndReturn(version, $"resolved:{version.Id}", ClaimVersionEventType.ClaimVersionResolved, actorId, correlationId);
-
-    public Task<ClaimVersionEvent> PublishVersionReversedAsync(
-        Claim version,
-        string supersessorVersionId,
-        string adjustmentReason,
-        string? actorId,
-        string? correlationId,
-        CancellationToken ct = default)
-        => DropAndReturn(version, $"reversed:{version.Id}->{supersessorVersionId}", ClaimVersionEventType.ClaimVersionReversed, actorId, correlationId);
-
-    private Task<ClaimVersionEvent> DropAndReturn(Claim version, string eventId, ClaimVersionEventType type, string? actorId, string? correlationId)
-    {
-        _logger.LogWarning(
-            "ClaimVersionEventPublisher is not configured; dropping {EventType} for claim {ClaimVersionId} version {VersionId}",
-            type, version.ClaimVersionId, version.Id);
-        return Task.FromResult(new ClaimVersionEvent
-        {
-            EventId = eventId,
-            EventType = type,
-            TenantId = version.TenantId,
-            ClaimVersionId = version.ClaimVersionId,
-            VersionId = version.Id,
-            ActorId = actorId,
-            CorrelationId = correlationId
-        });
-    }
 }

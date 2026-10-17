@@ -3,11 +3,9 @@ using ClaimsService.Repositories;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.Infrastructure.Serialization;
-using CloudHealthOffice.Testing.Cosmos;
 using CloudHealthOffice.Testing.Mongo;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
@@ -16,7 +14,7 @@ namespace CloudHealthOffice.ClaimsService.Tests.Repositories;
 
 /// <summary>
 /// The accumulator outbox on the claim document and the accumulator-totals
-/// rebuild source, on real stores (EphemeralMongo and the Cosmos emulator):
+/// rebuild source, on a real mongod (EphemeralMongo):
 /// the commit lands with the status write that finalizes the claim or not at
 /// all; the outbox entry is rescheduled / cleared only while it is still the
 /// one that was driven; superseded versions do not count, and every counted
@@ -65,7 +63,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
 
     // ── the commit lands with the finalizing status write ───────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task TheApprovedStatusWrite_CarriesTheCommit()
     {
         await SeedAsync("C1");
@@ -84,7 +82,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
         stored.PendingAccumulatorCommit.DueAtMs.Should().Be(AccumulatorOutboxItem.ToMs(Now + AccumulatorOutboxItem.InlineGrace));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task APendProjection_SavesNoCommit()
     {
         await SeedAsync("C1");
@@ -101,7 +99,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
     /// examiner's lock-fenced final write carries the commit instead) — and
     /// the commit with it.
     /// </summary>
-    [SkippableTheory]
+    [Theory]
     [InlineData(ClaimStatus.Pended)]
     [InlineData(ClaimStatus.Denied)]
     [InlineData(ClaimStatus.Voided)]
@@ -118,7 +116,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
 
     // ── due scan, reschedule, complete ──────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task TheEntry_IsDueAtItsTime_RescheduledAndClearedOnlyWhileItIsTheSame()
     {
         await SeedAsync("C1");
@@ -167,7 +165,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
     /// The review is its own write keyed on the commit id: saved after the slot was cleared by
     /// another attempt, a no-op for the same commit, replaced by a later commit's review.
     /// </summary>
-    [SkippableFact]
+    [Fact]
     public async Task TheReview_IsKeyedOnTheCommit_NotOnTheSlot()
     {
         await SeedAsync("C1");
@@ -193,7 +191,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
     }
 
     /// <summary>S3: the void write carries the terminal reversal (same write).</summary>
-    [SkippableFact]
+    [Fact]
     public async Task TheVoidWrite_CarriesTheReversal()
     {
         var claim = await SeedAsync("C1", ClaimStatus.Paid);
@@ -208,7 +206,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
         stored.PendingAccumulatorReversal.Reversal.BenefitPlanId.Should().Be(PlanId);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ThePendCodeQuery_FindsOnlyThatPend()
     {
         await SeedAsync("P1", ClaimStatus.Pended);
@@ -224,14 +222,12 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
     }
 
     /// <summary>
-    /// #1299 (Cosmos CI): an approval re-run that ends Deny on a Pended claim
-    /// writes its fenced projection; the status write is blocked (a pend is
-    /// never downgraded by the projection) and the contradictory-status repair
-    /// it then attempts must not fail. On Cosmos the repair predicate used
-    /// ARRAY_LENGTH, which the emulator cannot evaluate in a patch filter
-    /// (400), so the whole re-run threw.
+    /// #1299: an approval re-run that ends Deny on a Pended claim writes its
+    /// fenced projection; the status write is blocked (a pend is never
+    /// downgraded by the projection) and the contradictory-status repair it
+    /// then attempts must not fail.
     /// </summary>
-    [SkippableFact]
+    [Fact]
     public async Task AFencedDenyProjection_OnAPendedClaim_IsWritten_AndLeavesItPended()
     {
         await SeedAsync("PD", ClaimStatus.Pended);
@@ -253,7 +249,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
     /// re-run that pends again re-stamps PendedAt, so it goes to the back of
     /// the queue instead of refilling every batch (oldest-submitted-first did).
     /// </summary>
-    [SkippableFact]
+    [Fact]
     public async Task ThePendCodeQuery_ReturnsTheLeastRecentlyPendedFirst()
     {
         await SeedAsync("RETRIED", ClaimStatus.Pended);
@@ -273,7 +269,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
     /// be returned, or <c>limit</c> of them at the head would fill every batch
     /// forever and the re-runnable claim behind them would never be reached.
     /// </summary>
-    [SkippableFact]
+    [Fact]
     public async Task ThePendCodeQuery_ExcludesClaimsWithOtherPendReasons()
     {
         for (var i = 1; i <= 3; i++)
@@ -290,7 +286,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
         (await Repo.FindPendedByPendCodeAsync("PAUNAVAIL", 2)).Select(c => c.Id).Should().Equal("ONLY");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task TheSweepQuery_ReturnsFinalizedClaimsWithNoPendingCommit_InTheWindow()
     {
         await SeedAsync("A1", ClaimStatus.Approved, deductible: 10m, oop: 10m);
@@ -309,7 +305,7 @@ public abstract class ClaimRepositoryAccumulatorOutboxTests
 
     // ── accumulator totals (Redis rebuild source) ───────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task Totals_ExcludeSupersededVersions_AndListEachCountedClaim()
     {
         await SeedAsync("A1", ClaimStatus.Approved, deductible: 100m, oop: 120m);
@@ -360,42 +356,4 @@ public sealed class ClaimRepositoryAccumulatorOutboxMongoTests : ClaimRepository
     }
 
     public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
-}
-
-[Trait("Category", CosmosEmulator.Category)]
-[Collection(CosmosEmulatorFixture.CollectionName)]
-public sealed class ClaimRepositoryAccumulatorOutboxCosmosTests : ClaimRepositoryAccumulatorOutboxTests, IAsyncLifetime
-{
-    private const string ContainerName = "ClaimsV2";
-    private readonly CosmosEmulatorFixture _cosmos;
-    private CosmosClient _client = null!;
-    private IConfiguration _configuration = null!;
-
-    public ClaimRepositoryAccumulatorOutboxCosmosTests(CosmosEmulatorFixture cosmos) => _cosmos = cosmos;
-
-    protected override IClaimRepository Repo
-    {
-        get
-        {
-            var ctx = new DefaultHttpContext();
-            ctx.Items["TenantId"] = Tenant;
-            return new ClaimRepository(_client, _configuration, new HttpContextAccessor { HttpContext = ctx },
-                NullLogger<ClaimRepository>.Instance);
-        }
-    }
-
-    public async Task InitializeAsync()
-    {
-        _cosmos.SkipIfUnavailable();
-        _client = _cosmos.CreateClient(new CosmosSystemTextJsonSerializer());
-        var database = await _cosmos.CreateDatabaseAsync(_client, "claims");
-        await CosmosEmulatorFixture.CreateContainerAsync(database, ContainerName);
-        _configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["CosmosDb:DatabaseName"] = database.Id,
-            ["CosmosDb:ContainerName"] = ContainerName,
-        }).Build();
-    }
-
-    public Task DisposeAsync() => Task.CompletedTask;
 }

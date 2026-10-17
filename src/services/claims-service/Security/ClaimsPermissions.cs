@@ -23,7 +23,4 @@ public static class ClaimsPermissions
 
     /// <summary>Work the examiner queue: resolve (approve / deny) a pended claim.</summary>
     public const string WorkQueueWork = "workqueue:work";
-
-    /// <summary>The Cosmos partition migration reads and writes every tenant's claims.</summary>
-    public const string PlatformAdmin = "platform:admin";
 }

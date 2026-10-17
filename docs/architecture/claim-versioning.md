@@ -300,106 +300,14 @@ versioned entity's identity. Writing to a projection field doesn't
 change what the entity *is*, only what we *know about its operational
 status right now*.
 
-## Cosmos partition key — `/tenantId` (5.1b)
+## Storage
 
-5.1b moved the Claims Cosmos container from the legacy `/memberId`
-Bicep declaration / `/Id` runtime partition to the canonical
-`/tenantId` partition. Pattern parity with Provider, Benefit Plan,
-and AiExaminationAudit. The change eliminates cross-partition
-fan-out on the versioning surface (`GetLatestVersionAsync`,
-`GetVersionAsync`, `ListVersionsAsync`,
-`UpdateAdjudicationProjectionAsync`,
-`MarkSupersededProjectionAsync`, `MarkVoidedProjectionAsync`); each
-becomes an efficient single-partition operation.
-
-### Why a new container, not an in-place repartition
-
-Cosmos containers cannot be renamed and their partition key cannot
-be changed. Both the Bicep declaration and the SDK enforce this —
-the only "rename" Cosmos supports is delete + recreate, which
-destroys data. 5.1b therefore introduced a sibling container,
-`ClaimsV2`, declared at
-[infrastructure/azure/modules/cosmos-db.bicep](../../infrastructure/azure/modules/cosmos-db.bicep)
-with `partitionKey: ['/tenantId']`, and an operator-triggered
-migration job that copies documents from the legacy `Claims`
-container into `ClaimsV2`. The legacy container is preserved during
-a 30-day rollback window then removed in a focused follow-up Bicep
-PR.
-
-### Migration tooling shape
-
-`POST /api/v1/admin/claims/cosmos-migration/run` is the
-operator-facing surface, gated by
-`ClaimsCosmosMigration:MigrationsEnabled` (defaults to false; the
-deployment-layer ACL is the load-bearing authorization, the flag is
-a defence-in-depth tripwire). Mirrors the shape of
-`NetworkTierBackfillAdminController` in benefit-plan-service:
-503-when-disabled (not 404 — operators need to know the route
-exists and is intentionally gated), idempotent reruns, status
-endpoint at `GET /api/v1/admin/claims/cosmos-migration/status`.
-
-The migration logic lives in
-[`Services/Migrations/ClaimMigrationService.cs`](../../src/services/claims-service/Services/Migrations/ClaimMigrationService.cs).
-Three properties of the implementation are worth recording for
-future engineers:
-
-1. **Hydrate-on-write** — every document is passed through
-   `ClaimRepository.Hydrate` before writing to `ClaimsV2`. Legacy
-   rows missing `ClaimVersionId` (`""`), `VersionNumber` (`0`), or
-   `VersionState` (`Unknown`) land in the new container fully
-   canonicalized. Downstream readers don't need to re-Hydrate
-   post-migration.
-2. **Batched idempotency check** — for each page of source
-   documents (default 100), a single `ARRAY_CONTAINS(@ids, c.id)`
-   query against `ClaimsV2` partitioned by tenant resolves the
-   subset already migrated. Per-document point-reads would
-   dominate RU spend on rerun.
-3. **Single-flight semantics** — concurrent invocations are
-   rejected with 409 Conflict via an in-process running flag.
-   Two simultaneous runs would double-count outcomes and produce
-   confusing telemetry; operators get an explicit signal instead.
-
-### Cutover protocol
-
-1. Deploy the Bicep change (creates `ClaimsV2` alongside the
-   existing `Claims` container).
-2. Deploy claims-service with the migration capability
-   (`CosmosDb:ContainerName` still points at `Claims`).
-3. Set `ClaimsCosmosMigration:MigrationsEnabled=true` and run the
-   endpoint with `dryRun=true`. Verify counters and surface any
-   hydration anomalies before the apply pass.
-4. Re-run with `dryRun=false`. Idempotent reruns are safe.
-5. Plan a 2–5 minute low-traffic pause window. Drain the Service
-   Bus subscription, do a final delta migration pass, flip
-   `CosmosDb:ContainerName: "ClaimsV2"`, redeploy.
-6. Verify production traffic on `ClaimsV2` for the 30-day
-   retention window.
-7. Open the follow-up Bicep PR removing the legacy `Claims`
-   container declaration.
-
-### Defense-in-depth tenant guard preserved
-
-`GetByIdAsync`, `MarkSupersededProjectionAsync`, and
-`MarkVoidedProjectionAsync` still perform an in-memory
-`response.Resource.TenantId == tenantId` check after the
-partition-keyed read. With `/tenantId` partitioning a cross-tenant
-lookup surfaces as Cosmos 404 already, but the explicit equality
-check is intentionally retained: it makes the tenant-isolation
-contract explicit at the read point and catches any future code
-path that might bypass the partition-keyed read. Cheap, defensive,
-intentionally **NOT** dead code.
-
-### Known follow-up: Payments container
-
-The Payments Cosmos container at
-[infrastructure/azure/modules/cosmos-db.bicep](../../infrastructure/azure/modules/cosmos-db.bicep)
-also declares `/memberId` — out of scope for 5.1b. Worth a focused
-follow-up PR (mirroring the 5.1b shape) when payment-service
-operational pressure justifies it.
-
-### Operator runbook
-
-[`docs/migrations/claims-cosmos-partition-migration.md`](../migrations/claims-cosmos-partition-migration.md).
+Claims, their version events and adjustments are stored in MongoDB only
+(ADR 006). The 5.1b Cosmos partition-key migration (`ClaimsV2`, the
+`/api/v1/admin/claims/cosmos-migration` endpoints and their runbook) went
+with the Cosmos claim store in remediation Phase 5b. Every read and write
+filters on `TenantId`; `GetByIdAsync`, `MarkSupersededProjectionAsync` and
+`MarkVoidedProjectionAsync` also check the loaded row's `TenantId`.
 
 ## Tests
 
@@ -418,9 +326,7 @@ operational pressure justifies it.
   `UpdateAdjudicationProjectionAsync` bypass behavior, accumulator
   filter co-existence (legacy ClaimStatus + new ClaimVersionState).
 
-EphemeralMongo (MongoDB 7, one mongod per test collection via `tests/Shared/EphemeralMongo/MongoRunnerFixture.cs`) backs the Mongo-touching tests; the Cosmos repository
-exercises share their behavior with the Mongo backend through the
-common `IClaimRepository` interface.
+EphemeralMongo (MongoDB 7, one mongod per test collection via `tests/Shared/EphemeralMongo/MongoRunnerFixture.cs`) backs the repository tests.
 
 ## Out of scope for 5.1a
 
