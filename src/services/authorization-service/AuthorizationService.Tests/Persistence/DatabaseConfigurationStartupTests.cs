@@ -35,7 +35,7 @@ public sealed class DatabaseConfigurationStartupTests
         var act = () => host.Services.GetRequiredService<IServiceProvider>();
 
         act.Should().Throw<InvalidOperationException>()
-            .Where(e => e.ToString().Contains("MongoDb:ConnectionString"));
+            .Where(e => e.ToString().Contains("Database:Provider 'CosmosDb' is not supported"));
     }
 
     [Fact]
