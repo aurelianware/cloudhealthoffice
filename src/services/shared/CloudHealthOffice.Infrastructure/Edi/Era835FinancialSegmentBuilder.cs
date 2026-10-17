@@ -190,6 +190,24 @@ public static class Era835FinancialSegmentBuilder
         return $"TRN*1*{checkOrEftNumber}*{details.OriginatingCompanyId}~";
     }
 
+    /// <summary>
+    /// Loop 1000A N1 (Payer Identification). N103/N104 (XV, the CMS National
+    /// Plan ID) are situational: sent only when the payer has one. Without it
+    /// the segment ends at N102 rather than carrying a placeholder or an empty
+    /// N104 after a qualifier, either of which names the wrong payer or fails
+    /// the receiver's syntax check (N103 requires N104).
+    /// </summary>
+    public static string BuildPayerN1(string? payerName, string? planId)
+    {
+        var name = Clean(payerName);
+        var id = Clean(planId);
+        return string.IsNullOrWhiteSpace(id) ? $"N1*PR*{name}~" : $"N1*PR*{name}*XV*{id}~";
+    }
+
+    private static string Clean(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty
+            : value.Replace("*", " ").Replace("~", " ").Replace(":", " ").Replace("^", " ").Replace("\\", " ").Trim();
+
     private static bool HasDelimiter(string value) =>
         value.IndexOfAny(new[] { '*', '~', ':', '^' }) >= 0;
 }
