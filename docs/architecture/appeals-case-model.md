@@ -40,9 +40,9 @@ The track decides the clock, the notices, the audit universe and who gets the le
 |---|---|---|---|
 | Member | Self | **Member** | Member clocks and notices (422 subpart M, 438 subpart F, State law) |
 | Representative (AOR, POA, guardian) | Member | **Member** | Same; notices also to the representative |
-| Treating physician, MA **pre-service** | Member | **Member** | Allowed without an AOR after notifying the enrollee (422.578, 422.582(a)); any physician may request expedited |
+| Treating physician, MA **pre-service** | Member | **Member** | Allowed without an AOR after notifying the enrollee (422.578, 422.582(a)); a physician acting on the enrollee's behalf may request expedited |
 | Provider with member's written consent, Medicaid | Member | **Member** | Treated as the enrollee except it can't request continuation of benefits (438.402(c)(1)(ii)); only where State law permits |
-| **Non-contracted** provider, MA, payment denial | Self | **Member subpart M, provider variant** | Needs a signed **waiver of liability**; 60 days to file (65 from the remittance date); plan decides within 60 days or forwards to the IRE; notices go to the provider; the IDN may not be used (422.574(b), 422.582, 422.590(b); CMS PCD Guidance §50.1.1) |
+| **Non-contracted** provider, MA, payment denial | Self | **Member subpart M, provider variant** | Needs a signed **waiver of liability**; 60 days to file (65 from the remittance date); plan decides within 60 days or forwards to the IRE; notices go to the provider (422.574(b), 422.582, 422.590(b); CMS PCD Guidance §50.1.1); the IDN may not be sent to non-contract providers (PCD Guidance, notice section) |
 | Non-contracted provider, MA, **amount** paid only | Self | **Payment dispute** | Plan payment review, then the CMS Payment Dispute Resolution Contractor; not subpart M (422.214). *Current contractor and process document to confirm* |
 | **Contracted** provider, MA, payment | Self | **Provider contract dispute** | Provider contract terms; no subpart M rights when the enrollee owes nothing further (422.562(c)(2)) |
 | Provider, Medicaid, own behalf | Self | **Provider dispute (State)** | State law and the State contract (§5) |
@@ -50,7 +50,7 @@ The track decides the clock, the notices, the audit universe and who gets the le
 | Member or provider, about service or behavior, not a determination | — | **Grievance / complaint** | Member grievance or provider complaint rules |
 
 **Rules for the track:**
-- A request missing what its track needs (a waiver of liability, an AOR, member consent) doesn't silently switch tracks. It stays on its track with a work item to obtain the document, and is dismissed only as the rules allow (for MA, at the end of the adjudication time; PCD Guidance §50.9).
+- A request missing what its track needs (a waiver of liability, an AOR, member consent) doesn't silently switch tracks. It stays on its track with a work item to obtain the document, and is dismissed only as the rules allow (for MA, a missing waiver of liability at the end of the adjudication time, PCD Guidance §50.1.1; missing representative documentation, §20.2.1, *to confirm*).
 - A provider may file on one claim both for itself and, with an AOR, for the member. Those are two cases, linked.
 - The track is pinned when the case opens, like the rule pack version, and changes only by a recorded correction.
 
@@ -128,8 +128,8 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 | Member continuation | Appeal within 10 days of the notice; State Hearing within 10 days of the resolution | APL 21-011 |
 | Untranslated notice | Deemed exhaustion | APL 21-011 |
 | Member grievance | File within 180 days; acknowledge 5 calendar days; resolve 30 days, all internal levels included; urgent 72 hours (Medi-Cal) or 3 days with DMHC notice (Knox-Keene) | 28 CCR 1300.68; H&S Code §1368, §1368.01 |
-| Provider dispute | File within 365 days; acknowledge 2 working days (electronic) or 15 (paper); written determination within 45 working days; pay within 5 working days if overturned | 28 CCR 1300.71.38; DHCS APL 26-017 |
-| Recoupment | Request within 365 days of payment; provider contests within 30 working days as a provider dispute; **no offset while contested**, and only with a contract clause | 28 CCR 1300.71(b)(5), (d) |
+| Provider dispute | Filing window of at least 365 days; acknowledge 2 working days (electronic) or 15 (paper); written determination within 45 working days; pay within 5 working days if overturned | 28 CCR 1300.71.38; DHCS APL 26-017 |
+| Recoupment | Request within 365 days of payment; provider contests within 30 working days as a provider dispute; **no offset while contested**; offset only when the notice is uncontested, the provider hasn't repaid within 30 working days, and the contract allows it | 28 CCR 1300.71(b)(5), (d) |
 
 ### 5.3 Florida (SMMC)
 
@@ -144,7 +144,7 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 | Provider claim complaint | File within 90 days; acknowledge 3 business days; status notice every 30 days; resolve 60 days (denied claims) or 90 days | Att. II §VII.D.6.e |
 | Provider non-claim complaint | File within 45 days; acknowledge 3 business days; resolve 90 days | Att. II §VII.D.6.d |
 | State dispute program | File within 12 months of the plan's final determination; recommendation within 60–90 days; AHCA order within 30 days; loser pays | F.S. §408.7057 |
-| Recoupment | 30-month lookback; provider contests within 35 days; **no offset without written consent or a missed response** | F.S. §641.3155(5) |
+| Recoupment | 30-month lookback (12 months for providers licensed under chapters 458–461, 466 and 490); provider contests within 35 days; **no offset without written consent or a missed response** | F.S. §641.3155(5), (16) |
 
 ### 5.4 New York (Medicaid managed care)
 
@@ -156,9 +156,9 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 |---|---|---|
 | Member appeal: file / acknowledge / resolve | 60 days / 15 days / 30 days; expedited 72 hours (written notice within 24 hours of oral) | DOH timeframe comparison (rev. 6/2026) |
 | Missed UR appeal deadline | **Denial reversed** | PHL §4904 |
-| Complaint | Acknowledge 15 business days; resolve 45 days (max 60), expedited 48 hours | PHL §4408-a; DOH chart |
-| Complaint appeal | File within 60 business days; resolve 30 business days, urgent 2 business days | PHL §4408-a(8)–(11) |
-| Provider UR appeal | Retrospective only on its own; file within 45 days; acknowledge 15 days; decide 30 days | PHL §4904 |
+| Complaint | Acknowledge 15 business days; resolve 30 days (referral and coverage) or 45 days (other), expedited 48 hours | PHL §4408-a(4) |
+| Complaint appeal | Filing window of at least 60 business days; resolve 30 business days, urgent 2 business days | PHL §4408-a(8)–(11) |
+| Provider UR appeal | Retrospective only on its own; filing window of at least 45 days; acknowledge 15 days; decide within 30 days of receiving the needed information | PHL §4904 |
 | Provider external appeal | 60 days to file; reviewer fee may shift to the provider when a concurrent denial is upheld | PHL §4910, §4914 |
 | Recoupment | 30 days' notice; 24-month lookback; challenge procedure required; **no stated hold** | Ins. Law §3224-b |
 
@@ -186,9 +186,9 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 | Item | Value | Source |
 |---|---|---|
 | Member appeal: file / acknowledge / resolve | 60 days / 5 business days (1 day expedited) / 30 days (72 hours expedited), +14; missed deadline is **deemed denied** | R9-34-209, -213; ACC-RBHA contract Att. F1 |
-| Fair hearing window | Contract 90 days; rule text still 30. **Configure 90, record both** | Att. F1 ¶48; R9-34-217 |
+| Fair hearing window | Contract 90 days; rule text still 30, below the federal 90-day minimum in 42 CFR 438.408(f)(2). **Configure 90, record both** | Att. F1 ¶48; R9-34-217 |
 | Member grievance | Resolve within 10 business days, never more than 90; no fair hearing | Att. F1 ¶16; R9-34-212 |
-| Provider claim dispute | File by the latest of 12 months from service, 12 months from eligibility posting, or 60 days after payment, denial or recoupment; acknowledge 5 business days; decision within 30 days; hearing request within 30 days | A.R.S. §36-2903.01; R9-34-405; Att. F2 |
+| Provider claim dispute | File by the latest of 12 months from service, 12 months from eligibility posting, or 60 days after denial of a timely claim (statute); the contract extends the 60 days to payment, denial or recoupment; acknowledge 5 business days; decision within 30 days; hearing request within 30 days | A.R.S. §36-2903.01(B)(4); Att. F2; R9-34-405 |
 | Recoupment | AHCCCS approval for recoupments over 12 months after payment or above the dollar threshold; notice must state the right to file a claim dispute; hold while disputed *to confirm* | ACOM 412 (10/2026) |
 | Notices | AHCCCS NABD template; 6th-grade reading level, 12-point minimum | ACOM 414, 404 |
 
@@ -204,8 +204,8 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 | Member appeal: file / resolve | 60 days / **15 business days**, **expedited 24 hours** after information received, +14 | HCI contract model (Aug 2025) §5.30.3 |
 | Member grievance | Acknowledge **48 hours**; resolve 90 days | §5.30.1 |
 | Provider dispute (MCO) | Substantive response within 30 days | §5.29.7.4 |
-| Provider Complaint Portal | File between 30 days after the internal filing and the earlier of 60 days after it or 30 days after its resolution; MCO proposal 30 days; HFS review decision final | 305 ILCS 5/5-30.1(g-8); 89 IAC 140.75 |
-| Recoupment | Remittance must explain it; 60 days to appeal; 12-month lookback (215 ILCS 5/368d); fraud recoveries need OIG approval and a provider appeal first (contract §5.35.10) | |
+| Provider Complaint Portal | File no sooner than 30 days after the internal filing, and no later than 30 days after an unsatisfactory resolution or 60 days after the internal filing (HFS notices treat 60 days after filing as the outer limit); MCO proposal 30 days; HFS review decision final | 305 ILCS 5/5-30.1(g-8); 89 IAC 140.75 |
+| Recoupment | Remittance must explain it; 60 days to appeal; 12-month lookback, except fraud and recoupment HFS requires under federal Medicaid rules (215 ILCS 5/368d); fraud recoveries need OIG approval and a provider appeal first (contract §5.35.10) | |
 
 *New HealthChoice contracts were awarded in June 2026; confirm against the new contract text when published.*
 
@@ -262,7 +262,7 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 ### 5.11 What the States show
 
 - **Member clocks vary more than expected:** expedited appeals of 24 hours (Illinois), 48 hours (Florida) and 72 hours elsewhere; standard resolution of 10 working days (Colorado), 15 business days (Illinois) and 15 calendar days (Ohio) against the federal 30 days; Ohio requires State approval for any plan extension.
-- **Missed deadlines mean different things:** deemed exhaustion (most), reversal of the denial (New York UR), deemed denied (Arizona).
+- **Missed deadlines mean different things:** deemed exhaustion (most, including Arizona's "deemed denied"), and reversal of the denial (New York utilization review).
 - **Provider escalation differs everywhere:** a State agency (Texas, Illinois, Oklahoma), a State hearing (Arizona), an independent program (Florida), a regulator's complaint unit (California), a State external appeal (New York), State-run external medical review (Ohio), binding mediation or arbitration (Michigan), or only the plan's own process (Colorado managed care).
 - **Recoupment holds are State-specific:** explicit in California, Florida, Ohio, Colorado fee-for-service and Oklahoma (from 2027); partial in Texas and Illinois; not stated in New York or Michigan.
 - **Integrated duals are arriving:** Ohio's MyCare (2026) and Michigan's highly integrated D-SNPs (2026) need integrated notices and appeals, which [correspondence.md](correspondence.md) and these packs both have to support.
