@@ -1,7 +1,6 @@
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using CloudHealthOffice.Infrastructure.Serialization;
-using CloudHealthOffice.Testing.Cosmos;
 using CloudHealthOffice.Testing.Mongo;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
@@ -66,31 +65,5 @@ public class ClaimNoteRepositoryMongoTests
         {
             await _mongo.DropDatabaseAsync(database);
         }
-    }
-}
-
-[Trait("Category", CosmosEmulator.Category)]
-[Collection(CosmosEmulatorFixture.CollectionName)]
-public class ClaimNoteRepositoryCosmosTests
-{
-    private readonly CosmosEmulatorFixture _cosmos;
-
-    public ClaimNoteRepositoryCosmosTests(CosmosEmulatorFixture cosmos) => _cosmos = cosmos;
-
-    [SkippableFact]
-    public async Task ListsTheClaimsNotesInWrittenOrder_ScopedToTheTenant()
-    {
-        _cosmos.SkipIfUnavailable();
-        // The serializer AddChoDatabase registers for claims-service.
-        var client = _cosmos.CreateClient(new CosmosSystemTextJsonSerializer());
-        var database = await _cosmos.CreateDatabaseAsync(client, "claimnotes");
-        await CosmosEmulatorFixture.CreateContainerAsync(database, "ClaimNotes");
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["CosmosDb:DatabaseName"] = database.Id,
-        }).Build();
-
-        await ClaimNoteRepositoryContract.ListsTheClaimsNotesInWrittenOrder_ScopedToTheTenant(
-            new ClaimNoteRepositoryCosmos(client, configuration));
     }
 }

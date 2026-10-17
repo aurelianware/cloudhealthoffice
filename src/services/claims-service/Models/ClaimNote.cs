@@ -11,8 +11,6 @@ namespace ClaimsService.Models;
 /// The author and time come from the authenticated caller and the server
 /// clock, never from the request body, so the note history can stand as a
 /// record of who said what and when.
-///
-/// Cosmos partition key: TenantId.
 /// </summary>
 [BsonIgnoreExtraElements]
 public class ClaimNote

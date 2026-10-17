@@ -39,8 +39,8 @@
          NCCI engine class library for Column 1/2 (PTP) and MUE checks
          between BenefitCalculation (Order=300) and CoB (Order=500).
          Engine ships as a class library; auto-detect repository binds
-         to whichever backend (Mongo / Cosmos) AddChoInfrastructure
-         already registered for the host. -->
+         to the Mongo database AddChoInfrastructure registered for the
+         host. -->
     <ProjectReference Include="../../engines/CloudHealthOffice.NcciEngine/CloudHealthOffice.NcciEngine.csproj" />
     <!-- Capability 5.8 — CoordinationOfBenefitsStage uses the CobEngine
          class library for payer-order determination at Order=500.

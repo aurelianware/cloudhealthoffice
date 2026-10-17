@@ -56,9 +56,8 @@ domain-internal phasing tracked here.
 - Closer narrative — [`docs/architecture/claims-phase-1-closer.md`](../architecture/claims-phase-1-closer.md)
 - Phase 2 backlog (48 items across 10 categories) — [`docs/roadmap/claims-phase-2-backlog.md`](../roadmap/claims-phase-2-backlog.md)
 - CMS-0057-F readiness — [`docs/compliance/claims-cms-0057-f-readiness.md`](../compliance/claims-cms-0057-f-readiness.md)
-- V1 API surface (8 controllers / 47 verbs) — [`docs/api/claims-v1-surface.md`](../api/claims-v1-surface.md)
+- V1 API surface (7 controllers / 45 verbs) — [`docs/api/claims-v1-surface.md`](../api/claims-v1-surface.md)
 - 12 per-capability architecture docs unchanged — [`docs/architecture/claim-*.md`](../architecture/)
-- 5.1b operator runbook unchanged — [`docs/migrations/claims-cosmos-partition-migration.md`](../migrations/claims-cosmos-partition-migration.md)
 
 **Outstanding follow-ups (post-close):**
 

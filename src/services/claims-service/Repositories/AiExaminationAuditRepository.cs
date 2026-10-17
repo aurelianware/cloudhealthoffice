@@ -1,5 +1,4 @@
 using ClaimsService.Models;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 
 namespace ClaimsService.Repositories;
@@ -14,8 +13,7 @@ namespace ClaimsService.Repositories;
 ///     enforces single-write on agreement at the API surface; downstream
 ///     storage queries should treat all other fields as immutable.
 ///
-/// Tenant isolation: every read/write filters by TenantId. The Cosmos
-/// implementation uses TenantId as the partition key.
+/// Tenant isolation: every read/write filters by TenantId.
 /// </summary>
 public interface IAiExaminationAuditRepository
 {
@@ -146,109 +144,5 @@ public class AiExaminationAuditRepositoryMongo : IAiExaminationAuditRepository
 
         var options = new FindOneAndUpdateOptions<AiExaminationAudit> { ReturnDocument = ReturnDocument.After };
         return await _collection.FindOneAndUpdateAsync(filter, update, options, ct);
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Cosmos DB implementation
-// ─────────────────────────────────────────────────────────────────────────
-
-public class AiExaminationAuditRepositoryCosmos : IAiExaminationAuditRepository
-{
-    private readonly Container _container;
-    private readonly ILogger<AiExaminationAuditRepositoryCosmos> _logger;
-
-    public AiExaminationAuditRepositoryCosmos(
-        CosmosClient cosmosClient,
-        IConfiguration configuration,
-        ILogger<AiExaminationAuditRepositoryCosmos> logger)
-    {
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "ClaimsDB";
-        var containerName = configuration["CosmosDb:AiExaminationAuditContainer"] ?? "AiExaminationAudit";
-        _container = cosmosClient.GetContainer(databaseName, containerName);
-        _logger = logger;
-    }
-
-    public async Task<AiExaminationAudit> AppendAsync(AiExaminationAudit audit, CancellationToken ct = default)
-    {
-        if (string.IsNullOrEmpty(audit.Id)) audit.Id = Guid.NewGuid().ToString();
-        if (audit.GeneratedAt == default) audit.GeneratedAt = DateTime.UtcNow;
-        var response = await _container.CreateItemAsync(audit, new PartitionKey(audit.TenantId), cancellationToken: ct);
-        return response.Resource;
-    }
-
-    public async Task<IReadOnlyList<AiExaminationAudit>> GetByClaimAsync(
-        string claimId, string tenantId, CancellationToken ct = default)
-    {
-        var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.claimId = @claimId ORDER BY c.generatedAt DESC")
-            .WithParameter("@tenantId", tenantId)
-            .WithParameter("@claimId", claimId);
-
-        var iterator = _container.GetItemQueryIterator<AiExaminationAudit>(
-            query,
-            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
-
-        var results = new List<AiExaminationAudit>();
-        while (iterator.HasMoreResults)
-        {
-            var page = await iterator.ReadNextAsync(ct);
-            results.AddRange(page);
-        }
-        return results;
-    }
-
-    public async Task<AiExaminationAudit?> GetLatestAsync(
-        string claimId, string tenantId, CancellationToken ct = default)
-    {
-        var query = new QueryDefinition(
-            "SELECT TOP 1 * FROM c WHERE c.tenantId = @tenantId AND c.claimId = @claimId ORDER BY c.generatedAt DESC")
-            .WithParameter("@tenantId", tenantId)
-            .WithParameter("@claimId", claimId);
-
-        var iterator = _container.GetItemQueryIterator<AiExaminationAudit>(
-            query,
-            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
-
-        if (iterator.HasMoreResults)
-        {
-            var page = await iterator.ReadNextAsync(ct);
-            return page.FirstOrDefault();
-        }
-        return null;
-    }
-
-    public async Task<AiExaminationAudit?> SetExaminerAgreementAsync(
-        string claimId,
-        string tenantId,
-        string agreement,
-        string examinerUserId,
-        string? notes,
-        CancellationToken ct = default)
-    {
-        var latest = await GetLatestAsync(claimId, tenantId, ct);
-        if (latest is null) return null;
-
-        if (latest.ExaminerAgreement is not null)
-        {
-            _logger.LogInformation(
-                "Examiner agreement already set on audit {AuditId} for claim {ClaimId}; ignoring duplicate write",
-                latest.Id, claimId);
-            return latest;
-        }
-
-        latest.ExaminerAgreement = agreement;
-        latest.ExaminerActedAt = DateTime.UtcNow;
-        latest.ExaminerUserId = examinerUserId;
-        latest.ExaminerNotes = notes;
-
-        // ETag optimistic concurrency would be ideal here, but the read above
-        // doesn't capture _etag. The Mongo path uses a filter-on-null guard;
-        // the Cosmos path relies on the in-process check above plus the
-        // single-write contract enforced at the controller. If contention
-        // becomes a real issue, switch this to a patch with an etag pre-condition.
-        var response = await _container.ReplaceItemAsync(
-            latest, latest.Id, new PartitionKey(tenantId), cancellationToken: ct);
-        return response.Resource;
     }
 }

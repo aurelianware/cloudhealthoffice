@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **The native Cosmos DB SDK path (in progress, service by service).**
+  MongoDB is the only persistence path. Removed so far:
+  - **claims-service:** the Cosmos claim, claim-note and AI-examination-audit
+    repositories, the Cosmos-only noop adjustment repository and version-event
+    publisher, and the 5.1b Cosmos partition-key migration. That includes the
+    `POST /api/v1/admin/claims/cosmos-migration/run` and `GET …/status`
+    endpoints, which only worked in Cosmos mode, their
+    `ClaimsCosmosMigration` settings, metrics and runbook.
+  - The service now fails at start-up without `MongoDb:ConnectionString`
+    instead of falling back to `CosmosDb:*`. Claim adjustments therefore always
+    use the Mongo repository; Cosmos deployments used to get a repository that
+    threw on every write.
+
 ### Fixed
 
 - **Concurrent writes no longer silently overwrite each other (MongoDB).**

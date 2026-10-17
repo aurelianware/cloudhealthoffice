@@ -37,7 +37,7 @@ public class ClaimVersionEvent
     [Required]
     public string Id { get; set; } = string.Empty;
 
-    /// <summary><c>{TenantId}:{ClaimVersionId}</c> — first-class so Cosmos and Mongo both see it.</summary>
+    /// <summary><c>{TenantId}:{ClaimVersionId}</c> — first-class so queries and indexes see it.</summary>
     [Required]
     [StringLength(256)]
     public string PartitionKey { get; set; } = string.Empty;
