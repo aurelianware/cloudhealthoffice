@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -137,30 +138,6 @@ public static class ClaimAttachmentRules
         string.IsNullOrEmpty(checksum)
             ? string.Empty
             : checksum.Length <= 8 ? checksum : checksum[..8];
-
-    /// <summary>
-    /// Strip control characters (including CR/LF/Unicode separators) so
-    /// caller-supplied ids cannot forge additional log lines.
-    /// </summary>
-    public static string? SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return value;
-        }
-
-        var builder = new StringBuilder(value.Length);
-        foreach (var ch in value)
-        {
-            if (!char.IsControl(ch))
-            {
-                builder.Append(ch);
-            }
-        }
-
-        var sanitized = builder.ToString();
-        return sanitized.Length <= 128 ? sanitized : sanitized[..128];
-    }
 
     public static (GatewayErrorCategory Category, string Message)? ValidateRequest(
         ClaimAttachmentSubmissionRequest request,

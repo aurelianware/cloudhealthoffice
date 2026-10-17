@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -102,8 +103,8 @@ public sealed class RemittancePoster : IRemittancePoster
             {
                 _logger.LogWarning(
                     "Remittance claim post failed gateway={Gateway} id={RemittanceId} outcome={Outcome}",
-                    Sanitize(receipt.Gateway),
-                    Sanitize(receipt.RemittanceId),
+                    LogSanitizer.Sanitize(receipt.Gateway, 128),
+                    LogSanitizer.Sanitize(receipt.RemittanceId, 128),
                     claimPost.Outcome);
                 return new RemittancePostResult
                 {
@@ -199,9 +200,9 @@ public sealed class RemittancePoster : IRemittancePoster
             new KeyValuePair<string, object?>("cho.status", receipt.Status.ToString()));
         _logger.LogInformation(
             "Remittance posted gateway={Gateway} id={RemittanceId} tenant={TenantId} claims={Claims} accumulators={Accumulators}",
-            Sanitize(receipt.Gateway),
-            Sanitize(receipt.RemittanceId),
-            Sanitize(receipt.TenantId),
+            LogSanitizer.Sanitize(receipt.Gateway, 128),
+            LogSanitizer.Sanitize(receipt.RemittanceId, 128),
+            LogSanitizer.Sanitize(receipt.TenantId, 128),
             claimsPosted,
             accumulatorsApplied);
 
@@ -292,6 +293,4 @@ public sealed class RemittancePoster : IRemittancePoster
 
     private static string? FirstNonBlank(params string?[] values) =>
         values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
-
-    private static string? Sanitize(string? value) => ClaimAttachmentRules.SanitizeForLog(value);
 }

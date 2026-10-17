@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.BankReconciliation;
 
@@ -53,12 +54,6 @@ public sealed class BankReconciliationSummary
 /// </summary>
 public sealed class BankReconciliationRunner
 {
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
-
     private readonly IBankReconciliationStore _store;
     private readonly IBankReconciliationEventSink _events;
     private readonly BankReconciliationOptions _options;
@@ -177,7 +172,7 @@ public sealed class BankReconciliationRunner
         claim.Candidates = [.. decision.Candidates ?? []];
         if (!await _store.TryUpdateItemAsync(claim, claim.Version, ct))
         {
-            _logger.LogWarning("Reconciliation item {ItemId} changed while it was being decided", SanitizeForLog(id));
+            _logger.LogWarning("Reconciliation item {ItemId} changed while it was being decided", LogSanitizer.Sanitize(id));
             return null;
         }
 
@@ -192,7 +187,7 @@ public sealed class BankReconciliationRunner
 
         if (claim.IsOpen)
             _logger.LogWarning("Bank line {ItemId} ({Kind}, type {TypeCode}, {Amount} {Currency}) is waiting for review: {Status}",
-                SanitizeForLog(claim.Id), SanitizeForLog(claim.Kind), SanitizeForLog(claim.TypeCode), claim.Amount, SanitizeForLog(claim.Currency), claim.Status);
+                LogSanitizer.Sanitize(claim.Id), LogSanitizer.Sanitize(claim.Kind), LogSanitizer.Sanitize(claim.TypeCode), claim.Amount, LogSanitizer.Sanitize(claim.Currency), claim.Status);
 
         await PublishAsync(claim, BankReconciliationEvent.Decided, ct);
         return claim;
@@ -263,13 +258,13 @@ public sealed class BankReconciliationRunner
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "Bank reconciliation event for {ItemId} was not delivered; it is retried on the next run", SanitizeForLog(item.Id));
+            _logger.LogError(ex, "Bank reconciliation event for {ItemId} was not delivered; it is retried on the next run", LogSanitizer.Sanitize(item.Id));
             return;
         }
         if (type != BankReconciliationEvent.Decided) return;
         item.EventPublishedAt = _clock.GetUtcNow().UtcDateTime;
         if (!await _store.TryUpdateItemAsync(item, item.Version, ct))
-            _logger.LogInformation("Reconciliation item {ItemId} changed before its event was marked delivered", SanitizeForLog(item.Id));
+            _logger.LogInformation("Reconciliation item {ItemId} changed before its event was marked delivered", LogSanitizer.Sanitize(item.Id));
     }
 
     private ReconciliationItem NewItem(BankTransaction tx, string id, DateTime now) => new()

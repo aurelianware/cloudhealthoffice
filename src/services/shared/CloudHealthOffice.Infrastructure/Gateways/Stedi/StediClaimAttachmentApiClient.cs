@@ -6,6 +6,7 @@ using CloudHealthOffice.Infrastructure.Gateways.Stedi.Mapping;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 
@@ -135,7 +136,7 @@ internal sealed class StediClaimAttachmentApiClient
             {
                 _logger.LogInformation(
                     "Stedi claim attachment upload completed contentType={ContentType} contentLength={ContentLength}",
-                    ClaimAttachmentRules.SanitizeForLog(contentType), content.ContentLength);
+                    LogSanitizer.Sanitize(contentType, 128), content.ContentLength);
                 return;
             }
 

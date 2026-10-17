@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -392,7 +393,7 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
                 record.LastError = "outbox-publish-failed";
                 _logger.LogWarning(
                     "Failed to publish remittance event type={EventType} gateway={Gateway}",
-                    Sanitize(entry.EventType), Sanitize(record.Gateway));
+                    LogSanitizer.Sanitize(entry.EventType, 128), LogSanitizer.Sanitize(record.Gateway, 128));
             }
         }
 
@@ -404,8 +405,8 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
             "Remittance {Gateway} id={RemittanceId} tenant={TenantId} status={Status} " +
             "claims={ClaimCount} matched={Matched} replay={Replay} category={Category}",
             record.Gateway,
-            Sanitize(record.RemittanceId),
-            Sanitize(record.TenantId),
+            LogSanitizer.Sanitize(record.RemittanceId, 128),
+            LogSanitizer.Sanitize(record.TenantId, 128),
             record.Status,
             record.Claims.Count,
             record.Claims.Count(c => c.MatchStatus == RemittanceClaimMatchStatus.Matched),
@@ -429,6 +430,4 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
                     ? "matched"
                     : "unmatched"));
     }
-
-    private static string? Sanitize(string? value) => ClaimAttachmentRules.SanitizeForLog(value);
 }

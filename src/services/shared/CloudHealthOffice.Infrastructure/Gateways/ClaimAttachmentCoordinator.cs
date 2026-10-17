@@ -3,6 +3,7 @@ using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -196,7 +197,7 @@ internal sealed class ClaimAttachmentCoordinator
             record.CompletedAtUtc = _timeProvider.GetUtcNow();
             await _attachments.SaveAsync(record, ct).ConfigureAwait(false);
             _logger.LogError(ex, "Unexpected error submitting claim attachment {AttachmentId} transmission={TransmissionId}",
-                Sanitize(request.AttachmentId), Sanitize(request.TransmissionId));
+                LogSanitizer.Sanitize(request.AttachmentId, 128), LogSanitizer.Sanitize(request.TransmissionId, 128));
             return Fail(gatewayName, request, startedAt, stopwatch, record.RetryCount,
                 GatewayErrorCategory.Internal, record.ErrorMessage);
         }
@@ -335,16 +336,16 @@ internal sealed class ClaimAttachmentCoordinator
             "status={Status} category={ErrorCategory} latencyMs={LatencyMs} retries={RetryCount} extId={ExternalTransactionId}",
             metadata.GatewayName,
             metadata.TransactionType,
-            Sanitize(request.AttachmentId),
-            Sanitize(request.TransmissionId),
-            Sanitize(ClaimAttachmentRules.NormalizeContentType(request.ContentType)),
+            LogSanitizer.Sanitize(request.AttachmentId, 128),
+            LogSanitizer.Sanitize(request.TransmissionId, 128),
+            LogSanitizer.Sanitize(ClaimAttachmentRules.NormalizeContentType(request.ContentType), 128),
             contentLength,
             ClaimAttachmentRules.ChecksumPrefix(checksum),
             metadata.Status,
             metadata.ErrorCategory,
             metadata.Latency.TotalMilliseconds,
             metadata.RetryCount,
-            Sanitize(metadata.ExternalTransactionId));
+            LogSanitizer.Sanitize(metadata.ExternalTransactionId, 128));
 
     private static void RecordMetric(
         string gatewayName,
@@ -403,9 +404,7 @@ internal sealed class ClaimAttachmentCoordinator
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Claim attachment audit publish failed for attachment={AttachmentId}",
-                Sanitize(request.AttachmentId));
+                LogSanitizer.Sanitize(request.AttachmentId, 128));
         }
     }
-
-    private static string? Sanitize(string? value) => ClaimAttachmentRules.SanitizeForLog(value);
 }
