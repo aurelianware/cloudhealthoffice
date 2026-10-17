@@ -134,6 +134,9 @@ public interface IPaymentService
 
     /// <summary>Every payment that paid (or recouped) a claim.</summary>
     Task<List<PaymentView>> GetPaymentsForClaimAsync(string claimId);
+
+    /// <summary>A payee's checks and EFTs by NPI, newest first.</summary>
+    Task<List<PaymentView>> GetPaymentsForPayeeAsync(string npi, int limit = 100);
 }
 
 public sealed class PaymentService : IPaymentService
@@ -179,4 +182,7 @@ public sealed class PaymentService : IPaymentService
 
     public async Task<List<PaymentView>> GetPaymentsForClaimAsync(string claimId) =>
         await GetAsync<List<PaymentView>>($"/claim/{E(claimId)}") ?? new();
+
+    public async Task<List<PaymentView>> GetPaymentsForPayeeAsync(string npi, int limit = 100) =>
+        await GetAsync<List<PaymentView>>($"/payee/{E(npi)}?limit={limit}") ?? new();
 }

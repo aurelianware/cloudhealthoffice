@@ -1,0 +1,80 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceProvider Services
+@* A provider's checks and EFTs by payee NPI, newest first: what provider
+   relations needs on a "where's my money" call. Shown to payments:read
+   holders; each payment opens its record. *@
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="provider-payments-error">@_error</MudAlert>
+}
+else if (_payments is null)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_payments.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" data-testid="provider-payments-empty">No payments to NPI @Npi.</MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+        @_payments.Count payment@(_payments.Count == 1 ? "" : "s") to NPI @Npi, totalling @_payments.Sum(p => p.TotalPaymentAmount).ToString("C")@(_payments.Count >= Limit ? $" (newest {Limit} shown)" : "").
+    </MudText>
+    <MudSimpleTable Dense="true" Hover="true">
+        <thead><tr><th>Payment</th><th>Date</th><th>Status</th><th style="text-align:right;">Claims</th><th style="text-align:right;">Amount</th></tr></thead>
+        <tbody>
+            @foreach (var payment in _payments)
+            {
+                <tr data-testid="provider-payment">
+                    <td><RecordLink Href="@($"/payments/{Uri.EscapeDataString(payment.Id)}")">@payment.Label</RecordLink></td>
+                    <td>@payment.PaymentDate.ToString("MM/dd/yyyy")</td>
+                    <td>
+                        @payment.Status
+                        @if (payment.IsReversal)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-1">Reversal</MudChip>
+                        }
+                    </td>
+                    <td style="text-align:right;">@payment.ClaimPayments.Count</td>
+                    <td style="text-align:right;">@payment.TotalPaymentAmount.ToString("C")</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Npi { get; set; } = string.Empty;
+
+    private const int Limit = 100;
+    private List<PaymentView>? _payments;
+    private string? _error;
+    private string? _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == Npi) return;
+        _loadedFor = Npi;
+        _payments = null;
+        _error = null;
+        if (string.IsNullOrWhiteSpace(Npi))
+        {
+            _payments = new();
+            return;
+        }
+        if (Services.GetService<IPaymentService>() is not { } payments)
+        {
+            _error = "Payments aren't available here.";
+            return;
+        }
+        try
+        {
+            _payments = await payments.GetPaymentsForPayeeAsync(Npi, Limit);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = $"Payments couldn't be loaded: {ex.Message}";
+        }
+    }
+}
