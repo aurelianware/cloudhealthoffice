@@ -9,7 +9,7 @@ namespace AttachmentService.Models;
 public class TradingPartner
 {
     /// <summary>
-    /// Unique identifier for the trading partner (Cosmos DB 'id')
+    /// Unique identifier for the trading partner
     /// </summary>
     [Required]
     [StringLength(100)]
