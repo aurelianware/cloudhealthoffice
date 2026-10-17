@@ -5,7 +5,7 @@ namespace MemberService.Tests.Fakes;
 
 /// <summary>
 /// In-memory fake for <see cref="IFamilyRelationshipRepository"/>. Emulates the
-/// same-tenant / symmetric-pair invariants enforced by the Cosmos and Mongo impls
+/// same-tenant / symmetric-pair invariants enforced by the Mongo impl
 /// so service-layer tests can exercise the full behavior contract.
 /// </summary>
 public sealed class InMemoryFamilyRelationshipRepository : IFamilyRelationshipRepository

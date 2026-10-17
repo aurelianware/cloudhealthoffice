@@ -3,8 +3,8 @@ using MemberService.Models;
 namespace MemberService.Services;
 
 /// <summary>
-/// Publishes <see cref="MemberEvent"/>s. Authoritative store in this PR is the Cosmos
-/// <c>member-events</c> container (<see cref="CosmosMemberEventPublisher"/>). Downstream
+/// Publishes <see cref="MemberEvent"/>s. Authoritative store is the MongoDB
+/// <c>member-events</c> collection (<see cref="MemberEventPublisher"/>). Downstream
 /// fan-out (bus publishers) can be layered via a decorator/composite without touching
 /// call sites.
 ///

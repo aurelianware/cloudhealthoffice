@@ -38,7 +38,7 @@ public class AddressChangedIdempotencyTests
         });
 
         var events = new InMemoryMemberEventRepository();
-        var publisher = new CosmosMemberEventPublisher(events, NullLogger<CosmosMemberEventPublisher>.Instance);
+        var publisher = new MemberEventPublisher(events, NullLogger<MemberEventPublisher>.Instance);
         var ctl = new MembersController(
             repo,
             publisher,

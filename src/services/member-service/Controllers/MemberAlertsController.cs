@@ -266,7 +266,7 @@ public class MemberAlertsController : ControllerBase
     private async Task PublishViewedAsync(string memberId, string scope, int count, CancellationToken ct)
     {
         // Best-effort audit: a failure in the event publisher (downstream
-        // Cosmos/Mongo hiccup, concurrency retries exhausted) must not fail
+        // MongoDB hiccup, concurrency retries exhausted) must not fail
         // the read. The tradeoff is a potentially missing audit row; the
         // repository-level audit on Create/End is the primary integrity
         // guarantee, so missing Viewed rows degrade rather than break.

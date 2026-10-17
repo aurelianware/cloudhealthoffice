@@ -22,7 +22,7 @@ namespace MemberService.Models;
 [BsonIgnoreExtraElements]
 public class FamilyRelationship
 {
-    /// <summary>Cosmos document id / Mongo _id.</summary>
+    /// <summary>MongoDB document id (_id).</summary>
     [Required]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
@@ -36,8 +36,8 @@ public class FamilyRelationship
     public long Revision { get; set; }
 
     /// <summary>
-    /// Partition key. Both sides of a symmetric pair share the same tenant, so the two
-    /// rows live in the same Cosmos partition and can be written in a TransactionalBatch.
+    /// Owning tenant. Both sides of a symmetric pair share the same tenant; the two
+    /// rows are written together in one MongoDB transaction.
     /// </summary>
     [Required]
     [StringLength(100)]

@@ -22,7 +22,7 @@ public class FamilyRelationshipsControllerTests
         var rels = new InMemoryFamilyRelationshipRepository();
         var svc = new FamilyRelationshipService(rels, members);
         var events = new InMemoryMemberEventRepository();
-        var publisher = new CosmosMemberEventPublisher(events, NullLogger<CosmosMemberEventPublisher>.Instance);
+        var publisher = new MemberEventPublisher(events, NullLogger<MemberEventPublisher>.Instance);
         var enc = new NoOpIdentifierEncryptor();
         var ctl = new FamilyRelationshipsController(svc, members, publisher, enc);
 

@@ -28,7 +28,7 @@ public class DownstreamRouteContractTests
             {
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    // Force Mongo branch (no Cosmos creds required). Fake host so
+                    // Coverage requires a Mongo connection string. Fake host so
                     // the MongoClient constructor succeeds; no I/O runs because
                     // we replace the repository below.
                     ["MongoDb:ConnectionString"] = "mongodb://fake-contract-host:27017",
@@ -53,8 +53,7 @@ public class DownstreamRouteContractTests
             {
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    // Enrollment-import now speaks MongoDB (migrated off Cosmos —
-                    // see PR #1005). Force the Mongo branch with a fake host so
+                    // Enrollment-import requires a Mongo connection string. Fake host so
                     // the MongoClient constructor succeeds; no I/O runs because
                     // we replace the repositories below. Same pattern as
                     // CoverageFactory above.
