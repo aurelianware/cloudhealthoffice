@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     dead-lettered.
   - A crashed consume loop stops the host instead of exiting silently.
   - The Anthropic client retries 429 and 529.
+  - An Anthropic outage that outlasts those retries no longer escalates the
+    claim to a person for good. That covers 429, 529, an open circuit and
+    a timeout. The orchestrator throws `ExaminerTransientException` and
+    writes nothing, and the consumer retries the message, then
+    dead-letters it. Other Anthropic failures still write `EscalateToHuman`.
   - Model dispositions outside the known set escalate to a human.
 - **A client's resilience timeouts follow its own `HttpClient.Timeout`.**
   The shared pipeline had given every client a 10 s attempt and a 30 s total

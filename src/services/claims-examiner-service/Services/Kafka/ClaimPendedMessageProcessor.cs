@@ -38,7 +38,8 @@ public enum ClaimPendedMessageOutcome
 /// <list type="bullet">
 ///   <item>an unreadable message is skipped, since a retry cannot fix it;</item>
 ///   <item>a transient failure (<see cref="ExaminerTransientException"/>, when
-///     claims-service is unreachable) is retried with backoff up to
+///     claims-service is unreachable, or Anthropic is rate limited, overloaded,
+///     behind an open circuit or timed out) is retried with backoff up to
 ///     <see cref="ClaimPendedConsumerOptions.MaxAttempts"/>, then dead-lettered;</item>
 ///   <item>any other failure is dead-lettered at once;</item>
 ///   <item>a dead-letter publish that fails is retried until it succeeds, so a
