@@ -100,6 +100,17 @@ The export layouts are versioned CMS program audit templates; see [appeals-griev
 4. **Wrap-up:** Claude drafts the summary and a suggested classification and reasons from the transcript or notes. The rep edits and accepts. A person makes the final classification every time.
 5. **Follow-ups:** each one becomes a work item (WorkType `Inquiry`, or the case type) with a due date, routed by queue membership and worked through Get Next.
 
+### 6.1 Letters and notices
+
+How the module works with [correspondence.md](correspondence.md) (details in its §9.1):
+
+- **One-click letter actions are correspondence requests.** Reprint ID card, send EOB copy and resend a letter go through the correspondence service with the contact as their source, so they get the same templates, delivery and proof as any other letter. A lost-card request appears in the member's ID card request history ([correspondence.md](correspondence.md) §10.1).
+- **Cases opened from a call get their letters from the rule pack.** A grievance or appeal classified on the call gets its acknowledgment, extension and resolution notices automatically.
+- **Outbound calls can be notices.** An outbound contact classified as a notice records `OralNoticeGiven` on the case, with the time and whether it was a conversation or a voicemail. That covers MA expedited decisions, Medicaid extension notices and oral responses to oral MA grievances; the written confirmation's clock starts from the call. Failed attempts are recorded, and the written notice goes out on time regardless.
+- **Correspondence panel in the 360 view:** every letter sent to the member or provider, with its letter date, the date it left the plan, USPS events, returns and portal views. The rep answers "I never got my letter" from the panel and can reissue in one action.
+- **Structured capture on the contact screen:** language and accessible-format preferences, address changes, and electronic delivery consent (for Medicare Advantage, consent must name the medium and the letter types), each recorded with the contact as its source.
+- **Letter problems become outbound calls.** Returned mail and failed electronic delivery can create outbound-call work items in the same queues.
+
 ## 7. Standalone beside QNXT
 
 - **Read adapters:** members/eligibility, claims and status, authorizations, providers and payments, through the core system's APIs or a read replica. Nothing is written back to the core system.
@@ -116,6 +127,7 @@ The export layouts are versioned CMS program audit templates; see [appeals-griev
 5. **AI wrap-up:** summary, suggested classification, complaint-language flag, supervisor sampling.
 6. **Phone integration:** screen pop and recording/transcript intake (Amazon Connect first).
 7. **Standalone adapters for QNXT.**
+8. **Correspondence links** (§6.1), as the matching correspondence steps land: letter actions and the correspondence panel with the portal inbox and first mail channel; oral notice from outbound contacts with the appeal notices; consent capture with electronic delivery.
 
 ## 9. Open questions
 

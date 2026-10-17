@@ -217,7 +217,7 @@ notices: [ {
 
 ## 6. How a letter moves
 
-1. **Trigger.** A domain event arrives over the shared message bus (see [shared-messagebus.md](shared-messagebus.md)), for example appeal `Decided`, `ExtensionTaken`, an authorization denial, a claim RFAI, or a new enrollment. A user can also request a letter from any record page, with a reason. The rule pack sets `dueBy`.
+1. **Trigger.** A domain event arrives over the shared message bus (see [shared-messagebus.md](shared-messagebus.md)), for example appeal `Decided`, `ExtensionTaken`, an authorization denial, a claim RFAI, or a new enrollment. A user can also request a letter from any record page, with a reason; a request made during a call in [cho-service.md](cho-service.md) records the contact as its source (reprint an ID card, resend a denial letter, send an EOB copy). The rule pack sets `dueBy`.
 2. **Resolve the template.** Letter type plus the case's line of business, state and product, and the recipient's language and format preference, pick the template version in effect on the trigger date. A missing template or translation fails loudly and opens a work item; it never silently skips a notice.
 3. **Compose and freeze.** CHO verifies the address, gathers the merge data, sets the **letter date to the channel's planned mail date**, records a hash of the data, renders the PDF with its required attachments (notice of availability, taglines), and stores it in the document store as *Correspondence: outbound letter*, linked to every subject. Copies for a representative or the provider are separate letters linked to the same case.
 4. **Check.** Automated checks before release: locked text unchanged, required blocks and attachments present, font sizes at or above the minimum, reading level within the template's limit, address verified.
@@ -261,7 +261,7 @@ Delivery uses the same adapter pattern as `IIdCardAdapter`: one `IDeliveryChanne
 - Paper stays the default for adverse determinations and resolutions.
 - Medicare Advantage: electronic only with opt-in consent naming the media and the specific letter types; paper on request within 3 business days; **automatic paper if electronic delivery fails**.
 - Medicaid: electronic only where the §438.10(c)(6) conditions are met and the State allows it; paper free on request within 5 business days.
-- Consent is recorded per member, per letter type and per medium, with its source and date.
+- Consent is recorded per member, per letter type and per medium, with its source and date. Consent given on a call is captured on the contact screen as a structured choice of media and letter types (§9.1), not a free-text note.
 
 ## 9. Proof and the clock
 
@@ -273,13 +273,23 @@ Delivery uses the same adapter pattern as `IIdCardAdapter`: one `IDeliveryChanne
 - **Reprints and re-dated letters are new letters** linked to the original. The original record never changes.
 - **Audit:** universe exports take notice dates from `LeftPlanControl`. For any case, an auditor can open the exact letter, its data snapshot, its IMb serial, its USPS events and the vendor's mailing record. Every view goes through the document store's access audit.
 
+### 9.1 Calls and oral notice
+
+[cho-service.md](cho-service.md) and correspondence share the case event log, work management and the document store, so they connect without new infrastructure:
+
+- **Oral notice is recorded from the call.** Several rules allow or require oral notice: Medicare Advantage expedited decisions and denials of requests to expedite (written confirmation within 3 calendar days), Medicaid appeal extensions the plan takes (prompt oral notice, written notice within 2 calendar days), and MA oral grievances, which may get an oral response unless the member asks for writing. CMS counts oral notice when the plan speaks to the enrollee or leaves a voicemail (PCD Guidance §10.5.3). An **outbound contact classified as a notice** records `OralNoticeGiven` on the case with its time, the notice it covers, and whether it was a conversation or a voicemail. The written confirmation's clock starts from that moment.
+- **An unreachable member doesn't stop the clock.** Failed call attempts are recorded on the contact, and the written notice still goes out within its deadline.
+- **The rep sees what was sent.** The contact's member and provider views include a correspondence panel: each letter with its letter date, left-plan-control date, USPS events, returns, portal views and a link to the stored letter. "I never got my letter" is answered from the panel, and a reissue is one action that keeps the original.
+- **Calls capture what letters need:** language and accessible-format preferences, address changes, and electronic delivery consent (§8), each with the contact as its source.
+- **Letter problems become calls.** Returned mail, a failed electronic delivery with no valid address, or an MA card past its due date can create an outbound-call work item in the same queues.
+
 ## 10. ID cards
 
 **CHO owns the ID card process, but not the card printing.**
 - **idcard-service stays the card domain owner:** card records, templates, signed QR, scan verification, revocation, key rotation and the QNXT mirror don't change.
 - **Physical cards use the shared delivery layer.** A mailed card is a card plus a carrier letter; the carrier letter is a correspondence template. `FulfillmentVendorAdapter` becomes a thin adapter onto the print-and-mail channel. Card stock printing and affixing stay with a card vendor.
 - **Deadlines are rule pack values:** for Medicare Advantage, 10 calendar days from CMS enrollment confirmation or the last day of the month before the effective date, whichever is later; State values for Medicaid.
-- **Triggers:** new enrollment, plan or product change, any change to information printed on the card (which requires reissue for Medicare Advantage), a lost-card request on a call, and revocation.
+- **Triggers:** new enrollment, plan or product change, any change to information printed on the card (which requires reissue for Medicare Advantage), a lost-card request on a call (linked to the contact in [cho-service.md](cho-service.md)), and revocation.
 - **Templates follow the standards:** State templates where required (Texas UMCM 3.6, 3.7), INCITS 284 and the WEDI guide for layout, and an integrated card for integrated D-SNPs from CY2027.
 - **Digital cards** are offered as a FHIR `Coverage` following the CARIN Digital Insurance Card IG, alongside the existing PDF, PNG and signed QR.
 - **Bulk reissue** (open enrollment, plan-wide changes) is a correspondence batch job: one batch, one manifest, per-member proof.
