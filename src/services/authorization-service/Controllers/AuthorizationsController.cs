@@ -653,6 +653,76 @@ public class AuthorizationsController : ControllerBase
     }
 
     /// <summary>
+    /// Authorization Insights (portal-navigation.md §5.1): the CMS-0057
+    /// reporting figures for requests submitted in [from, to] (volume,
+    /// approval and denial rates, decision timeliness standard vs expedited),
+    /// the review queue now by status and SLA escalation, and top denial
+    /// reasons. Aggregates only; each figure's authorizations are listed by
+    /// <c>insights/list</c> with the same criteria.
+    /// </summary>
+    [HttpGet("insights")]
+    [ProducesResponseType(typeof(AuthorizationInsights), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AuthorizationInsights>> GetAuthorizationInsights(
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] LineOfBusiness? lineOfBusiness = null)
+    {
+        if (InsightsPeriod(from, to) is not { } period) return BadRequest(new { error = "from must be before to, at most a year apart" });
+
+        var activity = await _authorizationRepository.ListActivityBetweenAsync(period.From, period.To);
+        var open = await _authorizationRepository.GetOpenAuthorizationsAsync(_currentActor.TenantId);
+        return Ok(AuthorizationInsightSets.Build(activity, open, period.From, period.To, lineOfBusiness, DateTime.UtcNow));
+    }
+
+    /// <summary>
+    /// The authorizations behind one Insights figure (newest first, at most
+    /// <paramref name="limit"/>): the drill-down. Logged in the access log.
+    /// </summary>
+    [AuditRecordAccess("Authorization", RecordAccessActions.List)]
+    [HttpGet("insights/list")]
+    [ProducesResponseType(typeof(IEnumerable<Authorization>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IEnumerable<Authorization>>> ListAuthorizationInsight(
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] LineOfBusiness? lineOfBusiness = null,
+        [FromQuery] string scope = AuthorizationInsightSets.PeriodScope,
+        [FromQuery] string? requestType = null,
+        [FromQuery] string? outcome = null,
+        [FromQuery] bool? withinTimeframe = null,
+        [FromQuery] bool? automated = null,
+        [FromQuery] string? denialReasonCode = null,
+        [FromQuery] AuthorizationStatus? status = null,
+        [FromQuery] SlaEscalationLevel? sla = null,
+        [FromQuery] int limit = 500)
+    {
+        if (scope is not (AuthorizationInsightSets.PeriodScope or AuthorizationInsightSets.QueueScope))
+            return BadRequest(new { error = "scope is period or queue" });
+        if (InsightsPeriod(from, to) is not { } period) return BadRequest(new { error = "from must be before to, at most a year apart" });
+
+        var criteria = new AuthorizationInsightCriteria
+        {
+            Scope = scope, RequestType = requestType, Outcome = outcome, WithinTimeframe = withinTimeframe,
+            Automated = automated, DenialReasonCode = denialReasonCode, Status = status, Sla = sla,
+        };
+        var activity = scope == AuthorizationInsightSets.PeriodScope
+            ? await _authorizationRepository.ListActivityBetweenAsync(period.From, period.To)
+            : [];
+        var open = scope == AuthorizationInsightSets.QueueScope
+            ? await _authorizationRepository.GetOpenAuthorizationsAsync(_currentActor.TenantId)
+            : [];
+        return Ok(AuthorizationInsightSets.List(criteria, activity, open, period.From, period.To, lineOfBusiness, limit));
+    }
+
+    private static (DateTime From, DateTime To)? InsightsPeriod(DateTime? from, DateTime? to)
+    {
+        var toDate = (to ?? DateTime.UtcNow).ToUniversalTime();
+        var fromDate = (from ?? toDate.AddDays(-30)).ToUniversalTime();
+        return fromDate < toDate && toDate - fromDate <= TimeSpan.FromDays(366) ? (fromDate, toDate) : null;
+    }
+
+    /// <summary>
     /// CMS-0057-F public-reporting metrics for requests submitted in the period
     /// (default: the current calendar year to date): approved and denied
     /// percentages and average and median decision time, for standard and

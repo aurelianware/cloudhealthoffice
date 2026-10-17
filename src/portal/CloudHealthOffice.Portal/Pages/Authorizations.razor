@@ -5,18 +5,33 @@
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 @inject CloudHealthOffice.Portal.Infrastructure.ISearchCriteriaPolicy SearchPolicy
 @inject IDialogService DialogService
+@inject NavigationManager Navigation
 
 <PageTitle>Authorizations - Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="authorizations:read" RoleName="UMCoordinator">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h3" GutterBottom="true">
-        <MudIcon Icon="@Icons.Material.Filled.FactCheck" Class="mr-2" />
-        Prior Authorizations
-    </MudText>
+    <div class="d-flex align-center justify-space-between flex-wrap gap-2">
+        <MudText Typo="Typo.h3" GutterBottom="true">
+            <MudIcon Icon="@Icons.Material.Filled.FactCheck" Class="mr-2" />
+            Prior Authorizations
+        </MudText>
+        <ModuleViewSwitch ListHref="/authorizations" InsightsHref="/authorizations/insights" Active="list" />
+    </div>
+    @* Decision times are measured on Insights, not claimed here. *@
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
-        Real-time prior authorization management • Avg decision time: &lt;2 minutes
+        Search prior authorization requests and decisions.
     </MudText>
+
+    @if (_drillDown is not null)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.Insights" data-testid="authorizations-drilldown">
+            <div class="d-flex align-center justify-space-between flex-wrap gap-2">
+                <span>From Authorization Insights: <strong>@DrillDownDescription</strong></span>
+                <MudButton Variant="Variant.Text" Size="Size.Small" Href="/authorizations" data-testid="authorizations-drilldown-clear">Clear</MudButton>
+            </div>
+        </MudAlert>
+    }
 
     @if (_serviceError != null)
     {
@@ -232,9 +247,43 @@
     private bool _showValidationMessage = false;
     private bool _requireCriteria = true;
 
+    // An Insights drill-down: the criteria in the URL, listed by
+    // authorization-service with the predicate the figure was counted with.
+    private Dictionary<string, string>? _drillDown;
+
+    private string DrillDownDescription
+    {
+        get
+        {
+            var d = _drillDown!;
+            string? V(string k) => d.TryGetValue(k, out var v) ? v : null;
+            var parts = new List<string>();
+            parts.Add(V("scope") == "queue" ? "open now" : "submitted in the period");
+            if (V("requestType") is { } t) parts.Add(t.ToLowerInvariant());
+            if (V("outcome") is { } o) parts.Add(o.ToLowerInvariant());
+            if (V("withinTimeframe") == "true") parts.Add("decided within the timeframe");
+            if (V("withinTimeframe") == "false") parts.Add("decided late");
+            if (V("automated") == "true") parts.Add("decided by an automated rule");
+            if (V("denialReasonCode") is { } c) parts.Add(c == AuthorizationDrillDown.UnspecifiedCode ? "denied with no reason code" : $"denial reason {c}");
+            if (V("status") is { } st) parts.Add($"status {st}");
+            if (V("sla") is { } sla) parts.Add($"SLA {sla}");
+            if (V("lob") is { } lob) parts.Add(lob);
+            return string.Join(", ", parts);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _requireCriteria = await SearchPolicy.RequiresCriteriaAsync();
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Navigation.Uri).Query);
+        if (query.ContainsKey("scope"))
+        {
+            _drillDown = AuthorizationDrillDown.Keys
+                .Where(k => query.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v.ToString()))
+                .ToDictionary(k => k, k => query[k].ToString());
+            await LoadDrillDownAsync();
+            return;
+        }
         if (!_requireCriteria)
         {
             // Demo tenants (synthetic data) open on a browsable list.
@@ -250,6 +299,27 @@
     private bool HasCriteria =>
         !string.IsNullOrWhiteSpace(_authIdSearch) ||
         !string.IsNullOrWhiteSpace(_memberIdSearch);
+
+    private async Task LoadDrillDownAsync()
+    {
+        _loading = true;
+        try
+        {
+            _allAuthorizations = await AuthorizationService.ListAuthorizationInsightAsync(_drillDown!);
+            _filteredAuthorizations = _allAuthorizations.ToList();
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _serviceError = ex.Message;
+            _allAuthorizations = new();
+            _filteredAuthorizations = new();
+        }
+        finally
+        {
+            _hasSearched = true;
+            _loading = false;
+        }
+    }
 
     private async Task SearchAuthorizations()
     {
