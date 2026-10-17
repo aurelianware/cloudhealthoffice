@@ -1,9 +1,6 @@
-// REFERENCE ONLY — not compiled; see D-31 in docs/epa-gap-matrix.md.
-// This snapshot of the benefit-plan wiring still registers its own CosmosClient
-// (SDK default Newtonsoft serializer), which D-31 removed from the real
-// src/services/benefit-plan-service/Program.cs. Do not copy that registration.
+// REFERENCE ONLY — not compiled. MongoDB is the only store; the real
+// src/services/benefit-plan-service/Program.cs is authoritative.
 
-using Microsoft.Azure.Cosmos;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
@@ -26,30 +23,17 @@ builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // ── Database backend ──────────────────────────────────────────────────────────
-var useMongo = !string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]);
+var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+if (string.IsNullOrEmpty(mongoConnectionString))
+    throw new InvalidOperationException(
+        "Benefit Plan Service requires a database. Configure MongoDb:ConnectionString.");
 
-if (useMongo)
-{
-    builder.Services.AddSingleton<IMongoClient>(sp =>
-        new MongoClient(builder.Configuration["MongoDb:ConnectionString"]));
-    builder.Services.AddScoped<IMongoDatabase>(sp =>
-        sp.GetRequiredService<IMongoClient>()
-          .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]));
-    builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepositoryMongo>();
-    builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
-    Console.WriteLine("Using MongoDB repository");
-}
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var cfg = sp.GetRequiredService<IConfiguration>();
-        return new CosmosClient(cfg["CosmosDb:Endpoint"], cfg["CosmosDb:Key"]);
-    });
-    builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepository>();
-    builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryCosmos>();
-    Console.WriteLine("Using Cosmos DB repository");
-}
+builder.Services.AddSingleton<IMongoClient>(sp => new MongoClient(mongoConnectionString));
+builder.Services.AddScoped<IMongoDatabase>(sp =>
+    sp.GetRequiredService<IMongoClient>()
+      .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]));
+builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepositoryMongo>();
+builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
 
 // ── Redis — shared across all engines ────────────────────────────────────────
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
@@ -75,9 +59,9 @@ builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IBenefitPlan
                            BenefitPlanService.Services.ChoBenefitPlanProvider>();
 builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IServiceCategoryMappingRepository,
                            BenefitPlanService.Services.NullServiceCategoryMappingRepository>();
-builder.Services.AddFeeScheduleEngine().UseRepositoriesFromConfiguration(builder.Configuration);
+builder.Services.AddFeeScheduleEngine().UseMongoRepositories();
 builder.Services.AddClaimsScrubEngine();
-builder.Services.AddNcciEngine().UseRepositoryFromConfiguration(builder.Configuration);
+builder.Services.AddNcciEngine().UseMongoRepository();
 builder.Services.AddScoped<IAccumulatorAuditWriter, MongoAccumulatorAuditWriter>();
 
 // ── Provider Enrollment Service ───────────────────────────────────────────────
@@ -91,14 +75,9 @@ builder.Services.AddScoped<IAccumulatorAuditWriter, MongoAccumulatorAuditWriter>
 //     "Tmhp": { "ApiKey": "...(from AKV)" },
 //     "Caqh": { "Username": "...", "Password": "...(from AKV)" }
 //   }
-if (useMongo)
-    builder.Services.AddProviderEnrollmentService(builder.Configuration)
-        .UseMongoRepositories().WithRedisTenantConfigCache()
-        .WithTexasSource().WithCaqhSource();
-else
-    builder.Services.AddProviderEnrollmentService(builder.Configuration)
-        .UseCosmosRepositories().WithRedisTenantConfigCache()
-        .WithTexasSource().WithCaqhSource();
+builder.Services.AddProviderEnrollmentService(builder.Configuration)
+    .UseMongoRepositories().WithRedisTenantConfigCache()
+    .WithTexasSource().WithCaqhSource();
 
 // ── Prior Auth Rule Engine ────────────────────────────────────────────────────
 // Supplies IPriorAuthRuleEngine → AdjudicationController (future: pre-adjudication
@@ -111,14 +90,9 @@ else
 //     "GoldCardLookbackDays": 180,
 //     "PendOnRuleError": true
 //   }
-if (useMongo)
-    builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-        .UseMongoRepository().WithRedisRuleCache()
-        .WithPlatformRules().SeedOnStartup();
-else
-    builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-        .UseCosmosRepository().WithRedisRuleCache()
-        .WithPlatformRules().SeedOnStartup();
+builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
+    .UseMongoRepository().WithRedisRuleCache()
+    .WithPlatformRules().SeedOnStartup();
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
@@ -130,9 +104,6 @@ var claimsServiceHealthUrl = builder.Configuration["Services:ClaimsServiceUrl"]
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString  = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint         = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey              = builder.Configuration["CosmosDb:Key"];
     options.RedisConnectionString    = builder.Configuration["Redis:ConnectionString"];
     options.HttpDependencies["claims-service"] =
         $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
