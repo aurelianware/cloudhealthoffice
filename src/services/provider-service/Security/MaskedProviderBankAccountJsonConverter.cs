@@ -11,7 +11,7 @@ namespace ProviderService.Security;
 /// last 4 of the routing and account numbers, no tax id), whichever endpoint or
 /// model carries it (a provider, a version page, a search result, a
 /// bank-account change). Request bodies are read unchanged, so a proposed
-/// account still arrives with its full numbers. Storage (Mongo BSON, Cosmos)
+/// account still arrives with its full numbers. Storage (Mongo BSON)
 /// does not use these options and is unaffected.
 /// </summary>
 public sealed class MaskedProviderBankAccountJsonConverter : JsonConverter<ProviderBankAccount>

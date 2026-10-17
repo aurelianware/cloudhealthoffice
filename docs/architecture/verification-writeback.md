@@ -72,7 +72,6 @@ fine.
 │        │     returns ProviderVerificationRecord per NPI          │
 │        │                                                         │
 │        ├─► UpdateIntegrityProjectionAsync(score, rating, ...)    │
-│        │     Cosmos: PatchItemAsync (4 Set ops on head row)      │
 │        │     Mongo:  FindOneAndUpdateAsync ($set on 4 fields)    │
 │        │     bypasses UpdateAsync's version-state guard          │
 │        │                                                         │
@@ -156,7 +155,7 @@ data each refresh. The trade-off:
 
 - **What we ship (5.4.5):** one materialised
   `Provider.NextVerificationDue` per row. Simple, low storage cost,
-  one Cosmos/Mongo column. Re-runs the full composite at the
+  one Mongo field. Re-runs the full composite at the
   shortest cadence.
 - **What we deferred (5.10):** per-source materialised refresh
   state (six per-source `LastRefreshedAt` columns on `Provider`).
@@ -173,11 +172,10 @@ visible. Until then, the simpler model wins.
 Per-tenant pagination via `ListProvidersForIntegrityRefreshAsync`,
 mirroring the pattern established by `ListNetworkRosterAsync`:
 
-- **Cosmos:** `OFFSET / LIMIT` query, partition-scoped on `TenantId`,
-  filter on `(versionState = Active OR legacy) AND (nextVerificationDue
-  <= dueBefore OR null)`.
 - **Mongo:** `Find().Sort(ProviderId).Skip(safeSkip).Limit(pageSize)`,
-  same filter logic. Stable sort on `ProviderId, Id` so paginated
+  scoped on `TenantId`, filter on `(VersionState = Active OR legacy)
+  AND (NextVerificationDue <= dueBefore OR null)`. Stable sort on
+  `ProviderId, Id` so paginated
   sweeps produce deterministic ordering.
 
 Per-tenant cap (`MaxProvidersPerTenantPerSweep`, default 1000)
@@ -259,9 +257,7 @@ PR 5.1 `ProviderVersionEvents` pattern:
   - `(TenantId, ProviderId, Version)` UNIQUE — monotonic ordering.
 
 No cross-service consumer ships in 5.4.5. Capability 5.10 is the
-planned subscriber. Cosmos-only deployments register
-`NoopProviderVerificationEventPublisher` which logs a warning per
-emit so ops can spot the missing wiring.
+planned subscriber.
 
 ## `HttpProviderIntegrityGate` posture — migrated in 5.10
 

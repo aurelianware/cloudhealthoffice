@@ -7,7 +7,7 @@ namespace ProviderService.Repositories;
 
 /// <summary>
 /// Encrypts the bank numbers in <c>ProviderBankAccounts</c> at rest around the
-/// Mongo or Cosmos store: the active account, every change's proposed account
+/// Mongo store: the active account, every change's proposed account
 /// (full numbers while pending) and previous account. Saves store them
 /// encrypted and bound to the tenant and provider (<c>enc:v2:...</c>); without a key ring outside Development the
 /// save fails (<see cref="FieldProtectionException"/>, answered 503) and

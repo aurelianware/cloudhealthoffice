@@ -19,8 +19,8 @@ namespace ProviderService.Migrations;
 /// </list>
 ///
 /// <para>
-/// Usage (with provider-service's own configuration: <c>MongoDb</c> or
-/// <c>CosmosDb</c>, and <c>FieldProtection</c>, the same key ring the service uses):
+/// Usage (with provider-service's own configuration: <c>MongoDb</c> and
+/// <c>FieldProtection</c>, the same key ring the service uses):
 /// <c>dotnet provider-service.dll --encrypt-bank-accounts [--tenant &lt;id&gt;]... [--dry-run]</c>
 /// or <c>dotnet run --project src/services/provider-service -- --encrypt-bank-accounts</c>.
 /// Without <c>--tenant</c> every tenant found in the two collections is processed
@@ -29,9 +29,8 @@ namespace ProviderService.Migrations;
 ///
 /// <para>
 /// Idempotent and resumable: a value already bound is left alone, and each
-/// document is updated on its own with a compare-and-set filter (Mongo: the
-/// values it read and, for bank-account records, the record revision; Cosmos:
-/// the document's ETag, and the record revision). A document changed
+/// document is updated on its own with a compare-and-set filter (the values it
+/// read and, for bank-account records, the record revision). A document changed
 /// by the running service in between is counted as a conflict and left to the
 /// next run (the service itself stores it encrypted on that write). Stop it at
 /// any point and run it again. Exit code 0 when nothing is left in plaintext, 2
@@ -114,23 +113,8 @@ public static partial class EncryptProviderBankAccounts
         var connectionString = configuration["MongoDb:ConnectionString"];
         if (string.IsNullOrWhiteSpace(connectionString))
         {
-            // The service uses Cosmos when Mongo is not configured (Program.cs).
-            if (string.IsNullOrWhiteSpace(configuration["CosmosDb:Endpoint"]) || string.IsNullOrWhiteSpace(configuration["CosmosDb:Key"]))
-            {
-                Console.Error.WriteLine("ABORT: neither MongoDb:ConnectionString nor CosmosDb:Endpoint/Key is configured.");
-                return 1;
-            }
-            await using var cosmosServices = services.BuildServiceProvider();
-            using var cosmos = new Microsoft.Azure.Cosmos.CosmosClient(configuration["CosmosDb:Endpoint"], configuration["CosmosDb:Key"]);
-            var cosmosTotal = await MigrateStoresAsync(
-                new CosmosProviderRowStore(cosmos, configuration),
-                new CosmosBankAccountRecordStore(cosmos, configuration),
-                cosmosServices.GetRequiredService<IFieldProtector>(),
-                tenants.Count == 0 ? null : tenants, dryRun, Console.Out);
-            Console.WriteLine($"TOTAL (Cosmos){(dryRun ? " (dry run, nothing written)" : string.Empty)}: {cosmosTotal}");
-            if (!cosmosTotal.Complete)
-                Console.WriteLine("Some documents were changed while this ran or failed: run the command again.");
-            return cosmosTotal.Complete ? 0 : 2;
+            Console.Error.WriteLine("ABORT: MongoDb:ConnectionString is not configured.");
+            return 1;
         }
         var baseName = configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
         var scoped = configuration.GetValue<bool>("MongoDb:UseTenantScoping", false);

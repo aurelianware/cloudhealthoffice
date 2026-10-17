@@ -17,14 +17,14 @@ namespace ProviderService.Models;
 public class Provider
 {
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation).
+    /// Owning tenant (every query is scoped by it).
     /// The server sets it from the caller's token on every write, so it is not
     /// required (and is ignored) in a request body.
     /// </summary>
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Unique identifier (Cosmos DB document id / Mongo _id). Per-version
+    /// Unique identifier (Mongo <c>_id</c>). Per-version
     /// — each row in the version chain has its own <c>Id</c>. Existing
     /// callers that historically treated <c>Id</c> as the persistent
     /// provider identifier are still supported because legacy single-row

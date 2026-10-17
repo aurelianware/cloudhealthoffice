@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 using ProviderService.Models;
 
@@ -73,83 +72,5 @@ public sealed class MongoProviderBankAccountRepository : IProviderBankAccountRep
 
         record.Revision = expectedRevision;
         return false;
-    }
-}
-
-public sealed class CosmosProviderBankAccountRepository : IProviderBankAccountRepository
-{
-    public const string DefaultContainerName = "ProviderBankAccounts";
-
-    private readonly Container _container;
-
-    public CosmosProviderBankAccountRepository(CosmosClient client, IConfiguration configuration)
-    {
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "ProviderDB";
-        var containerName = configuration["CosmosDb:ProviderBankAccountsContainer"] ?? DefaultContainerName;
-        _container = client.GetContainer(databaseName, containerName);
-    }
-
-    public async Task<ProviderBankAccountRecord?> GetAsync(string tenantId, string providerId, CancellationToken ct = default)
-    {
-        try
-        {
-            var response = await _container.ReadItemAsync<ProviderBankAccountRecord>(
-                ProviderBankAccountRecord.KeyFor(tenantId, providerId), new PartitionKey(tenantId), cancellationToken: ct);
-            return response.Resource;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-    }
-
-    public async Task<bool> SaveAsync(ProviderBankAccountRecord record, long expectedRevision, CancellationToken ct = default)
-    {
-        record.Id = ProviderBankAccountRecord.KeyFor(record.TenantId, record.ProviderId);
-        var partition = new PartitionKey(record.TenantId);
-
-        if (expectedRevision == 0)
-        {
-            record.Revision = 1;
-            record.UpdatedAt = DateTime.UtcNow;
-            try
-            {
-                await _container.CreateItemAsync(record, partition, cancellationToken: ct);
-                return true;
-            }
-            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
-            {
-                record.Revision = expectedRevision;
-                return false;
-            }
-        }
-
-        // Read the stored revision and its ETag, then replace only if the
-        // document is unchanged since (If-Match), so the revision check and
-        // the write are one conditional operation.
-        ItemResponse<ProviderBankAccountRecord> current;
-        try
-        {
-            current = await _container.ReadItemAsync<ProviderBankAccountRecord>(record.Id, partition, cancellationToken: ct);
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            return false;
-        }
-        if (current.Resource.Revision != expectedRevision) return false;
-
-        record.Revision = expectedRevision + 1;
-        record.UpdatedAt = DateTime.UtcNow;
-        try
-        {
-            await _container.ReplaceItemAsync(record, record.Id, partition,
-                new ItemRequestOptions { IfMatchEtag = current.ETag }, ct);
-            return true;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
-        {
-            record.Revision = expectedRevision;
-            return false;
-        }
     }
 }

@@ -38,7 +38,7 @@ GET /api/v1/networks*    │      NetworksController      │
                 ┌───────────────────────┴───────────────────────┐
                 ▼                                               ▼
         IOrganizationRepository              OrganizationAdapterFactory
-        (Cosmos | Mongo)                          │
+        (Mongo)                                   │
                                 ┌─────────────────┼─────────────────┐
                                 ▼                 ▼                 ▼
                          Cho (active)        QNXT (stub)       Facets (stub)
@@ -56,7 +56,7 @@ write paths are intentionally out of scope for this capability.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `TenantId` | string | Cosmos partition key. |
+| `TenantId` | string | Tenant scope (every query filters on it). |
 | `Id` | string | Per-version document id. |
 | `OrganizationId` | string | Stable chain key (preserved across versions). |
 | `Name` | string | Human-readable network name. |
@@ -187,8 +187,7 @@ database (`ProviderDB` / `CloudHealthOffice` for Mongo). Mongo indexes:
 - `(TenantId, ParentOrganizationId)` — partOf traversal.
 - `(TenantId, VersionState)` — head/draft separation.
 
-Cosmos uses `TenantId` as the partition key; queries are scoped to the
-partition for tenant isolation.
+Every query filters on `TenantId` for tenant isolation.
 
 ## Hand-off to benefit-plan-service (Capability 5.5)
 

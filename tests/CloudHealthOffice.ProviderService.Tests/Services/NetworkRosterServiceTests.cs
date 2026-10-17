@@ -9,7 +9,7 @@ namespace CloudHealthOffice.ProviderService.Tests.Services;
 /// <summary>
 /// Behaviour tests for <see cref="NetworkRosterService"/>. Drives the
 /// in-memory repository so tests cover the full filter/sort/cursor path
-/// without the storage backends. Cosmos- and Mongo-specific filter
+/// without the storage backends. Mongo-specific filter
 /// shapes are covered indirectly by the repository contract.
 /// </summary>
 public class NetworkRosterServiceTests
@@ -378,7 +378,7 @@ public class NetworkRosterServiceTests
     {
         // Legacy shape: VersionId / VersionState absent on disk, Status=Active.
         // The fake's HydratedView normalizes these to VersionState=Active —
-        // exercising the same read-path semantics that the Mongo/Cosmos
+        // exercising the same read-path semantics that the Mongo
         // queries now accept after the legacy-state-filter fix.
         var repo = new InMemoryProviderRepository { TenantId = TenantA };
         var svc = NewService(repo);

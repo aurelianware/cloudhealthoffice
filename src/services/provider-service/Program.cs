@@ -22,7 +22,7 @@ builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // One-off migration (operator CLI): dotnet provider-service.dll --encrypt-bank-accounts
 // [--tenant <id>] [--dry-run]. Stores bank numbers written before encryption, or
-// before record binding (enc:v1), as enc:v2. Mongo or Cosmos, as configured.
+// before record binding (enc:v1), as enc:v2, in the configured Mongo database.
 if (args.Contains(ProviderService.Migrations.EncryptProviderBankAccounts.Switch))
 {
     Environment.ExitCode = await ProviderService.Migrations.EncryptProviderBankAccounts.RunAsync(
@@ -70,78 +70,36 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultWritePermission = "providers:write";
 });
 
-// Database Configuration
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+// Database — MongoDB is the only provider store (ADR 006); AddChoDatabase
+// registers the client.
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
 {
-    // MongoDB Registration
-    
-    builder.Services.AddScoped<ProviderRepositoryMongo>();
-    builder.Services.AddScoped<IProviderRepository>(sp => new ProtectedProviderRepository(
-        sp.GetRequiredService<ProviderRepositoryMongo>(),
-        sp.GetRequiredService<IFieldProtector>(),
-        sp.GetRequiredService<ILogger<ProtectedProviderRepository>>()));
-    builder.Services.AddScoped<IOrganizationRepository, OrganizationRepositoryMongo>();
-    builder.Services.AddScoped<IProviderTransitionRepository, MongoProviderTransitionRepository>();
-    builder.Services.AddScoped<IProviderVersionEventPublisher, MongoProviderVersionEventPublisher>();
-    builder.Services.AddScoped<IProviderVerificationEventPublisher, MongoProviderVerificationEventPublisher>();
-    builder.Services.AddScoped<INetworkParticipationEventPublisher, MongoNetworkParticipationEventPublisher>();
-    builder.Services.AddScoped<ICredentialingEventPublisher, MongoCredentialingEventPublisher>();
-    builder.Services.AddScoped<ICredentialingEventRepository, MongoCredentialingEventRepository>();
-    builder.Services.AddScoped<MongoProviderBankAccountRepository>();
-    builder.Services.AddScoped<IProviderBankAccountRepository>(sp => new ProtectedProviderBankAccountRepository(
-        sp.GetRequiredService<MongoProviderBankAccountRepository>(),
-        sp.GetRequiredService<IFieldProtector>(),
-        sp.GetRequiredService<ILogger<ProtectedProviderBankAccountRepository>>()));
-    builder.Services.AddHostedService<ProviderQueryIndexInitializer>();
-    builder.Services.AddHostedService<ProviderVersionEventIndexInitializer>();
-    builder.Services.AddHostedService<ProviderVerificationEventIndexInitializer>();
-    builder.Services.AddHostedService<NetworkParticipationEventIndexInitializer>();
-    builder.Services.AddHostedService<CredentialingEventIndexInitializer>();
-    Console.WriteLine("Using MongoDB database provider");
+    throw new InvalidOperationException(
+        "Provider Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
-{
-    // Cosmos DB client (singleton)
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var config = sp.GetRequiredService<IConfiguration>();
-        var endpoint = config["CosmosDb:Endpoint"];
-        var key = config["CosmosDb:Key"];
 
-        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
-        {
-            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-        }
-
-        return new CosmosClient(endpoint, key);
-    });
-
-    // Repositories
-    builder.Services.AddScoped<ProviderRepository>();
-    builder.Services.AddScoped<IProviderRepository>(sp => new ProtectedProviderRepository(
-        sp.GetRequiredService<ProviderRepository>(),
-        sp.GetRequiredService<IFieldProtector>(),
-        sp.GetRequiredService<ILogger<ProtectedProviderRepository>>()));
-    builder.Services.AddScoped<IOrganizationRepository, OrganizationRepository>();
-    builder.Services.AddScoped<IProviderTransitionRepository, CosmosProviderTransitionRepository>();
-    // Cosmos-only deployments don't have a provisioned events stream; the
-    // Noop publisher logs a warning so ops can spot the missing wiring
-    // without breaking the lifecycle path.
-    builder.Services.AddScoped<IProviderVersionEventPublisher, NoopProviderVersionEventPublisher>();
-    builder.Services.AddScoped<IProviderVerificationEventPublisher, NoopProviderVerificationEventPublisher>();
-    builder.Services.AddScoped<INetworkParticipationEventPublisher, NoopNetworkParticipationEventPublisher>();
-    builder.Services.AddScoped<ICredentialingEventPublisher, NoopCredentialingEventPublisher>();
-    builder.Services.AddScoped<ICredentialingEventRepository, CosmosCredentialingEventRepository>();
-    // Needs a "ProviderBankAccounts" container (partition key /tenantId).
-    builder.Services.AddScoped<CosmosProviderBankAccountRepository>();
-    builder.Services.AddScoped<IProviderBankAccountRepository>(sp => new ProtectedProviderBankAccountRepository(
-        sp.GetRequiredService<CosmosProviderBankAccountRepository>(),
-        sp.GetRequiredService<IFieldProtector>(),
-        sp.GetRequiredService<ILogger<ProtectedProviderBankAccountRepository>>()));
-}
+builder.Services.AddScoped<ProviderRepositoryMongo>();
+builder.Services.AddScoped<IProviderRepository>(sp => new ProtectedProviderRepository(
+    sp.GetRequiredService<ProviderRepositoryMongo>(),
+    sp.GetRequiredService<IFieldProtector>(),
+    sp.GetRequiredService<ILogger<ProtectedProviderRepository>>()));
+builder.Services.AddScoped<IOrganizationRepository, OrganizationRepositoryMongo>();
+builder.Services.AddScoped<IProviderTransitionRepository, MongoProviderTransitionRepository>();
+builder.Services.AddScoped<IProviderVersionEventPublisher, MongoProviderVersionEventPublisher>();
+builder.Services.AddScoped<IProviderVerificationEventPublisher, MongoProviderVerificationEventPublisher>();
+builder.Services.AddScoped<INetworkParticipationEventPublisher, MongoNetworkParticipationEventPublisher>();
+builder.Services.AddScoped<ICredentialingEventPublisher, MongoCredentialingEventPublisher>();
+builder.Services.AddScoped<ICredentialingEventRepository, MongoCredentialingEventRepository>();
+builder.Services.AddScoped<MongoProviderBankAccountRepository>();
+builder.Services.AddScoped<IProviderBankAccountRepository>(sp => new ProtectedProviderBankAccountRepository(
+    sp.GetRequiredService<MongoProviderBankAccountRepository>(),
+    sp.GetRequiredService<IFieldProtector>(),
+    sp.GetRequiredService<ILogger<ProtectedProviderBankAccountRepository>>()));
+builder.Services.AddHostedService<ProviderQueryIndexInitializer>();
+builder.Services.AddHostedService<ProviderVersionEventIndexInitializer>();
+builder.Services.AddHostedService<ProviderVerificationEventIndexInitializer>();
+builder.Services.AddHostedService<NetworkParticipationEventIndexInitializer>();
+builder.Services.AddHostedService<CredentialingEventIndexInitializer>();
 
 // Provider versioning service (5.1 — provider identity & versioning)
 builder.Services.AddScoped<IProviderVersioningService, ProviderVersioningService>();
@@ -254,13 +212,10 @@ builder.Services.AddSingleton<IFhirOrganizationProjector, FhirOrganizationProjec
 // HTTP context accessor (repositories read the token tenant from the request)
 builder.Services.AddHttpContextAccessor();
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 // No CORS: this service is called server-to-server only (the portal is
@@ -289,7 +244,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-
 
 // Authentication, then tenant from the validated token, then authorization.
 app.UseChoAuthentication();
