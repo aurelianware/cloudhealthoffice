@@ -50,6 +50,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- In-process IDtrResourceStore double; fhir-service registers only the Mongo store. -->
+    <Compile Include="..\Shared\FhirService\InMemoryDtrResourceStore.cs" Link="Shared\FhirService\InMemoryDtrResourceStore.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- CHO product surface: FHIR CRD/DTR/PAS/PatientAccess + compliance + adapter status. -->
     <ProjectReference Include="..\..\src\services\fhir-service\fhir-service.csproj" />
 

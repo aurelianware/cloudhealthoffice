@@ -11,8 +11,8 @@ namespace FhirService.Services.PayerToPayer.Ingestion;
 /// MongoDB-backed <see cref="IPayerToPayerImportRepository"/> — the durable store
 /// a deployment gets when <c>MongoDb:ConnectionString</c> is configured. It
 /// mirrors the persistence idiom fhir-service already uses (see
-/// <c>DtrService</c>): it opens its own database handle from configuration, uses
-/// BSON documents, and ensures its indexes once at construction. It is
+/// <c>MongoDtrResourceStore</c>): it takes the host's client, names its database
+/// from configuration, uses BSON documents, and ensures its indexes once at construction. It is
 /// registered as a SINGLETON for exactly that reason — a per-request instance
 /// would re-issue createIndex on every call.
 ///
