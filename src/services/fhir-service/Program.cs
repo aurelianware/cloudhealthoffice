@@ -11,7 +11,6 @@ using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.PriorAuthRuleEngine.Configuration;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -69,14 +68,19 @@ builder.Services.AddFhirAccessPolicies();
 // it. See docs/architecture/shared-cache.md.
 builder.Services.AddChoCaching(builder.Configuration, builder.Environment);
 
-// Database wiring is optional here: with neither provider configured the service still starts
-// and the engine wiring below is skipped, so AddChoDatabase is only called once a provider is
-// actually configured (it throws by design rather than guessing).
-ChoDatabaseProvider? databaseProvider = null;
-if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"])
-    || string.Equals(builder.Configuration["Database:Provider"], "CosmosDb", StringComparison.OrdinalIgnoreCase))
+// Database: MongoDB (ADR 006). With no database configured, only a Development /
+// Testing host may start: the engine wiring below is then skipped and the
+// in-process fallbacks are used. Any other host refuses to start.
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+if (databaseProvider is not null && databaseProvider != ChoDatabaseProvider.MongoDb)
 {
-    databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+    throw new InvalidOperationException(
+        "fhir-service supports MongoDB only. Remove Database:Provider or set it to MongoDb.");
+}
+if (databaseProvider is null && !ChoTestingEnvironment.AllowsDevelopmentSecrets(builder.Environment))
+{
+    throw new InvalidOperationException(
+        "fhir-service requires a database. Configure MongoDb:ConnectionString.");
 }
 
 var useMongo = databaseProvider == ChoDatabaseProvider.MongoDb;
@@ -91,21 +95,15 @@ var useMongo = databaseProvider == ChoDatabaseProvider.MongoDb;
 //     "Tmhp": { "ApiKey": "...(from AKV)" },
 //     "Caqh": { "Username": "...", "Password": "...(from AKV)" }
 //   }
-var hasDb = databaseProvider is not null;
 // Cache backend presence is decided by AddChoCaching (Redis when a
 // connection string is configured AND env is Production; InMemory
 // otherwise). Either resolves to a working ICacheProvider, so the
-// engine wiring no longer hinges on "hasRedis" — only on "hasDb".
-if (hasDb)
+// engine wiring no longer hinges on "hasRedis" — only on the database.
+if (useMongo)
 {
-    if (useMongo)
-        builder.Services.AddProviderEnrollmentService(builder.Configuration)
-            .UseMongoRepositories().WithTenantConfigCache()
-            .WithTexasSource().WithCaqhSource();
-    else
-        builder.Services.AddProviderEnrollmentService(builder.Configuration)
-            .UseCosmosRepositories().WithTenantConfigCache()
-            .WithTexasSource().WithCaqhSource();
+    builder.Services.AddProviderEnrollmentService(builder.Configuration)
+        .UseMongoRepositories().WithTenantConfigCache()
+        .WithTexasSource().WithCaqhSource();
 
     // ── Prior Auth Rule Engine ────────────────────────────────────────────────────
     // Supplies IPriorAuthRuleEngine → PasAutoAdjudicator Rule 5.
@@ -118,18 +116,13 @@ if (hasDb)
     //     "GoldCardLookbackDays": 180,
     //     "PendOnRuleError": true
     //   }
-    if (useMongo)
-        builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-            .UseMongoRepository().WithRuleCache()
-            .WithPlatformRules().SeedOnStartup();
-    else
-        builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-            .UseCosmosRepository().WithRuleCache()
-            .WithPlatformRules().SeedOnStartup();
+    builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
+        .UseMongoRepository().WithRuleCache()
+        .WithPlatformRules().SeedOnStartup();
 }
 else
 {
-    // Local dev / test without Redis+DB: register passthrough implementations
+    // Development / Testing without a database: register passthrough implementations
     // so DI resolution of PasAutoAdjudicator doesn't fail.
     builder.Services.AddSingleton<CloudHealthOffice.ProviderEnrollmentService.Abstractions.IEnrollmentDecisionGate,
         CloudHealthOffice.ProviderEnrollmentService.Gates.PassthroughEnrollmentGate>();
@@ -581,8 +574,6 @@ builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
     options.RedisConnectionString   = builder.Configuration["Redis:ConnectionString"];
-    options.CosmosDbEndpoint        = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey             = builder.Configuration["CosmosDb:Key"];
 });
 
 // Identity trust readiness: configuration valid AND every trusted issuer's
