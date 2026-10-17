@@ -61,7 +61,7 @@ public class EligibilityController : ControllerBase
             inquiry.TenantId = TenantId;
             inquiry.ControlNumber = GenerateControlNumber();
             
-            _logger.LogInformation("Processing eligibility inquiry for member {SubscriberId}", LogSanitizer.Sanitize(inquiry.SubscriberId));
+            _logger.LogInformation("Processing eligibility inquiry for member {SubscriberId}", LogSanitizer.MaskId(inquiry.SubscriberId));
             
             var response = await _eligibilityService.ProcessInquiryAsync(inquiry);
             
@@ -289,7 +289,7 @@ public class EligibilityController : ControllerBase
 
         _logger.LogInformation(
             "Processing EDI 270 for subscriber {SubscriberId}, serviceType={ServiceType}",
-            LogSanitizer.Sanitize(inquiry.SubscriberId), inquiry.ServiceTypeCode);
+            LogSanitizer.MaskId(inquiry.SubscriberId), inquiry.ServiceTypeCode);
 
         EligibilityResponse response;
         try
@@ -338,7 +338,7 @@ public class EligibilityController : ControllerBase
 
         _logger.LogInformation(
             "Generating 271 EDI for inquiry {InquiryId} (subscriber={SubscriberId})",
-            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(inquiry.SubscriberId));
+            LogSanitizer.Sanitize(id), LogSanitizer.MaskId(inquiry.SubscriberId));
 
         var edi271 = _edi271Generator.Generate(
             inquiry, response,

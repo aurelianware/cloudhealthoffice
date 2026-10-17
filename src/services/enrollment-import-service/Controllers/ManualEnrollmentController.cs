@@ -85,7 +85,7 @@ public class ManualEnrollmentController : ControllerBase
         _logger.LogInformation(
             "Manual enrollment for tenant {TenantId} subscriber {SubscriberId} type {Type} actor {Actor} eventId {EventId}",
             LogSanitizer.Sanitize(tenantId),
-            LogSanitizer.Sanitize(enrollment.SubscriberId),
+            LogSanitizer.MaskId(enrollment.SubscriberId),
             LogSanitizer.Sanitize(enrollment.MaintenanceType),
             LogSanitizer.Sanitize(actorId),
             LogSanitizer.Sanitize(enrollment.EventId));

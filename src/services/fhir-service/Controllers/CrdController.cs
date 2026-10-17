@@ -136,7 +136,7 @@ public class CrdController : FhirControllerBase
             "CRD hook {HookId} received for tenant {TenantId}, patient {PatientId}",
             LogSanitizer.Sanitize(hookId),
             LogSanitizer.Sanitize(TenantId),
-            LogSanitizer.Sanitize(request.Context.PatientId ?? "unknown"));
+            request.Context.PatientId is null ? "unknown" : LogSanitizer.MaskId(request.Context.PatientId));
 
         try
         {

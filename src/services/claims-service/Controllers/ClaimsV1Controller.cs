@@ -117,7 +117,7 @@ public class ClaimsV1Controller : ControllerBase
 
         _logger.LogInformation(
             "v1 claim submission: member={Member}, provider={Provider}, lines={LineCount}",
-            LogSanitizer.Sanitize(claim.MemberId), LogSanitizer.Sanitize(claim.BillingProviderNPI),
+            LogSanitizer.MaskId(claim.MemberId), LogSanitizer.Sanitize(claim.BillingProviderNPI),
             claim.ClaimLines?.Count ?? 0);
 
         var actorId = ResolveActorId();
@@ -690,7 +690,7 @@ public class ClaimsV1Controller : ControllerBase
 
         _logger.LogInformation(
             "v1 claims member search: member={Member}, status={Status}, type={Type}, amount=[{Min},{Max}]",
-            LogSanitizer.Sanitize(memberId), status, claimType, amountMin, amountMax);
+            LogSanitizer.MaskId(memberId), status, claimType, amountMin, amountMax);
 
         var adapter = await _adapterFactory.GetAdapterAsync(tenantId, ct);
         var adapterResponse = await adapter.SearchClaimsForMemberAsync(

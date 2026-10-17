@@ -146,7 +146,7 @@ public class ChoIdCardAdapter : IIdCardAdapter
 
         _logger.LogInformation(
             "Issued ID card {CardId} for member {MemberId} template {TemplateId} doc {DocId}",
-            cardId, LogSanitizer.Sanitize(memberId), template.Id, pdfDocId);
+            cardId, LogSanitizer.MaskId(memberId), template.Id, pdfDocId);
 
         return new IdCardIssueResult { Success = true, Record = record };
     }

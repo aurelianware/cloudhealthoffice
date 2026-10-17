@@ -42,7 +42,7 @@ public class MembersPremiumController : ControllerBase
         if (string.IsNullOrWhiteSpace(memberId))
             return BadRequest(new { error = "memberId is required" });
 
-        _logger.LogInformation("Premium summary lookup for member {MemberId}", LogSanitizer.Sanitize(memberId));
+        _logger.LogInformation("Premium summary lookup for member {MemberId}", LogSanitizer.MaskId(memberId));
 
         var invoices = (await _invoiceRepository.ListByMemberAsync(memberId, take: 12)).ToList();
         var summary = Build(memberId, invoices, DateTime.UtcNow);

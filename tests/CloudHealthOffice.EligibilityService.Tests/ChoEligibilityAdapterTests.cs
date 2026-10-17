@@ -172,6 +172,29 @@ public class ChoEligibilityAdapterTests
     }
 
     [Fact]
+    public async Task VerifyEligibility_NoCoverage_LogsOnlyTheLastFourCharactersOfTheSubscriberId()
+    {
+        const string subscriberId = "SUB987654321";
+        var logger = new ListLogger<ChoEligibilityAdapter>();
+        var factory = Substitute.For<IHttpClientFactory>();
+        factory.CreateClient("EligibilityDefault").Returns(new HttpClient(new SequenceHandler(new[]
+        {
+            new FakeResponse(HttpStatusCode.NotFound, "{}"),
+        })));
+        var adapter = new ChoEligibilityAdapter(factory, _configuration, logger);
+
+        await adapter.VerifyEligibilityAsync(new EligibilityAdapterRequest
+        {
+            TenantId = "test-tenant",
+            SubscriberId = subscriberId,
+            ServiceDate = DateTime.UtcNow,
+        });
+
+        Assert.Contains(logger.Messages, m => m.Contains("No active coverage found for member ***4321"));
+        Assert.DoesNotContain(logger.Messages, m => m.Contains(subscriberId));
+    }
+
+    [Fact]
     public async Task VerifyEligibility_CobraCoverage_IsConsideredActive()
     {
         var coverageArray = JsonSerializer.Serialize(new[]
@@ -427,6 +450,15 @@ public class ChoEligibilityAdapterTests
     // ═══════════════════════════════════════════════════════════════════
     // Test helpers
     // ═══════════════════════════════════════════════════════════════════
+
+    private sealed class ListLogger<T> : ILogger<T>
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<string> Messages { get; } = new();
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => Messages.Enqueue(formatter(state, exception));
+    }
 
     private record FakeResponse(HttpStatusCode Status, string Body);
 

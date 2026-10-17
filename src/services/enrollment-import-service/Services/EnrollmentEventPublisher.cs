@@ -106,7 +106,7 @@ public sealed class EnrollmentEventPublisher : IEnrollmentEventPublisher
 
             _logger.LogWarning(
                 "EnrollmentEvent version {Version} conflict for {Tenant}:{Member}; retry {Attempt}/{Max}",
-                evt.Version, LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.MemberId), attempt + 1, MaxVersionRetries);
+                evt.Version, LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.MaskId(evt.MemberId), attempt + 1, MaxVersionRetries);
 
             if (attempt + 1 < MaxVersionRetries)
                 await Task.Delay(BackoffMs[attempt], ct);
@@ -127,7 +127,7 @@ public sealed class EnrollmentEventPublisher : IEnrollmentEventPublisher
             "EnrollmentEvent replay deduped: eventId={EventId} tenant={Tenant} member={Member} type={Type} originallyOccurredAt={OccurredAt:o} detection={Detection}",
             LogSanitizer.Sanitize(existing.EventId),
             LogSanitizer.Sanitize(existing.TenantId),
-            LogSanitizer.Sanitize(existing.MemberId),
+            LogSanitizer.MaskId(existing.MemberId),
             existing.EventType,
             existing.OccurredAt,
             detection);

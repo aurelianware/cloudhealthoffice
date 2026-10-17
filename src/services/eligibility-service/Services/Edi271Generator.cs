@@ -250,7 +250,7 @@ public class Edi271Generator : IEdi271Generator
 
         _logger.LogInformation(
             "Generated 271 for subscriber {SubscriberId}: covered={IsCovered}, {BenefitCount} EB segments",
-            LogSanitizer.Sanitize(inquiry.SubscriberId), response.IsCovered, response.Benefits.Count);
+            LogSanitizer.MaskId(inquiry.SubscriberId), response.IsCovered, response.Benefits.Count);
 
         return sb.ToString();
     }

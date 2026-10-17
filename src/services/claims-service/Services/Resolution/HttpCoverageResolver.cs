@@ -72,7 +72,7 @@ public class HttpCoverageResolver : ICoverageResolver
             {
                 _logger.LogWarning(
                     "Coverage service returned {StatusCode} resolving active coverage for member {Member}",
-                    response.StatusCode, LogSanitizer.Sanitize(memberId));
+                    response.StatusCode, LogSanitizer.MaskId(memberId));
                 return null;
             }
 
@@ -88,7 +88,7 @@ public class HttpCoverageResolver : ICoverageResolver
         {
             _logger.LogWarning(ex,
                 "Active-coverage lookup failed for member {Member} tenant {Tenant}",
-                LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(tenantId));
+                LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(tenantId));
             return null;
         }
     }

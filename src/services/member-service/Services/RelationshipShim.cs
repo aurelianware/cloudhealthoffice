@@ -78,7 +78,7 @@ public sealed class RelationshipShim : IRelationshipShim
             // Idempotent re-run: the active pair is already in place.
             _logger.LogDebug(
                 "RelationshipShim no-op: pair already exists for {Dependent} → {Subscriber}",
-                LogSanitizer.Sanitize(dependent.MemberId, 128), LogSanitizer.Sanitize(legacySubscriberId, 128));
+                LogSanitizer.Sanitize(dependent.MemberId, 128), LogSanitizer.MaskId(legacySubscriberId));
         }
         catch (FamilyRelationshipValidationException ex)
         {
@@ -86,7 +86,7 @@ public sealed class RelationshipShim : IRelationshipShim
             // Graph-model completeness can be reconciled by the backfill tool.
             _logger.LogWarning(ex,
                 "RelationshipShim: skipped edge for {Dependent} → {Subscriber}",
-                LogSanitizer.Sanitize(dependent.MemberId, 128), LogSanitizer.Sanitize(legacySubscriberId, 128));
+                LogSanitizer.Sanitize(dependent.MemberId, 128), LogSanitizer.MaskId(legacySubscriberId));
         }
     }
 }

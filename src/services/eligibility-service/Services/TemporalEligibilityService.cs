@@ -121,7 +121,7 @@ public class TemporalEligibilityService : ITemporalEligibilityService
         {
             _logger.LogWarning(ex,
                 "Coverage-service unreachable for tenant {Tenant} member {Member}",
-                LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(memberId));
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.MaskId(memberId));
             return new List<CoverageDto>();
         }
 
@@ -129,7 +129,7 @@ public class TemporalEligibilityService : ITemporalEligibilityService
         {
             _logger.LogDebug(
                 "Coverage-service returned {Status} for member {Member}",
-                response.StatusCode, LogSanitizer.Sanitize(memberId));
+                response.StatusCode, LogSanitizer.MaskId(memberId));
             return new List<CoverageDto>();
         }
 

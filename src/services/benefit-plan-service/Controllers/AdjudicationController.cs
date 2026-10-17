@@ -204,7 +204,7 @@ public class AdjudicationController : ControllerBase
 
         _logger.LogInformation(
             "Adjudicating claim {ClaimId} for member {MemberId}, plan {PlanId}, {LineCount} lines (type={ClaimType}, mode={Mode})",
-            LogSanitizer.Sanitize(request.ClaimId, 256), LogSanitizer.Sanitize(request.MemberId, 256),
+            LogSanitizer.Sanitize(request.ClaimId, 256), LogSanitizer.MaskId(request.MemberId),
             request.BenefitPlanId, request.Lines.Count, LogSanitizer.Sanitize(claimTypeCode, 256),
             routingDecision.OperatingMode.Mode);
 
@@ -390,7 +390,7 @@ public class AdjudicationController : ControllerBase
 
             _logger.LogWarning(
                 "Claim {ClaimId} denied: member {MemberId} not eligible on service date {ServiceDate}: {Reason}",
-                LogSanitizer.Sanitize(request.ClaimId, 256), LogSanitizer.Sanitize(request.MemberId, 256),
+                LogSanitizer.Sanitize(request.ClaimId, 256), LogSanitizer.MaskId(request.MemberId),
                 serviceDateForLog, LogSanitizer.Sanitize(eligibilityReason, 256));
 
             return UnprocessableEntity(new
@@ -817,7 +817,7 @@ public class AdjudicationController : ControllerBase
 
         _logger.LogInformation(
             "Calculating benefits for member {MemberId}, plan {PlanId}, {LineCount} lines",
-            LogSanitizer.Sanitize(request.MemberId, 256), request.BenefitPlanId, request.Lines.Count);
+            LogSanitizer.MaskId(request.MemberId), request.BenefitPlanId, request.Lines.Count);
 
         var result = await _benefitEngine.CalculateAsync(request, ct);
         return Ok(result);
@@ -896,7 +896,7 @@ public class AdjudicationController : ControllerBase
         _logger.LogInformation(
             "Reversing claim {OriginalClaimId} for member {MemberId}, plan {PlanId}, service date {ServiceDate}",
             LogSanitizer.Sanitize(request.OriginalClaimId, 256),
-            LogSanitizer.Sanitize(request.MemberId, 256),
+            LogSanitizer.MaskId(request.MemberId),
             request.BenefitPlanId,
             request.ServiceDate);
 

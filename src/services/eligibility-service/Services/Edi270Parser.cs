@@ -199,7 +199,7 @@ public class Edi270Parser : IEdi270Parser
 
         _logger.LogInformation(
             "Parsed 270 EDI: subscriber={SubscriberId}, serviceType={ServiceType}, controlNumber={Control}",
-            LogSanitizer.Sanitize(inquiry.SubscriberId), inquiry.ServiceTypeCode, LogSanitizer.Sanitize(inquiry.ControlNumber));
+            LogSanitizer.MaskId(inquiry.SubscriberId), inquiry.ServiceTypeCode, LogSanitizer.Sanitize(inquiry.ControlNumber));
 
         return new Edi270ParseResult
         {

@@ -84,7 +84,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("No active coverage found for member {SubscriberId}", LogSanitizer.Sanitize(subscriberId));
+            _logger.LogWarning("No active coverage found for member {SubscriberId}", LogSanitizer.MaskId(subscriberId));
             return null;
         }
 

@@ -50,7 +50,7 @@ public class EncountersController : ControllerBase
     {
         _logger.LogInformation(
             "Submitting encounter for member {MemberId}, provider {ProviderNPI}, payer {PayerId}",
-            LogSanitizer.Sanitize(encounter.MemberId),
+            LogSanitizer.MaskId(encounter.MemberId),
             LogSanitizer.Sanitize(encounter.BillingProviderNPI),
             LogSanitizer.Sanitize(encounter.PayerId));
 
@@ -134,7 +134,7 @@ public class EncountersController : ControllerBase
     {
         _logger.LogInformation(
             "Searching encounters: member={Member}, payer={Payer}, batch={Batch}, status={Status}",
-            LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(payerId), LogSanitizer.Sanitize(batchId), status);
+            LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(payerId), LogSanitizer.Sanitize(batchId), status);
 
         var encounters = await _encounterRepository.SearchAsync(
             memberId, payerId, batchId, serviceDateFrom, serviceDateTo,

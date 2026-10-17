@@ -287,7 +287,7 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
             _logger.LogInformation(
                 "Provider Access granted: tenant={Tenant} provider={Provider} member={Member} "
                 + "resource={Resource} consent={Consent} at={At}",
-                LogSanitizer.Sanitize(decision.TenantId), LogSanitizer.Sanitize(decision.ProviderId), LogSanitizer.Sanitize(decision.MemberId),
+                LogSanitizer.Sanitize(decision.TenantId), LogSanitizer.Sanitize(decision.ProviderId), LogSanitizer.MaskId(decision.MemberId),
                 LogSanitizer.Sanitize(resourceType), LogSanitizer.Sanitize(decision.AuthorizingConsentId), decision.EvaluatedAtUtc);
             return;
         }
@@ -295,7 +295,7 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
         _logger.LogWarning(
             "Provider Access denied: tenant={Tenant} provider={Provider} member={Member} "
             + "resource={Resource} reason={Reason} attributed={Attributed} consent={ConsentReason} at={At}",
-            LogSanitizer.Sanitize(decision.TenantId), LogSanitizer.Sanitize(decision.ProviderId), LogSanitizer.Sanitize(decision.MemberId),
+            LogSanitizer.Sanitize(decision.TenantId), LogSanitizer.Sanitize(decision.ProviderId), LogSanitizer.MaskId(decision.MemberId),
             LogSanitizer.Sanitize(resourceType), decision.Reason, decision.Attributed,
             LogSanitizer.Sanitize(decision.ConsentDecisionReason), decision.EvaluatedAtUtc);
     }

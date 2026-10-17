@@ -96,7 +96,7 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         var audit = Audit(request, MemberMatchOutcome.Matched, matched.MemberId, selection.Coverage?.CoverageId);
         _logger.LogInformation(
             "P2P member-match: tenant={Tenant} receivingPayer={Payer} member={Member} coverage={Coverage}",
-            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), LogSanitizer.Sanitize(audit.MatchedMemberId), LogSanitizer.Sanitize(audit.SelectedCoverageId));
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), LogSanitizer.MaskId(audit.MatchedMemberId), LogSanitizer.Sanitize(audit.SelectedCoverageId));
 
         return MemberMatchResult.Matched(matched, selection.Coverage, audit);
     }

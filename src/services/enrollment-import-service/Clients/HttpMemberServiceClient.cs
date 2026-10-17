@@ -50,7 +50,7 @@ public class HttpMemberServiceClient : IMemberServiceClient
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning("member-service rejected member creation for {MemberId}: {Status} {Body}",
-                LogSanitizer.Sanitize(request.MemberId), response.StatusCode, LogSanitizer.Sanitize(body));
+                LogSanitizer.MaskId(request.MemberId), response.StatusCode, LogSanitizer.Sanitize(body));
             throw new MemberServiceException(
                 $"member-service create failed for {request.MemberId}: {response.StatusCode}", response.StatusCode);
         }
@@ -70,7 +70,7 @@ public class HttpMemberServiceClient : IMemberServiceClient
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning("member-service rejected member update for {MemberId}: {Status} {Body}",
-                LogSanitizer.Sanitize(memberId), response.StatusCode, LogSanitizer.Sanitize(body));
+                LogSanitizer.MaskId(memberId), response.StatusCode, LogSanitizer.Sanitize(body));
             throw new MemberServiceException(
                 $"member-service update failed for {memberId}: {response.StatusCode}", response.StatusCode);
         }
@@ -102,7 +102,7 @@ public class HttpMemberServiceClient : IMemberServiceClient
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning("member-service rejected member termination for {MemberId}: {Status} {Body}",
-                LogSanitizer.Sanitize(memberId), response.StatusCode, LogSanitizer.Sanitize(body));
+                LogSanitizer.MaskId(memberId), response.StatusCode, LogSanitizer.Sanitize(body));
             throw new MemberServiceException(
                 $"member-service terminate failed for {memberId}: {response.StatusCode}", response.StatusCode);
         }

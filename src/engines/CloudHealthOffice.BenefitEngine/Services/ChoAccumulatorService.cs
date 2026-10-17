@@ -86,7 +86,7 @@ internal class ChoAccumulatorService : IAccumulatorService
 
         _logger.LogDebug(
             "Loaded {Count} accumulator snapshots for member {MemberId}, plan {PlanId} / {PlanYear}",
-            snapshots.Count, LogSanitizer.Sanitize(memberId), benefitPlanId, LogSanitizer.Sanitize(planYear));
+            snapshots.Count, LogSanitizer.MaskId(memberId), benefitPlanId, LogSanitizer.Sanitize(planYear));
 
         return snapshots;
     }

@@ -253,7 +253,7 @@ public sealed class PcpAssignmentService : IPcpAssignmentService
 
         _logger.LogInformation(
             "PCP assigned tenant={TenantId} member={MemberId} npi={Npi} source={Source}",
-            LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(cmd.ProviderNpi), cmd.Source);
+            LogSanitizer.Sanitize(tenantId), LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(cmd.ProviderNpi), cmd.Source);
 
         return PcpAssignmentResult.Ok(assignment);
     }

@@ -45,7 +45,7 @@ public class TemporalEligibilityController : ControllerBase
 
         _logger.LogInformation(
             "Temporal eligibility lookup for member {Member} on {Date}",
-            LogSanitizer.Sanitize(memberId), serviceDate.ToString("yyyy-MM-dd"));
+            LogSanitizer.MaskId(memberId), serviceDate.ToString("yyyy-MM-dd"));
 
         var result = await _temporal.GetAsOfAsync(TenantId, memberId, serviceDate, ct);
         return Ok(result);

@@ -178,7 +178,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         _logger.LogInformation(
             "Calculating benefits for member {MemberId}, plan {PlanId}, " +
             "{LineCount} lines, service date {ServiceDate}",
-            LogSanitizer.Sanitize(request.MemberId), request.BenefitPlanId,
+            LogSanitizer.MaskId(request.MemberId), request.BenefitPlanId,
             request.Lines.Count, request.ServiceDate);
 
         // ── Step 1: Load plan configuration ──
@@ -524,7 +524,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         _logger.LogInformation(
             "Reversing accumulators for claim {ClaimId}, member {MemberId}, plan year {PlanYear}",
-            originalClaimId, memberId, planYear);
+            originalClaimId, LogSanitizer.MaskId(memberId), planYear);
 
         await _accumulatorService.ReverseTerminallyAsync(
             memberId, subscriberId, benefitPlanId, planYear, originalClaimId, ct);
@@ -549,7 +549,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         _logger.LogInformation(
             "Reversing accumulators (non-terminal, claim may re-commit) for claim {ClaimId}, member {MemberId}, plan year {PlanYear}",
-            LogSanitizer.Sanitize(originalClaimId), LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(planYear));
+            LogSanitizer.Sanitize(originalClaimId), LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(planYear));
 
         return await _accumulatorService.ReverseCommitAsync(
             memberId, subscriberId, benefitPlanId, planYear, originalClaimId, commitId, ct);

@@ -276,7 +276,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
             "P2P outbound completed: tenant={Tenant} member={Member} targetPayer={Payer} peer={EndpointKey} "
             + "exchange={Exchange} resources={Count} persisted={Persisted} duplicate={Duplicate} "
             + "unsupported={Unsupported}",
-            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.MemberId), LogSanitizer.Sanitize(audit.TargetPayerId),
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.MaskId(audit.MemberId), LogSanitizer.Sanitize(audit.TargetPayerId),
             LogSanitizer.Sanitize(audit.TargetEndpointKey), LogSanitizer.Sanitize(audit.ExchangeId), audit.ResourceCount,
             audit.PersistedResourceCount, audit.DuplicateResourceCount, audit.UnsupportedResourceCount);
 
@@ -401,7 +401,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         _logger.LogInformation(
             "P2P outbound declined: tenant={Tenant} member={Member} targetPayer={Payer} exchange={Exchange} "
             + "status={Status} failure={Failure}",
-            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.MemberId), LogSanitizer.Sanitize(audit.TargetPayerId),
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.MaskId(audit.MemberId), LogSanitizer.Sanitize(audit.TargetPayerId),
             LogSanitizer.Sanitize(audit.ExchangeId), audit.Outcome, audit.FailureCategory);
 
         return new PayerToPayerOutboundResult { Exchange = exchange, Audit = audit };
@@ -443,7 +443,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         var audit = Audit(request, exchange);
         _logger.LogInformation(
             "P2P outbound replay: tenant={Tenant} member={Member} exchange={Exchange} status={Status}",
-            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.MemberId), LogSanitizer.Sanitize(audit.ExchangeId), audit.Outcome);
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.MaskId(audit.MemberId), LogSanitizer.Sanitize(audit.ExchangeId), audit.Outcome);
 
         return new PayerToPayerOutboundResult { Exchange = exchange, Audit = audit, IsReplay = true };
     }
