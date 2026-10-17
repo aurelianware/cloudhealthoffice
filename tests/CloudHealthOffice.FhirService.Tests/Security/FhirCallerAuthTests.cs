@@ -326,7 +326,7 @@ public class FhirCallerAuthTests : IClassFixture<FhirTestWebAppFactory>
             content: AppealBundle("pat-001", sender: "Practitioner/p1", configureTask: t =>
             {
                 // Only Task.code marks the tier; no appealLevel extension.
-                t.Code = new CodeableConcept(null, "external-review");
+                t.Code = new CodeableConcept { Coding = [new Coding { Code = "external-review" }] };
                 t.Extension.Add(new Extension(FhirAppealMapper.AppealLineOfBusinessExtensionUrl, new Code("Marketplace")));
                 t.Extension.Add(new Extension(FhirAppealMapper.AppealTargetResponseDateExtensionUrl, new FhirDateTime(target)));
             }));

@@ -61,7 +61,6 @@ public class ChoEligibilityAdapterTests
         }, JsonOpts);
 
         var benefitsArray = "[]";
-        var accumulationJson = "null";
 
         var handler = new SequenceHandler(new[]
         {
@@ -241,7 +240,7 @@ public class ChoEligibilityAdapterTests
         {
             new { id = "cov-old", memberId = "MBR-001", groupNumber = "GRP-OLD",
                   planId = "PLAN-OLD", coverageLevel = "EMP",
-                  effectiveDate = "2023-01-01", terminationDate = "2023-12-31",
+                  effectiveDate = "2023-01-01", terminationDate = (string?)"2023-12-31",
                   status = 3, lineOfBusiness = 1 },
             new { id = "cov-new", memberId = "MBR-001", groupNumber = "GRP-NEW",
                   planId = "PLAN-NEW", coverageLevel = "FAM",

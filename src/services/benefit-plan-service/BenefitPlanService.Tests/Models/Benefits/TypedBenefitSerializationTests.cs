@@ -298,9 +298,8 @@ public class TypedBenefitSerializationTests
         var json = JsonSerializer.Serialize(src, Opts);
         var back = JsonSerializer.Deserialize<Benefit>(json, Opts)!;
 
-        back.Rules.Should().NotBeNull();
-        back.Rules!.Should().HaveCount(1);
-        back.Rules[0].MemberAgeMin.Should().Be(18);
-        back.Rules[0].MemberAgeMax.Should().Be(64);
+        var rule = back.Rules.Should().ContainSingle().Which;
+        rule.MemberAgeMin.Should().Be(18);
+        rule.MemberAgeMax.Should().Be(64);
     }
 }

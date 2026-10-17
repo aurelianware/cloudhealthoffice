@@ -84,7 +84,7 @@ public class PlanDefaultFeeScheduleTests
             .Select(l => l.ProcedureCode)
             .ToHashSet();
 
-        Assert.Empty(codes.Where(c => !scheduled.Contains(c)));
+        Assert.DoesNotContain(codes, c => !scheduled.Contains(c));
     }
 
     [Fact]

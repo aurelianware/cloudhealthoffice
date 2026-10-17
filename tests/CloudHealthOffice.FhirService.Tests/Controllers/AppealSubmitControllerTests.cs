@@ -128,7 +128,7 @@ public class AppealSubmitControllerTests
                     {
                         Id = "att1",
                         Status = DocumentReferenceStatus.Current,
-                        Type = new CodeableConcept(null, "OZ"),
+                        Type = CodeOnly("OZ"),
                         Content = [new DocumentReference.ContentComponent
                         {
                             Attachment = new Attachment { Url = "mds://x" }
@@ -256,7 +256,7 @@ public class AppealSubmitControllerTests
     public void ExternalReview_Task_code_without_level_extension_lands_on_external_review_level(string code)
     {
         var task = BuildValidTask();
-        task.Code = new CodeableConcept(null, code);
+        task.Code = CodeOnly(code);
 
         var (type, level) = AppealSubmitController.ResolveTypeAndLevel(task);
 
@@ -282,7 +282,7 @@ public class AppealSubmitControllerTests
     public void Explicit_type_and_level_are_not_rewritten()
     {
         var task = BuildValidTask();
-        task.Code = new CodeableConcept(null, "Reconsideration");
+        task.Code = CodeOnly("Reconsideration");
         task.Extension.Add(new Extension(FhirAppealMapper.AppealLevelExtensionUrl, new Code("ExternalReview")));
 
         var (type, level) = AppealSubmitController.ResolveTypeAndLevel(task);
@@ -295,7 +295,7 @@ public class AppealSubmitControllerTests
     public void Grievance_is_never_promoted_to_external_review()
     {
         var task = BuildValidTask();
-        task.Code = new CodeableConcept(null, "Grievance");
+        task.Code = CodeOnly("Grievance");
 
         var (type, level) = AppealSubmitController.ResolveTypeAndLevel(task);
 
@@ -338,7 +338,7 @@ public class AppealSubmitControllerTests
     public void Unrecognized_Task_code_is_rejected_not_defaulted()
     {
         var task = BuildValidTask();
-        task.Code = new CodeableConcept(null, "Arbitration");
+        task.Code = CodeOnly("Arbitration");
 
         Action act = () => AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null);
 
@@ -419,6 +419,9 @@ public class AppealSubmitControllerTests
         }
     }
 
+    /// <summary>A concept carrying a code with no code system.</summary>
+    private static CodeableConcept CodeOnly(string code) => new() { Coding = [new Coding { Code = code }] };
+
     private static Hl7.Fhir.Model.Task BuildValidTask() => new()
     {
         Id = "apl-new",
@@ -427,7 +430,7 @@ public class AppealSubmitControllerTests
         For = new ResourceReference("Patient/p1"),
         Focus = new ResourceReference("Claim/c1"),
         Requester = new ResourceReference("Practitioner/prov-1"),
-        Code = new CodeableConcept(null, "Reconsideration")
+        Code = CodeOnly("Reconsideration")
     };
 
     private static Patient BuildValidPatient() => new()
