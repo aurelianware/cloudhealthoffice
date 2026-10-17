@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     and work-management-service already deduplicate.
 
   See `docs/architecture/claim-event-outbox.md`.
+- **The claim-event outbox refuses tenant-scoped databases.** Its dispatcher
+  scans only the base claims database, so with `MongoDb:UseTenantScoping` a
+  tenant's pending events were never retried. claims-service now fails at
+  start-up in that configuration (Kafka configured, dispatcher enabled)
+  instead of running without retries. Tenant-scoped deployments are not
+  supported by the outbox yet; `Claims:EventOutbox:Enabled=false` starts
+  without the dispatcher.
 - **Shared Kafka producer.** `CloudHealthOffice.Events.Kafka.ChoKafkaProducer`
   has idempotence on, `acks=all` and a bounded delivery timeout.
   claims-service now publishes all its claim events through it. Six other
