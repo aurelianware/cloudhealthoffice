@@ -228,11 +228,11 @@ public record RateAdjustment
 
 ## Persistence
 
-Two Cosmos DB containers (or MongoDB collections) back the engine. Lines are embedded in the parent `FeeSchedule` document — no join required at adjudication time.
+Two MongoDB collections back the engine. Lines are embedded in the parent `FeeSchedule` document — no join required at adjudication time.
 
 ### Fee schedules
 
-**Partition key:** `/tenantId`
+Every query is scoped by `tenantId`.
 
 | Field | Description |
 |---|---|
@@ -249,8 +249,6 @@ Two Cosmos DB containers (or MongoDB collections) back the engine. Lines are emb
 | `lines[]` | Embedded `FeeScheduleLine` documents |
 | `defaultForPlanId` | Populated for plan-default schedules (enables `GetDefaultForPlanAsync`) |
 
-**Recommended indexes (Cosmos):** `effectiveDate`, `defaultForPlanId`
-
 **Recommended indexes (MongoDB):**
 ```
 { tenantId: 1, defaultForPlanId: 1, effectiveDate: -1 }
@@ -258,7 +256,7 @@ Two Cosmos DB containers (or MongoDB collections) back the engine. Lines are emb
 
 ### Provider contracts
 
-**Partition key:** `/tenantId`
+Every query is scoped by `tenantId`.
 
 | Field | Description |
 |---|---|
@@ -284,21 +282,16 @@ Two Cosmos DB containers (or MongoDB collections) back the engine. Lines are emb
 In the host service's `Program.cs`:
 
 ```csharp
-// Auto-detect Mongo vs Cosmos from configuration
-builder.Services.AddFeeScheduleEngine()
-    .UseRepositoriesFromConfiguration(builder.Configuration);
-
-// Or explicitly:
-builder.Services.AddFeeScheduleEngine()
-    .UseCosmosRepositories();   // requires CosmosClient to be registered
-
 builder.Services.AddFeeScheduleEngine()
     .UseMongoRepositories();    // requires IMongoDatabase to be registered
+
+// UseRepositoriesFromConfiguration(configuration) is kept for existing
+// callers and binds the same Mongo repositories.
 ```
 
 This registers:
 - `IRateResolutionService` → `RateResolutionService`
-- `IFeeScheduleRepository` → `FeeScheduleRepositoryCosmos` or `FeeScheduleRepositoryMongo`
+- `IFeeScheduleRepository` → `FeeScheduleRepositoryMongo` (behind `CachingFeeScheduleRepository`)
 - `IProviderContractRepository` → same implementation (implements both interfaces)
 
 The fee schedule engine is intended to be consumed by the **adjudication service** or the **Argo workflow steps** for `calculate-cost-sharing` and `get-rates`. It has no dependency on HTTP context and can be used in any host.
@@ -309,14 +302,10 @@ The fee schedule engine is intended to be consumed by the **adjudication service
 
 | Key | Required | Description |
 |---|---|---|
-| `CosmosDb:DatabaseName` | Cosmos only | Database name (default: `CloudHealthOffice`) |
-| `CosmosDb:Endpoint` / `CosmosDb:Key` | Cosmos only | Cosmos DB credentials |
-| `MongoDb:ConnectionString` | Mongo only | MongoDB connection string |
-| `MongoDb:DatabaseName` | Mongo only | MongoDB database name |
-| `FeeScheduleEngine:FeeScheduleContainer` | Cosmos only | Container name (default: `FeeSchedules`) |
-| `FeeScheduleEngine:ProviderContractContainer` | Cosmos only | Container name (default: `ProviderContracts`) |
-| `FeeScheduleEngine:FeeScheduleCollection` | Mongo only | Collection name (default: `FeeSchedules`) |
-| `FeeScheduleEngine:ProviderContractCollection` | Mongo only | Collection name (default: `ProviderContracts`) |
+| `MongoDb:ConnectionString` | Yes | MongoDB (or Azure Cosmos DB for MongoDB vCore) connection string |
+| `MongoDb:DatabaseName` | Yes | MongoDB database name |
+| `FeeScheduleEngine:FeeScheduleCollection` | No | Collection name (default: `FeeSchedules`) |
+| `FeeScheduleEngine:ProviderContractCollection` | No | Collection name (default: `ProviderContracts`) |
 
 ---
 

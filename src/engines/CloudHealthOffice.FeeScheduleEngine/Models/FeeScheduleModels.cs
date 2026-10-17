@@ -6,7 +6,7 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace CloudHealthOffice.FeeScheduleEngine.Models;
 
 // ═══════════════════════════════════════════════════════════════════
-// FEE SCHEDULE DOCUMENTS (persisted in Cosmos/Mongo)
+// FEE SCHEDULE DOCUMENTS (persisted in MongoDB)
 // ═══════════════════════════════════════════════════════════════════
 
 /// <summary>
@@ -49,8 +49,8 @@ public class FeeSchedule
     /// The benefit plan (its id, as claims carry it) this schedule is the
     /// default for: <c>IFeeScheduleRepository.GetDefaultForPlanAsync</c>
     /// returns it for lines whose provider has no contracted schedule.
-    /// Null = not a plan default. Stored as <c>defaultForPlanId</c> in both
-    /// stores (the Mongo and Cosmos default-schedule queries filter on it).
+    /// Null = not a plan default. Stored as <c>defaultForPlanId</c> (the
+    /// default-schedule query filters on it).
     /// </summary>
     [JsonPropertyName("defaultForPlanId")]
     [BsonElement("defaultForPlanId")]
