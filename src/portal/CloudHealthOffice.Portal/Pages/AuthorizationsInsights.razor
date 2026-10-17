@@ -1,0 +1,247 @@
+@page "/authorizations/insights"
+@attribute [Authorize]
+@inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
+@inject NavigationManager Navigation
+
+<PageTitle>Authorization Insights - Cloud Health Office</PageTitle>
+
+@*
+    Authorization Insights (portal-navigation.md §5.1). The period figures are
+    the CMS-0057 public-reporting figures, computed by the same code as the
+    regulator report (Compliance → CMS-0057). Every number links to the
+    authorizations it counts, listed with the same predicate.
+*@
+<PermissionGate Permission="authorizations:read" RoleName="UMCoordinator">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <div class="d-flex align-center justify-space-between flex-wrap gap-2 mb-2">
+        <MudText Typo="Typo.h3">
+            <MudIcon Icon="@Icons.Material.Filled.Insights" Class="mr-2" />
+            Authorization Insights
+        </MudText>
+        <ModuleViewSwitch ListHref="/authorizations" InsightsHref="/authorizations/insights" Active="insights" />
+    </div>
+
+    <div class="d-flex align-center flex-wrap gap-3 mb-4" data-testid="insights-filters">
+        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+            @foreach (var d in PeriodChoices)
+            {
+                <MudButton Href="@Link(d, LineOfBusiness)" Variant="@(Days == d ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                           data-testid="@($"insights-period-{d}")">Last @d days</MudButton>
+            }
+        </MudButtonGroup>
+        <MudSelect T="string" Value="@(LineOfBusiness ?? "")" ValueChanged="@(v => Navigation.NavigateTo(Link(Days, string.IsNullOrEmpty(v) ? null : v)))"
+                   Label="Line of business" Dense="true" Variant="Variant.Outlined" Style="max-width: 220px;" data-testid="insights-lob">
+            <MudSelectItem T="string" Value="@("")">All lines of business</MudSelectItem>
+            @foreach (var lob in LinesOfBusiness)
+            {
+                <MudSelectItem T="string" Value="@lob">@lob</MudSelectItem>
+            }
+        </MudSelect>
+        @if (_insights is not null)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" data-testid="insights-asof">
+                As of @_insights.AsOf.ToLocalTime().ToString("MM/dd/yyyy h:mm tt") · submitted @_insights.From.ToLocalTime().ToString("MM/dd") – @_insights.To.ToLocalTime().ToString("MM/dd/yyyy")
+            </MudText>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" data-testid="insights-error">@_error</MudAlert>
+    }
+    else if (_insights is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        var i = _insights;
+        var r = i.Reporting;
+        var lob = i.LineOfBusiness ?? LineOfBusiness;
+        var approved = r.Standard.Approved + r.Expedited.Approved;
+        var pastSla = i.Queue.BySla.Where(s => s.Key is "Critical" or "Breach").Sum(s => s.Count);
+
+        <MudGrid Class="mb-2" Spacing="3">
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Requests in the period" Value="@r.TotalRequests.ToString("N0")"
+                             Sub="@($"{r.DecidedRequests:N0} decided · {r.OpenRequests:N0} still open")"
+                             Href="@AuthorizationDrillDown.Period(i.From, i.To, lob)" TestId="stat-requests" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Approval rate" Value="@(r.DecidedRequests == 0 ? "—" : Pct((double)approved / r.DecidedRequests))"
+                             Sub="@($"{approved:N0} approved of {r.DecidedRequests:N0} decided (modified counts as approved)")"
+                             Href="@(approved > 0 ? AuthorizationDrillDown.Period(i.From, i.To, lob, outcome: "Approved") : null)" TestId="stat-approval" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Expedited decided within 72 hours" Value="@(r.Expedited.DecidedWithinTimeframePercent is { } e ? Pct(e / 100) : "—")"
+                             Sub="@($"{r.Expedited.Decided - r.Expedited.DecidedWithinTimeframe:N0} late of {r.Expedited.Decided:N0} decided")"
+                             Href="@(r.Expedited.Decided - r.Expedited.DecidedWithinTimeframe > 0 ? AuthorizationDrillDown.Period(i.From, i.To, lob, requestType: "Expedited", withinTimeframe: false) : null)"
+                             TestId="stat-expedited" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Open queue now" Value="@i.Queue.Total.ToString("N0")"
+                             Sub="@($"{i.Queue.Expedited:N0} expedited · {pastSla:N0} critical or past SLA")"
+                             Href="@AuthorizationDrillDown.Queue(lob)" TestId="stat-queue" />
+            </MudItem>
+        </MudGrid>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="7">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">Standard vs expedited</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">
+                        Requests submitted in the period. Timeframes: expedited 72 hours, standard 7 days (CMS-0057).
+                    </MudText>
+                    <MudSimpleTable Dense="true" data-testid="insights-types">
+                        <thead><tr><th></th><th style="text-align:right;">Standard</th><th style="text-align:right;">Expedited</th></tr></thead>
+                        <tbody>
+                            <tr>
+                                <td>Requests</td>
+                                <td style="text-align:right;">@Num(r.Standard.Requests, AuthorizationDrillDown.Period(i.From, i.To, lob, requestType: "Standard"), "types-standard-requests")</td>
+                                <td style="text-align:right;">@Num(r.Expedited.Requests, AuthorizationDrillDown.Period(i.From, i.To, lob, requestType: "Expedited"), "types-expedited-requests")</td>
+                            </tr>
+                            <tr>
+                                <td>Approved</td>
+                                <td style="text-align:right;">@Num(r.Standard.Approved, AuthorizationDrillDown.Period(i.From, i.To, lob, "Standard", "Approved"), "types-standard-approved") @Share(r.Standard.ApprovedPercent)</td>
+                                <td style="text-align:right;">@Num(r.Expedited.Approved, AuthorizationDrillDown.Period(i.From, i.To, lob, "Expedited", "Approved"), "types-expedited-approved") @Share(r.Expedited.ApprovedPercent)</td>
+                            </tr>
+                            <tr>
+                                <td>Denied</td>
+                                <td style="text-align:right;">@Num(r.Standard.Denied, AuthorizationDrillDown.Period(i.From, i.To, lob, "Standard", "Denied"), "types-standard-denied") @Share(r.Standard.DeniedPercent)</td>
+                                <td style="text-align:right;">@Num(r.Expedited.Denied, AuthorizationDrillDown.Period(i.From, i.To, lob, "Expedited", "Denied"), "types-expedited-denied") @Share(r.Expedited.DeniedPercent)</td>
+                            </tr>
+                            <tr>
+                                <td>Decided within timeframe</td>
+                                <td style="text-align:right;">@Num(r.Standard.DecidedWithinTimeframe, AuthorizationDrillDown.Period(i.From, i.To, lob, "Standard", withinTimeframe: true), "types-standard-within") @Share(r.Standard.DecidedWithinTimeframePercent)</td>
+                                <td style="text-align:right;">@Num(r.Expedited.DecidedWithinTimeframe, AuthorizationDrillDown.Period(i.From, i.To, lob, "Expedited", withinTimeframe: true), "types-expedited-within") @Share(r.Expedited.DecidedWithinTimeframePercent)</td>
+                            </tr>
+                            <tr>
+                                <td>Decided late</td>
+                                <td style="text-align:right;">@Num(r.Standard.Decided - r.Standard.DecidedWithinTimeframe, AuthorizationDrillDown.Period(i.From, i.To, lob, "Standard", withinTimeframe: false), "types-standard-late")</td>
+                                <td style="text-align:right;">@Num(r.Expedited.Decided - r.Expedited.DecidedWithinTimeframe, AuthorizationDrillDown.Period(i.From, i.To, lob, "Expedited", withinTimeframe: false), "types-expedited-late")</td>
+                            </tr>
+                            <tr>
+                                <td>Median decision time</td>
+                                <td style="text-align:right;">@Hours(r.Standard.MedianDecisionHours)</td>
+                                <td style="text-align:right;">@Hours(r.Expedited.MedianDecisionHours)</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-3">
+                        @Num(r.AutomatedDecisions, AuthorizationDrillDown.Period(i.From, i.To, lob, automated: true), "stat-automated") of @r.DecidedRequests.ToString("N0") decisions were made by an automated rule.
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="5">
+                <MudPaper Class="pa-4 mb-3" Elevation="1">
+                    <MudText Typo="Typo.h6">Open queue by SLA</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">The SLA watchdog's clock (it pauses for RFAI).</MudText>
+                    <InsightBarList TestId="insights-sla" AriaLabel="Open authorizations by SLA escalation"
+                                    Rows="@i.Queue.BySla.Select(s => new InsightBarList.Row(SlaLabel(s.Key), s.Count, AuthorizationDrillDown.Queue(lob, sla: s.Key))).ToList()"
+                                    EmptyText="The queue is empty." />
+                </MudPaper>
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">Open queue by status</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">Requests not yet decided, whenever submitted.</MudText>
+                    <InsightBarList TestId="insights-queue-status" AriaLabel="Open authorizations by status"
+                                    Rows="@i.Queue.ByStatus.OrderByDescending(s => s.Count).Select(s => new InsightBarList.Row(s.Key == "InReview" ? "In review" : s.Key, s.Count, AuthorizationDrillDown.Queue(lob, status: s.Key))).ToList()"
+                                    EmptyText="The queue is empty." />
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">Top denial reasons</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">Requests submitted in the period and denied (top 10).</MudText>
+                    <InsightBarList TestId="insights-denials" AriaLabel="Denied authorizations by reason code"
+                                    Rows="@i.DenialReasons.Select(d => new InsightBarList.Row(d.Code == AuthorizationDrillDown.UnspecifiedCode ? "No reason code" : (d.Description ?? $"Reason {d.Code}"), d.Count, AuthorizationDrillDown.Period(i.From, i.To, lob, denialReasonCode: d.Code), Sub: d.Code == AuthorizationDrillDown.UnspecifiedCode ? null : d.Code)).ToList()"
+                                    EmptyText="No requests denied in the period." />
+                </MudPaper>
+            </MudItem>
+            @if (r.NotYetTracked.Count > 0)
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" data-testid="insights-gaps">
+                        Not yet measured: @string.Join("; ", r.NotYetTracked.Select(g => $"{g.Metric} ({g.Reason})"))
+                    </MudText>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private static readonly int[] PeriodChoices = [7, 30, 90];
+    private static readonly string[] LinesOfBusiness = ["Commercial", "Medicare", "Medicaid", "Exchange", "TRICARE", "VA"];
+
+    [SupplyParameterFromQuery(Name = "days")] public int? DaysParam { get; set; }
+    [SupplyParameterFromQuery(Name = "lob")] public string? LineOfBusiness { get; set; }
+
+    private int Days => DaysParam is { } d && PeriodChoices.Contains(d) ? d : 30;
+
+    private AuthorizationInsightsView? _insights;
+    private string? _error;
+    private string? _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var lob = LinesOfBusiness.Contains(LineOfBusiness) ? LineOfBusiness : null;
+        var key = $"{Days}:{lob}";
+        if (_loadedFor == key) return;
+        _loadedFor = key;
+        _insights = null;
+        _error = null;
+        var to = DateTime.UtcNow;
+        try
+        {
+            _insights = await AuthorizationService.GetAuthorizationInsightsAsync(to.AddDays(-Days), to, lob);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = $"Authorization Insights couldn't be loaded: {ex.Message}";
+        }
+    }
+
+    private static string Link(int days, string? lob) =>
+        "/authorizations/insights?days=" + days + (string.IsNullOrWhiteSpace(lob) ? "" : "&lob=" + Uri.EscapeDataString(lob));
+
+    // Culture-independent "75.0%".
+    private static string Pct(double share) =>
+        (share * 100).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    private static RenderFragment Share(double? percent) => __builder =>
+    {
+        if (percent is { } p)
+        {
+            <span class="mud-text-secondary" style="font-size: 0.75rem; margin-left: 4px;">@p.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%</span>
+        }
+    };
+
+    private static RenderFragment Num(int count, string href, string testId) => __builder =>
+    {
+        if (count > 0)
+        {
+            <a href="@href" data-testid="@testId" style="color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px;">@count.ToString("N0")</a>
+        }
+        else
+        {
+            <span data-testid="@testId">0</span>
+        }
+    };
+
+    private static string Hours(double? hours) => hours switch
+    {
+        null => "—",
+        < 48 => $"{hours:0.#} h",
+        _ => $"{hours / 24:0.#} days",
+    };
+
+    private static string SlaLabel(string level) => level switch
+    {
+        "None" => "On track",
+        "Warning" => "Warning",
+        "Critical" => "Critical",
+        "Breach" => "Past SLA",
+        _ => level,
+    };
+}
