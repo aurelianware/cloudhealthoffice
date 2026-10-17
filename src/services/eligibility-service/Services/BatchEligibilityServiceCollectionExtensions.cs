@@ -74,7 +74,8 @@ public static class BatchEligibilityServiceCollectionExtensions
             var database = new MongoClient(mongoCs).GetDatabase(mongoDb);
             var collection = database.GetCollection<MongoContainerAdapter.JobDoc>(mongoCollection);
             var jobContainer = new MongoContainerAdapter(collection);
-            jobContainer.EnsureIndexesAsync().GetAwaiter().GetResult();
+            // Singleton factory (resolved once, synchronously): the driver's sync API, not sync-over-async.
+            jobContainer.EnsureIndexes();
 
             return new BatchJobStore(
                 jobContainer,

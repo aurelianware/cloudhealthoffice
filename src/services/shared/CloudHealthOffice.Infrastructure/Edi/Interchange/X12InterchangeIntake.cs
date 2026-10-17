@@ -194,8 +194,17 @@ public sealed class X12InterchangeIntake : IX12InterchangeIntake
         _clock = clock ?? TimeProvider.System;
     }
 
-    // No receipt is registered without a request, so Decide completes synchronously.
-    public InterchangeIntakeResult Preview(string content) => Decide(content, null, CancellationToken.None).GetAwaiter().GetResult();
+    public InterchangeIntakeResult Preview(string content)
+    {
+        // Preview is synchronous by contract (IX12InterchangeIntake). Without a receive
+        // request Decide never reaches the store (no duplicate check, no TA1 control
+        // number), so the task is already complete here and GetResult does not block.
+        // Refuse rather than block should that ever stop being true.
+        var decided = Decide(content, null, CancellationToken.None);
+        if (!decided.IsCompleted)
+            throw new InvalidOperationException("Interchange preview must not perform I/O.");
+        return decided.GetAwaiter().GetResult();
+    }
 
     public async Task<InterchangeIntakeResult> ReceiveAsync(InterchangeIntakeRequest request, CancellationToken ct = default)
     {

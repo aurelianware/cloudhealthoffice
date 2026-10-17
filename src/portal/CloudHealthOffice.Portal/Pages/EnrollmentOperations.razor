@@ -244,8 +244,8 @@
             var filesTask = EnrollmentOpsService.GetRecentFilesAsync(7);
             await Task.WhenAll(summaryTask, filesTask);
 
-            _summary = summaryTask.Result;
-            _files = filesTask.Result;
+            _summary = await summaryTask;
+            _files = await filesTask;
 
             BuildChartData();
         }

@@ -359,9 +359,9 @@
             var rfaiTask = CorrespondenceService.GetOutstandingRfaisAsync();
             await Task.WhenAll(summaryTask, queueTask, rfaiTask);
 
-            _summary = summaryTask.Result;
-            _queue = queueTask.Result;
-            _rfais = rfaiTask.Result;
+            _summary = await summaryTask;
+            _queue = await queueTask;
+            _rfais = await rfaiTask;
         }
         catch (ServiceUnavailableException ex)
         {

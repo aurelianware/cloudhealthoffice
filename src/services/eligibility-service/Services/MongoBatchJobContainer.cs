@@ -35,6 +35,18 @@ public class MongoContainerAdapter : IBatchJobContainer
             new CreateIndexModel<JobDoc>(indexKeys, indexOptions), cancellationToken: ct);
     }
 
+    /// <summary>
+    /// Synchronous <see cref="EnsureIndexesAsync"/> for registration-time callers (a DI
+    /// factory cannot await): uses the driver's own sync <c>CreateOne</c> rather than
+    /// blocking on the async call.
+    /// </summary>
+    public void EnsureIndexes()
+    {
+        var indexKeys = Builders<JobDoc>.IndexKeys.Ascending(d => d.ExpiresAt);
+        var indexOptions = new CreateIndexOptions { ExpireAfter = TimeSpan.Zero };
+        _collection.Indexes.CreateOne(new CreateIndexModel<JobDoc>(indexKeys, indexOptions));
+    }
+
     // Each write $sets only the part of the job document it owns (the job, or
     // one payload slot) instead of reading the whole document and replacing it:
     // a replace from a separate read erased whatever another writer stored in
