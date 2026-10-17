@@ -18,7 +18,6 @@
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="Azure.Core" />
     <PackageReference Include="Confluent.Kafka" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
