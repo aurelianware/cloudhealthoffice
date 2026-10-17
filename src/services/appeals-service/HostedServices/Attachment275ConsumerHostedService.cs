@@ -190,7 +190,10 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
         }
         finally
         {
-            try { consumer?.Close(); } catch { /* ignore on shutdown */ }
+            // Leaving the group cleanly only speeds up the next rebalance; uncommitted offsets
+            // are redelivered either way, so a failed Close must not fail shutdown.
+            try { consumer?.Close(); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Closing the 275 attachment consumer failed"); }
             consumer?.Dispose();
         }
     }

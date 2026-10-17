@@ -173,7 +173,8 @@ public sealed class HttpTenantDirectory : ITenantDirectory
                 }
                 catch (System.Text.Json.JsonException)
                 {
-                    // handled below
+                    // An unreadable body leaves answer null; the checks below then treat the
+                    // response as an outage (TenantDirectoryUnavailableException).
                 }
 
                 if (response.IsSuccessStatusCode && answer is { Succeeded: true })
@@ -229,7 +230,8 @@ public sealed class HttpTenantDirectory : ITenantDirectory
                 }
                 catch (System.Text.Json.JsonException)
                 {
-                    // handled below
+                    // An unreadable body leaves answer null; the checks below then treat the
+                    // response as an outage (TenantDirectoryUnavailableException).
                 }
 
                 if (response.IsSuccessStatusCode && answer is { Succeeded: true })

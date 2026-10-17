@@ -297,8 +297,10 @@ public sealed class ServiceBusMessageBus : IMessageBus, IAsyncDisposable
 
         public async ValueTask DisposeAsync()
         {
+            // Stopping first is only for a clean drain; DisposeAsync below closes the
+            // processor regardless, so a stop failure must not prevent disposal.
             try { await StopAsync(CancellationToken.None).ConfigureAwait(false); }
-            catch { /* best effort */ }
+            catch (Exception ex) { _logger.LogWarning(ex, "Stopping the ServiceBusProcessor on {Queue} during dispose failed", _queueOrTopic); }
             await _processor.DisposeAsync().ConfigureAwait(false);
         }
     }

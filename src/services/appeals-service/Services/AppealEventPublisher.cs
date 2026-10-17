@@ -191,7 +191,10 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
                 _producer = null;
                 _available = false;
             }
-            try { failed.Dispose(); } catch (Exception) { /* already broken */ }
+            // The old producer already hit a fatal error and has been replaced; disposing it
+            // is cleanup only and must not undo the rebuild above.
+            try { failed.Dispose(); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Disposing the failed Kafka producer threw"); }
         }
     }
 

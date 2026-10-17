@@ -449,6 +449,8 @@ public class EftDraftService : IEftDraftService
                 }
                 catch (BillingRunConcurrencyException) when (attempt < MaxConcurrentWriteAttempts)
                 {
+                    // Lost the race: the loop re-reads the run and adds the warnings to the fresh
+                    // copy. The final attempt's conflict is not caught and reaches the caller.
                 }
             }
         }

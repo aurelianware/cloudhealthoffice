@@ -382,7 +382,9 @@ public sealed class SshNetSftpSessionFactory : ISftpSessionFactory
         // the library ever connect without raising HostKeyReceived).
         if (!hostKey.Trusted)
         {
-            try { client.Disconnect(); } catch { /* closing an untrusted session */ }
+            // The host-key rejection thrown below is the failure that matters; a Disconnect that
+            // fails on a session we refuse to use changes nothing, and Dispose still runs.
+            try { client.Disconnect(); } catch (Exception) { /* see above */ }
             client.Dispose();
             throw hostKey.RejectionException();
         }

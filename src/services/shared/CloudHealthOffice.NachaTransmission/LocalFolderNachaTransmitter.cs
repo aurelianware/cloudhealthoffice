@@ -65,7 +65,10 @@ public sealed class LocalFolderNachaTransmitter : INachaTransmitter, INachaRemot
         }
         catch (Exception ex)
         {
-            try { File.Delete(tempPath); } catch { /* best effort */ }
+            // The write failure below is what the caller must see; the temp name is never
+            // picked up as a NACHA file, so a leftover is harmless.
+            try { File.Delete(tempPath); }
+            catch (Exception deleteEx) { _logger.LogWarning("Could not remove the partial local NACHA file: {Error}", deleteEx.GetType().Name); }
             throw new NachaTransmissionException($"Writing the NACHA file to the local outbox failed ({ex.GetType().Name}).");
         }
 

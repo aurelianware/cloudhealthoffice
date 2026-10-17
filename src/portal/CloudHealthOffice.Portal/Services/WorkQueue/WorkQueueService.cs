@@ -145,6 +145,8 @@ public class WorkQueueService : IWorkQueueService
             }
             catch (System.Text.Json.JsonException)
             {
+                // The 202 is the outcome; its message is optional, so a body that is not JSON
+                // falls back to the default text below.
             }
             return new ClaimResolutionResult(true, message ?? "Waiting for a second approver.");
         }

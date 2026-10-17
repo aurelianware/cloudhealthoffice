@@ -396,9 +396,10 @@
         {
             _serviceError = ex.Message;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Handle error (could show snackbar)
+            // Previously swallowed: the dialog stayed open with no sign the save failed.
+            _serviceError = $"Saving the provider failed: {ex.Message}";
         }
         finally
         {

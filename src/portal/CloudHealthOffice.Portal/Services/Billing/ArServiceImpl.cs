@@ -180,7 +180,11 @@ public class ArServiceImpl : IArService
                 && body.RootElement.TryGetProperty("code", out var value) && value.ValueKind == JsonValueKind.String)
                 code = value.GetString();
         }
-        catch (JsonException) { }
+        catch (JsonException)
+        {
+            // A 409 without a JSON body is not the reconciliation refusal: code stays null and
+            // the caller's generic conflict handling applies.
+        }
         if (code == CashPostingRequiresReconciliationException.Code)
         {
             _logger.LogWarning("Cash posting {PostingId} cannot be {Action}: legacy posting awaiting finance reconciliation", id, action);

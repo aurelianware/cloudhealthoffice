@@ -171,9 +171,11 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
                 failed.LastFailureAtUtc = _timeProvider.GetUtcNow();
                 await _cursors.SaveAsync(failed, ct).ConfigureAwait(false);
             }
-            catch
+            catch (Exception cursorEx)
             {
-                // Preserve the original poll failure; cursor persistence is best-effort.
+                // Preserve the original poll failure (already logged); recording the failure
+                // time on the cursor is best-effort and the next cycle polls regardless.
+                _logger.LogWarning(cursorEx, "Recording the Stedi 277CA poll failure on the cursor failed");
             }
         }
     }
