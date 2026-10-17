@@ -475,7 +475,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             catch (Exception ex) when (ex is not SeparationOfDutiesException)
             {
                 result.Errors++;
-                result.ErrorMessages.Add($"Statement {statementId}: {ex.Message}");
+                result.ErrorMessages.Add($"Statement {statementId}: {ClientErrorText.For(ex)}");
                 _logger.LogWarning(ex, "Failed to initiate disbursement for statement {StatementId}", statementId);
             }
         }

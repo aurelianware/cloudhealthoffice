@@ -154,8 +154,22 @@ public class ClaimAttachmentTests
 
         var response = await gateway.SubmitAttachmentAsync(Request(tx, stored, tenantId: "tenant-beta"));
 
+        // Read within the caller's tenant: another tenant's transmission is simply
+        // not found (no "it exists, but not for you" answer).
         response.IsSuccess.Should().BeFalse();
-        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.ClaimMismatch);
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.TransmissionNotFound);
+    }
+
+    [Fact]
+    public async Task MissingTenant_Fails_InsteadOfAdoptingTheTransmissionsTenant()
+    {
+        var (gateway, _, _, content) = NewHarness();
+        var (tx, stored) = await SeedAsync(gateway, content);
+
+        var response = await gateway.SubmitAttachmentAsync(Request(tx, stored, tenantId: ""));
+
+        response.IsSuccess.Should().BeFalse();
+        response.Metadata.ErrorCategory.Should().Be(GatewayErrorCategory.Validation);
     }
 
     [Fact]

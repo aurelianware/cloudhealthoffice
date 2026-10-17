@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderService.Models;
@@ -71,11 +72,8 @@ public sealed class CredentialingController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-            {
-                error = "credentialing_publish_failed",
-                message = ex.Message,
-            });
+            _logger.LogError(ex, "Credentialing publish failed (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Credentialing publish failed", StatusCodes.Status503ServiceUnavailable);
         }
     }
 
@@ -111,11 +109,8 @@ public sealed class CredentialingController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-            {
-                error = "credentialing_publish_failed",
-                message = ex.Message,
-            });
+            _logger.LogError(ex, "Credentialing publish failed (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Credentialing publish failed", StatusCodes.Status503ServiceUnavailable);
         }
     }
 
@@ -150,11 +145,8 @@ public sealed class CredentialingController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-            {
-                error = "credentialing_publish_failed",
-                message = ex.Message,
-            });
+            _logger.LogError(ex, "Credentialing publish failed (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Credentialing publish failed", StatusCodes.Status503ServiceUnavailable);
         }
     }
 
@@ -189,11 +181,8 @@ public sealed class CredentialingController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-            {
-                error = "credentialing_publish_failed",
-                message = ex.Message,
-            });
+            _logger.LogError(ex, "Credentialing publish failed (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Credentialing publish failed", StatusCodes.Status503ServiceUnavailable);
         }
     }
 
@@ -228,11 +217,8 @@ public sealed class CredentialingController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-            {
-                error = "credentialing_publish_failed",
-                message = ex.Message,
-            });
+            _logger.LogError(ex, "Credentialing publish failed (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Credentialing publish failed", StatusCodes.Status503ServiceUnavailable);
         }
     }
 
@@ -267,11 +253,8 @@ public sealed class CredentialingController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-            {
-                error = "credentialing_publish_failed",
-                message = ex.Message,
-            });
+            _logger.LogError(ex, "Credentialing publish failed (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Credentialing publish failed", StatusCodes.Status503ServiceUnavailable);
         }
     }
 

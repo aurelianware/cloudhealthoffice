@@ -540,6 +540,9 @@ for dep in $(kubectl get deployments -n "$NAMESPACE" -o name); do
     >/dev/null 2>&1 || true
 done
 kubectl set env deployment --all -n "$NAMESPACE" SecretProvider__Provider=None >/dev/null 2>&1 || true
+# Development hosts refuse to start on Kubernetes unless this says it is deliberate
+# (ChoTestingEnvironment); this is a local Docker Desktop cluster with synthetic data.
+kubectl set env deployment --all -n "$NAMESPACE" CHO_ALLOW_DEV_ON_DEPLOYED_HOST=true >/dev/null 2>&1 || true
 kubectl set env deployment/pricing-api -n "$NAMESPACE" \
   PricingApi__MongoConnectionString="$MONGO_CONN" >/dev/null 2>&1 || true
 for dep in appeals-service consent-service personal-representative-service; do

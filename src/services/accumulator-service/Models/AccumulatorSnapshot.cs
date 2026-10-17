@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Serialization;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace AccumulatorService.Models;
@@ -30,9 +31,11 @@ public class AccumulatorSnapshot
     public string MemberId { get; set; } = string.Empty;
 
     [Required]
+    [BsonSerializer(typeof(UtcCalendarDateSerializer))]
     public DateTime PlanYearStart { get; set; }
 
     [Required]
+    [BsonSerializer(typeof(UtcCalendarDateSerializer))]
     public DateTime PlanYearEnd { get; set; }
 
     public decimal IndividualDeductibleUsed { get; set; }

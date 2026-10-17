@@ -7,7 +7,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Redis accumulators store integer cents.** `RedisAccumulatorService`
+  wrote amounts with `HINCRBYFLOAT` and read them back as
+  `double` → `decimal`. 10,000 × $0.10 did not sum to $1,000.00, and a
+  deductible filled exactly to its limit could read as not met. Every hash
+  value is now an integer number of hundredths (`HINCRBY`, integer Lua
+  arithmetic, cents in the per-claim journal and clamp results). An amount
+  with sub-cent precision is rejected, not rounded.
+- **Hashes written before integer cents are never read as cents.** New
+  hashes carry `__v=2`. A hash without it is a cache miss: its amounts and
+  journals are dropped, its fences are kept, and it is rebuilt from
+  claims-service. **Deploying needs benefit-plan-service scaled to zero
+  first**, because old and new pods misread each other's values. See
+  `docs/operations/ACCUMULATOR-CENTS-CUTOVER.md`.
+- **Accumulator audit rows are written before the operation returns.**
+  These are the audit writes on commit, increment and reversal. They were
+  fire-and-forget `Task.Run`s, so a write could be lost on an error or at
+  shutdown, and they used a scoped writer after its request scope had
+  ended. A failed audit write now fails the operation with
+  `AccumulatorAuditException`. The caller retries it (commits come from
+  the claims-service accumulator outbox), and the retry writes the row. For
+  increments, the audit row is written first.
+
+### Security
+
+- **Attachment uploads are validated before anything is stored.**
+  `POST api/attachments` built the blob path from client-supplied parent ids
+  and the file extension, and the Content-Type from `DocumentFormat`. Now:
+  - Parent ids must be plain ids (letters, digits, `-`, `_`), and every path
+    segment is also sanitized.
+  - Only PDF, TIFF, JPEG and PNG are accepted. DocumentFormat, file
+    extension and file signature must agree, and stored and served
+    Content-Types come from that allowlist.
+  - Size is capped by `Attachments:Upload:MaxFileSizeBytes`, 64 MB by
+    default (the outbound gateway's limit).
+  - The parent claim, authorization or appeal must exist for the caller's
+    tenant, read from the service that owns it. If that check cannot be
+    made, the upload is refused with 502.
+- **Member last-name search is an escaped, case-insensitive prefix match**
+  of at most 100 characters. Before, the caller's text was run as a
+  MongoDB `$regex`, so `.*` matched every member of the tenant. The Cosmos
+  path changes from `CONTAINS` to `STARTSWITH` to match.
+- **834 enrollment events no longer store SSN or date of birth.** The raw
+  snapshot on `EnrollmentEvent.RawSegment` replaces NM109 and DMG02 with
+  `[REDACTED]` for the subscriber and every dependent. Names and addresses
+  remain. Events stored before this change are not rewritten.
+- **Development hosts refuse to start on a deployed platform**
+  (Kubernetes, App Service or Container Apps) unless
+  `CHO_ALLOW_DEV_ON_DEPLOYED_HOST=true`, and then warn on stderr. The portal
+  now runs the same check. The GKE demo renderer and
+  `scripts/deploy-local.sh` set the override.
+- **Unexpected errors no longer return exception text.** The affected
+  services are attachment, eligibility, member, provider, premium-billing,
+  payment, benefit-plan, capitation, trading-partner, fhir, idcard,
+  enrollment-import and terminology, plus the migration-wizard UI. They now
+  return an RFC 7807 problem with a `traceId` (new `ChoProblemResults`
+  helper), or record a fixed message on run, batch and row results, and log
+  the exception server-side. Messages from the services' own validation and
+  state exceptions are unchanged. Converted error bodies are now problem
+  documents rather than `{ error | message }` objects. For example, the
+  provider credentialing 503 no longer carries
+  `error: "credentialing_publish_failed"`. The portal still shows raw
+  exception text in about 200 places; that is not yet changed.
+- **Secret scanning covers service `appsettings*.json` files.** The
+  path-based exemption in `.gitleaks.toml` is removed, and
+  `verify-gitleaks-rules.sh` fails if it returns.
+- **Claim transmissions are read within the caller's tenant.** This covers
+  claim-status and attachment submission by transmission id, remittance
+  posting and acknowledgment replay. Another tenant's transmission id is
+  answered "not found", and attachment submission now requires a tenant.
+- **Stedi attachment submission resolves the payer within the caller's
+  tenant.** Before, it read the transmission by id across tenants and
+  resolved the payer under the stored record's tenant, so another tenant's
+  transmission id returned a different error than an unknown one.
+
 ### Fixed
+
+- **Accumulator plan-year dates no longer shift with the host time zone.**
+  The MongoDB driver stored an `Unspecified`-kind plan-year boundary such as
+  2025-01-01 as local time converted to UTC: 07:00Z on a UTC-7 host and
+  2024-12-31T22:00Z on a UTC+2 host. On the UTC+2 host the read-back start
+  then built the previous plan year's snapshot id. Plan-year fields on
+  accumulator snapshots, events and processed-claim lease targets now use
+  `UtcCalendarDateSerializer` (Infrastructure), which stores the wall-clock
+  date as UTC. On a UTC host it writes exactly what the default serializer
+  wrote, so documents from UTC pods read back unchanged. Documents written by
+  a non-UTC host are not rewritten; they still hold the shifted value.
+- **Eligibility's default service date is today in UTC** from the injected
+  `TimeProvider`, not the host's `DateTime.Today`. This covers quick check,
+  benefit details, accumulation and the auth-requirement lookups.
+
+### Changed
+
+- **CI runs the .NET unit tests a second time with `TZ=America/Phoenix`**
+  (`test-dotnet.yml` matrix). The UTC leg keeps the `.NET Unit Tests` check
+  name, artifact and coverage.
 
 - **Benefit engine: deductibles now apply on non-HDHP plans.** The benefit-plan
   projection (`ChoBenefitPlanProvider`) emitted only copay/coinsurance rules, so

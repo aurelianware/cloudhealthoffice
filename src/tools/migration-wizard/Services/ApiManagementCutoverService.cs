@@ -82,7 +82,8 @@ public class ApiManagementCutoverService
         {
             _logger.LogError(ex, "Cutover failed");
             result.Success = false;
-            result.ErrorMessage = ex.Message;
+            // Shown in the browser: the exception text stays in the log.
+            result.ErrorMessage = "Cutover failed. See the migration wizard log for details.";
             return result;
         }
     }
@@ -132,7 +133,7 @@ public class ApiManagementCutoverService
         {
             _logger.LogError(ex, "Rollback failed");
             result.Success = false;
-            result.ErrorMessage = ex.Message;
+            result.ErrorMessage = "Rollback failed. See the migration wizard log for details.";
             return result;
         }
     }
@@ -170,7 +171,7 @@ public class ApiManagementCutoverService
             return new RoutingStatus
             {
                 IsConfigured = false,
-                ErrorMessage = ex.Message
+                ErrorMessage = "Routing status could not be read. See the migration wizard log for details."
             };
         }
     }

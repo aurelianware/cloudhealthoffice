@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -168,9 +169,15 @@ public class TradingPartnersController : ControllerBase
                 sftpUsername = partner.SftpConfig?.Username
             });
         }
+        catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException)
+        {
+            // The path resolver's own "not configured" / "not found" refusals.
+            return BadRequest(new { message = ex.Message });
+        }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            _logger.LogError(ex, "Error resolving SFTP path (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Error resolving SFTP path", StatusCodes.Status400BadRequest);
         }
     }
 
@@ -214,9 +221,15 @@ public class TradingPartnersController : ControllerBase
                 retentionDays = retention
             });
         }
+        catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException)
+        {
+            // The path resolver's own "not configured" / "not found" refusals.
+            return BadRequest(new { message = ex.Message });
+        }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            _logger.LogError(ex, "Error resolving blob path (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Error resolving blob path", StatusCodes.Status400BadRequest);
         }
     }
 

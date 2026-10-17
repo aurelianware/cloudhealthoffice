@@ -111,6 +111,29 @@ public class OrderToDocumentFlowTests : IClassFixture<OrderToDocumentFlowTests.F
     }
 
     [Fact]
+    public async Task PostOrder_UnexpectedFailure_ReportsAFixedReason_NotTheExceptionText()
+    {
+        _factory.ResetSubstitutes();
+        _factory.Member.GetAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<MemberDto?>(_ => throw new InvalidOperationException("mongodb://admin:hunter2@db:27017 timed out"));
+        var templates = _factory.Services.GetRequiredService<IIdCardTemplateRepository>();
+        await templates.UpsertAsync(TestFixtures.GlobalDefault());
+
+        var response = await _client.PostAsJsonAsync("/api/v1/id-cards/orders", new
+        {
+            memberId = TestFixtures.MemberId,
+            channel = "Digital"
+        });
+
+        var raw = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("hunter2", raw);
+        var body = System.Text.Json.JsonSerializer.Deserialize<IdCardOrderResponse>(raw,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Equal("Failed", body!.Status);
+        Assert.Equal(IdCardOrchestrator.IssuanceFailedMessage, body.FailureReason);
+    }
+
+    [Fact]
     public async Task Scan_WithValidQr_ReturnsEligibilitySnapshot()
     {
         _factory.ResetSubstitutes();

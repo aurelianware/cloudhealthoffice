@@ -222,7 +222,10 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
         ClaimTransmissionRecord? transmission = null;
         if (!string.IsNullOrWhiteSpace(existing.TransmissionId))
         {
-            transmission = await _transmissions.GetByIdAsync(existing.TransmissionId, ct).ConfigureAwait(false);
+            // A stored acknowledgment already names its tenant; replay stays within it.
+            transmission = string.IsNullOrWhiteSpace(existing.TenantId)
+                ? await _transmissions.GetByIdAsync(existing.TransmissionId, ct).ConfigureAwait(false)
+                : await _transmissions.GetByTenantAndIdAsync(existing.TenantId, existing.TransmissionId, ct).ConfigureAwait(false);
             if (transmission is not null)
             {
                 await ApplyTransmissionAsync(existing, transmission, ct).ConfigureAwait(false);

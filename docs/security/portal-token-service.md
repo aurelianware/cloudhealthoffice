@@ -567,6 +567,13 @@ Set the values through Key Vault references or environment variables
   `CHO_ALLOW_TESTING_ENVIRONMENT=true` marks a deliberate in-cluster test run
   (it then warns on stderr). CI that runs tests inside Kubernetes pods must set
   that variable.
+- `Development` accepts the same development keys and gets the same
+  deployed-host rule: on Kubernetes, App Service or Container Apps a
+  Development host (every service, through `AddChoAuthentication`, and the
+  portal) refuses to start unless `CHO_ALLOW_DEV_ON_DEPLOYED_HOST=true` (it then
+  warns on stderr). Only the GKE demo (`deploy/gcp/render_manifests.py`) and
+  the local Docker Desktop deploy (`scripts/deploy-local.sh`) set it.
+  Development off any platform (a laptop, docker compose) is unaffected.
 
 ## Service tokens
 
