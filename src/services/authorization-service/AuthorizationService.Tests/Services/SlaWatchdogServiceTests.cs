@@ -342,20 +342,6 @@ public class SlaWatchdogServiceTests
             It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
     }
 
-    [Fact]
-    public async Task TenantScopingOnCosmos_IsIrrelevant()
-    {
-        _settings["Database:Provider"] = "CosmosDb";
-        _settings["MongoDb:UseTenantScoping"] = "true";
-        var auth = CreateAuth(levelOfService: "U", hoursAgo: 50);
-        SetupRepository(auth);
-
-        var summary = await RunWatchdog();
-
-        summary.SkippedReason.Should().BeNull();
-        auth.SlaEscalation.Should().Be(SlaEscalationLevel.Warning);
-    }
-
     private readonly Dictionary<string, string?> _settings = new();
     private readonly ManualClock _clock = new();
     private SlaWatchdogService? _service;

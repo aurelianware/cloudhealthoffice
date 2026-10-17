@@ -25,6 +25,19 @@ public sealed class DatabaseConfigurationStartupTests
             .Where(e => e.ToString().Contains("No database is configured"));
     }
 
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Development")]
+    public void Host_ToldToUseTheCosmosNativeSdk_FailsAtStartup(string environment)
+    {
+        using var host = new NoDatabaseHost(environment, provider: "CosmosDb");
+
+        var act = () => host.Services.GetRequiredService<IServiceProvider>();
+
+        act.Should().Throw<InvalidOperationException>()
+            .Where(e => e.ToString().Contains("MongoDb:ConnectionString"));
+    }
+
     [Fact]
     public void DevelopmentHost_WithNoDatabaseConfigured_Starts()
     {
@@ -33,7 +46,7 @@ public sealed class DatabaseConfigurationStartupTests
         host.Services.GetRequiredService<IServiceProvider>().Should().NotBeNull();
     }
 
-    private sealed class NoDatabaseHost(string environment) : WebApplicationFactory<Program>
+    private sealed class NoDatabaseHost(string environment, string provider = "") : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -51,10 +64,14 @@ public sealed class DatabaseConfigurationStartupTests
                 builder.UseSetting("ChoAuth:Issuers:0:Issuer", "https://issuer.example.test/");
                 builder.UseSetting("ChoAuth:Issuers:0:Authority", "https://issuer.example.test/");
             }
-            builder.UseSetting("Database:Provider", "");
+            builder.UseSetting("Database:Provider", provider);
             builder.UseSetting("MongoDb:ConnectionString", "");
-            builder.UseSetting("CosmosDb:Endpoint", "");
-            builder.UseSetting("CosmosDb:ConnectionString", "");
+            if (provider.Length > 0)
+            {
+                // What AddChoDatabase needs to wire the Cosmos client; never contacted.
+                builder.UseSetting("CosmosDb:Endpoint", "https://localhost:1/");
+                builder.UseSetting("CosmosDb:Key", "a2V5");
+            }
         }
     }
 }

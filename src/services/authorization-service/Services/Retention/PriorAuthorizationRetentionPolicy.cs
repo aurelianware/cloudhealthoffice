@@ -70,8 +70,7 @@ public sealed class PriorAuthorizationRetentionOptions
     public int MaxRecordsPerTenantPerSweep { get; set; } = 500;
 
     /// <summary>
-    /// Report what would be purged without deleting anything. Mirrors the
-    /// dry-run convention the Cosmos claims migration already uses.
+    /// Report what would be purged without deleting anything.
     /// </summary>
     public bool DryRun { get; set; }
 

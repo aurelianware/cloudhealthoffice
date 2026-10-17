@@ -271,7 +271,7 @@ provider-service's `IntegrityProjectionWorker`:
   an argument, so the sweep never depends on an ambient `HttpContext`;
 * **bounded** — `MaxRecordsPerTenantPerSweep` caps work; no unbounded load;
 * **cancellation observed** between every tenant and every record;
-* **dry-run mode**, following the convention the Cosmos claims migration uses.
+* **dry-run mode**: report what would be purged without deleting anything.
 
 Cadence (default daily) affects only *when* eligible records are discovered,
 never *whether* a record is eligible.
@@ -279,16 +279,12 @@ never *whether* a record is eligible.
 ### Concurrency and idempotency
 
 Purge is a **conditional delete** predicated on the status the sweep decided
-against:
-
-* **Mongo** — one atomic `DeleteOne` whose filter includes id, tenant and
-  expected status;
-* **Cosmos** — a re-read inside the purge, carrying that read's ETag into
-  `DeleteItemAsync` as `IfMatchEtag`.
+against: one atomic Mongo `DeleteOne` whose filter includes id, tenant and
+expected status.
 
 So a record that reopens between being listed and being purged **survives**: the
 predicate no longer matches. `Authorization` has no version field of its own; the
-store's ETag is the concurrency token available.
+status in the delete filter is the concurrency guard.
 
 Repeated sweeps are safe — an already-purged record returns false, not an error —
 and a failed batch simply retries next interval, because each record is an
