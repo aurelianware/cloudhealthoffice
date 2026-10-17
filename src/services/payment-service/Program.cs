@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -262,6 +263,9 @@ PaymentService.BankReconciliation.PaymentBankReconciliationRegistration.AddPayme
 
 builder.Services.AddChoObservability(builder.Configuration);
 
+// Who read which payment (HIPAA access accounting): GET api/payments/{id}/access-log.
+builder.Services.AddRecordAccessAudit();
+
 var app = builder.Build();
 
 app.UseChoObservability();
@@ -285,6 +289,7 @@ app.UseHttpsRedirection();
 app.UseChoAuthentication();
 
 app.MapControllers();
+app.MapRecordAccessLog("api/payments", "Payment");
 app.MapChoX12InterchangeEndpoints("api/v1/payments/interchange");
 app.MapChoHealthChecks();
 

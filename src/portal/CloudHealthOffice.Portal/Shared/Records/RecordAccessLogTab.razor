@@ -1,0 +1,64 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceProvider Services
+@* The Access log tab of a provider, authorization or payment record: loads
+   the log when the tab is opened (audit:read holders only; hosts hide the
+   tab otherwise). *@
+<div data-testid="@($"{Kind.ToLowerInvariant()}-tab-access-log")">
+    <RecordAccessLogPanel Log="_log" Error="@_error" PrimaryType="@Kind" Subject="@Kind.ToLowerInvariant()" Description="@Description" />
+</div>
+
+@code {
+    /// <summary>Provider, Authorization or Payment.</summary>
+    [Parameter, EditorRequired] public string Kind { get; set; } = string.Empty;
+
+    /// <summary>The record's id as the service knows it (not a check or auth number).</summary>
+    [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
+
+    /// <summary>A provider's NPI: its bank-detail reads are logged under it.</summary>
+    [Parameter] public string? Npi { get; set; }
+
+    private RecordAccessLog? _log;
+    private string? _error;
+    private string? _loadedFor;
+
+    /// <summary>Whether the current user may read access logs (audit:read).</summary>
+    public static bool CanRead(IServiceProvider services) =>
+        services.GetService<IUserContextService>()?.HasPermission("audit:read") == true;
+
+    private string Description => Kind switch
+    {
+        "Provider" => "Every read of this provider record and of its bank details: views, and searches that returned it.",
+        "Payment" => "Every read of this payment and its 835: views, and searches and claim lookups that returned it.",
+        _ => "Every read of this record: views, and searches that returned it.",
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{Kind}:{RecordId}:{Npi}";
+        if (_loadedFor == key) return;
+        _loadedFor = key;
+        _log = null;
+        _error = null;
+
+        if (Services.GetService<IRecordAccessLogService>() is not { } logs)
+        {
+            _error = "The access log isn't available here.";
+            return;
+        }
+        try
+        {
+            _log = Kind switch
+            {
+                "Provider" => await logs.GetProviderAccessLogAsync(RecordId, Npi),
+                "Authorization" => await logs.GetAuthorizationAccessLogAsync(RecordId),
+                "Payment" => await logs.GetPaymentAccessLogAsync(RecordId),
+                _ => throw new ArgumentOutOfRangeException(nameof(Kind), Kind, "No access log for this record type."),
+            };
+        }
+        catch (Exception ex)
+        {
+            _error = $"The access log couldn't be loaded: {ex.Message}";
+        }
+    }
+}

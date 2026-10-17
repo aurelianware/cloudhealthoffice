@@ -492,6 +492,10 @@
                     }
                 </div>
             }
+            else if (ActiveTab == "access-log")
+            {
+                <RecordAccessLogTab Kind="Provider" RecordId="@_provider.ProviderId" Npi="@_provider.NPI" />
+            }
         }
 </div>
 
@@ -508,7 +512,7 @@
 
     // Fixed order (portal-navigation.md §8). Payments, Authorizations,
     // Calls, Notes and Documents join when that data is wired.
-    private static readonly IReadOnlyList<RecordTab> ProviderTabs =
+    private IReadOnlyList<RecordTab> ProviderTabs =>
     [
         new("overview", "Overview", Icons.Material.Filled.Info),
         new("locations", "Locations", Icons.Material.Filled.LocationOn),
@@ -517,6 +521,7 @@
         new("contract", "Contract", Icons.Material.Filled.Description),
         new("claims", "Claims", Icons.Material.Filled.Receipt),
         new("performance", "Performance", Icons.Material.Filled.Analytics),
+        new("access-log", "Access log", Icons.Material.Filled.Visibility, Visible: _canReadAccessLog),
     ];
 
     private string ActiveTab => RecordTabs.Resolve(ProviderTabs, Tab, "overview");
@@ -525,6 +530,7 @@
     private bool _refreshing = false;
     private bool _canEdit;
     private ProviderDetails? _provider;
+    private bool _canReadAccessLog => UserContextService.HasPermission("audit:read");
     private string? _serviceError;
     private ClaimSearchResult? _claims;
     private string? _claimsError;

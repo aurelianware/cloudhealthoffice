@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using AuthorizationService.Backends;
@@ -195,6 +196,7 @@ public class AuthorizationsController : ControllerBase
     /// <summary>
     /// Get authorization by ID
     /// </summary>
+    [AuditRecordAccess("Authorization", RecordAccessActions.View, RecordIdRouteValue = "id")]
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(Authorization), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -214,6 +216,7 @@ public class AuthorizationsController : ControllerBase
     /// <summary>
     /// Get authorization by authorization number
     /// </summary>
+    [AuditRecordAccess("Authorization", RecordAccessActions.View, ResultIsRecord = true)]
     [HttpGet("number/{authNumber}")]
     [ProducesResponseType(typeof(Authorization), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -400,6 +403,7 @@ public class AuthorizationsController : ControllerBase
     /// <summary>
     /// Search authorizations (by member, provider, status, date range)
     /// </summary>
+    [AuditRecordAccess("Authorization", RecordAccessActions.Search)]
     [HttpGet("search")]
     [ProducesResponseType(typeof(IEnumerable<Authorization>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Authorization>>> SearchAuthorizations(
@@ -658,6 +662,7 @@ public class AuthorizationsController : ControllerBase
     /// to 100): decision time against the 72-hour or 7-day timeframe, whether an
     /// automated rule or a reviewer decided, and the reason.
     /// </summary>
+    [AuditRecordAccess("Authorization", RecordAccessActions.List)]
     [HttpGet("cms-0057/decisions")]
     [ProducesResponseType(typeof(IEnumerable<Cms0057Decision>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Cms0057Decision>>> GetCms0057Decisions(
@@ -676,6 +681,7 @@ public class AuthorizationsController : ControllerBase
     /// <summary>
     /// Get authorizations approaching or past their SLA deadline
     /// </summary>
+    [AuditRecordAccess("Authorization", RecordAccessActions.List)]
     [HttpGet("sla/at-risk")]
     [ProducesResponseType(typeof(IEnumerable<AuthorizationSlaStatus>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<AuthorizationSlaStatus>>> GetAtRiskAuthorizations(

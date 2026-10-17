@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PaymentService.Models;
@@ -81,6 +82,7 @@ public class PaymentsController : ControllerBase
     /// <summary>
     /// Get payment by ID
     /// </summary>
+    [AuditRecordAccess("Payment", RecordAccessActions.View, RecordIdRouteValue = "id")]
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(Payment), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -99,6 +101,7 @@ public class PaymentsController : ControllerBase
     /// <summary>
     /// Get payment by check number
     /// </summary>
+    [AuditRecordAccess("Payment", RecordAccessActions.View, ResultIsRecord = true)]
     [HttpGet("check/{checkNumber}")]
     [ProducesResponseType(typeof(Payment), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -117,6 +120,7 @@ public class PaymentsController : ControllerBase
     /// <summary>
     /// Get payments for a specific claim
     /// </summary>
+    [AuditRecordAccess("Payment", RecordAccessActions.List)]
     [HttpGet("claim/{claimId}")]
     [ProducesResponseType(typeof(IEnumerable<Payment>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Payment>>> GetPaymentsByClaimId(string claimId)
@@ -128,6 +132,7 @@ public class PaymentsController : ControllerBase
     /// <summary>
     /// Search payments with filters
     /// </summary>
+    [AuditRecordAccess("Payment", RecordAccessActions.Search)]
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<Payment>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Payment>>> SearchPayments(
@@ -208,6 +213,7 @@ public class PaymentsController : ControllerBase
     /// <summary>
     /// Download the X12 835 ERA file for a payment
     /// </summary>
+    [AuditRecordAccess("Payment", "Era", RecordIdRouteValue = "id")]
     [HttpGet("{id}/835")]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
