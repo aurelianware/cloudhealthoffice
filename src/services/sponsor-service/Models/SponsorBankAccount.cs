@@ -119,11 +119,10 @@ public class SponsorBankAccountChange
 }
 
 /// <summary>
-/// One document per sponsor per tenant (collection/container
+/// One document per sponsor per tenant (collection
 /// <c>SponsorBankAccounts</c>): the active approved account, at most one
 /// pending change, and the history. Every write replaces the whole document
-/// conditionally on <see cref="Revision"/> (Mongo filtered replace, Cosmos
-/// If-Match), so approving a change and switching the active account are one
+/// conditionally on <see cref="Revision"/> (a Mongo filtered replace), so approving a change and switching the active account are one
 /// atomic step.
 /// </summary>
 [BsonIgnoreExtraElements]

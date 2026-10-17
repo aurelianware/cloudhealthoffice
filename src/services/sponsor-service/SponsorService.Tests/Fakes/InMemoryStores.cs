@@ -8,7 +8,7 @@ namespace SponsorService.Tests.Fakes;
 /// <summary>
 /// Raw bank-account storage: keeps a serialized copy of exactly what the
 /// service saved (encrypted numbers included), with the same conditional
-/// revision rule as the Mongo and Cosmos repositories.
+/// revision rule as the Mongo repository.
 /// </summary>
 public sealed class InMemorySponsorBankAccountRepository : ISponsorBankAccountRepository
 {
@@ -62,7 +62,7 @@ public sealed class InMemorySponsorBankAccountRepository : ISponsorBankAccountRe
     }
 }
 
-/// <summary>Raw sponsor storage (what Mongo or Cosmos would hold), copies in and out.</summary>
+/// <summary>Raw sponsor storage (what Mongo would hold), copies in and out.</summary>
 public sealed class InMemorySponsorRepository : ISponsorRepository
 {
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);

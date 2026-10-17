@@ -378,18 +378,16 @@ dotnet sponsor-service.dll --encrypt-bank-accounts [--tenant <id>]... [--dry-run
 dotnet run --project src/services/sponsor-service -- --encrypt-bank-accounts --dry-run
 ```
 
-- Run it with sponsor-service's own configuration (the same `MongoDb`, or
-  `Database:Provider=CosmosDb` with `CosmosDb:Endpoint` / `CosmosDb:Key`, and
-  `FieldProtection` settings and identity as the pods). Mongo collections:
-  `CosmosDb:ContainerName` (default `Sponsors`, as the service) and
-  `MongoDb:SponsorBankAccountsCollection` (default `SponsorBankAccounts`);
-  Cosmos containers `Sponsors` and `CosmosDb:SponsorBankAccountsContainer`.
+- Run it with sponsor-service's own configuration (the same `MongoDb` and
+  `FieldProtection` settings and identity as the pods; sponsor-service is
+  MongoDB-only). Collections: `CosmosDb:ContainerName` (default `Sponsors`,
+  as the service) and `MongoDb:SponsorBankAccountsCollection` (default
+  `SponsorBankAccounts`). Without `MongoDb:ConnectionString` it exits 1.
 - Same options, output, exit codes and `MongoDb:UseTenantScoping` rule as the
   provider command. It never prints a number, and it only encrypts: it never
   approves or activates an account.
 - Idempotent and resumable: a sponsor document is changed only if its billing
-  account number is still the value read (Mongo; Cosmos: a patch of that one
-  field on the document's ETag). A bank-account record is saved through the
+  account number is still the value read. A bank-account record is saved through the
   service's own revision-checked save, which bumps its revision: a decision
   (approve, reject) racing the migration on the same record gets the
   service's usual conflict and is retried.
