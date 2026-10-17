@@ -55,8 +55,8 @@ fluent registration extension:
 builder.Services.AddNcciEngine().UseRepositoryFromConfiguration(builder.Configuration);
 ```
 
-Auto-detect: when `MongoDb:ConnectionString` is set the Mongo
-repository binds; otherwise the Cosmos repository binds. Mirrors the
+`UseRepositoryFromConfiguration` binds the Mongo repository, the only
+store (ADR 017). Mirrors the
 5.4 ClaimsScrubEngine wiring pattern. No microservice to decommission;
 no external network call inside the stage.
 
@@ -143,7 +143,7 @@ Task<bool> UpdateAdjudicationProjectionAsync(
     PendDetails? pendDetails = null);   // ← 5.7 addition
 ```
 
-Both Cosmos and Mongo implementations forward the field when non-null;
+The repository forwards the field when non-null;
 null leaves the head row's existing `PendDetails` untouched (so a
 clean re-adjudication doesn't accidentally drop a prior pend reason).
 
@@ -347,7 +347,7 @@ project reference removed; `NcciMode` field removed from
 removed; `IClaimRepository.UpdateAdjudicationProjectionAsync` reverts
 to the 5-parameter signature. No data changes; no migration to undo.
 The optional `PendDetails?` field on the projection bypass is the
-only forward-incompatible surface — Cosmos / Mongo head rows that
+only forward-incompatible surface — head rows that
 captured a `PendDetails` projection during 5.7 would still
 deserialize correctly into the pre-5.7 `Claim` model (the field
 already existed) and would simply not be re-projected on

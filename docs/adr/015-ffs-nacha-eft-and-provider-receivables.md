@@ -130,10 +130,10 @@ retry does not post twice.
   insert, the ledger is left with a `Recovered` entry whose payment does not
   exist. The entry is visible, but no job reconciles it yet.
 - Known and not addressed here:
-  - The run record is updated unconditionally (`PaymentRunRepository.UpdateAsync`
-    replaces it), the existing pattern for payment and reversal runs, so two
-    concurrent EFT-file generations for one run both write. They write the
-    same pinned SHA, but there is no version check.
+  - *Superseded (remediation Phase 5a):* the run record update is now
+    conditional on its revision, so of two concurrent EFT-file generations
+    for one run the second gets a conflict
+    (`docs/architecture/mongo-write-concurrency.md`).
   - `HttpProviderPayeeAccountSource` (the HTTP client for the payee read) has
     no test of its own; the service tests use a scripted source.
 - A receivable whose PLB01 NPI never receives another payment stays open. It

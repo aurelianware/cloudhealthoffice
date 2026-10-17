@@ -23,7 +23,7 @@ the approver who releases the payment gets a masked summary and a receipt.
 
 Each record holds the **active** (approved) account, at most one **pending**
 change, and the history. Every write is conditional on the record's revision
-(Mongo filtered replace, Cosmos If-Match), so approving a change and switching
+(a Mongo filtered replace), so approving a change and switching
 the active account is one atomic step.
 
 - A change is only proposed. It does nothing until a different user holding
