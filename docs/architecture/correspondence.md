@@ -219,7 +219,7 @@ notices: [ {
 
 1. **Trigger.** A domain event arrives over the shared message bus (see [shared-messagebus.md](shared-messagebus.md)), for example appeal `Decided`, `ExtensionTaken`, an authorization denial, a claim RFAI, or a new enrollment. A user can also request a letter from any record page, with a reason; a request made during a call in [cho-service.md](cho-service.md) records the contact as its source (reprint an ID card, resend a denial letter, send an EOB copy). The rule pack sets `dueBy`.
 2. **Resolve the template.** Letter type plus the case's line of business, state and product, and the recipient's language and format preference, pick the template version in effect on the trigger date. A missing template or translation fails loudly and opens a work item; it never silently skips a notice.
-3. **Compose and freeze.** CHO verifies the address, gathers the merge data, sets the **letter date to the channel's planned mail date**, records a hash of the data, renders the PDF with its required attachments (notice of availability, taglines), and stores it in the document store as *Correspondence: outbound letter*, linked to every subject. Copies for a representative or the provider are separate letters linked to the same case.
+3. **Compose and freeze.** CHO resolves the recipient address (§13.1), gathers the merge data, sets the **letter date to the channel's planned mail date**, records a hash of the data, renders the PDF with its required attachments (notice of availability, taglines), and stores it in the document store as *Correspondence: outbound letter*, linked to every subject. Copies for a representative or the provider are separate letters linked to the same case.
 4. **Check.** Automated checks before release: locked text unchanged, required blocks and attachments present, font sizes at or above the minimum, reading level within the template's limit, address verified.
 5. **Approve, where required.** Letter types marked `requiresApproval` become a work item. The reviewer sees the rendered letter next to the case. A correction produces a new version.
 6. **Release.** The letter goes to its channels per the rule pack, the recipient's preferences and any consent on file, early enough to leave the plan's control by `dueBy`.
@@ -365,66 +365,140 @@ Mode A builds what Mode B needs: the templates, delivery channels, proof and the
 - **Sensitive letters** inherit the document store's sensitivity tags; for example, a letter about a Part 2 record is restricted the same way.
 - **Address used is frozen.** The recipient address comes from the member or provider record at render time, is verified, and is part of the data snapshot.
 
-## 13. Demo scenarios
+## 13. Operating safeguards
 
-Seven scripted scenarios, each showing one thing the design does that a fulfillment feed can't. They are the acceptance tests for the design and the script for plan demos.
+Four safeguards that belong in the first release. Each closes a way real fulfillment fails.
+
+### 13.1 Confidential communications and restricted addresses
+
+- **The rule:** a health plan must accommodate reasonable requests to receive communications by alternative means or at an alternative location when the individual clearly states that disclosure could endanger them; the plan may require that statement in the request (45 CFR 164.522(b)). *Some States require more, for example for sensitive services received by a dependent on a subscriber's policy; to confirm per State pack.*
+- **Typical cases:** domestic violence, and adult dependents or minors whose letters must not reach the policyholder.
+- **Address resolution, in order:** a confidential-communications instruction on file for that member (and, where it's scoped, for that subject or service); then a representative where the notice goes to one; then the member's mailing address. The source used is recorded on the letter (`addressSource`) and in its data snapshot.
+- **Scope of an instruction:** an alternate address, an alternate channel (portal only, or phone only), or both; which letters it covers; and its effective dates. It's captured in call tracking or from a written request, with the source recorded.
+- **Enforced everywhere a letter can leave:** mail, email and SMS notifications, the portal inbox and EOBs. A letter that would go to an address the instruction excludes is held, and a work item opens.
+- **Restricted to people who need it:** the alternate address is a sensitive field, shown only to roles that must act on it, and every view is audited.
+- **Other address flags handled the same way:** deceased member (letters stop except those still owed, such as to a representative or estate), "do not mail" on a known-bad address, and returned-mail holds (§9).
+
+### 13.2 Daily reconciliation with each channel
+
+The most common real-world fulfillment failure is a letter that silently never mails. Every channel is reconciled every day:
+
+- **Three counts per channel and day:** released by CHO, acknowledged as received by the vendor, reported as having left the plan's control. Batch channels reconcile at the batch and the piece level; API channels at the piece level.
+- **Any letter missing from a step opens an exception the same day,** without waiting for its own `dueBy` to go at risk.
+- **Duplicates count too:** a letter the vendor reports twice, or mails twice, is an exception.
+- **The reconciliation itself is a record:** each day's counts and exceptions are stored, so an auditor can see the control ran, not just that letters went out.
+
+### 13.3 Channel outage and continuity
+
+Notice clocks don't pause when a vendor goes down.
+
+- **Every mail channel has a configured fallback:** a second vendor, or the print-and-mail API as backup for a batch vendor.
+- **Failover is triggered** by the vendor's status, by missed acknowledgments in reconciliation (§13.2), or by an operator, and is limited to the letter types and dates affected.
+- **Nothing is sent twice:** letters already acknowledged by the failed channel are excluded, and any later report from it for a re-routed letter is an exception.
+- **Each switch is recorded** with who triggered it, why and which letters moved. The letter's events show both channels.
+
+### 13.4 Replies matched to the letter that asked
+
+Many letters expect something back: records for an RFAI, an appointment-of-representative form, a fair hearing request, a signed consent.
+
+- **Each such letter, and any return form in it, carries a barcode** encoding the letter id (no PHI). A short tracking number is printed beside it for callers and fax cover sheets.
+- **Fax and mail intake read the barcode** ([document-store.md](document-store.md) §4), so the reply links itself to the case and the open request, records its received date, and reopens the waiting work. Replies without a readable barcode fall back to OCR matching and the unmatched-documents queue.
+- **Portal replies** link from the letter in the inbox, so they're matched by construction.
+- This depends on the document store's fax and scan intake, so it ships after that intake exists.
+
+## 14. Later phases
+
+### 14.1 Case file packets
+
+- **The need:** Medicaid enrollees have a right to their case file, free of charge, provided sufficiently in advance of the resolution deadline (438.406(b)(5)); MA plans forward the case file to the IRE when a reconsideration is upheld (422.590).
+- **What CHO does:** assembles the packet from the documents linked to the case in the document store, with an index page and page numbering, excluding documents the recipient may not receive (for example sensitivity tags requiring consent). The packet is stored write-once and sent through the usual channels, with proof.
+
+### 14.2 Correspondence operations dashboard
+
+The same idea as the appeals standing mock audit ([appeals-grievances-compliance.md](appeals-grievances-compliance.md) §5), for notices:
+- on-time rate by notice type, line of business and State, measured on `LeftPlanControl`;
+- letters at risk right now, and date mismatches;
+- return and undeliverable rate, and returns still unresolved;
+- each vendor's turnaround and reconciliation exceptions against its SLA;
+- electronic delivery failures and paper fallbacks.
+
+Each measure opens the list of letters behind it.
+
+### 14.3 AI-assisted letters, inside the rules
+
+- **Drafting plan-authored letters** (acknowledgments, grievance resolutions, explanations) from the case record, with a person approving every letter before release.
+- **Plain-language rewrites** of plan-authored text, checked against the template's reading-level limit.
+- **Translation drafts** for new template versions, reviewed and approved by a qualified human translator before use (§3.4); never machine translation at send time.
+- **Never for locked text:** standardized and State-prescribed notices are only filled, never reworded.
+- **Recorded:** a letter or template that AI helped draft records that, and who approved it.
+
+## 15. Demo scenarios
+
+Eight scripted scenarios, each showing one thing the design does that a fulfillment feed can't. They are the acceptance tests for the design and the script for plan demos.
 
 **Demo data rules:**
 - **All synthetic.** Members, providers, addresses and case details are invented and follow the repo's synthetic-data conventions (for example `.test` email addresses) so the PHI scan stays clean.
 - **Vendor and USPS events are mocked** by a simulated print-and-mail channel that emits acceptance, scan and return events on a script, including late and failed cases.
-- **Seeds ship with the code** that runs them (§14): each build step adds the seeds for the scenarios it makes runnable.
+- **Seeds ship with the code** that runs them (§16): each build step adds the seeds for the scenarios it makes runnable.
 - **Each scenario names its rule** (from §3), so the demo shows the regulation being met, not just a letter being printed.
 
-### 13.1 Texas Medicaid appeal with a plan-taken extension
+### 15.1 Texas Medicaid appeal with a plan-taken extension
 
 - **Setup:** a STAR member whose language preference is Spanish appeals a denied service authorization. On day 20 the plan needs more records and takes a 14-day extension.
 - **What happens:** `ExtensionTaken` triggers the extension notice in Spanish, due within 2 calendar days. It's rendered, linked to the appeal and released. The simulated vendor reports USPS acceptance the next day, and appeals-service records `WrittenNoticeSent` from that event.
 - **What it proves:** the notice clock is met from the USPS acceptance date, not the print date; the member's language preference is honored without anyone asking; the letter sits on the appeal record.
 - **Rules:** 42 CFR 438.408(c)(2); UMCM 3.21.
 
-### 13.2 Medicare Advantage denial on the standardized IDN
+### 15.2 Medicare Advantage denial on the standardized IDN
 
 - **Setup:** a pre-service request for an item under the prior authorization rules is denied on day 5 of its 7-day clock.
 - **What happens:** the IDN renders with only its variable fields filled; an edit to locked text is rejected by the pre-release check. The Section 1557 notice of availability is attached. A copy goes to the requesting provider by fax. The ODAG organization-determination export shows the left-plan-control date and time, not the generation date.
 - **What it proves:** standardized text can't drift; the provider is notified; the audit export reports the date CMS asks for.
 - **Rules:** 422.568(b)(1)(ii), (d), (e); 422.2267(b)(1), (e)(16); 45 CFR 92.11.
 
-### 13.3 A letter that mails a day late
+### 15.3 A letter that mails a day late
 
 - **Setup:** a Medicaid adverse benefit determination is dated and released on Monday. The simulated vendor deposits it with USPS on Tuesday.
 - **What happens:** `LeftPlanControl` (Tuesday) doesn't match the letter date (Monday), so a date-mismatch work item opens. The demo rule pack's `onDateMismatch` is `Reissue`: a corrected letter dated for its actual mail date is linked to the original, which is kept unchanged.
 - **What it proves:** CHO catches the gap between the date on a notice and the day it actually left, which a fulfillment feed hides.
 - **Rules:** 438.402(c)(2)(ii); 81 FR 27511 (mail on the date the notice is dated).
 
-### 13.4 Returned mail
+### 15.4 Returned mail
 
 - **Setup:** a grievance resolution letter is mailed to an address the member moved away from.
 - **What happens:** Full-Service ACS reports the piece undeliverable with a new address. CHO records `Returned`, flags the member's address, opens an address-research work item, and posts the letter to the member's portal inbox.
 - **What it proves:** a returned notice becomes work for a person, not a bin in the mailroom.
 - **Rules:** USPS Move Update and ACS (§3.6).
 
-### 13.5 Electronic delivery fails
+### 15.5 Electronic delivery fails
 
 - **Setup:** a Medicare Advantage member has opted in to electronic delivery of denial notices by email and portal.
 - **What happens:** the notice posts to the portal and the PHI-free email alert bounces. CHO records `ElectronicDeliveryFailed` and mails a paper copy automatically; the case shows both.
 - **What it proves:** consent is per medium and per letter type, and failure falls back to paper without anyone noticing it first.
 - **Rules:** 422.2267(d)(2)(ii); PCD Guidance §10.4.4.
 
-### 13.6 Beside QNXT: letters only
+### 15.6 Beside QNXT: letters only
 
 - **Setup:** a mocked QNXT extract delivers notice requests for three appeal resolutions (Mode A, §11.1).
 - **What happens:** CHO renders and delivers all three and writes a result file with each letter's id, document link, letter date and left-plan-control date and evidence. One request has a missing template translation and opens a work item instead of being skipped.
 - **What it proves:** a plan can keep its core system and print vendor and still get proof back; nothing fails silently.
 - **Rules:** §11.1.
 
-### 13.7 ID card on enrollment
+### 15.7 ID card on enrollment
 
 - **Setup:** CMS confirms a Medicare Advantage enrollment on November 3 for a January 1 effective date.
 - **What happens:** the rule pack sets the card deadline to the later of November 13 (10 calendar days) and December 31 (last day of the month before the effective date): December 31. idcard-service issues the card; the carrier letter and card go through the print-and-mail channel; the CARIN digital card is available through FHIR; a later PCP change triggers a reissue.
 - **What it proves:** ID cards follow the same deadlines, delivery and proof as every other letter.
 - **Rules:** 422.2267(e)(30).
 
-## 14. Build order
+### 15.8 Confidential address
+
+- **Setup:** an adult dependent on a subscriber's policy has a confidential-communications instruction on file, given on a call with an endangerment statement, covering all letters.
+- **What happens:** an explanation of benefits and a denial letter for the dependent resolve to the alternate address. The subscriber's household mailing excludes them. A rep without the needed role sees that an instruction exists but not the address.
+- **What it proves:** sensitive mail can't reach the wrong person, and the address used is recorded on every letter.
+- **Rules:** 45 CFR 164.522(b).
+
+## 16. Build order
 
 Depends on [document-store.md](document-store.md) §9 steps 1–2 (storage providers and the catalog).
 
@@ -434,16 +508,19 @@ Depends on [document-store.md](document-store.md) §9 steps 1–2 (storage provi
 2. **Appeal notices:** acknowledgment, extension and resolution letters for the Texas Medicaid and Medicare Advantage packs, including the IDN and the HHSC Notice 1 and 2 templates; triggers from appeals-service; rule pack `notices` entries.
 3. **Approval gate** through work management.
 4. **Portal inbox and the first print-and-mail API adapter,** with IMb serials, USPS events and `LeftPlanControl`.
-5. **Proof loop:** `WrittenNoticeSent` from `LeftPlanControl`, at-risk and date-mismatch work items, returned mail, reprints.
+5. **Proof loop and safeguards:** `WrittenNoticeSent` from `LeftPlanControl`, at-risk and date-mismatch work items, returned mail, reprints, daily reconciliation (§13.2), and confidential-communications address resolution (§13.1).
 6. **Electronic delivery consent and paper fallback.**
-7. **Batch adapter** for the first pilot plan's fulfillment vendor.
+7. **Batch adapter** for the first pilot plan's fulfillment vendor, with failover to the API channel (§13.3).
 8. **ID cards on the shared layer:** physical delivery, bulk reissue, CARIN digital card, and the due-by and delivery columns on the ID Cards tab (§10.1); card storage moves to the document store.
 9. **More letter families:** authorization and claim notices, RFAI letters, EOBs, provider letters.
 10. **Template authoring UI** with preview, version diff and checks.
+11. **Reply matching** (§13.4), once the document store's fax and scan intake exists.
 
-Each step ships the seeds and the simulated-channel scripts for the §13 scenarios it makes runnable: 13.1–13.2 with step 4, 13.3–13.4 with step 5, 13.5 with step 6, 13.6 with step 7, 13.7 with step 8.
+**Later phases:** case file packets (§14.1), the correspondence operations dashboard (§14.2), and AI-assisted letters (§14.3).
 
-## 15. Open questions
+Each step ships the seeds and the simulated-channel scripts for the §15 scenarios it makes runnable: 15.1–15.2 with step 4, 15.3–15.4 and 15.8 with step 5, 15.5 with step 6, 15.6 with step 7, 15.7 with step 8.
+
+## 17. Open questions
 
 1. **Texas currency:** confirm the current UMCM 3.21 version and its HHSC notice templates, ID card issuance timing, and member-materials reading level against the current UMCC and UMCM 4.3.
 2. **Medicaid electronic notices:** how §438.10(c)(6)'s website condition applies to an individual notice, and the opt-in rules in §435.918.
@@ -454,6 +531,7 @@ Each step ships the seeds and the simulated-channel scripts for the §13 scenari
 
 - [42 CFR 422.564](https://www.ecfr.gov/current/title-42/section-422.564), [422.568](https://www.ecfr.gov/current/title-42/section-422.568), [422.570](https://www.ecfr.gov/current/title-42/section-422.570), [422.572](https://www.ecfr.gov/current/title-42/section-422.572), [422.584](https://www.ecfr.gov/current/title-42/section-422.584), [422.590](https://www.ecfr.gov/current/title-42/section-422.590), [422.618](https://www.ecfr.gov/current/title-42/section-422.618), [422.629](https://www.ecfr.gov/current/title-42/section-422.629), [422.631](https://www.ecfr.gov/current/title-42/section-422.631), [422.633](https://www.ecfr.gov/current/title-42/section-422.633), [422.504](https://www.ecfr.gov/current/title-42/section-422.504), [422.2267](https://www.ecfr.gov/current/title-42/section-422.2267)
 - [42 CFR 438.3](https://www.ecfr.gov/current/title-42/section-438.3), [438.10](https://www.ecfr.gov/current/title-42/section-438.10), [438.210](https://www.ecfr.gov/current/title-42/section-438.210), [438.242](https://www.ecfr.gov/current/title-42/section-438.242), [438.402](https://www.ecfr.gov/current/title-42/section-438.402), [438.404](https://www.ecfr.gov/current/title-42/section-438.404), [438.406](https://www.ecfr.gov/current/title-42/section-438.406), [438.408](https://www.ecfr.gov/current/title-42/section-438.408), [438.416](https://www.ecfr.gov/current/title-42/section-438.416), [438.420](https://www.ecfr.gov/current/title-42/section-438.420), [431.80](https://www.ecfr.gov/current/title-42/section-431.80), [431.201](https://www.ecfr.gov/current/title-42/section-431.201), [431.211](https://www.ecfr.gov/current/title-42/section-431.211)
+- [45 CFR 164.522: confidential communications](https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-C/part-164/subpart-E/section-164.522)
 - [45 CFR part 92 (Section 1557)](https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-A/part-92); [HHS notice of the October 2025 vacatur, June 2, 2026](https://www.federalregister.gov/documents/2026/06/02/2026-11015/notice-of-vacatur-regarding-certain-provisions-of-the-2024-nondiscrimination-in-health-programs-and)
 - [CMS: Parts C & D Enrollee Grievances, Organization/Coverage Determinations, and Appeals Guidance](https://www.cms.gov/medicare/appeals-and-grievances/mmcag/downloads/parts-c-and-d-enrollee-grievances-organization-coverage-determinations-and-appeals-guidance.pdf)
 - [CMS: Integrated Denial Notice form instructions (Jan 2025)](https://www.cms.gov/files/document/integrated-denial-notice-form-instructions-cms-10003-eff-jan-2025.pdf); [CMS: MA notices and forms](https://www.cms.gov/medicare/appeals-grievances/managed-care/notices-forms)
