@@ -36,7 +36,7 @@ public class HttpCoverageServiceClient : ICoverageServiceClient
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning("coverage-service rejected coverage creation for member {MemberId}: {Status} {Body}",
-                LogSanitizer.Sanitize(request.MemberId), response.StatusCode, LogSanitizer.Sanitize(body));
+                LogSanitizer.MaskId(request.MemberId), response.StatusCode, LogSanitizer.Sanitize(body));
             throw new CoverageServiceException(
                 $"coverage-service create failed for {request.MemberId}: {response.StatusCode}", response.StatusCode);
         }

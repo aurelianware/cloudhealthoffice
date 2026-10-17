@@ -124,7 +124,7 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation(
             "Submitting authorization for member {MemberId}, provider {ProviderNPI}, service date {ServiceDate}",
-            LogSanitizer.Sanitize(authorization.MemberId), LogSanitizer.Sanitize(authorization.RequestingProviderNPI), authorization.RequestedServiceDateFrom);
+            LogSanitizer.MaskId(authorization.MemberId), LogSanitizer.Sanitize(authorization.RequestingProviderNPI), authorization.RequestedServiceDateFrom);
 
         // Validate authorization
         if (authorization.RequestedServices.Count == 0)
@@ -440,7 +440,7 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation(
             "Searching authorizations: member={Member}, provider={Provider}, dateFrom={From}, dateTo={To}, status={Status}, lob={LOB}",
-            LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(providerNPI), serviceDateFrom, serviceDateTo, status, lineOfBusiness);
+            LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(providerNPI), serviceDateFrom, serviceDateTo, status, lineOfBusiness);
 
         var authorizations = await _authorizationRepository.SearchAsync(
             memberId, providerNPI, serviceDateFrom, serviceDateTo, status, lineOfBusiness, page, pageSize);

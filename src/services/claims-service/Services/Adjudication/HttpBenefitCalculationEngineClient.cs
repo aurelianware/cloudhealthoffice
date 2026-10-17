@@ -220,7 +220,7 @@ public sealed class HttpBenefitCalculationEngineClient : IBenefitCalculationEngi
 
         _logger.LogInformation(
             "Reversal for original claim {OriginalClaimId} (member {MemberId}, plan {PlanId}, terminal {Terminal}): {Outcome}",
-            LogSanitizer.Sanitize(originalClaimId), LogSanitizer.Sanitize(memberId), benefitPlanId, terminal, outcome);
+            LogSanitizer.Sanitize(originalClaimId), LogSanitizer.MaskId(memberId), benefitPlanId, terminal, outcome);
         return outcome;
     }
 

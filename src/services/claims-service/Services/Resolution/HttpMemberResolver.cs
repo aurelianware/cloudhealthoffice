@@ -63,7 +63,7 @@ public class HttpMemberResolver : IMemberResolver
             {
                 _logger.LogWarning(
                     "Member-service returned {StatusCode} resolving member {MemberId}",
-                    response.StatusCode, LogSanitizer.Sanitize(memberId));
+                    response.StatusCode, LogSanitizer.MaskId(memberId));
                 return null;
             }
 
@@ -93,7 +93,7 @@ public class HttpMemberResolver : IMemberResolver
         {
             _logger.LogWarning(ex,
                 "Failed to resolve member {MemberId} for tenant {TenantId}",
-                LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(tenantId));
+                LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(tenantId));
             return null;
         }
     }

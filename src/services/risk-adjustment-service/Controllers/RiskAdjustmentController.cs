@@ -52,7 +52,7 @@ public class RiskAdjustmentController : ControllerBase
         int measurementYear)
     {
         _logger.LogInformation("Fetching risk score for member {MemberId}, year {Year}",
-            LogSanitizer.Sanitize(memberId), measurementYear);
+            LogSanitizer.MaskId(memberId), measurementYear);
 
         var score = await _riskScoreRepository.GetByMemberAndYearAsync(memberId, measurementYear);
         if (score == null)
@@ -73,7 +73,7 @@ public class RiskAdjustmentController : ControllerBase
         int measurementYear)
     {
         _logger.LogInformation("Fetching risk score summary for member {MemberId}, year {Year}",
-            LogSanitizer.Sanitize(memberId), measurementYear);
+            LogSanitizer.MaskId(memberId), measurementYear);
 
         var score = await _riskScoreRepository.GetByMemberAndYearAsync(memberId, measurementYear);
         if (score == null)
@@ -111,7 +111,7 @@ public class RiskAdjustmentController : ControllerBase
     public async Task<ActionResult<MemberScoreTrend>> GetMemberScoreTrend(string memberId)
     {
         _logger.LogInformation("Fetching risk score trend for member {MemberId}",
-            LogSanitizer.Sanitize(memberId));
+            LogSanitizer.MaskId(memberId));
 
         var scores = await _riskScoreRepository.GetByMemberAsync(memberId);
         var scoreList = scores.ToList();
@@ -151,7 +151,7 @@ public class RiskAdjustmentController : ControllerBase
         [FromBody] MemberRiskScore score)
     {
         _logger.LogInformation("Upserting risk score for member {MemberId}, year {Year}, score={Score}",
-            LogSanitizer.Sanitize(memberId), measurementYear, score.RiskScore);
+            LogSanitizer.MaskId(memberId), measurementYear, score.RiskScore);
 
         if (score.MemberId != memberId || score.MeasurementYear != measurementYear)
             return BadRequest("Member ID and measurement year in URL must match the request body");
@@ -205,7 +205,7 @@ public class RiskAdjustmentController : ControllerBase
     {
         _logger.LogInformation(
             "Score calculation requested for member {MemberId}, year {Year}, model {Model}",
-            LogSanitizer.Sanitize(request.MemberId), request.MeasurementYear, LogSanitizer.Sanitize(request.RiskModel));
+            LogSanitizer.MaskId(request.MemberId), request.MeasurementYear, LogSanitizer.Sanitize(request.RiskModel));
 
         var hccModel = MapHccModel(request.RiskModel);
         var gender   = MapGender(request.Gender);
@@ -392,7 +392,7 @@ public class RiskAdjustmentController : ControllerBase
     {
         _logger.LogInformation(
             "Searching risk scores: year={Year}, member={Member}, lob={LOB}, status={Status}",
-            measurementYear, LogSanitizer.Sanitize(memberId), lineOfBusiness, status);
+            measurementYear, LogSanitizer.MaskId(memberId), lineOfBusiness, status);
 
         var scores = await _riskScoreRepository.SearchAsync(
             measurementYear, memberId, lineOfBusiness, status, minScore, maxScore, page, pageSize);

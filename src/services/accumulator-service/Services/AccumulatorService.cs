@@ -308,7 +308,7 @@ public class AccumulatorService : IAccumulatorService
     {
         _logger.LogWarning(
             "Orphan claim: ServiceDate {ServiceDate} does not map to any known plan-year snapshot for member {MemberId} tenant {TenantId}. ClaimId={ClaimId}",
-            evt.ServiceDate, LogSanitizer.Sanitize(evt.MemberId), LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.ClaimId));
+            evt.ServiceDate, LogSanitizer.MaskId(evt.MemberId), LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.ClaimId));
 
         await _publisher.PublishOrphanAsync(new OrphanAccumulatorClaimEvent
         {

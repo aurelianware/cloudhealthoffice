@@ -55,7 +55,7 @@ public sealed class MemberEventPublisher : IMemberEventPublisher
         {
             _logger.LogDebug(
                 "MemberEvent {EventId} already present for {Tenant}:{Member} (idempotent no-op)",
-                LogSanitizer.Sanitize(evt.EventId), LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.MemberId));
+                LogSanitizer.Sanitize(evt.EventId), LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.MaskId(evt.MemberId));
             return existing;
         }
 
@@ -76,7 +76,7 @@ public sealed class MemberEventPublisher : IMemberEventPublisher
 
             _logger.LogWarning(
                 "MemberEvent version {Version} conflict for {Tenant}:{Member}; retry {Attempt}/{Max}",
-                evt.Version, LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.MemberId), attempt + 1, MaxVersionRetries);
+                evt.Version, LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.MaskId(evt.MemberId), attempt + 1, MaxVersionRetries);
 
             if (attempt + 1 < MaxVersionRetries)
             {

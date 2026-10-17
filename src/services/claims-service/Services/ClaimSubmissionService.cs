@@ -193,7 +193,7 @@ public class ClaimSubmissionService : IClaimSubmissionService
         {
             _logger.LogInformation(
                 "Claim submission rejected: {ErrorCount} validation error(s) for member {Member}",
-                validationErrors.Count, LogSanitizer.Sanitize(claim.MemberId));
+                validationErrors.Count, LogSanitizer.MaskId(claim.MemberId));
             return ClaimSubmissionResult.ValidationFailed(validationErrors);
         }
 

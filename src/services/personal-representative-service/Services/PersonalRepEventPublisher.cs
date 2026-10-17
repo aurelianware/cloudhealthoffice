@@ -173,7 +173,7 @@ public sealed class PersonalRepEventPublisher : IPersonalRepEventPublisher, IHos
                 "Kafka producer unavailable; skipping {EventType} for rep {PersonalRepId} member {MemberId}",
                 eventType,
                 LogSanitizer.Sanitize(rep.Id, 256),
-                LogSanitizer.Sanitize(association.MemberId, 256));
+                LogSanitizer.MaskId(association.MemberId));
             return;
         }
 
@@ -206,7 +206,7 @@ public sealed class PersonalRepEventPublisher : IPersonalRepEventPublisher, IHos
                 "Published {EventType} for rep {PersonalRepId} member {MemberId}",
                 eventTypeName,
                 LogSanitizer.Sanitize(rep.Id, 256),
-                LogSanitizer.Sanitize(association.MemberId, 256));
+                LogSanitizer.MaskId(association.MemberId));
         }
         catch (ProduceException<string, string> ex)
         {

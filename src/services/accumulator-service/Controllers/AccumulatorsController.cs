@@ -66,7 +66,7 @@ public class AccumulatorsController : ControllerBase
         _logger.LogInformation(
             "Accumulator adjusted: tenant={TenantId} member={MemberId} adjustmentId={AdjustmentId} actor={ActorId}",
             LogSanitizer.Sanitize(TenantId),
-            LogSanitizer.Sanitize(memberId),
+            LogSanitizer.MaskId(memberId),
             LogSanitizer.Sanitize(result.AdjustmentId),
             LogSanitizer.Sanitize(actorId));
         return Ok(result);

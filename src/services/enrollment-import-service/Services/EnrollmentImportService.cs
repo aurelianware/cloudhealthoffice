@@ -90,7 +90,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 var flat = string.Join("; ", validation.ToFlatStrings());
                 _logger.LogWarning(
                     "Validation failed for subscriber {SubscriberId}: {Errors}",
-                    LogSanitizer.Sanitize(memberEnrollment.SubscriberId), flat);
+                    LogSanitizer.MaskId(memberEnrollment.SubscriberId), flat);
                 result.Errors.AddRange(
                     validation.Errors.Select(e =>
                         $"Subscriber {memberEnrollment.SubscriberId}: [{e.Code}] {e.Field} — {e.Message}"));
@@ -117,7 +117,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing enrollment for subscriber {SubscriberId}",
-                    LogSanitizer.Sanitize(memberEnrollment.SubscriberId));
+                    LogSanitizer.MaskId(memberEnrollment.SubscriberId));
                 result.Errors.Add($"Subscriber {memberEnrollment.SubscriberId}: {ClientErrorText.For(ex)}");
                 result.FailedCount++;
                 txnStatus = "Rejected";
@@ -278,7 +278,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             // still records the txn. Surface as a warning so it shows up in dashboards.
             _logger.LogWarning(ex,
                 "Failed to publish EnrollmentEvent for {Tenant}:{Member} batch {BatchId}",
-                LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(batchId));
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(batchId));
         }
     }
 
@@ -371,7 +371,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             // Transaction-log failures must not bring down the import; log and move on.
             _logger.LogWarning(ex,
                 "Failed to persist EnrollmentTransaction for subscriber {SubscriberId}",
-                LogSanitizer.Sanitize(memberEnrollment.SubscriberId));
+                LogSanitizer.MaskId(memberEnrollment.SubscriberId));
         }
     }
 
@@ -413,7 +413,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                     // but still reconcile coverage and dependents — both are
                     // keyed deterministically, so a replay changes nothing.
                     _logger.LogWarning("Member {SubscriberId} already exists, skipping addition",
-                        LogSanitizer.Sanitize(enrollment.SubscriberId));
+                        LogSanitizer.MaskId(enrollment.SubscriberId));
                     result.SkippedCount++;
                     break;
                 }
@@ -432,7 +432,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 if (!memberExists)
                 {
                     _logger.LogWarning("Member {SubscriberId} not found for change/reinstatement, creating new",
-                        LogSanitizer.Sanitize(enrollment.SubscriberId));
+                        LogSanitizer.MaskId(enrollment.SubscriberId));
                     await CreateMemberFromEnrollmentAsync(memberId, enrollment, tenantId);
                     result.MembersCreated++;
                 }
@@ -448,7 +448,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 if (!memberExists)
                 {
                     _logger.LogWarning("Member {SubscriberId} not found for termination, skipping",
-                        LogSanitizer.Sanitize(enrollment.SubscriberId));
+                        LogSanitizer.MaskId(enrollment.SubscriberId));
                     result.SkippedCount++;
                     subscriberOnFile = false;
                     break;
@@ -500,7 +500,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             _logger.LogWarning(
                 "Subscriber {SubscriberId} not on file; skipping {Count} dependent(s)",
-                LogSanitizer.Sanitize(enrollment.SubscriberId), enrollment.Dependents.Count);
+                LogSanitizer.MaskId(enrollment.SubscriberId), enrollment.Dependents.Count);
             result.Errors.Add(
                 $"Subscriber {enrollment.SubscriberId}: not on file; {enrollment.Dependents.Count} dependent(s) not applied");
             return;
@@ -550,7 +550,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error looking up subscriber {SubscriberId} for dependent",
-                LogSanitizer.Sanitize(subscriberId));
+                LogSanitizer.MaskId(subscriberId));
             result.Errors.Add($"Subscriber {subscriberId} dependent: {ClientErrorText.For(ex)}");
             result.FailedCount++;
             await RecordTransactionAsync(
@@ -564,7 +564,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             {
                 _logger.LogWarning(
                     "Subscriber {SubscriberId} not found for dependent termination, skipping",
-                    LogSanitizer.Sanitize(subscriberId));
+                    LogSanitizer.MaskId(subscriberId));
                 result.SkippedCount++;
                 // Same status the subscriber loop records for a not-found 024.
                 await RecordTransactionAsync(
@@ -629,7 +629,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing dependent {DependentId} of subscriber {SubscriberId}",
-                LogSanitizer.Sanitize(dependentMemberId), LogSanitizer.Sanitize(subscriberMemberId));
+                LogSanitizer.MaskId(dependentMemberId), LogSanitizer.MaskId(subscriberMemberId));
             ctx.Result.Errors.Add($"Dependent {dependentMemberId}: {ClientErrorText.For(ex)}");
             await RecordTransactionAsync(
                 ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId);
@@ -922,7 +922,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 {
                     _logger.LogInformation(
                         "Coverage {CoverageKey} already on file for member {MemberId}; addition is a no-op",
-                        key, LogSanitizer.Sanitize(memberId));
+                        key, LogSanitizer.MaskId(memberId));
                     return;
                 }
                 await CreateCoverageAsync(memberId, line, planId, groupNumber, effective, end, "021",
@@ -1014,7 +1014,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 {
                     _logger.LogWarning(
                         "No coverage {CoverageKey} in force on the termination date for member {MemberId}; termination not applied",
-                        key, LogSanitizer.Sanitize(memberId));
+                        key, LogSanitizer.MaskId(memberId));
                     return;
                 }
                 if (!HasId(match, memberId, ctx) || match.TerminationDate?.Date == terminationDate.Value.Date)
@@ -1028,7 +1028,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             default:
                 _logger.LogWarning(
                     "Unsupported coverage maintenance type {MaintenanceType} for member {MemberId}; skipped",
-                    LogSanitizer.Sanitize(maintenanceType), LogSanitizer.Sanitize(memberId));
+                    LogSanitizer.Sanitize(maintenanceType), LogSanitizer.MaskId(memberId));
                 return;
         }
     }
@@ -1105,7 +1105,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 {
                     _logger.LogInformation(
                         "Reinstatement {CoverageKey} for member {MemberId} begins {Begin:yyyy-MM-dd}, after a gap since {Termination:yyyy-MM-dd}; creating a new span",
-                        key, LogSanitizer.Sanitize(memberId), begin, previous.TerminationDate);
+                        key, LogSanitizer.MaskId(memberId), begin, previous.TerminationDate);
                 }
                 var newEnd = end ?? (begin is null ? null : DayBeforeNextSpan(existing, line.InsuranceLineCode, begin.Value, null));
                 await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, newEnd, "025",
@@ -1228,7 +1228,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             _logger.LogInformation(
                 "Reinstatement for member {MemberId} with no HD: member has open coverage or none terminated; nothing to reinstate",
-                LogSanitizer.Sanitize(memberId));
+                LogSanitizer.MaskId(memberId));
             return;
         }
 
@@ -1255,7 +1255,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             {
                 _logger.LogInformation(
                     "Reinstatement for member {MemberId} begins {Begin:yyyy-MM-dd}, after a gap since {Termination:yyyy-MM-dd}; creating a new span",
-                    LogSanitizer.Sanitize(memberId), begin, previous.TerminationDate);
+                    LogSanitizer.MaskId(memberId), begin, previous.TerminationDate);
                 var line = new CoverageDetail { InsuranceLineCode = previous.InsuranceLineCode ?? string.Empty };
                 await CreateCoverageAsync(memberId, line, previous.PlanId, previous.GroupNumber, begin, null, "025",
                     previous.CoverageLevel, existing, ctx);
@@ -1442,7 +1442,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             _logger.LogWarning(
                 "Coverage for member {MemberId} is missing group number or plan code (HD04); cannot resolve PlanId",
-                LogSanitizer.Sanitize(memberId));
+                LogSanitizer.MaskId(memberId));
             return null;
         }
 
@@ -1453,7 +1453,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             _logger.LogWarning(
                 "No plan-code mapping for group {GroupNumber} line {InsuranceLineCode} code {ExternalCode}; skipping coverage for {MemberId}",
                 LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(coverageDetail.InsuranceLineCode),
-                LogSanitizer.Sanitize(externalPlanCode), LogSanitizer.Sanitize(memberId));
+                LogSanitizer.Sanitize(externalPlanCode), LogSanitizer.MaskId(memberId));
         }
         return planId;
     }
@@ -1483,7 +1483,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                     // Replay: leave the member alone, still reconcile coverage
                     // (idempotent by coverage key).
                     _logger.LogWarning("Dependent {DependentId} already exists, skipping addition",
-                        LogSanitizer.Sanitize(dependentMemberId));
+                        LogSanitizer.MaskId(dependentMemberId));
                     applied = false;
                     break;
                 }
@@ -1526,7 +1526,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 if (!exists)
                 {
                     _logger.LogWarning("Dependent {DependentId} not found for termination, skipping",
-                        LogSanitizer.Sanitize(dependentMemberId));
+                        LogSanitizer.MaskId(dependentMemberId));
                     return false;
                 }
                 await _memberClient.TerminateAsync(tenantId, dependentMemberId, new TerminateMemberRequestDto

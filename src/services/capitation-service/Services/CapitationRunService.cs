@@ -523,7 +523,7 @@ public class CapitationRunService : ICapitationRunService
                     _logger.LogError(
                         "Capitation run {RunNumber}: risk score unavailable for member {MemberId} (provider {NPI}, year {Year}): {Failure}. " +
                         "The member is left off the statement and the statement is held",
-                        run.RunNumber, LogSanitizer.Sanitize(coverage.MemberId), contract.ProviderNPI, periodStart.Year, lookup.Failure);
+                        run.RunNumber, LogSanitizer.MaskId(coverage.MemberId), contract.ProviderNPI, periodStart.Year, lookup.Failure);
                     statement.MemberIssues.Add(new CapitationMemberIssue
                     {
                         MemberId = coverage.MemberId,
@@ -547,7 +547,7 @@ public class CapitationRunService : ICapitationRunService
                     riskScoreSource = RiskScoreSources.NoScoreForYear;
                     _logger.LogInformation(
                         "Capitation run {RunNumber}: no risk score for member {MemberId}, year {Year}; using contract default {Default}",
-                        run.RunNumber, LogSanitizer.Sanitize(coverage.MemberId), periodStart.Year, contract.DefaultRiskScore);
+                        run.RunNumber, LogSanitizer.MaskId(coverage.MemberId), periodStart.Year, contract.DefaultRiskScore);
                 }
             }
             else
@@ -772,7 +772,7 @@ public class CapitationRunService : ICapitationRunService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Risk score request failed for member {MemberId}, year {Year}",
-                LogSanitizer.Sanitize(memberId), year);
+                LogSanitizer.MaskId(memberId), year);
             return RiskScoreLookup.Failed($"risk-adjustment-service unreachable: {ex.GetType().Name}");
         }
 
@@ -792,7 +792,7 @@ public class CapitationRunService : ICapitationRunService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unreadable risk score response for member {MemberId}, year {Year}",
-                    LogSanitizer.Sanitize(memberId), year);
+                    LogSanitizer.MaskId(memberId), year);
                 return RiskScoreLookup.Failed("risk-adjustment-service returned an unreadable score");
             }
 

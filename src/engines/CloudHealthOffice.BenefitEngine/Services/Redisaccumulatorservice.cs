@@ -142,7 +142,7 @@ public class RedisAccumulatorService : IAccumulatorService
 
         _logger.LogDebug(
             "Loaded {Count} accumulator snapshots for member {MemberId}, plan {PlanId}/{PlanYear}",
-            snapshots.Count, LogSanitizer.Sanitize(memberId), benefitPlanId, LogSanitizer.Sanitize(planYear));
+            snapshots.Count, LogSanitizer.MaskId(memberId), benefitPlanId, LogSanitizer.Sanitize(planYear));
 
         return snapshots;
     }
@@ -190,7 +190,7 @@ public class RedisAccumulatorService : IAccumulatorService
 
         _logger.LogDebug(
             "Applied {Count} accumulator updates for claim {ClaimId} (member {MemberId})",
-            updates.Count, LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(memberId));
+            updates.Count, LogSanitizer.Sanitize(claimId), LogSanitizer.MaskId(memberId));
     }
 
     /// <summary>
@@ -743,7 +743,7 @@ return #fences
 
         _logger.LogInformation(
             "Invalidated accumulator cache for claim reversal {ClaimId} (member {MemberId}, fenced: {Fenced})",
-            LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(memberId), fence);
+            LogSanitizer.Sanitize(claimId), LogSanitizer.MaskId(memberId), fence);
     }
 
     // ═══════════════════════════════════════════════════════════════════

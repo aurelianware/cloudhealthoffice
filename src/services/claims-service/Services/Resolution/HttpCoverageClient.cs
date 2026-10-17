@@ -88,7 +88,7 @@ public class HttpCoverageClient : ICoverageClient
             {
                 _logger.LogWarning(
                     "Coverage service returned {StatusCode} resolving COB entries for member {Member}",
-                    response.StatusCode, LogSanitizer.Sanitize(memberId));
+                    response.StatusCode, LogSanitizer.MaskId(memberId));
                 return null;
             }
 
@@ -104,7 +104,7 @@ public class HttpCoverageClient : ICoverageClient
         {
             _logger.LogWarning(ex,
                 "COB lookup failed for member {Member} tenant {Tenant}",
-                LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(tenantId));
+                LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(tenantId));
             return null;
         }
     }

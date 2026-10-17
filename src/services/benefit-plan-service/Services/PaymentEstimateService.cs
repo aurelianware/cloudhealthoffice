@@ -61,7 +61,7 @@ public class PaymentEstimateService : IPaymentEstimateService
 
         _logger.LogInformation(
             "Prospective estimate for member {MemberId}, plan {PlanId}, {LineCount} line(s), type {ClaimType}",
-            LogSanitizer.Sanitize(request.MemberId, 256), request.BenefitPlanId,
+            LogSanitizer.MaskId(request.MemberId), request.BenefitPlanId,
             request.Lines.Count, LogSanitizer.Sanitize(claimTypeCode, 256));
 
         var warnings = new List<EstimateMessage>();

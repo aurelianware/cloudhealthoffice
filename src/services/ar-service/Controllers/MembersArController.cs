@@ -39,7 +39,7 @@ public class MembersArController : ControllerBase
         if (string.IsNullOrWhiteSpace(memberId))
             return BadRequest(new { error = "memberId is required" });
 
-        _logger.LogInformation("AR summary lookup for member {MemberId}", LogSanitizer.Sanitize(memberId));
+        _logger.LogInformation("AR summary lookup for member {MemberId}", LogSanitizer.MaskId(memberId));
 
         var balances = (await _balanceRepository.GetBalancesContainingMemberAsync(memberId)).ToList();
         var summary = BuildSummary(memberId, balances, DateTime.UtcNow);

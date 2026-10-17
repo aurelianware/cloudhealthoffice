@@ -81,7 +81,7 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
         var audit = Audit(request, PayerToPayerOutcome.Exported, member.MemberId, bundle.Total, decision);
         _logger.LogInformation(
             "P2P respond: tenant={Tenant} receivingPayer={Payer} member={Member} resources={Count}",
-            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), LogSanitizer.Sanitize(audit.MatchedMemberId), audit.ResourceCount);
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), LogSanitizer.MaskId(audit.MatchedMemberId), audit.ResourceCount);
 
         return new PayerToPayerExportResult
         {
