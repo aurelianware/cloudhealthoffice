@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -44,6 +45,7 @@ public class FamilyRelationshipsController : ControllerBase
     // ── Read ────────────────────────────────────────────────────────────
 
     /// <summary>List active relationships touching <paramref name="memberId"/>.</summary>
+    [AuditRecordAccess("Member", "Family", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet]
     [ProducesResponseType(typeof(FamilyRelationshipListResponse), 200)]
     [ProducesResponseType(404)]
@@ -70,6 +72,7 @@ public class FamilyRelationshipsController : ControllerBase
         });
     }
 
+    [AuditRecordAccess("Member", "Family", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{relId}")]
     [ProducesResponseType(typeof(FamilyRelationship), 200)]
     [ProducesResponseType(404)]

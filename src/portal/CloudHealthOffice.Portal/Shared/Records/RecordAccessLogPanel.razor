@@ -1,0 +1,87 @@
+@namespace CloudHealthOffice.Portal.Shared.Records
+@* Who read a record, newest first, from every service that holds part of its
+   log. Shown on a record's Access log tab to users with audit:read; opening
+   it is itself recorded. *@
+@if (Error is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" data-testid="access-log-error">@Error</MudAlert>
+}
+else if (Log is null)
+{
+    <div class="d-flex justify-center pa-8"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+}
+else
+{
+    @if (Log.Unavailable.Count > 0)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3" data-testid="access-log-partial">
+            Incomplete: the log from @string.Join(" and ", Log.Unavailable) couldn't be read. The entries below are from the other sources.
+        </MudAlert>
+    }
+    @if (Log.Entries.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" data-testid="access-log-empty">No reads of this @Subject have been recorded.</MudText>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">@Description Opening this log is recorded too.</MudText>
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead>
+                <tr><th>When (UTC)</th><th>Who</th><th>Roles</th><th>Record</th><th>What</th><th>Outcome</th><th>From</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in Log.Entries)
+                {
+                    <tr data-testid="access-log-row">
+                        <td style="white-space: nowrap;">@entry.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td>
+                            @entry.Actor
+                            @if (entry.ActorIsService)
+                            {
+                                <MudChip T="string" Size="Size.Small" Class="ml-1">service</MudChip>
+                            }
+                        </td>
+                        <td><MudText Typo="Typo.caption">@string.Join(", ", entry.ActorRoles)</MudText></td>
+                        <td data-testid="access-log-record">
+                            @if (entry.Href is { } href && entry.RecordType != PrimaryType)
+                            {
+                                <RecordLink Href="@href">@entry.RecordType @entry.RecordId</RecordLink>
+                            }
+                            else
+                            {
+                                @entry.RecordType
+                            }
+                        </td>
+                        <td>@entry.What</td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Color="@OutcomeColor(entry.Outcome)" data-testid="access-log-outcome">@entry.Outcome</MudChip>
+                        </td>
+                        <td><MudText Typo="Typo.caption" Style="font-family: monospace;">@entry.ClientIp</MudText></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+}
+
+@code {
+    /// <summary>The log, or null while loading.</summary>
+    [Parameter] public RecordAccessLog? Log { get; set; }
+    [Parameter] public string? Error { get; set; }
+
+    /// <summary>The record's own type; rows for it don't link back to the page they're on.</summary>
+    [Parameter, EditorRequired] public string PrimaryType { get; set; } = string.Empty;
+
+    /// <summary>"member", "provider", ... for the empty message.</summary>
+    [Parameter] public string Subject { get; set; } = "record";
+
+    [Parameter] public string Description { get; set; } = "Every read of this record: views, and searches that returned it.";
+
+    private static Color OutcomeColor(string outcome) => outcome switch
+    {
+        "Allowed" => Color.Success,
+        "Denied" => Color.Error,
+        "NotFound" => Color.Warning,
+        _ => Color.Default,
+    };
+}

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -69,6 +70,7 @@ public class MembersController : ControllerBase
     // ── Search / read ────────────────────────────────────────────────
 
     /// <summary>Search members by various criteria.</summary>
+    [AuditRecordAccess("Member", RecordAccessActions.Search, ResultIdProperty = "MemberId")]
     [HttpGet]
     [ProducesResponseType(typeof(MemberListResponse), 200)]
     public async Task<IActionResult> SearchMembers(
@@ -109,6 +111,7 @@ public class MembersController : ControllerBase
     }
 
     /// <summary>Free-text search across memberId and lastName.</summary>
+    [AuditRecordAccess("Member", RecordAccessActions.Search, ResultIdProperty = "MemberId")]
     [HttpGet("search")]
     [ProducesResponseType(typeof(List<Member>), 200)]
     public async Task<IActionResult> SearchByQuery([FromQuery] string? q = null)
@@ -172,6 +175,7 @@ public class MembersController : ControllerBase
     }
 
     /// <summary>Get member details by member ID.</summary>
+    [AuditRecordAccess("Member", "View", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{memberId}")]
     [ProducesResponseType(typeof(Member), 200)]
     [ProducesResponseType(404)]
@@ -507,6 +511,7 @@ public class MembersController : ControllerBase
 
     // ── Dependents ───────────────────────────────────────────────────
 
+    [AuditRecordAccess("Member", "Family", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{memberId}/dependents")]
     [ProducesResponseType(typeof(List<Member>), 200)]
     public async Task<IActionResult> GetDependents([FromRoute] string memberId)
@@ -518,6 +523,7 @@ public class MembersController : ControllerBase
     // ── Eligibility ──────────────────────────────────────────────────
 
     /// <summary>Verify member eligibility for a service date.</summary>
+    [AuditRecordAccess("Member", "Eligibility", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{memberId}/eligibility")]
     [ProducesResponseType(typeof(EligibilityCheckResponse), 200)]
     [ProducesResponseType(404)]
@@ -559,6 +565,7 @@ public class MembersController : ControllerBase
     // ── FHIR projection ──────────────────────────────────────────────
 
     /// <summary>FHIR R4 Patient projection of this member.</summary>
+    [AuditRecordAccess("Member", "Fhir", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{memberId}/fhir")]
     [Produces("application/fhir+json", "application/json")]
     [ProducesResponseType(200)]
@@ -594,6 +601,7 @@ public class MembersController : ControllerBase
     // ── Event stream ─────────────────────────────────────────────────
 
     /// <summary>Return the member-events stream for this member, ordered by version.</summary>
+    [AuditRecordAccess("Member", "Events", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{memberId}/events")]
     [ProducesResponseType(typeof(List<MemberEvent>), 200)]
     [ProducesResponseType(404)]
@@ -608,6 +616,7 @@ public class MembersController : ControllerBase
 
     // ── Portal integration endpoints ─────────────────────────────────
 
+    [AuditRecordAccess("Member", "Pcp", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{memberId}/pcp")]
     [ProducesResponseType(typeof(MemberPcpResponse), 200)]
     [ProducesResponseType(404)]
@@ -693,6 +702,7 @@ public class MembersController : ControllerBase
     /// coverage-service so portal / consent / audit stay on the member-service
     /// boundary.
     /// </summary>
+    [AuditRecordAccess("Member", "Pcp", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{memberId}/pcp/history")]
     [ProducesResponseType(typeof(IReadOnlyList<PcpAssignmentHistoryItem>), 200)]
     [ProducesResponseType(404)]
@@ -713,6 +723,7 @@ public class MembersController : ControllerBase
         }
     }
 
+    [AuditRecordAccess("Member", "Coverage", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{memberId}/coverage-history")]
     [ProducesResponseType(typeof(List<CoverageHistoryEvent>), 200)]
     [ProducesResponseType(503)]
@@ -729,6 +740,7 @@ public class MembersController : ControllerBase
         }
     }
 
+    [AuditRecordAccess("Member", "Enrollment", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{memberId}/834-transactions")]
     [ProducesResponseType(typeof(List<Enrollment834Record>), 200)]
     [ProducesResponseType(503)]
@@ -750,6 +762,7 @@ public class MembersController : ControllerBase
     /// consent scope, audit logging, tenant context, and rate limiting all live on this
     /// member-service boundary instead of being duplicated at every portal client.
     /// </summary>
+    [AuditRecordAccess("Member", "Enrollment", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{memberId}/enrollment-events")]
     [ProducesResponseType(typeof(EnrollmentEventListResponse), 200)]
     [ProducesResponseType(400)]
@@ -778,6 +791,7 @@ public class MembersController : ControllerBase
         }
     }
 
+    [AuditRecordAccess("Member", "Accumulators", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{memberId}/accumulators")]
     [ProducesResponseType(typeof(MemberAccumulatorsResponse), 200)]
     [ProducesResponseType(503)]
