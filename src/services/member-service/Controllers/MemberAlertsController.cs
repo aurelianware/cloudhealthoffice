@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -48,6 +49,7 @@ public class MemberAlertsController : ControllerBase
     }
 
     /// <summary>List alerts for a member. Set <c>status=active</c> to filter to in-effect alerts.</summary>
+    [AuditRecordAccess("Member", "Alerts", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet]
     [ProducesResponseType(typeof(MemberAlertListResponse), 200)]
     [ProducesResponseType(404)]
@@ -68,6 +70,7 @@ public class MemberAlertsController : ControllerBase
     }
 
     /// <summary>Get a single alert by id.</summary>
+    [AuditRecordAccess("Member", "Alerts", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{alertId}")]
     [ProducesResponseType(typeof(MemberAlert), 200)]
     [ProducesResponseType(404)]
@@ -233,6 +236,7 @@ public class MemberAlertsController : ControllerBase
     }
 
     /// <summary>FHIR Flag projection. <c>?status=active</c> filters to in-effect alerts.</summary>
+    [AuditRecordAccess("Member", "Alerts", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("/api/v1/members/{memberId}/fhir/Flag")]
     [Produces("application/fhir+json", "application/json")]
     [ProducesResponseType(200)]

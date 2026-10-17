@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
@@ -132,6 +133,10 @@ else
 
     Console.WriteLine($"Using Cosmos DB database provider (events container: {eventsContainerName})");
 }
+
+// Every read of a member is recorded (who, what, outcome) for HIPAA
+// accounting; compliance reads it at /api/v1/members/{id}/access-log.
+builder.Services.AddRecordAccessAudit();
 
 // ── Member Service internals ─────────────────────────────────────────
 builder.Services.AddScoped<IMemberEventPublisher, CosmosMemberEventPublisher>();
@@ -320,6 +325,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseChoAuthentication();
 app.MapControllers();
+app.MapRecordAccessLog("api/v1/members", "Member");
 app.MapChoHealthChecks();
 
 app.Run();

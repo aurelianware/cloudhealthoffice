@@ -19,6 +19,7 @@ public class MemberRecordTests : TestContext
     private readonly Mock<IMemberService> _members = new();
     private readonly Mock<IMemberNoteService> _notes = new();
     private readonly Mock<IClaimsService> _claims = new();
+    private readonly Mock<IRecordAccessLogService> _accessLog = new();
 
     public MemberRecordTests()
     {
@@ -38,6 +39,7 @@ public class MemberRecordTests : TestContext
         Services.AddSingleton(Mock.Of<ISponsorService>());
         Services.AddSingleton(Mock.Of<IMemberAlertService>(a => a.ListAsync(It.IsAny<string>(), It.IsAny<bool>()) == Task.FromResult(new List<MemberAlertView>())));
         Services.AddSingleton(Mock.Of<IWorkQueueService>());
+        Services.AddSingleton(_accessLog.Object);
 
         _members.Setup(m => m.GetMemberByIdAsync("M1")).ReturnsAsync(new MemberDetails
         {
@@ -139,5 +141,51 @@ public class MemberRecordTests : TestContext
 
         cut.SetParametersAndRender(p => p.Add(x => x.MemberId, "M2"));
         alerts.Verify(a => a.ListAsync("M2", true), Times.Once);
+    }
+
+    private void GrantAuditRead() =>
+        Services.AddSingleton(Mock.Of<IUserContextService>(u => u.HasPermission("audit:read") == true));
+
+    [Fact]
+    public void The_access_log_tab_is_only_for_audit_readers_and_is_not_fetched_otherwise()
+    {
+        var cut = Render(tab: "access-log");
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Ana Reyes"));
+        cut.FindAll("[data-testid=record-tab-access-log]").Should().BeEmpty();
+        cut.FindAll("[data-testid=member-tab-overview]").Should().ContainSingle();
+        _accessLog.Verify(a => a.GetMemberAccessLogAsync(It.IsAny<string>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public void The_access_log_lists_reads_of_the_member_and_their_claims()
+    {
+        GrantAuditRead();
+        _accessLog.Setup(a => a.GetMemberAccessLogAsync("M1", It.IsAny<int>())).ReturnsAsync(new RecordAccessLog(
+        [
+            new() { RecordType = "Claim", RecordId = "c1", Action = "View", Outcome = "Allowed", ActorId = "ex-1", OccurredAt = new DateTime(2026, 10, 2) },
+            new() { RecordType = "Member", RecordId = "M1", Action = "View", Outcome = "Denied", ActorId = "fin-1", OccurredAt = new DateTime(2026, 10, 1) },
+        ], []));
+
+        var cut = Render(tab: "access-log");
+
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=access-log-row]").Should().HaveCount(2));
+        cut.FindAll("[data-testid=access-log-record] a.record-link-main").Select(a => a.GetAttribute("href")).Should().Equal("/claims/c1");
+        cut.FindAll("[data-testid=access-log-outcome]").Select(o => o.TextContent).Should().Equal("Allowed", "Denied");
+        cut.FindAll("[data-testid=access-log-partial]").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_source_that_cannot_be_read_is_named_rather_than_hiding_the_rest()
+    {
+        GrantAuditRead();
+        _accessLog.Setup(a => a.GetMemberAccessLogAsync("M1", It.IsAny<int>())).ReturnsAsync(new RecordAccessLog(
+            [new() { RecordType = "Member", RecordId = "M1", Action = "View", Outcome = "Allowed", ActorId = "csr-1" }],
+            ["Claims Service"]));
+
+        var cut = Render(tab: "access-log");
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=access-log-partial]").TextContent.Should().Contain("Claims Service"));
+        cut.FindAll("[data-testid=access-log-row]").Should().ContainSingle();
     }
 }

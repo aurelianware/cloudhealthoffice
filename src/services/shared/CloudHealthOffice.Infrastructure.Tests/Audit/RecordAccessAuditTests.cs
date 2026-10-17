@@ -1,0 +1,41 @@
+using CloudHealthOffice.Infrastructure.Audit;
+
+namespace CloudHealthOffice.Infrastructure.Tests.Audit;
+
+public class RecordAccessAuditTests
+{
+    private sealed record Row(string Id, string? MemberId);
+    private sealed record Page(List<Row> Items, int TotalCount);
+
+    [Fact]
+    public void Subjects_come_from_one_record_a_list_or_a_page()
+    {
+        RecordSubjects.From(new Row("a", "M1")).Should().Equal(new RecordSubject("a", "M1"));
+        RecordSubjects.From(new[] { new Row("a", "M1"), new Row("b", null) }).Select(s => s.RecordId).Should().Equal("a", "b");
+        RecordSubjects.From(new Page([new Row("c", "M2")], 1)).Should().Equal(new RecordSubject("c", "M2"));
+        RecordSubjects.From("not a record").Should().BeEmpty();
+        RecordSubjects.From(null).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task The_in_memory_log_stays_inside_the_tenant_and_finds_records_in_searches()
+    {
+        var store = new RecordAccessStoreInMemory();
+        await store.AppendAsync(new RecordAccessEvent { TenantId = "t1", RecordType = "Member", RecordId = "M1", Action = "View" });
+        await store.AppendAsync(new RecordAccessEvent { TenantId = "t1", RecordType = "Member", Action = "Search", RecordIds = ["M1", "M2"] });
+        await store.AppendAsync(new RecordAccessEvent { TenantId = "t2", RecordType = "Member", RecordId = "M1", Action = "View" });
+
+        var found = await store.QueryAsync(new RecordAccessQuery("t1", RecordType: "Member", RecordId: "M1"));
+
+        found.Select(e => e.Action).Should().BeEquivalentTo(["View", "Search"]);
+        found.Should().OnlyContain(e => e.TenantId == "t1");
+    }
+
+    [Theory]
+    [InlineData(200, "Allowed")]
+    [InlineData(404, "NotFound")]
+    [InlineData(403, "Denied")]
+    [InlineData(401, "Denied")]
+    public void Outcome_follows_the_status(int status, string outcome) =>
+        RecordAccessOutcomes.For(status).Should().Be(outcome);
+}

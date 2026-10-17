@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -42,6 +43,7 @@ public class MemberNotesController : ControllerBase
     }
 
     /// <summary>List notes for a member, newest first. Filter by category, paged.</summary>
+    [AuditRecordAccess("Member", "Notes", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet]
     [ProducesResponseType(typeof(MemberNoteListResponse), 200)]
     [ProducesResponseType(404)]
@@ -70,6 +72,7 @@ public class MemberNotesController : ControllerBase
     }
 
     /// <summary>Get a single note by id.</summary>
+    [AuditRecordAccess("Member", "Notes", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet("{noteId}")]
     [ProducesResponseType(typeof(MemberNote), 200)]
     [ProducesResponseType(404)]
