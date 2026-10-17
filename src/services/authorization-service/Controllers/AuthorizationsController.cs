@@ -239,6 +239,9 @@ public class AuthorizationsController : ControllerBase
     /// Check if authorization is valid for claim submission
     /// CRITICAL for claims processing: validates auth before submitting 837
     /// </summary>
+    // Recorded by the action (against the authorization's id and member,
+    // known only once it is loaded); a refusal is logged under the number.
+    [AuditRecordAccess("Authorization", "Validate", RecordIdRouteValue = "authNumber", RecordedByAction = true)]
     [HttpGet("{authNumber}/validate")]
     [ProducesResponseType(typeof(AuthorizationValidationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -246,7 +249,8 @@ public class AuthorizationsController : ControllerBase
         string authNumber,
         [FromQuery] string? procedureCode = null,
         [FromQuery] DateTime? serviceDate = null,
-        [FromQuery] string? providerNpi = null)
+        [FromQuery] string? providerNpi = null,
+        [FromServices] RecordAccessWriter? accessLog = null)
     {
         var checkDate = serviceDate ?? DateTime.UtcNow;
 
@@ -257,6 +261,7 @@ public class AuthorizationsController : ControllerBase
         var authorization = await _backends.Resolve().GetByNumberAsync(authNumber, HttpContext.RequestAborted);
         if (authorization == null)
         {
+            await RecordValidateAsync(accessLog, authNumber, null, StatusCodes.Status404NotFound);
             return NotFound($"Authorization {authNumber} not found");
         }
 
@@ -304,8 +309,22 @@ public class AuthorizationsController : ControllerBase
                                "Authorization valid"
         };
 
+        await RecordValidateAsync(accessLog, authorization.Id, authorization.MemberId, StatusCodes.Status200OK);
         return Ok(response);
     }
+
+    private Task RecordValidateAsync(RecordAccessWriter? accessLog, string recordId, string? memberId, int statusCode) =>
+        accessLog is null
+            ? Task.CompletedTask
+            : accessLog.AppendAsync(HttpContext, _currentActor, new RecordAccessEvent
+            {
+                RecordType = "Authorization",
+                RecordId = recordId,
+                MemberId = string.IsNullOrWhiteSpace(memberId) ? null : memberId,
+                Action = "Validate",
+                Outcome = RecordAccessOutcomes.For(statusCode),
+                StatusCode = statusCode,
+            });
 
     private static bool IsProviderApprovedForAuthorization(Authorization authorization, string? providerNpi)
     {

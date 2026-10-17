@@ -55,6 +55,7 @@ public sealed class RecordAccessEntry
         "Eob" => "Read EOB",
         "BankAccount" => "Read bank details",
         "Era" => "Downloaded the 835",
+        "Validate" => "Checked the authorization (claim adjudication)",
         "Rates" => "Read contracted rates",
         "Versions" => "Read record history",
         "Notes" or "Edits" or "Eligibility" or "Events" or "Coverage" or "Enrollment" or "Accumulators"
@@ -77,8 +78,9 @@ public sealed record RecordAccessLog(IReadOnlyList<RecordAccessEntry> Entries, I
 public interface IRecordAccessLogService
 {
     /// <summary>
-    /// Who read this member: the member record (member-service) and their
-    /// claims (claims-service), newest first. Needs <c>audit:read</c>.
+    /// Who read this member: the member record (member-service), their claims
+    /// (claims-service) and payments that paid them (payment-service), newest
+    /// first. Needs <c>audit:read</c>.
     /// </summary>
     Task<RecordAccessLog> GetMemberAccessLogAsync(string memberId, int limit = 200);
 
@@ -88,8 +90,12 @@ public interface IRecordAccessLogService
     /// </summary>
     Task<RecordAccessLog> GetProviderAccessLogAsync(string providerId, string? npi, int limit = 200);
 
-    /// <summary>Who read this authorization (authorization-service).</summary>
-    Task<RecordAccessLog> GetAuthorizationAccessLogAsync(string authorizationId, int limit = 200);
+    /// <summary>
+    /// Who read this authorization (authorization-service), including claim
+    /// validation lookups; a refused or not-found lookup is logged under the
+    /// authorization number.
+    /// </summary>
+    Task<RecordAccessLog> GetAuthorizationAccessLogAsync(string authorizationId, string? authorizationNumber, int limit = 200);
 
     /// <summary>Who read this payment and its 835 (payment-service).</summary>
     Task<RecordAccessLog> GetPaymentAccessLogAsync(string paymentId, int limit = 200);
@@ -120,14 +126,19 @@ public sealed class RecordAccessLogService : IRecordAccessLogService
             $"{Base("MemberService", "http://member-service.cloudhealthoffice/api/v1")}/members/{E(memberId)}/access-log?limit={limit}");
         var claims = Fetch<ClaimAccessEntry>("Claims Service",
             $"{Base("ClaimsService", "http://claims-service.cloudhealthoffice/api")}/claims/access-log?memberId={E(memberId)}&limit={limit}");
-        await Task.WhenAll(member, claims);
+        // Payments name many members' claims; payment-service logs a read
+        // against each of them.
+        var payments = Fetch<RecordAccessEntry>("Payment Service",
+            $"{Base("PaymentService", "http://payment-service.cloudhealthoffice/api")}/payments/access-log?memberId={E(memberId)}&limit={limit}");
+        await Task.WhenAll(member, claims, payments);
 
         var entries = (member.Result.Entries ?? [])
             .Concat((claims.Result.Entries ?? []).Select(RecordAccessEntry.FromClaim))
+            .Concat(payments.Result.Entries ?? [])
             .OrderByDescending(e => e.OccurredAt)
             .Take(limit)
             .ToList();
-        var unavailable = new[] { member.Result.Unavailable, claims.Result.Unavailable }.OfType<string>().ToList();
+        var unavailable = new[] { member.Result.Unavailable, claims.Result.Unavailable, payments.Result.Unavailable }.OfType<string>().ToList();
         return new RecordAccessLog(entries, unavailable);
     }
 
@@ -143,9 +154,17 @@ public sealed class RecordAccessLogService : IRecordAccessLogService
         return Merge(await Task.WhenAll(parts), limit);
     }
 
-    public async Task<RecordAccessLog> GetAuthorizationAccessLogAsync(string authorizationId, int limit = 200) =>
-        Merge([await Fetch<RecordAccessEntry>("Authorization Service",
-            $"{Base("AuthorizationService", "http://authorization-service.cloudhealthoffice/api")}/authorizations/{E(authorizationId)}/access-log?limit={limit}")], limit);
+    public async Task<RecordAccessLog> GetAuthorizationAccessLogAsync(string authorizationId, string? authorizationNumber, int limit = 200)
+    {
+        var baseUrl = Base("AuthorizationService", "http://authorization-service.cloudhealthoffice/api");
+        var parts = new List<Task<(List<RecordAccessEntry>? Entries, string? Unavailable)>>
+        {
+            Fetch<RecordAccessEntry>("Authorization Service", $"{baseUrl}/authorizations/{E(authorizationId)}/access-log?limit={limit}"),
+        };
+        if (!string.IsNullOrWhiteSpace(authorizationNumber) && authorizationNumber != authorizationId)
+            parts.Add(Fetch<RecordAccessEntry>("Authorization Service", $"{baseUrl}/authorizations/{E(authorizationNumber)}/access-log?limit={limit}"));
+        return Merge(await Task.WhenAll(parts), limit);
+    }
 
     public async Task<RecordAccessLog> GetPaymentAccessLogAsync(string paymentId, int limit = 200) =>
         Merge([await Fetch<RecordAccessEntry>("Payment Service",

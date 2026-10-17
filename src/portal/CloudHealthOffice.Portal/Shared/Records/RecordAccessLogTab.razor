@@ -18,6 +18,9 @@
     /// <summary>A provider's NPI: its bank-detail reads are logged under it.</summary>
     [Parameter] public string? Npi { get; set; }
 
+    /// <summary>An authorization's number: refused validation lookups are logged under it.</summary>
+    [Parameter] public string? Number { get; set; }
+
     private RecordAccessLog? _log;
     private string? _error;
     private string? _loadedFor;
@@ -30,12 +33,13 @@
     {
         "Provider" => "Every read of this provider record and of its bank details: views, and searches that returned it.",
         "Payment" => "Every read of this payment and its 835: views, and searches and claim lookups that returned it.",
+        "Authorization" => "Every read of this authorization, including validation lookups during claim adjudication.",
         _ => "Every read of this record: views, and searches that returned it.",
     };
 
     protected override async Task OnParametersSetAsync()
     {
-        var key = $"{Kind}:{RecordId}:{Npi}";
+        var key = $"{Kind}:{RecordId}:{Npi}:{Number}";
         if (_loadedFor == key) return;
         _loadedFor = key;
         _log = null;
@@ -51,7 +55,7 @@
             _log = Kind switch
             {
                 "Provider" => await logs.GetProviderAccessLogAsync(RecordId, Npi),
-                "Authorization" => await logs.GetAuthorizationAccessLogAsync(RecordId),
+                "Authorization" => await logs.GetAuthorizationAccessLogAsync(RecordId, Number),
                 "Payment" => await logs.GetPaymentAccessLogAsync(RecordId),
                 _ => throw new ArgumentOutOfRangeException(nameof(Kind), Kind, "No access log for this record type."),
             };

@@ -58,10 +58,28 @@ public sealed class AuditRecordAccessAttribute : Attribute
     /// read is logged as a single-record read of that record.
     /// </summary>
     public bool ResultIsRecord { get; init; }
+
+    /// <summary>
+    /// A collection on each result record whose items name members (each
+    /// item's <see cref="ResultMemberProperty"/>), e.g. a payment's
+    /// <c>ClaimPayments</c>: the read is logged against every one of them.
+    /// </summary>
+    public string? ResultMembersCollection { get; init; }
+
+    /// <summary>
+    /// The action records its own access event (it knows the record's id
+    /// only after loading it); the filter then records nothing for it. A
+    /// refusal by authorization is still recorded automatically.
+    /// </summary>
+    public bool RecordedByAction { get; init; }
 }
 
 /// <summary>A record (and its member) found in a response.</summary>
-public sealed record RecordSubject(string? RecordId, string? MemberId);
+public sealed record RecordSubject(string? RecordId, string? MemberId)
+{
+    /// <summary>Members named inside the record (see <see cref="AuditRecordAccessAttribute.ResultMembersCollection"/>).</summary>
+    public IReadOnlyList<string> NestedMemberIds { get; init; } = [];
+}
 
 /// <summary>Writes access events; never fails the read it records.</summary>
 public sealed class RecordAccessWriter
@@ -88,7 +106,8 @@ public sealed class RecordAccessWriter
         var memberQuery = audit.MemberQueryParameters
             .Select(p => http.Request.Query.TryGetValue(p, out var v) ? v.ToString() : null)
             .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
-        var members = subjects.Select(s => s.MemberId).Where(m => !string.IsNullOrWhiteSpace(m)).Distinct().ToList();
+        var members = subjects.SelectMany(s => s.NestedMemberIds.Prepend(s.MemberId ?? string.Empty))
+            .Where(m => !string.IsNullOrWhiteSpace(m)).Distinct().ToList();
         var single = recordId is not null;
 
         await AppendAsync(http, actor, new RecordAccessEvent
@@ -96,6 +115,7 @@ public sealed class RecordAccessWriter
             RecordType = audit.RecordType,
             RecordId = recordId,
             MemberId = memberRoute ?? memberQuery ?? (members.Count == 1 ? members[0] : null),
+            MemberIds = members.Count > 1 ? members.Take(RecordAccessEvent.MaxRecordIds).ToList() : [],
             RecordIds = single
                 ? []
                 : subjects.Select(s => s.RecordId).Where(id => !string.IsNullOrWhiteSpace(id))
@@ -178,7 +198,10 @@ public sealed class RecordAccessAuditFilter : IAsyncActionFilter
             ? 500
             : executed.Result is IStatusCodeActionResult { StatusCode: { } code } ? code : 200;
         var value = (executed.Result as ObjectResult)?.Value ?? (executed.Result as JsonResult)?.Value;
-        var subjects = statusCode is >= 200 and < 300 ? RecordSubjects.From(value, audit.ResultIdProperty, audit.ResultMemberProperty) : [];
+        if (audit.RecordedByAction) return;
+        var subjects = statusCode is >= 200 and < 300
+            ? RecordSubjects.From(value, audit.ResultIdProperty, audit.ResultMemberProperty, audit.ResultMembersCollection)
+            : [];
         await _writer.RecordAsync(context.HttpContext, audit, _actor, statusCode, null, subjects);
     }
 }
@@ -210,7 +233,7 @@ public static class RecordSubjects
 {
     private static readonly string[] ListProperties = ["Items", "Results", "Data", "Entries", "Members", "Providers", "Authorizations", "Payments"];
 
-    public static IReadOnlyList<RecordSubject> From(object? value, string idProperty = "Id", string memberProperty = "MemberId")
+    public static IReadOnlyList<RecordSubject> From(object? value, string idProperty = "Id", string memberProperty = "MemberId", string? membersCollection = null)
     {
         if (value is null or string) return [];
         if (value is IEnumerable items)
@@ -218,7 +241,7 @@ public static class RecordSubjects
             var found = new List<RecordSubject>();
             foreach (var item in items)
             {
-                if (Single(item, idProperty, memberProperty) is { } s) found.Add(s);
+                if (Single(item, idProperty, memberProperty, membersCollection) is { } s) found.Add(s);
                 if (found.Count >= 1000) break;
             }
             return found;
@@ -226,18 +249,29 @@ public static class RecordSubjects
         foreach (var name in ListProperties)
         {
             var list = value.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)?.GetValue(value);
-            if (list is IEnumerable and not string) return From(list, idProperty, memberProperty);
+            if (list is IEnumerable and not string) return From(list, idProperty, memberProperty, membersCollection);
         }
-        return Single(value, idProperty, memberProperty) is { } one ? [one] : [];
+        return Single(value, idProperty, memberProperty, membersCollection) is { } one ? [one] : [];
     }
 
-    private static RecordSubject? Single(object? item, string idProperty, string memberProperty)
+    private static RecordSubject? Single(object? item, string idProperty, string memberProperty, string? membersCollection = null)
     {
         if (item is null) return null;
         var type = item.GetType();
         var id = Text(type, item, idProperty);
         var member = Text(type, item, memberProperty);
-        return id is null && member is null ? null : new RecordSubject(id, member);
+        var nested = new List<string>();
+        if (membersCollection is not null
+            && type.GetProperty(membersCollection, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)?.GetValue(item) is IEnumerable children
+            and not string)
+        {
+            foreach (var child in children)
+            {
+                if (child is not null && Text(child.GetType(), child, memberProperty) is { } m && !nested.Contains(m)) nested.Add(m);
+                if (nested.Count >= RecordAccessEvent.MaxRecordIds) break;
+            }
+        }
+        return id is null && member is null && nested.Count == 0 ? null : new RecordSubject(id, member) { NestedMemberIds = nested };
     }
 
     private static string? Text(Type type, object item, string name) =>

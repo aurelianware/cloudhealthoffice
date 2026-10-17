@@ -37,6 +37,7 @@ public sealed class RecordAccessStoreMongo : IRecordAccessStore
                         new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.RecordId).Descending(e => e.OccurredAt)),
                         new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.RecordIds).Descending(e => e.OccurredAt)),
                         new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.MemberId).Descending(e => e.OccurredAt)),
+                        new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.MemberIds).Descending(e => e.OccurredAt)),
                         new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.ActorId).Descending(e => e.OccurredAt)),
                     ]);
                 }
@@ -58,7 +59,7 @@ public sealed class RecordAccessStoreMongo : IRecordAccessStore
         var filter = f.Eq(e => e.TenantId, q.TenantId);
         if (!string.IsNullOrWhiteSpace(q.RecordType)) filter &= f.Eq(e => e.RecordType, q.RecordType);
         if (!string.IsNullOrWhiteSpace(q.RecordId)) filter &= f.Or(f.Eq(e => e.RecordId, q.RecordId), f.AnyEq(e => e.RecordIds, q.RecordId));
-        if (!string.IsNullOrWhiteSpace(q.MemberId)) filter &= f.Eq(e => e.MemberId, q.MemberId);
+        if (!string.IsNullOrWhiteSpace(q.MemberId)) filter &= f.Or(f.Eq(e => e.MemberId, q.MemberId), f.AnyEq(e => e.MemberIds, q.MemberId));
         if (!string.IsNullOrWhiteSpace(q.ActorId)) filter &= f.Eq(e => e.ActorId, q.ActorId);
         if (q.From is { } from) filter &= f.Gte(e => e.OccurredAt, from);
         if (q.To is { } to) filter &= f.Lte(e => e.OccurredAt, to);
@@ -90,7 +91,7 @@ public sealed class RecordAccessStoreInMemory : IRecordAccessStore
             .Where(e => e.TenantId == q.TenantId)
             .Where(e => q.RecordType is null || e.RecordType == q.RecordType)
             .Where(e => q.RecordId is null || e.RecordId == q.RecordId || e.RecordIds.Contains(q.RecordId))
-            .Where(e => q.MemberId is null || e.MemberId == q.MemberId)
+            .Where(e => q.MemberId is null || e.MemberId == q.MemberId || e.MemberIds.Contains(q.MemberId))
             .Where(e => q.ActorId is null || e.ActorId == q.ActorId)
             .Where(e => q.From is null || e.OccurredAt >= q.From)
             .Where(e => q.To is null || e.OccurredAt <= q.To)
