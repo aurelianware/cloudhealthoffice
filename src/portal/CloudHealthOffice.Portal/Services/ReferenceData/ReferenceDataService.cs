@@ -65,7 +65,7 @@ public class ReferenceDataService : IReferenceDataService
         }
     }
 
-    public async Task<CodeUsageStats> GetCodeUsageStatsAsync(string codeSystem, string code)
+    public async Task<CodeUsageStats?> GetCodeUsageStatsAsync(string codeSystem, string code)
     {
         var baseUrl = _configuration["Services:ReferenceDataService"];
         try

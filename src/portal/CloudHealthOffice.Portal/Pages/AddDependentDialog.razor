@@ -63,7 +63,7 @@
                     <MudDatePicker @bind-Date="_relStartDate" Label="Relationship Start" Required="true" />
                 </MudItem>
                 <MudItem xs="12" md="6">
-                    <MudCheckBox T="bool" @bind-Checked="_payload.Relationship.IsCustodial" Label="Custodial (minor / QMCSO)" />
+                    <MudCheckBox T="bool" @bind-Value="_payload.Relationship.IsCustodial" Label="Custodial (minor / QMCSO)" />
                 </MudItem>
                 <MudItem xs="12" md="6">
                     <MudTextField @bind-Value="_payload.Relationship.QmcsoReference" Label="QMCSO Reference (optional)" />

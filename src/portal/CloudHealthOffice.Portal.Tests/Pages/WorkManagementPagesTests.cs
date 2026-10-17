@@ -232,7 +232,7 @@ public class WorkQueuesReassignTests : TestContext
         _work.Setup(w => w.AssignAsync("tenant-a.claim-c-1", "bob")).ReturnsAsync(WorkItems.Claim("c-1", "bob"));
         var cut = Render("claims:read", "claims:work", "workqueue:read", "workqueue:assign");
         var select = cut.FindComponents<MudSelect<string>>()
-            .Single(s => s.Instance.UserAttributes.TryGetValue("data-testid", out var id) && (string)id == "reassign");
+            .Single(s => s.Instance.UserAttributes.TryGetValue("data-testid", out var id) && id is "reassign");
         select.Instance.Value.Should().Be("alice");
 
         await cut.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync("bob"));
@@ -241,7 +241,7 @@ public class WorkQueuesReassignTests : TestContext
         _claimsQueue.Verify(w => w.AssignClaimAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never,
             "the claims-service assign stub is no longer used");
         cut.WaitForAssertion(() => cut.FindComponents<MudSelect<string>>()
-            .Single(s => s.Instance.UserAttributes.TryGetValue("data-testid", out var id) && (string)id == "reassign")
+            .Single(s => s.Instance.UserAttributes.TryGetValue("data-testid", out var id) && id is "reassign")
             .Instance.Value.Should().Be("bob"));
     }
 
@@ -251,7 +251,7 @@ public class WorkQueuesReassignTests : TestContext
         _work.Setup(w => w.UnassignAsync("tenant-a.claim-c-1")).ReturnsAsync(WorkItems.Claim("c-1"));
         var cut = Render("claims:read", "claims:work", "workqueue:read", "workqueue:assign");
         var select = cut.FindComponents<MudSelect<string>>()
-            .Single(s => s.Instance.UserAttributes.TryGetValue("data-testid", out var id) && (string)id == "reassign");
+            .Single(s => s.Instance.UserAttributes.TryGetValue("data-testid", out var id) && id is "reassign");
 
         await cut.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync("(unassigned)"));
 
@@ -264,7 +264,7 @@ public class WorkQueuesReassignTests : TestContext
         var cut = Render("claims:read", "claims:work", "workqueue:read", "workqueue:work");
 
         cut.FindComponents<MudSelect<string>>()
-            .Where(s => s.Instance.UserAttributes.TryGetValue("data-testid", out var id) && (string)id == "reassign")
+            .Where(s => s.Instance.UserAttributes.TryGetValue("data-testid", out var id) && id is "reassign")
             .Should().BeEmpty();
         _work.Verify(w => w.ListAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
     }

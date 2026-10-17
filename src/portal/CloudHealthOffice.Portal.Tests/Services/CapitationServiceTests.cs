@@ -733,7 +733,7 @@ public class CapitationServiceTests
                 {
                     tierName = "Adult Female", ageFrom = 18, ageTo = 64,
                     gender = "F", ageSexCategory = "Adult 18-64 Female",
-                    basePMPM = 295.50m, serviceCategory = "Medical"
+                    basePMPM = 295.50m, serviceCategory = (string?)"Medical"
                 },
                 new
                 {
