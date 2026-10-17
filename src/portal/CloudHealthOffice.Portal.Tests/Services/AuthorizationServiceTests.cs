@@ -93,7 +93,7 @@ public class AuthorizationServiceTests
                   memberId = "MBR-001", patientFirstName = "Jane", patientLastName = "Doe",
                   serviceTypeCode = "MRI", status = 4, // Approved
                   submittedDate = "2026-02-01", requestingProviderName = "Dr. Lee",
-                  reviewedDate = "2026-02-02" },
+                  reviewedDate = (string?)"2026-02-02" },
             new { id = "id-2", authorizationNumber = "AUTH-002",
                   memberId = "MBR-002", patientFirstName = "John", patientLastName = "Roe",
                   serviceTypeCode = "Surgery", status = 3, // Pended

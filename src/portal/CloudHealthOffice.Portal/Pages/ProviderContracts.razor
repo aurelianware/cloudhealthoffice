@@ -210,37 +210,37 @@
 </MudTable>
 
 <!-- Create/Edit Form Dialog -->
-@if (_showCreateForm)
+@if (_showCreateForm && _editContract is { } editContract)
 {
     <MudDialog @bind-Visible="_showCreateForm" Options="new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true }">
         <TitleContent>
             <MudText Typo="Typo.h6" Style="color: #00ffff;">
-                @(string.IsNullOrEmpty(_editContract?.Id) ? "New" : "Edit") Provider Contract
+                @(string.IsNullOrEmpty(editContract.Id) ? "New" : "Edit") Provider Contract
             </MudText>
         </TitleContent>
         <DialogContent>
             <MudGrid Spacing="3">
                 <MudItem xs="12" md="4">
-                    <MudTextField @bind-Value="_editContract!.ProviderNPI" Label="Provider NPI" Required="true"
+                    <MudTextField @bind-Value="editContract.ProviderNPI" Label="Provider NPI" Required="true"
                                   Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="4">
-                    <MudTextField @bind-Value="_editContract.ProviderName" Label="Provider Name" Required="true"
+                    <MudTextField @bind-Value="editContract.ProviderName" Label="Provider Name" Required="true"
                                   Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="4">
-                    <MudTextField @bind-Value="_editContract.ProviderTin" Label="Provider TIN"
+                    <MudTextField @bind-Value="editContract.ProviderTin" Label="Provider TIN"
                                   Variant="Variant.Outlined" HelperText="9-digit TIN — will be masked in lists" />
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudSelect @bind-Value="_editContract.ProviderType" Label="Provider Type" Required="true"
+                    <MudSelect @bind-Value="editContract.ProviderType" Label="Provider Type" Required="true"
                                Variant="Variant.Outlined">
                         <MudSelectItem Value=@("Individual")>Individual</MudSelectItem>
                         <MudSelectItem Value=@("Organization")>Organization</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudSelect @bind-Value="_editContract.LineOfBusiness" Label="Line of Business" Required="true"
+                    <MudSelect @bind-Value="editContract.LineOfBusiness" Label="Line of Business" Required="true"
                                Variant="Variant.Outlined">
                         <MudSelectItem Value=@("Commercial")>Commercial</MudSelectItem>
                         <MudSelectItem Value=@("Medicare")>Medicare</MudSelectItem>
@@ -251,7 +251,7 @@
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudSelect @bind-Value="_editContract.PaymentMethodology" Label="Payment Methodology" Required="true"
+                    <MudSelect @bind-Value="editContract.PaymentMethodology" Label="Payment Methodology" Required="true"
                                Variant="Variant.Outlined">
                         <MudSelectItem Value=@("FullCapitation")>Full Capitation</MudSelectItem>
                         <MudSelectItem Value=@("FeeForService")>Fee-for-Service</MudSelectItem>
@@ -260,7 +260,7 @@
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="3">
-                    <MudSelect @bind-Value="_editContract.NetworkStatus" Label="Network Status"
+                    <MudSelect @bind-Value="editContract.NetworkStatus" Label="Network Status"
                                Variant="Variant.Outlined">
                         <MudSelectItem Value=@("Participating")>Participating</MudSelectItem>
                         <MudSelectItem Value=@("NonParticipating")>Non-Participating</MudSelectItem>
@@ -268,11 +268,11 @@
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="4">
-                    <MudTextField @bind-Value="_editContract.ContractOwner" Label="Contract Owner"
+                    <MudTextField @bind-Value="editContract.ContractOwner" Label="Contract Owner"
                                   Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="4">
-                    <MudTextField @bind-Value="_editContract.SignatoryName" Label="Signatory Name"
+                    <MudTextField @bind-Value="editContract.SignatoryName" Label="Signatory Name"
                                   Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="4">
@@ -284,20 +284,20 @@
                 </MudItem>
                 <MudItem xs="12" md="4">
                     <MudDatePicker @bind-Date="_editTermination" Label="Termination Date" Variant="Variant.Outlined"
-                                   Disabled="@(!string.IsNullOrEmpty(_editContract.Id))"
-                                   HelperText="@(string.IsNullOrEmpty(_editContract.Id) ? null : "Set by Terminate")" />
+                                   Disabled="@(!string.IsNullOrEmpty(editContract.Id))"
+                                   HelperText="@(string.IsNullOrEmpty(editContract.Id) ? null : "Set by Terminate")" />
                 </MudItem>
                 <MudItem xs="12" md="4">
-                    <MudCheckBox @bind-Value="_editContract.AutoRenews" Label="Auto-Renews" />
+                    <MudCheckBox @bind-Value="editContract.AutoRenews" Label="Auto-Renews" />
                 </MudItem>
-                @if (_editContract.AutoRenews)
+                @if (editContract.AutoRenews)
                 {
                     <MudItem xs="12" md="6">
-                        <MudNumericField @bind-Value="_editContract.RenewalTermMonths" Label="Renewal Term (months)"
+                        <MudNumericField @bind-Value="editContract.RenewalTermMonths" Label="Renewal Term (months)"
                                          Variant="Variant.Outlined" />
                     </MudItem>
                     <MudItem xs="12" md="6">
-                        <MudNumericField @bind-Value="_editContract.NoticeRequiredDays" Label="Notice Required (days)"
+                        <MudNumericField @bind-Value="editContract.NoticeRequiredDays" Label="Notice Required (days)"
                                          Variant="Variant.Outlined" />
                     </MudItem>
                 }

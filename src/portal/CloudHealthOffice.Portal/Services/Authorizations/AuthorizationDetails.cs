@@ -2,7 +2,6 @@ namespace CloudHealthOffice.Portal.Services;
 
 public class AuthorizationDetails : AuthorizationSummary
 {
-    public string MemberId { get; set; } = string.Empty;
     public string ProviderId { get; set; } = string.Empty;
     public string DiagnosisCode { get; set; } = string.Empty;
     public string DiagnosisDescription { get; set; } = string.Empty;

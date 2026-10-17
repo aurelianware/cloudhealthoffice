@@ -207,11 +207,11 @@
         }
     }
 
-    private void OnSearchKeyUp(KeyboardEventArgs e)
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
         {
-            LoadCodes();
+            await LoadCodes();
         }
     }
 
@@ -230,7 +230,15 @@
     private async Task ViewUsageStats(string codeSystem, string code)
     {
         var stats = await ReferenceDataService.GetCodeUsageStatsAsync(codeSystem, code);
-        
+        if (stats is null)
+        {
+            await DialogService.ShowMessageBox(
+                "Code Usage Statistics",
+                $"No usage statistics are available for {codeSystem} {code}.",
+                yesText: "Close");
+            return;
+        }
+
         var message = $"Usage Statistics for {codeSystem} {code}:\n\n" +
             $"- Used in {stats.ClaimsCount:N0} claims\n" +
             $"- Used in {stats.AuthorizationsCount:N0} prior authorizations\n" +

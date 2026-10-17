@@ -3,6 +3,7 @@
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 @inject IAttachmentService AttachmentService
 @inject ISnackbar Snackbar
+@inject ILogger<SubmitAuthorizationDialog> Logger
 
 <MudDialog>
     <DialogContent>
@@ -258,6 +259,7 @@
                     }
                     catch (Exception ex)
                     {
+                        Logger.LogWarning(ex, "Attachment upload failed for a submitted authorization request");
                         Snackbar.Add($"Warning: Failed to upload {file.Name}", Severity.Warning);
                     }
                 }
@@ -272,6 +274,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Authorization request submission failed");
             Snackbar.Add("Failed to submit authorization request. Please try again.", Severity.Error);
         }
         finally

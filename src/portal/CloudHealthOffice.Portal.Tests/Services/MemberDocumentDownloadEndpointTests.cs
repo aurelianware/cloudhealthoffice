@@ -51,8 +51,8 @@ public sealed class MemberDocumentDownloadEndpointTests : IAsyncLifetime
             ["Authentication:Mode"] = "Entra",
         });
 
-        builder.Services.AddAuthentication(TestCookieAuth.Scheme)
-            .AddScheme<AuthenticationSchemeOptions, TestCookieAuth>(TestCookieAuth.Scheme, _ => { });
+        builder.Services.AddAuthentication(TestCookieAuth.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, TestCookieAuth>(TestCookieAuth.SchemeName, _ => { });
         builder.Services.AddAuthorization();
 
         // What AddServerSideBlazor registers: the circuit's provider. Outside a circuit
@@ -234,7 +234,7 @@ public sealed class MemberDocumentDownloadEndpointTests : IAsyncLifetime
     /// <summary>Stands in for the portal's cookie: authenticated when the test header names a user.</summary>
     private sealed class TestCookieAuth : AuthenticationHandler<AuthenticationSchemeOptions>
     {
-        public const string Scheme = "TestCookie";
+        public const string SchemeName = "TestCookie";
         public const string UserHeader = "X-Test-User";
 
         public TestCookieAuth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
@@ -248,7 +248,7 @@ public sealed class MemberDocumentDownloadEndpointTests : IAsyncLifetime
                 return Task.FromResult(AuthenticateResult.NoResult());
 
             var principal = EntraUser(tid: "entra-tid-1", oid: oid.ToString());
-            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, Scheme)));
+            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName)));
         }
     }
 }

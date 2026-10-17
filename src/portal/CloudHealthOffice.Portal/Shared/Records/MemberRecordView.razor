@@ -13,6 +13,7 @@
 @inject IRecordAccessLogService AccessLogService
 @inject IIdCardService IdCardService
 @inject IClaimsService ClaimsService
+@inject ILogger<MemberRecordView> Logger
 @inject IArService ArService
 @inject IPremiumBillingService PremiumBillingService
 @inject ISponsorService SponsorService
@@ -1538,7 +1539,6 @@
     private bool _loading = true;
     private bool _loadingCoverage = true;
     private bool _loadingPcp = false;
-    private bool _loadingHistory = false;
     private bool _loading834 = false;
     private bool _loadingEvents = false;
     private bool _loadingAccumulators = false;
@@ -1630,6 +1630,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Loading the member record failed");
             _member = null;
             _coverages = new();
         }
@@ -1894,7 +1895,6 @@
 
     private async Task LoadHistoryAsync()
     {
-        _loadingHistory = true;
         try
         {
             _coverageHistory = await MemberService.GetCoverageHistoryAsync(MemberId);
@@ -1902,7 +1902,6 @@
         catch { _coverageHistory = new(); }
         finally
         {
-            _loadingHistory = false;
             await InvokeAsync(StateHasChanged);
         }
     }

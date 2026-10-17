@@ -70,7 +70,7 @@
                    OnClick="OpenCreateRunDialog">New Capitation Run</MudButton>
         <MudSelect T="string" Value="_filterLob" Label="LOB" Variant="Variant.Outlined" Dense="true"
                    Clearable="true" Style="max-width: 180px;" Margin="Margin.Dense"
-                   ValueChanged="@((string? v) => { _filterLob = v; LoadRuns(); })">
+                   ValueChanged="@(async (string? v) => { _filterLob = v; await LoadRuns(); })">
             <MudSelectItem Value="@((string?)null)">All LOBs</MudSelectItem>
             <MudSelectItem Value="@("Commercial")">Commercial</MudSelectItem>
             <MudSelectItem Value="@("Medicare")">Medicare</MudSelectItem>
