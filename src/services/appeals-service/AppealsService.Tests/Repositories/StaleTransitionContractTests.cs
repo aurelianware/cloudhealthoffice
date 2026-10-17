@@ -10,9 +10,7 @@ namespace AppealsService.Tests.Repositories;
 /// earlier. Every other endpoint that writes the appeal can commit between
 /// that read and the transition write; the transition must keep what it
 /// wrote. One scenario per concurrent writer in <see cref="IAppealRepository"/>.
-/// Runs against the in-memory fake and a real mongod (EphemeralMongo). The
-/// Cosmos repository is covered against a mocked container in
-/// <see cref="AppealRepositoryCosmosTransitionTests"/>.
+/// Runs against the in-memory fake and a real mongod (EphemeralMongo).
 /// </summary>
 public abstract class StaleTransitionContractTests
 {

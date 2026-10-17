@@ -4,7 +4,7 @@ namespace AppealsService.Repositories;
 
 /// <summary>
 /// Computes <see cref="AppealsSummary"/> from a flat list of appeals.
-/// Extracted so the Cosmos and Mongo repositories share the aggregation
+/// Extracted so the repository and the in-memory fake share the aggregation
 /// logic verbatim. Preserves the portal's observed 4-bucket wire shape
 /// (<c>OpenAppeals</c>, <c>UrgentExpedited</c>, <c>DueThisWeek</c>,
 /// <c>OverturnedRate</c>) across the status-enum consolidation by

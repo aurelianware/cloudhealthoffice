@@ -6,7 +6,7 @@ namespace AppealsService.Tests.Repositories;
 /// <summary>
 /// Behavioral spec for <c>GetMostRecentAppealByClaimIdAsync</c>. Exercised
 /// against <see cref="InMemoryAppealRepository"/>, which mirrors the
-/// Cosmos + Mongo filter and ordering semantics. The production
+/// Mongo filter and ordering semantics. The production
 /// implementations carry the same invariants; this suite documents and
 /// guards them in a reproducible form.
 /// </summary>

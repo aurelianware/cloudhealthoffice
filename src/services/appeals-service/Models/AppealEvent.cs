@@ -10,17 +10,16 @@ namespace AppealsService.Models;
 /// Append-only audit row for <see cref="Appeal"/>. One row per lifecycle
 /// action (created, status-changed, closed, note-added, attachment-added,
 /// attachment-acknowledged, overdue-observed, assigned, deadline-extended, migrated from
-/// pre-modernization status values). Partition key is
-/// <c>{tenantId}:{appealId}</c> so the full audit trail for an appeal lives
-/// in a single partition and scans cheaply.
+/// pre-modernization status values). <see cref="PartitionKey"/> is
+/// <c>{tenantId}:{appealId}</c>, stored with every row.
 /// </summary>
 [BsonIgnoreExtraElements]
 public class AppealEvent
 {
-    /// <summary>Cosmos document id + Mongo `_id`. Defaults to <see cref="EventId"/>.</summary>
+    /// <summary>Mongo `_id`. Defaults to <see cref="EventId"/>.</summary>
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>Cosmos partition key. Derived via <see cref="BuildPartitionKey"/>.</summary>
+    /// <summary><c>{tenantId}:{appealId}</c>. Derived via <see cref="BuildPartitionKey"/>.</summary>
     public string PartitionKey { get; set; } = string.Empty;
 
     [Required]
@@ -63,7 +62,7 @@ public class AppealEvent
 
     /// <summary>
     /// Mongo-facing mirror of <see cref="Payload"/>. Not emitted by
-    /// System.Text.Json (Cosmos path) — used only by the BSON driver.
+    /// System.Text.Json — used only by the BSON driver.
     /// </summary>
     [JsonIgnore]
     public string? PayloadJson

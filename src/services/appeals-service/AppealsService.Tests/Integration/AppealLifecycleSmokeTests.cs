@@ -489,12 +489,11 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
 /// <see cref="WebApplicationFactory{TEntryPoint}"/> wiring that swaps in
 /// the in-memory fakes for repository, encryptor, publisher, and secret
 /// provider so the controller tests run fully in-process with no Mongo /
-/// Cosmos / Kafka / Key Vault dependencies.
+/// Kafka / Key Vault dependencies.
 ///
 /// Also sets <c>MongoDb:ConnectionString</c> to a non-empty sentinel so
-/// the Mongo branch of the Program.cs DI wiring is chosen (we override
-/// every registration after) and the Cosmos branch's CosmosDb:Endpoint
-/// validation doesn't trip.
+/// Program.cs's database check passes (we override every repository
+/// registration after).
 /// </summary>
 public sealed class AppealsWebApplicationFactory : WebApplicationFactory<Program>
 {
