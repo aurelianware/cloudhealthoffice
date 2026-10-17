@@ -27,10 +27,12 @@ public static class ExaminerPendCodes
 }
 
 /// <summary>
-/// A dependency (claims-service) could not answer: the message must be
-/// retried, not skipped. The consumer retries it with backoff and dead-letters
-/// it after the last attempt, so a claims-service outage never silently
-/// drops an AI examination.
+/// A dependency could not answer: the message must be retried, not skipped.
+/// The dependency is claims-service, or Anthropic when it is rate limited,
+/// overloaded, behind an open circuit or timed out. The consumer retries the
+/// message with backoff and dead-letters it after the last attempt, so an
+/// outage never silently drops an AI examination. Nor does it turn one into
+/// a permanent EscalateToHuman.
 /// </summary>
 public sealed class ExaminerTransientException : Exception
 {
