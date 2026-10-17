@@ -56,7 +56,6 @@ public interface IPersonalRepRepository
     /// <summary>
     /// Atomically persist the forward (RepToMember) and inverse
     /// (MemberToRep) rows of an association, along with the audit event.
-    /// Cosmos uses <c>TransactionalBatch</c> (both rows share tenantId);
     /// Mongo uses a session with a transaction.
     ///
     /// Failure-mode contract (enforced by
@@ -119,9 +118,9 @@ public interface IPersonalRepEventRepository
 
 /// <summary>
 /// Repository-local sink for appending <see cref="PersonalRepEvent"/> rows.
-/// Lets the Cosmos and Mongo <see cref="IPersonalRepRepository"/>
-/// implementations share a single transition-and-append shape while
-/// keeping their own storage choice for audit rows.
+/// Lets an <see cref="IPersonalRepRepository"/> implementation share a
+/// single transition-and-append shape while keeping its own storage choice
+/// for audit rows.
 /// </summary>
 public interface IPersonalRepEventSink
 {
