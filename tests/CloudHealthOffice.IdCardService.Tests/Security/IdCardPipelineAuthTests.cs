@@ -30,7 +30,6 @@ public class IdCardPipelineAuthTests : IClassFixture<IdCardPipelineAuthTests.Fac
             builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MongoDb:ConnectionString"] = "",
-                ["CosmosDb:ConnectionString"] = "",
                 ["ProviderJwt:Authority"] = "",
             }));
             builder.ConfigureServices(services =>

@@ -24,7 +24,6 @@ public class ProviderSchemeTests : IClassFixture<ProviderSchemeTests.Factory>
             builder.UseSetting("ProviderJwt:Audience", "idcard-scan");
             builder.UseSetting("Messaging:Backend", "InMemory");
             builder.UseSetting("MongoDb:ConnectionString", "");
-            builder.UseSetting("CosmosDb:ConnectionString", "");
         }
     }
 

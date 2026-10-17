@@ -14,7 +14,6 @@ using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Azure.Cosmos;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,51 +46,31 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Storage: Mongo if configured, else Cosmos if configured, else in-memory.
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-var cosmosConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-
-// With neither provider configured the service falls back to in-memory storage, so
-// AddChoDatabase is only called once one is actually configured.
-ChoDatabaseProvider? databaseProvider = null;
-if (!string.IsNullOrEmpty(mongoConnectionString)
-    || string.Equals(builder.Configuration["Database:Provider"], "CosmosDb", StringComparison.OrdinalIgnoreCase))
-{
-    databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-}
-
+// Storage: MongoDB (ADR 006). With no database configured, only a Development /
+// Testing host may run on the process-local in-memory store (state is lost on
+// restart and not shared by replicas); any other host refuses to start.
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
 if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
-
     builder.Services.AddScoped<IIdCardOrderRepository, MongoIdCardOrderRepository>();
     builder.Services.AddScoped<IIdCardRecordRepository, MongoIdCardRecordRepository>();
     builder.Services.AddScoped<IIdCardTemplateRepository, MongoIdCardTemplateRepository>();
     Console.WriteLine("idcard-service: using MongoDB storage");
 }
-else if (databaseProvider == ChoDatabaseProvider.CosmosDb)
+else if (databaseProvider is not null)
 {
-    builder.Services.AddSingleton(_ =>
-    {
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
-        var options = new CosmosClientOptions { Serializer = new CosmosSystemTextJsonSerializer(jsonOptions) };
-        return new CosmosClient(cosmosConnectionString, options);
-    });
-
-    builder.Services.AddScoped<IIdCardOrderRepository, CosmosIdCardOrderRepository>();
-    builder.Services.AddScoped<IIdCardRecordRepository, CosmosIdCardRecordRepository>();
-    builder.Services.AddScoped<IIdCardTemplateRepository, CosmosIdCardTemplateRepository>();
-    Console.WriteLine("idcard-service: using Cosmos DB storage");
+    throw new InvalidOperationException(
+        "idcard-service supports MongoDB only. Remove Database:Provider or set it to MongoDb.");
 }
 else
 {
+    if (!ChoTestingEnvironment.AllowsDevelopmentSecrets(builder.Environment))
+        throw new InvalidOperationException(
+            "idcard-service requires a database. Configure MongoDb:ConnectionString.");
     builder.Services.AddSingleton<IIdCardOrderRepository, InMemoryIdCardOrderRepository>();
     builder.Services.AddSingleton<IIdCardRecordRepository, InMemoryIdCardRecordRepository>();
     builder.Services.AddSingleton<IIdCardTemplateRepository, InMemoryIdCardTemplateRepository>();
-    Console.WriteLine("idcard-service: using in-memory storage (dev only)");
+    Console.WriteLine("idcard-service: no database configured, using in-memory storage (Development only)");
 }
 
 // Upstream CHO calls. Every request names its tenant in X-Tenant-ID so the
@@ -259,7 +238,6 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
 });
 
 // Global-template check: surfaces missing-seed deployments as a readiness

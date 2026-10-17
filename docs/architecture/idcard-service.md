@@ -218,9 +218,8 @@ revoke (with confirmation message box). The "Order New Card" button opens
 
 ## Storage
 
-Mirrors `eligibility-service`: auto-detects MongoDB (`MongoDb:ConnectionString`),
-falls back to Cosmos (`CosmosDb:ConnectionString`), falls back to in-memory
-(dev only). Collections / containers:
+MongoDB (`MongoDb:ConnectionString`). Without it, Development / Testing hosts
+use an in-memory store and any other host refuses to start. Collections:
 
 - `idcard_orders` (tenant-partitioned, `id` key)
 - `idcard_records` (tenant+card unique index, tenant+member history index)
