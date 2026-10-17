@@ -31,7 +31,7 @@ export interface EDI277Payload {
   statusCategory?: string; // Rejected, Denied, Pended, etc.
   serviceDate?: string;
   billAmount?: number;
-  additionalInfo?: Record<string, any>;
+  additionalInfo?: Record<string, unknown>;
 }
 
 /**
