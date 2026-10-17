@@ -46,6 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     constructors.
 
   The inventory is in `docs/architecture/service-client-resilience.md`.
+- **A failing call is retried by one layer, not two.** Clients that retry
+  on their own now opt out of the shared pipeline (`WithoutChoResilience`).
+  Before, a failing Stedi call made up to 9 attempts and NPPES or SAM.gov
+  up to 12. The clients that opt out:
+  - Stedi, which keeps `StediHttpSender`'s loop. The loop reports retry
+    counts and never retries auth or validation errors. The attachment
+    upload, a one-shot stream, is no longer retried at all.
+  - NPPES, which keeps `AddStandardResilienceHandler`.
+  - The SAM.gov exclusions API, which keeps the screener's own loop.
+  - The exclusion dataset download.
 - **eligibility-service uses its configured HttpClient.** A duplicate
   `AddScoped` registration had replaced the typed client and its 5 s timeout.
 

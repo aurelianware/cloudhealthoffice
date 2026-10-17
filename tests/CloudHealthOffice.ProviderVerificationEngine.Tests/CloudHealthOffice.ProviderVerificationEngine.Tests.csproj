@@ -26,5 +26,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\engines\CloudHealthOffice.ProviderVerificationEngine\CloudHealthOffice.ProviderVerificationEngine.csproj" />
     <ProjectReference Include="..\..\src\services\provider-verification-service\CloudHealthOffice.ProviderVerificationService.csproj" />
+    <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure.Tests\CloudHealthOffice.Infrastructure.Tests.csproj" />
   </ItemGroup>
 </Project>
