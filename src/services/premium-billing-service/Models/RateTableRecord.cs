@@ -41,8 +41,8 @@ public class RateTableRecord
     public RateTable Table { get; set; } = new();
 
     /// <summary>
-    /// Unique per tenant, rate table and version, and safe as a Cosmos id and a
-    /// Mongo _id (one Mongo collection holds every tenant). Creating a version
+    /// Unique per tenant, rate table and version: the Mongo _id (one collection
+    /// holds every tenant). Creating a version
     /// that exists fails, so two writers cannot both create version N.
     /// </summary>
     public static string DocumentId(string tenantId, string rateTableId, int version)

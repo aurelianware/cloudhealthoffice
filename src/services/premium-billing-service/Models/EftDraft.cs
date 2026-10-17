@@ -167,8 +167,8 @@ public class EftDraft
     /// <summary>
     /// The invoice id while this draft is active (not Settled, Returned, Failed
     /// or Cancelled), otherwise null. Set by the repository on every write: at
-    /// most one active draft per invoice (Mongo: unique partial index on
-    /// TenantId + ActiveInvoiceKey; Cosmos: a lock item per invoice).
+    /// most one active draft per invoice (unique partial index on
+    /// TenantId + ActiveInvoiceKey).
     /// </summary>
     public string? ActiveInvoiceKey { get; set; }
 

@@ -10,13 +10,13 @@ namespace PremiumBillingService.Models;
 public class PremiumInvoice
 {
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation)
+    /// Owning tenant (every query is scoped to it)
     /// </summary>
     [Required]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Unique identifier (Cosmos DB document id)
+    /// Unique identifier (the document id)
     /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -226,11 +226,6 @@ public class PremiumInvoice
     /// stale copy throws <see cref="Repositories.ConcurrencyConflictException"/>.
     /// </summary>
     public long Version { get; set; }
-
-    /// <summary>Optimistic concurrency (Cosmos); set by Cosmos DB.</summary>
-    [JsonPropertyName("_etag")]
-    [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
-    public string? ETag { get; set; }
 
     /// <summary>
     /// Recalculate computed totals from line items, adjustments, and payments

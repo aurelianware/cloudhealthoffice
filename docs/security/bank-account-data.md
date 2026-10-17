@@ -210,8 +210,7 @@ Transmission not configured, disabled, or failing: the file is encrypted with
 settings sponsor-service and provider-service use, with purpose
 `premium-billing-service` / `capitation-service`) and held in Mongo
 (`NachaHeldFiles`, TTL index on `expiresAt`, 7 days; reads refuse it after
-expiry). Without a key ring or a store (Cosmos native SDK deployments: TODO),
-nothing is held and the payments stay `Pending`.
+expiry). Without a key ring, nothing is held and the payments stay `Pending`.
 
 | Endpoint (premium-billing `api/v1/eft/...`, capitation `api/v1/capitation/disbursements/...`) | Who |
 |---|---|

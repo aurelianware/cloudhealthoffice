@@ -11,10 +11,9 @@ using PremiumBillingService.Services;
 namespace PremiumBillingService.Tests.Remittance;
 
 /// <summary>
-/// 820 and lockbox cash application against a real store and the real
-/// repositories, run once per backend (<see cref="CashApplicationTests"/> on
-/// a mongod, <see cref="CashApplicationCosmosEmulatorTests"/> on the Cosmos DB
-/// emulator): every assertion on a balance re-reads what was saved.
+/// 820 and lockbox cash application against a real mongod and the real
+/// repositories (<see cref="CashApplicationTests"/>): every assertion on a
+/// balance re-reads what was saved.
 /// </summary>
 public abstract class CashApplicationScenarios : IAsyncLifetime
 {
@@ -89,7 +88,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
 
     // ── the four required cases ───────────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task ExactPayment_PaysTheInvoice_AndTheAccountOwesNothing()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1200.00m);
@@ -121,7 +120,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         account.LastPaymentAt.Should().Be(new DateTime(2026, 3, 5, 0, 0, 0, DateTimeKind.Utc));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task PartialPayment_LeavesTheBalance_OnTheInvoiceAndTheAccount()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1200.00m);
@@ -141,7 +140,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         account.NetBalance.Should().Be(700.00m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Overpayment_PaysTheBalance_AndHoldsTheRestAsUnappliedCredit()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1200.00m);
@@ -171,7 +170,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         entry.TraceNumber.Should().Be("OVER-1");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UnmatchedReference_GoesToTheExceptionsQueue_AndPostsNothing()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1200.00m);
@@ -200,7 +199,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
 
     // ── other rules ───────────────────────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task SamePaymentTwice_IsRefused_AndNotPostedAgain()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1200.00m);
@@ -215,7 +214,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         saved.Payments.Should().ContainSingle();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task TwoItemsForOneInvoice_AreAppliedInOrder()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -233,7 +232,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         (await _accounts.GetAsync(Group))!.UnappliedCredit.Should().Be(100.00m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task VoidedInvoice_IsAnException()
     {
         await Invoice("INV-GRP001-2026-01", 500.00m, InvoiceStatus.Voided);
@@ -245,7 +244,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         (await _exceptions.ListAsync()).Single().Reason.Should().Be(RemittanceExceptionReason.InvoiceClosed);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task MoneyWithoutDetail_IsAnUnallocatedRemainder()
     {
         await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -260,7 +259,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         (batch.AppliedAmount + batch.UnappliedCreditAmount + batch.ExceptionAmount).Should().Be(batch.PaymentAmount);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DetailExceedingThePayment_PostsNothing()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -276,7 +275,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         (await Reload(invoice)).TotalPaid.Should().Be(0m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RemittanceOnly820_PostsNothing()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -289,7 +288,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         (await Reload(invoice)).TotalPaid.Should().Be(0m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Lockbox_GoesThroughTheSameApplication()
     {
         var march = await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -314,7 +313,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
 
     // ── exceptions queue ──────────────────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task Exception_AppliedToAnInvoice_UpdatesTheInvoiceAndAccount()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -338,7 +337,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         (await _accounts.GetAsync(Group))!.OpenInvoiceBalance.Should().Be(0m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Exception_CreditedToASponsor_RaisesItsUnappliedCredit()
     {
         await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -359,7 +358,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         account.Entries.Single().Type.Should().Be(SponsorAccountEntryType.ExceptionCredit);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Exception_CanBeResolvedOnlyOnce()
     {
         await Apply820(new Synthetic820.Transaction { Amount = 10.00m, Trace = "ONCE-1" }.Organization().Rmr("UNKNOWN", 10.00m));
@@ -372,7 +371,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         await again.Should().ThrowAsync<InvalidOperationException>().WithMessage("*already Dismissed*");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ConcurrentCredits_ToOneAccount_AreAllKept()
     {
         await Task.WhenAll(Enumerable.Range(1, 8).Select(i => _accounts.UpdateAsync(Group, a =>
@@ -388,7 +387,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
 
     // ── review fixes ──────────────────────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task NegativeLine_SendsTheWholePaymentToTheQueue_SoAppliedNeverExceedsReceived()
     {
         // +100 on the invoice, −20 recoupment, 80 received: crediting 100 would post more than arrived.
@@ -405,7 +404,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         (await Reload(invoice)).TotalPaid.Should().Be(0m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DebitFlag_PostsNothing()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 100.00m);
@@ -418,7 +417,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         (await Reload(invoice)).TotalPaid.Should().Be(0m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task SameCheck_ByLockboxAndBy820_IsPostedOnce()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -439,7 +438,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         saved.Payments.Should().ContainSingle();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task LockboxBatchAndItemNumbers_RepeatingNextDay_AreDifferentChecks()
     {
         await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -458,7 +457,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         account.OpenInvoiceBalance.Should().Be(300.00m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task FailedPartWay_ReuploadResumes_WithoutApplyingAnythingTwice()
     {
         var march = await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -484,7 +483,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         await FluentActions.Invoking(() => Apply820(transaction)).Should().ThrowAsync<DuplicateRemittanceException>();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ConcurrentPayment_OnTheSameInvoice_IsNotOverwritten_AndTheSplitUsesTheFreshBalance()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -509,7 +508,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         saved.BalanceDue.Should().Be(0m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task InvoiceRepository_RefusesAStaleSave()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -520,7 +519,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         await FluentActions.Invoking(() => _invoices.UpdateAsync(second)).Should().ThrowAsync<ConcurrencyConflictException>();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Exception_ResolvedTwiceAtOnce_PostsOnce()
     {
         await Invoice("INV-GRP001-2026-03", 1000.00m);
@@ -539,7 +538,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         (await _exceptions.GetByIdAsync(queued.Id))!.Status.Should().Be(RemittanceExceptionStatus.Credited);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CreditToAnUnknownGroup_IsRefused_AndTheExceptionStaysOpen()
     {
         await Apply820(new Synthetic820.Transaction { Amount = 10.00m, Trace = "TYPO-GRP" }.Organization().Rmr("UNKNOWN", 10.00m));
@@ -555,7 +554,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         (await _accounts.GetAsync("GRP-TYPO")).Should().BeNull();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task PolicyNumberQualifier_IsNotMatchedAsAnInvoice()
     {
         var invoice = await Invoice("INV-GRP001-2026-03", 100.00m);
@@ -568,7 +567,7 @@ public abstract class CashApplicationScenarios : IAsyncLifetime
         (await Reload(invoice)).TotalPaid.Should().Be(0m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task InvoiceOfAnotherGroup_ThanTheOnePaid_IsAnException()
     {
         var other = await Invoice("INV-GRP002-2026-03", 100.00m, group: "GRP002");

@@ -75,8 +75,6 @@ public class NachaTransmissionEndToEndTests : IClassFixture<NachaTransmissionEnd
             builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MongoDb:ConnectionString"] = "",
-                ["CosmosDb:ConnectionString"] = "",
-                ["CosmosDb:Endpoint"] = "",
                 ["Nacha:ImmediateDestination"] = "091000019",
                 ["Nacha:ImmediateOrigin"] = "1234567890",
                 ["Nacha:ImmediateDestinationName"] = "TEST BANK",
