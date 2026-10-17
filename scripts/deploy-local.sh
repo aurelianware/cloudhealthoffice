@@ -257,12 +257,10 @@ kubectl create secret generic mongodb-auth \
   --dry-run=client -o yaml | kubectl apply -f -
 ok "mongodb-auth"
 
-# Database connection string (used by all services — some reference 'key' or 'endpoint')
+# MongoDB connection string (used by all services)
 kubectl create secret generic database-secret \
   --namespace "$NAMESPACE" \
   --from-literal=connectionString="$MONGO_CONN" \
-  --from-literal=endpoint= \
-  --from-literal=key= \
   --dry-run=client -o yaml | kubectl apply -f -
 ok "database-secret"
 
@@ -272,13 +270,6 @@ kubectl create secret generic reference-data-service-secret \
   --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f -
 ok "reference-data-service-secret"
-
-# CosmosDB secret alias (portal uses this key name)
-kubectl create secret generic cosmosdb-secret \
-  --namespace "$NAMESPACE" \
-  --from-literal=connectionString="$MONGO_CONN" \
-  --dry-run=client -o yaml | kubectl apply -f -
-ok "cosmosdb-secret"
 
 # Redis connection
 [[ -z "$REDIS_CONNECTION_STRING" ]] && REDIS_CONNECTION_STRING="redis-dataprotection.${NAMESPACE}.svc.cluster.local:6379"
@@ -309,19 +300,6 @@ kubectl create secret generic azure-storage-secret \
   --from-literal=connectionString="$AZURE_STORAGE_CONNECTION_STRING" \
   --dry-run=client -o yaml | kubectl apply -f -
 ok "azure-storage-secret"
-
-# eligibility-service's BatchEligibility feature. Left empty on purpose --
-# ASPNETCORE_ENVIRONMENT is patched to Development below, so an empty
-# connection string here just means it resolves to the InMemory backend
-# (see BatchEligibilityServiceCollectionExtensions) rather than crashing.
-# The secret still needs to exist, though: a missing secretKeyRef target
-# fails pod startup outright (CreateContainerConfigError), regardless of
-# what the application code would otherwise tolerate.
-kubectl create secret generic batch-eligibility-secret \
-  --namespace "$NAMESPACE" \
-  --from-literal=cosmosConnectionString="" \
-  --dry-run=client -o yaml | kubectl apply -f -
-ok "batch-eligibility-secret"
 
 # Stripe API keys
 kubectl create secret generic stripe-api-keys \

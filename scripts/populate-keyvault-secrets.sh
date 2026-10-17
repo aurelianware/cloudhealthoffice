@@ -73,7 +73,7 @@ MANIFEST FORMAT (.env):
   # Lines starting with # are comments (skipped)
   # Empty lines are skipped
   # Format: SECRET_NAME=secret_value
-  CosmosDb--ConnectionString=mongodb+srv://user:pass@host/db
+  MongoDb--ConnectionString=mongodb+srv://user:pass@host/?tls=true&retrywrites=false
   Stripe--SecretKey=sk_live_...
 
 EOF
