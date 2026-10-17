@@ -627,6 +627,26 @@ public class ClaimsController : ControllerBase
             return Ok(new { claims = runPage, totalCount = runTotalCount, pageNumber = body.PageNumber, pageSize = body.PageSize });
         }
 
+        // A claim number or authorization number narrows the search to the
+        // claims that carry it; until this branch existed both were silently
+        // ignored and the search returned unrelated claims.
+        if (!string.IsNullOrWhiteSpace(body.ClaimNumber) || !string.IsNullOrWhiteSpace(body.AuthorizationNumber))
+        {
+            var (byReference, referenceCount) = await _claimRepository.SearchByReferenceAsync(
+                body.ClaimNumber,
+                body.AuthorizationNumber,
+                body.MemberId,
+                body.ProviderId,
+                body.ServiceDateFrom,
+                body.ServiceDateTo,
+                status,
+                body.PageNumber,
+                body.PageSize);
+
+            await _diagnosisMetadataEnricher.EnrichAsync(byReference, ct);
+            return Ok(new { claims = byReference, totalCount = referenceCount, pageNumber = body.PageNumber, pageSize = body.PageSize });
+        }
+
         var (claims, totalCount) = await _claimRepository.SearchWithCountAsync(
             body.MemberId,
             body.ProviderId,

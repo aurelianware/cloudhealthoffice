@@ -75,4 +75,54 @@ public class AuthorizationRecordTests : TestContext
         claim.WaitForAssertion(() => claim.Find("[data-testid=open-authorization]"));
         claim.Find("[data-testid=open-authorization]").GetAttribute("href").Should().Be("/authorizations/PA-77");
     }
+
+    private IRenderedComponent<AuthorizationRecordView> RenderAsClaimsReader(string tab)
+    {
+        Services.AddSingleton(Mock.Of<IUserContextService>(u => u.HasPermission("claims:read") == true));
+        return Render(tab);
+    }
+
+    [Fact]
+    public void Related_claims_are_only_for_claims_readers()
+    {
+        var cut = Render("claims");
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Authorization PA-77"));
+        cut.FindAll("[data-testid=record-tab-claims]").Should().BeEmpty();
+        _claims.Verify(c => c.SearchClaimsAsync(It.IsAny<ClaimSearchRequest>()), Times.Never);
+    }
+
+    [Fact]
+    public void Related_claims_lists_claims_billed_against_the_auth_number_with_totals()
+    {
+        _claims.Setup(c => c.SearchClaimsAsync(It.Is<ClaimSearchRequest>(r => r.AuthorizationNumber == "PA-77")))
+            .ReturnsAsync(new ClaimSearchResult
+            {
+                TotalCount = 2, PageSize = 100,
+                Claims =
+                [
+                    new ClaimSummary { ClaimId = "c1", ClaimNumber = "CLM-1", MemberId = "M1", Status = "Paid", TotalChargeAmount = 300m, PaidAmount = 210m },
+                    new ClaimSummary { ClaimId = "c2", ClaimNumber = "CLM-2", MemberId = "M1", Status = "Pended", TotalChargeAmount = 150m },
+                ],
+            });
+
+        var cut = RenderAsClaimsReader("claims");
+
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=authorization-claim]").Should().HaveCount(2));
+        cut.Find("[data-testid=record-tab-claims]").GetAttribute("href").Should().Be("/authorizations/PA-77/claims");
+        cut.FindAll("[data-testid=authorization-claim] a.record-link-main").Select(a => a.GetAttribute("href"))
+            .Should().Equal("/claims/c1", "/members/M1", "/claims/c2", "/members/M1");
+        var summary = cut.Find("[data-testid=authorization-claims-summary]").TextContent;
+        summary.Should().Contain("450.00").And.Contain("210.00").And.Contain("8");
+    }
+
+    [Fact]
+    public void Related_claims_says_so_when_none_were_billed()
+    {
+        _claims.Setup(c => c.SearchClaimsAsync(It.IsAny<ClaimSearchRequest>())).ReturnsAsync(new ClaimSearchResult());
+
+        var cut = RenderAsClaimsReader("claims");
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=authorization-claims-empty]").TextContent.Should().Contain("PA-77"));
+    }
 }

@@ -264,6 +264,12 @@
                     </div>
                 </div>
             }
+            else if (ActiveTab == "claims")
+            {
+                <div data-testid="authorization-tab-claims">
+                    <AuthorizationClaimsPanel AuthorizationNumber="@_authorization.AuthorizationNumber" UnitsApproved="@_authorization.UnitsApproved" />
+                </div>
+            }
             else if (ActiveTab == "access-log")
             {
                 <RecordAccessLogTab Kind="Authorization" RecordId="@_authorization.Id" />
@@ -286,14 +292,15 @@
     [Parameter, EditorRequired] public string BaseHref { get; set; } = string.Empty;
 
     // Fixed order (portal-navigation.md §8 decision 3). Decision & Letters,
-    // Related claims and Notes join when their data is wired. Access log is
-    // for audit:read holders only.
+    // Notes joins when its data is wired. Related claims needs claims:read;
+    // Access log is for audit:read holders only.
     private IReadOnlyList<RecordTab> AuthorizationTabs =>
     [
         new("overview", "Overview", Icons.Material.Filled.Info),
         new("services", "Services", Icons.Material.Filled.MedicalServices),
         new("review", "Review", Icons.Material.Filled.Assignment),
         new("documents", "Documents", Icons.Material.Filled.AttachFile, _authorization is { Attachments.Count: > 0 } a ? a.Attachments.Count : null),
+        new("claims", "Related claims", Icons.Material.Filled.Receipt, Visible: CanReadClaims),
         new("access-log", "Access log", Icons.Material.Filled.Visibility, Visible: RecordAccessLogTab.CanRead(ServiceProvider)),
     ];
 
@@ -306,6 +313,9 @@
             : $"/providers/{Uri.EscapeDataString(providerId)}";
 
     private AuthorizationDetails? _authorization;
+
+    private bool CanReadClaims =>
+        Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<IUserContextService>(ServiceProvider)?.HasPermission("claims:read") == true;
     private bool _loading = true;
     private string? _serviceError;
 
