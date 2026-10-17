@@ -131,7 +131,6 @@ grep -rnE "ReplaceOneAsync|FindOneAndReplaceAsync|\.ReplaceOne\(" --include='*.c
 - **tenant-service.** `ValidateApiKeyAsync` and `UpdateUsageAsync` read and
   replace the whole tenant; nothing calls them today, but wired up they would
   409 under load and should become targeted updates.
-- **Cosmos repositories** ignore `Revision`; they are removed in Phase 5b.
 - **payment-service.** The GL outbox dispatcher marks `PublishedAt` without
   bumping the revision. A stale run save can clear it, which only causes the
   event to be delivered again; consumers deduplicate.

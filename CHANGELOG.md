@@ -9,18 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- **The native Cosmos DB SDK path (in progress, service by service).**
-  MongoDB is the only persistence path. Removed so far:
-  - **claims-service:** the Cosmos claim, claim-note and AI-examination-audit
-    repositories, the Cosmos-only noop adjustment repository and version-event
-    publisher, and the 5.1b Cosmos partition-key migration. That includes the
+- **The native Cosmos DB SDK persistence path (ADR 017).** MongoDB, through
+  the MongoDB driver, is the only document store; in Azure it is Azure
+  DocumentDB (MongoDB vCore). Removed from every service and engine:
+  - the startup switch between Mongo and Cosmos, the Cosmos repositories,
+    `CosmosSystemTextJsonSerializer` copies and Cosmos-only noop classes;
+  - shared Infrastructure's Cosmos client registration, Cosmos health check
+    and `ChoDatabaseProvider.CosmosDb`;
+  - the Cosmos emulator tests, their fixture and the CI emulator job. Each
+    behaviour they covered has a Mongo test, ported where none existed;
+  - the claims 5.1b Cosmos partition-key migration, including
     `POST /api/v1/admin/claims/cosmos-migration/run` and `GET …/status`
-    endpoints, which only worked in Cosmos mode, their
-    `ClaimsCosmosMigration` settings, metrics and runbook.
-  - The service now fails at start-up without `MongoDb:ConnectionString`
-    instead of falling back to `CosmosDb:*`. Claim adjustments therefore always
-    use the Mongo repository; Cosmos deployments used to get a repository that
-    threw on every write.
+    (they only worked in Cosmos mode), its settings, metrics and runbook;
+  - the Cosmos DB for NoSQL Bicep module and its Logic App connector.
+    `main.bicep` provisions Azure DocumentDB through `enableDocumentDb`
+    instead. Incremental deployments do not delete an existing SQL-API
+    account.
+
+  Only `src/tools/migration-wizard` still references `Microsoft.Azure.Cosmos`.
+
+### Changed
+
+- **Services refuse to start against a missing or Cosmos database.**
+  - `Database:Provider` set to anything but `MongoDb` fails at start-up.
+  - `CosmosDb:ConnectionString` or `CosmosDb:Endpoint` without
+    `MongoDb:ConnectionString` fails at start-up.
+  - Services that used to fall back to Cosmos, or start with no database, now
+    require `MongoDb:ConnectionString`.
+  - idcard, reference-data, fhir, authorization, rfai, consent,
+    personal-representative and attachment keep a no-database mode only on
+    Development and Testing hosts.
+- **eligibility-service batch storage is configured under
+  `BatchEligibility:MongoDb`** instead of `BatchEligibility:CosmosDb`.
+- **Some `CosmosDb:*` keys are still read**, as Mongo collection-name
+  overrides; they are listed in ADR 017.
+- **The Azure DocumentDB connection string must include `retrywrites=false`.**
 
 ### Fixed
 
@@ -63,6 +86,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a conflict. The low-risk sites still open, and the known residual gaps, are
   listed in
   `docs/architecture/mongo-write-concurrency.md`.
+- **Benefit-plan plan-year boundaries no longer shift with the host time
+  zone.** `PlanYearStart` and `PlanYearEnd` were stored as local times, so on
+  a host east of UTC a January 1 start fell in the previous year. They now use
+  the UTC calendar-date serializer, like the accumulator plan-year fields.
+- **The provider-enrollment Mongo cache can hold more than one record.** Every
+  upsert wrote `ObjectId.Empty` as `_id`, so the second (NPI, state) record
+  failed with a duplicate-key error.
 - **A claim is no longer sent twice while its first send is in flight.**
   The Stedi and Mock gateways treated a `Transmitting` transmission like a
   failed one, so a second submit of the same idempotency key (or the loser of
