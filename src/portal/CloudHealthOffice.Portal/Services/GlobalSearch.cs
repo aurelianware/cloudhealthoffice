@@ -29,9 +29,11 @@ public sealed class GlobalSearch
     private readonly IMemberService _members;
     private readonly IProviderService _providers;
     private readonly IUserContextService _user;
+    private readonly IServiceProvider _services;
 
-    public GlobalSearch(IClaimsService claims, IMemberService members, IProviderService providers, IUserContextService user)
+    public GlobalSearch(IClaimsService claims, IMemberService members, IProviderService providers, IUserContextService user, IServiceProvider services)
     {
+        _services = services;
         _claims = claims;
         _members = members;
         _providers = providers;
@@ -51,10 +53,12 @@ public sealed class GlobalSearch
         if (_user.HasPermission("claims:read")) tasks.Add(Claims(q, results));
         if (_user.HasPermission("members:read")) tasks.Add(Members(q, results));
         if (_user.HasPermission("providers:read")) tasks.Add(Providers(q, results));
+        if (_user.HasPermission("payments:read") && _services.GetService(typeof(IPaymentService)) is IPaymentService payments)
+            tasks.Add(Payments(payments, q, results));
         await Task.WhenAll(tasks);
 
         // Exact matches first, then by kind in a fixed order.
-        var order = new[] { "Claim", "Member", "Provider" };
+        var order = new[] { "Claim", "Member", "Provider", "Payment" };
         var sorted = results.Hits.OrderByDescending(h => h.Exact).ThenBy(h => Array.IndexOf(order, h.Kind)).ToList();
         results.Hits.Clear();
         results.Hits.AddRange(sorted);
@@ -107,6 +111,23 @@ public sealed class GlobalSearch
             }
         }
         catch { lock (results) results.Unavailable.Add("Members"); }
+    }
+
+    // A check or EFT trace number opens the payment.
+    private static async Task Payments(IPaymentService payments, string q, SearchResults results)
+    {
+        try
+        {
+            var payment = await payments.GetPaymentByCheckNumberAsync(q);
+            if (payment is null) return;
+            lock (results)
+            {
+                results.Hits.Add(new SearchHit("Payment", payment.Label,
+                    $"{payment.TotalPaymentAmount:C} · {payment.PayeeName} · {payment.PaymentDate:MM/dd/yyyy}",
+                    $"/payments/{Uri.EscapeDataString(payment.Id)}", Exact: true));
+            }
+        }
+        catch { lock (results) results.Unavailable.Add("Payments"); }
     }
 
     private static SearchHit MemberHit(MemberSummary m, bool exact) =>
