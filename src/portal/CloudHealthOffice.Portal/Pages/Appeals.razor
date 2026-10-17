@@ -10,10 +10,13 @@
 
 <PermissionGate Permission="appeals:read" RoleName="UMCoordinator">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h3" GutterBottom="true">
-        <MudIcon Icon="@Icons.Material.Filled.Balance" Class="mr-2" />
-        Appeals
-    </MudText>
+    <div class="d-flex align-center justify-space-between flex-wrap gap-2">
+        <MudText Typo="Typo.h3" GutterBottom="true">
+            <MudIcon Icon="@Icons.Material.Filled.Balance" Class="mr-2" />
+            Appeals
+        </MudText>
+        <ModuleViewSwitch ListHref="/appeals" InsightsHref="/appeals/insights" Active="list" />
+    </div>
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
         Track and manage member and provider appeals through the regulatory lifecycle
     </MudText>
@@ -28,50 +31,39 @@
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
     }
 
-    @* ─── Summary Cards ─── *@
-    @if (_summary != null)
+    @* ─── The queue now (Appeals Insights' definitions; each number opens its cases) ─── *@
+    @if (_insights is { } ins)
     {
-        <MudGrid Class="mb-6">
+        var overturnDecided = ins.ResolvedByLevel.Where(l => l.Level != "Grievance").Sum(l => l.Overturned + l.Upheld);
+        var overturned = ins.ResolvedByLevel.Where(l => l.Level != "Grievance").Sum(l => l.Overturned);
+        <MudGrid Class="mb-6" Spacing="3">
             <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="2">
-                    <MudCardContent Class="text-center pa-4">
-                        <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Color="Color.Primary" Size="Size.Large" />
-                        <MudText Typo="Typo.h4" Class="mt-2">@_summary.OpenAppeals</MudText>
-                        <MudText Typo="Typo.caption">Open Appeals</MudText>
-                    </MudCardContent>
-                </MudCard>
+                <InsightStat Label="Open now" Value="@ins.Open.Total.ToString("N0")" Sub="@($"{ins.Open.Expedited:N0} expedited · {ins.Open.PendingInfo:N0} waiting on information")"
+                             Href="@AppealDrillDown.Open(null)" TestId="appeals-open" />
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="2">
-                    <MudCardContent Class="text-center pa-4">
-                        <MudIcon Icon="@Icons.Material.Filled.FlashOn" Color="Color.Error" Size="Size.Large" />
-                        <MudText Typo="Typo.h4" Class="mt-2" Color="Color.Error">@_summary.UrgentExpedited</MudText>
-                        <MudText Typo="Typo.caption">Urgent / Expedited</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">72-hour MA deadline</MudText>
-                    </MudCardContent>
-                </MudCard>
+                <InsightStat Label="Overdue" Value="@ins.Open.Overdue.ToString("N0")" Sub="Past the regulatory deadline"
+                             Href="@(ins.Open.Overdue > 0 ? AppealDrillDown.Open(null, overdue: true) : null)" TestId="appeals-overdue" />
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="2">
-                    <MudCardContent Class="text-center pa-4">
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Warning" Size="Size.Large" />
-                        <MudText Typo="Typo.h4" Class="mt-2" Color="Color.Warning">@_summary.DueThisWeek</MudText>
-                        <MudText Typo="Typo.caption">Due This Week</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Approaching deadline</MudText>
-                    </MudCardContent>
-                </MudCard>
+                <InsightStat Label="Due within 7 days" Value="@ins.Open.DueWithin7Days.ToString("N0")" Sub="Not yet overdue"
+                             Href="@(ins.Open.DueWithin7Days > 0 ? AppealDrillDown.Open(null, dueWithin7Days: true) : null)" TestId="appeals-due" />
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
-                <MudCard Elevation="2">
-                    <MudCardContent Class="text-center pa-4">
-                        <MudIcon Icon="@Icons.Material.Filled.PublishedWithChanges" Color="Color.Info" Size="Size.Large" />
-                        <MudText Typo="Typo.h4" Class="mt-2">@(_summary.OverturnedRate.ToString("F1"))%</MudText>
-                        <MudText Typo="Typo.caption">Overturned Rate</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Original decision reversed</MudText>
-                    </MudCardContent>
-                </MudCard>
+                <InsightStat Label="Overturned, last 30 days" Value="@(overturnDecided == 0 ? "—" : $"{(100.0 * overturned / overturnDecided).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}%")"
+                             Sub="@($"{overturned:N0} of {overturnDecided:N0} appeals decided")" Href="/appeals/insights" TestId="appeals-overturned" />
             </MudItem>
         </MudGrid>
+    }
+
+    @if (_drillDown is not null)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.Insights" data-testid="appeals-drilldown">
+            <div class="d-flex align-center justify-space-between flex-wrap gap-2">
+                <span>From Appeals Insights: <strong>@DrillDownDescription</strong></span>
+                <MudButton Variant="Variant.Text" Size="Size.Small" Href="/appeals" data-testid="appeals-drilldown-clear">Clear</MudButton>
+            </div>
+        </MudAlert>
     }
 
     @* ─── Search Form ─── *@
@@ -287,7 +279,45 @@
     private bool _loadingResults;
     private bool _hasSearched;
     private string? _serviceError;
-    private AppealsSummary? _summary;
+    private AppealInsightsView? _insights;
+    private Dictionary<string, string>? _drillDown;
+
+    private string DrillDownDescription
+    {
+        get
+        {
+            var d = _drillDown!;
+            string? V(string k) => d.TryGetValue(k, out var v) ? v : null;
+            var parts = new List<string>
+            {
+                V("scope") switch { "open" => "open now", "resolved" => "resolved in the period", _ => "received in the period" },
+            };
+            if (V("kind") is { } kind) parts.Add(kind == "Grievance" ? "grievances" : "appeals");
+            if (V("level") is { } level) parts.Add(LevelLabel(level));
+            if (V("expedited") == "true") parts.Add("expedited");
+            if (V("expedited") == "false") parts.Add("standard");
+            if (V("onTime") == "true") parts.Add("on time");
+            if (V("onTime") == "false") parts.Add("late");
+            if (V("extended") == "true") parts.Add("deadline extended");
+            if (V("outcome") is { } outcome) parts.Add(outcome switch { "ClosedWithoutDecision" => "closed without a decision", _ => outcome.ToLowerInvariant() });
+            if (V("overdue") == "true") parts.Add("overdue");
+            if (V("dueWithin7Days") == "true") parts.Add("due within 7 days");
+            if (V("pendingInfo") == "true") parts.Add("waiting on information");
+            if (V("externalReview") == "true") parts.Add("at external review");
+            if (V("denialReasonCode") is { } code) parts.Add(code == AppealDrillDown.UnspecifiedCode ? "no denial reason code" : $"denial reason {code}");
+            if (V("lob") is { } lob) parts.Add(lob);
+            return string.Join(", ", parts);
+        }
+    }
+
+    internal static string LevelLabel(string level) => level switch
+    {
+        "FirstLevel" => "first level",
+        "SecondLevel" => "second level",
+        "ExternalReview" => "external review",
+        "Grievance" => "grievances",
+        _ => level,
+    };
     private List<AppealSummary> _results = new();
 
     private string? _searchAppealId;
@@ -297,9 +327,21 @@
     protected override async Task OnInitializedAsync()
     {
         _loadingSummary = true;
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(NavigationManager.Uri).Query);
+        if (query.ContainsKey("scope"))
+        {
+            _drillDown = AppealDrillDown.Keys
+                .Where(k => query.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v.ToString()))
+                .ToDictionary(k => k, k => query[k].ToString());
+            _hasSearched = true;
+            _loadingResults = true;
+        }
         try
         {
-            _summary = await AppealsService.GetSummaryAsync();
+            var to = DateTime.UtcNow;
+            _insights = await AppealsService.GetAppealInsightsAsync(to.AddDays(-30), to);
+            if (_drillDown is not null)
+                _results = await AppealsService.ListAppealInsightAsync(_drillDown);
         }
         catch (ServiceUnavailableException ex)
         {
@@ -312,6 +354,7 @@
         finally
         {
             _loadingSummary = false;
+            _loadingResults = false;
         }
     }
 

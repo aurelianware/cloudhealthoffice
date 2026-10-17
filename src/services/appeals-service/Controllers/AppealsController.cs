@@ -252,6 +252,65 @@ public class AppealsController : ControllerBase
         return Ok(new AppealListResponse { Items = decrypted.ToList() });
     }
 
+    /// <summary>
+    /// Appeals &amp; Grievances Insights (portal-navigation.md §5.1):
+    /// received in [from, to] by kind, level and urgency; resolved in the
+    /// period by level with timeliness against the regulatory deadline and the
+    /// overturn rate; open now (overdue, due within 7 days, pending info); and
+    /// the denial reasons appealed. Aggregates only; each figure's cases are
+    /// listed by <c>insights/list</c> with the same predicate.
+    /// </summary>
+    [HttpGet("insights")]
+    [ProducesResponseType(typeof(AppealInsights), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetAppealInsights(
+        [FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] LineOfBusiness? lineOfBusiness, CancellationToken ct = default)
+    {
+        if (InsightsPeriod(from, to) is not { } period) return BadRequest(new { error = "from must be before to, at most a year apart" });
+
+        var activity = await _appeals.ListInsightActivityAsync(TenantId, period.From, period.To, ct);
+        var open = await _appeals.ListOpenAsync(TenantId, ct);
+        return Ok(AppealInsightSets.Build(activity, open, period.From, period.To, lineOfBusiness, DateTime.UtcNow));
+    }
+
+    /// <summary>The appeals and grievances behind one Insights figure (newest first): the drill-down. Logged in the access log.</summary>
+    [AuditRecordAccess("Appeal", RecordAccessActions.List)]
+    [HttpGet("insights/list")]
+    [ProducesResponseType(typeof(AppealListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ListAppealInsight(
+        [FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] LineOfBusiness? lineOfBusiness,
+        [FromQuery] string scope = AppealInsightSets.ReceivedScope,
+        [FromQuery] string? kind = null, [FromQuery] string? level = null, [FromQuery] bool? expedited = null,
+        [FromQuery] bool? onTime = null, [FromQuery] bool? extended = null, [FromQuery] string? outcome = null,
+        [FromQuery] bool? overdue = null, [FromQuery] bool? dueWithin7Days = null, [FromQuery] bool? pendingInfo = null,
+        [FromQuery] bool? externalReview = null, [FromQuery] string? denialReasonCode = null,
+        [FromQuery] int limit = 500, CancellationToken ct = default)
+    {
+        if (scope is not (AppealInsightSets.ReceivedScope or AppealInsightSets.ResolvedScope or AppealInsightSets.OpenScope))
+            return BadRequest(new { error = "scope is received, resolved or open" });
+        if (InsightsPeriod(from, to) is not { } period) return BadRequest(new { error = "from must be before to, at most a year apart" });
+
+        var criteria = new AppealInsightCriteria
+        {
+            Scope = scope, Kind = kind, Level = level, Expedited = expedited, OnTime = onTime, Extended = extended, Outcome = outcome,
+            Overdue = overdue, DueWithin7Days = dueWithin7Days, PendingInfo = pendingInfo, ExternalReview = externalReview,
+            DenialReasonCode = denialReasonCode,
+        };
+        var activity = scope == AppealInsightSets.OpenScope ? [] : await _appeals.ListInsightActivityAsync(TenantId, period.From, period.To, ct);
+        var open = scope == AppealInsightSets.OpenScope ? await _appeals.ListOpenAsync(TenantId, ct) : [];
+        var matched = AppealInsightSets.List(criteria, activity, open, period.From, period.To, lineOfBusiness, DateTime.UtcNow, limit);
+        var decrypted = await Task.WhenAll(matched.Select(a => DecryptForResponseAsync(a, ct)));
+        return Ok(new AppealListResponse { Items = decrypted.ToList() });
+    }
+
+    private static (DateTime From, DateTime To)? InsightsPeriod(DateTime? from, DateTime? to)
+    {
+        var toDate = (to ?? DateTime.UtcNow).ToUniversalTime();
+        var fromDate = (from ?? toDate.AddDays(-30)).ToUniversalTime();
+        return fromDate < toDate && toDate - fromDate <= TimeSpan.FromDays(366) ? (fromDate, toDate) : null;
+    }
+
     [HttpGet("summary")]
     [ProducesResponseType(typeof(AppealsSummary), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAppealsSummary(

@@ -1,0 +1,255 @@
+@page "/appeals/insights"
+@attribute [Authorize]
+@inject IAppealsService AppealsService
+@inject NavigationManager Navigation
+
+<PageTitle>Appeals Insights - Cloud Health Office</PageTitle>
+
+@*
+    Appeals & Grievances Insights (portal-navigation.md §5.1). Timeliness is
+    against each case's regulatory deadline (TargetResponseDate, set by
+    AppealResponseDeadlinePolicy per line of business, type, level and
+    urgency; moved only by the one-time extension). Every number links to the
+    cases it counts, listed by appeals-service with the same predicate.
+*@
+<PermissionGate Permission="appeals:read" RoleName="UMCoordinator">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <div class="d-flex align-center justify-space-between flex-wrap gap-2 mb-2">
+        <MudText Typo="Typo.h3">
+            <MudIcon Icon="@Icons.Material.Filled.Insights" Class="mr-2" />
+            Appeals &amp; Grievances Insights
+        </MudText>
+        <ModuleViewSwitch ListHref="/appeals" InsightsHref="/appeals/insights" Active="insights" />
+    </div>
+
+    <div class="d-flex align-center flex-wrap gap-3 mb-4" data-testid="insights-filters">
+        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+            @foreach (var d in PeriodChoices)
+            {
+                <MudButton Href="@Link(d, LineOfBusiness)" Variant="@(Days == d ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                           data-testid="@($"insights-period-{d}")">Last @d days</MudButton>
+            }
+        </MudButtonGroup>
+        <MudSelect T="string" Value="@(LineOfBusiness ?? "")" ValueChanged="@(v => Navigation.NavigateTo(Link(Days, string.IsNullOrEmpty(v) ? null : v)))"
+                   Label="Line of business" Dense="true" Variant="Variant.Outlined" Style="max-width: 220px;" data-testid="insights-lob">
+            <MudSelectItem T="string" Value="@("")">All lines of business</MudSelectItem>
+            @foreach (var lob in LinesOfBusiness)
+            {
+                <MudSelectItem T="string" Value="@lob">@lob</MudSelectItem>
+            }
+        </MudSelect>
+        @if (_insights is not null)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" data-testid="insights-asof">
+                As of @_insights.AsOf.ToLocalTime().ToString("MM/dd/yyyy h:mm tt") · @_insights.From.ToLocalTime().ToString("MM/dd") – @_insights.To.ToLocalTime().ToString("MM/dd/yyyy")
+            </MudText>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" data-testid="insights-error">@_error</MudAlert>
+    }
+    else if (_insights is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        var i = _insights;
+        var lob = i.LineOfBusiness ?? LineOfBusiness;
+        var resolved = i.ResolvedByLevel.Sum(l => l.Resolved);
+        var onTime = i.ResolvedByLevel.Sum(l => l.OnTime);
+        var appealLevels = i.ResolvedByLevel.Where(l => l.Level != "Grievance").ToList();
+        var overturned = appealLevels.Sum(l => l.Overturned);
+        var decided = appealLevels.Sum(l => l.Overturned + l.Upheld);
+        var external = i.ResolvedByLevel.FirstOrDefault(l => l.Level == "ExternalReview");
+
+        <MudGrid Class="mb-2" Spacing="3">
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Received in the period" Value="@i.Received.Total.ToString("N0")"
+                             Sub="@($"{i.Received.Appeals:N0} appeals · {i.Received.Grievances:N0} grievances · {i.Received.Expedited:N0} expedited")"
+                             Href="@AppealDrillDown.Received(i.From, i.To, lob)" TestId="stat-received" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Resolved on time" Value="@(resolved == 0 ? "—" : Pct(onTime, resolved))"
+                             Sub="@($"{resolved - onTime:N0} late of {resolved:N0} resolved")"
+                             Href="@(resolved - onTime > 0 ? AppealDrillDown.Resolved(i.From, i.To, lob, onTime: false) : null)" TestId="stat-ontime" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Appeals overturned" Value="@(decided == 0 ? "—" : Pct(overturned, decided))"
+                             Sub="@($"{overturned:N0} of {decided:N0} decided in the appellant's favor")"
+                             Href="@(overturned > 0 ? AppealDrillDown.Resolved(i.From, i.To, lob, outcome: "Overturned") : null)" TestId="stat-overturned" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Open now" Value="@i.Open.Total.ToString("N0")"
+                             Sub="@($"{i.Open.Overdue:N0} overdue · {i.Open.DueWithin7Days:N0} due within 7 days")"
+                             Href="@AppealDrillDown.Open(lob)" TestId="stat-open" />
+            </MudItem>
+        </MudGrid>
+
+        <MudPaper Class="pa-4 mb-3" Elevation="1">
+            <MudText Typo="Typo.h6">Timeliness and outcomes by level</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">
+                Cases resolved in the period, against each case's regulatory deadline (an extended deadline counts once extended). Overturned is of appeals decided; grievances aren't overturned.
+            </MudText>
+            <div style="overflow-x: auto;">
+            <MudSimpleTable Dense="true" data-testid="insights-levels">
+                <thead>
+                    <tr>
+                        <th>Level</th>
+                        <th style="text-align:right;">Standard on time</th>
+                        <th style="text-align:right;">Expedited on time</th>
+                        <th style="text-align:right;">Late</th>
+                        <th style="text-align:right;">Extended</th>
+                        <th style="text-align:right;">Overturned</th>
+                        <th style="text-align:right;">Upheld</th>
+                        <th style="text-align:right;">Closed, no decision</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var l in i.ResolvedByLevel)
+                    {
+                        var key = l.Level;
+                        <tr data-testid="insights-level-row">
+                            <td>@LevelName(key)</td>
+                            <td style="text-align:right;">@Num(l.Standard.OnTime, AppealDrillDown.Resolved(i.From, i.To, lob, key, expedited: false, onTime: true), $"level-{key}-std-ontime") <span class="mud-text-secondary" style="font-size:0.75rem;">of @l.Standard.Resolved @Share(l.Standard.OnTimePercent)</span></td>
+                            <td style="text-align:right;">@Num(l.Expedited.OnTime, AppealDrillDown.Resolved(i.From, i.To, lob, key, expedited: true, onTime: true), $"level-{key}-exp-ontime") <span class="mud-text-secondary" style="font-size:0.75rem;">of @l.Expedited.Resolved @Share(l.Expedited.OnTimePercent)</span></td>
+                            <td style="text-align:right;">@Num(l.Standard.Late + l.Expedited.Late, AppealDrillDown.Resolved(i.From, i.To, lob, key, onTime: false), $"level-{key}-late")</td>
+                            <td style="text-align:right;">@Num(l.Standard.Extended + l.Expedited.Extended, AppealDrillDown.Resolved(i.From, i.To, lob, key, extended: true), $"level-{key}-extended")</td>
+                            @if (key == "Grievance")
+                            {
+                                <td style="text-align:right;" class="mud-text-secondary">n/a</td>
+                                <td style="text-align:right;" class="mud-text-secondary">n/a</td>
+                            }
+                            else
+                            {
+                                <td style="text-align:right;">@Num(l.Overturned, AppealDrillDown.Resolved(i.From, i.To, lob, key, outcome: "Overturned"), $"level-{key}-overturned") @Share(l.OverturnPercent)</td>
+                                <td style="text-align:right;">@Num(l.Upheld, AppealDrillDown.Resolved(i.From, i.To, lob, key, outcome: "Upheld"), $"level-{key}-upheld")</td>
+                            }
+                            <td style="text-align:right;">@Num(l.ClosedWithoutDecision, AppealDrillDown.Resolved(i.From, i.To, lob, key, outcome: "ClosedWithoutDecision"), $"level-{key}-nodecision")</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            </div>
+        </MudPaper>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">Open now</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">Whenever received.</MudText>
+                    <InsightBarList TestId="insights-open" AriaLabel="Open cases by state"
+                                    Rows="@(new List<InsightBarList.Row>
+                                    {
+                                        new("Overdue", i.Open.Overdue, AppealDrillDown.Open(lob, overdue: true), Sub: "past the regulatory deadline"),
+                                        new("Due within 7 days", i.Open.DueWithin7Days, AppealDrillDown.Open(lob, dueWithin7Days: true)),
+                                        new("Waiting on information", i.Open.PendingInfo, AppealDrillDown.Open(lob, pendingInfo: true)),
+                                    })"
+                                    EmptyText="Nothing is open." />
+                    <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">By level</MudText>
+                    <InsightBarList TestId="insights-open-level" AriaLabel="Open cases by level"
+                                    Rows="@i.Open.ByLevel.OrderByDescending(x => x.Count).Select(x => new InsightBarList.Row(LevelName(x.Key), x.Count, AppealDrillDown.Open(lob, level: x.Key))).ToList()"
+                                    EmptyText="Nothing is open." />
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Elevation="1" data-testid="insights-external">
+                    <MudText Typo="Typo.h6">Sent outside the plan</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">
+                        External review: IRE / independent review, or the Medicaid State Fair Hearing.
+                    </MudText>
+                    <div class="d-flex align-baseline gap-2">
+                        <span style="font-size: 1.75rem; font-weight: 600;">@Num(i.Received.ExternalReview, AppealDrillDown.Received(i.From, i.To, lob, externalReview: true), "stat-external")</span>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">received in the period</MudText>
+                    </div>
+                    @if (external is not null && external.Overturned + external.Upheld > 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-2">
+                            @Num(external.Overturned, AppealDrillDown.Resolved(i.From, i.To, lob, "ExternalReview", outcome: "Overturned"), "stat-external-overturned") of @((external.Overturned + external.Upheld).ToString("N0")) decided at external review overturned the plan @Share(external.OverturnPercent)
+                        </MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">Denials appealed</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">Appeals received in the period, by the original denial's reason code (top 10).</MudText>
+                    <InsightBarList TestId="insights-reasons" AriaLabel="Appeals received by original denial reason"
+                                    Rows="@i.AppealedDenialReasons.Select(r => new InsightBarList.Row(r.Code == AppealDrillDown.UnspecifiedCode ? "No reason code" : r.Code, r.Count, AppealDrillDown.Received(i.From, i.To, lob, kind: "Appeal", denialReasonCode: r.Code))).ToList()"
+                                    EmptyText="No appeals received in the period." />
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private static readonly int[] PeriodChoices = [30, 90, 365];
+    private static readonly string[] LinesOfBusiness = ["Commercial", "Medicare", "Medicaid", "Exchange", "TRICARE", "VA"];
+
+    [SupplyParameterFromQuery(Name = "days")] public int? DaysParam { get; set; }
+    [SupplyParameterFromQuery(Name = "lob")] public string? LineOfBusiness { get; set; }
+
+    private int Days => DaysParam is { } d && PeriodChoices.Contains(d) ? d : 30;
+
+    private AppealInsightsView? _insights;
+    private string? _error;
+    private string? _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var lob = LinesOfBusiness.Contains(LineOfBusiness) ? LineOfBusiness : null;
+        var key = $"{Days}:{lob}";
+        if (_loadedFor == key) return;
+        _loadedFor = key;
+        _insights = null;
+        _error = null;
+        var to = DateTime.UtcNow;
+        try
+        {
+            _insights = await AppealsService.GetAppealInsightsAsync(to.AddDays(-Days), to, lob);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = $"Appeals Insights couldn't be loaded: {ex.Message}";
+        }
+    }
+
+    private static string Link(int days, string? lob) =>
+        "/appeals/insights?days=" + days + (string.IsNullOrWhiteSpace(lob) ? "" : "&lob=" + Uri.EscapeDataString(lob));
+
+    private static string LevelName(string level) => level switch
+    {
+        "FirstLevel" => "First level",
+        "SecondLevel" => "Second level",
+        "ExternalReview" => "External review",
+        "Grievance" => "Grievances",
+        _ => level,
+    };
+
+    private static string Pct(int part, int whole) =>
+        (100.0 * part / whole).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    private static RenderFragment Share(double? percent) => __builder =>
+    {
+        if (percent is { } p)
+        {
+            <span class="mud-text-secondary" style="font-size: 0.75rem; margin-left: 4px;">(@p.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%)</span>
+        }
+    };
+
+    private static RenderFragment Num(int count, string href, string testId) => __builder =>
+    {
+        if (count > 0)
+        {
+            <a href="@href" data-testid="@testId" style="color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px;">@count.ToString("N0")</a>
+        }
+        else
+        {
+            <span data-testid="@testId">0</span>
+        }
+    };
+}

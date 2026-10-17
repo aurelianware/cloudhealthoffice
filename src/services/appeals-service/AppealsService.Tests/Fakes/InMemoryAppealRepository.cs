@@ -21,6 +21,20 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
 {
     private readonly ConcurrentDictionary<string, Appeal> _appeals = new();
     private readonly ConcurrentBag<AppealEvent> _events = new();
+
+    public Task<IReadOnlyList<Appeal>> ListInsightActivityAsync(string tenantId, DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        static bool In(DateTime? d, DateTime f, DateTime t) => d is { } v && v >= f && v <= t;
+        return Task.FromResult<IReadOnlyList<Appeal>>(_appeals.Values
+            .Where(a => a.TenantId == tenantId && a.Status != AppealStatus.Draft)
+            .Where(a => In(a.ReceivedDate ?? a.SubmittedDate, from, to) || In(a.DecisionDate, from, to) || In(a.ClosedAt, from, to))
+            .ToList());
+    }
+
+    public Task<IReadOnlyList<Appeal>> ListOpenAsync(string tenantId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Appeal>>(_appeals.Values
+            .Where(a => a.TenantId == tenantId && a.Status is AppealStatus.Submitted or AppealStatus.InReview or AppealStatus.PendingInfo)
+            .ToList());
     private readonly object _sync = new();
     private bool _failAuditAppendOnce;
 

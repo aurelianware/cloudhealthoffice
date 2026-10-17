@@ -3872,6 +3872,41 @@ public class AppealsService : IAppealsService
         }
     }
 
+    public async Task<AppealInsightsView> GetAppealInsightsAsync(DateTime from, DateTime to, string? lineOfBusiness = null)
+    {
+        var baseUrl = _configuration["Services:AppealsService"];
+        var query = $"from={Uri.EscapeDataString(from.ToUniversalTime().ToString("o"))}&to={Uri.EscapeDataString(to.ToUniversalTime().ToString("o"))}"
+                    + (string.IsNullOrWhiteSpace(lineOfBusiness) ? "" : $"&lineOfBusiness={Uri.EscapeDataString(lineOfBusiness)}");
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<AppealInsightsView>($"{baseUrl}/appeals/insights?{query}") ?? new AppealInsightsView();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Appeals Service");
+            throw new ServiceUnavailableException("Appeals Service", ex);
+        }
+    }
+
+    public async Task<List<AppealSummary>> ListAppealInsightAsync(IReadOnlyDictionary<string, string> query)
+    {
+        var baseUrl = _configuration["Services:AppealsService"];
+        var parts = query
+            .Where(kv => AppealDrillDown.Keys.Contains(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+            .Select(kv => $"{(kv.Key == "lob" ? "lineOfBusiness" : kv.Key)}={Uri.EscapeDataString(kv.Value)}");
+        try
+        {
+            var list = await _httpClient.GetFromJsonAsync<AppealListWire>($"{baseUrl}/appeals/insights/list?{string.Join("&", parts)}");
+            var now = DateTime.UtcNow;
+            return (list?.Items ?? new()).Select(w => AppealWireMapper.ToSummary(w, now)).ToList();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Appeals Service");
+            throw new ServiceUnavailableException("Appeals Service", ex);
+        }
+    }
+
     public async Task<AppealDetails?> GetAppealByIdAsync(string appealId)
     {
         var baseUrl = _configuration["Services:AppealsService"];
