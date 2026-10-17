@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -349,7 +350,7 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
                 record.LastError = "outbox-publish-failed";
                 _logger.LogWarning(ex,
                     "Failed to publish claim acknowledgment event type={EventType} gateway={Gateway}",
-                    Sanitize(entry.EventType), Sanitize(record.Gateway));
+                    LogSanitizer.Sanitize(entry.EventType), LogSanitizer.Sanitize(record.Gateway));
             }
         }
 
@@ -378,7 +379,7 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
     private void Log(ClaimAcknowledgmentRecord record, bool replay) =>
         _logger.LogInformation(
             "Claim acknowledgment processed gateway={Gateway} status={Status} replay={Replay} pendingOutbox={Pending}",
-            Sanitize(record.Gateway),
+            LogSanitizer.Sanitize(record.Gateway),
             record.Status,
             replay,
             record.HasPendingOutbox);
@@ -390,19 +391,5 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
         ChoMetrics.ClaimAcknowledgmentDuration.Record(
             Math.Max(0, (DateTimeOffset.UtcNow - started).TotalSeconds),
             new KeyValuePair<string, object?>("cho.status", status.ToString()));
-    }
-
-    private static string Sanitize(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return string.Empty;
-        }
-
-        // Strip control characters and anything that is not a safe identifier
-        // token so log forging from inbound 277CA ids is not possible.
-        var chars = value.Where(static c =>
-            char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or '|').ToArray();
-        return new string(chars);
     }
 }

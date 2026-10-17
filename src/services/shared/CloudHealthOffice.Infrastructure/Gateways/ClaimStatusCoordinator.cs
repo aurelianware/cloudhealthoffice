@@ -2,6 +2,7 @@ using System.Diagnostics;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -87,7 +88,7 @@ internal sealed class ClaimStatusCoordinator
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error in claim status inquiry for tenant {TenantId}",
-                Sanitize(request.TenantId));
+                LogSanitizer.Sanitize(request.TenantId, 128));
             return Fail(gatewayName, request, startedAt, stopwatch, 0,
                 GatewayErrorCategory.Internal, "Unexpected error executing the claim status inquiry.");
         }
@@ -301,14 +302,14 @@ internal sealed class ClaimStatusCoordinator
             "latencyMs={LatencyMs} retries={RetryCount} extId={ExternalTransactionId}",
             metadata.GatewayName,
             metadata.TransactionType,
-            Sanitize(metadata.TenantId),
+            LogSanitizer.Sanitize(metadata.TenantId, 128),
             metadata.Status,
             status,
             metadata.ErrorCategory,
-            Sanitize(metadata.CorrelationId),
+            LogSanitizer.Sanitize(metadata.CorrelationId, 128),
             metadata.Latency.TotalMilliseconds,
             metadata.RetryCount,
-            Sanitize(metadata.ExternalTransactionId));
+            LogSanitizer.Sanitize(metadata.ExternalTransactionId, 128));
 
     private static void RecordMetric(
         string gatewayName,
@@ -324,8 +325,6 @@ internal sealed class ClaimStatusCoordinator
             new KeyValuePair<string, object?>("cho.gateway", gatewayName),
             new KeyValuePair<string, object?>("cho.status", status.ToString()));
     }
-
-    private static string? Sanitize(string? value) => ClaimAttachmentRules.SanitizeForLog(value);
 
     private TimeSpan GetElapsed(long start) => Stopwatch.GetElapsedTime(start);
 }

@@ -5,6 +5,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Middleware;
 
@@ -71,7 +72,7 @@ public class TenantMiddleware
         {
             _logger.LogWarning(
                 "Authenticated request without a tenant claim rejected for {Path}",
-                SanitizeForLog(context.Request.Path));
+                LogSanitizer.Sanitize(context.Request.Path));
             await WriteErrorAsync(context, StatusCodes.Status401Unauthorized, "TENANT_CONTEXT_MISSING",
                 "The access token does not carry a tenant claim.");
             return;
@@ -82,9 +83,9 @@ public class TenantMiddleware
         {
             _logger.LogWarning(
                 "Tenant conflict rejected: token asserts {TokenTenant}, {Header} header asserts {HeaderTenant}, subject {Subject}, path {Path}",
-                SanitizeForLog(tokenTenant), TenantHeaderName, SanitizeForLog(headerTenant),
-                SanitizeForLog(context.User.FindFirst(ChoClaimTypes.Subject)?.Value),
-                SanitizeForLog(context.Request.Path));
+                LogSanitizer.Sanitize(tokenTenant), TenantHeaderName, LogSanitizer.Sanitize(headerTenant),
+                LogSanitizer.Sanitize(context.User.FindFirst(ChoClaimTypes.Subject)?.Value),
+                LogSanitizer.Sanitize(context.Request.Path));
             await WriteErrorAsync(context, StatusCodes.Status403Forbidden, "TENANT_CONTEXT_CONFLICT",
                 "The tenant header does not match the tenant in the access token.");
             return;
@@ -127,13 +128,6 @@ public class TenantMiddleware
             TraceId = Activity.Current?.Id ?? context.TraceIdentifier
         };
         await context.Response.WriteAsync(JsonSerializer.Serialize(error, JsonOptions));
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

@@ -5,6 +5,7 @@ using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
 using CloudHealthOffice.Infrastructure.Responders;
 using CloudHealthOffice.Infrastructure.Responders.Models;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -477,8 +478,8 @@ public sealed class ClaimIntelligenceComposer : IClaimIntelligenceComposer
         _logger.LogInformation(
             "Claim intelligence composed tenant={TenantId} claim={ClaimId} status={Status} " +
             "next={Next} missing={MissingCount} timeline={TimelineCount}",
-            Sanitize(view.TenantId),
-            Sanitize(view.ClaimId),
+            LogSanitizer.Sanitize(view.TenantId, 128),
+            LogSanitizer.Sanitize(view.ClaimId, 128),
             view.LifecycleStatus,
             view.Workflow.NextAction,
             view.Signals.MissingTransactionLinks.Count,
@@ -499,6 +500,4 @@ public sealed class ClaimIntelligenceComposer : IClaimIntelligenceComposer
     private static void RecordFailed(string reason) =>
         ChoMetrics.ClaimIntelligenceFailures.Add(1,
             new KeyValuePair<string, object?>("cho.error_category", reason));
-
-    private static string? Sanitize(string? value) => ClaimAttachmentRules.SanitizeForLog(value);
 }

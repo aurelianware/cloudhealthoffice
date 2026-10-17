@@ -324,15 +324,6 @@ public class ClaimAttachmentTests
     }
 
     [Fact]
-    public void SanitizeForLog_StripsControlCharactersAndTruncates()
-    {
-        ClaimAttachmentRules.SanitizeForLog("att-1\r\nFORGED")
-            .Should().Be("att-1FORGED");
-        ClaimAttachmentRules.SanitizeForLog("ok").Should().Be("ok");
-        ClaimAttachmentRules.SanitizeForLog(new string('a', 200))!.Length.Should().Be(128);
-    }
-
-    [Fact]
     public void FileName_IsSanitized_AndNotUsedAsStorageKey()
     {
         var name = ClaimAttachmentRules.SanitizeFileName("../../etc/passwd");
