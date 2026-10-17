@@ -9,7 +9,7 @@ Wallet and physical mail fulfillment.
 > separate vendor integration inside this service, and card storage moves
 > from member-document-service to the document store catalog. idcard-service
 > stays the owner of card records, templates, QR signing, scan verification,
-> revocation and the QNXT mirror. See [correspondence.md](correspondence.md) §9
+> revocation and the QNXT mirror. See [correspondence.md](correspondence.md) §10
 > and [document-store.md](document-store.md).
 
 ## Service context
@@ -238,7 +238,7 @@ falls back to Cosmos (`CosmosDb:ConnectionString`), falls back to in-memory
 
 - `.pkpass` (Apple Wallet) and Google Wallet object generation.
 - `FulfillmentVendorAdapter` physical-card mail, as a thin adapter onto the
-  correspondence print and mail channel ([correspondence.md](correspondence.md) §7).
+  correspondence print and mail channel ([correspondence.md](correspondence.md) §8).
 - Bulk re-issuance (e.g. on plan-wide change), as a correspondence batch job.
 - Card PDFs and PNGs stored through the document store catalog instead of
   member-document-service's Azure-only blob client.
