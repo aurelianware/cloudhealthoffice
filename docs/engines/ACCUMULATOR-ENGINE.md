@@ -27,7 +27,8 @@ This mirrors the QNXT pattern: instead of maintaining an `AccumBalance` table wi
 
 **Consequences:**
 - No optimistic concurrency retry loops for concurrent claims on the same member
-- No risk of double-counting from race conditions: `HINCRBYFLOAT` is atomic
+- No risk of double-counting from race conditions: writes are atomic server-side (`HINCRBY` and Lua scripts)
+- Amounts are integer cents, so long sums are exact and a limit reached exactly reads as met
 - Cache self-heals on miss — even if Redis is flushed, data is never lost
 - Annual reset is handled by TTL expiry, not a batch delete job
 
@@ -48,8 +49,8 @@ Adjudication workflow
 │  RedisAccumulatorService │
 └──────┬──────────┬────────┘
        │          │
-  HGETALL     HINCRBYFLOAT
-  (read)       (write)
+  HGETALL   HINCRBY / Lua
+  (read)    (write, integer cents)
        │          │
        ▼          ▼
   ┌─────────────────┐       cache miss
@@ -62,7 +63,7 @@ Adjudication workflow
                                        └──────────────┘
 
   After adjudication:
-  RedisAccumulatorService ──fire-and-forget──▶ IAccumulatorAuditWriter
+  RedisAccumulatorService ──awaited──▶ IAccumulatorAuditWriter
                                                        │
                                                        ▼
                                                MongoAccumulatorAuditWriter
@@ -148,27 +149,35 @@ Required configuration in benefit-plan-service:
 
 After cost-sharing is calculated for a claim, the adjudication workflow calls `ApplyUpdatesAsync()` with a list of `AccumulatorUpdate` objects.
 
-Updates are batched per scope and sent in a single Redis pipeline using `HINCRBYFLOAT`:
+Every value in an accumulator hash is an integer number of hundredths: cents
+for money, 1/100 for visit and day counts. A hash carries `__v` = `2` to mark
+this schema. Updates for one scope are applied by one Lua script, atomically,
+with `HINCRBY`:
 
 ```
-HINCRBYFLOAT accum:t1:IND:M123:plan-abc:2026 IndividualDeductible:InNetwork 250.00
-HINCRBYFLOAT accum:t1:IND:M123:plan-abc:2026 IndividualOopMax:InNetwork     350.00
-HINCRBYFLOAT accum:t1:FAM:S456:plan-abc:2026 FamilyDeductible:InNetwork     250.00
-HINCRBYFLOAT accum:t1:FAM:S456:plan-abc:2026 FamilyOopMax:InNetwork         350.00
+HINCRBY accum:t1:IND:M123:plan-abc:2026 IndividualDeductible:InNetwork 25000
+HINCRBY accum:t1:IND:M123:plan-abc:2026 IndividualOopMax:InNetwork     35000
 ```
 
-Each `HINCRBYFLOAT` is individually atomic. The pipeline reduces round trips; order within a pipeline is not guaranteed but all increments are applied.
+The prepared-commit path (`CommitAsync`, the claims pipeline's write)
+journals and clamps in cents as well. An amount with precision below one cent
+is rejected with `ArgumentException`, never rounded: it means the pricing
+upstream is wrong.
+
+**Hashes written before integer cents.** These used `HINCRBYFLOAT` and hold
+dollars without the `__v` marker, and they are never read as cents:
+- a read treats such a hash as a cache miss and rebuilds it from claims-service;
+- the next script on it drops its amounts and journals, but keeps its fences.
+
+See `docs/operations/ACCUMULATOR-CENTS-CUTOVER.md`.
 
 ---
 
 ## Claim reversal
 
-When a claim is voided or reversed, the cache keys for both the individual and family scopes are deleted:
-
-```
-DEL accum:{tenantId}:IND:{memberId}:{planId}:{planYear}
-DEL accum:{tenantId}:FAM:{subscriberId}:{planId}:{planYear}
-```
+When a claim is voided or reversed, both the individual and the family hash
+are invalidated. Every amount and commit journal is dropped, and the claim
+fences (`__fence:*`) are kept; a terminal reversal also fences this claim.
 
 The next read for that member will trigger a cache miss and rebuild from claim history — which no longer includes the reversed claim. This is always correct regardless of whether the key existed.
 
@@ -186,14 +195,14 @@ The audit trail in MongoDB/Cosmos is retained indefinitely per compliance requir
 
 ## Audit trail
 
-`IAccumulatorAuditWriter` is an optional, non-blocking interface. When registered, it receives accumulator update events **fire-and-forget** after Redis is updated. Adjudication does not wait for the durable write.
+`IAccumulatorAuditWriter` is optional. When it is registered, every audit row is written **before the operation returns**: the commit, the increment and each reversal wait for it. A failed write fails the operation with `AccumulatorAuditException`, and the caller retries it. For commits, that caller is the claims-service accumulator outbox. Every audited operation is safe to repeat, and the writer is idempotent per claim. For non-idempotent increments (`ApplyUpdatesAsync`) the audit row is written first, so a failure adds nothing.
 
 The production implementation `MongoAccumulatorAuditWriter` persists `AccumulatorDocument` records to MongoDB or Cosmos DB for:
 - Member portal display ("you've met $750 of your $1,500 deductible")
 - Compliance reporting and audit
 - Cache rebuild fallback if `IClaimsAccumulatorSource` is unavailable
 
-If the audit write fails, it is logged as a warning. The cache is self-healing — the next rebuild from claims history will produce the correct state.
+A rebuild of the Redis cache does not touch the audit trail, so a lost audit row would not come back on its own. The operation fails instead of losing the row.
 
 ---
 
