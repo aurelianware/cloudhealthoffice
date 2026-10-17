@@ -1,17 +1,13 @@
-using System.Net;
-using System.Text.Json;
 using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using EligibilityService.Models;
-using Microsoft.Azure.Cosmos;
 
 namespace EligibilityService.Services;
 
 /// <summary>
-/// Persistent IBatchJobStore implementation backed by a pluggable document
-/// store (Cosmos DB or MongoDB, via IBatchJobContainer) + Azure Blob
-/// Storage (large payloads).
+/// Persistent IBatchJobStore implementation backed by MongoDB (job docs, via
+/// IBatchJobContainer) + Azure Blob Storage (large payloads).
 ///
 /// Small payloads (&lt; <see cref="InlineMaxBytes"/>, default 1 MB) are
 /// embedded on the job doc as base64. Larger payloads are written to a blob
@@ -19,12 +15,9 @@ namespace EligibilityService.Services;
 /// doc records the blob URI and <see cref="BatchStorageMode.Blob"/>. Reads
 /// route back through this store so we never hand out SAS URIs.
 ///
-/// Partitioned/scoped by tenantId regardless of backend. Cosmos mode
-/// carries a <c>defaultTtl</c>-inherited TTL (set at container
-/// provisioning) so completed jobs expire automatically; the matching
-/// blob-lifecycle rule is provisioned in
-/// scripts/azure/provision-batch-eligibility.sh. Mongo mode relies on a
-/// TTL index instead (see MongoContainerAdapter).
+/// Scoped by tenantId. Completed jobs expire through a TTL index (see
+/// MongoContainerAdapter); the matching blob-lifecycle rule is provisioned
+/// in scripts/azure/provision-batch-eligibility.sh.
 /// </summary>
 public class BatchJobStore : IBatchJobStore
 {
@@ -118,8 +111,8 @@ public class BatchJobStore : IBatchJobStore
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Thin wrappers that isolate BatchJobStore from the raw Cosmos SDK / MongoDB driver /
-// Blob SDK so the class is fully unit-testable without the emulator.
+// Thin wrappers that isolate BatchJobStore from the raw MongoDB driver /
+// Blob SDK so the class is fully unit-testable without a server.
 // The concrete implementations below are trivial adapters; tests swap in
 // in-memory fakes.
 // ─────────────────────────────────────────────────────────────────────────
@@ -149,103 +142,6 @@ public interface IBatchBlobContainer
     Task<Uri> UploadAsync(string path, Stream content, CancellationToken ct);
     Task DownloadToAsync(string path, Stream destination, CancellationToken ct);
     Task<Stream> OpenReadAsync(string path, CancellationToken ct);
-}
-
-/// <summary>
-/// Production adapter over the Cosmos SDK. Stores the job doc itself and a
-/// side-car "payloads" dictionary on the doc for inline payloads or blob
-/// URIs. This keeps everything in a single document and a single partition
-/// read per lookup.
-/// </summary>
-public class CosmosContainerAdapter : IBatchJobContainer
-{
-    private readonly Container _container;
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
-
-    public CosmosContainerAdapter(Container container) { _container = container; }
-
-    private record PayloadSlot(string? Inline, string? BlobUri);
-
-    private class JobDoc
-    {
-        public BatchEligibilityJob Job { get; set; } = new();
-        public Dictionary<string, PayloadSlot> Payloads { get; set; } = new();
-    }
-
-    public async Task UpsertAsync(BatchEligibilityJob job, string partitionKey, CancellationToken ct)
-    {
-        var existing = await ReadDocAsync(job.Id, partitionKey, ct);
-        var doc = existing ?? new JobDoc();
-        doc.Job = job;
-        await _container.UpsertItemAsync(WrapAsCosmos(doc, job.Id, partitionKey),
-            new PartitionKey(partitionKey), cancellationToken: ct);
-    }
-
-    public async Task<BatchEligibilityJob?> ReadAsync(string id, string partitionKey, CancellationToken ct)
-    {
-        var doc = await ReadDocAsync(id, partitionKey, ct);
-        return doc?.Job;
-    }
-
-    public async Task WriteInlinePayloadAsync(
-        string id, string partitionKey, string payloadKey, byte[] bytes, CancellationToken ct)
-    {
-        var doc = (await ReadDocAsync(id, partitionKey, ct)) ?? new JobDoc();
-        doc.Payloads[payloadKey] = new PayloadSlot(Convert.ToBase64String(bytes), null);
-        await _container.UpsertItemAsync(WrapAsCosmos(doc, id, partitionKey),
-            new PartitionKey(partitionKey), cancellationToken: ct);
-    }
-
-    public async Task RecordBlobPayloadAsync(
-        string id, string partitionKey, string payloadKey, string blobUri, CancellationToken ct)
-    {
-        var doc = (await ReadDocAsync(id, partitionKey, ct)) ?? new JobDoc();
-        doc.Payloads[payloadKey] = new PayloadSlot(null, blobUri);
-        if (doc.Job != null)
-        {
-            doc.Job.StorageMode = BatchStorageMode.Blob;
-            if (payloadKey == "input") doc.Job.InputBlobUri = blobUri;
-            if (payloadKey == "result") doc.Job.ResultBlobUri = blobUri;
-        }
-        await _container.UpsertItemAsync(WrapAsCosmos(doc, id, partitionKey),
-            new PartitionKey(partitionKey), cancellationToken: ct);
-    }
-
-    public async Task<BatchPayloadRecord?> ReadPayloadAsync(
-        string id, string partitionKey, string payloadKey, CancellationToken ct)
-    {
-        var doc = await ReadDocAsync(id, partitionKey, ct);
-        if (doc == null || !doc.Payloads.TryGetValue(payloadKey, out var slot)) return null;
-        return new BatchPayloadRecord(
-            Inline: slot.Inline == null ? null : Convert.FromBase64String(slot.Inline),
-            BlobUri: slot.BlobUri);
-    }
-
-    private async Task<JobDoc?> ReadDocAsync(string id, string partitionKey, CancellationToken ct)
-    {
-        try
-        {
-            var response = await _container.ReadItemAsync<Dictionary<string, object>>(
-                id, new PartitionKey(partitionKey), cancellationToken: ct);
-            var raw = JsonSerializer.Serialize(response.Resource, JsonOpts);
-            return JsonSerializer.Deserialize<JobDoc>(raw, JsonOpts);
-        }
-        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-    }
-
-    private static Dictionary<string, object?> WrapAsCosmos(JobDoc doc, string id, string tenantId)
-    {
-        return new Dictionary<string, object?>
-        {
-            ["id"] = id,
-            ["tenantId"] = tenantId,
-            ["job"] = doc.Job,
-            ["payloads"] = doc.Payloads
-        };
-    }
 }
 
 public class BlobContainerAdapter : IBatchBlobContainer

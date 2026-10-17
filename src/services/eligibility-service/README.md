@@ -5,7 +5,7 @@ A dual-interface healthcare eligibility verification service supporting both X12
 ## Features
 
 - **Dual Interface**: X12 270/271 EDI endpoint AND FHIR CoverageEligibilityRequest
-- **Cosmos DB Cache**: Dedicated `eligibility-db` database with TTL for automatic cache expiration
+- **MongoDB store**: inquiries, responses and batch jobs in MongoDB (Azure Cosmos DB for MongoDB vCore when deployed); batch jobs expire through a TTL index
 - **Event Grid Publishing**: Publishes "EligibilityChecked" events for downstream processing
 - **Azure Container Apps**: Production-ready deployment with Dapr integration
 - **Helm Chart**: Kubernetes deployment support
@@ -40,9 +40,9 @@ A dual-interface healthcare eligibility verification service supporting both X12
       │                 │                   │
       ▼                 ▼                   ▼
 ┌──────────┐    ┌─────────────┐    ┌─────────────┐
-│Cosmos DB │    │claims backend/Backend │    │Event Grid   │
-│eligibility│    │Systems      │    │Topic        │
-│-db       │    └─────────────┘    └─────────────┘
+│MongoDB   │    │claims backend/Backend │    │Event Grid   │
+│          │    │Systems      │    │Topic        │
+│          │    └─────────────┘    └─────────────┘
 └──────────┘
 ```
 
@@ -197,6 +197,13 @@ GET /readyz (readiness)
 
 ## Deployment
 
+> The service stores everything in MongoDB and refuses to start without
+> `MongoDb:ConnectionString`. The bundled `infra/main.bicep`, Helm chart and
+> `k8s/` manifest still provision or wire Cosmos DB for NoSQL settings that
+> the service no longer reads; supply `MongoDb__ConnectionString` (and
+> `BatchEligibility__MongoDb__ConnectionString` for persistent batch jobs)
+> until they are updated.
+
 ### Azure Container Apps (Recommended)
 
 ```bash
@@ -229,8 +236,7 @@ docker build -t eligibility-service:latest .
 
 # Run locally
 docker run -p 3000:3000 \
-  -e COSMOS_ENDPOINT=https://localhost:8081 \
-  -e COSMOS_DATABASE=eligibility-db \
+  -e MongoDb__ConnectionString=mongodb://host.docker.internal:27017 \
   eligibility-service:latest
 ```
 
@@ -279,9 +285,9 @@ The migration script expects CSV with these columns:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | Server port | 3000 |
-| `COSMOS_ENDPOINT` | Cosmos DB endpoint | Required |
-| `COSMOS_DATABASE` | Database name | eligibility-db |
-| `COSMOS_CONTAINER` | Container name | eligibility-cache |
+| `MongoDb__ConnectionString` | MongoDB connection string (required; startup fails without it) | Required |
+| `MongoDb__DatabaseName` | MongoDB database name | CloudHealthOffice |
+| `BatchEligibility__MongoDb__ConnectionString` | MongoDB for persistent batch jobs (with `BatchEligibility__BlobStorage__ConnectionString`) | Optional |
 | `EVENT_GRID_ENDPOINT` | Event Grid topic endpoint | Optional |
 | `CACHE_ENABLED` | Enable caching | true |
 | `CACHE_ACTIVE_TTL` | TTL for active members (seconds) | 86400 |
@@ -319,15 +325,12 @@ Published after each eligibility check:
 }
 ```
 
-## Cosmos DB Structure
+## MongoDB Structure
 
-### Database: eligibility-db
-
-| Container | Partition Key | TTL | Purpose |
-|-----------|--------------|-----|---------|
-| eligibility-cache | /memberId | Configurable | Eligibility response cache |
-| eligibility-rules | /planCode | None | claims backend eligibility rules |
-| dapr-state | /partitionKey | None | Dapr state store |
+| Collection | Purpose |
+|------------|---------|
+| EligibilityInquiries / EligibilityResponses | 270/271 history, scoped by tenant |
+| batch-jobs (`BatchEligibility:MongoDb:Collection`) | Batch eligibility job documents; `_id` is `{tenantId}::{jobId}`, TTL index on `expiresAt` |
 
 ## Development
 
