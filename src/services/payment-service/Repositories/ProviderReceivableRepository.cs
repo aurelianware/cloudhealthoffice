@@ -101,9 +101,9 @@ public sealed class ProviderReceivableRepositoryMongo : IProviderReceivableRepos
 }
 
 /// <summary>
-/// In-memory ledger for Cosmos-only (development) deployments, mirroring
-/// <see cref="InMemoryEraEnvelopeRepository"/>: payment-service's canonical
-/// store is Mongo, where the ledger is durable. Records are cloned in and out
+/// In-memory ledger for tests and harnesses, mirroring
+/// <see cref="InMemoryEraEnvelopeRepository"/>: the service always uses the
+/// durable Mongo ledger. Records are cloned in and out
 /// so a caller's edits never reach the store without <see cref="TryReplaceAsync"/>.
 /// </summary>
 public sealed class InMemoryProviderReceivableRepository : IProviderReceivableRepository

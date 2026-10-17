@@ -141,11 +141,8 @@ public class EraEnvelopeRepositoryMongo : IEraEnvelopeRepository
 }
 
 /// <summary>
-/// In-memory fallback used when no MongoDB instance is available
-/// (Cosmos-only deployments). EraEnvelope records are not retained
-/// across restarts on this path; mirrors the Cosmos-only deployment
-/// posture for payment-service in 5.10 (Mongo is the canonical
-/// payment-service backing store).
+/// In-memory store for tests and harnesses. Not registered by the service,
+/// which always persists EraEnvelope records in MongoDB.
 /// </summary>
 public class InMemoryEraEnvelopeRepository : IEraEnvelopeRepository
 {

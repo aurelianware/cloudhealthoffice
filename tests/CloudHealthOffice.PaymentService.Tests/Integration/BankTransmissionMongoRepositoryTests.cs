@@ -12,7 +12,6 @@ namespace CloudHealthOffice.PaymentService.Tests.Integration;
 /// The Mongo stores behind bank transmission, against a real mongod: the
 /// transmission record's insert-if-absent and version-conditional replace, the
 /// file ID modifier claims, and the run's EFT-file-only conditional write.
-/// (The Cosmos implementations are covered by the Cosmos emulator CI work.)
 /// </summary>
 [Collection(MongoRunnerFixture.CollectionName)]
 public sealed class BankTransmissionMongoRepositoryTests : IAsyncLifetime

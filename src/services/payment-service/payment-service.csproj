@@ -17,7 +17,6 @@
     <!-- GL source event contracts (PaymentRunExecuted, ReversalRunExecuted, PaymentFileTransmitted). -->
     <ProjectReference Include="..\shared\CloudHealthOffice.Finance.Contracts\CloudHealthOffice.Finance.Contracts.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>

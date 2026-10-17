@@ -66,8 +66,8 @@ public enum ReservationAuditAction
 }
 
 /// <summary>
-/// One reservation release or flag. Collection / container
-/// <c>PaymentReservationAudit</c> (Cosmos partition key <c>/tenantId</c>).
+/// One reservation release or flag. Collection
+/// <c>PaymentReservationAudit</c>.
 /// Written once, never updated.
 /// </summary>
 public class ReservationAuditEntry

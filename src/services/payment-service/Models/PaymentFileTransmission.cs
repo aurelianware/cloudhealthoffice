@@ -190,7 +190,7 @@ public sealed class PaymentFileTransmission
     [JsonPropertyName("createdAt")] public DateTime CreatedAt { get; set; }
     [JsonPropertyName("updatedAt")] public DateTime UpdatedAt { get; set; }
 
-    /// <summary>Unique per (tenant, file reference). Characters Cosmos forbids in ids are escaped.</summary>
+    /// <summary>Unique per (tenant, file reference). Tenant and file reference are URI-escaped.</summary>
     public static string KeyFor(string tenantId, string fileReference)
         => $"nacha:{Uri.EscapeDataString(tenantId)}:{Uri.EscapeDataString(fileReference)}";
 }
