@@ -5,6 +5,7 @@ using CloudHealthOffice.Events.Kafka;
 using CloudHealthOffice.Infrastructure.Observability;
 using Confluent.Kafka;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services;
 
@@ -103,7 +104,7 @@ public sealed class ClaimEventOutboxDrainer
             await claims.CompleteClaimEventAsync(claim.TenantId, claim.Id, item.Id, CancellationToken.None);
             ClaimEventOutboxMetrics.Attempts.Add(1, new KeyValuePair<string, object?>("result", "published"));
             _logger.LogInformation("Published claim event {EventId} for claim {ClaimId} to {Topic}",
-                Sanitize(item.Id), Sanitize(claim.Id), item.Topic);
+                LogSanitizer.Sanitize(item.Id), LogSanitizer.Sanitize(claim.Id), item.Topic);
             published++;
         }
         return published;
@@ -125,16 +126,13 @@ public sealed class ClaimEventOutboxDrainer
         {
             // The event is still pending (with its old due time); the next poll retries it.
             _logger.LogError(rescheduleEx, "Could not reschedule claim event {EventId} for claim {ClaimId}",
-                Sanitize(item.Id), Sanitize(claim.Id));
+                LogSanitizer.Sanitize(item.Id), LogSanitizer.Sanitize(claim.Id));
         }
         ClaimEventOutboxMetrics.Attempts.Add(1, new KeyValuePair<string, object?>("result", "rescheduled"));
         _logger.LogWarning(ex,
             "Claim event {EventId} for claim {ClaimId} not acknowledged by Kafka (attempt {Attempts}); kept in the outbox, next attempt in {Delay}",
-            Sanitize(item.Id), Sanitize(claim.Id), attempts, delay);
+            LogSanitizer.Sanitize(item.Id), LogSanitizer.Sanitize(claim.Id), attempts, delay);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>

@@ -1,5 +1,6 @@
 using CloudHealthOffice.TradingPartnerService.Models;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.TradingPartnerService.Services;
 
@@ -37,7 +38,7 @@ public class TradingPartnerRepositoryMongo : ITradingPartnerRepository
         {
             _logger.LogWarning(
                 "Trading partner not found: {TenantId}/{TradingPartnerId}/{Environment}",
-                SanitizeForLog(tenantId), SanitizeForLog(tradingPartnerId), SanitizeForLog(environment));
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(tradingPartnerId), LogSanitizer.Sanitize(environment));
         }
 
         return partner;
@@ -71,7 +72,7 @@ public class TradingPartnerRepositoryMongo : ITradingPartnerRepository
 
         _logger.LogInformation(
             "Created trading partner: {Id} in partition {TenantId}",
-            SanitizeForLog(partner.Id), SanitizeForLog(partner.TenantId));
+            LogSanitizer.Sanitize(partner.Id), LogSanitizer.Sanitize(partner.TenantId));
 
         return partner;
     }
@@ -94,7 +95,7 @@ public class TradingPartnerRepositoryMongo : ITradingPartnerRepository
 
         _logger.LogInformation(
             "Updated trading partner: {Id}",
-            SanitizeForLog(partner.Id));
+            LogSanitizer.Sanitize(partner.Id));
 
         return partner;
     }
@@ -111,7 +112,7 @@ public class TradingPartnerRepositoryMongo : ITradingPartnerRepository
 
         _logger.LogWarning(
             "Deleted trading partner: {Id} from partition {PartitionKey}",
-            SanitizeForLog(id), SanitizeForLog(partitionKey));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(partitionKey));
     }
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> IndexesEnsured = new();
@@ -147,17 +148,4 @@ public class TradingPartnerRepositoryMongo : ITradingPartnerRepository
         => string.IsNullOrWhiteSpace(tenantId)
             ? throw new InvalidOperationException("A tenant is required; trading partners are never read or written without one.")
             : tenantId;
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return string.Empty;
-        }
-
-        // Remove newline characters to prevent log forging via line injection.
-        return value
-            .Replace("\r", string.Empty)
-            .Replace("\n", string.Empty);
-    }
 }

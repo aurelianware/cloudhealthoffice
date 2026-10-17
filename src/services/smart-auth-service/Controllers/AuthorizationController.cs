@@ -10,6 +10,7 @@ using OpenIddict.Server.AspNetCore;
 using SmartAuthService.Models;
 using SmartAuthService.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace SmartAuthService.Controllers;
 
@@ -181,8 +182,8 @@ public class AuthorizationController : ControllerBase
 
         _logger.LogInformation(
             "Issuing authorization code — context: {Context}, tenant: {Tenant}, subject: {Subject}, scopes: {Scopes}",
-            context.Context, SanitizeForLog(context.TenantId), SanitizeForLog(context.Subject),
-            SanitizeForLog(string.Join(" ", scopes)));
+            context.Context, LogSanitizer.Sanitize(context.TenantId, 256), LogSanitizer.Sanitize(context.Subject, 256),
+            LogSanitizer.Sanitize(string.Join(" ", scopes), 256));
 
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
@@ -349,27 +350,6 @@ public class AuthorizationController : ControllerBase
                 [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = description,
             }),
             OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
-
-    /// <summary>
-    /// Replaces control characters (including CR/LF/tab/NUL) with '_' in user-supplied
-    /// strings and truncates the sanitized result to 256 characters before they appear
-    /// in log messages, preventing log-forging/log-injection (CodeQL rule
-    /// cs/log-forging). Uses char.IsControl() so that CodeQL's sanitizer recognition
-    /// picks it up correctly — a simple Replace("\r","").Replace("\n","") is not
-    /// sufficient for CodeQL to recognise the value as sanitized.
-    /// </summary>
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        const int maxLength = 256;
-        var buffer = new System.Text.StringBuilder(Math.Min(value.Length, maxLength));
-        foreach (var ch in value)
-        {
-            if (buffer.Length == maxLength) break;
-            buffer.Append(char.IsControl(ch) ? '_' : ch);
-        }
-        return buffer.ToString();
-    }
 }
 
 /// <summary>An access token this server issued, validated by OpenIddict's local validation.</summary>

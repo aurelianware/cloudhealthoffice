@@ -21,6 +21,7 @@ using CloudHealthOffice.ProviderEnrollmentService.Models;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Services;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Controllers;
 
@@ -99,26 +100,6 @@ public class AdjudicationController : ControllerBase
 
     private string TenantId => HttpContext.GetTenantId()
         ?? throw new InvalidOperationException("Tenant context missing");
-
-    /// <summary>
-    /// Replace control characters (CR, LF, tab, etc.) with underscore so
-    /// caller-controlled string values cannot forge log lines or split a
-    /// single log entry into multiple. Mirrors
-    /// <c>RelationshipShim.SanitizeForLog</c> in member-service so CodeQL's
-    /// cs/log-forging rule recognizes it as a sanitizer (the prior
-    /// CR/LF-only Replace pattern was not picked up as a sanitizer).
-    /// </summary>
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        var buffer = new System.Text.StringBuilder(value.Length);
-        foreach (var ch in value)
-        {
-            buffer.Append(char.IsControl(ch) ? '_' : ch);
-        }
-        if (buffer.Length > 256) buffer.Length = 256;
-        return buffer.ToString();
-    }
 
     // ═══════════════════════════════════════════════════════════════════
     // POST /api/v1/adjudication/adjudicate
@@ -205,8 +186,8 @@ public class AdjudicationController : ControllerBase
 
             _logger.LogInformation(
                 "Claim {ClaimId} routed to legacy system (type={ClaimType}, LOB={Lob}, key={Key})",
-                SanitizeForLog(request.ClaimId), SanitizeForLog(claimTypeCode),
-                request.LineOfBusiness, SanitizeForLog(routingDecision.ResolvedKey));
+                LogSanitizer.Sanitize(request.ClaimId, 256), LogSanitizer.Sanitize(claimTypeCode, 256),
+                request.LineOfBusiness, LogSanitizer.Sanitize(routingDecision.ResolvedKey, 256));
 
             return Ok(new AdjudicationResponse
             {
@@ -223,8 +204,8 @@ public class AdjudicationController : ControllerBase
 
         _logger.LogInformation(
             "Adjudicating claim {ClaimId} for member {MemberId}, plan {PlanId}, {LineCount} lines (type={ClaimType}, mode={Mode})",
-            SanitizeForLog(request.ClaimId), SanitizeForLog(request.MemberId),
-            request.BenefitPlanId, request.Lines.Count, SanitizeForLog(claimTypeCode),
+            LogSanitizer.Sanitize(request.ClaimId, 256), LogSanitizer.Sanitize(request.MemberId, 256),
+            request.BenefitPlanId, request.Lines.Count, LogSanitizer.Sanitize(claimTypeCode, 256),
             routingDecision.OperatingMode.Mode);
 
         // ── Step 0a: Claims scrub validation ──
@@ -255,7 +236,7 @@ public class AdjudicationController : ControllerBase
 
             _logger.LogWarning(
                 "Claim {ClaimId} failed scrub validation: {ErrorCount} error(s), {WarningCount} warning(s)",
-                SanitizeForLog(request.ClaimId), scrubResponse.Result.ErrorCount, scrubResponse.Result.WarningCount);
+                LogSanitizer.Sanitize(request.ClaimId, 256), scrubResponse.Result.ErrorCount, scrubResponse.Result.WarningCount);
 
             return UnprocessableEntity(new
             {
@@ -314,7 +295,7 @@ public class AdjudicationController : ControllerBase
 
             _logger.LogWarning(
                 "Claim {ClaimId} failed NCCI/MUE edits: {FailureCount} failure(s)",
-                SanitizeForLog(request.ClaimId), ncciResult.EditFailures.Count);
+                LogSanitizer.Sanitize(request.ClaimId, 256), ncciResult.EditFailures.Count);
 
             return UnprocessableEntity(new
             {
@@ -354,7 +335,7 @@ public class AdjudicationController : ControllerBase
 
             _logger.LogWarning(
                 "Claim {ClaimId} denied: provider NPI {Npi} excluded from federal programs (integrity score: {Score})",
-                SanitizeForLog(request.ClaimId), SanitizeForLog(request.ProviderNpi),
+                LogSanitizer.Sanitize(request.ClaimId, 256), LogSanitizer.Sanitize(request.ProviderNpi, 256),
                 providerIntegrity.IntegrityScore);
 
             return UnprocessableEntity(new
@@ -383,7 +364,7 @@ public class AdjudicationController : ControllerBase
 
             _logger.LogWarning(
                 "Claim {ClaimId} pended: provider NPI {Npi} integrity could not be confidently verified",
-                SanitizeForLog(request.ClaimId), SanitizeForLog(request.ProviderNpi));
+                LogSanitizer.Sanitize(request.ClaimId, 256), LogSanitizer.Sanitize(request.ProviderNpi, 256));
 
             return UnprocessableEntity(new
             {
@@ -404,13 +385,13 @@ public class AdjudicationController : ControllerBase
 
             RecordLatency(sw, claimTypeCode, "member_not_eligible");
 
-            var serviceDateForLog = SanitizeForLog(
-                request.ServiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            var serviceDateForLog = LogSanitizer.Sanitize(
+                request.ServiceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), 256);
 
             _logger.LogWarning(
                 "Claim {ClaimId} denied: member {MemberId} not eligible on service date {ServiceDate}: {Reason}",
-                SanitizeForLog(request.ClaimId), SanitizeForLog(request.MemberId),
-                serviceDateForLog, SanitizeForLog(eligibilityReason));
+                LogSanitizer.Sanitize(request.ClaimId, 256), LogSanitizer.Sanitize(request.MemberId, 256),
+                serviceDateForLog, LogSanitizer.Sanitize(eligibilityReason, 256));
 
             return UnprocessableEntity(new
             {
@@ -470,7 +451,7 @@ public class AdjudicationController : ControllerBase
 
             _logger.LogWarning(
                 "Claim {ClaimId} denied: prior authorization required by rule {RuleId} ({RuleName})",
-                SanitizeForLog(request.ClaimId),
+                LogSanitizer.Sanitize(request.ClaimId, 256),
                 priorAuthDecision.FiringRuleId, priorAuthDecision.FiringRuleName);
 
             return UnprocessableEntity(new
@@ -565,7 +546,7 @@ public class AdjudicationController : ControllerBase
 
             _logger.LogWarning(
                 "Claim {ClaimId} pended: fee schedule rate unresolved for {LineCount} line(s)",
-                SanitizeForLog(request.ClaimId), unresolvedLines.Count);
+                LogSanitizer.Sanitize(request.ClaimId, 256), unresolvedLines.Count);
 
             return UnprocessableEntity(new
             {
@@ -694,7 +675,7 @@ public class AdjudicationController : ControllerBase
 
             _logger.LogWarning(
                 "Claim {ClaimId} pended: benefit calculation requires review ({PendCode})",
-                SanitizeForLog(request.ClaimId), SanitizeForLog(benefitResult.PendReasonCode));
+                LogSanitizer.Sanitize(request.ClaimId, 256), LogSanitizer.Sanitize(benefitResult.PendReasonCode, 256));
 
             return UnprocessableEntity(new
             {
@@ -791,7 +772,7 @@ public class AdjudicationController : ControllerBase
 
         _logger.LogInformation(
             "Adjudication complete for claim {ClaimId}: allowed={Allowed}, plan={Plan}, member={Member}",
-            SanitizeForLog(request.ClaimId), response.Totals.AllowedAmount,
+            LogSanitizer.Sanitize(request.ClaimId, 256), response.Totals.AllowedAmount,
             response.Totals.PlanPayment, response.Totals.MemberResponsibility);
 
         return Ok(response);
@@ -836,7 +817,7 @@ public class AdjudicationController : ControllerBase
 
         _logger.LogInformation(
             "Calculating benefits for member {MemberId}, plan {PlanId}, {LineCount} lines",
-            SanitizeForLog(request.MemberId), request.BenefitPlanId, request.Lines.Count);
+            LogSanitizer.Sanitize(request.MemberId, 256), request.BenefitPlanId, request.Lines.Count);
 
         var result = await _benefitEngine.CalculateAsync(request, ct);
         return Ok(result);
@@ -914,8 +895,8 @@ public class AdjudicationController : ControllerBase
 
         _logger.LogInformation(
             "Reversing claim {OriginalClaimId} for member {MemberId}, plan {PlanId}, service date {ServiceDate}",
-            SanitizeForLog(request.OriginalClaimId),
-            SanitizeForLog(request.MemberId),
+            LogSanitizer.Sanitize(request.OriginalClaimId, 256),
+            LogSanitizer.Sanitize(request.MemberId, 256),
             request.BenefitPlanId,
             request.ServiceDate);
 
@@ -998,7 +979,7 @@ public class AdjudicationController : ControllerBase
         // Audit: who wrote what to whose accumulators (ids only, no amounts).
         _logger.LogInformation(
             "AUDIT accumulator commit {CommitId} for claim {ClaimId} by service {Caller} (tenant {TenantId}): {Outcome}, {Updates} update(s), {Clamped} clamped",
-            SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId), SanitizeForLog(caller), SanitizeForLog(TenantId),
+            LogSanitizer.Sanitize(commit.CommitId, 256), LogSanitizer.Sanitize(commit.ClaimId, 256), LogSanitizer.Sanitize(caller, 256), LogSanitizer.Sanitize(TenantId, 256),
             result.Outcome, commit.Updates.Count, result.Clamped.Count);
         return Ok(new AccumulatorCommitResponse { Outcome = result.Outcome, Clamped = result.Clamped });
     }
@@ -1094,7 +1075,7 @@ public class AdjudicationController : ControllerBase
     {
         _logger.LogInformation(
             "Running NCCI/MUE check for claim {ClaimId}, {LineCount} lines",
-            SanitizeForLog(request.ClaimId), request.ServiceLines.Count);
+            LogSanitizer.Sanitize(request.ClaimId, 256), request.ServiceLines.Count);
 
         // Inject tenant ID from middleware
         request.TenantId = TenantId;
@@ -1124,7 +1105,7 @@ public class AdjudicationController : ControllerBase
     {
         _logger.LogInformation(
             "Running scrub validation for claim {ClaimId}",
-            SanitizeForLog(request.Claim.ClaimId));
+            LogSanitizer.Sanitize(request.Claim.ClaimId, 256));
 
         var result = await _scrubEngine.ScrubAndRouteAsync(request, ct);
         return Ok(result);
@@ -1181,9 +1162,9 @@ public class AdjudicationController : ControllerBase
 
         _logger.LogInformation(
             "Provider enrollment validation: NPI={Npi} State={State} LOB={Lob} Passed={Passed}",
-            SanitizeForLog(request.ProviderNpi),
-            SanitizeForLog(request.StateCode),
-            SanitizeForLog(request.LineOfBusiness),
+            LogSanitizer.Sanitize(request.ProviderNpi, 256),
+            LogSanitizer.Sanitize(request.StateCode, 256),
+            LogSanitizer.Sanitize(request.LineOfBusiness, 256),
             gateResult.Passed);
 
         return Ok(new BenefitPlanService.Models.ProviderEnrollmentValidationResponse

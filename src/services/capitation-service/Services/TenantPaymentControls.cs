@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CapitationService.Services;
 
@@ -56,7 +57,7 @@ public sealed class TenantPaymentControls : ITenantPaymentControls
             {
                 _logger.LogWarning(
                     "tenant-service returned {Status} for tenant {TenantId}; payment separation of duties stays enforced",
-                    (int)response.StatusCode, Sanitize(tenantId));
+                    (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
                 return true; // not cached: a transient failure must not pin the answer
             }
 
@@ -69,7 +70,7 @@ public sealed class TenantPaymentControls : ITenantPaymentControls
         {
             _logger.LogWarning(ex,
                 "Could not read payment controls for tenant {TenantId}; payment separation of duties stays enforced",
-                Sanitize(tenantId));
+                LogSanitizer.Sanitize(tenantId));
             return true;
         }
     }
@@ -91,7 +92,4 @@ public sealed class TenantPaymentControls : ITenantPaymentControls
 
     /// <summary>Test seam: drops all cached entries.</summary>
     public void Clear() => _cache.Clear();
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

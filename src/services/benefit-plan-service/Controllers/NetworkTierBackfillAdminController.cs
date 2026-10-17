@@ -4,6 +4,7 @@ using BenefitPlanService.Services;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Controllers;
 
@@ -121,12 +122,9 @@ public sealed class NetworkTierBackfillAdminController : ControllerBase
 
         _logger.LogInformation(
             "network-tier backfill triggered tenant={Tenant} mappings={Mappings} actor={Actor}",
-            Sanitize(contextTenantId), request.Mappings.Count, Sanitize(request.ActorId));
+            LogSanitizer.Sanitize(contextTenantId), request.Mappings.Count, LogSanitizer.Sanitize(request.ActorId));
 
         var result = await _backfill.RunTenantAsync(contextTenantId, request, ct);
         return Ok(result);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

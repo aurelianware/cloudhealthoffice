@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EnrollmentImportService.Clients;
 
@@ -53,12 +54,9 @@ public class HttpSponsorServiceClient : ISponsorServiceClient
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning("sponsor-service rejected sponsor creation for {GroupNumber}: {Status} {Body}",
-                SanitizeForLog(request.GroupNumber), response.StatusCode, SanitizeForLog(body));
+                LogSanitizer.Sanitize(request.GroupNumber), response.StatusCode, LogSanitizer.Sanitize(body));
             throw new SponsorServiceException(
                 $"sponsor-service create failed for {request.GroupNumber}: {response.StatusCode}", response.StatusCode);
         }
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

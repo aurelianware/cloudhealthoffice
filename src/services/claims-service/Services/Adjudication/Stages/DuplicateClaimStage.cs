@@ -3,6 +3,7 @@ using ClaimsService.Models;
 using ClaimsService.Models.Adjudication;
 using ClaimsService.Repositories;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication.Stages;
 
@@ -155,7 +156,7 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
             // claim is clean.
             _logger.LogError(ex,
                 "Duplicate candidate lookup failed for claim {ClaimVersionId}; degrading to mode-driven outcome",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
             activity?.SetTag("duplicate.lookup_status", "exception");
             if (_options.ExactDuplicateMode == DuplicateClaimEnforcementMode.SoftValidation
                 && _options.SuspectDuplicateMode == DuplicateClaimEnforcementMode.SoftValidation)
@@ -217,7 +218,7 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
             findings.Count(f => f.IsExact),
             findings.Count(f => !f.IsExact),
             claim.ClaimLines.Count,
-            SanitizeForLog(context.ClaimVersionId));
+            LogSanitizer.Sanitize(context.ClaimVersionId));
 
         var allLinesDeny = findings.Count == claim.ClaimLines.Count
             && decisions.All(d => d.Mode == DuplicateClaimEnforcementMode.Deny);
@@ -433,8 +434,8 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
 
         _logger.LogInformation(
             "DuplicateClaimStage denied claim {ClaimVersionId} as duplicate of {PriorClaimId}",
-            SanitizeForLog(context.ClaimVersionId),
-            SanitizeForLog(original.PriorClaimId));
+            LogSanitizer.Sanitize(context.ClaimVersionId),
+            LogSanitizer.Sanitize(original.PriorClaimId));
     }
 
     private static string BuildPendReason(IReadOnlyList<DuplicateFinding> findings)
@@ -480,9 +481,6 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
 
     private static string TruncateMessage(string message) =>
         message.Length <= 1000 ? message : message[..1000];
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private sealed record DuplicateFinding(
         int LineNumber,

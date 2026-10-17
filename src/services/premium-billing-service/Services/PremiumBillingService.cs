@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PremiumBillingService.Services;
 
@@ -323,7 +324,7 @@ public class PremiumBillingService : IPremiumBillingService
             return true;
         }) ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
 
-        _logger.LogInformation("Voided invoice {InvoiceNumber}: {Reason}", updated.InvoiceNumber, SanitizeForLog(reason));
+        _logger.LogInformation("Voided invoice {InvoiceNumber}: {Reason}", updated.InvoiceNumber, LogSanitizer.Sanitize(reason));
 
         // A voided invoice no longer counts toward the sponsor's open balance.
         if (_sponsorAccounts != null && !string.IsNullOrEmpty(updated.GroupNumber))
@@ -416,7 +417,7 @@ public class PremiumBillingService : IPremiumBillingService
                     Error = error.Length > 1000 ? error[..1000] : error
                 });
                 _logger.LogError(ex, "Delinquency processing failed for invoice {InvoiceNumber}; the run continues",
-                    SanitizeForLog(invoice.InvoiceNumber));
+                    LogSanitizer.Sanitize(invoice.InvoiceNumber));
             }
         }
 
@@ -514,13 +515,6 @@ public class PremiumBillingService : IPremiumBillingService
         && invoice.Status is not (InvoiceStatus.Voided or InvoiceStatus.WriteOff or InvoiceStatus.Paid or InvoiceStatus.Draft);
 
     // --- Private helper methods ---
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 
     private async Task<PremiumInvoice> GenerateInvoiceForSponsorAsync(
         SponsorDto sponsor, string tenantId, DateTime billingPeriod, string billingRunId, string? executedBy)
@@ -663,7 +657,7 @@ public class PremiumBillingService : IPremiumBillingService
             record.LastError = null;
             record.SuspendedAt = DateTime.UtcNow;
             _logger.LogWarning("Suspended sponsor {GroupNumber} due to premium delinquency (invoice {InvoiceNumber})",
-                SanitizeForLog(invoice.GroupNumber), SanitizeForLog(invoice.InvoiceNumber));
+                LogSanitizer.Sanitize(invoice.GroupNumber), LogSanitizer.Sanitize(invoice.InvoiceNumber));
             return null;
         }
 
@@ -671,8 +665,8 @@ public class PremiumBillingService : IPremiumBillingService
         record.LastError = outcome.Error is { Length: > 1000 } e ? e[..1000] : outcome.Error;
         _logger.LogError(
             "Failed to suspend sponsor {GroupNumber} for delinquent invoice {InvoiceNumber} (attempt {Attempt}, status {StatusCode}): {Error}",
-            SanitizeForLog(invoice.GroupNumber), SanitizeForLog(invoice.InvoiceNumber), record.Attempts,
-            outcome.StatusCode, SanitizeForLog(outcome.Error));
+            LogSanitizer.Sanitize(invoice.GroupNumber), LogSanitizer.Sanitize(invoice.InvoiceNumber), record.Attempts,
+            outcome.StatusCode, LogSanitizer.Sanitize(outcome.Error));
         return new SponsorSuspensionFailure
         {
             InvoiceId = invoice.Id,

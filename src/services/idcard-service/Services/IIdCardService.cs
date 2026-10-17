@@ -1,6 +1,7 @@
 using IdCardService.Adapters;
 using IdCardService.Models;
 using IdCardService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace IdCardService.Services;
 
@@ -223,7 +224,7 @@ public class IdCardOrchestrator : IIdCardOrchestrator
         }
 
         _logger.LogWarning("Scan of card {CardId} not counted: overtaken by concurrent writes {Attempts} times",
-            LogSafe.Of(cardId), MaxConcurrencyAttempts);
+            LogSanitizer.Sanitize(cardId, 256), MaxConcurrencyAttempts);
         return await _records.FindByCardIdAsync(tenantId, cardId, ct) ?? record;
     }
 }

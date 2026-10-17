@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using SponsorService.Models;
 using SponsorService.Repositories;
 using SponsorService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace SponsorService.Controllers;
 
@@ -67,7 +68,7 @@ public class SponsorBankAccountDebitController : ControllerBase
         catch (FieldProtectionException ex)
         {
             _logger.LogError(ex, "Sponsor bank account for {GroupNumber} in tenant {TenantId} could not be decrypted",
-                Sanitize(groupNumber), Sanitize(tenant));
+                LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(tenant));
             return Problem(title: "Bank-account encryption unavailable", detail: ex.Message,
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
@@ -85,12 +86,9 @@ public class SponsorBankAccountDebitController : ControllerBase
         _logger.LogInformation(FullReadEvent,
             "AUDIT sponsor bank account read for debit: sponsor {GroupNumber} in tenant {TenantId} by service {Client}; " +
             "enrolled {Enrolled}; numbers returned {Returned}",
-            Sanitize(groupNumber), Sanitize(tenant), Sanitize(_actor.UserId), enrolled, enrolled);
+            LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(tenant), LogSanitizer.Sanitize(_actor.UserId), enrolled, enrolled);
 
         // Not enrolled: premium billing skips the sponsor and needs no numbers.
         return Ok(enrolled ? active : SponsorBankAccountMasking.Mask(active));
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

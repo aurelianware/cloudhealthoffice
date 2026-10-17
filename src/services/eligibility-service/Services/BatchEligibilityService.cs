@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using EligibilityService.Adapters;
 using EligibilityService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EligibilityService.Services;
 
@@ -139,7 +140,7 @@ public class BatchEligibilityService : IBatchEligibilityService
         if (job == null)
         {
             _logger.LogWarning("ProcessJobAsync: job {JobId} not found for tenant {Tenant}",
-                jobId, SanitizeForLog(tenantId));
+                jobId, LogSanitizer.Sanitize(tenantId));
             return;
         }
 
@@ -384,7 +385,4 @@ public class BatchEligibilityService : IBatchEligibilityService
     }
 
     internal static string InputKey(string jobId) => $"INPUT::{jobId}";
-
-    private static string SanitizeForLog(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

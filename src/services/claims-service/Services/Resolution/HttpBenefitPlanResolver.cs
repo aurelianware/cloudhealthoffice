@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -65,7 +66,7 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
             {
                 _logger.LogWarning(
                     "Benefit-plan-service returned {StatusCode} resolving plan {PlanId}",
-                    response.StatusCode, SanitizeForLog(planId));
+                    response.StatusCode, LogSanitizer.Sanitize(planId));
                 throw new BenefitPlanUnavailableException(
                     $"benefit-plan-service returned {(int)response.StatusCode} for the plan");
             }
@@ -123,14 +124,11 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
             // than as null, which means "no such plan" (a definitive 404).
             _logger.LogWarning(ex,
                 "Failed to resolve benefit plan {PlanId} for tenant {TenantId}",
-                SanitizeForLog(planId), SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(planId), LogSanitizer.Sanitize(tenantId));
             throw new BenefitPlanUnavailableException(
                 $"benefit plan lookup failed ({ex.GetType().Name})", ex);
         }
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private sealed class BenefitPlanDto
     {

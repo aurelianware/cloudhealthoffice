@@ -8,6 +8,7 @@ using AppealsService.Repositories;
 using AppealsService.Services;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AppealsService.Controllers;
 
@@ -361,7 +362,7 @@ public class AppealsController : ControllerBase
         var requeued = await outboxStore.RequeueDeadLetteredAsync(TenantId, id, eventId, ct);
         _logger.LogWarning(
             "Outbox replay by {Actor}: requeued {Count} dead-lettered event(s) for appeal {AppealId} (eventId filter {EventId})",
-            LogSanitizer.SafeForLog(Actor), requeued, LogSanitizer.SafeForLog(id), LogSanitizer.SafeForLog(eventId));
+            LogSanitizer.Sanitize(Actor, 256), requeued, LogSanitizer.Sanitize(id, 256), LogSanitizer.Sanitize(eventId, 256));
         if (requeued > 0) await _outbox.NotifyChangedAsync(TenantId, id, ct);
         return Ok(new OutboxReplayResponse { Requeued = requeued });
     }
@@ -379,7 +380,7 @@ public class AppealsController : ControllerBase
     {
         var requeued = await outboxStore.RequeueAllDeadLetteredAsync(TenantId, ct);
         _logger.LogWarning("Tenant-wide outbox replay by {Actor}: requeued {Count} dead-lettered event(s)",
-            LogSanitizer.SafeForLog(Actor), requeued);
+            LogSanitizer.Sanitize(Actor, 256), requeued);
         return Ok(new OutboxReplayResponse { Requeued = requeued });
     }
 
@@ -392,7 +393,7 @@ public class AppealsController : ControllerBase
     {
         var requeued = await outboxStore.RequeueAllDeadLetteredAsync(tenantId: null, ct);
         _logger.LogWarning("Platform-wide outbox replay by {Actor}: requeued {Count} dead-lettered event(s)",
-            LogSanitizer.SafeForLog(Actor), requeued);
+            LogSanitizer.Sanitize(Actor, 256), requeued);
         return Ok(new OutboxReplayResponse { Requeued = requeued });
     }
 

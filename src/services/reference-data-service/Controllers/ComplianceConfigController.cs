@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using ReferenceDataService.Models;
 using ReferenceDataService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ReferenceDataService.Controllers;
 
@@ -56,7 +57,7 @@ public class ComplianceConfigController : ControllerBase
         if (PathTenantMismatch(tenantId) is { } refused) return refused;
         tenantId = _actor.TenantId;
         _logger.LogInformation("Fetching compliance config for tenant {TenantId}",
-            SanitizeForLog(tenantId));
+            LogSanitizer.Sanitize(tenantId));
 
         var cacheKey = $"compliance:{tenantId}";
         var config = await _cache.GetOrCreateAsync(cacheKey, async entry =>
@@ -67,7 +68,7 @@ public class ComplianceConfigController : ControllerBase
 
         if (config is null)
         {
-            return NotFound(new { message = $"No compliance config found for tenant {SanitizeForLog(tenantId)}" });
+            return NotFound(new { message = $"No compliance config found for tenant {StripLineBreaks(tenantId)}" });
         }
 
         return Ok(config);
@@ -85,7 +86,7 @@ public class ComplianceConfigController : ControllerBase
         if (PathTenantMismatch(tenantId) is { } refused) return refused;
         tenantId = _actor.TenantId;
         _logger.LogInformation("Fetching state compliance config for tenant {TenantId}",
-            SanitizeForLog(tenantId));
+            LogSanitizer.Sanitize(tenantId));
 
         var cacheKey = $"compliance:{tenantId}";
         var config = await _cache.GetOrCreateAsync(cacheKey, async entry =>
@@ -96,7 +97,7 @@ public class ComplianceConfigController : ControllerBase
 
         if (config is null)
         {
-            return NotFound(new { message = $"No compliance config found for tenant {SanitizeForLog(tenantId)}" });
+            return NotFound(new { message = $"No compliance config found for tenant {StripLineBreaks(tenantId)}" });
         }
 
         return Ok(config.StateConfig);
@@ -122,7 +123,7 @@ public class ComplianceConfigController : ControllerBase
         }
 
         _logger.LogInformation("Upserting compliance config for tenant {TenantId}, state {StateCode}",
-            SanitizeForLog(tenantId), SanitizeForLog(config.StateCode));
+            LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(config.StateCode));
 
         var saved = await SaveAsync(tenantId, config);
 
@@ -162,7 +163,7 @@ public class ComplianceConfigController : ControllerBase
 
         _logger.LogInformation(
             "Dev-seed compliance config for tenant {TenantId} (env={Env})",
-            SanitizeForLog(tenantId), _env.EnvironmentName);
+            LogSanitizer.Sanitize(tenantId), _env.EnvironmentName);
 
         var saved = await SaveAsync(tenantId, config);
         _cache.Remove($"compliance:{tenantId}");
@@ -199,7 +200,7 @@ public class ComplianceConfigController : ControllerBase
 
         _logger.LogWarning(
             "Compliance config request refused: path tenant {PathTenant} does not match the authenticated tenant {TokenTenant} (subject {Subject})",
-            SanitizeForLog(pathTenantId), SanitizeForLog(_actor.TenantId), SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(pathTenantId), LogSanitizer.Sanitize(_actor.TenantId), LogSanitizer.Sanitize(_actor.UserId));
         return StatusCode(StatusCodes.Status403Forbidden,
             new { message = "The tenant in the path does not match the authenticated tenant." });
     }
@@ -210,10 +211,10 @@ public class ComplianceConfigController : ControllerBase
            || env.IsEnvironment("Test")
            || env.IsEnvironment("Testing");
 
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

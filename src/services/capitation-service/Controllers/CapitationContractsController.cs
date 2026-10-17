@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using CapitationService.Models;
 using CapitationService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CapitationService.Controllers;
 
@@ -88,7 +89,7 @@ public class CapitationContractsController : ControllerBase
             return BadRequest(new { error = "ContractId is required — must reference a parent ProviderContract" });
 
         _logger.LogInformation("Creating capitation rate config for contract {ContractId}, provider {NPI}",
-            contract.ContractId, SanitizeForLog(contract.ProviderNPI));
+            contract.ContractId, LogSanitizer.Sanitize(contract.ProviderNPI));
 
         // Server-owned fields: status starts at Draft, the actor and timestamps
         // come from the token and the clock (the repository stamps the tenant).
@@ -176,17 +177,10 @@ public class CapitationContractsController : ControllerBase
         contract.LastUpdatedBy = _actor.UserId;
         contract.LastUpdatedAt = DateTime.UtcNow;
         _logger.LogInformation("Terminated capitation contract {ContractNumber}: {Reason}",
-            contract.ContractNumber, SanitizeForLog(request.Reason));
+            contract.ContractNumber, LogSanitizer.Sanitize(request.Reason));
 
         var updated = await _contractRepository.UpdateAsync(contract);
         return Ok(updated);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

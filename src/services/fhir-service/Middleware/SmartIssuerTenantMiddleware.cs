@@ -1,6 +1,7 @@
 using FhirService.Services.Identity;
 using Hl7.Fhir.Model;
 using Task = System.Threading.Tasks.Task;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Middleware;
 
@@ -33,7 +34,7 @@ public sealed class SmartIssuerTenantMiddleware
         {
             _logger.LogWarning(
                 "Issuer {Issuer} is not permitted to authenticate tenant {TenantId}",
-                Clean(caller.Issuer), Clean(tenantId));
+                LogSanitizer.Sanitize(caller.Issuer), LogSanitizer.Sanitize(tenantId));
             await FhirErrorResponse.WriteAsync(context, 403,
                 OperationOutcome.IssueSeverity.Error,
                 OperationOutcome.IssueType.Forbidden,
@@ -43,9 +44,6 @@ public sealed class SmartIssuerTenantMiddleware
 
         await _next(context);
     }
-
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>

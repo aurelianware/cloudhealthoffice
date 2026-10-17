@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json.Nodes;
 using ClaimsService.Models;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services;
 
@@ -348,7 +349,7 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
         {
             _logger.LogDebug(
                 "ClaimVersionEvent {EventId} already present for {Tenant}:{ClaimVersionId} (idempotent no-op)",
-                Sanitize(evt.EventId), Sanitize(evt.TenantId), Sanitize(evt.ClaimVersionId));
+                LogSanitizer.Sanitize(evt.EventId), LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.ClaimVersionId));
             return existing;
         }
 
@@ -374,7 +375,7 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
 
                 _logger.LogWarning(
                     "ClaimVersionEvent version {Version} conflict for {Tenant}:{ClaimVersionId}; retry {Attempt}/{Max}",
-                    evt.Version, Sanitize(evt.TenantId), Sanitize(evt.ClaimVersionId), attempt + 1, MaxRetries);
+                    evt.Version, LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.ClaimVersionId), attempt + 1, MaxRetries);
 
                 if (attempt + 1 < MaxRetries)
                     await Task.Delay(BackoffMs[attempt], ct);
@@ -404,7 +405,4 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
         var latest = await _collection.Find(filter).SortByDescending(x => x.Version).FirstOrDefaultAsync(ct);
         return (latest?.Version ?? 0) + 1;
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

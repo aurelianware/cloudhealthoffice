@@ -4,6 +4,7 @@ using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Security;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Controllers;
 
@@ -86,7 +87,7 @@ public class ProviderPayeeAccountController : ControllerBase
             _logger.LogError(PayeeReadEvent,
                 "AUDIT provider payee account read refused: provider {ProviderId} (NPI {Npi}) in tenant {TenantId} " +
                 "by service {Client}; the numbers could not be decrypted",
-                Sanitize(provider.ProviderId), Sanitize(npi), Sanitize(tenant), Sanitize(caller));
+                LogSanitizer.Sanitize(provider.ProviderId), LogSanitizer.Sanitize(npi), LogSanitizer.Sanitize(tenant), LogSanitizer.Sanitize(caller));
             return Problem(title: "Bank-account encryption unavailable",
                 detail: "The provider's bank numbers could not be decrypted.",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
@@ -96,13 +97,10 @@ public class ProviderPayeeAccountController : ControllerBase
         _logger.LogInformation(PayeeReadEvent,
             "AUDIT provider payee account read for FFS EFT: provider {ProviderId} (NPI {Npi}) in tenant {TenantId} " +
             "by service {Client}; EFT enabled {Enrolled}; numbers returned {Returned}",
-            Sanitize(provider.ProviderId), Sanitize(npi), Sanitize(tenant), Sanitize(caller), enrolled, enrolled);
+            LogSanitizer.Sanitize(provider.ProviderId), LogSanitizer.Sanitize(npi), LogSanitizer.Sanitize(tenant), LogSanitizer.Sanitize(caller), enrolled, enrolled);
 
         return Ok(ProviderPayeeAccountDetails.From(provider, active, includeNumbers: enrolled));
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>

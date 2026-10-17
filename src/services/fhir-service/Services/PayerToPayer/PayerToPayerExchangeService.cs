@@ -1,6 +1,7 @@
 using CloudHealthOffice.Consent.Contracts;
 using FhirService.Models.PayerToPayer;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.PayerToPayer;
 
@@ -80,7 +81,7 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
         var audit = Audit(request, PayerToPayerOutcome.Exported, member.MemberId, bundle.Total, decision);
         _logger.LogInformation(
             "P2P respond: tenant={Tenant} receivingPayer={Payer} member={Member} resources={Count}",
-            Clean(audit.TenantId), Clean(audit.ReceivingPayerId), Clean(audit.MatchedMemberId), audit.ResourceCount);
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), LogSanitizer.Sanitize(audit.MatchedMemberId), audit.ResourceCount);
 
         return new PayerToPayerExportResult
         {
@@ -98,20 +99,10 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
         var audit = Audit(request, outcome, matchedMemberId, resourceCount: 0, decision);
         _logger.LogInformation(
             "P2P respond declined: tenant={Tenant} receivingPayer={Payer} outcome={Outcome} consent={Consent}",
-            Clean(audit.TenantId), Clean(audit.ReceivingPayerId), audit.Outcome,
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), audit.Outcome,
             audit.ConsentDecisionReason ?? "n/a");
         return new PayerToPayerExportResult { Outcome = outcome, MatchedMemberId = matchedMemberId, Audit = audit };
     }
-
-    /// <summary>
-    /// Strips CR/LF from caller-supplied values before they reach a log entry,
-    /// preventing log-forging / injection (CWE-117) from the exchange request.
-    /// </summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 
     private static PayerToPayerAuditEntry Audit(
         PayerToPayerExchangeRequest request, PayerToPayerOutcome outcome, string? matchedMemberId,

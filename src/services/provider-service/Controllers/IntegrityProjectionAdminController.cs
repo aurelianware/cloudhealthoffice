@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using ProviderService.Models;
 using ProviderService.Security;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Controllers;
 
@@ -101,7 +102,7 @@ public sealed class IntegrityProjectionAdminController : ControllerBase
         {
             _logger.LogWarning(
                 "integrity projection backfill refused: query tenant {QueryTenant} does not match the authenticated tenant {TokenTenant}",
-                Sanitize(tenantId), Sanitize(tokenTenant));
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(tokenTenant));
             return StatusCode(StatusCodes.Status403Forbidden,
                 new { error = "The tenantId query parameter does not match the authenticated tenant." });
         }
@@ -109,7 +110,7 @@ public sealed class IntegrityProjectionAdminController : ControllerBase
 
         _logger.LogInformation(
             "integrity projection backfill triggered for tenant={Tenant} maxProviders={Max}",
-            Sanitize(tenantId), maxProviders);
+            LogSanitizer.Sanitize(tenantId), maxProviders);
 
         var result = await _projection.RefreshTenantAsync(
             tenantId,
@@ -124,12 +125,9 @@ public sealed class IntegrityProjectionAdminController : ControllerBase
 
         _logger.LogInformation(
             "integrity projection backfill complete: tenant={Tenant} inspected={Inspected} patched={Patched} skipped={Skipped} failed={Failed}",
-            Sanitize(tenantId), result.Inspected, result.Patched,
+            LogSanitizer.Sanitize(tenantId), result.Inspected, result.Patched,
             result.Skipped, result.Failed);
 
         return Ok(result);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

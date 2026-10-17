@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace SponsorService.Controllers;
 
@@ -178,7 +179,7 @@ public class SponsorsController : ControllerBase
 
         var created = await _sponsorRepository.CreateAsync(sponsor);
         _logger.LogInformation("Created sponsor {GroupNumber} ({EmployerName})",
-            SanitizeForLog(created.GroupNumber), SanitizeForLog(created.EmployerName));
+            LogSanitizer.Sanitize(created.GroupNumber), LogSanitizer.Sanitize(created.EmployerName));
         return CreatedAtAction(nameof(GetSponsor), new { groupNumber = created.GroupNumber }, created);
     }
 
@@ -223,7 +224,7 @@ public class SponsorsController : ControllerBase
 
         sponsor.LastUpdatedBy = _actor.UserId;
         var updated = await _sponsorRepository.UpdateAsync(sponsor);
-        _logger.LogInformation("Updated sponsor {GroupNumber}", SanitizeForLog(updated.GroupNumber));
+        _logger.LogInformation("Updated sponsor {GroupNumber}", LogSanitizer.Sanitize(updated.GroupNumber));
         return Ok(updated);
     }
 
@@ -263,8 +264,8 @@ public class SponsorsController : ControllerBase
             _logger.LogInformation(
                 "AUDIT sponsor status unchanged: sponsor {GroupNumber} in tenant {TenantId} is already {Status}; " +
                 "requested by {UserId} (service: {IsService}), reason {Reason}",
-                SanitizeForLog(groupNumber), SanitizeForLog(TenantId), to,
-                SanitizeForLog(_actor.UserId), _actor.IsService, SanitizeForLog(reason));
+                LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(TenantId), to,
+                LogSanitizer.Sanitize(_actor.UserId), _actor.IsService, LogSanitizer.Sanitize(reason));
             return Ok(new SponsorStatusChangeResponse
             {
                 GroupNumber = sponsor.GroupNumber,
@@ -279,8 +280,8 @@ public class SponsorsController : ControllerBase
             _logger.LogWarning(
                 "AUDIT sponsor status change refused: {From} -> {To} for sponsor {GroupNumber} in tenant {TenantId} " +
                 "by {UserId} (service: {IsService}), reason {Reason}",
-                from, to, SanitizeForLog(groupNumber), SanitizeForLog(TenantId),
-                SanitizeForLog(_actor.UserId), _actor.IsService, SanitizeForLog(reason));
+                from, to, LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(TenantId),
+                LogSanitizer.Sanitize(_actor.UserId), _actor.IsService, LogSanitizer.Sanitize(reason));
             var allowed = SponsorStatusTransitions.AllowedFrom(from);
             return Conflict(new
             {
@@ -305,15 +306,15 @@ public class SponsorsController : ControllerBase
             _logger.LogWarning(
                 "AUDIT sponsor status change refused: {From} -> {To} for sponsor {GroupNumber} in tenant {TenantId} " +
                 "by {UserId}: the status changed while the request was processed",
-                from, to, SanitizeForLog(groupNumber), SanitizeForLog(TenantId), SanitizeForLog(_actor.UserId));
+                from, to, LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(_actor.UserId));
             return Conflict(new { error = "The sponsor's status changed while the request was processed; read it and try again" });
         }
 
         _logger.LogInformation(
             "AUDIT sponsor status changed: {From} -> {To} for sponsor {GroupNumber} in tenant {TenantId} " +
             "by {UserId} (service: {IsService}) at {ChangedAt:O}, reason {Reason}",
-            from, to, SanitizeForLog(groupNumber), SanitizeForLog(TenantId),
-            SanitizeForLog(change.ChangedBy), change.ChangedByIsService, change.ChangedAt, SanitizeForLog(reason));
+            from, to, LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(TenantId),
+            LogSanitizer.Sanitize(change.ChangedBy), change.ChangedByIsService, change.ChangedAt, LogSanitizer.Sanitize(reason));
 
         return Ok(new SponsorStatusChangeResponse
         {
@@ -346,7 +347,7 @@ public class SponsorsController : ControllerBase
         sponsor.LastUpdatedBy = _actor.UserId;
         await _sponsorRepository.UpdateAsync(sponsor);
         _logger.LogInformation("Terminated sponsor {GroupNumber} (effective {TerminationDate:O})",
-            SanitizeForLog(groupNumber), sponsor.TerminationDate);
+            LogSanitizer.Sanitize(groupNumber), sponsor.TerminationDate);
         return NoContent();
     }
 
@@ -377,12 +378,6 @@ public class SponsorsController : ControllerBase
             MonthlyPremium = sponsor.BillingInfo?.PremiumAmount ?? 0m
         };
         return Ok(summary);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

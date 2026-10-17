@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using PaymentService.Models;
 using PaymentService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Services;
 
@@ -145,7 +146,7 @@ public sealed class ReservationReconciliationService : IReservationReconciliatio
         {
             _logger.LogInformation(
                 "Reservation reconciliation for tenant {TenantId}: {Examined} examined, {Released} auto-released, {Flagged} flagged, {Cleared} cleared, {Skipped} changed meanwhile",
-                Sanitize(tenantId), result.Examined, result.AutoReleased.Count, result.Flagged.Count,
+                LogSanitizer.Sanitize(tenantId), result.Examined, result.AutoReleased.Count, result.Flagged.Count,
                 result.Cleared.Count, result.SkippedChanged.Count);
         }
         return result;
@@ -226,7 +227,7 @@ public sealed class ReservationReconciliationService : IReservationReconciliatio
                 {
                     result.SkippedChanged.Add(reservation.ClaimId);
                     _logger.LogInformation(
-                        "Reservation of claim {ClaimId} changed before auto-release; left as it is", Sanitize(reservation.ClaimId));
+                        "Reservation of claim {ClaimId} changed before auto-release; left as it is", LogSanitizer.Sanitize(reservation.ClaimId));
                     return;
                 }
 
@@ -238,7 +239,7 @@ public sealed class ReservationReconciliationService : IReservationReconciliatio
                 result.AutoReleased.Add(reservation.ClaimId);
                 _logger.LogWarning(AutoReleasedEvent,
                     "Auto-released reservation of claim {ClaimId} held by {Kind} run {RunNumber} ({RunStatus}) in tenant {TenantId}",
-                    Sanitize(reservation.ClaimId), reservation.Kind, Sanitize(run?.Number), run?.Status, Sanitize(reservation.TenantId));
+                    LogSanitizer.Sanitize(reservation.ClaimId), reservation.Kind, LogSanitizer.Sanitize(run?.Number), run?.Status, LogSanitizer.Sanitize(reservation.TenantId));
                 return;
             }
 
@@ -260,8 +261,8 @@ public sealed class ReservationReconciliationService : IReservationReconciliatio
                 result.Flagged.Add(reservation.ClaimId);
                 _logger.LogWarning(FlaggedEvent,
                     "Reservation of claim {ClaimId} held by {Kind} run {RunNumber} in tenant {TenantId} needs attention: {Reason}",
-                    Sanitize(reservation.ClaimId), reservation.Kind, Sanitize(run?.Number ?? reservation.RunId),
-                    Sanitize(reservation.TenantId), Sanitize(verdict.Reason));
+                    LogSanitizer.Sanitize(reservation.ClaimId), reservation.Kind, LogSanitizer.Sanitize(run?.Number ?? reservation.RunId),
+                    LogSanitizer.Sanitize(reservation.TenantId), LogSanitizer.Sanitize(verdict.Reason));
                 return;
             }
 
@@ -343,7 +344,7 @@ public sealed class ReservationReconciliationService : IReservationReconciliatio
 
         _logger.LogWarning(ReleasedEvent,
             "Reservation of claim {ClaimId} held by {Kind} run {RunNumber} released by {User} in tenant {TenantId}",
-            Sanitize(claimId), kind, Sanitize(run.Number), Sanitize(releasedBy), Sanitize(run.TenantId));
+            LogSanitizer.Sanitize(claimId), kind, LogSanitizer.Sanitize(run.Number), LogSanitizer.Sanitize(releasedBy), LogSanitizer.Sanitize(run.TenantId));
 
         return new ReservationReleaseResult
         {
@@ -446,7 +447,4 @@ public sealed class ReservationReconciliationService : IReservationReconciliatio
             throw new InvalidOperationException("TenantId not found in request context");
         return tenantId;
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

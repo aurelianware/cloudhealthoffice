@@ -2,6 +2,7 @@ using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -170,7 +171,7 @@ public sealed class NetworkTierBackfillService : INetworkTierBackfillService
 
         _logger.LogInformation(
             "network-tier backfill complete tenant={Tenant} runId={RunId} submitted={Submitted} patched={Patched} skipped={Skipped} notFound={NotFound} unresolved={Unresolved} failed={Failed}",
-            SanitizeForLog(tenantId), result.BackfillRunId,
+            LogSanitizer.Sanitize(tenantId), result.BackfillRunId,
             result.MappingsSubmitted, result.Patched, result.Skipped,
             result.NotFound, result.Unresolved, result.Failed);
 
@@ -257,7 +258,7 @@ public sealed class NetworkTierBackfillService : INetworkTierBackfillService
             // and continue with the next plan.
             _logger.LogError(ex,
                 "network-tier backfill failed tenant={Tenant} planId={PlanId} runId={RunId}",
-                SanitizeForLog(tenantId), SanitizeForLog(planId), result.BackfillRunId);
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(planId), result.BackfillRunId);
             foreach (var m in pendingPatched)
             {
                 RecordOutcome(tenantId, "failed", m, result, detail: ex.GetType().Name);
@@ -274,7 +275,7 @@ public sealed class NetworkTierBackfillService : INetworkTierBackfillService
             // as `not_found`.
             _logger.LogWarning(
                 "network-tier backfill: head row vanished mid-operation tenant={Tenant} planId={PlanId} runId={RunId}",
-                SanitizeForLog(tenantId), SanitizeForLog(planId), result.BackfillRunId);
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(planId), result.BackfillRunId);
             foreach (var m in pendingPatched)
             {
                 RecordOutcome(tenantId, "not_found", m, result, detail: "Head version disappeared during patch.");
@@ -326,10 +327,4 @@ public sealed class NetworkTierBackfillService : INetworkTierBackfillService
         ProviderNpis = t.ProviderNpis.ToList(),
     };
 #pragma warning restore CS0618
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }

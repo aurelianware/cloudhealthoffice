@@ -4,6 +4,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using EncounterService.Models;
 using EncounterService.Repositories;
 using EncounterService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EncounterService.Controllers;
 
@@ -49,9 +50,9 @@ public class EncountersController : ControllerBase
     {
         _logger.LogInformation(
             "Submitting encounter for member {MemberId}, provider {ProviderNPI}, payer {PayerId}",
-            SanitizeForLog(encounter.MemberId),
-            SanitizeForLog(encounter.BillingProviderNPI),
-            SanitizeForLog(encounter.PayerId));
+            LogSanitizer.Sanitize(encounter.MemberId),
+            LogSanitizer.Sanitize(encounter.BillingProviderNPI),
+            LogSanitizer.Sanitize(encounter.PayerId));
 
         if (encounter.ServiceLines == null || encounter.ServiceLines.Count == 0)
             return BadRequest("Encounter must have at least one service line");
@@ -74,7 +75,7 @@ public class EncountersController : ControllerBase
         var created = await _encounterRepository.CreateAsync(encounter);
 
         _logger.LogInformation("Encounter {ControlNumber} submitted successfully",
-            SanitizeForLog(encounter.EncounterControlNumber));
+            LogSanitizer.Sanitize(encounter.EncounterControlNumber));
 
         return CreatedAtAction(nameof(GetEncounterById), new { id = created.Id }, created);
     }
@@ -87,7 +88,7 @@ public class EncountersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Encounter>> GetEncounterById(string id)
     {
-        _logger.LogInformation("Fetching encounter by ID: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Fetching encounter by ID: {Id}", LogSanitizer.Sanitize(id));
 
         var encounter = await _encounterRepository.GetByIdAsync(id);
         if (encounter == null)
@@ -105,7 +106,7 @@ public class EncountersController : ControllerBase
     public async Task<ActionResult<Encounter>> GetEncounterByControlNumber(string controlNumber)
     {
         _logger.LogInformation("Fetching encounter by control number: {ControlNumber}",
-            SanitizeForLog(controlNumber));
+            LogSanitizer.Sanitize(controlNumber));
 
         var encounter = await _encounterRepository.GetByControlNumberAsync(controlNumber);
         if (encounter == null)
@@ -133,7 +134,7 @@ public class EncountersController : ControllerBase
     {
         _logger.LogInformation(
             "Searching encounters: member={Member}, payer={Payer}, batch={Batch}, status={Status}",
-            SanitizeForLog(memberId), SanitizeForLog(payerId), SanitizeForLog(batchId), status);
+            LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(payerId), LogSanitizer.Sanitize(batchId), status);
 
         var encounters = await _encounterRepository.SearchAsync(
             memberId, payerId, batchId, serviceDateFrom, serviceDateTo,
@@ -153,7 +154,7 @@ public class EncountersController : ControllerBase
         [FromBody] EncounterStatusUpdate statusUpdate)
     {
         _logger.LogInformation("Updating encounter {Id} status to {Status}",
-            SanitizeForLog(id), statusUpdate.Status);
+            LogSanitizer.Sanitize(id), statusUpdate.Status);
 
         var encounter = await _encounterRepository.GetByIdAsync(id);
         if (encounter == null)
@@ -207,7 +208,7 @@ public class EncountersController : ControllerBase
         var toDate = to ?? DateTime.UtcNow;
 
         _logger.LogInformation("Fetching encounter summary from {From} to {To}, payer={PayerId}",
-            fromDate, toDate, SanitizeForLog(payerId));
+            fromDate, toDate, LogSanitizer.Sanitize(payerId));
 
         var summary = await _encounterRepository.GetSummaryAsync(fromDate, toDate, payerId);
         return Ok(summary);
@@ -227,7 +228,7 @@ public class EncountersController : ControllerBase
         [FromBody] BatchDispatchRequest request)
     {
         _logger.LogInformation("Dispatching batch for payer {PayerId}, maxSize={MaxBatchSize}",
-            SanitizeForLog(request.PayerId), request.MaxBatchSize);
+            LogSanitizer.Sanitize(request.PayerId), request.MaxBatchSize);
 
         var pending = await _encounterRepository.GetPendingByPayerAsync(
             request.PayerId, request.LineOfBusiness, request.EncounterType, request.MaxBatchSize);
@@ -250,7 +251,7 @@ public class EncountersController : ControllerBase
         }
 
         _logger.LogInformation("Batch {BatchId} created with {Count} encounters for payer {PayerId}",
-            batchId, encounterList.Count, SanitizeForLog(request.PayerId));
+            batchId, encounterList.Count, LogSanitizer.Sanitize(request.PayerId));
 
         var result = new BatchDispatchResult
         {
@@ -272,7 +273,7 @@ public class EncountersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> MarkBatchSubmitted(string batchId)
     {
-        _logger.LogInformation("Marking batch {BatchId} as submitted", SanitizeForLog(batchId));
+        _logger.LogInformation("Marking batch {BatchId} as submitted", LogSanitizer.Sanitize(batchId));
 
         var encounters = await _encounterRepository.SearchAsync(
             null, null, batchId, null, null, EncounterStatus.Queued, null, null, 1, 5000);
@@ -321,7 +322,7 @@ public class EncountersController : ControllerBase
 
         _logger.LogInformation(
             "Generating 837 for encounter {Id} ({ControlNumber}), type={Type}",
-            SanitizeForLog(id), SanitizeForLog(encounter.EncounterControlNumber), encounter.EncounterType);
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(encounter.EncounterControlNumber), encounter.EncounterType);
 
         var edi = _edi837Service.Generate837(encounter, cfg);
 
@@ -360,7 +361,7 @@ public class EncountersController : ControllerBase
         string id,
         [FromBody] CorrectionRequest request)
     {
-        _logger.LogInformation("Submitting correction for encounter {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Submitting correction for encounter {Id}", LogSanitizer.Sanitize(id));
 
         var original = await _encounterRepository.GetByIdAsync(id);
         if (original == null)
@@ -443,7 +444,7 @@ public class EncountersController : ControllerBase
 
         _logger.LogInformation(
             "Correction submitted for encounter {OriginalId}: void={VoidId}, replacement={ReplacementId}",
-            SanitizeForLog(id), SanitizeForLog(createdVoid.Id), SanitizeForLog(createdReplacement.Id));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(createdVoid.Id), LogSanitizer.Sanitize(createdReplacement.Id));
 
         return Ok(new CorrectionResult
         {
@@ -461,7 +462,7 @@ public class EncountersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Encounter>> ResubmitEncounter(string id)
     {
-        _logger.LogInformation("Resubmitting encounter {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Resubmitting encounter {Id}", LogSanitizer.Sanitize(id));
 
         var original = await _encounterRepository.GetByIdAsync(id);
         if (original == null)
@@ -510,7 +511,7 @@ public class EncountersController : ControllerBase
         var created = await _encounterRepository.CreateAsync(resubmission);
 
         _logger.LogInformation("Encounter {OriginalId} resubmitted as {NewId}",
-            SanitizeForLog(id), SanitizeForLog(created.Id));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(created.Id));
 
         return Ok(created);
     }
@@ -523,7 +524,7 @@ public class EncountersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> VoidEncounter(string id)
     {
-        _logger.LogInformation("Voiding encounter: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Voiding encounter: {Id}", LogSanitizer.Sanitize(id));
 
         var encounter = await _encounterRepository.GetByIdAsync(id);
         if (encounter == null)
@@ -541,11 +542,4 @@ public class EncountersController : ControllerBase
 
     private static string GenerateControlNumber()
         => $"ENC-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString()[..8].ToUpperInvariant()}";
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }

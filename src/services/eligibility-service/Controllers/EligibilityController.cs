@@ -5,6 +5,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using EligibilityService.Models;
 using EligibilityService.Repositories;
 using EligibilityService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EligibilityService.Controllers;
 
@@ -60,7 +61,7 @@ public class EligibilityController : ControllerBase
             inquiry.TenantId = TenantId;
             inquiry.ControlNumber = GenerateControlNumber();
             
-            _logger.LogInformation("Processing eligibility inquiry for member {SubscriberId}", SanitizeForLog(inquiry.SubscriberId));
+            _logger.LogInformation("Processing eligibility inquiry for member {SubscriberId}", LogSanitizer.Sanitize(inquiry.SubscriberId));
             
             var response = await _eligibilityService.ProcessInquiryAsync(inquiry);
             
@@ -288,7 +289,7 @@ public class EligibilityController : ControllerBase
 
         _logger.LogInformation(
             "Processing EDI 270 for subscriber {SubscriberId}, serviceType={ServiceType}",
-            SanitizeForLog(inquiry.SubscriberId), inquiry.ServiceTypeCode);
+            LogSanitizer.Sanitize(inquiry.SubscriberId), inquiry.ServiceTypeCode);
 
         EligibilityResponse response;
         try
@@ -337,7 +338,7 @@ public class EligibilityController : ControllerBase
 
         _logger.LogInformation(
             "Generating 271 EDI for inquiry {InquiryId} (subscriber={SubscriberId})",
-            SanitizeForLog(id), SanitizeForLog(inquiry.SubscriberId));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(inquiry.SubscriberId));
 
         var edi271 = _edi271Generator.Generate(
             inquiry, response,
@@ -352,13 +353,6 @@ public class EligibilityController : ControllerBase
     private string GenerateControlNumber()
     {
         return DateTime.UtcNow.ToString("yyyyMMddHHmmssfff");
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

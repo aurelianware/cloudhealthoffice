@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Security;
 using System.Text.Json;
 using Microsoft.IdentityModel.Tokens;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.Identity;
 
@@ -89,7 +90,7 @@ public sealed class HttpIssuerMetadataFetcher : IIssuerMetadataFetcher
             {
                 throw new IssuerMetadataException(
                     $"Discovery document issuer mismatch: configured '{issuer.Issuer}', "
-                    + $"document declared '{Sanitize(declaredIssuer)}'.");
+                    + $"document declared '{StripLineBreaks(declaredIssuer)}'.");
             }
 
             var jwksUriValue = ReadString(root, "jwks_uri")
@@ -201,7 +202,7 @@ public sealed class HttpIssuerMetadataFetcher : IIssuerMetadataFetcher
         if (!JwksOriginPolicy.IsAllowedHost(uri, issuer, _isDevelopmentHost))
         {
             throw new IssuerMetadataException(
-                $"Issuer '{issuer.Issuer}' {field} host '{Sanitize(uri.Host)}' is not permitted. "
+                $"Issuer '{issuer.Issuer}' {field} host '{StripLineBreaks(uri.Host)}' is not permitted. "
                 + "It is neither the issuer's own host nor listed in AdditionalJwksHosts.");
         }
 
@@ -213,6 +214,10 @@ public sealed class HttpIssuerMetadataFetcher : IIssuerMetadataFetcher
             ? element.GetString()
             : null;
 
-    private static string Sanitize(string value)
-        => value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

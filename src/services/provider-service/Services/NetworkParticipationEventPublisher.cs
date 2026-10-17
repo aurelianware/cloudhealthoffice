@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using MongoDB.Driver;
 using ProviderService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Services;
 
@@ -115,7 +116,7 @@ public sealed class MongoNetworkParticipationEventPublisher : INetworkParticipat
         {
             _logger.LogDebug(
                 "NetworkParticipationEvent {EventId} already present for {Tenant}:{Provider} (idempotent no-op)",
-                Sanitize(evt.EventId), Sanitize(evt.TenantId), Sanitize(evt.ProviderId));
+                LogSanitizer.Sanitize(evt.EventId), LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.ProviderId));
             return existing;
         }
 
@@ -134,7 +135,7 @@ public sealed class MongoNetworkParticipationEventPublisher : INetworkParticipat
 
                 _logger.LogWarning(
                     "NetworkParticipationEvent version {Version} conflict for {Tenant}:{Provider}; retry {Attempt}/{Max}",
-                    evt.Version, Sanitize(evt.TenantId), Sanitize(evt.ProviderId), attempt + 1, MaxRetries);
+                    evt.Version, LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.ProviderId), attempt + 1, MaxRetries);
 
                 if (attempt + 1 < MaxRetries)
                     await Task.Delay(BackoffMs[attempt], ct);
@@ -163,7 +164,4 @@ public sealed class MongoNetworkParticipationEventPublisher : INetworkParticipat
         var latest = await _collection.Find(filter).SortByDescending(x => x.Version).FirstOrDefaultAsync(ct);
         return (latest?.Version ?? 0) + 1;
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

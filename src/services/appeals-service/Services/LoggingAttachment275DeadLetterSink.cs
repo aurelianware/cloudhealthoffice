@@ -1,4 +1,5 @@
 using AppealsService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AppealsService.Services;
 
@@ -23,10 +24,10 @@ public sealed class LoggingAttachment275DeadLetterSink : IAttachment275DeadLette
     {
         _logger.LogWarning(
             "275 dead-letter: tenantId={TenantId} claimId={ClaimId} controlNumber={ControlNumber} reason={Reason}",
-            LogSanitizer.SafeForLog(envelope.TenantId),
-            LogSanitizer.SafeForLog(envelope.ClaimId),
-            LogSanitizer.SafeForLog(envelope.ControlNumber),
-            LogSanitizer.SafeForLog(reason));
+            LogSanitizer.Sanitize(envelope.TenantId, 256),
+            LogSanitizer.Sanitize(envelope.ClaimId, 256),
+            LogSanitizer.Sanitize(envelope.ControlNumber, 256),
+            LogSanitizer.Sanitize(reason, 256));
         return Task.CompletedTask;
     }
 
@@ -39,7 +40,7 @@ public sealed class LoggingAttachment275DeadLetterSink : IAttachment275DeadLette
         _logger.LogWarning(
             "275 dead-letter (malformed): charLength={CharLength} reason={Reason}",
             rawMessage?.Length ?? 0,
-            LogSanitizer.SafeForLog(reason));
+            LogSanitizer.Sanitize(reason, 256));
         return Task.CompletedTask;
     }
 }

@@ -2,6 +2,7 @@ using ClaimsService.Audit;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Controllers;
 
@@ -88,7 +89,7 @@ public sealed class MassAdjudicationRunsController : ControllerBase
         _logger.LogInformation(
             "Saved mass adjudication run {RunId} for tenant {TenantId}: {Processed}/{Total} processed, {Failures} platform failures",
             saved.Id,
-            SanitizeForLog(tenantId),
+            LogSanitizer.Sanitize(tenantId),
             saved.Processed,
             saved.TotalClaims,
             saved.PlatformFailures);
@@ -106,9 +107,4 @@ public sealed class MassAdjudicationRunsController : ControllerBase
 
         return tenantId;
     }
-
-    private static string SanitizeForLog(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

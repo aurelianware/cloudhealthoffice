@@ -9,6 +9,7 @@ using CloudHealthOffice.OperatingMode;
 using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
 using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -50,16 +51,6 @@ public class PaymentEstimateService : IPaymentEstimateService
         _logger = logger;
     }
 
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        var buffer = new System.Text.StringBuilder(value.Length);
-        foreach (var ch in value)
-            buffer.Append(char.IsControl(ch) ? '_' : ch);
-        if (buffer.Length > 256) buffer.Length = 256;
-        return buffer.ToString();
-    }
-
     public async Task<PaymentEstimateResponse> EstimateAsync(
         string tenantId,
         PaymentEstimateRequest request,
@@ -70,8 +61,8 @@ public class PaymentEstimateService : IPaymentEstimateService
 
         _logger.LogInformation(
             "Prospective estimate for member {MemberId}, plan {PlanId}, {LineCount} line(s), type {ClaimType}",
-            SanitizeForLog(request.MemberId), request.BenefitPlanId,
-            request.Lines.Count, SanitizeForLog(claimTypeCode));
+            LogSanitizer.Sanitize(request.MemberId, 256), request.BenefitPlanId,
+            request.Lines.Count, LogSanitizer.Sanitize(claimTypeCode, 256));
 
         var warnings = new List<EstimateMessage>();
 
@@ -331,7 +322,7 @@ public class PaymentEstimateService : IPaymentEstimateService
         {
             _logger.LogWarning(ex,
                 "Operating-mode resolution failed for tenant {TenantId}; defaulting estimate authority to Simulation",
-                SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(tenantId, 256));
             return EstimateAuthority.Simulation;
         }
     }

@@ -7,6 +7,7 @@ using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Security;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Controllers;
 
@@ -78,7 +79,7 @@ public class ProvidersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Provider>> GetByNPI(string npi)
     {
-        _logger.LogInformation("Fetching provider by NPI: {NPI}", SanitizeForLog(npi));
+        _logger.LogInformation("Fetching provider by NPI: {NPI}", LogSanitizer.Sanitize(npi));
 
         var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
         var response = await adapter.GetProviderByNpiAsync(new ProviderAdapterRequest
@@ -117,7 +118,7 @@ public class ProvidersController : ControllerBase
     {
         _logger.LogInformation(
             "Searching providers: name={Name}, specialty={Specialty}, zip={Zip}, state={State}, plan={Plan}, lob={LOB}",
-            SanitizeForLog(name), SanitizeForLog(specialty), SanitizeForLog(zipCode), SanitizeForLog(state), SanitizeForLog(planId), lineOfBusiness);
+            LogSanitizer.Sanitize(name), LogSanitizer.Sanitize(specialty), LogSanitizer.Sanitize(zipCode), LogSanitizer.Sanitize(state), LogSanitizer.Sanitize(planId), lineOfBusiness);
 
         // Support 'q' as alias for 'name' (portal autocomplete uses q=)
         var searchName = name ?? q;
@@ -210,7 +211,7 @@ public class ProvidersController : ControllerBase
 
         _logger.LogInformation(
             "Checking network status for provider {Id}, plan={Plan}, lob={LOB}, date={Date}",
-            SanitizeForLog(id), SanitizeForLog(planId), lineOfBusiness, checkDate);
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(planId), lineOfBusiness, checkDate);
 
         var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
         var adapterResponse = await adapter.GetProviderAsync(new ProviderAdapterRequest
@@ -271,7 +272,7 @@ public class ProvidersController : ControllerBase
     {
         _logger.LogInformation(
             "Fetching contracted rates for provider {Id}, plan={Plan}, lob={LOB}",
-            SanitizeForLog(id), SanitizeForLog(planId), lineOfBusiness);
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(planId), lineOfBusiness);
 
         var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
         var adapterResponse = await adapter.GetProviderAsync(new ProviderAdapterRequest
@@ -494,7 +495,7 @@ public class ProvidersController : ControllerBase
     {
         _logger.LogInformation(
             "on-demand verification refresh for provider {Id} force={Force}",
-            SanitizeForLog(id), force);
+            LogSanitizer.Sanitize(id), force);
 
         var result = await _integrityProjection.RefreshProviderAsync(
             TenantId, id, forceRefresh: force,
@@ -541,7 +542,7 @@ public class ProvidersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Provider>> GetById(string id)
     {
-        _logger.LogInformation("Fetching provider by ID: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Fetching provider by ID: {Id}", LogSanitizer.Sanitize(id));
 
         var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
         var response = await adapter.GetProviderAsync(new ProviderAdapterRequest
@@ -569,7 +570,7 @@ public class ProvidersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Provider>> CreateProvider([FromBody] Provider provider)
     {
-        _logger.LogInformation("Creating provider with NPI: {NPI}", SanitizeForLog(provider.NPI));
+        _logger.LogInformation("Creating provider with NPI: {NPI}", LogSanitizer.Sanitize(provider.NPI));
 
         // Check if NPI already exists
         var existing = await _providerRepository.GetByNPIAsync(provider.NPI);
@@ -616,7 +617,7 @@ public class ProvidersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<Provider>> UpdateProvider(string id, [FromBody] Provider provider)
     {
-        _logger.LogInformation("Updating provider: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Updating provider: {Id}", LogSanitizer.Sanitize(id));
 
         var existing = await _providerRepository.GetByIdAsync(id);
         if (existing == null)
@@ -703,7 +704,7 @@ public class ProvidersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteProvider(string id)
     {
-        _logger.LogInformation("Deleting provider: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Deleting provider: {Id}", LogSanitizer.Sanitize(id));
 
         var existing = await _providerRepository.GetByIdAsync(id);
         if (existing == null)
@@ -746,7 +747,7 @@ public class ProvidersController : ControllerBase
     {
         _logger.LogInformation(
             "Adding network participation for provider {Id}, plan={Plan}, lob={LOB}",
-            SanitizeForLog(id), SanitizeForLog(participation.PlanId), participation.LineOfBusiness);
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(participation.PlanId), participation.LineOfBusiness);
 
         var provider = await _providerRepository.GetByIdAsync(id);
         if (provider == null)
@@ -819,7 +820,7 @@ public class ProvidersController : ControllerBase
     {
         _logger.LogInformation(
             "Updating credentialing for provider {Id}, status={Status}",
-            SanitizeForLog(id), request.Status);
+            LogSanitizer.Sanitize(id), request.Status);
 
         var provider = await _providerRepository.GetByIdAsync(id);
         if (provider == null)
@@ -944,7 +945,7 @@ public class ProvidersController : ControllerBase
             {
                 _logger.LogWarning(ex,
                     "Could not read the bank-account record of provider {ProviderId}; showing no bank account",
-                    SanitizeForLog(provider.ProviderId));
+                    LogSanitizer.Sanitize(provider.ProviderId));
             }
         }
         provider.BankAccount = BankAccountMasking.Mask(active);
@@ -981,14 +982,7 @@ public class ProvidersController : ControllerBase
         await _bankAccountChanges.ProposeAsync(created, account, actor, source);
         _logger.LogInformation(
             "Provider {ProviderId} created; its bank account is pending approval by a user with payments:approve",
-            SanitizeForLog(created.ProviderId));
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+            LogSanitizer.Sanitize(created.ProviderId));
     }
 }
 

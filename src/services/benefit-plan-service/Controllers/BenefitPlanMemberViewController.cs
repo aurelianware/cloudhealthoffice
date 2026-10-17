@@ -2,6 +2,7 @@ using BenefitPlanService.Adapters;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Controllers;
 
@@ -44,7 +45,7 @@ public class BenefitPlanMemberViewController : ControllerBase
         var asOf = (serviceDate ?? DateTime.UtcNow).Date;
         _logger.LogInformation(
             "Building member view for plan {PlanId} tenant {TenantId} as of {ServiceDate:yyyy-MM-dd}",
-            SanitizeForLog(planId), SanitizeForLog(TenantId), asOf);
+            LogSanitizer.Sanitize(planId), LogSanitizer.Sanitize(TenantId), asOf);
 
         var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
         var response = await adapter.GetMemberBenefitViewAsync(new BenefitPlanAdapterRequest
@@ -61,12 +62,5 @@ public class BenefitPlanMemberViewController : ControllerBase
         }
 
         return Ok(response.View.ToMemberBenefitView());
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

@@ -1,6 +1,7 @@
 using CapitationService.Models;
 using CapitationService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CapitationService.Services;
 
@@ -93,7 +94,7 @@ public sealed class PaymentSeparationOfDuties : IPaymentSeparationOfDuties
             _logger.LogWarning(NoMakerRecordedEvent,
                 "Separation of duties not checked: statement {StatementId} ({StatementNumber}) has no recorded creator; " +
                 "user {UserId} allowed to {Action} it",
-                statement.Id, statement.StatementNumber, Sanitize(actorUserId), action);
+                statement.Id, statement.StatementNumber, LogSanitizer.Sanitize(actorUserId), action);
             return;
         }
 
@@ -118,7 +119,7 @@ public sealed class PaymentSeparationOfDuties : IPaymentSeparationOfDuties
             "AUDIT separation-of-duties override: user {UserId} allowed to {Action} capitation statement {StatementId} " +
             "({StatementNumber}, net payable {NetPayable}) that they prepared, because tenant {TenantId} has " +
             "paymentControls.enforceSeparationOfDuties = false",
-            Sanitize(actorUserId), action, statement.Id, statement.StatementNumber, statement.NetPayable, Sanitize(tenantId));
+            LogSanitizer.Sanitize(actorUserId), action, statement.Id, statement.StatementNumber, statement.NetPayable, LogSanitizer.Sanitize(tenantId));
     }
 
     /// <summary>
@@ -163,7 +164,4 @@ public sealed class PaymentSeparationOfDuties : IPaymentSeparationOfDuties
             return null; // no tenant: the override cannot apply
         }
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

@@ -2,6 +2,7 @@ using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AuthorizationService.Services.Retention;
 
@@ -154,7 +155,7 @@ public sealed class PriorAuthorizationRetentionWorker : BackgroundService
                     _logger.LogInformation(
                         "Prior-authorization purged: run={RunId} tenant={Tenant} authorization={AuthId} "
                         + "policy={Policy} retainedUntil={RetainedUntil} status={Status}",
-                        runId, Sanitize(tenantId), Sanitize(candidate.Id),
+                        runId, LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(candidate.Id),
                         policy.PolicyVersion, policy.RetentionUntilUtc(candidate), candidate.Status);
                 }
                 else
@@ -174,7 +175,7 @@ public sealed class PriorAuthorizationRetentionWorker : BackgroundService
                 RecordOutcome(tenantId, "failed", options.DryRun);
                 _logger.LogWarning(ex,
                     "Prior-authorization purge failed: run={RunId} tenant={Tenant} authorization={AuthId}",
-                    runId, Sanitize(tenantId), Sanitize(candidate.Id));
+                    runId, LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(candidate.Id));
             }
         }
 
@@ -199,13 +200,6 @@ public sealed class PriorAuthorizationRetentionWorker : BackgroundService
             // Shutting down.
         }
     }
-
-    /// <summary>Strips CR/LF so an id cannot forge a log entry (CWE-117).</summary>
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }
 
 /// <summary>

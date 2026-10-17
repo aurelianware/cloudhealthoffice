@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EnrollmentImportService.Clients;
 
@@ -35,7 +36,7 @@ public class HttpCoverageServiceClient : ICoverageServiceClient
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning("coverage-service rejected coverage creation for member {MemberId}: {Status} {Body}",
-                SanitizeForLog(request.MemberId), response.StatusCode, SanitizeForLog(body));
+                LogSanitizer.Sanitize(request.MemberId), response.StatusCode, LogSanitizer.Sanitize(body));
             throw new CoverageServiceException(
                 $"coverage-service create failed for {request.MemberId}: {response.StatusCode}", response.StatusCode);
         }
@@ -124,11 +125,8 @@ public class HttpCoverageServiceClient : ICoverageServiceClient
         }
         var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         _logger.LogWarning("coverage-service rejected coverage {Operation} for {Id}: {Status} {Body}",
-            operation, SanitizeForLog(id), response.StatusCode, SanitizeForLog(body));
+            operation, LogSanitizer.Sanitize(id), response.StatusCode, LogSanitizer.Sanitize(body));
         throw new CoverageServiceException(
             $"coverage-service {operation} failed for {id}: {response.StatusCode}", response.StatusCode);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

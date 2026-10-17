@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -62,7 +63,7 @@ public class HttpMemberResolver : IMemberResolver
             {
                 _logger.LogWarning(
                     "Member-service returned {StatusCode} resolving member {MemberId}",
-                    response.StatusCode, SanitizeForLog(memberId));
+                    response.StatusCode, LogSanitizer.Sanitize(memberId));
                 return null;
             }
 
@@ -92,13 +93,10 @@ public class HttpMemberResolver : IMemberResolver
         {
             _logger.LogWarning(ex,
                 "Failed to resolve member {MemberId} for tenant {TenantId}",
-                SanitizeForLog(memberId), SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(tenantId));
             return null;
         }
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private sealed class MemberDto
     {

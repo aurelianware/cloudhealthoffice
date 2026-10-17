@@ -4,6 +4,7 @@ using System.Text.Json;
 using CloudHealthOffice.Consent.Contracts;
 using FhirService.Services.Consent;
 using FhirService.Middleware;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.PayerToPayer;
 
@@ -70,7 +71,7 @@ public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSourc
             // Category only: the exception can name internal hosts.
             _logger.LogWarning(
                 "Consent registry unreachable for tenant={Tenant} ({Fault}); authorization will be denied.",
-                Clean(tenantId), ex.GetType().Name);
+                LogSanitizer.Sanitize(tenantId), ex.GetType().Name);
             return Array.Empty<ConsentAuthorizationSnapshot>();
         }
 
@@ -84,7 +85,7 @@ public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSourc
                 _logger.LogError(
                     "Consent registry refused the call ({Status}) for tenant={Tenant}; check service "
                     + "authentication. Authorization will be denied.",
-                    (int)response.StatusCode, Clean(tenantId));
+                    (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
                 return Array.Empty<ConsentAuthorizationSnapshot>();
             }
 
@@ -92,7 +93,7 @@ public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSourc
             {
                 _logger.LogWarning(
                     "Consent registry returned {Status} for tenant={Tenant}; authorization will be denied.",
-                    (int)response.StatusCode, Clean(tenantId));
+                    (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
                 return Array.Empty<ConsentAuthorizationSnapshot>();
             }
 
@@ -107,7 +108,7 @@ public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSourc
             {
                 _logger.LogWarning(
                     "Consent registry response could not be read for tenant={Tenant}; authorization will be denied.",
-                    Clean(tenantId));
+                    LogSanitizer.Sanitize(tenantId));
                 return Array.Empty<ConsentAuthorizationSnapshot>();
             }
         }
@@ -117,11 +118,4 @@ public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSourc
     {
         public List<ConsentAuthorizationSnapshot> Items { get; set; } = new();
     }
-
-    /// <summary>Strips CR/LF so an id cannot forge a log entry (CWE-117).</summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

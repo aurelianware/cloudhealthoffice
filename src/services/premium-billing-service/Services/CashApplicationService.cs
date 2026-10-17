@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Security;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PremiumBillingService.Services;
 
@@ -148,7 +149,7 @@ public sealed class CashApplicationService : ICashApplicationService
             if (existing.Status != RemittanceBatchStatus.Processing)
                 throw new DuplicateRemittanceException(batch.Id, batch.TraceNumber);
             _logger.LogWarning("Resuming remittance {BatchId} (trace {Trace}): {Done} of {Total} item(s) were already done",
-                existing.Id, Sanitize(existing.TraceNumber), existing.Applications.Count, advice.Items.Count);
+                existing.Id, LogSanitizer.Sanitize(existing.TraceNumber), existing.Applications.Count, advice.Items.Count);
             existing.Warnings.Add($"Resumed at {DateTime.UtcNow:O} by {_actor.UserId}");
             batch = existing;
         }
@@ -272,7 +273,7 @@ public sealed class CashApplicationService : ICashApplicationService
                 }
                 case RemittanceExceptionAction.CreditSponsorAccount:
                     await CreditAsync(group!, $"exc-{item.Id}", item.Amount, SponsorAccountEntryType.ExceptionCredit,
-                        item.BatchId, item.TraceNumber, null, item.Reference, $"Exception {item.Id}: {Sanitize(request.Note)}");
+                        item.BatchId, item.TraceNumber, null, item.Reference, $"Exception {item.Id}: {StripLineBreaks(request.Note)}");
                     await SponsorAccountBalances.RefreshAsync(_invoices, _accounts, group!, item.PaymentDate);
                     item.Status = RemittanceExceptionStatus.Credited;
                     item.CreditedGroupNumber = group;
@@ -293,7 +294,7 @@ public sealed class CashApplicationService : ICashApplicationService
         item.ResolvedBy = _actor.UserId;
         item.ResolutionNote = request.Note.Length > 1000 ? request.Note[..1000] : request.Note;
         _logger.LogInformation("Remittance exception {ExceptionId} resolved as {Status} by {Actor}",
-            item.Id, item.Status, Sanitize(_actor.UserId));
+            item.Id, item.Status, LogSanitizer.Sanitize(_actor.UserId));
         return await _exceptions.UpdateAsync(item);
     }
 
@@ -363,7 +364,7 @@ public sealed class CashApplicationService : ICashApplicationService
 
         _logger.LogInformation(
             "Applied {Amount:0.00} from trace {Trace} line {Line} to invoice {InvoiceNumber}: applied {Applied:0.00}, credit {Excess:0.00}",
-            item.Amount, Sanitize(batch.TraceNumber), line, posting.InvoiceNumber, posting.Applied, posting.Excess);
+            item.Amount, LogSanitizer.Sanitize(batch.TraceNumber), line, posting.InvoiceNumber, posting.Applied, posting.Excess);
 
         return new RemittanceApplication
         {
@@ -502,7 +503,7 @@ public sealed class CashApplicationService : ICashApplicationService
         if (batch.Exceptions.All(e => e.Id != exception.Id))
             batch.Exceptions.Add(new BatchExceptionRef { Id = exception.Id, Amount = exception.Amount });
         _logger.LogWarning("Remittance trace {Trace} line {Line}: {Amount:0.00} queued as {Reason}",
-            Sanitize(batch.TraceNumber), line, amount, reason);
+            LogSanitizer.Sanitize(batch.TraceNumber), line, amount, reason);
         return exception;
     }
 
@@ -527,12 +528,16 @@ public sealed class CashApplicationService : ICashApplicationService
         batch.CompletedAt = DateTime.UtcNow;
         _logger.LogInformation(
             "Remittance {BatchId} ({Source}, trace {Trace}) {Status}: received {Amount:0.00}, applied {Applied:0.00}, credit {Credit:0.00}, exceptions {Exceptions:0.00}",
-            batch.Id, batch.Source, Sanitize(batch.TraceNumber), status, batch.PaymentAmount, batch.AppliedAmount,
+            batch.Id, batch.Source, LogSanitizer.Sanitize(batch.TraceNumber), status, batch.PaymentAmount, batch.AppliedAmount,
             batch.UnappliedCreditAmount, batch.ExceptionAmount);
         return await _batches.UpdateAsync(batch);
     }
 
-    private static string Sanitize(string? value) =>
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 

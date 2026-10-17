@@ -3,6 +3,7 @@ using FhirService.Models;
 using FhirService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Controllers;
 
@@ -51,7 +52,7 @@ public class CrdConfigController : FhirControllerBase
 
         _logger.LogInformation(
             "CRD code classification updated for tenant {TenantId}: auth={AuthCount}, approved={ApprovedCount}, doc={DocCount}",
-            SanitizeForLog(TenantId),
+            LogSanitizer.Sanitize(TenantId),
             classification.AuthRequiredCodes.Count,
             classification.AutoApprovedCodes.Count,
             classification.DocumentationRequiredCodes.Count);

@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Security;
 using PersonalRepresentativeService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PersonalRepresentativeService.Services;
 
@@ -184,8 +185,8 @@ public sealed class PersonalRepActivationControls : IPersonalRepActivationContro
                 "AUDIT separation-of-duties override: user {UserId} activated personal representative {PersonalRepId} " +
                 "({CredentialType}) that they established, because tenant {TenantId} has " +
                 "personalRepresentativeControls.requireSecondPerson = false",
-                LogSanitizer.SafeForLog(activator), LogSanitizer.SafeForLog(rep.Id), rep.CredentialType,
-                LogSanitizer.SafeForLog(tenantId));
+                LogSanitizer.Sanitize(activator, 256), LogSanitizer.Sanitize(rep.Id, 256), rep.CredentialType,
+                LogSanitizer.Sanitize(tenantId, 256));
         }
 
         return new PersonalRepActivationDecision

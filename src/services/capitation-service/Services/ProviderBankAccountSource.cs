@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CapitationService.Services;
 
@@ -79,7 +80,7 @@ public sealed class HttpProviderBankAccountSource : IProviderBankAccountSource
 
         if (_tokens == null)
         {
-            _logger.LogError("Bank details for provider {NPI} cannot be fetched: ChoAuth:ServiceToken is not configured", Sanitize(providerNpi));
+            _logger.LogError("Bank details for provider {NPI} cannot be fetched: ChoAuth:ServiceToken is not configured", LogSanitizer.Sanitize(providerNpi));
             return ProviderBankAccountLookup.Unavailable(
                 "Provider bank details unavailable: capitation-service has no service token configured (ChoAuth:ServiceToken). Needs attention.");
         }
@@ -118,7 +119,7 @@ public sealed class HttpProviderBankAccountSource : IProviderBankAccountSource
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
                 _logger.LogWarning("Provider {NPI} in tenant {TenantId} has no approved bank account in provider-service: {Body}",
-                    Sanitize(providerNpi), Sanitize(tenantId), body);
+                    LogSanitizer.Sanitize(providerNpi), LogSanitizer.Sanitize(tenantId), body);
                 return ProviderBankAccountLookup.Unavailable(
                     $"Provider {providerNpi} has no approved bank account in provider-service (a pending change must be approved " +
                     $"by a user with payments:approve): {body}. Needs attention.");
@@ -128,14 +129,14 @@ public sealed class HttpProviderBankAccountSource : IProviderBankAccountSource
             {
                 _logger.LogError("provider-service refused the bank-account read for provider {NPI} in tenant {TenantId} " +
                                  "({StatusCode}); check service authentication",
-                    Sanitize(providerNpi), Sanitize(tenantId), (int)response.StatusCode);
+                    LogSanitizer.Sanitize(providerNpi), LogSanitizer.Sanitize(tenantId), (int)response.StatusCode);
                 return ProviderBankAccountLookup.Unavailable(
                     $"provider-service refused the bank-account read for provider {providerNpi} " +
                     $"({(int)response.StatusCode} {response.StatusCode}). Needs attention.");
             }
 
             _logger.LogError("provider-service answered {StatusCode} to the bank-account read for provider {NPI} in tenant {TenantId}",
-                (int)response.StatusCode, Sanitize(providerNpi), Sanitize(tenantId));
+                (int)response.StatusCode, LogSanitizer.Sanitize(providerNpi), LogSanitizer.Sanitize(tenantId));
             return ProviderBankAccountLookup.Unavailable(
                 $"provider-service answered {(int)response.StatusCode} {response.StatusCode} to the bank-account read " +
                 $"for provider {providerNpi}: {body}. Needs attention.");
@@ -144,7 +145,7 @@ public sealed class HttpProviderBankAccountSource : IProviderBankAccountSource
                                    || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
         {
             _logger.LogError("The bank-account read for provider {NPI} in tenant {TenantId} failed: {Error}",
-                Sanitize(providerNpi), Sanitize(tenantId), ex.GetType().Name);
+                LogSanitizer.Sanitize(providerNpi), LogSanitizer.Sanitize(tenantId), ex.GetType().Name);
             return ProviderBankAccountLookup.Unavailable(
                 $"The bank-account read for provider {providerNpi} from provider-service failed ({ex.GetType().Name}). Needs attention.");
         }
@@ -164,9 +165,6 @@ public sealed class HttpProviderBankAccountSource : IProviderBankAccountSource
             return string.Empty;
         }
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>

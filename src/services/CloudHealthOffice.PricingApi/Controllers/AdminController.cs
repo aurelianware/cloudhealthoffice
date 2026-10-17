@@ -4,6 +4,7 @@ using CloudHealthOffice.PricingApi.Models;
 using CloudHealthOffice.PricingApi.Security;
 using CloudHealthOffice.PricingApi.Services;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.PricingApi.Controllers;
 
@@ -68,7 +69,7 @@ public class AdminController : ControllerBase
         var created = await _apiKeyRepo.CreateAsync(record);
 
         _logger.LogInformation("AUDIT pricing api-key {KeyId} ({KeyPrefix}) created for customer {Customer} (tier={Tier}) by {Actor}",
-            created.KeyId, created.KeyPrefix, SanitizeForLog(request.TenantName), request.Tier, _actor.UserId);
+            created.KeyId, created.KeyPrefix, LogSanitizer.Sanitize(request.TenantName), request.Tier, _actor.UserId);
 
         return StatusCode(StatusCodes.Status201Created, new ApiResponse<ApiKeyCreated>
         {
@@ -115,7 +116,7 @@ public class AdminController : ControllerBase
         await _apiKeyRepo.DeactivateAsync(existing.KeyId, _actor.UserId, DateTimeOffset.UtcNow);
 
         _logger.LogInformation("AUDIT pricing api-key {KeyId} ({KeyPrefix}) deactivated for customer {Customer} by {Actor}",
-            existing.KeyId, existing.KeyPrefix, SanitizeForLog(existing.TenantName), _actor.UserId);
+            existing.KeyId, existing.KeyPrefix, LogSanitizer.Sanitize(existing.TenantName), _actor.UserId);
 
         return Ok(new ApiResponse<object> { Data = new { message = "API key deactivated.", keyId = existing.KeyId, tenantName = existing.TenantName } });
     }
@@ -322,9 +323,6 @@ public class AdminController : ControllerBase
 
         return null;
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     /// <summary>
     /// What the caller sees of a failed import. The exception (which can name

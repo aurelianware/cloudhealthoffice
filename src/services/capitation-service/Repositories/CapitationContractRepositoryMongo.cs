@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using CapitationService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CapitationService.Repositories;
 
@@ -129,7 +130,7 @@ public class CapitationContractRepositoryMongo : ICapitationContractRepository
         contract.Revision = 0;
         await _collection.InsertOneAsync(contract);
         _logger.LogInformation("Created capitation contract {ContractNumber} for provider {NPI}",
-            SanitizeForLog(contract.ContractNumber), SanitizeForLog(contract.ProviderNPI));
+            LogSanitizer.Sanitize(contract.ContractNumber), LogSanitizer.Sanitize(contract.ProviderNPI));
         return contract;
     }
 
@@ -161,7 +162,7 @@ public class CapitationContractRepositoryMongo : ICapitationContractRepository
                 throw new CapitationConcurrencyException("Capitation contract", contract.Id, expected);
             // Missing: as before, nothing written and no error.
         }
-        _logger.LogInformation("Updated capitation contract {ContractNumber}", SanitizeForLog(contract.ContractNumber));
+        _logger.LogInformation("Updated capitation contract {ContractNumber}", LogSanitizer.Sanitize(contract.ContractNumber));
         return contract;
     }
 
@@ -172,12 +173,5 @@ public class CapitationContractRepositoryMongo : ICapitationContractRepository
         return expected == 0
             ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
             : b.Eq(x => x.Revision, expected);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

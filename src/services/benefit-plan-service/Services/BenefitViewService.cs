@@ -1,4 +1,5 @@
 using BenefitPlanService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -59,9 +60,9 @@ public class BenefitViewService : IBenefitViewService
             // Unmapped categories surface here; fix the map when they do.
             _logger.LogInformation(
                 "Unmapped benefit service category {ServiceCategory} on plan {PlanId} tenant {TenantId} — defaulting to Other",
-                SanitizeForLog(benefit.ServiceCategory),
-                SanitizeForLog(plan.PlanId),
-                SanitizeForLog(plan.TenantId));
+                LogSanitizer.Sanitize(benefit.ServiceCategory),
+                LogSanitizer.Sanitize(plan.PlanId),
+                LogSanitizer.Sanitize(plan.TenantId));
         }
 
         var inNetworkTierName = plan.NetworkTiers
@@ -163,12 +164,5 @@ public class BenefitViewService : IBenefitViewService
     {
         var ts = plan.ModifiedDate ?? plan.UpdatedAt;
         return ts.ToUniversalTime().ToString("yyyyMMdd'T'HHmmss'Z'");
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

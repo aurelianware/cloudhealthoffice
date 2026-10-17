@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.PayerToPayer.Outbound;
 
@@ -106,7 +107,7 @@ public sealed class HttpPayerToPayerRemoteClient : IPayerToPayerRemoteClient
             // carry peer detail, so it is not logged as text — the category is.
             _logger.LogWarning(
                 "Payer-to-Payer {Operation} to peer {EndpointKey} was unreachable ({Fault}).",
-                operation, Clean(endpoint.EndpointKey), ex.GetType().Name);
+                operation, LogSanitizer.Sanitize(endpoint.EndpointKey), ex.GetType().Name);
             return RemoteCallResponse.Failure(RemoteCallOutcome.Unavailable);
         }
 
@@ -117,7 +118,7 @@ public sealed class HttpPayerToPayerRemoteClient : IPayerToPayerRemoteClient
             {
                 _logger.LogWarning(
                     "Payer-to-Payer {Operation} to peer {EndpointKey} returned {Status} → {Outcome}.",
-                    operation, Clean(endpoint.EndpointKey), (int)response.StatusCode, outcome);
+                    operation, LogSanitizer.Sanitize(endpoint.EndpointKey), (int)response.StatusCode, outcome);
                 return RemoteCallResponse.Failure(outcome);
             }
 
@@ -126,7 +127,7 @@ public sealed class HttpPayerToPayerRemoteClient : IPayerToPayerRemoteClient
             {
                 _logger.LogWarning(
                     "Payer-to-Payer {Operation} from peer {EndpointKey} returned an empty or oversized payload.",
-                    operation, Clean(endpoint.EndpointKey));
+                    operation, LogSanitizer.Sanitize(endpoint.EndpointKey));
                 return RemoteCallResponse.Failure(RemoteCallOutcome.InvalidResponse);
             }
 
@@ -188,13 +189,6 @@ public sealed class HttpPayerToPayerRemoteClient : IPayerToPayerRemoteClient
         // and a 404 handled above) is a response CHO will not act on.
         _ => RemoteCallOutcome.InvalidResponse,
     };
-
-    /// <summary>Strips CR/LF so config-derived values cannot forge log entries (CWE-117).</summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }
 
 /// <summary>Transport limits for outbound Payer-to-Payer calls.</summary>

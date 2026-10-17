@@ -2,6 +2,7 @@ using System.Text.Json;
 using CloudHealthOffice.FieldProtection;
 using ProviderService.Models;
 using ProviderService.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Repositories;
 
@@ -54,7 +55,7 @@ public sealed class ProtectedProviderBankAccountRepository : IProviderBankAccoun
             _logger.LogWarning(LegacyPlaintextEvent,
                 "The bank-account record of provider {ProviderId} in tenant {TenantId} holds numbers stored before encryption; " +
                 "they are stored encrypted by its next save (or run provider-service --encrypt-bank-accounts)",
-                Sanitize(record.ProviderId), Sanitize(record.TenantId));
+                LogSanitizer.Sanitize(record.ProviderId), LogSanitizer.Sanitize(record.TenantId));
         }
         return record;
     }
@@ -79,7 +80,4 @@ public sealed class ProtectedProviderBankAccountRepository : IProviderBankAccoun
 
     private static ProviderBankAccountRecord Clone(ProviderBankAccountRecord record)
         => JsonSerializer.Deserialize<ProviderBankAccountRecord>(JsonSerializer.Serialize(record, CloneOptions), CloneOptions)!;
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

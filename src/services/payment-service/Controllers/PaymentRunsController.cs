@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PaymentService.Models;
 using PaymentService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Controllers;
 
@@ -63,7 +64,7 @@ public class PaymentRunsController : ControllerBase
     public async Task<ActionResult<PaymentRun>> CreatePaymentRun([FromBody] CreatePaymentRunRequest request)
     {
         _logger.LogInformation("Creating payment run with criteria: LOB={LOB}, Provider={Provider}",
-            request.Criteria.LineOfBusiness, SanitizeForLog(request.Criteria.ProviderNPI));
+            request.Criteria.LineOfBusiness, LogSanitizer.Sanitize(request.Criteria.ProviderNPI));
 
         // The creator is the token subject; request.CreatedBy is never read.
         PaymentRun paymentRun;
@@ -99,7 +100,7 @@ public class PaymentRunsController : ControllerBase
     public ActionResult<PaymentRun> CreateAndExecutePaymentRun([FromBody] CreatePaymentRunRequest request)
     {
         _logger.LogWarning("Refused create-and-execute payment run by {User}: the creator cannot execute",
-            SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(_actor.UserId));
         return SeparationOfDuties(new SeparationOfDutiesException(
             "Separation of duties: a payment run cannot be created and executed by the same caller. " +
             "Create it with POST /api/paymentruns; a different user with payments:approve executes it."));
@@ -117,7 +118,7 @@ public class PaymentRunsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaymentRun>> ExecutePaymentRun(string id)
     {
-        _logger.LogInformation("Executing payment run {PaymentRunId}", SanitizeForLog(id));
+        _logger.LogInformation("Executing payment run {PaymentRunId}", LogSanitizer.Sanitize(id));
 
         try
         {
@@ -154,7 +155,7 @@ public class PaymentRunsController : ControllerBase
     public async Task<ActionResult<PaymentRun>> RetryFinalize(string id)
     {
         _logger.LogInformation("Retrying finalize for payment run {PaymentRunId} by {User}",
-            SanitizeForLog(id), SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(_actor.UserId));
         try
         {
             return Ok(await _paymentRunService.RetryFinalizeAsync(id));
@@ -497,13 +498,6 @@ public class PaymentRunsController : ControllerBase
 
     private ObjectResult SeparationOfDuties(SeparationOfDutiesException ex)
         => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden);
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }
 
 /// <summary>The manual release, shared by payment runs and reversal runs.</summary>

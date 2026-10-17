@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Controllers;
 
@@ -109,7 +110,7 @@ public class FhirOrganizationController : ControllerBase
             // 10-digit id matched NPI pattern but no qualifying provider
             // found; fall through to 404 rather than retrying as an
             // OrganizationId (NPI wins per Decision 6).
-            return FhirOperationOutcome(404, "not-found", $"Organization/{SanitizeForLog(id)} not found.");
+            return FhirOperationOutcome(404, "not-found", $"Organization/{StripLineBreaks(id)} not found.");
         }
 
         // Non-NPI id → try Organization entity chain key.
@@ -120,7 +121,7 @@ public class FhirOrganizationController : ControllerBase
             if (resource != null) return FhirContent(resource);
         }
 
-        return FhirOperationOutcome(404, "not-found", $"Organization/{SanitizeForLog(id)} not found.");
+        return FhirOperationOutcome(404, "not-found", $"Organization/{StripLineBreaks(id)} not found.");
     }
 
     /// <summary>
@@ -167,7 +168,7 @@ public class FhirOrganizationController : ControllerBase
                 if (!NpiPattern.IsMatch(npi))
                 {
                     return FhirOperationOutcome(400, "invalid",
-                        $"npi '{SanitizeForLog(npi)}' is not a valid 10-digit NPI.");
+                        $"npi '{StripLineBreaks(npi)}' is not a valid 10-digit NPI.");
                 }
 
                 var provider = await _providerRepository.GetByNPIAsync(npi);
@@ -437,7 +438,10 @@ public class FhirOrganizationController : ControllerBase
         };
     }
 
-    private static string SanitizeForLog(string value)
-        => value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                .Replace("\n", string.Empty, StringComparison.Ordinal);
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

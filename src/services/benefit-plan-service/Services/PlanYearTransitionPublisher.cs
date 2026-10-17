@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using BenefitPlanService.Models;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -105,7 +106,7 @@ public sealed class MongoPlanYearTransitionPublisher : IPlanYearTransitionPublis
         {
             _logger.LogDebug(
                 "PlanYearTransitionEvent {EventId} already present for {Tenant}:{Plan} (idempotent no-op)",
-                Sanitize(evt.EventId), Sanitize(evt.TenantId), Sanitize(evt.PlanId));
+                LogSanitizer.Sanitize(evt.EventId), LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.PlanId));
             return existing;
         }
 
@@ -124,7 +125,7 @@ public sealed class MongoPlanYearTransitionPublisher : IPlanYearTransitionPublis
 
                 _logger.LogWarning(
                     "PlanYearTransitionEvent version {Version} conflict for {Tenant}:{Plan}; retry {Attempt}/{Max}",
-                    evt.Version, Sanitize(evt.TenantId), Sanitize(evt.PlanId), attempt + 1, MaxRetries);
+                    evt.Version, LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.Sanitize(evt.PlanId), attempt + 1, MaxRetries);
 
                 if (attempt + 1 < MaxRetries)
                     await Task.Delay(BackoffMs[attempt], ct);
@@ -149,7 +150,4 @@ public sealed class MongoPlanYearTransitionPublisher : IPlanYearTransitionPublis
         var latest = await _collection.Find(filter).SortByDescending(x => x.Version).FirstOrDefaultAsync(ct);
         return (latest?.Version ?? 0) + 1;
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

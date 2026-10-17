@@ -2,6 +2,7 @@ using AppealsService.Models;
 using AppealsService.Repositories;
 using AppealsService.Services;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AppealsService.HostedServices;
 
@@ -243,7 +244,7 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
             // The change and its event are committed; the sweep publishes it.
             _logger.LogWarning(ex,
                 "Inline outbox dispatch failed for appeal {AppealId}; the background relay will publish it.",
-                LogSanitizer.SafeForLog(appealId));
+                LogSanitizer.Sanitize(appealId, 256));
         }
     }
 
@@ -270,7 +271,7 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Outbox dispatch failed for appeal {AppealId}; retrying on the next sweep.",
-                    LogSanitizer.SafeForLog(key.AppealId));
+                    LogSanitizer.Sanitize(key.AppealId, 256));
             }
         }
         return published;
@@ -344,7 +345,7 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
                         CancellationToken.None))
                 {
                     _logger.LogWarning("Outbox lease on appeal {AppealId} was lost; stopping this run.",
-                        LogSanitizer.SafeForLog(appealId));
+                        LogSanitizer.Sanitize(appealId, 256));
                     break;
                 }
                 if (assign is not null)
@@ -388,7 +389,7 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Releasing the outbox lease for appeal {AppealId} failed; it lapses on its own.",
-                    LogSanitizer.SafeForLog(appealId));
+                    LogSanitizer.Sanitize(appealId, 256));
             }
         }
         return published;
@@ -400,7 +401,7 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
         if (await store.UpdateMessageAsync(tenantId, appealId, InstanceId, entry, CancellationToken.None)) return true;
         _logger.LogWarning(
             "Outbox entry {EventId} of appeal {AppealId} was not updated: the lease moved or the entry is no longer pending. Stopping this run.",
-            LogSanitizer.SafeForLog(entry.EventId), LogSanitizer.SafeForLog(appealId));
+            LogSanitizer.Sanitize(entry.EventId, 256), LogSanitizer.Sanitize(appealId, 256));
         return false;
     }
 
@@ -430,8 +431,8 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
             _logger.LogError(
                 "Appeal outbox event dead-lettered ({Reason}): {EventType} {EventId} appeal {AppealId} tenant {TenantId}. " +
                 "Replay with POST /api/appeals/{{id}}/outbox/replay before {Expires}.",
-                reason, LogSanitizer.SafeForLog(entry.EventType), LogSanitizer.SafeForLog(entry.EventId),
-                LogSanitizer.SafeForLog(appealId), LogSanitizer.SafeForLog(tenantId), entry.ExpiresAt);
+                reason, LogSanitizer.Sanitize(entry.EventType, 256), LogSanitizer.Sanitize(entry.EventId, 256),
+                LogSanitizer.Sanitize(appealId, 256), LogSanitizer.Sanitize(tenantId, 256), entry.ExpiresAt);
         }
         return true;
     }
@@ -456,7 +457,7 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
             _logger.LogWarning(
                 "Pruning dead-lettered appeal event {EventType} {EventId} of appeal {AppealId} (retention or cap reached); " +
                 "it is no longer replayable from the outbox. The audit trail keeps the change.",
-                LogSanitizer.SafeForLog(m.EventType), LogSanitizer.SafeForLog(m.EventId), LogSanitizer.SafeForLog(m.AppealId));
+                LogSanitizer.Sanitize(m.EventType, 256), LogSanitizer.Sanitize(m.EventId, 256), LogSanitizer.Sanitize(m.AppealId, 256));
         }
         return prune;
     }
@@ -467,7 +468,7 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
     {
         var now = Now;
         entry.LastAttemptAt = now;
-        entry.LastError = LogSanitizer.SafeForLog($"{ex.GetType().Name}: {ex.Message}", 500);
+        entry.LastError = CleanStoredError($"{ex.GetType().Name}: {ex.Message}");
 
         if (_transport.IsTransient(ex))
         {
@@ -476,8 +477,8 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
             Record("failed", entry, transient: true);
             _logger.LogWarning(
                 "Kafka unavailable publishing {EventType} {EventId} for appeal {AppealId}; kept pending, relay paused for {Pause}. {Error}",
-                LogSanitizer.SafeForLog(entry.EventType), LogSanitizer.SafeForLog(entry.EventId),
-                LogSanitizer.SafeForLog(appealId), pause, entry.LastError);
+                LogSanitizer.Sanitize(entry.EventType, 256), LogSanitizer.Sanitize(entry.EventId, 256),
+                LogSanitizer.Sanitize(appealId, 256), pause, entry.LastError);
             return false;
         }
 
@@ -493,8 +494,8 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
             _logger.LogError(
                 "Appeal outbox event dead-lettered after {Attempts} attempts: {EventType} {EventId} appeal {AppealId} tenant {TenantId}. " +
                 "Later events of this appeal continue; replay with POST /api/appeals/{{id}}/outbox/replay. Last error: {Error}",
-                entry.Attempts, LogSanitizer.SafeForLog(entry.EventType), LogSanitizer.SafeForLog(entry.EventId),
-                LogSanitizer.SafeForLog(appealId), LogSanitizer.SafeForLog(tenantId), entry.LastError);
+                entry.Attempts, LogSanitizer.Sanitize(entry.EventType, 256), LogSanitizer.Sanitize(entry.EventId, 256),
+                LogSanitizer.Sanitize(appealId, 256), LogSanitizer.Sanitize(tenantId, 256), entry.LastError);
             return true;
         }
 
@@ -503,8 +504,8 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
         Record("failed", entry);
         _logger.LogWarning(
             "Publishing {EventType} {EventId} for appeal {AppealId} failed (attempt {Attempts}/{Max}); retry at {Next}. {Error}",
-            LogSanitizer.SafeForLog(entry.EventType), LogSanitizer.SafeForLog(entry.EventId),
-            LogSanitizer.SafeForLog(appealId), entry.Attempts, _options.MaxAttempts, entry.NextAttemptAt, entry.LastError);
+            LogSanitizer.Sanitize(entry.EventType, 256), LogSanitizer.Sanitize(entry.EventId, 256),
+            LogSanitizer.Sanitize(appealId, 256), entry.Attempts, _options.MaxAttempts, entry.NextAttemptAt, entry.LastError);
         return false;
     }
 
@@ -542,4 +543,20 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
             new KeyValuePair<string, object?>("cho.outcome", outcome),
             new KeyValuePair<string, object?>("cho.event_type", entry.EventType),
             new KeyValuePair<string, object?>("cho.transient", transient));
+
+    /// <summary>
+    /// The stored outbox error: control characters replaced by '?', capped
+    /// at 500 characters. For log lines use
+    /// <see cref="LogSanitizer.Sanitize(string?, int)"/>.
+    /// </summary>
+    private static string CleanStoredError(string value)
+    {
+        var capped = value.Length > 500 ? value[..500] : value;
+        var chars = capped.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (char.IsControl(chars[i])) chars[i] = '?';
+        }
+        return new string(chars);
+    }
 }

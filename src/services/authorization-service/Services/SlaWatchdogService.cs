@@ -1,6 +1,7 @@
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services.Retention;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AuthorizationService.Services;
 
@@ -144,7 +145,7 @@ public class SlaWatchdogService : BackgroundService
             catch (Exception ex)
             {
                 summary.FailedTenants++;
-                _logger.LogError(ex, "SLA watchdog evaluation failed for tenant {Tenant}", SanitizeForLog(tenantId));
+                _logger.LogError(ex, "SLA watchdog evaluation failed for tenant {Tenant}", LogSanitizer.Sanitize(tenantId));
             }
         }
 
@@ -178,7 +179,7 @@ public class SlaWatchdogService : BackgroundService
             {
                 _logger.LogError(
                     "SLA watchdog skipped authorization {AuthId}: listed for tenant {Tenant} but belongs to another tenant",
-                    SanitizeForLog(auth.Id), SanitizeForLog(tenantId));
+                    LogSanitizer.Sanitize(auth.Id), LogSanitizer.Sanitize(tenantId));
                 continue;
             }
 
@@ -201,7 +202,7 @@ public class SlaWatchdogService : BackgroundService
                 summary.FailedRecords++;
                 _logger.LogError(ex,
                     "SLA watchdog evaluation failed for authorization {AuthId} (tenant {Tenant})",
-                    SanitizeForLog(auth.Id), SanitizeForLog(tenantId));
+                    LogSanitizer.Sanitize(auth.Id), LogSanitizer.Sanitize(tenantId));
             }
         }
     }
@@ -230,7 +231,7 @@ public class SlaWatchdogService : BackgroundService
         summary.Escalated++;
         _logger.LogWarning(
             "SLA {Level} for authorization {AuthNumber} (tenant {Tenant}): {HoursElapsed:F1}h elapsed, {HoursRemaining:F1}h remaining",
-            newLevel, SanitizeForLog(auth.AuthorizationNumber), SanitizeForLog(tenantId), elapsed, remaining);
+            newLevel, LogSanitizer.Sanitize(auth.AuthorizationNumber), LogSanitizer.Sanitize(tenantId), elapsed, remaining);
     }
 
     /// <summary>
@@ -274,13 +275,6 @@ public class SlaWatchdogService : BackgroundService
         if (hoursElapsed >= warning) return SlaEscalationLevel.Warning;
         return SlaEscalationLevel.None;
     }
-
-    /// <summary>Strips CR/LF so a stored value cannot forge a log entry (CWE-117).</summary>
-    private static string SanitizeForLog(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }
 
 /// <summary>Counts from one watchdog run. Aggregate only; no member identifiers.</summary>

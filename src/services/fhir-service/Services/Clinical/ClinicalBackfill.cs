@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Task = System.Threading.Tasks.Task;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.Clinical;
 
@@ -203,7 +204,7 @@ public sealed class ClinicalBackfillService
             // Category only — the message can carry package content.
             _logger.LogWarning(
                 "Clinical backfill skipped an exchange whose archived package could not be read: exchange={Exchange}",
-                Clean(ledger.ExchangeId));
+                LogSanitizer.Sanitize(ledger.ExchangeId));
             return new ProjectionOutcome([], 0, [], []);
         }
 
@@ -305,12 +306,6 @@ public sealed class ClinicalBackfillService
         ledger.Counts.RejectedReasons = outcome.RejectedReasons;
         ledger.ClinicalBackfilledAtUtc = DateTime.UtcNow;
     }
-
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }
 
 /// <summary>

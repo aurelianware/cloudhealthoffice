@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using ProviderService.Models;
 using ProviderService.Security;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Controllers;
 
@@ -111,7 +112,7 @@ public sealed class NetworkParticipationBackfillAdminController : ControllerBase
         {
             _logger.LogWarning(
                 "panel-gating backfill refused: query tenant {QueryTenant} does not match the authenticated tenant {TokenTenant}",
-                Sanitize(tenantId), Sanitize(tokenTenant));
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(tokenTenant));
             return StatusCode(StatusCodes.Status403Forbidden,
                 new { error = "The tenantId query parameter does not match the authenticated tenant." });
         }
@@ -119,7 +120,7 @@ public sealed class NetworkParticipationBackfillAdminController : ControllerBase
 
         _logger.LogInformation(
             "panel-gating backfill triggered tenant={Tenant} maxProviders={Max} pageSize={PageSize}",
-            Sanitize(tenantId), maxProviders, pageSize);
+            LogSanitizer.Sanitize(tenantId), maxProviders, pageSize);
 
         var actorId = this.TokenActorId();
         var correlationId = HttpContext.TraceIdentifier;
@@ -137,14 +138,11 @@ public sealed class NetworkParticipationBackfillAdminController : ControllerBase
 
         _logger.LogInformation(
             "panel-gating backfill complete tenant={Tenant} runId={RunId} providersInspected={ProvIn} participationsInspected={PartIn} backfilled={Bf} skipped={Sk} failed={Fa} etag={Etag}",
-            Sanitize(tenantId), result.BackfillRunId,
+            LogSanitizer.Sanitize(tenantId), result.BackfillRunId,
             result.ProvidersInspected, result.ParticipationsInspected,
             result.ParticipationsBackfilled, result.ParticipationsSkipped,
             result.ParticipationsFailed, result.EtagConflicts);
 
         return Ok(result);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

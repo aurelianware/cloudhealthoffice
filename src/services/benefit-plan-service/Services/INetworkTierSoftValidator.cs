@@ -1,6 +1,7 @@
 using BenefitPlanService.Models;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -82,18 +83,12 @@ public sealed class NetworkTierSoftValidator : INetworkTierSoftValidator
                 level,
                 "NetworkTierNetworkIdMissing on plan write. caller={Caller} tenantId={TenantId} planId={PlanId} versionId={VersionId} tierIndex={TierIndex} tierName={TierName} tierLevel={TierLevel}",
                 caller,
-                SanitizeForLog(plan.TenantId),
-                SanitizeForLog(plan.PlanId),
-                SanitizeForLog(plan.VersionId),
+                LogSanitizer.Sanitize(plan.TenantId),
+                LogSanitizer.Sanitize(plan.PlanId),
+                LogSanitizer.Sanitize(plan.VersionId),
                 i,
-                SanitizeForLog(tier?.TierName ?? string.Empty),
+                LogSanitizer.Sanitize(tier?.TierName ?? string.Empty),
                 tier?.TierLevel ?? 0);
         }
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

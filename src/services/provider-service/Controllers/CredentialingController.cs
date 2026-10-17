@@ -5,6 +5,7 @@ using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Security;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Controllers;
 
@@ -54,7 +55,7 @@ public sealed class CredentialingController : ControllerBase
     {
         _logger.LogInformation(
             "Submitting credentialing application for provider {Id}, source={Source}",
-            SanitizeForLog(id), SanitizeForLog(request?.ApplicationSource));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request?.ApplicationSource));
 
         try
         {
@@ -91,7 +92,7 @@ public sealed class CredentialingController : ControllerBase
     {
         _logger.LogInformation(
             "Withdrawing credentialing application {EventId} for provider {Id}",
-            SanitizeForLog(eventId), SanitizeForLog(id));
+            LogSanitizer.Sanitize(eventId), LogSanitizer.Sanitize(id));
 
         try
         {
@@ -127,7 +128,7 @@ public sealed class CredentialingController : ControllerBase
     {
         _logger.LogInformation(
             "Recording primary-source verification for provider {Id}, vendor={Vendor}",
-            SanitizeForLog(id), SanitizeForLog(request?.VerificationVendor));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request?.VerificationVendor));
 
         try
         {
@@ -163,7 +164,7 @@ public sealed class CredentialingController : ControllerBase
     {
         _logger.LogInformation(
             "Scheduling committee review for provider {Id}, committee={Committee}",
-            SanitizeForLog(id), SanitizeForLog(request?.CommitteeId));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request?.CommitteeId));
 
         try
         {
@@ -199,7 +200,7 @@ public sealed class CredentialingController : ControllerBase
     {
         _logger.LogInformation(
             "Recording credentialing decision for provider {Id}, decision={Decision}, authority={Authority}",
-            SanitizeForLog(id), request?.Decision, request?.DecisionAuthorityType);
+            LogSanitizer.Sanitize(id), request?.Decision, request?.DecisionAuthorityType);
 
         try
         {
@@ -235,7 +236,7 @@ public sealed class CredentialingController : ControllerBase
     {
         _logger.LogInformation(
             "Triggering re-credentialing for provider {Id}, reason={Reason}",
-            SanitizeForLog(id), SanitizeForLog(request?.Reason));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request?.Reason));
 
         try
         {
@@ -343,10 +344,4 @@ public sealed class CredentialingController : ControllerBase
     /// body field never names the actor.
     /// </summary>
     private string ResolveActorId() => this.TokenActorId();
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }

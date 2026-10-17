@@ -8,6 +8,7 @@ using CloudHealthOffice.CobEngine.Domain;
 using CobInfo = CloudHealthOffice.BenefitEngine.Models.CobInfo;
 using ClaimsAdj = ClaimsService.Models.AdjudicationResult;
 using ClaimsLineAdj = ClaimsService.Models.LineAdjudicationResult;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication.Stages;
 
@@ -312,7 +313,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             // An engine outage is not a benefit decision: pend, never deny.
             _logger.LogError(ex,
                 "Benefit calculation engine threw for claim {ClaimVersionId}; pending {PendCode}",
-                SanitizeForLog(context.ClaimVersionId), ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode);
+                LogSanitizer.Sanitize(context.ClaimVersionId), ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode);
             var threwReason = $"{ClaimAdjudicationOrchestrator.ServiceUnavailableReason}: benefit calculation engine threw " +
                               $"{ex.GetType().Name}; {TransientPendClearedByApproval}";
             ClaimAdjudicationOrchestrator.RecordServiceUnavailablePend(context, threwReason);
@@ -329,7 +330,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         {
             _logger.LogWarning(
                 "Benefit calculation engine gave no answer for claim {ClaimVersionId}; pending {PendCode}",
-                SanitizeForLog(context.ClaimVersionId), ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode);
+                LogSanitizer.Sanitize(context.ClaimVersionId), ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode);
             var unavailableReason = $"{ClaimAdjudicationOrchestrator.ServiceUnavailableReason}: " +
                                     $"{result.DenialReasonDescription ?? "benefit calculation engine gave no answer."} " +
                                     TransientPendClearedByApproval;
@@ -546,7 +547,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         {
             _logger.LogWarning(
                 "Benefit plan unavailable for claim {ClaimVersionId}; its prior-authorization scope is unknown, pending",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
             return new PriorAuthorizationDecision(null,
                 $"{PlanUnavailableReason} (benefit-plan-service gave no answer, so which lines need prior authorization " +
                 $"is unknown); {TransientPendClearedBy}",
@@ -597,7 +598,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                     // or escape the stage.
                     _logger.LogWarning(ex,
                         "Prior-authorization lookup threw for claim {ClaimVersionId} line {LineNumber}",
-                        SanitizeForLog(context.ClaimVersionId), line.LineNumber);
+                        LogSanitizer.Sanitize(context.ClaimVersionId), line.LineNumber);
                     lookup = AuthorizationLookupResult.Unavailable($"authorization lookup failed ({ex.GetType().Name})");
                 }
                 lookups[key] = lookup;
@@ -628,7 +629,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         {
             _logger.LogWarning(
                 "Prior-authorization lookup unavailable for claim {ClaimVersionId} ({Count} line(s)); pending, not paying or denying",
-                SanitizeForLog(context.ClaimVersionId),
+                LogSanitizer.Sanitize(context.ClaimVersionId),
                 unavailable.Count);
             var reason = $"{PriorAuthorizationUnavailableReason} ({string.Join("; ", unavailable)}); {TransientPendClearedBy}";
             return new PriorAuthorizationDecision(null, Truncate(reason, 500));
@@ -1248,7 +1249,4 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             AdjudicationDenialCodes.UnprocessableClaimRarc);
         return ClaimAdjudicationStageResult.Reject(StageName, reason);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

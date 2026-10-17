@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using Hl7.Fhir.Model;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.Cdex;
 
@@ -327,7 +328,7 @@ public sealed class CdexAttachmentSubmissionService : ICdexAttachmentSubmissionS
             {
                 _logger.LogWarning(
                     "CDex $submit-attachment content rejected by scanner for request {Request}",
-                    Sanitize(request.Id));
+                    LogSanitizer.Sanitize(request.Id));
 
                 return new CdexSubmissionResult
                 {
@@ -369,7 +370,7 @@ public sealed class CdexAttachmentSubmissionService : ICdexAttachmentSubmissionS
         {
             _logger.LogError(ex,
                 "CDex $submit-attachment could not store content for request {Request}",
-                Sanitize(request.Id));
+                LogSanitizer.Sanitize(request.Id));
 
             return new CdexSubmissionResult
             {
@@ -395,7 +396,7 @@ public sealed class CdexAttachmentSubmissionService : ICdexAttachmentSubmissionS
             // pretending the submission landed.
             _logger.LogError(ex,
                 "CDex $submit-attachment stored content but could not record it against request {Request}",
-                Sanitize(request.Id));
+                LogSanitizer.Sanitize(request.Id));
 
             return new CdexSubmissionResult
             {
@@ -546,7 +547,7 @@ public sealed class CdexAttachmentSubmissionService : ICdexAttachmentSubmissionS
             _logger.LogInformation(
                 "CDex $submit-attachment: request {Request} records no provider, so the "
                 + "submitter could not be corroborated against one.",
-                Sanitize(request.Id));
+                LogSanitizer.Sanitize(request.Id));
             return true;
         }
 
@@ -561,7 +562,7 @@ public sealed class CdexAttachmentSubmissionService : ICdexAttachmentSubmissionS
                 _logger.LogWarning(
                     "CDex $submit-attachment: caller identity verified by the trusted issuer "
                     + "does not match the provider request {Request} was addressed to.",
-                    Sanitize(request.Id));
+                    LogSanitizer.Sanitize(request.Id));
             }
 
             return bound;
@@ -612,12 +613,6 @@ public sealed class CdexAttachmentSubmissionService : ICdexAttachmentSubmissionS
         var slash = trimmed.LastIndexOf('/');
         return slash >= 0 && slash < trimmed.Length - 1 ? trimmed[(slash + 1)..] : trimmed;
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 
     /// <summary>An attachment that passed policy, with its server-derived identity.</summary>
     private sealed record ValidatedArtifact

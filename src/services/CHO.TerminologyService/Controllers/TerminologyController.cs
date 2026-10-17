@@ -4,6 +4,7 @@ using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CHO.TerminologyService.Controllers;
 
@@ -57,9 +58,6 @@ public class TerminologyController : ControllerBase
         _loaders = loaders;
         _logger = logger;
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     /// <summary>
     /// A tenant named by the caller (query or body) is only an echo of the token tenant:
@@ -323,13 +321,13 @@ public class TerminologyController : ControllerBase
         };
 
         _logger.LogInformation("Loading map: {MapName} v{Version} ({Format}) {Source} → {Target}",
-            SanitizeForLog(mapName), SanitizeForLog(version), SanitizeForLog(format), SanitizeForLog(sourceSystem), SanitizeForLog(targetSystem));
+            LogSanitizer.Sanitize(mapName), LogSanitizer.Sanitize(version), LogSanitizer.Sanitize(format), LogSanitizer.Sanitize(sourceSystem), LogSanitizer.Sanitize(targetSystem));
 
         var result = await loader.LoadAsync(Request.Body, options, ct);
         _logger.LogInformation(
             "AUDIT terminology map load: {MapName} v{Version} ({Scope}) by {Subject} in tenant {TenantId}: success {Success}, {Entries} entries, version {MapVersionId}",
-            SanitizeForLog(mapName), SanitizeForLog(version), isOverride ? "tenant override" : "global",
-            SanitizeForLog(actor), SanitizeForLog(tenant), result.Success, result.EntriesLoaded, SanitizeForLog(result.MapVersionId));
+            LogSanitizer.Sanitize(mapName), LogSanitizer.Sanitize(version), isOverride ? "tenant override" : "global",
+            LogSanitizer.Sanitize(actor), LogSanitizer.Sanitize(tenant), result.Success, result.EntriesLoaded, LogSanitizer.Sanitize(result.MapVersionId));
         return Ok(result);
     }
 

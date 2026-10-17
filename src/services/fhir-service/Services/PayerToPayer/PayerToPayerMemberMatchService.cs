@@ -1,6 +1,7 @@
 using FhirService.Models;
 using FhirService.Models.PayerToPayer;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.PayerToPayer;
 
@@ -95,7 +96,7 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         var audit = Audit(request, MemberMatchOutcome.Matched, matched.MemberId, selection.Coverage?.CoverageId);
         _logger.LogInformation(
             "P2P member-match: tenant={Tenant} receivingPayer={Payer} member={Member} coverage={Coverage}",
-            Clean(audit.TenantId), Clean(audit.ReceivingPayerId), Clean(audit.MatchedMemberId), Clean(audit.SelectedCoverageId));
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), LogSanitizer.Sanitize(audit.MatchedMemberId), LogSanitizer.Sanitize(audit.SelectedCoverageId));
 
         return MemberMatchResult.Matched(matched, selection.Coverage, audit);
     }
@@ -106,7 +107,7 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         var audit = Audit(request, outcome, matchedMemberId, selectedCoverageId: null);
         _logger.LogInformation(
             "P2P member-match declined: tenant={Tenant} receivingPayer={Payer} outcome={Outcome}",
-            Clean(audit.TenantId), Clean(audit.ReceivingPayerId), audit.Outcome);
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), audit.Outcome);
         return MemberMatchResult.Failure(outcome, audit);
     }
 
@@ -123,14 +124,4 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
             SelectedCoverageId = selectedCoverageId,
             Outcome = outcome.ToString(),
         };
-
-    /// <summary>
-    /// Strips CR/LF from caller-supplied values before they reach a log entry,
-    /// preventing log-forging / injection (CWE-117) from the match request.
-    /// </summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

@@ -4,6 +4,7 @@ using AppealsService.Services;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AppealsService.HostedServices;
 
@@ -134,8 +135,8 @@ public sealed class AppealStatusMigrationHostedService : IHostedService
                     failedIds.Add(doc.GetValue("_id", BsonNull.Value));
                     _logger.LogError(ex,
                         "Failed to migrate appeal {AppealId} for tenant {TenantId}",
-                        LogSanitizer.SafeForLog(doc.GetValue("_id", BsonNull.Value).ToString()),
-                        LogSanitizer.SafeForLog(AsString(GetEither(doc, Fields.TenantId))));
+                        LogSanitizer.Sanitize(doc.GetValue("_id", BsonNull.Value).ToString(), 256),
+                        LogSanitizer.Sanitize(AsString(GetEither(doc, Fields.TenantId)), 256));
                 }
             }
 
@@ -315,8 +316,8 @@ public sealed class AppealStatusMigrationHostedService : IHostedService
 
         _logger.LogInformation(
             "Migrated appeal {AppealId} tenant {TenantId} from legacy status {Legacy} -> Closed + {Reason}",
-            LogSanitizer.SafeForLog(appealId), LogSanitizer.SafeForLog(tenantId),
-            LogSanitizer.SafeForLog(legacyLabel), LogSanitizer.SafeForLog(mappedReason.ToString()));
+            LogSanitizer.Sanitize(appealId, 256), LogSanitizer.Sanitize(tenantId, 256),
+            LogSanitizer.Sanitize(legacyLabel, 256), LogSanitizer.Sanitize(mappedReason.ToString(), 256));
         return true;
     }
 
@@ -411,8 +412,8 @@ public sealed class AppealStatusMigrationHostedService : IHostedService
                     _logger.LogWarning(
                         "Duplicate AppealNumber detected pre-index-build: {Key} count={Count}. " +
                         "ux_tenant_appeal_number unique index creation WILL FAIL until manually resolved.",
-                        LogSanitizer.SafeForLog(key.ToString()),
-                        LogSanitizer.SafeForLog(count.ToString()));
+                        LogSanitizer.Sanitize(key.ToString(), 256),
+                        LogSanitizer.Sanitize(count.ToString(), 256));
                 }
             }
         }

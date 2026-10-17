@@ -4,6 +4,7 @@ using FhirService.Services.Clinical;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.PayerToPayer.Ingestion;
 
@@ -268,7 +269,7 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
             "P2P import committed: exchange={Exchange} sourcePayer={Payer} received={Received} "
             + "persisted={Persisted} clinical={Clinical} administrative={Administrative} "
             + "duplicate={Duplicate} unsupported={Unsupported} rejected={Rejected}",
-            Clean(context.ExchangeId), Clean(context.SourcePayerId),
+            LogSanitizer.Sanitize(context.ExchangeId), LogSanitizer.Sanitize(context.SourcePayerId),
             counts.Received, counts.Persisted, counts.Clinical, counts.AdministrativeReference,
             counts.Duplicate, counts.Unsupported, counts.Rejected);
 
@@ -281,11 +282,4 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
             CompletedAtUtc = ledger.CompletedAtUtc,
         };
     }
-
-    /// <summary>Strips CR/LF so a config- or peer-derived id cannot forge a log entry (CWE-117).</summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

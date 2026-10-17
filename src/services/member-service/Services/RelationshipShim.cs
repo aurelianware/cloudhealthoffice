@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MemberService.Models;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace MemberService.Services;
 
@@ -77,7 +78,7 @@ public sealed class RelationshipShim : IRelationshipShim
             // Idempotent re-run: the active pair is already in place.
             _logger.LogDebug(
                 "RelationshipShim no-op: pair already exists for {Dependent} → {Subscriber}",
-                SanitizeForLog(dependent.MemberId), SanitizeForLog(legacySubscriberId));
+                LogSanitizer.Sanitize(dependent.MemberId, 128), LogSanitizer.Sanitize(legacySubscriberId, 128));
         }
         catch (FamilyRelationshipValidationException ex)
         {
@@ -85,25 +86,7 @@ public sealed class RelationshipShim : IRelationshipShim
             // Graph-model completeness can be reconciled by the backfill tool.
             _logger.LogWarning(ex,
                 "RelationshipShim: skipped edge for {Dependent} → {Subscriber}",
-                SanitizeForLog(dependent.MemberId), SanitizeForLog(legacySubscriberId));
+                LogSanitizer.Sanitize(dependent.MemberId, 128), LogSanitizer.Sanitize(legacySubscriberId, 128));
         }
-    }
-
-    /// <summary>
-    /// Strip control characters (including CR/LF) from user-controlled values before
-    /// they enter a log message. Prevents log-forging / log-injection per CodeQL rule
-    /// cs/log-forging. MemberId and SubscriberMemberId originate from X12 payloads
-    /// processed upstream — never trust them verbatim in logs.
-    /// </summary>
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        var buffer = new System.Text.StringBuilder(value.Length);
-        foreach (var ch in value)
-        {
-            buffer.Append(char.IsControl(ch) ? '_' : ch);
-        }
-        if (buffer.Length > 128) buffer.Length = 128;
-        return buffer.ToString();
     }
 }

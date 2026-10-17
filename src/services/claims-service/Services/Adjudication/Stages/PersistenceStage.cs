@@ -1,5 +1,6 @@
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication.Stages;
 
@@ -96,7 +97,7 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
         {
             _logger.LogInformation(
                 "Examiner re-run of {Status} claim {ClaimVersionId} resolved {Outcome}; not persisted (the resolver refuses it)",
-                context.Claim.Status, SanitizeForLog(context.ClaimVersionId), resolvedOutcome);
+                context.Claim.Status, LogSanitizer.Sanitize(context.ClaimVersionId), resolvedOutcome);
             return ClaimAdjudicationStageResult.Pass(StageName);
         }
 
@@ -126,7 +127,7 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
                 _logger.LogWarning(
                     "Approval re-run for claim {ClaimVersionId} did not persist: the examiner resolution lock " +
                     "is no longer held (another resolution took over)",
-                    SanitizeForLog(context.ClaimVersionId));
+                    LogSanitizer.Sanitize(context.ClaimVersionId));
                 return ClaimAdjudicationStageResult.Reject(
                     StageName,
                     "Adjudication projection write refused — the examiner resolution lock is no longer held.");
@@ -137,7 +138,7 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
                 _logger.LogWarning(
                     "Adjudication projection bypass returned false for claim {ClaimVersionId}; " +
                     "head row not found or version no longer current",
-                    SanitizeForLog(context.ClaimVersionId));
+                    LogSanitizer.Sanitize(context.ClaimVersionId));
                 return ClaimAdjudicationStageResult.Reject(
                     StageName,
                     "Adjudication projection write failed — head version not found.");
@@ -149,7 +150,7 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
         {
             _logger.LogError(ex,
                 "Failed to persist adjudication projection for claim {ClaimVersionId}",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
             // Bubble the exception so the orchestrator's exception handler
             // abandons the Service Bus message — Service Bus then
             // redelivers and the next attempt re-runs the pipeline. If
@@ -194,7 +195,7 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
             "assigning default CARC {Carc} / RARC {Rarc}",
             deciding?.StageName ?? "unknown",
             resolvedOutcome,
-            SanitizeForLog(context.ClaimVersionId),
+            LogSanitizer.Sanitize(context.ClaimVersionId),
             carc,
             rarc);
 
@@ -204,9 +205,6 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
             context.AdjudicationResult.DenialReason ?? deciding?.Reason,
             rarc);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private static ClaimStatus MapOutcomeToStatus(ClaimAdjudicationOutcome outcome) => outcome switch
     {

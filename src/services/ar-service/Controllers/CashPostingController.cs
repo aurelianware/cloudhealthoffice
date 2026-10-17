@@ -3,6 +3,7 @@ using ArService.Ledger;
 using ArService.Models;
 using ArService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ArService.Controllers;
 
@@ -82,7 +83,7 @@ public class CashPostingController : ControllerBase
         }
 
         _logger.LogInformation("Creating cash posting {PostingNumber} for payer {PayerName}",
-            SanitizeForLog(posting.PostingNumber), SanitizeForLog(posting.PayerName));
+            LogSanitizer.Sanitize(posting.PostingNumber), LogSanitizer.Sanitize(posting.PayerName));
 
         var created = await _cashPostingRepository.CreateAsync(posting);
         return CreatedAtAction(nameof(GetCashPostingById), new { id = created.Id }, created);
@@ -194,7 +195,7 @@ public class CashPostingController : ControllerBase
         posting.LastUpdatedAt = now;
 
         _logger.LogInformation("Applied cash posting {PostingNumber}, applied={AppliedAmount}, credited {Count} balance(s)",
-            SanitizeForLog(posting.PostingNumber), posting.AppliedAmount, credited);
+            LogSanitizer.Sanitize(posting.PostingNumber), posting.AppliedAmount, credited);
 
         var updated = await _cashPostingRepository.UpdateAsync(posting);
         return Ok(updated);
@@ -210,7 +211,7 @@ public class CashPostingController : ControllerBase
     private ObjectResult LegacyConflict(CashPosting posting, string action)
     {
         _logger.LogWarning("Refused: legacy cash posting {PostingNumber} cannot be {Action} before reconciliation",
-            SanitizeForLog(posting.PostingNumber), action);
+            LogSanitizer.Sanitize(posting.PostingNumber), action);
         return Conflict(new
         {
             error = $"Cash posting {posting.PostingNumber} was applied before applying credited AR balances. " +
@@ -313,19 +314,12 @@ public class CashPostingController : ControllerBase
         posting.LastUpdatedAt = DateTime.UtcNow;
 
         _logger.LogInformation("Voided cash posting {PostingNumber}, reversed {Count} credited application(s)",
-            SanitizeForLog(posting.PostingNumber), posted.Count);
+            LogSanitizer.Sanitize(posting.PostingNumber), posted.Count);
         if (manual > 0)
             _logger.LogWarning("Voided cash posting {PostingNumber}: {Manual} application(s) were corrected by hand at reconciliation and were not reversed; finance must reverse those adjustments",
-                SanitizeForLog(posting.PostingNumber), manual);
+                LogSanitizer.Sanitize(posting.PostingNumber), manual);
 
         var updated = await _cashPostingRepository.UpdateAsync(posting);
         return Ok(updated);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

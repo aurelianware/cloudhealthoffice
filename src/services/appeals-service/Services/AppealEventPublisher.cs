@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using AppealsService.Models;
 using Confluent.Kafka;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AppealsService.Services;
 
@@ -103,7 +104,7 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
             _producer = new ProducerBuilder<string, string>(producerConfig).Build();
             _available = true;
             _logger.LogInformation("Appeal event publisher connected to Kafka at {Servers}",
-                LogSanitizer.SafeForLog(bootstrapServers));
+                LogSanitizer.Sanitize(bootstrapServers, 256));
         }
         catch (Exception ex)
         {
@@ -178,7 +179,7 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
         {
             if (!ReferenceEquals(_producer, failed) || _producerConfig is null) return;
             _logger.LogError("Kafka producer hit a fatal error ({Code}: {Reason}); rebuilding it.",
-                error.Code, LogSanitizer.SafeForLog(error.Reason));
+                error.Code, LogSanitizer.Sanitize(error.Reason, 256));
             try
             {
                 _producer = new ProducerBuilder<string, string>(_producerConfig).Build();
