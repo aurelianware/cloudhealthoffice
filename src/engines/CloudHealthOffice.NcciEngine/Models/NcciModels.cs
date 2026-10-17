@@ -232,21 +232,19 @@ public enum NcciEditType
 /// Metadata about the NCCI/MUE table version currently loaded.
 /// Returned by INcciEditService.GetTableVersionAsync() for audit/display.
 ///
-/// One document per tenant. Cosmos stores it under id "current" (the
-/// repository point-reads that id). Mongo keys it by TenantId and keeps
-/// whatever <c>_id</c> the document already has: <see cref="Id"/> is not
-/// mapped to Mongo, and extra elements (the server-assigned <c>_id</c>)
-/// are ignored on read.
+/// One document per tenant. Mongo keys it by TenantId and keeps whatever
+/// <c>_id</c> the document already has: <see cref="Id"/> is not mapped to
+/// Mongo, and extra elements (the server-assigned <c>_id</c>) are ignored
+/// on read.
 /// </summary>
 [MongoDB.Bson.Serialization.Attributes.BsonIgnoreExtraElements]
 public class NcciTableVersion
 {
     public const string CurrentId = "current";
 
-    /// <summary>Cosmos item id; always "current".</summary>
+    /// <summary>Always "current"; returned as <c>id</c> by the version endpoint.</summary>
     [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
     [System.Text.Json.Serialization.JsonPropertyName("id")]
-    [Newtonsoft.Json.JsonProperty("id")]
     public string Id { get; set; } = CurrentId;
 
     public string TenantId { get; set; } = string.Empty;
