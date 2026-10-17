@@ -29,8 +29,8 @@ approve + transmit (user != run creator, != run executor)   POST /api/paymentrun
   Transmitted (200)  |  Failed (502, nothing reached the drop, may retry)  |  NeedsReview (409, outcome unknown)
 ```
 
-- **One record per file** (`PaymentFileTransmissions`, Mongo collection or Cosmos
-  container, id `nacha:{tenant}:{fileReference}`), pinned to the file's SHA-256
+- **One record per file** (`PaymentFileTransmissions` Mongo collection, id
+  `nacha:{tenant}:{fileReference}`), pinned to the file's SHA-256
   at approval. The record holds no file, no routing/account/TIN number and no PHI.
 - **Never twice.** A `Transmitted` file is returned as is. A `NeedsReview` file
   (the rename's reply was lost, the attempt crashed, any unexpected error) is
@@ -290,9 +290,7 @@ already in flight completes or becomes `NeedsReview`; it is never retried by its
 
 `resolve` is deliberately **not** gated by the flag: after an emergency stop,
 operators must still be able to record what the bank said about a `NeedsReview`
-file (it sends and contacts nothing). `GET .../transmission` works too, and on
-Cosmos it never creates the `PaymentFileTransmissions` container (only the first
-approval, which needs the flag on, does).
+file (it sends and contacts nothing). `GET .../transmission` works too.
 
 ## 9. Not built yet (follow-ups)
 
@@ -324,7 +322,4 @@ approval, which needs the flag on, does).
   service only issues the notices described in section 1.
 - **GenerationCount** on a pinned file can miss an increment when two
   reproductions race (it is informational only).
-- **Cosmos repository tests.** The Mongo stores are tested against a real mongod
-  (EphemeralMongo); the Cosmos implementations get emulator tests from the separate
-  Cosmos CI work.
 - **Automatic retries.** Retries are operator-triggered by design.

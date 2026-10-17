@@ -45,17 +45,15 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
                 services.Remove(descriptor);
             }
 
-            // Remove Cosmos/Mongo registrations that would fail without config.
+            // Remove Mongo registrations so nothing reaches a real server.
             // Filter both service and implementation type — EraEnvelopeRepositoryMongo
             // would otherwise leak through as IEraEnvelopeRepository.
-            var cosmosDescriptors = services
-                .Where(d => d.ServiceType.FullName?.Contains("Cosmos") == true
-                         || d.ServiceType.FullName?.Contains("Mongo") == true
-                         || d.ImplementationType?.FullName?.Contains("Cosmos") == true
+            var mongoDescriptors = services
+                .Where(d => d.ServiceType.FullName?.Contains("Mongo") == true
                          || d.ImplementationType?.FullName?.Contains("Mongo") == true)
                 .ToList();
 
-            foreach (var descriptor in cosmosDescriptors)
+            foreach (var descriptor in mongoDescriptors)
             {
                 services.Remove(descriptor);
             }
