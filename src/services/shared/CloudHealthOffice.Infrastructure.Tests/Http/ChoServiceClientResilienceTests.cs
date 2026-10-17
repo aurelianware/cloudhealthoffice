@@ -155,4 +155,123 @@ public class ChoServiceClientResilienceTests
 
         (await act.Should().ThrowAsync<TaskCanceledException>()).Which.InnerException.Should().BeOfType<TimeoutException>();
     }
+
+    // ── Timeouts follow the client's own HttpClient.Timeout ──────────────
+
+    private static ServiceProvider ClientWithItsOwnTimeout(
+        ManualClock clock, HttpMessageHandler downstream, TimeSpan ownTimeout, Action<ChoResilienceOptions>? configure = null)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddChoServiceClientResilience();
+        services.AddSingleton<TimeProvider>(clock);
+        services.AddHttpClient("vendor", c =>
+            {
+                c.BaseAddress = new Uri("http://vendor/");
+                c.Timeout = ownTimeout;
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => downstream)
+            .ConfigureChoResilience(o =>
+            {
+                o.RetryBaseDelay = TimeSpan.FromMilliseconds(1);
+                configure?.Invoke(o);
+            });
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>Takes its time on the clock, then answers 200 unless a timeout cancelled it meanwhile.</summary>
+    private sealed class Slow(ManualClock clock, TimeSpan takes) : HttpMessageHandler
+    {
+        public int Calls;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Interlocked.Increment(ref Calls);
+            clock.Advance(takes);
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        }
+    }
+
+    [Fact]
+    public async Task AClientsOwnTimeout_IsItsAttemptTimeout_SoACallShorterThanItSucceeds()
+    {
+        var clock = new ManualClock();
+        var slow = new Slow(clock, TimeSpan.FromSeconds(45));
+        using var provider = ClientWithItsOwnTimeout(clock, slow, TimeSpan.FromSeconds(60));
+
+        var response = await clock.Drive(provider.GetRequiredService<IHttpClientFactory>().CreateClient("vendor").GetAsync("x"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        slow.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AClientsOwnTimeout_StillCutsAnAttemptThatTakesLonger()
+    {
+        var clock = new ManualClock();
+        var slow = new Slow(clock, TimeSpan.FromSeconds(6));
+        using var provider = ClientWithItsOwnTimeout(clock, slow, TimeSpan.FromSeconds(5));
+
+        var act = () => clock.Drive(provider.GetRequiredService<IHttpClientFactory>().CreateClient("vendor").GetAsync("x"));
+
+        (await act.Should().ThrowAsync<TaskCanceledException>()).Which.InnerException.Should().BeOfType<TimeoutException>();
+        slow.Calls.Should().Be(3, "each of the three attempts is cut at the client's 5 s");
+    }
+
+    [Fact]
+    public void TheTotalTimeout_CoversEveryAttempt_AndHttpClientTimeoutIsRaisedPastIt()
+    {
+        using var provider = ClientWithItsOwnTimeout(new ManualClock(), new Downstream(), TimeSpan.FromSeconds(120));
+
+        var timeouts = provider.GetRequiredService<ChoResiliencePipelines>().Timeouts("vendor")!;
+        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("vendor");
+
+        timeouts.OwnTimeout.Should().Be(TimeSpan.FromSeconds(120));
+        timeouts.Attempt.Should().Be(TimeSpan.FromSeconds(120));
+        timeouts.Total.Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(120 * 3));
+        client.Timeout.Should().BeGreaterThan(timeouts.Total!.Value, "the pipeline's timeouts govern, not HttpClient.Timeout");
+    }
+
+    [Fact]
+    public void ExplicitTimeouts_WinOverTheClientsOwn()
+    {
+        using var provider = ClientWithItsOwnTimeout(new ManualClock(), new Downstream(), TimeSpan.FromSeconds(120), o =>
+        {
+            o.AttemptTimeout = TimeSpan.FromSeconds(7);
+            o.TotalTimeout = TimeSpan.FromSeconds(9);
+        });
+
+        var timeouts = provider.GetRequiredService<ChoResiliencePipelines>().Timeouts("vendor")!;
+
+        timeouts.Attempt.Should().Be(TimeSpan.FromSeconds(7));
+        timeouts.Total.Should().Be(TimeSpan.FromSeconds(9));
+        provider.GetRequiredService<IHttpClientFactory>().CreateClient("vendor").Timeout.Should().Be(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public void AClientWithoutATimeoutOfItsOwn_KeepsTheDefaults()
+    {
+        var services = new ServiceCollection();
+        services.AddChoServiceClientResilience();
+        services.AddHttpClient("plain");
+        using var provider = services.BuildServiceProvider();
+
+        var timeouts = provider.GetRequiredService<ChoResiliencePipelines>().Timeouts("plain")!;
+
+        timeouts.OwnTimeout.Should().BeNull();
+        timeouts.Attempt.Should().Be(ChoResilienceOptions.DefaultAttemptTimeout);
+        timeouts.Total.Should().BeGreaterThanOrEqualTo(ChoResilienceOptions.DefaultTotalTimeout);
+    }
+
+    [Fact]
+    public void AClientWithResilienceTurnedOff_KeepsItsOwnHttpClientTimeout()
+    {
+        var services = new ServiceCollection();
+        services.AddChoServiceClientResilience();
+        services.AddHttpClient("own", c => c.Timeout = TimeSpan.FromSeconds(42)).WithoutChoResilience();
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IHttpClientFactory>().CreateClient("own").Timeout.Should().Be(TimeSpan.FromSeconds(42));
+    }
 }

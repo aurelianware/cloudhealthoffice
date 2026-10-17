@@ -51,7 +51,12 @@ var anthropicOptions = builder.Configuration.GetSection("Anthropic").Get<Anthrop
     ?? new AnthropicOptions();
 builder.Services.AddSingleton(anthropicOptions);
 builder.Services.AddTransient<AnthropicAuthHandler>();
-builder.Services.AddHttpClient<IAnthropicClient, AnthropicClient>()
+// The model timeout is set here, not in the client's constructor: the shared
+// resilience reads it as the attempt timeout, sizes the total timeout to cover
+// every attempt and its back-off, and raises HttpClient.Timeout past that total.
+// (A constructor-set HttpClient.Timeout would cap all attempts together.)
+builder.Services.AddHttpClient<IAnthropicClient, AnthropicClient>(
+        client => client.Timeout = TimeSpan.FromSeconds(anthropicOptions.TimeoutSeconds))
     .AddHttpMessageHandler<AnthropicAuthHandler>()
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
     // 429 (rate limited) and 529 (overloaded) are retried with backoff, honouring
@@ -63,12 +68,11 @@ builder.Services.AddHttpClient<IAnthropicClient, AnthropicClient>()
         o.AdditionalTransientStatusCodes = [429, 529];
         o.MaxRetryAttempts = 3;
         o.RetryBaseDelay = TimeSpan.FromSeconds(2);
-        o.AttemptTimeout = TimeSpan.FromSeconds(anthropicOptions.TimeoutSeconds);
-        o.TotalTimeout = TimeSpan.FromSeconds(anthropicOptions.TimeoutSeconds * 3 + 30);
         o.CircuitMinimumThroughput = 5;
         o.CircuitBreakDuration = TimeSpan.FromSeconds(30);
     });
-builder.Services.AddHttpClient<AnthropicConnectivityCheck>()
+builder.Services.AddHttpClient<AnthropicConnectivityCheck>(
+        client => client.Timeout = TimeSpan.FromSeconds(Math.Max(anthropicOptions.TimeoutSeconds, 5)))
     .AddHttpMessageHandler<AnthropicAuthHandler>();
 
 // Claims-service client (typed HttpClient)
