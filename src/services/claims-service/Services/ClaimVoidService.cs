@@ -1,5 +1,6 @@
 using ClaimsService.Models;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services;
 
@@ -63,7 +64,7 @@ public sealed class ClaimVoidService : IClaimVoidService
     {
         _logger.LogInformation(
             "Voiding claim {Id}; ReversalRun={ReversalRunId}",
-            SanitizeForLog(id), SanitizeForLog(request.ReversalRunId));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(request.ReversalRunId));
 
         return _finalizationService.VoidAsync(
             id, request, getTenantId(), TryGetActorId(), correlationId, ct);
@@ -73,7 +74,7 @@ public sealed class ClaimVoidService : IClaimVoidService
     public Task<ClaimVoidResult> DeleteClaimAsync(
         string id, Func<string> getTenantId, string? correlationId, CancellationToken ct)
     {
-        _logger.LogInformation("Voiding claim: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Voiding claim: {Id}", LogSanitizer.Sanitize(id));
 
         return VoidWithReasonAsync(id, "Voided via DELETE /api/claims/{id}", getTenantId, correlationId, ct);
     }
@@ -87,11 +88,4 @@ public sealed class ClaimVoidService : IClaimVoidService
     // Identity.Name is the display name claim, and X-User-Id is caller-supplied;
     // the actor is the token subject.
     private string? TryGetActorId() => _actor.UserId;
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }

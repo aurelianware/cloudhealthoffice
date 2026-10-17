@@ -1,5 +1,6 @@
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services;
 
@@ -116,7 +117,7 @@ public sealed class ClaimStatusTransitionService : IClaimStatusTransitionService
     {
         _logger.LogInformation(
             "Updating claim {Id} status to {Status}",
-            SanitizeForLog(id), statusUpdate.Status);
+            LogSanitizer.Sanitize(id), statusUpdate.Status);
 
         // A void is the void transition (VoidAsync), never a bare status
         // write: it saves the terminal accumulator reversal with the void and
@@ -151,7 +152,7 @@ public sealed class ClaimStatusTransitionService : IClaimStatusTransitionService
         {
             _logger.LogInformation(
                 "Status transition suppressed for claim {Id}: requested={Requested}, persisted={Persisted}",
-                SanitizeForLog(id), statusUpdate.Status, statusResult.PersistedStatus);
+                LogSanitizer.Sanitize(id), statusUpdate.Status, statusResult.PersistedStatus);
         }
         else
         {
@@ -194,11 +195,4 @@ public sealed class ClaimStatusTransitionService : IClaimStatusTransitionService
         ClaimStatusSemantics.IsPayOutcome(status)
             || ClaimStatusSemantics.IsDenied(status)
             || status == ClaimStatus.Voided;
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }

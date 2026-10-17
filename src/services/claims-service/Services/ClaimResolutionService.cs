@@ -5,6 +5,7 @@ using ClaimsService.Repositories;
 using ClaimsService.Services.Adjudication;
 using ClaimsService.Models.Adjudication;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services;
 
@@ -528,7 +529,7 @@ public sealed class ClaimResolutionService : IClaimResolutionService
                 {
                     _logger.LogWarning(
                         "No audit row found for claim {Id} when resolving pended claim; live AI feedback was persisted",
-                        SanitizeForLog(claimId));
+                        LogSanitizer.Sanitize(claimId));
                 }
             }
 
@@ -544,10 +545,10 @@ public sealed class ClaimResolutionService : IClaimResolutionService
 
             _logger.LogInformation(
                 "Examiner {User} resolved pended claim {ClaimId} as {Disposition}: {Reason}",
-                SanitizeForLog(examinerUserId),
-                SanitizeForLog(claimId),
+                LogSanitizer.Sanitize(examinerUserId),
+                LogSanitizer.Sanitize(claimId),
                 disposition,
-                SanitizeForLog(request.Reason));
+                LogSanitizer.Sanitize(request.Reason));
 
             return Ok(updated);
         }
@@ -634,7 +635,7 @@ public sealed class ClaimResolutionService : IClaimResolutionService
         {
             _logger.LogWarning(ex,
                 "Claim {ClaimId}: accumulator {Kind} not driven now; the outbox dispatcher retries it",
-                SanitizeForLog(claim.Id), kind);
+                LogSanitizer.Sanitize(claim.Id), kind);
         }
     }
 
@@ -803,12 +804,5 @@ public sealed class ClaimResolutionService : IClaimResolutionService
             reasons.AddRange(pend.AdditionalPendReasons ?? []);
         }
         return reasons;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Portal.Services;
 
@@ -49,7 +50,7 @@ internal static class BillingApiHttp
             {
                 var (title, detail) = ParseError(text);
                 logger.LogWarning("{ServiceName} refused {Method} {Path}: {Status} {Title}",
-                    serviceName, method, OneLine(new Uri(url).AbsolutePath), (int)response.StatusCode, OneLine(title));
+                    serviceName, method, LogSanitizer.Sanitize(new Uri(url).AbsolutePath), (int)response.StatusCode, LogSanitizer.Sanitize(title));
                 throw new BillingApiException((int)response.StatusCode, title, detail) { Body = text };
             }
 
@@ -64,9 +65,6 @@ internal static class BillingApiHttp
         catch (JsonException) { return null; }
     }
 
-    /// <summary>Strips line breaks so a response or path cannot forge log lines.</summary>
-    private static string OneLine(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", " ");
 
     /// <summary>
     /// The services refuse with ProblemDetails (<c>title</c>, <c>detail</c>),
