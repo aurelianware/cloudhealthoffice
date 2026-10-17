@@ -89,6 +89,11 @@ them the service refuses to start.
 Set `CHO_PROVIDER_ELIGIBILITY_STEDI_ENV=production` only with a production Stedi key.
 Test-mode keys return Stedi's mock responses and cannot check real patients.
 
+Or run the **Deploy CDO-facing services (Container Apps)** workflow
+(`.github/workflows/deploy-cdo-services.yml`) from main: pick `provider-eligibility`,
+`mode=preview` to see the what-if, then `mode=deploy`. It waits for the new revision to be
+ready. The Stedi key must already be in Key Vault; the workflow never handles it.
+
 ## Local development
 
 ```sh
