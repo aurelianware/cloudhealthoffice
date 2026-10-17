@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Serialization;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace AccumulatorService.Models;
@@ -36,7 +37,9 @@ public class AccumulatorEvent
     public long Version { get; set; }
 
     public string MemberId { get; set; } = string.Empty;
+    [BsonSerializer(typeof(UtcCalendarDateSerializer))]
     public DateTime PlanYearStart { get; set; }
+    [BsonSerializer(typeof(UtcCalendarDateSerializer))]
     public DateTime PlanYearEnd { get; set; }
 
     /// <summary>ClaimApplied | ManualAdjustment | OrphanSkipped | DuplicateSkipped.</summary>
@@ -160,9 +163,11 @@ public class ProcessedClaim
     public string? TargetMemberId { get; set; }
 
     /// <summary>See <see cref="TargetSnapshotId"/>.</summary>
+    [BsonSerializer(typeof(NullableUtcCalendarDateSerializer))]
     public DateTime? TargetPlanYearStart { get; set; }
 
     /// <summary>See <see cref="TargetSnapshotId"/>.</summary>
+    [BsonSerializer(typeof(NullableUtcCalendarDateSerializer))]
     public DateTime? TargetPlanYearEnd { get; set; }
 
     public static string BuildId(string tenantId, string claimId) => $"{tenantId}:{claimId}";

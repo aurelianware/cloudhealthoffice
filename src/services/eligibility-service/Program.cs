@@ -14,6 +14,7 @@ using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -105,6 +106,8 @@ builder.Services.AddChoHealthcareGateways(builder.Configuration);
 // responder today.
 builder.Services.AddChoPayerEligibilityResponder(builder.Configuration);
 builder.Services.AddChoPayerClaimAttachmentReceiver(builder.Configuration);
+
+builder.Services.TryAddSingleton(TimeProvider.System);
 
 builder.Services.AddHttpClient<IEligibilityService, EligibilityServiceImpl>()
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
