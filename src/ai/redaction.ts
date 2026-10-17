@@ -58,6 +58,17 @@ const PHI_PATTERNS = {
 };
 
 /**
+ * A plain object (or array) walked key-by-key by the redaction helpers.
+ */
+type PlainRecord = Record<string, unknown>;
+
+/**
+ * Any value with a toString method (everything except null, undefined and
+ * prototype-less objects).
+ */
+type Stringable = { toString(): string };
+
+/**
  * Check if a string value contains PHI patterns
  */
 export function isPHI(val: string): boolean {
@@ -126,9 +137,12 @@ export function maskValue(val: string, maskChar: string = '*', visibleChars: num
 }
 
 /**
- * Redact PHI patterns from a string
+ * Redact PHI patterns from a string.
+ * Non-string input is returned unchanged.
  */
-export function redactPHI(text: string | any): string {
+export function redactPHI(text: string): string;
+export function redactPHI<T>(text: T): T;
+export function redactPHI(text: unknown): unknown {
   if (typeof text !== 'string') {
     return text;
   }
@@ -173,10 +187,11 @@ export function maskPHIFields<T>(obj: T, options?: {
   }
 
   // Handle objects
-  const masked: any = preserveStructure ? { ...obj } : {};
+  const source = obj as unknown as PlainRecord;
+  const masked: PlainRecord = preserveStructure ? { ...source } : {};
 
-  for (const key in obj) {
-    const value = (obj as any)[key];
+  for (const key in source) {
+    const value = source[key];
 
     // Check if field name indicates PHI
     if (isPHIFieldName(key)) {
@@ -200,7 +215,7 @@ export function maskPHIFields<T>(obj: T, options?: {
     }
   }
 
-  return masked as T;
+  return masked as unknown as T;
 }
 
 /**
@@ -223,31 +238,35 @@ export function createSafePayload<T>(obj: T, options?: {
   }
 
   // First pass: mask PHI fields
-  let safe = maskPHIFields(obj, { maskChar, visibleChars, preserveStructure: true });
+  let safe: T = maskPHIFields(obj, { maskChar, visibleChars, preserveStructure: true });
 
   // Second pass: preserve allowed fields (even if they look like PHI)
   if (allowedFields.length > 0) {
-    const restore = (safeObj: any, origObj: any, path: string = ''): any => {
+    const restore = (safeObj: unknown, origObj: unknown, path: string = ''): unknown => {
       if (typeof origObj !== 'object' || origObj === null) {
         return safeObj;
       }
 
-      const result = Array.isArray(origObj) ? [...safeObj] : { ...safeObj };
+      const orig = origObj as PlainRecord;
+      const safeRec = safeObj as PlainRecord;
+      const result = (Array.isArray(origObj)
+        ? [...(safeObj as unknown[])]
+        : { ...safeRec }) as PlainRecord;
 
-      for (const key in origObj) {
+      for (const key in orig) {
         const fieldPath = path ? `${path}.${key}` : key;
         
         if (allowedFields.includes(fieldPath) || allowedFields.includes(key)) {
-          result[key] = origObj[key];
-        } else if (typeof origObj[key] === 'object' && origObj[key] !== null) {
-          result[key] = restore(safeObj[key], origObj[key], fieldPath);
+          result[key] = orig[key];
+        } else if (typeof orig[key] === 'object' && orig[key] !== null) {
+          result[key] = restore(safeRec[key], orig[key], fieldPath);
         }
       }
 
       return result;
     };
 
-    safe = restore(safe, obj);
+    safe = restore(safe, obj) as T;
   }
 
   return safe;
@@ -257,10 +276,10 @@ export function createSafePayload<T>(obj: T, options?: {
  * Validate that a payload has been properly redacted
  * Returns true if no PHI patterns are detected
  */
-export function validateRedaction(obj: any): { isValid: boolean; violations: string[] } {
+export function validateRedaction(obj: unknown): { isValid: boolean; violations: string[] } {
   const violations: string[] = [];
 
-  const checkValue = (value: any, path: string = ''): void => {
+  const checkValue = (value: unknown, path: string = ''): void => {
     if (typeof value === 'string') {
       for (const [patternName, pattern] of Object.entries(PHI_PATTERNS)) {
         pattern.lastIndex = 0; // Reset lastIndex before each test
@@ -269,14 +288,16 @@ export function validateRedaction(obj: any): { isValid: boolean; violations: str
         }
       }
     } else if (typeof value === 'object' && value !== null) {
-      for (const key in value) {
+      const record = value as PlainRecord;
+      for (const key in record) {
         const newPath = path ? `${path}.${key}` : key;
+        const fieldValue = record[key];
         
-        if (isPHIFieldName(key) && value[key] !== '***REDACTED***' && !value[key]?.toString().includes('REDACTED')) {
+        if (isPHIFieldName(key) && fieldValue !== '***REDACTED***' && !(fieldValue as Stringable | null | undefined)?.toString().includes('REDACTED')) {
           violations.push(`${newPath}: PHI field not redacted`);
         }
         
-        checkValue(value[key], newPath);
+        checkValue(fieldValue, newPath);
       }
     }
   };
