@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
 using SponsorService.Repositories;
 using MongoDB.Driver;
@@ -18,7 +17,7 @@ builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // One-off migration (operator CLI): dotnet sponsor-service.dll --encrypt-bank-accounts
 // [--tenant <id>] [--dry-run]. Stores sponsor bank numbers written before encryption,
-// or before record binding (enc:v1), as enc:v2. Mongo or Cosmos, as configured.
+// or before record binding (enc:v1), as enc:v2, in the MongoDB store.
 if (args.Contains(SponsorService.Migrations.EncryptSponsorBankAccounts.Switch))
 {
     Environment.ExitCode = await SponsorService.Migrations.EncryptSponsorBankAccounts.RunAsync(
@@ -63,53 +62,25 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Database Configuration (Cosmos DB or MongoDB)
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+// Database Configuration — MongoDB is the only sponsor store (ADR 006);
+// the database client is registered by the shared lib.
+if (string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
-    // Use MongoDB
-    builder.Services.AddScoped<SponsorRepositoryMongo>();
-    builder.Services.AddScoped<ISponsorRepository>(sp => new ProtectedSponsorRepository(
-        sp.GetRequiredService<SponsorRepositoryMongo>(),
-        sp.GetRequiredService<IFieldProtector>(),
-        sp.GetRequiredService<ILogger<ProtectedSponsorRepository>>()));
-    builder.Services.AddScoped<ISponsorBankAccountRepository, MongoSponsorBankAccountRepository>();
-    Console.WriteLine("Using MongoDB repository");
+    throw new InvalidOperationException(
+        "Sponsor Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
 {
-    // Use Cosmos DB (Default)
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"] 
-            ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-        var key = configuration["CosmosDb:Key"] 
-            ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-        
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            SerializerOptions = new CosmosSerializationOptions
-            {
-                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-            }
-        });
-    });
-
-    builder.Services.AddScoped<ISponsorRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new ProtectedSponsorRepository(
-            new SponsorRepository(cosmosClient, databaseName),
-            sp.GetRequiredService<IFieldProtector>(),
-            sp.GetRequiredService<ILogger<ProtectedSponsorRepository>>());
-    });
-    builder.Services.AddScoped<ISponsorBankAccountRepository, CosmosSponsorBankAccountRepository>();
-    Console.WriteLine("Using Cosmos DB repository");
+    throw new InvalidOperationException(
+        "Sponsor Service supports only MongoDB. Remove Database:Provider or set it to MongoDb.");
 }
+
+builder.Services.AddScoped<SponsorRepositoryMongo>();
+builder.Services.AddScoped<ISponsorRepository>(sp => new ProtectedSponsorRepository(
+    sp.GetRequiredService<SponsorRepositoryMongo>(),
+    sp.GetRequiredService<IFieldProtector>(),
+    sp.GetRequiredService<ILogger<ProtectedSponsorRepository>>()));
+builder.Services.AddScoped<ISponsorBankAccountRepository, MongoSponsorBankAccountRepository>();
 
 // Sponsor bank accounts under dual control (see SponsorBankAccountsController).
 builder.Services.AddScoped<ISponsorBankAccountService, SponsorBankAccountService>();
@@ -117,13 +88,10 @@ builder.Services.AddScoped<ISponsorBankAccountService, SponsorBankAccountService
 // No CORS: this service is called server-to-server only (the portal is
 // Blazor Server), so browsers on other origins get no CORS grant.
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);

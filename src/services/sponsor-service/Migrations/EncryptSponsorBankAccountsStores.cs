@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 using SponsorService.Models;
 using SponsorService.Repositories;
@@ -8,9 +7,10 @@ namespace SponsorService.Migrations;
 
 /// <summary>
 /// A sponsor document as stored (billing account number not decrypted), with
-/// what a conditional write needs: the value read (Mongo) or the ETag (Cosmos).
+/// an optional version token for a store whose conditional write needs one
+/// (the Mongo store needs none: it matches on the value read).
 /// </summary>
-public sealed record StoredSponsor(Sponsor Sponsor, string? ETag);
+public sealed record StoredSponsor(Sponsor Sponsor, string? VersionToken);
 
 /// <summary>Sponsor documents that carry a billing account number, read and written as stored.</summary>
 public interface ISponsorRowStore
@@ -98,88 +98,6 @@ public sealed class MongoSponsorBankAccountRecordStore : ISponsorBankAccountReco
         }
     }
 
-    public Task<bool> SaveAsync(SponsorBankAccountRecord record, long expectedRevision, CancellationToken ct)
-        => _repository.SaveAsync(record, expectedRevision, ct);
-}
-
-/// <summary>Sponsor documents in the Cosmos <c>Sponsors</c> container (partition key: the tenant id).</summary>
-public sealed class CosmosSponsorRowStore : ISponsorRowStore
-{
-    private readonly Container _container;
-
-    public CosmosSponsorRowStore(CosmosClient client, IConfiguration configuration)
-        => _container = client.GetContainer(configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice", "Sponsors");
-
-    public async IAsyncEnumerable<StoredSponsor> ListWithBillingAccountAsync(string? tenant, [EnumeratorCancellation] CancellationToken ct)
-    {
-        var options = tenant == null ? new QueryRequestOptions() : new QueryRequestOptions { PartitionKey = new PartitionKey(tenant) };
-        using var iterator = _container.GetItemQueryIterator<Sponsor>(new QueryDefinition("SELECT * FROM c"), requestOptions: options);
-        while (iterator.HasMoreResults)
-        {
-            foreach (var listed in await iterator.ReadNextAsync(ct))
-            {
-                if (string.IsNullOrEmpty(listed.BillingInfo?.BillingAccountNumber)) continue;
-                if (tenant != null && !string.Equals(listed.TenantId, tenant, StringComparison.Ordinal)) continue;
-                // Re-read for the ETag the conditional patch needs.
-                ItemResponse<Sponsor> current;
-                try
-                {
-                    current = await _container.ReadItemAsync<Sponsor>(listed.Id, new PartitionKey(listed.TenantId), cancellationToken: ct);
-                }
-                catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    continue;
-                }
-                yield return new StoredSponsor(current.Resource, current.ETag);
-            }
-        }
-    }
-
-    public async Task<bool> SetBillingAccountIfUnchangedAsync(StoredSponsor row, string stored, CancellationToken ct)
-    {
-        try
-        {
-            // Only the one field changes; the rest of the document is left as it is.
-            await _container.PatchItemAsync<Sponsor>(row.Sponsor.Id, new PartitionKey(row.Sponsor.TenantId),
-                new[] { PatchOperation.Set("/billingInfo/billingAccountNumber", stored) },
-                new PatchItemRequestOptions { IfMatchEtag = row.ETag }, ct);
-            return true;
-        }
-        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed or System.Net.HttpStatusCode.NotFound)
-        {
-            return false;
-        }
-    }
-}
-
-/// <summary>Bank-account records in the Cosmos <c>SponsorBankAccounts</c> container.</summary>
-public sealed class CosmosSponsorBankAccountRecordStore : ISponsorBankAccountRecordStore
-{
-    private readonly Container _container;
-    private readonly CosmosSponsorBankAccountRepository _repository;
-
-    public CosmosSponsorBankAccountRecordStore(CosmosClient client, IConfiguration configuration)
-    {
-        _container = client.GetContainer(
-            configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice",
-            configuration["CosmosDb:SponsorBankAccountsContainer"] ?? CosmosSponsorBankAccountRepository.DefaultContainerName);
-        _repository = new CosmosSponsorBankAccountRepository(client, configuration);
-    }
-
-    public async IAsyncEnumerable<SponsorBankAccountRecord> ListAsync(string? tenant, [EnumeratorCancellation] CancellationToken ct)
-    {
-        var options = tenant == null ? new QueryRequestOptions() : new QueryRequestOptions { PartitionKey = new PartitionKey(tenant) };
-        using var iterator = _container.GetItemQueryIterator<SponsorBankAccountRecord>(new QueryDefinition("SELECT * FROM c"), requestOptions: options);
-        while (iterator.HasMoreResults)
-        {
-            foreach (var record in await iterator.ReadNextAsync(ct))
-            {
-                if (tenant == null || string.Equals(record.TenantId, tenant, StringComparison.Ordinal)) yield return record;
-            }
-        }
-    }
-
-    /// <summary>The service's own revision-checked save (ETag-conditional replace).</summary>
     public Task<bool> SaveAsync(SponsorBankAccountRecord record, long expectedRevision, CancellationToken ct)
         => _repository.SaveAsync(record, expectedRevision, ct);
 }

@@ -37,12 +37,10 @@ public class SponsorPipelineAuthTests : IClassFixture<SponsorPipelineAuthTests.F
         {
             builder.UseEnvironment("Development");
             builder.UseSetting("FieldProtection:KeyRing:LocalDirectory", KeyDirectory);
-            builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["MongoDb:ConnectionString"] = "",
-                ["CosmosDb:ConnectionString"] = "",
-                ["CosmosDb:Endpoint"] = "",
-            }));
+            // Program.cs requires a Mongo connection string (read before app
+            // configuration applies); nothing reaches it, the repositories are
+            // replaced below.
+            builder.UseSetting("MongoDb:ConnectionString", "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=100");
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<ISponsorRepository>();

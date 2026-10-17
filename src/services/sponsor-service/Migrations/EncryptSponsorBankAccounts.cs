@@ -22,8 +22,7 @@ namespace SponsorService.Migrations;
 /// </list>
 ///
 /// <para>
-/// Usage (with sponsor-service's own configuration: <c>MongoDb</c>, or
-/// <c>Database:Provider=CosmosDb</c> with <c>CosmosDb</c>, and
+/// Usage (with sponsor-service's own configuration: <c>MongoDb</c> and
 /// <c>FieldProtection</c>, the same key ring the service uses):
 /// <c>dotnet sponsor-service.dll --encrypt-bank-accounts [--tenant &lt;id&gt;]... [--dry-run]</c>
 /// or <c>dotnet run --project src/services/sponsor-service -- --encrypt-bank-accounts</c>.
@@ -34,8 +33,7 @@ namespace SponsorService.Migrations;
 /// <para>
 /// Idempotent and resumable: a value already bound is left alone, and each
 /// document is written on its own and only if unchanged since it was read
-/// (sponsor documents: Mongo on the value read, Cosmos a patch on the ETag;
-/// bank-account records: the service's own revision-checked save). A document
+/// (sponsor documents: on the value read; bank-account records: the service's own revision-checked save). A document
 /// changed by the running service in between is counted as a conflict and
 /// left to the next run. Exit code 0 when nothing is left to bind, 2 when a
 /// conflict or a failure needs another run, 1 when it cannot start (no key
@@ -113,65 +111,40 @@ public static class EncryptSponsorBankAccounts
         var protector = provider.GetRequiredService<IFieldProtector>();
 
         Counts total;
-        var useCosmos = string.Equals(configuration["Database:Provider"], "CosmosDb", StringComparison.OrdinalIgnoreCase);
-        if (useCosmos)
+        var connectionString = configuration["MongoDb:ConnectionString"];
+        if (string.IsNullOrWhiteSpace(connectionString))
         {
-            // As Program.cs builds the service's own Cosmos client.
-            if (string.IsNullOrWhiteSpace(configuration["CosmosDb:Endpoint"]) || string.IsNullOrWhiteSpace(configuration["CosmosDb:Key"]))
+            Console.Error.WriteLine("ABORT: MongoDb:ConnectionString is not configured.");
+            return 1;
+        }
+        var baseName = configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
+        var scoped = configuration.GetValue<bool>("MongoDb:UseTenantScoping", false);
+        if (scoped && tenants.Count == 0)
+        {
+            Console.Error.WriteLine("ABORT: MongoDb:UseTenantScoping is on (one database per tenant): name each tenant with --tenant <id>.");
+            return 1;
+        }
+
+        var client = new MongoClient(connectionString);
+        if (scoped)
+        {
+            total = new Counts();
+            foreach (var tenant in tenants)
             {
-                Console.Error.WriteLine("ABORT: Database:Provider is CosmosDb but CosmosDb:Endpoint/Key is not configured.");
-                return 1;
+                var db = client.GetDatabase($"{baseName}_{SanitizeTenantForDatabase(tenant)}");
+                total.Add(await MigrateStoresAsync(new MongoSponsorRowStore(db, configuration),
+                    new MongoSponsorBankAccountRecordStore(db, configuration), protector, new[] { tenant }, dryRun, Console.Out));
             }
-            using var cosmos = new Microsoft.Azure.Cosmos.CosmosClient(configuration["CosmosDb:Endpoint"], configuration["CosmosDb:Key"],
-                new Microsoft.Azure.Cosmos.CosmosClientOptions
-                {
-                    SerializerOptions = new Microsoft.Azure.Cosmos.CosmosSerializationOptions
-                    {
-                        PropertyNamingPolicy = Microsoft.Azure.Cosmos.CosmosPropertyNamingPolicy.CamelCase
-                    }
-                });
-            total = await MigrateStoresAsync(
-                new CosmosSponsorRowStore(cosmos, configuration),
-                new CosmosSponsorBankAccountRecordStore(cosmos, configuration),
-                protector, tenants.Count == 0 ? null : tenants, dryRun, Console.Out);
         }
         else
         {
-            var connectionString = configuration["MongoDb:ConnectionString"];
-            if (string.IsNullOrWhiteSpace(connectionString))
-            {
-                Console.Error.WriteLine("ABORT: neither MongoDb:ConnectionString nor Database:Provider=CosmosDb is configured.");
-                return 1;
-            }
-            var baseName = configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-            var scoped = configuration.GetValue<bool>("MongoDb:UseTenantScoping", false);
-            if (scoped && tenants.Count == 0)
-            {
-                Console.Error.WriteLine("ABORT: MongoDb:UseTenantScoping is on (one database per tenant): name each tenant with --tenant <id>.");
-                return 1;
-            }
-
-            var client = new MongoClient(connectionString);
-            if (scoped)
-            {
-                total = new Counts();
-                foreach (var tenant in tenants)
-                {
-                    var db = client.GetDatabase($"{baseName}_{SanitizeTenantForDatabase(tenant)}");
-                    total.Add(await MigrateStoresAsync(new MongoSponsorRowStore(db, configuration),
-                        new MongoSponsorBankAccountRecordStore(db, configuration), protector, new[] { tenant }, dryRun, Console.Out));
-                }
-            }
-            else
-            {
-                var db = client.GetDatabase(baseName);
-                total = await MigrateStoresAsync(new MongoSponsorRowStore(db, configuration),
-                    new MongoSponsorBankAccountRecordStore(db, configuration), protector,
-                    tenants.Count == 0 ? null : tenants, dryRun, Console.Out);
-            }
+            var db = client.GetDatabase(baseName);
+            total = await MigrateStoresAsync(new MongoSponsorRowStore(db, configuration),
+                new MongoSponsorBankAccountRecordStore(db, configuration), protector,
+                tenants.Count == 0 ? null : tenants, dryRun, Console.Out);
         }
 
-        Console.WriteLine($"TOTAL{(useCosmos ? " (Cosmos)" : string.Empty)}{(dryRun ? " (dry run, nothing written)" : string.Empty)}: {total}");
+        Console.WriteLine($"TOTAL{(dryRun ? " (dry run, nothing written)" : string.Empty)}: {total}");
         if (!total.Complete)
             Console.WriteLine("Some documents were changed while this ran or failed: run the command again.");
         return total.Complete ? 0 : 2;
@@ -212,7 +185,7 @@ public static class EncryptSponsorBankAccounts
                     if (await sponsors.SetBillingAccountIfUnchangedAsync(stored, rebound.Value.Stored, ct)) counts.SponsorsEncrypted++;
                     else counts.SponsorConflicts++;
                 }
-                catch (Exception ex) when (ex is FieldProtectionException or MongoException or Microsoft.Azure.Cosmos.CosmosException or ArgumentException)
+                catch (Exception ex) when (ex is FieldProtectionException or MongoException or ArgumentException)
                 {
                     counts.Failures++;
                     await Console.Error.WriteLineAsync(
@@ -237,7 +210,7 @@ public static class EncryptSponsorBankAccounts
                     if (await records.SaveAsync(record, record.Revision, ct)) counts.RecordsEncrypted++;
                     else counts.RecordConflicts++;
                 }
-                catch (Exception ex) when (ex is FieldProtectionException or MongoException or Microsoft.Azure.Cosmos.CosmosException or ArgumentException)
+                catch (Exception ex) when (ex is FieldProtectionException or MongoException or ArgumentException)
                 {
                     counts.Failures++;
                     await Console.Error.WriteLineAsync(
