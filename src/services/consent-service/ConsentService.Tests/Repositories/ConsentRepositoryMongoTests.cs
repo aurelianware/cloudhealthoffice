@@ -5,8 +5,8 @@ namespace ConsentService.Tests.Repositories;
 
 /// <summary>
 /// Repository contract tests. Exercised against the in-memory fake — the
-/// fake implements the same transition-and-append contract as the Cosmos
-/// and Mongo repositories. Mongo container-backed integration runs in CI
+/// fake implements the same transition-and-append contract as the Mongo
+/// repository. Mongo container-backed integration runs in CI
 /// under a separate fixture once operators publish a test mongo instance.
 /// </summary>
 public class ConsentRepositoryMongoTests
@@ -141,8 +141,8 @@ public class ConsentRepositoryMongoTests
     public async Task TransitionStatus_WhenFromStatusMissing_ThrowsArgumentException()
     {
         // The tightened repository contract requires every transition
-        // audit event to declare its expected from-status so the Cosmos
-        // and Mongo implementations can enforce a write-side precondition.
+        // audit event to declare its expected from-status so the Mongo
+        // implementation can enforce a write-side precondition.
         // The fake mirrors that contract — a null FromStatus is a caller bug.
         var repo = new InMemoryConsentRepository();
         var consent = NewActiveConsent();
@@ -174,8 +174,8 @@ public class ConsentRepositoryMongoTests
         // persisted Active. The caller's TransitionStatusAsync must NOT
         // silently overwrite — it surfaces the race as an
         // InvalidConsentTransitionException so the controller can return
-        // 409, matching the Cosmos (IfMatchEtag) and Mongo
-        // (status-filter ReplaceOneAsync) implementations.
+        // 409, matching the Mongo (status-filter ReplaceOneAsync)
+        // implementation.
         var repo = new InMemoryConsentRepository();
         var consent = NewActiveConsent();
         consent.Status = ConsentStatus.Draft;

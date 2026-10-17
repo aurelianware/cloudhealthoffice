@@ -8,17 +8,16 @@ namespace ConsentService.Models;
 
 /// <summary>
 /// Append-only audit row for <see cref="Consent"/>. One row per lifecycle
-/// action (created, activated, revoked, expired). Partition key is
-/// <c>{tenantId}:{consentId}</c> so the full audit trail for a consent lives
-/// in a single partition and scans cheaply.
+/// action (created, activated, revoked, expired). <see cref="PartitionKey"/>
+/// is <c>{tenantId}:{consentId}</c>, stored with every row.
 /// </summary>
 [BsonIgnoreExtraElements]
 public class ConsentEvent
 {
-    /// <summary>Cosmos document id + Mongo `_id`. Defaults to <see cref="EventId"/>.</summary>
+    /// <summary>Mongo `_id`. Defaults to <see cref="EventId"/>.</summary>
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>Cosmos partition key (see class remarks). Derived via <see cref="BuildPartitionKey"/>.</summary>
+    /// <summary><c>{tenantId}:{consentId}</c> (see class remarks). Derived via <see cref="BuildPartitionKey"/>.</summary>
     public string PartitionKey { get; set; } = string.Empty;
 
     [Required]
@@ -58,7 +57,7 @@ public class ConsentEvent
     /// adjacent fields OUT of this payload (those live encrypted on the
     /// <see cref="Consent"/> aggregate).
     ///
-    /// Cosmos serialization (System.Text.Json) emits this as a nested JSON
+    /// System.Text.Json emits this as a nested JSON
     /// object. Mongo serialization goes through <see cref="PayloadJson"/>
     /// as a string because the BSON driver has no built-in serializer for
     /// <see cref="JsonObject"/>.
@@ -68,7 +67,7 @@ public class ConsentEvent
 
     /// <summary>
     /// Mongo-facing mirror of <see cref="Payload"/>. Not emitted by
-    /// System.Text.Json (Cosmos path) — used only by the BSON driver.
+    /// System.Text.Json — used only by the BSON driver.
     /// </summary>
     [JsonIgnore]
     public string? PayloadJson

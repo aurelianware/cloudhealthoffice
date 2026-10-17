@@ -57,3 +57,14 @@ public interface IConsentEventRepository
         string consentId,
         CancellationToken ct = default);
 }
+
+/// <summary>
+/// Repository-local sink for appending <see cref="ConsentEvent"/> rows.
+/// Lets an <see cref="IConsentRepository"/> implementation share a single
+/// transition-and-append shape while keeping its own storage choice for
+/// audit rows.
+/// </summary>
+public interface IConsentEventSink
+{
+    Task AppendAsync(ConsentEvent evt);
+}
