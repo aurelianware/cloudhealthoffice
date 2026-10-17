@@ -1,0 +1,27 @@
+@namespace CloudHealthOffice.Portal.Shared.Insights
+@* One headline figure. The value links to the claims it counts. *@
+<MudPaper Class="pa-4 insight-stat" Elevation="1" data-testid="@TestId">
+    <MudText Typo="Typo.caption" Color="Color.Secondary">@Label</MudText>
+    <div class="insight-stat-value">
+        @if (Href is not null)
+        {
+            <a href="@Href" data-testid="@($"{TestId}-link")">@Value</a>
+        }
+        else
+        {
+            <span>@Value</span>
+        }
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Sub))
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary">@Sub</MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+    [Parameter] public string? Sub { get; set; }
+    [Parameter] public string? Href { get; set; }
+    [Parameter, EditorRequired] public string TestId { get; set; } = string.Empty;
+}

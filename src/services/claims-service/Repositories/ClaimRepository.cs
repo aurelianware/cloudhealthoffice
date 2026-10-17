@@ -54,21 +54,15 @@ public interface IClaimRepository
         int pageSize);
 
     /// <summary>
-    /// Search by a claim reference: the claim number, and/or a prior
-    /// authorization number on the claim header or any line (837 REF*G1),
-    /// combined with the usual filters. Newest first.
+    /// Search by <see cref="ClaimCriteria"/> (current versions only, newest
+    /// first): the claims list's reference and Insights drill-down filters.
     /// </summary>
-    Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByReferenceAsync(
-        string? claimNumber,
-        string? authorizationNumber,
-        string? memberId,
-        string? providerNPI,
-        DateTime? serviceDateFrom,
-        DateTime? serviceDateTo,
-        ClaimStatus? status,
-        int page,
-        int pageSize)
-        => throw new NotSupportedException("Searching by claim or authorization number needs the MongoDB claim store.");
+    Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByCriteriaAsync(ClaimCriteria criteria, int page, int pageSize)
+        => throw new NotSupportedException("Searching by claim reference or Insights criteria needs the MongoDB claim store.");
+
+    /// <summary>Claims Insights for claims adjudicated in [from, to), and the open inventory at <paramref name="asOf"/>.</summary>
+    Task<ClaimInsights> GetInsightsAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness, DateTime asOf, CancellationToken ct = default)
+        => throw new NotSupportedException("Claims Insights needs the MongoDB claim store.");
 
     Task<(IReadOnlyList<Claim> Page, int TotalCount)> SearchByIdsAsync(
         IReadOnlyCollection<string> claimIds,

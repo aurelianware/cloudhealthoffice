@@ -376,7 +376,7 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
         var claim = CreateValidClaim();
         claim.Id = "auth-claim-1";
         claim.PriorAuthorizationNumber = "PA-77";
-        _repo.SearchByReferenceAsync(null, "PA-77", null, null, null, null, null, 1, 25)
+        _repo.SearchByCriteriaAsync(Arg.Is<ClaimCriteria>(c => c.AuthorizationNumber == "PA-77" && c.ClaimNumber == null), 1, 25)
             .Returns((new List<Claim> { claim }, 11));
 
         var response = await _client.PostAsJsonAsync("/api/claims/search", new ClaimSearchBody { AuthorizationNumber = "PA-77" });
@@ -391,13 +391,42 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
     {
         var claim = CreateValidClaim();
         claim.Id = "by-number-1";
-        _repo.SearchByReferenceAsync("CLM-REF-9", null, null, null, null, null, null, 1, 25)
+        _repo.SearchByCriteriaAsync(Arg.Is<ClaimCriteria>(c => c.ClaimNumber == "CLM-REF-9"), 1, 25)
             .Returns((new List<Claim> { claim }, 7));
 
         var response = await _client.PostAsJsonAsync("/api/claims/search", new ClaimSearchBody { ClaimNumber = "CLM-REF-9" });
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal(7, doc.RootElement.GetProperty("totalCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task SearchClaimsPost_InsightsDrillDown_PassesTheSameCriteria()
+    {
+        var after = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        var onOrBefore = new DateTime(2026, 9, 16, 0, 0, 0, DateTimeKind.Utc);
+        _repo.SearchByCriteriaAsync(
+                Arg.Is<ClaimCriteria>(c => c.Open && c.ReceivedAfter == after && c.ReceivedOnOrBefore == onOrBefore && c.LineOfBusiness == LineOfBusiness.Medicaid),
+                1, 25)
+            .Returns((new List<Claim> { CreateValidClaim() }, 312));
+
+        var response = await _client.PostAsJsonAsync("/api/claims/search", new ClaimSearchBody
+        {
+            Open = true, ReceivedAfter = after, ReceivedOnOrBefore = onOrBefore, LineOfBusiness = LineOfBusiness.Medicaid,
+        });
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(312, doc.RootElement.GetProperty("totalCount").GetInt32());
+    }
+
+    [Theory]
+    [InlineData("?from=2026-10-01&to=2026-09-01")]
+    [InlineData("?from=2024-01-01&to=2026-01-01")]
+    public async Task GetClaimInsights_RejectsABackwardsOrOverlongPeriod(string query)
+    {
+        var response = await _client.GetAsync("/api/claims/insights" + query);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     // ═══════════════════════════════════════════════════════════════════

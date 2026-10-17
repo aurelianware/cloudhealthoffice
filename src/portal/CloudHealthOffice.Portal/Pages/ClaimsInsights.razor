@@ -1,0 +1,215 @@
+@page "/claims/insights"
+@attribute [Authorize]
+@inject IClaimsService ClaimsService
+@inject NavigationManager Navigation
+
+<PageTitle>Claims Insights - Cloud Health Office</PageTitle>
+
+@*
+    Claims Insights (portal-navigation.md §5.1). Aggregates only: every
+    number links to the claims list filtered to exactly the claims it counts
+    (the criteria are defined once, in claims-service), and that link can be
+    shared. Inventory and pend reasons are as of now; outcomes, denials and
+    turnaround cover claims adjudicated in the chosen period.
+*@
+<PermissionGate Permission="claims:read" RoleName="ClaimsExaminer">
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <div class="d-flex align-center justify-space-between flex-wrap gap-2 mb-2">
+        <MudText Typo="Typo.h3">
+            <MudIcon Icon="@Icons.Material.Filled.Insights" Class="mr-2" />
+            Claims Insights
+        </MudText>
+        <ModuleViewSwitch ListHref="/claims" InsightsHref="/claims/insights" Active="insights" />
+    </div>
+
+    <div class="d-flex align-center flex-wrap gap-3 mb-4" data-testid="insights-filters">
+        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+            @foreach (var d in PeriodChoices)
+            {
+                <MudButton Href="@Link(d, LineOfBusiness)" Variant="@(Days == d ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                           data-testid="@($"insights-period-{d}")">Last @d days</MudButton>
+            }
+        </MudButtonGroup>
+        <MudSelect T="string" Value="@(LineOfBusiness ?? "")" ValueChanged="@(v => Navigation.NavigateTo(Link(Days, string.IsNullOrEmpty(v) ? null : v)))"
+                   Label="Line of business" Dense="true" Variant="Variant.Outlined" Style="max-width: 220px;" data-testid="insights-lob">
+            <MudSelectItem T="string" Value="@("")">All lines of business</MudSelectItem>
+            @foreach (var lob in LinesOfBusiness)
+            {
+                <MudSelectItem T="string" Value="@lob">@lob</MudSelectItem>
+            }
+        </MudSelect>
+        @if (_insights is not null)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" data-testid="insights-asof">
+                As of @_insights.AsOf.ToLocalTime().ToString("MM/dd/yyyy h:mm tt") · adjudicated @_insights.From.ToLocalTime().ToString("MM/dd") – @_insights.To.ToLocalTime().ToString("MM/dd/yyyy")
+            </MudText>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" data-testid="insights-error">@_error</MudAlert>
+    }
+    else if (_insights is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        var i = _insights;
+        var lob = i.LineOfBusiness ?? LineOfBusiness;
+        var over30 = i.Inventory.Aging.Where(a => a.MinDays >= 31).ToList();
+        var over30Start = over30.FirstOrDefault();
+
+        <MudGrid Class="mb-2" Spacing="3">
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Open inventory" Value="@i.Inventory.Total.ToString("N0")" Sub="@($"{i.Inventory.TotalCharge:C0} billed")"
+                             Href="@ClaimDrillDown.Open(lob)" TestId="stat-open" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Open over 30 days" Value="@over30.Sum(a => a.Count).ToString("N0")"
+                             Sub="@(i.Inventory.Total == 0 ? "" : $"{Pct((decimal)over30.Sum(a => a.Count) / i.Inventory.Total, 0)} of open inventory")"
+                             Href="@(over30Start is null ? null : ClaimDrillDown.Open(lob, receivedOnOrBefore: over30Start.ReceivedOnOrBefore))" TestId="stat-over30" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Auto-adjudication rate"
+                             Value="@(i.Outcomes.AutoAdjudicationRate is { } rate ? Pct(rate, 1) : "—")"
+                             Sub="@($"{i.Outcomes.AutoAdjudicated:N0} of {i.Outcomes.Adjudicated:N0} adjudicated with no examiner")"
+                             Href="@(i.Outcomes.AutoAdjudicated > 0 ? ClaimDrillDown.Adjudicated(i.From, i.To, lob, auto: true) : null)" TestId="stat-auto" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <InsightStat Label="Receipt to adjudication (median)"
+                             Value="@(i.Turnaround.MedianDays is { } m ? $"{m:0.#} days" : "—")"
+                             Sub="@(i.Turnaround.P90Days is { } p ? $"90% within {p:0.#} days · average {i.Turnaround.AverageDays:0.#}" + (i.Turnaround.Sampled ? $" · first {i.Turnaround.Count:N0} measured" : "") : "No claims adjudicated")"
+                             TestId="stat-turnaround" />
+            </MudItem>
+        </MudGrid>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">Open inventory by age</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">Full days since receipt.</MudText>
+                    <InsightBarList TestId="insights-aging" AriaLabel="Open claims by age since receipt"
+                                    Rows="@i.Inventory.Aging.Select(a => new InsightBarList.Row(a.Label, a.Count, ClaimDrillDown.Open(lob, a.ReceivedAfter, a.ReceivedOnOrBefore), Extra: a.Charge.ToString("C0"), Title: $"{a.Count:N0} open claims received {a.Label} ago, {a.Charge:C0} billed")).ToList()"
+                                    EmptyText="No open claims." />
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">Open inventory by status</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">Claims not yet adjudicated.</MudText>
+                    <InsightBarList TestId="insights-status" AriaLabel="Open claims by status"
+                                    Rows="@i.Inventory.ByStatus.OrderByDescending(s => s.Count).Select(s => new InsightBarList.Row(StatusLabel(s.Status), s.Count, ClaimDrillDown.Open(lob, status: s.Status), Extra: s.Charge.ToString("C0"))).ToList()"
+                                    EmptyText="No open claims." />
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">Pend reasons</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">Claims pended now, by pend code.</MudText>
+                    <InsightBarList TestId="insights-pends" AriaLabel="Pended claims by pend code"
+                                    Rows="@i.PendReasons.Select(p => new InsightBarList.Row(PendLabel(p.PendCode), p.Count, ClaimDrillDown.Pended(p.PendCode, lob), Sub: p.PendCode == ClaimDrillDown.UnspecifiedCode ? null : p.PendCode, Extra: p.OldestPendedAt is { } at ? $"oldest {Age(at, i.AsOf)}" : null)).ToList()"
+                                    EmptyText="Nothing is pended." />
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">Outcomes</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">
+                        @i.Outcomes.Adjudicated.ToString("N0") claims adjudicated in the period · @i.Outcomes.TotalPaid.ToString("C0") paid of @i.Outcomes.TotalCharge.ToString("C0") billed.
+                    </MudText>
+                    <InsightBarList TestId="insights-outcomes" AriaLabel="Claims adjudicated in the period by status"
+                                    Rows="@i.Outcomes.ByStatus.OrderByDescending(s => s.Count).Select(s => new InsightBarList.Row(StatusLabel(s.Status), s.Count, ClaimDrillDown.Adjudicated(i.From, i.To, lob, status: s.Status), Extra: s.Charge.ToString("C0"))).ToList()"
+                                    EmptyText="No claims adjudicated in the period." />
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.h6">Top denial reasons</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">Claims denied in the period, by claim-level reason code (top 10).</MudText>
+                    <InsightBarList TestId="insights-denials" AriaLabel="Denied claims by reason code"
+                                    Rows="@i.DenialReasons.Select(d => new InsightBarList.Row(d.Code == ClaimDrillDown.UnspecifiedCode ? "No reason code" : (d.Description ?? $"Reason {d.Code}"), d.Count, ClaimDrillDown.Denied(d.Code, i.From, i.To, lob), Sub: d.Code == ClaimDrillDown.UnspecifiedCode ? null : $"CARC {d.Code}")).ToList()"
+                                    EmptyText="No claims denied in the period." />
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+</PermissionGate>
+
+@code {
+    private static readonly int[] PeriodChoices = [7, 30, 90];
+    private static readonly string[] LinesOfBusiness = ["Commercial", "Medicare", "Medicaid", "Exchange", "TRICARE", "VA"];
+
+    [SupplyParameterFromQuery(Name = "days")] public int? DaysParam { get; set; }
+    [SupplyParameterFromQuery(Name = "lob")] public string? LineOfBusiness { get; set; }
+
+    private int Days => DaysParam is { } d && PeriodChoices.Contains(d) ? d : 30;
+
+    private ClaimInsightsView? _insights;
+    private string? _error;
+    private string? _loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var lob = LinesOfBusiness.Contains(LineOfBusiness) ? LineOfBusiness : null;
+        var key = $"{Days}:{lob}";
+        if (_loadedFor == key) return;
+        _loadedFor = key;
+        _insights = null;
+        _error = null;
+        var to = DateTime.UtcNow;
+        try
+        {
+            _insights = await ClaimsService.GetClaimInsightsAsync(to.AddDays(-Days), to, lob);
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            _error = $"Claims Insights couldn't be loaded: {ex.Message}";
+        }
+    }
+
+    // Culture-independent "75.0%" (P-format puts a space or a different sign in some cultures).
+    private static string Pct(decimal share, int decimals) =>
+        (share * 100).ToString(decimals == 0 ? "0" : "0." + new string('0', decimals), System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    private static string Link(int days, string? lob) =>
+        "/claims/insights?days=" + days + (string.IsNullOrWhiteSpace(lob) ? "" : "&lob=" + Uri.EscapeDataString(lob));
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "InAdjudication" => "In adjudication",
+        "Approved" => "Pay (awaiting payment)",
+        "Deny" => "Deny (awaiting 835)",
+        "PartiallyPaid" => "Partially paid",
+        _ => status,
+    };
+
+    private static string PendLabel(string code) => code switch
+    {
+        "NCCI" => "NCCI edit",
+        "MUE" => "Units over MUE",
+        "AUTH" => "Authorization check",
+        "NOAUTH" => "No authorization",
+        "OON" => "Out of network",
+        "NOCONTRACT" => "No contract",
+        "COB" => "Coordination of benefits",
+        "MEDREVIEW" => "Medical review",
+        "CLINICAL" => "Clinical review",
+        "RETROELIG" => "Retro eligibility",
+        "SUBRO" => "Subrogation",
+        "SPENDDOWN" => "Spend-down",
+        "PRICING" => "Pricing",
+        "DUPLICATE" => "Possible duplicate",
+        "SVCUNAVAIL" => "Check unavailable (retrying)",
+        ClaimDrillDown.UnspecifiedCode => "No pend reason recorded",
+        _ => code,
+    };
+
+    private static string Age(DateTime at, DateTime asOf)
+    {
+        var days = (int)Math.Floor((asOf - at).TotalDays);
+        return days <= 0 ? "today" : days == 1 ? "1 day" : $"{days} days";
+    }
+}

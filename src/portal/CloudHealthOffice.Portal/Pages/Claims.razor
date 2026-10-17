@@ -13,10 +13,13 @@
 
 <PermissionGate Permission="claims:read,claims:work" RoleName="ClaimsExaminer">
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h3" GutterBottom="true">
-        <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="mr-2" />
-        Claims Management
-    </MudText>
+    <div class="d-flex align-center justify-space-between flex-wrap gap-2">
+        <MudText Typo="Typo.h3" GutterBottom="true">
+            <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="mr-2" />
+            Claims Management
+        </MudText>
+        <ModuleViewSwitch ListHref="/claims" InsightsHref="/claims/insights" Active="list" />
+    </div>
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
         Search and manage professional and institutional healthcare claims
     </MudText>
@@ -30,6 +33,16 @@
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.ReceiptLong">
             Showing persisted claims submitted by MCC run <strong>@ShortId(RunId)</strong>.
+        </MudAlert>
+    }
+
+    @if (_searchRequest.HasDrillDown)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.Insights" data-testid="claims-drilldown">
+            <div class="d-flex align-center justify-space-between flex-wrap gap-2">
+                <span>From Claims Insights: <strong>@DrillDownDescription</strong></span>
+                <MudButton Variant="Variant.Text" Size="Size.Small" Href="/claims" data-testid="claims-drilldown-clear">Clear</MudButton>
+            </div>
         </MudAlert>
     }
 
@@ -405,11 +418,71 @@
     [SupplyParameterFromQuery(Name = "runId")]
     public string? RunId { get; set; }
 
+    // Claims Insights drill-down (ClaimDrillDown builds these URLs).
+    [SupplyParameterFromQuery(Name = "open")] public bool? QOpen { get; set; }
+    [SupplyParameterFromQuery(Name = "adjudicated")] public bool? QAdjudicated { get; set; }
+    [SupplyParameterFromQuery(Name = "status")] public string? QStatus { get; set; }
+    [SupplyParameterFromQuery(Name = "receivedAfter")] public string? QReceivedAfter { get; set; }
+    [SupplyParameterFromQuery(Name = "receivedOnOrBefore")] public string? QReceivedOnOrBefore { get; set; }
+    [SupplyParameterFromQuery(Name = "adjudicatedFrom")] public string? QAdjudicatedFrom { get; set; }
+    [SupplyParameterFromQuery(Name = "adjudicatedBefore")] public string? QAdjudicatedBefore { get; set; }
+    [SupplyParameterFromQuery(Name = "pendCode")] public string? QPendCode { get; set; }
+    [SupplyParameterFromQuery(Name = "denialCode")] public string? QDenialCode { get; set; }
+    [SupplyParameterFromQuery(Name = "auto")] public bool? QAuto { get; set; }
+    [SupplyParameterFromQuery(Name = "lob")] public string? QLineOfBusiness { get; set; }
+
+    private static DateTime? Instant(string? value) =>
+        DateTime.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var d) ? d : null;
+
+    private void ApplyDrillDown()
+    {
+        _searchRequest.Open = QOpen;
+        _searchRequest.Adjudicated = QAdjudicated;
+        if (!string.IsNullOrWhiteSpace(QStatus)) _searchRequest.Status = QStatus;
+        _searchRequest.ReceivedAfter = Instant(QReceivedAfter);
+        _searchRequest.ReceivedOnOrBefore = Instant(QReceivedOnOrBefore);
+        _searchRequest.AdjudicatedFrom = Instant(QAdjudicatedFrom);
+        _searchRequest.AdjudicatedBefore = Instant(QAdjudicatedBefore);
+        _searchRequest.PendCode = QPendCode;
+        _searchRequest.DenialReasonCode = QDenialCode;
+        _searchRequest.AutoAdjudicated = QAuto;
+        _searchRequest.LineOfBusiness = QLineOfBusiness;
+    }
+
+    /// <summary>The drill-down in words: "open, received 16–30 days ago, Medicaid".</summary>
+    private string DrillDownDescription
+    {
+        get
+        {
+            var r = _searchRequest;
+            var parts = new List<string>();
+            if (r.Open == true) parts.Add("open claims");
+            if (r.Adjudicated == true) parts.Add("adjudicated claims");
+            if (!string.IsNullOrWhiteSpace(r.Status)) parts.Add($"status {r.Status}");
+            if (r.ReceivedAfter.HasValue || r.ReceivedOnOrBefore.HasValue)
+                parts.Add($"received {(r.ReceivedAfter.HasValue ? $"after {r.ReceivedAfter.Value.ToLocalTime():MM/dd/yyyy}" : "")}{(r.ReceivedAfter.HasValue && r.ReceivedOnOrBefore.HasValue ? " and " : "")}{(r.ReceivedOnOrBefore.HasValue ? $"on or before {r.ReceivedOnOrBefore.Value.ToLocalTime():MM/dd/yyyy}" : "")}");
+            if (r.AdjudicatedFrom.HasValue && r.AdjudicatedBefore.HasValue)
+                parts.Add($"adjudicated {r.AdjudicatedFrom.Value.ToLocalTime():MM/dd/yyyy} – {r.AdjudicatedBefore.Value.ToLocalTime():MM/dd/yyyy}");
+            if (!string.IsNullOrWhiteSpace(r.PendCode)) parts.Add($"pend code {r.PendCode}");
+            if (!string.IsNullOrWhiteSpace(r.DenialReasonCode)) parts.Add($"denial reason {r.DenialReasonCode}");
+            if (r.AutoAdjudicated == true) parts.Add("auto-adjudicated");
+            if (r.AutoAdjudicated == false) parts.Add("resolved by an examiner");
+            if (!string.IsNullOrWhiteSpace(r.LineOfBusiness)) parts.Add(r.LineOfBusiness);
+            return string.Join(", ", parts);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _searchRequest.PageSize = 25;
         _requireCriteria = await SearchPolicy.RequiresCriteriaAsync();
-        if (!string.IsNullOrWhiteSpace(RunId))
+        ApplyDrillDown();
+        if (_searchRequest.HasDrillDown)
+        {
+            await PerformSearch(skipValidation: true);
+        }
+        else if (!string.IsNullOrWhiteSpace(RunId))
         {
             _searchRequest.RunId = RunId;
             await PerformSearch(skipValidation: true);
