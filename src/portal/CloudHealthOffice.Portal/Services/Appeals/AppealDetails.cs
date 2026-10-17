@@ -2,7 +2,11 @@ namespace CloudHealthOffice.Portal.Services;
 
 public class AppealDetails
 {
+    /// <summary>The appeal number shown to people (the record id when it has none).</summary>
     public string AppealId { get; set; } = string.Empty;
+
+    /// <summary>appeals-service's record id: what the access log is keyed on.</summary>
+    public string RecordId { get; set; } = string.Empty;
     public string MemberName { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;
     public string AppealType { get; set; } = string.Empty;

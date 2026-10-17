@@ -4,6 +4,9 @@ public interface IClaimsService
 {
     Task<List<ClaimSummary>> GetRecentClaimsAsync(int count);
     Task<ClaimSearchResult> SearchClaimsAsync(ClaimSearchRequest request);
+
+    /// <summary>Claims Insights for claims adjudicated in [from, to), and open inventory now (claims:read).</summary>
+    Task<ClaimInsightsView> GetClaimInsightsAsync(DateTime from, DateTime to, string? lineOfBusiness = null);
     Task<ClaimDetails?> GetClaimByIdAsync(string claimId);
     Task<string?> GetExplanationOfBenefitJsonAsync(string claimId);
     Task<List<MassAdjudicationRunSummary>> GetMassAdjudicationRunsAsync(int limit = 25);
@@ -52,4 +55,18 @@ public interface IClaimsService
     /// Null when the claim doesn't exist.
     /// </summary>
     Task<ClaimEditsView?> GetClaimEditsAsync(string claimId);
+
+    /// <summary>
+    /// Who read this claim, newest first: views, and searches that returned it
+    /// (claims-service <c>GET /claims/{id}/access-log</c>, needs <c>audit:read</c>).
+    /// Reading the log is itself recorded.
+    /// </summary>
+    Task<List<ClaimAccessEntry>> GetClaimAccessLogAsync(string claimId, int limit = 200);
+
+    /// <summary>
+    /// Claims the signed-in user opened recently, newest first, one per claim
+    /// (claims-service <c>GET /claims/recently-viewed</c>, built from the
+    /// caller's own access events).
+    /// </summary>
+    Task<List<RecentClaimView>> GetRecentlyViewedClaimsAsync(int limit = 10);
 }
