@@ -27,9 +27,9 @@ public class IdCardPipelineAuthTests : IClassFixture<IdCardPipelineAuthTests.Fac
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            builder.UseInMemoryStorage();
             builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["MongoDb:ConnectionString"] = "",
                 ["ProviderJwt:Authority"] = "",
             }));
             builder.ConfigureServices(services =>
