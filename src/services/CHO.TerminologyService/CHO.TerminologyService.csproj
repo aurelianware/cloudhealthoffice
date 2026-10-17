@@ -7,7 +7,6 @@
     <RootNamespace>CHO.TerminologyService</RootNamespace>
     <AssemblyName>CHO.TerminologyService</AssemblyName>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
   <ItemGroup>

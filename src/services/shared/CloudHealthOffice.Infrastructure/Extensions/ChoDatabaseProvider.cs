@@ -1,22 +1,12 @@
 namespace CloudHealthOffice.Infrastructure.Extensions;
 
 /// <summary>
-/// The database backend a service was wired against by <c>AddChoDatabase</c>.
-/// <para>
-/// Services that ship both a MongoDB and a Cosmos DB repository use the returned value to pick
-/// the matching implementation, so the choice is made once, from configuration, instead of being
-/// re-derived in each service.
-/// </para>
-/// <para>
-/// Cosmos DB's MongoDB API reports as <see cref="MongoDb"/>: it is reached through the MongoDB
-/// driver, so the Mongo repository is the correct implementation for it.
-/// </para>
+/// The database backend a service was wired against by <c>AddChoDatabase</c>. MongoDB
+/// (including Azure DocumentDB, reached through the MongoDB driver) is the only one
+/// (ADR 017); <c>AddChoDatabase</c> returns null when no database is configured.
 /// </summary>
 public enum ChoDatabaseProvider
 {
-    /// <summary>MongoDB, or any MongoDB-wire-compatible service such as Cosmos DB for MongoDB. The default.</summary>
+    /// <summary>MongoDB, or a MongoDB-wire-compatible service such as Azure DocumentDB.</summary>
     MongoDb,
-
-    /// <summary>Cosmos DB accessed through its native SDK. Opt-in via <c>Database:Provider=CosmosDb</c>.</summary>
-    CosmosDb
 }

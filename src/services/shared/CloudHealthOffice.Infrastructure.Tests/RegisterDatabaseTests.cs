@@ -1,6 +1,5 @@
 using CloudHealthOffice.Infrastructure.Data;
 using CloudHealthOffice.Infrastructure.Extensions;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Driver;
@@ -8,15 +7,13 @@ using MongoDB.Driver;
 namespace CloudHealthOffice.Infrastructure.Tests;
 
 /// <summary>
-/// Covers provider selection in AddChoInfrastructure. MongoDB is the default so deployments
-/// stay cloud-agnostic; the Cosmos DB native SDK is opt-in via Database:Provider=CosmosDb.
+/// Covers database registration in AddChoInfrastructure. MongoDB is the only store (ADR 017);
+/// leftover Cosmos DB SDK settings or another provider name are refused at start-up.
 /// </summary>
 public class RegisterDatabaseTests
 {
     private const string MongoConnectionString = "mongodb://localhost:27017";
     private const string CosmosEndpoint = "https://example.documents.azure.com:443/";
-
-    // A syntactically valid base-64 key; CosmosClient parses the key at construction time.
     private const string CosmosKey = "dGVzdC1jb3Ntb3Mta2V5LXZhbHVlLWZvci11bml0LXRlc3Rz";
 
     private static IServiceCollection BuildServices(params (string Key, string Value)[] settings)
@@ -88,18 +85,10 @@ public class RegisterDatabaseTests
     }
 
     [Fact]
-    public void Default_WithMongoConnectionString_DoesNotRegisterCosmosClient()
-    {
-        var services = BuildServices(("MongoDb:ConnectionString", MongoConnectionString));
-
-        services.Should().NotContain(d => d.ServiceType == typeof(CosmosClient));
-    }
-
-    [Fact]
     public void Default_WithCosmosCredentialsButNoMongo_DoesNotSilentlyFallBackToCosmos()
     {
-        // Regression guard: the previous behaviour started a service against Cosmos DB whenever
-        // MongoDb:ConnectionString happened to be missing, with no signal that it had done so.
+        // Leftover Cosmos DB SDK settings: the operator believes a database is configured, so the
+        // service must not start without one.
         var act = () => BuildServices(
             ("CosmosDb:Endpoint", CosmosEndpoint),
             ("CosmosDb:Key", CosmosKey));
@@ -117,7 +106,6 @@ public class RegisterDatabaseTests
         var services = BuildServices();
 
         services.Should().NotContain(d => d.ServiceType == typeof(IMongoClient));
-        services.Should().NotContain(d => d.ServiceType == typeof(CosmosClient));
         services.Should().NotContain(d => d.ServiceType == typeof(MongoDbConnectionFactory));
     }
 
@@ -145,32 +133,25 @@ public class RegisterDatabaseTests
     public void ProviderName_IsCaseInsensitive()
     {
         var services = BuildServices(
-            ("Database:Provider", "cosmosdb"),
-            ("CosmosDb:Endpoint", CosmosEndpoint),
-            ("CosmosDb:Key", CosmosKey));
+            ("Database:Provider", "mongodb"),
+            ("MongoDb:ConnectionString", MongoConnectionString));
 
-        services.Should().Contain(d => d.ServiceType == typeof(CosmosClient));
+        services.Should().Contain(d => d.ServiceType == typeof(IMongoClient));
     }
 
-    [Fact]
-    public void CosmosProvider_WithEndpointAndKey_RegistersCosmosClient()
+    [Theory]
+    [InlineData("CosmosDb")]
+    [InlineData("cosmosdb")]
+    public void CosmosProvider_IsRefused_EvenWithCredentials(string provider)
     {
-        var services = BuildServices(
-            ("Database:Provider", "CosmosDb"),
+        var act = () => BuildServices(
+            ("Database:Provider", provider),
             ("CosmosDb:Endpoint", CosmosEndpoint),
-            ("CosmosDb:Key", CosmosKey));
-
-        services.Should().Contain(d => d.ServiceType == typeof(CosmosClient));
-        services.Should().NotContain(d => d.ServiceType == typeof(IMongoClient));
-    }
-
-    [Fact]
-    public void CosmosProvider_WithoutCredentials_Throws()
-    {
-        var act = () => BuildServices(("Database:Provider", "CosmosDb"));
+            ("CosmosDb:Key", CosmosKey),
+            ("MongoDb:ConnectionString", MongoConnectionString));
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*CosmosDb:ConnectionString*");
+            .WithMessage("*not supported*ADR 017*");
     }
 
     [Fact]
