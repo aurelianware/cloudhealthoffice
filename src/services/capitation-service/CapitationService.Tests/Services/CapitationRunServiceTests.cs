@@ -296,6 +296,60 @@ public class CapitationRunServiceTests
         savedStatement.NetPayable.Should().Be(90.00m);
     }
 
+    // Money is rounded to the cent half away from zero (MoneyRounding.ToCents).
+    // $50.15 × 1.5 = $75.225 → $75.23; banker's rounding gave $75.22.
+    [Fact]
+    public async Task ExecuteRunAsync_RiskAdjustedPmpmAtHalfCent_RoundsAwayFromZero()
+    {
+        var run = CreatePendingRun();
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        var contract = CreateContract(basePmpm: 50.15m, withholdPct: 0, riskAdjusted: true);
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(It.IsAny<LineOfBusiness?>(), It.IsAny<ContractType?>()))
+            .ReturnsAsync(new List<CapitationContract> { contract });
+        SetupCoverageServiceResponse("1234567890", new List<CapitationCoverageDto> { CreateCoverage("MEM001") });
+        SetupRiskScoreServiceResponse(1.5m);
+
+        CapitationStatement? savedStatement = null;
+        _statementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(s => savedStatement = s)
+            .ReturnsAsync((CapitationStatement s) => s);
+
+        await _service.ExecuteRunAsync("run-1");
+
+        var item = savedStatement!.LineItems[0];
+        item.AdjustedPMPM.Should().Be(75.23m);
+        item.GrossAmount.Should().Be(75.23m);
+    }
+
+    // $100.25 × 10% = $10.025 → $10.03 withheld; banker's rounding gave $10.02.
+    [Fact]
+    public async Task ExecuteRunAsync_WithholdAtHalfCent_RoundsAwayFromZero()
+    {
+        var run = CreatePendingRun();
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+
+        var contract = CreateContract(basePmpm: 100.25m, withholdPct: 0.10m);
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(It.IsAny<LineOfBusiness?>(), It.IsAny<ContractType?>()))
+            .ReturnsAsync(new List<CapitationContract> { contract });
+        SetupCoverageServiceResponse("1234567890", new List<CapitationCoverageDto> { CreateCoverage("MEM001") });
+        SetupRiskScoreServiceResponse();
+
+        CapitationStatement? savedStatement = null;
+        _statementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(s => savedStatement = s)
+            .ReturnsAsync((CapitationStatement s) => s);
+
+        await _service.ExecuteRunAsync("run-1");
+
+        var item = savedStatement!.LineItems[0];
+        item.GrossAmount.Should().Be(100.25m);
+        item.WithholdAmount.Should().Be(10.03m);
+        item.NetAmount.Should().Be(90.22m);
+    }
+
     [Fact]
     public async Task ExecuteRunAsync_NoRiskScore_UsesDefaultScore()
     {

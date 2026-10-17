@@ -329,10 +329,10 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
     {
         var (disposition, denialCode, allowedRatio) = GetScenarioOutcomeRules(scenario);
 
-        var totalAllowed = Math.Round(claim.TotalCharges * allowedRatio, 2);
+        var totalAllowed = ExpectedMoney.ToCents(claim.TotalCharges * allowedRatio);
         var copay = disposition == "Paid" ? 25m : 0m;
         var coinsuranceRate = disposition == "Paid" ? 0.20m : 0m;
-        var coinsurance = Math.Round(totalAllowed * coinsuranceRate, 2);
+        var coinsurance = ExpectedMoney.ToCents(totalAllowed * coinsuranceRate);
         var deductible = disposition == "Paid" && random.Next(100) < 30 ? 50m : 0m;
         var paid = disposition == "Paid"
             ? Math.Max(0, totalAllowed - copay - deductible - coinsurance)
@@ -354,9 +354,9 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
         var lineOutcomes = claim.Lines.Select(l =>
         {
             var lineAllowed = disposition == "Paid"
-                ? Math.Round(l.ChargeAmount * l.Units * allowedRatio, 2)
+                ? ExpectedMoney.ToCents(l.ChargeAmount * l.Units * allowedRatio)
                 : 0m;
-            var lineCoins = Math.Round(lineAllowed * coinsuranceRate, 2);
+            var lineCoins = ExpectedMoney.ToCents(lineAllowed * coinsuranceRate);
             return new LineOutcome
             {
                 LineNumber = l.LineNumber,
@@ -372,8 +372,8 @@ public class EdgeCaseClaimGenerator : IClaimGenerator
             Disposition = disposition,
             DenialReasonCode = denialCode,
             ExpectedAllowedAmount = totalAllowed,
-            ExpectedPaidAmount = Math.Round(paid, 2),
-            ExpectedMemberLiability = Math.Round(memberLiability, 2),
+            ExpectedPaidAmount = ExpectedMoney.ToCents(paid),
+            ExpectedMemberLiability = ExpectedMoney.ToCents(memberLiability),
             ExpectedCopay = copay,
             ExpectedCoinsurance = coinsurance,
             ExpectedDeductible = deductible,

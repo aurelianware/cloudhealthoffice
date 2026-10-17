@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using ArService.Models;
 using CloudHealthOffice.Finance.Contracts;
+using CloudHealthOffice.Infrastructure.Money;
 using Microsoft.Extensions.Options;
 using CloudHealthOffice.Infrastructure.Logging;
 
@@ -705,7 +706,7 @@ public sealed class GlPostingService
         {
             // An unreadable payload leaves refund null and is parked as InvalidPayload just below.
         }
-        if (refund == null || refund.Amount <= 0m || decimal.Round(refund.Amount, 2) != refund.Amount)
+        if (refund == null || refund.Amount <= 0m || MoneyRounding.ToCents(refund.Amount) != refund.Amount)
         {
             Park(record, GlParkReason.InvalidPayload, "The ProviderRefundOwed payload has no money amount.");
             return;

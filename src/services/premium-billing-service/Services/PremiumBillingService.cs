@@ -3,6 +3,7 @@ using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Money;
 
 namespace PremiumBillingService.Services;
 
@@ -568,9 +569,9 @@ public class PremiumBillingService : IPremiumBillingService
                 PlanId = coverage.PlanId,
                 CoverageLevel = coverage.CoverageLevel,
                 InsuranceLineCode = coverage.InsuranceLineCode,
-                SubscriberPremium = Math.Round(subscriberPremium, 2),
-                EmployerContribution = Math.Round(employerContribution, 2),
-                TotalPremium = Math.Round(subscriberPremium + employerContribution, 2),
+                SubscriberPremium = MoneyRounding.ToCents(subscriberPremium),
+                EmployerContribution = MoneyRounding.ToCents(employerContribution),
+                TotalPremium = MoneyRounding.ToCents(subscriberPremium + employerContribution),
                 EffectiveDate = coverage.EffectiveDate,
                 TerminationDate = coverage.TerminationDate,
                 ProrationFactor = Math.Round(prorationFactor, 4),
