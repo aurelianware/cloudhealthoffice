@@ -93,7 +93,7 @@ This is the most important finding for the design, because it decides which date
 - Beneficiary-specific materials are mailed in hard copy unless the enrollee **opts in**.
 - Opt-in consent must name **both the media type and the specific materials**.
 - The plan explains how and when to access them, mails hard copy on request within **3 business days** (one time or permanently, for all or some materials), and **mails hard copy automatically if electronic delivery fails**.
-- CMS guidance expects an alert (such as an email) when a document is posted to a portal (PCD Guidance §10.4.4).
+- Portal delivery under opt-in is conditioned on the system generating a notification (such as an email) when a document is posted (PCD Guidance §10.4.4).
 
 ### 3.3 Medicaid managed care notices
 
@@ -114,19 +114,19 @@ This is the most important finding for the design, because it decides which date
 - **Adverse benefit determination** (438.404(b)): the decision; the reasons, with the right to free copies of relevant documents and criteria; appeal rights, including that the plan's single appeal level comes first; State fair hearing rights; how to use them; when and how to expedite; and continuation of benefits, including possible cost to the enrollee.
 - **Appeal resolution** (438.408(e)): the result and date; if not wholly favorable, the right to a State fair hearing and how to request it (within 90–120 days, per State), and continuation of benefits.
 - **Missing notice or timing requirements means deemed exhaustion:** the enrollee can go straight to a State fair hearing (438.408(c)(3)).
-- **Providers:** the plan notifies the requesting provider of a denial or reduced authorization (438.210(c)). From 2026, a prior authorization denial must include a **specific reason**, however it's communicated (438.242(b)(8) → 431.80(a)).
+- **Providers:** the plan notifies the requesting provider of a denial or reduced authorization (438.210(c)). From 2026, the denial sent to the provider must include a **specific reason**, however it's communicated (438.242(b)(8) → 431.80(a)).
 - **State model notices:** States must develop model enrollee notices and require plans to use them (438.10(c)(4)).
 
 **Formatting, language and electronic delivery** (438.10):
 - Easily understood language and format; font **no smaller than 12 point**; available in alternative formats at no cost.
-- Appeal, grievance, denial and termination notices are available in the State's **prevalent non-English languages**, with taglines in a **conspicuously visible** font size. (The former 18-point tagline requirement was replaced in 2020.)
+- Appeal, grievance, denial and termination notices are available in the State's **prevalent non-English languages**, with taglines in a **conspicuously visible** font size. (*The former 18-point tagline size was replaced by this standard in 2020; to confirm.*)
 - Electronic delivery requires **all** of: a readily accessible format, a prominent location on the website, the ability to save and print, the same content and language requirements, and notice that paper is free on request **within 5 business days** (438.10(c)(6)). *How the website condition applies to a notice addressed to one person, and the opt-in rules in §435.918, are to confirm.*
 
 ### 3.4 Language access and accessibility (Section 1557)
 
 - **Notice of availability** (45 CFR 92.11): a notice that free language assistance and auxiliary aids are available, in English and at least the **15 most common languages** of people with limited English proficiency in the State, must accompany significant communications. These include **notices of denial or termination of benefits or coverage, EOBs, notices of appeal and grievance rights**, and member handbooks.
   - A member can opt out annually; alternatively the plan records the member's primary language and sends materials in it.
-  - In force since July 5, 2025. The June 2026 vacatur affects only gender-identity provisions; §§92.11, 92.201 and 92.202 remain in force.
+  - In force since July 5, 2025. The October 2025 court vacatur (*Tennessee v. Kennedy*; HHS notice June 2, 2026) covers only listed gender-identity provisions; §§92.11, 92.201 and 92.202 remain in force.
   - **For Medicare Advantage,** the CY2027 rule removed the separate Part C Notice of Availability (422.2267(e)(31) is now reserved) because §92.11 already requires it. The obligation continues under §92.11.
 - **Translation quality** (92.201): machine translation must be reviewed by a qualified human translator when accuracy is critical or the text is complex. **CHO doesn't machine-translate notices at send time.** Translations are template versions, reviewed and approved by a qualified translator.
 - **Accessible formats** (92.202): large print, Braille and accessible electronic formats are free and timely on request.
@@ -141,7 +141,7 @@ From UMCM 3.21 (*v2.6, May 2022; current version to confirm*):
 - **Mailing date is the postmark** (§3.1).
 - **ID cards:** UMCM 3.6 (Medicaid) and 3.7 (CHIP) set the required card content as templates. *Issuance timing, threshold languages beyond Spanish, and the general member-materials reading level are to confirm against the current UMCC and UMCM 4.3.*
 
-**Where Texas and federal rules differ, the stricter value wins.** UMCM 3.21 allows 11–12 point type; federal Medicaid requires at least 12, so CHO enforces 12.
+**Where Texas and federal rules differ, the stricter value wins.** UMCM 3.21 gives 11- or 12-point sans-serif type as an example of readable formatting; federal Medicaid requires at least 12 point, so CHO enforces 12.
 
 ### 3.6 Proving mailing
 
@@ -326,7 +326,7 @@ Depends on [document-store.md](document-store.md) §9 steps 1–2 (storage provi
 
 - [42 CFR 422.564](https://www.ecfr.gov/current/title-42/section-422.564), [422.568](https://www.ecfr.gov/current/title-42/section-422.568), [422.570](https://www.ecfr.gov/current/title-42/section-422.570), [422.572](https://www.ecfr.gov/current/title-42/section-422.572), [422.584](https://www.ecfr.gov/current/title-42/section-422.584), [422.590](https://www.ecfr.gov/current/title-42/section-422.590), [422.618](https://www.ecfr.gov/current/title-42/section-422.618), [422.629](https://www.ecfr.gov/current/title-42/section-422.629), [422.631](https://www.ecfr.gov/current/title-42/section-422.631), [422.633](https://www.ecfr.gov/current/title-42/section-422.633), [422.504](https://www.ecfr.gov/current/title-42/section-422.504), [422.2267](https://www.ecfr.gov/current/title-42/section-422.2267)
 - [42 CFR 438.3](https://www.ecfr.gov/current/title-42/section-438.3), [438.10](https://www.ecfr.gov/current/title-42/section-438.10), [438.210](https://www.ecfr.gov/current/title-42/section-438.210), [438.242](https://www.ecfr.gov/current/title-42/section-438.242), [438.402](https://www.ecfr.gov/current/title-42/section-438.402), [438.404](https://www.ecfr.gov/current/title-42/section-438.404), [438.406](https://www.ecfr.gov/current/title-42/section-438.406), [438.408](https://www.ecfr.gov/current/title-42/section-438.408), [438.416](https://www.ecfr.gov/current/title-42/section-438.416), [438.420](https://www.ecfr.gov/current/title-42/section-438.420), [431.80](https://www.ecfr.gov/current/title-42/section-431.80), [431.201](https://www.ecfr.gov/current/title-42/section-431.201), [431.211](https://www.ecfr.gov/current/title-42/section-431.211)
-- [45 CFR part 92 (Section 1557)](https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-A/part-92); [HHS notice of vacatur, June 2, 2026](https://www.federalregister.gov/documents/2026/06/02/2026-11015/notice-of-vacatur-regarding-certain-provisions-of-the-2024-nondiscrimination-in-health-programs-and)
+- [45 CFR part 92 (Section 1557)](https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-A/part-92); [HHS notice of the October 2025 vacatur, June 2, 2026](https://www.federalregister.gov/documents/2026/06/02/2026-11015/notice-of-vacatur-regarding-certain-provisions-of-the-2024-nondiscrimination-in-health-programs-and)
 - [CMS: Parts C & D Enrollee Grievances, Organization/Coverage Determinations, and Appeals Guidance](https://www.cms.gov/medicare/appeals-and-grievances/mmcag/downloads/parts-c-and-d-enrollee-grievances-organization-coverage-determinations-and-appeals-guidance.pdf)
 - [CMS: Integrated Denial Notice form instructions (Jan 2025)](https://www.cms.gov/files/document/integrated-denial-notice-form-instructions-cms-10003-eff-jan-2025.pdf); [CMS: MA notices and forms](https://www.cms.gov/medicare/appeals-grievances/managed-care/notices-forms)
 - [CY2027 MA and Part D final rule (91 FR 17583)](https://www.federalregister.gov/documents/2026/04/06/2026-06600/medicare-program-contract-year-2027-and-certain-contract-year-2026-policy-and-technical-changes-to); [CMS: marketing guideline changes](https://www.cms.gov/files/document/changes-medicare-advantage-organization-medicare-drug-plan-sponsors-marketing-guidelines.pdf)
