@@ -519,52 +519,25 @@ module workbooks 'modules/workbooks.bicep' = {
 }
 
 // =========================
-// Cosmos DB Module (for Prior Auth and Provider Directory APIs)
+// Azure DocumentDB (MongoDB vCore): the one persistence target (ADR 017)
 // =========================
-param enableCosmosDb bool = true
-param cosmosDbThroughput int = 400
+// Opt-in; the default tier is Free, for the wipe-and-rebuild demo environment.
+// Store the connection string (with retrywrites=false) in Key Vault as
+// MongoDb--ConnectionString; it is not a template output.
+param enableDocumentDb bool = false
+@secure()
+param documentDbAdministratorPassword string = ''
+param documentDbComputeTier string = 'Free'
+param documentDbFirewallRules array = []
 
-module cosmosDb 'modules/cosmos-db.bicep' = if (enableCosmosDb) {
-  name: 'cosmos-db-module'
+module documentDb 'modules/documentdb-mongo-cluster.bicep' = if (enableDocumentDb) {
+  name: 'documentdb-mongo-cluster-module'
   params: {
     baseName: baseName
     location: location
-    throughput: cosmosDbThroughput
-    enableServerless: false
-  }
-}
-
-// =========================
-// Cosmos DB for MongoDB lifetime free tier
-// =========================
-// Separate from the NoSQL API account above. This is opt-in because Azure
-// permits only one free-tier Cosmos DB account per subscription.
-param enableCosmosMongoFreeTier bool = false
-param cosmosMongoDatabaseName string = 'cloudhealthoffice'
-
-module cosmosMongoFreeTier 'modules/cosmos-mongodb-free-tier.bicep' = if (enableCosmosMongoFreeTier) {
-  name: 'cosmos-mongodb-free-tier-module'
-  params: {
-    baseName: baseName
-    location: location
-    databaseName: cosmosMongoDatabaseName
-    throughput: 1000
-  }
-}
-
-// Cosmos DB managed API connection (legacy Logic App connector)
-resource connCosmosDb 'Microsoft.Web/connections@2016-06-01' = if (enableManagedApiConnections && enableCosmosDb) {
-  name: 'documentdb'
-  location: connectorLocation
-  properties: {
-    displayName: 'documentdb'
-    api: {
-      id: subscriptionResourceId('Microsoft.Web/locations/managedApis', connectorLocation, 'documentdb')
-    }
-    parameterValues: {
-      databaseAccount: cosmosDb.outputs.cosmosAccountName
-      accessKey: cosmosDb.outputs.cosmosPrimaryKey
-    }
+    administratorPassword: documentDbAdministratorPassword
+    computeTier: documentDbComputeTier
+    firewallRules: documentDbFirewallRules
   }
 }
 
@@ -614,19 +587,9 @@ output payerIntegrationHealthUrl string = workbooks.outputs.payerIntegrationHeal
 output hipaaComplianceUrl string = workbooks.outputs.hipaaComplianceUrl
 output cms0057fComplianceUrl string = workbooks.outputs.cms0057fComplianceUrl
 
-// Cosmos DB outputs
-output cosmosDbAccountName string = enableCosmosDb ? cosmosDb.outputs.cosmosAccountName : 'disabled'
-output cosmosDbEndpoint string = enableCosmosDb ? cosmosDb.outputs.cosmosAccountEndpoint : 'disabled'
-output cosmosDbDatabaseName string = enableCosmosDb ? cosmosDb.outputs.cosmosDatabaseName : 'disabled'
-output priorAuthContainerName string = enableCosmosDb ? cosmosDb.outputs.priorAuthContainerName : 'disabled'
-output providerDirectoryContainerName string = enableCosmosDb ? cosmosDb.outputs.providerDirectoryContainerName : 'disabled'
-output cosmosDbConnectionId string = enableManagedApiConnections && enableCosmosDb ? connCosmosDb.id : 'disabled'
-
-// Cosmos DB for MongoDB free-tier outputs (connection strings are deliberately
-// excluded; retrieve them directly into the target secret store).
-output cosmosMongoFreeTierAccountName string = enableCosmosMongoFreeTier ? cosmosMongoFreeTier!.outputs.cosmosMongoAccountName : 'disabled'
-output cosmosMongoFreeTierEndpoint string = enableCosmosMongoFreeTier ? cosmosMongoFreeTier!.outputs.cosmosMongoEndpoint : 'disabled'
-output cosmosMongoFreeTierDatabaseName string = enableCosmosMongoFreeTier ? cosmosMongoFreeTier!.outputs.cosmosMongoDatabaseName : 'disabled'
+// Azure DocumentDB outputs (the connection string carries the password and is
+// deliberately not an output; build it into Key Vault directly).
+output documentDbClusterName string = enableDocumentDb ? documentDb!.outputs.clusterName : 'disabled'
 
 // ClaimRiskScorer outputs
 output claimRiskScorerFunctionName string = enableClaimRiskScorer ? claimRiskScorerFunc.name : 'disabled'

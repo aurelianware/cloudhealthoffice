@@ -1,12 +1,17 @@
 # Cosmos DB for MongoDB free-tier benchmark
 
-CloudHealthOffice can use an Azure Cosmos DB for MongoDB account as the
-persistence layer for the Million Claim Challenge while the application
-services continue to run in local Kubernetes.
+> **Benchmark only.** The persistence target for deployed environments is Azure
+> DocumentDB (MongoDB vCore), provisioned by `modules/documentdb-mongo-cluster.bicep`
+> through `enableDocumentDb` in `main.bicep` (ADR 017). This RU-based account is
+> kept only for the Million Claim Challenge throttling exercise below, and is
+> deployed by its own script rather than by `main.bicep`.
 
-The deployment is intentionally separate from
-`modules/cosmos-db.bicep`, which provisions the Cosmos DB for NoSQL API.
-The MongoDB module is opt-in, enables the lifetime free-tier discount when
+CloudHealthOffice can use an Azure Cosmos DB for MongoDB (RU) account as the
+persistence layer for the Million Claim Challenge while the application
+services continue to run in local Kubernetes. The services reach it through
+the MongoDB driver, like any MongoDB.
+
+The module is opt-in, enables the lifetime free-tier discount when
 the account is created, uses the MongoDB 5.0 API required by the repository's
 MongoDB.Driver version, and fixes shared database throughput at 1,000 RU/s.
 
@@ -26,22 +31,6 @@ BASE_NAME=cho-mcc \
 The script creates the resource group when needed, checks for another
 free-tier account, deploys the Bicep module, and prints the generated account
 name. It never prints or saves account keys.
-
-To include the account in the full Azure deployment instead, set:
-
-```json
-"enableCosmosDb": {
-  "value": false
-},
-"enableCosmosMongoFreeTier": {
-  "value": true
-}
-```
-
-The MongoDB option defaults to `false`. The existing `enableCosmosDb` option
-controls a separate, non-free-tier NoSQL API account and defaults to `true`;
-disable it when the MongoDB free-tier account is the only Cosmos resource you
-want.
 
 The module defaults to 1,000 RU/s, but `throughput` can be raised for a
 billable benchmark deployment. The lifetime-free discount still applies to
