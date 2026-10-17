@@ -16,7 +16,6 @@
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Azure.Storage.Blobs" VersionOverride="12.24.0" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Confluent.Kafka" />
