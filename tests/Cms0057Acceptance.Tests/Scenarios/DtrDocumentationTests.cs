@@ -1,3 +1,4 @@
+using CloudHealthOffice.Testing.FhirService;
 using FhirService.Controllers;
 using FhirService.Models;
 using FhirService.Services;
@@ -14,7 +15,7 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// The payer returns the correct Questionnaire for the coverage/service; a
 /// completed QuestionnaireResponse validates and is retrievable so it can be
 /// carried into the PAS-03 submission bundle. Executed against the REAL
-/// DtrService (in-memory, seeded) + DtrController in Demo/Cho mode.
+/// DtrService (seeded, over an in-process store double) + DtrController in Demo/Cho mode.
 ///
 /// Traceability:
 ///   controller  src/services/fhir-service/Controllers/DtrController.cs
@@ -31,8 +32,8 @@ public class DtrDocumentationTests
             MaxResponseSizeBytes = 1_048_576,
         });
 
-        // Empty IConfiguration → DtrService uses in-memory storage + seed data.
-        var service = new DtrService(config, AcceptanceContext.Logger<DtrService>(), AcceptanceContext.EmptyConfig());
+        // In-process store double; DtrService seeds the default library into it.
+        var service = new DtrService(config, new InMemoryDtrResourceStore(), AcceptanceContext.Logger<DtrService>());
         var bundleBuilder = new FhirBundleBuilder(AcceptanceContext.DemoConfig());
 
         return new DtrController(service, bundleBuilder, AcceptanceContext.Logger<DtrController>())

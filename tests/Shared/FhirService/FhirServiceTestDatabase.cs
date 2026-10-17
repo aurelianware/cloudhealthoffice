@@ -3,16 +3,12 @@
 // <Compile Include="..\Shared\FhirService\*.cs" />.
 using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
 using CloudHealthOffice.ProviderEnrollmentService.Gates;
-using FhirService.Models;
 using FhirService.Services;
 using FhirService.Services.PayerToPayer.Ingestion;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace CloudHealthOffice.Testing.FhirService;
 
@@ -71,14 +67,10 @@ public static class FhirServiceTestDatabase
             services.RemoveAll<IPayerToPayerImportRepository>();
             services.AddSingleton<IPayerToPayerImportRepository, InMemoryPayerToPayerImportRepository>();
 
-            // DtrService opens Mongo (and creates its indexes) when it sees a
-            // connection string; constructed without one it keeps its seeded
-            // questionnaires in process.
-            services.RemoveAll<IDtrService>();
-            services.AddSingleton<IDtrService>(sp => new DtrService(
-                sp.GetRequiredService<IOptions<DtrConfig>>(),
-                sp.GetRequiredService<ILogger<DtrService>>(),
-                new ConfigurationBuilder().Build()));
+            // The Mongo DTR store creates its indexes at construction, and
+            // DtrService seeds the default questionnaire library through it.
+            services.RemoveAll<IDtrResourceStore>();
+            services.AddSingleton<IDtrResourceStore, InMemoryDtrResourceStore>();
         });
 
         return builder;

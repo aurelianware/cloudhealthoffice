@@ -522,6 +522,8 @@ builder.Services.AddMemoryCache(options => options.SizeLimit = 1024);
 builder.Services.AddSingleton<ICrdClassificationStore, CrdClassificationStore>();
 builder.Services.AddScoped<ICrdService, CrdService>();
 builder.Services.Configure<DtrConfig>(builder.Configuration.GetSection("Cms0057:Dtr"));
+// Singleton: the store ensures its indexes at construction.
+builder.Services.AddSingleton<IDtrResourceStore, MongoDtrResourceStore>();
 builder.Services.AddSingleton<IDtrService, DtrService>();
 builder.Services.AddSingleton<IBulkExportService, BulkExportService>();
 
