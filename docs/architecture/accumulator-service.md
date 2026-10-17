@@ -136,8 +136,7 @@ parameter as a dev-only fallback.
 
 | Setting | Purpose |
 | --- | --- |
-| `MongoDb:ConnectionString` | Primary storage. Mongo path when set. |
-| `CosmosDb:ConnectionString` | Fallback storage. Cosmos path when Mongo is unset. |
+| `MongoDb:ConnectionString` | Storage (MongoDB, or Azure Cosmos DB for MongoDB vCore). Required: the service refuses to start without it. |
 | `Kafka:BootstrapServers` | Kafka brokers. Consumer + publisher disable gracefully when unset. |
 | `Kafka:ClaimFinalized:GroupId` | Consumer group for claims.finalized.v1. |
 
