@@ -27,14 +27,14 @@ namespace ProviderService.Models;
 public class Organization
 {
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation).
+    /// Owning tenant (every query is scoped by it).
     /// The server sets it from the caller's token on every write, so it is not
     /// required (and is ignored) in a request body.
     /// </summary>
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Per-version document id (Cosmos DB document id / Mongo _id).
+    /// Per-version document id (Mongo <c>_id</c>).
     /// </summary>
     public string Id { get; set; } = Guid.NewGuid().ToString();
 

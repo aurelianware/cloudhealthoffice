@@ -334,7 +334,7 @@ mechanism. A service opts in with a project reference and
 tax number in `Providers` (all version rows) and `ProviderBankAccounts`
 (active, pending and history) as `enc:v2:` (bound to its record): plaintext
 and `enc:v1:` values alike, tenant by tenant. Run it after deploying, with
-provider-service's own configuration (the same `MongoDb` or `CosmosDb` and
+provider-service's own configuration (the same `MongoDb` and
 `FieldProtection` settings and identity as the pods, so it writes with the
 shared key ring):
 
@@ -352,17 +352,13 @@ dotnet run --project src/services/provider-service -- --encrypt-bank-accounts --
 - It prints, per tenant, rows and records scanned, encrypted, already
   encrypted and conflicts. It never prints a number.
 - Idempotent and resumable: bound values are left alone, and each document
-  is updated on its own with a compare-and-set (Mongo: on the values it read
-  and, for records, the revision, which it does not bump; Cosmos: the row's
-  ETag, and for records the service's own revision-checked save). A document the
+  is updated on its own with a compare-and-set on the values it read
+  and, for records, the revision, which it does not bump. A document the
   service changed meanwhile is a conflict, left for the next run. Stop it at
   any time and run it again.
 - Exit code 0: nothing left in plaintext. 2: conflicts or failures, run again.
   1: it did not start (no key ring outside Development/Testing, half a key-ring
-  configuration, or neither Mongo nor Cosmos configured). With
-  `MongoDb:ConnectionString` it uses Mongo; otherwise `CosmosDb:Endpoint` /
-  `CosmosDb:Key` (containers `CosmosDb:ContainerName`, default `Providers`,
-  and `CosmosDb:ProviderBankAccountsContainer`, default `ProviderBankAccounts`).
+  configuration, or no `MongoDb:ConnectionString`).
 - When it exits 0 for every tenant, set `FieldProtection__RejectPlaintext=true`
   and `FieldProtection__RejectUnbound=true` on provider-service.
 

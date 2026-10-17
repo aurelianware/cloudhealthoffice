@@ -154,14 +154,11 @@ through `UpdateAsync` are not.** The repository method is
 `IProviderRepository.UpdatePanelGatingDefaultsAsync` and it bypasses
 the `UpdateAsync` state guard via:
 
-- **Cosmos** — `PatchItemAsync` with five `PatchOperation.Set` ops on
-  the positional participation slot. Conditional on the row's
-  `_etag` so a concurrent CRUD write moves the row out from under the
-  backfill (counted as `EtagConflicts` and retried on next operator
-  run).
 - **Mongo** — `FindOneAndUpdateAsync` with `$set` on
   `NetworkParticipations.{idx}.{field}`, sorted by
-  `VersionNumber DESC` so amendments hit the latest head.
+  `VersionNumber DESC` so amendments hit the latest head. The write
+  bumps `Revision`, so a CRUD replace based on an earlier read
+  conflicts instead of erasing the defaults.
 
 Identity-field writes through `UpdateAsync` against the same row
 continue to throw, verified by
