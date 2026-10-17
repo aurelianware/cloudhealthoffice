@@ -83,9 +83,9 @@ Tradeoffs:
   (`ClaimVersionEventsContainer`, `ClaimAdjustmentsContainer`) and
   trading-partner (`COSMOS_CONTAINER_TRADING_PARTNERS`). They are misnamed, not
   Cosmos-only; renaming them is a configuration change left for later.
-- `src/tools/migration-wizard` still writes TriZetto exports into Cosmos SQL
-  containers and is the only project that references `Microsoft.Azure.Cosmos`.
-  Its documents carry no tenant id and no service reads them; it is obsolete.
+- `src/tools/migration-wizard`, which wrote TriZetto exports straight into
+  Cosmos SQL containers that no service read, was removed with the SDK.
+  Nothing references `Microsoft.Azure.Cosmos` any more.
 
 ## References
 
