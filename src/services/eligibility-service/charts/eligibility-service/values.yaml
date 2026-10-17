@@ -126,12 +126,9 @@ config:
   # Server port
   port: 3000
   
-  # Cosmos DB configuration
-  cosmosDb:
-    endpoint: ""  # Set via secret or environment
-    database: "eligibility-db"
-    container: "eligibility-cache"
-    # Key should be stored in a secret
+  # MongoDB configuration (connection string comes from existingSecrets.mongo)
+  mongoDb:
+    database: "CloudHealthOffice"
   
   # Event Grid configuration
   eventGrid:
@@ -174,12 +171,6 @@ externalSecrets:
   target:
     name: eligibility-secrets
   data:
-    - secretKey: COSMOS_ENDPOINT
-      remoteRef:
-        key: cosmos-endpoint
-    - secretKey: COSMOS_KEY
-      remoteRef:
-        key: cosmos-key
     - secretKey: EVENT_GRID_ENDPOINT
       remoteRef:
         key: eventgrid-endpoint
@@ -189,7 +180,7 @@ externalSecrets:
 
 # Existing secrets to use
 existingSecrets:
-  cosmos: ""              # Name of existing secret with Cosmos DB credentials
+  mongo: "database-secret"  # Secret whose connectionString key holds the MongoDB / Azure DocumentDB connection string (required)
   eventGrid: ""           # Name of existing secret with Event Grid credentials
   backend: ""                # Name of existing secret with claims backend credentials
 
@@ -208,25 +199,6 @@ serviceMonitor:
 
 # Dapr components (for non-ACA deployments)
 daprComponents:
-  stateStore:
-    enabled: true
-    name: eligibility-state
-    type: state.azure.cosmosdb
-    version: v1
-    metadata:
-      - name: url
-        secretKeyRef:
-          name: cosmos-credentials
-          key: endpoint
-      - name: database
-        value: eligibility-db
-      - name: collection
-        value: dapr-state
-      - name: masterKey
-        secretKeyRef:
-          name: cosmos-credentials
-          key: key
-  
   pubSub:
     enabled: true
     name: eligibility-pubsub

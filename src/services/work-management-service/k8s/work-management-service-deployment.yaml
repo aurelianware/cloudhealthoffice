@@ -17,7 +17,6 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "CloudHealthOffice"
   MongoDb__DatabaseName: "CloudHealthOffice"
   Services__ClaimsService: "http://claims-service.cloudhealthoffice"
   Kafka__ClientId: "work-management-service"
@@ -75,17 +74,6 @@ spec:
             secretKeyRef:
               name: database-secret
               key: connectionString
-              optional: true
-        - name: CosmosDb__Endpoint
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: endpoint
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: key
         - name: Kafka__BootstrapServers
           valueFrom:
             secretKeyRef:

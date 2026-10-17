@@ -17,8 +17,6 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "CloudHealthOffice"
-  CosmosDb__ContainerName: "RiskScores"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -60,34 +58,13 @@ spec:
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: risk-adjustment-service-secret
-              key: MongoDb__ConnectionString
-              optional: true
+              name: database-secret
+              key: connectionString
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
               name: risk-adjustment-service-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: CosmosDb__DatabaseName
-          valueFrom:
-            configMapKeyRef:
-              name: risk-adjustment-service-config
-              key: CosmosDb__DatabaseName
-        - name: CosmosDb__ContainerName
-          valueFrom:
-            configMapKeyRef:
-              name: risk-adjustment-service-config
-              key: CosmosDb__ContainerName
-        - name: CosmosDb__Endpoint
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: endpoint
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: key
         resources:
           requests:
             cpu: 200m

@@ -17,7 +17,6 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "CloudHealthOffice"
   ClaimsService__BaseUrl: "http://claims-service.cloudhealthoffice"
   AppealEncryption__KeySecretPrefix: "appeal-body-encryption-key"
   AppealEncryption__CurrentKeyVersion: "v1"
@@ -73,21 +72,6 @@ spec:
             configMapKeyRef:
               name: appeals-service-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: CosmosDb__AccountEndpoint
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: endpoint
-        - name: CosmosDb__AccountKey
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: key
-        - name: CosmosDb__DatabaseName
-          valueFrom:
-            configMapKeyRef:
-              name: appeals-service-config
-              key: CosmosDb__DatabaseName
         - name: ClaimsService__BaseUrl
           valueFrom:
             configMapKeyRef:
