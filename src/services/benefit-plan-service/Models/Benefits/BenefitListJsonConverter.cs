@@ -10,8 +10,7 @@ namespace BenefitPlanService.Models.Benefits;
 /// inherited by every subclass and recurse), it keeps the typed benefits'
 /// <c>benefitType</c> discriminator and type-specific facets on any
 /// System.Text.Json path that does not register
-/// <see cref="BenefitJsonConverter"/> itself; in particular the shared
-/// Cosmos serializer, <c>CosmosSystemTextJsonSerializer</c>.
+/// <see cref="BenefitJsonConverter"/> itself.
 /// </summary>
 public sealed class BenefitListJsonConverter : JsonConverter<List<Benefit>>
 {

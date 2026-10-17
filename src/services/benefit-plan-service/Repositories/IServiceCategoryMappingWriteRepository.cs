@@ -17,7 +17,7 @@ namespace BenefitPlanService.Repositories;
 /// </para>
 ///
 /// <para>
-/// Both backends (Cosmos / Mongo) implement both read and write seams via
+/// The Mongo backend implements both read and write seams via
 /// the same physical class. Writes invalidate the in-process cache the read
 /// path uses; cross-pod cache coherence relies on the configured
 /// <see cref="Models.ServiceCategoryMappingOptions.CacheTtl"/> rather than a

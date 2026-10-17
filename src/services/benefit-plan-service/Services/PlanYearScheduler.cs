@@ -22,9 +22,7 @@ public interface IPlanYearScheduleSource
 
 /// <summary>
 /// Mongo-backed source. Reads from the BenefitPlans collection and
-/// filters to rows that have a PlanYearDefinition set. Cosmos is not
-/// supported in Phase 1 — the events stream lives in Mongo today
-/// (consistent with PlanVersionEvent).
+/// filters to rows that have a PlanYearDefinition set.
 /// </summary>
 public sealed class MongoPlanYearScheduleSource : IPlanYearScheduleSource
 {

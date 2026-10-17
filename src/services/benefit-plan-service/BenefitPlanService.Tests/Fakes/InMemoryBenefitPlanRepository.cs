@@ -9,12 +9,12 @@ namespace BenefitPlanService.Tests.Fakes;
 /// <summary>
 /// In-memory fake of <see cref="IBenefitPlanRepository"/> with full
 /// version-chain semantics. Used by service- and controller-level tests
-/// to avoid requiring a live Mongo/Cosmos.
+/// to avoid requiring a live Mongo.
 /// </summary>
 /// <remarks>
 /// All store and fetch operations deep-clone via JSON round-trip so that
 /// external mutations of a returned object cannot corrupt the stored document
-/// — matching the behaviour of real Cosmos / Mongo round-trips and preventing
+/// — matching the behaviour of real Mongo round-trips and preventing
 /// tests from becoming order-dependent due to shared object references.
 /// </remarks>
 public sealed class InMemoryBenefitPlanRepository : IBenefitPlanRepository

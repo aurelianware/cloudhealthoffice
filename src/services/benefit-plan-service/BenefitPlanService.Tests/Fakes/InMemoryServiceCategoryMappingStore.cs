@@ -9,7 +9,7 @@ namespace BenefitPlanService.Tests.Fakes;
 /// Used as the inner storage backend in tests so the
 /// <see cref="CachingServiceCategoryMappingRepository"/> decorator and the
 /// <c>SystemDefaultMappingSeeder</c> can be exercised without spinning up a
-/// real Cosmos or Mongo client.
+/// real Mongo client.
 ///
 /// <para>
 /// Tracks per-method call counts so cache-hit assertions can verify that
@@ -96,8 +96,8 @@ internal sealed class InMemoryServiceCategoryMappingStore :
 
     private IReadOnlyList<ServiceCategoryMapping> Filter(string tenantId, Guid? benefitPlanId)
     {
-        // Match the production backends' newest-first ordering so resolver
-        // tests see the same iteration order in-memory as in Cosmos / Mongo.
+        // Match the production backend's newest-first ordering so resolver
+        // tests see the same iteration order in-memory as in Mongo.
         return _mappings
             .Where(m => m.TenantId == tenantId && m.BenefitPlanId == benefitPlanId)
             .OrderByDescending(m => m.CreatedAt)

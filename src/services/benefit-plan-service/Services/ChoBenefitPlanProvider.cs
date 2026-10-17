@@ -15,7 +15,7 @@ using Microsoft.Extensions.Caching.Memory;
 namespace BenefitPlanService.Services;
 
 /// <summary>
-/// Real IBenefitPlanProvider backed by IBenefitPlanRepository (MongoDB or Cosmos).
+/// Real IBenefitPlanProvider backed by IBenefitPlanRepository (MongoDB).
 /// Loaded by Program.cs in place of the engine's internal stub.
 /// </summary>
 public class ChoBenefitPlanProvider : IBenefitPlanProvider

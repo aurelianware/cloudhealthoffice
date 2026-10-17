@@ -34,7 +34,7 @@ public class PlanYearTransitionEvent
     [Required]
     public string Id { get; set; } = string.Empty;
 
-    /// <summary><c>{TenantId}:{PlanId}</c> — first-class so Cosmos and Mongo both see it.</summary>
+    /// <summary><c>{TenantId}:{PlanId}</c> — a first-class stored field.</summary>
     [Required]
     [StringLength(256)]
     public string PartitionKey { get; set; } = string.Empty;
