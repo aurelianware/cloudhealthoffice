@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using RfaiService.Repositories;
@@ -45,27 +44,24 @@ builder.Services.AddSwaggerGen(c =>
 
 // ── Database ─────────────────────────────────────────────────────────────────
 
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+// MongoDB is the only RFAI store (ADR 006); AddChoDatabase registers the client.
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+if (databaseProvider != ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddScoped<IRfaiRepository, RfaiRepositoryMongo>();
-    Console.WriteLine("Using MongoDB database provider");
-}
-else
-{
-    var endpoint = builder.Configuration["CosmosDb:Endpoint"]
-        ?? throw new InvalidOperationException("CosmosDb:Endpoint must be configured when MongoDb is not used.");
-    var key = builder.Configuration["CosmosDb:Key"]
-        ?? throw new InvalidOperationException("CosmosDb:Key must be configured when MongoDb is not used.");
+    const string noDatabase = "RFAI Service requires a database. Configure MongoDb:ConnectionString.";
 
-    builder.Services.AddSingleton<CosmosClient>(_ =>
-        new CosmosClient(endpoint, key));
+    // A deployed host (or one told to use the Cosmos DB native SDK, which this
+    // service no longer supports) refuses to start.
+    if (databaseProvider is not null
+        || (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing")))
+        throw new InvalidOperationException(noDatabase);
 
-    builder.Services.AddScoped<IRfaiRepository, RfaiRepositoryCosmos>();
-    Console.WriteLine("Using Cosmos DB database provider");
+    // Development and test hosts (which substitute the repository) still
+    // build; a real call fails on first use with the same message.
+    builder.Services.AddSingleton<MongoDB.Driver.IMongoDatabase>(_ => throw new InvalidOperationException(noDatabase));
 }
+
+builder.Services.AddScoped<IRfaiRepository, RfaiRepositoryMongo>();
 
 // ── Kafka producer ───────────────────────────────────────────────────────────
 
@@ -90,9 +86,6 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 // No CORS: this service is called server-to-server only (the portal is
 // Blazor Server), so browsers on other origins get no CORS grant.

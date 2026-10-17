@@ -42,7 +42,7 @@ namespace RfaiService.Models;
 public class RfaiCase
 {
     /// <summary>
-    /// Cosmos DB / MongoDB document ID.
+    /// MongoDB document ID.
     ///
     /// DETERMINISTIC for cases created through
     /// <see cref="Services.RfaiCaseLifecycle.Create"/>: it is derived from the caller's
