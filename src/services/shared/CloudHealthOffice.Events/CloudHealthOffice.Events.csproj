@@ -8,4 +8,9 @@
     <AssemblyName>CloudHealthOffice.Events</AssemblyName>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- ChoKafkaProducer: the shared, reliable Kafka producer configuration. -->
+    <PackageReference Include="Confluent.Kafka" />
+  </ItemGroup>
+
 </Project>
