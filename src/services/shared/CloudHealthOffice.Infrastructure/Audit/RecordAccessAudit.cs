@@ -51,6 +51,13 @@ public sealed class AuditRecordAccessAttribute : Attribute
 
     /// <summary>In a result, the property holding the member id.</summary>
     public string ResultMemberProperty { get; init; } = "MemberId";
+
+    /// <summary>
+    /// The response is one record found by something other than its id (a
+    /// check number, an NPI, an auth number): its id is the record id, so the
+    /// read is logged as a single-record read of that record.
+    /// </summary>
+    public bool ResultIsRecord { get; init; }
 }
 
 /// <summary>A record (and its member) found in a response.</summary>
@@ -62,6 +69,9 @@ public sealed class RecordAccessWriter
     private readonly IRecordAccessStore _store;
     private readonly ILogger<RecordAccessWriter> _logger;
 
+    /// <summary>The longest a read waits for its access event to be stored.</summary>
+    public static TimeSpan AppendTimeout { get; set; } = TimeSpan.FromSeconds(3);
+
     public RecordAccessWriter(IRecordAccessStore store, ILogger<RecordAccessWriter> logger)
     {
         _store = store;
@@ -72,7 +82,8 @@ public sealed class RecordAccessWriter
         HttpContext http, AuditRecordAccessAttribute audit, ICurrentActor actor, int statusCode,
         string? outcome, IReadOnlyList<RecordSubject> subjects)
     {
-        var recordId = RouteValue(http, audit.RecordIdRouteValue);
+        var recordId = RouteValue(http, audit.RecordIdRouteValue)
+                       ?? (audit.ResultIsRecord && subjects.Count == 1 ? subjects[0].RecordId : null);
         var memberRoute = RouteValue(http, audit.MemberIdRouteValue);
         var memberQuery = audit.MemberQueryParameters
             .Select(p => http.Request.Query.TryGetValue(p, out var v) ? v.ToString() : null)
@@ -111,7 +122,10 @@ public sealed class RecordAccessWriter
         accessEvent.OccurredAt = DateTime.UtcNow;
         try
         {
-            await _store.AppendAsync(accessEvent, CancellationToken.None);
+            // Bounded: an unreachable store must not hold the read for the
+            // driver's server-selection timeout.
+            using var timeout = new CancellationTokenSource(AppendTimeout);
+            await _store.AppendAsync(accessEvent, timeout.Token);
         }
         catch (Exception ex)
         {

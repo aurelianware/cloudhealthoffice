@@ -1,4 +1,7 @@
 using CloudHealthOffice.Infrastructure.Audit;
+using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CloudHealthOffice.Infrastructure.Tests.Audit;
 
@@ -38,4 +41,23 @@ public class RecordAccessAuditTests
     [InlineData(401, "Denied")]
     public void Outcome_follows_the_status(int status, string outcome) =>
         RecordAccessOutcomes.For(status).Should().Be(outcome);
+
+    private sealed class HangingStore : IRecordAccessStore
+    {
+        public Task AppendAsync(RecordAccessEvent accessEvent, CancellationToken ct = default) => Task.Delay(Timeout.Infinite, ct);
+        public Task<IReadOnlyList<RecordAccessEvent>> QueryAsync(RecordAccessQuery query, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<RecordAccessEvent>>([]);
+    }
+
+    [Fact]
+    public async Task An_unresponsive_store_holds_the_read_no_longer_than_the_append_timeout()
+    {
+        var writer = new RecordAccessWriter(new HangingStore(), NullLogger<RecordAccessWriter>.Instance);
+        var actor = Mock.Of<ICurrentActor>(a => a.UserId == "u1" && a.TenantId == "t1" && a.Roles == Array.Empty<string>());
+        var started = DateTime.UtcNow;
+
+        await writer.AppendAsync(new DefaultHttpContext(), actor, new RecordAccessEvent { RecordType = "Member", Action = "View" });
+
+        (DateTime.UtcNow - started).Should().BeLessThan(RecordAccessWriter.AppendTimeout + TimeSpan.FromSeconds(2));
+    }
 }

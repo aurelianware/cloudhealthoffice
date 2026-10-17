@@ -22,25 +22,30 @@ public sealed class RecordAccessStoreMongo : IRecordAccessStore
     public RecordAccessStoreMongo(IMongoDatabase database)
     {
         _collection = database.GetCollection<RecordAccessEvent>(CollectionName);
-        if (Indexed.TryAdd(database.DatabaseNamespace.DatabaseName, true))
+        var name = database.DatabaseNamespace.DatabaseName;
+        if (Indexed.TryAdd(name, true))
         {
-            var keys = Builders<RecordAccessEvent>.IndexKeys;
-            try
+            // In the background and best effort: an unreachable or read-only
+            // database must never hold up (or fail) the first read.
+            _ = Task.Run(async () =>
             {
-                _collection.Indexes.CreateMany(
-                [
-                    new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.RecordId).Descending(e => e.OccurredAt)),
-                    new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.RecordIds).Descending(e => e.OccurredAt)),
-                    new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.MemberId).Descending(e => e.OccurredAt)),
-                    new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.ActorId).Descending(e => e.OccurredAt)),
-                ]);
-            }
-            catch (MongoException)
-            {
-                // Index creation is best effort (a read-only replica, a
-                // throttled account); queries still work.
-                Indexed.TryRemove(database.DatabaseNamespace.DatabaseName, out _);
-            }
+                var keys = Builders<RecordAccessEvent>.IndexKeys;
+                try
+                {
+                    await _collection.Indexes.CreateManyAsync(
+                    [
+                        new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.RecordId).Descending(e => e.OccurredAt)),
+                        new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.RecordIds).Descending(e => e.OccurredAt)),
+                        new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.MemberId).Descending(e => e.OccurredAt)),
+                        new CreateIndexModel<RecordAccessEvent>(keys.Ascending(e => e.TenantId).Ascending(e => e.ActorId).Descending(e => e.OccurredAt)),
+                    ]);
+                }
+                catch (Exception)
+                {
+                    // Retried by the next store instance (next process start).
+                    Indexed.TryRemove(name, out _);
+                }
+            });
         }
     }
 
