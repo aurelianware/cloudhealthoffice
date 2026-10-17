@@ -44,21 +44,12 @@ builder.Services.AddSwaggerGen(c =>
 
 // ── Database ─────────────────────────────────────────────────────────────────
 
-// MongoDB is the only RFAI store (ADR 006); AddChoDatabase registers the client.
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-if (databaseProvider != ChoDatabaseProvider.MongoDb)
+// MongoDB is the only RFAI store (ADR 006, ADR 017); AddChoDatabase registers the
+// client. A host with no database configured refuses to start, in every environment.
+if (builder.Services.AddChoDatabase(builder.Configuration) is null)
 {
-    const string noDatabase = "RFAI Service requires a database. Configure MongoDb:ConnectionString.";
-
-    // A deployed host (or one told to use the Cosmos DB native SDK, which this
-    // service no longer supports) refuses to start.
-    if (databaseProvider is not null
-        || (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing")))
-        throw new InvalidOperationException(noDatabase);
-
-    // Development and test hosts (which substitute the repository) still
-    // build; a real call fails on first use with the same message.
-    builder.Services.AddSingleton<MongoDB.Driver.IMongoDatabase>(_ => throw new InvalidOperationException(noDatabase));
+    throw new InvalidOperationException(
+        "RFAI Service requires a database. Configure MongoDb:ConnectionString.");
 }
 
 builder.Services.AddScoped<IRfaiRepository, RfaiRepositoryMongo>();

@@ -18,11 +18,20 @@ namespace RfaiService.Tests.Support;
 // Program is a top-level (internal) class, so the entry point is named through a controller type.
 public sealed class RfaiServiceFactory : WebApplicationFactory<RfaiController>
 {
+    /// <summary>A MongoDB address that is never listening; the driver connects lazily.</summary>
+    public const string UnreachableMongo =
+        "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=100&connectTimeoutMS=100";
+
     public InMemoryRfaiRepository Cases { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        // Program.cs requires MongoDB in every environment and reads the
+        // setting while registering services, so it goes in as a host setting.
+        // Nothing reaches it: the repository is replaced below.
+        builder.UseSetting("MongoDb:ConnectionString", UnreachableMongo);
 
         // Also trust the development workload issuer, so an Argo workflow's
         // workload token (token-service's cho-workload in production) can be
