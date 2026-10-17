@@ -4,8 +4,9 @@ using IdCardService.Models;
 namespace IdCardService.Repositories;
 
 /// <summary>
-/// In-memory implementations used for dev, unit tests, and integration tests
-/// that don't need a real database.
+/// In-memory implementations used only as test doubles by unit and in-process
+/// host tests. Program.cs never registers them: the service runs on MongoDB in
+/// every environment.
 /// </summary>
 public class InMemoryIdCardOrderRepository : IIdCardOrderRepository
 {

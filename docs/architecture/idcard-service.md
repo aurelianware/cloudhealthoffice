@@ -218,8 +218,8 @@ revoke (with confirmation message box). The "Order New Card" button opens
 
 ## Storage
 
-MongoDB (`MongoDb:ConnectionString`). Without it, Development / Testing hosts
-use an in-memory store and any other host refuses to start. Collections:
+MongoDB (`MongoDb:ConnectionString`), required in every environment: a host
+without it refuses to start, Development and Testing included. Collections:
 
 - `idcard_orders` (tenant-partitioned, `id` key)
 - `idcard_records` (tenant+card unique index, tenant+member history index)

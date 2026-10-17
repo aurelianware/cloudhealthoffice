@@ -47,8 +47,8 @@ overridden via environment variables (`IdCard__CurrentKeyVersion` etc.).
 
 ## Storage
 
-MongoDB (`MongoDb:ConnectionString`). Without it, Development / Testing hosts
-use an in-memory store and any other host refuses to start. Collections:
+MongoDB (`MongoDb:ConnectionString`), required in every environment: a host
+without it refuses to start, Development and Testing included. Collections:
 `idcard_orders`, `idcard_records`, `idcard_templates`.
 
 ## Key rotation

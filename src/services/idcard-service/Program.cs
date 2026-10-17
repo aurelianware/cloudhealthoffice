@@ -46,32 +46,17 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Storage: MongoDB (ADR 006). With no database configured, only a Development /
-// Testing host may run on the process-local in-memory store (state is lost on
-// restart and not shared by replicas); any other host refuses to start.
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
-{
-    builder.Services.AddScoped<IIdCardOrderRepository, MongoIdCardOrderRepository>();
-    builder.Services.AddScoped<IIdCardRecordRepository, MongoIdCardRecordRepository>();
-    builder.Services.AddScoped<IIdCardTemplateRepository, MongoIdCardTemplateRepository>();
-    Console.WriteLine("idcard-service: using MongoDB storage");
-}
-else if (databaseProvider is not null)
+// Storage: MongoDB is the only ID card store (ADR 006, ADR 017). A host with no
+// database configured refuses to start, in every environment.
+if (builder.Services.AddChoDatabase(builder.Configuration) is null)
 {
     throw new InvalidOperationException(
-        "idcard-service supports MongoDB only. Remove Database:Provider or set it to MongoDb.");
+        "ID Card Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
-{
-    if (!ChoTestingEnvironment.AllowsDevelopmentSecrets(builder.Environment))
-        throw new InvalidOperationException(
-            "idcard-service requires a database. Configure MongoDb:ConnectionString.");
-    builder.Services.AddSingleton<IIdCardOrderRepository, InMemoryIdCardOrderRepository>();
-    builder.Services.AddSingleton<IIdCardRecordRepository, InMemoryIdCardRecordRepository>();
-    builder.Services.AddSingleton<IIdCardTemplateRepository, InMemoryIdCardTemplateRepository>();
-    Console.WriteLine("idcard-service: no database configured, using in-memory storage (Development only)");
-}
+
+builder.Services.AddScoped<IIdCardOrderRepository, MongoIdCardOrderRepository>();
+builder.Services.AddScoped<IIdCardRecordRepository, MongoIdCardRecordRepository>();
+builder.Services.AddScoped<IIdCardTemplateRepository, MongoIdCardTemplateRepository>();
 
 // Upstream CHO calls. Every request names its tenant in X-Tenant-ID so the
 // outbound handler can mint a service token when there is no caller.
