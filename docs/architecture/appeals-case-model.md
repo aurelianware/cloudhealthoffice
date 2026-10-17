@@ -5,7 +5,7 @@
 - member appeals and grievances, including pre-service appeals with no claim;
 - provider claim disputes and provider complaints, which follow contract and State rules rather than member rules;
 - providers acting for members, which follow member rules;
-- per-State rule packs, starting with Texas, California, Florida, New York, Colorado, Arizona and Illinois;
+- per-State rule packs, starting with Texas, California, Florida, New York, Colorado, Arizona, Illinois, Oklahoma, Michigan and Ohio;
 - holding recoupment while a provider dispute is open, where a State requires it.
 
 **Related:**
@@ -209,12 +209,63 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 
 *New HealthChoice contracts were awarded in June 2026; confirm against the new contract text when published.*
 
-### 5.8 What the States show
+### 5.8 Oklahoma (SoonerSelect)
 
-- **Member clocks vary more than expected:** expedited appeals of 24 hours (Illinois), 48 hours (Florida) and 72 hours elsewhere; standard resolution of 10 working days (Colorado) and 15 business days (Illinois) against the federal 30 days.
+- **Member:** plan appeal → State Fair Hearing through OHCA (120 days). No external medical review.
+- **Provider:** reconsideration → plan appeal panel → OHCA administrative appeal. No State Fair Hearing for providers under the rule (the statute's wording conflicts; see §9).
+
+| Item | Value | Source |
+|---|---|---|
+| Member appeal: file / acknowledge / resolve | 60 days / 5 calendar days / 30 calendar days, +14; resolution notice within 3 calendar days | OAC 317:2-3-5 |
+| Expedited | Required when the standard timeline could jeopardize health; hours not stated (federal 72 hours applies; *to confirm in contract*); step therapy 24 hours if exigent | OAC 317:2-3-5(g)(1) |
+| Member grievance | Acknowledge 10 calendar days; resolve 90 days, +14 | OAC 317:2-3-4 |
+| Provider reconsideration | Within 6 months of a claim denial (15 days for audit findings and terminations); notice within 5 calendar days | OAC 317:2-3-10; 56 O.S. §4002.8(C) |
+| Provider appeal | Panel of 3 or 5 uninvolved reviewers; medical necessity reviewed by a same- or similar-specialty clinician, no automated review software | OAC 317:2-3-10(d); 56 O.S. §4002.8(D)–(E) (HB 1810, eff. 11/1/2025) |
+| OHCA administrative appeal | Within 30 days of a plan appeal decision not fully in the provider's favor; plan sends the file within 15 days | OAC 317:2-3-10(d)(4)–(5), 317:2-3-13 |
+| Prompt pay | 90% of clean claims within 14 days; 1.5% monthly interest on late clean claims | 56 O.S. §4002.7 |
+| Recoupment (from 1/1/2027) | 24-month audit lookback; 60 days to correct a claim before recoupment; **disputed funds recouped only after all appeals are final** | 63 O.S. §5051.11 (SB 1645, 2026; *signature to confirm*) |
+
+### 5.9 Michigan (Medicaid Health Plans)
+
+- **Member:** plan appeal → State Fair Hearing through MOAHR (120 days); optional DIFS external review under the Patient's Right to Independent Review Act.
+- **Provider:** non-contracted hospitals under the Hospital Access Agreement: plan appeal → reconciliation group → binding State Rapid Dispute Resolution. Other providers: plan appeal → binding arbitration.
+
+| Item | Value | Source |
+|---|---|---|
+| Member appeal: file / resolve | 60 days (expedited request within 10 days) / 30 days, +14; expedited 72 hours. Acknowledgment required, no deadline set | CHCP contract (FY24, updated 6-2024) §1.1.XIII.H |
+| Notices | Below a 6.9 reading level; prevalent languages; alternative formats | CHCP §XIII.H.6.c |
+| DIFS external review | 120 days to request (expedited 10 days with a physician's support); IRO recommends in 14 days; director decides in 7 business days | MCL 550.1911, 550.1913 |
+| Member grievance | Resolve 90 days, +14; no acknowledgment deadline set | CHCP §XIII.H.1.c.v |
+| Hospital disputes (HAA) | Reconciliation group at least every 90 days; then Rapid Dispute Resolution: mediator in 15 days, session in 15, decision in 15, payment in 30; binding | CHCP §XIV.F.6.b; MDHHS RDRP |
+| Other providers | Binding arbitration after the plan's internal appeal, from an MDHHS arbitrator list | CHCP §XIV.F.6.c–d |
+| Prompt pay | Clean claims in 45 days with 12% interest; defect notice in 30 days | MCL 400.111i |
+| Recoupment | No statewide notice, lookback or hold rule found; limits on recoupment after retroactive disenrollment | CHCP §XIV.F.4 (*hold to confirm*) |
+
+### 5.10 Ohio (Next Generation managed care)
+
+- **Member:** plan appeal → State hearing (90 days). No external review through the Department of Insurance for Medicaid.
+- **Provider:** internal claim dispute → ODM External Medical Review for medical-necessity denials (binding on the plan if it reverses) or the ODM complaint portal (not binding) for other disputes.
+- **Integrated duals:** Next Generation MyCare became a fully integrated D-SNP model on 1/1/2026, with integrated appeals under 42 CFR 422.633 (OAC 5160-58-08.4).
+
+| Item | Value | Source |
+|---|---|---|
+| Member appeal: file / acknowledge / resolve | 60 days / 3 business days (written) / **15 calendar days**; expedited 72 hours | OAC 5160-26-08.4(D)–(E) |
+| Extension | Up to 14 days, **only with ODM approval** before the deadline | OAC 5160-26-08.4(F) |
+| Advance notice of reduction or termination | 15 calendar days | OAC 5160-26-08.4(B)(3) |
+| Continuation | Appeal within 15 days of the notice; hearing within 15 days of the decision | OAC 5160-26-08.4(G)–(H) |
+| Required forms | ODM 04043, 04066, 04046 (appeal outcomes); ODM 01959 (hearing summary) | OAC 5160-26-08.4(G) |
+| Member grievance | Acknowledge 3 business days; resolve 2 business days (access), 60 days (claims) or 30 days (other) | OAC 5160-26-08.4(C) |
+| Provider claim dispute | File within the later of 12 months from service or 60 days after payment or denial; acknowledge 5 business days; resolve 30 business days (medical necessity) or 15 business days (other) | ODM MCO Provider Agreement (rev. 7/2024) App. A |
+| External Medical Review | 30 days to request after the plan's decision; 30 days standard, 3 business days expedited; plan pays; binding on the plan if reversed | ODM EMR FAQ; Provider Agreement |
+| Recoupment | 2-year lookback; provider has 30 days to dispute; plan decides in 30 days; **recovery no earlier than 3 business days after the written determination** | Provider Agreement App. G §11; ORC 5167.22 |
+
+### 5.11 What the States show
+
+- **Member clocks vary more than expected:** expedited appeals of 24 hours (Illinois), 48 hours (Florida) and 72 hours elsewhere; standard resolution of 10 working days (Colorado), 15 business days (Illinois) and 15 calendar days (Ohio) against the federal 30 days; Ohio requires State approval for any plan extension.
 - **Missed deadlines mean different things:** deemed exhaustion (most), reversal of the denial (New York UR), deemed denied (Arizona).
-- **Provider escalation differs everywhere:** a State agency (Texas, Illinois), a State hearing (Arizona), an independent program (Florida), a regulator's complaint unit (California), a State external appeal (New York), or only the plan's own process (Colorado managed care).
-- **Recoupment holds are State-specific:** explicit in California, Florida and Colorado fee-for-service; partial in Texas and Illinois; not stated in New York.
+- **Provider escalation differs everywhere:** a State agency (Texas, Illinois, Oklahoma), a State hearing (Arizona), an independent program (Florida), a regulator's complaint unit (California), a State external appeal (New York), State-run external medical review (Ohio), binding mediation or arbitration (Michigan), or only the plan's own process (Colorado managed care).
+- **Recoupment holds are State-specific:** explicit in California, Florida, Ohio, Colorado fee-for-service and Oklahoma (from 2027); partial in Texas and Illinois; not stated in New York or Michigan.
+- **Integrated duals are arriving:** Ohio's MyCare (2026) and Michigan's highly integrated D-SNPs (2026) need integrated notices and appeals, which [correspondence.md](correspondence.md) and these packs both have to support.
 
 ## 6. Recoupment while a dispute is open
 
@@ -234,7 +285,7 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 ## 8. Build order
 
 1. **Case model and migration:** track, case type, requester party, subjects; schema version; Mongo migrator and Cosmos script; contract and event 2.0; FHIR mapping; portal record page.
-2. **Rule pack evaluation:** per-State level chains and units from reference-data-service; federal floors from the existing policy; Texas, then the other six States from §5.
+2. **Rule pack evaluation:** per-State level chains and units from reference-data-service; federal floors from the existing policy; Texas, then the other nine States from §5.
 3. **Intake by track:** the §2 decision at intake (portal, Availity, FHIR, call tracking), with work items for missing waivers, AORs or consent.
 4. **Provider complaints** and member grievances without a claim.
 5. **Recoupment holds** in claims-service and ar-service (§6).
@@ -246,7 +297,10 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 2. **Conflicts to settle:** Colorado's fair hearing window (rule 120 days, member page 60) and Arizona's (contract 90, rule 30).
 3. **MA payment amount disputes:** confirm the current CMS Payment Dispute Resolution Contractor and process document.
 4. **New contracts:** confirm Illinois against the June 2026 HealthChoice contract and Arizona against the current ACC contract.
-5. **Next States:** Oklahoma, Michigan and Ohio are proposed next (new managed care program with provider-dispute scrutiny; D-SNP integration from 2027).
+5. **Oklahoma:** the statute says a provider "may request a fair hearing" while OAC 317:2-3-13 provides none (legal review); confirm SB 1645's signature and the contract's expedited appeal hours.
+6. **Michigan:** member notices show 127 days for DIFS external review against 120 in statute; confirm against the current CHCP contract.
+7. **Ohio:** confirm the provider agreement values against the current 2026 MCO and MyCare agreements.
+8. **Watch list:** Georgia, Nevada and Washington, once their programs' timelines are firm.
 
 ## Sources
 
@@ -268,3 +322,9 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 **Arizona:** [A.R.S. §36-2903.01](https://www.azleg.gov/ars/36/02903-01.htm); [A.A.C. R9-34-405](https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R9-34-405); [ACOM 412](https://www.azahcccs.gov/shared/Downloads/ACOM/PolicyFiles/400/412.pdf); [ACOM 414](https://www.azahcccs.gov/shared/Downloads/ACOM/PolicyFiles/400/414.pdf); [ACC-RBHA contract amendment (Att. F1/F2)](https://azahcccs.gov/Resources/Downloads/ContractAmendments/ACC-RBHA/ACC-RBHA_T19-21_AZCH-3_CARE1ST-3,MC-3-EFF100123.pdf)
 
 **Illinois:** [305 ILCS 5/5-30.1](https://www.ilga.gov/Documents/legislation/ilcs/documents/030500050K5-30.1.htm); [89 IAC 140.75](https://ilga.gov/ftp/JCAR/AdminCode/089/089001400B00750R.html); [215 ILCS 5/368d](https://www.ilga.gov/Documents/legislation/ilcs/documents/021500050K368d.htm); [HealthChoice Illinois contract model (Aug 2025)](https://hfs.illinois.gov/content/dam/soi/en/web/hfs/medicalproviders/cc/managedcarecontracts/hcicontractmodel.docx)
+
+**Oklahoma:** [OAC 317:2-3-5](https://oklahoma.gov/ohca/policies-and-rules/xpolicy/grievance-procedures-and-process/subchapter-three-member-grievances-and-appeals-provider-complaints-and-state-fair-hearings-in-soonerselect/member-appeals.html); [OAC 317:2-3-10](https://oklahoma.gov/ohca/policies-and-rules/xpolicy/grievance-procedures-and-process/subchapter-three-member-grievances-and-appeals-provider-complaints-and-state-fair-hearings-in-soonerselect/provider-complaint-system.html); [56 O.S. §4002.7](https://law.justia.com/codes/oklahoma/title-56/section-56-4002-7/); [56 O.S. §4002.8](https://law.justia.com/codes/oklahoma/title-56/section-56-4002-8/); [SB 1645 (2026) enrolled](https://www.oklegislature.gov/cf_pdf/2025-26%20ENR/SB/SB1645%20ENR.PDF)
+
+**Michigan:** [CHCP contract (FY24, updated 6-2024)](https://michigan.gov/mdhhs/-/media/Project/Websites/mdhhs/Assistance-Programs/Medicaid-BPHASA/Other-Prov-Specific-Page-Docs/FY24-CHCP-FINAL-Contract-Updated-6-2024.pdf); [MCL 400.111i](https://www.legislature.mi.gov/Laws/MCL?objectName=mcl-400-111i); [MCL 550.1911](https://www.legislature.mi.gov/Laws/MCL?objectName=mcl-550-1911); [MDHHS Rapid Dispute Resolution Process](https://www.michigan.gov/documents/RAPID_DISPUTE_RESOLUTION_PROCESS_88671_7.pdf)
+
+**Ohio:** [OAC 5160-26-08.4](https://codes.ohio.gov/ohio-administrative-code/rule-5160-26-08.4); [OAC 5160-58-08.4](https://codes.ohio.gov/ohio-administrative-code/rule-5160-58-08.4); [ORC 5167.22](https://codes.ohio.gov/ohio-revised-code/section-5167.22); [ODM MCO Provider Agreement (rev. 7/2024)](https://dam.assets.ohio.gov/image/upload/medicaid.ohio.gov/Providers/ProviderTypes/Managed%20Care/Provider%20Agreements/2024_07_MCO_Final.pdf); [ODM External Medical Review FAQ](https://dam.assets.ohio.gov/image/upload/medicaid.ohio.gov/Providers/ProviderTypes/Managed%20Care/External-Medical-Review-FAQ.pdf)
