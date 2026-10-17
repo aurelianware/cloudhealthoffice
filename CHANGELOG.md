@@ -34,6 +34,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A crashed consume loop stops the host instead of exiting silently.
   - The Anthropic client retries 429 and 529.
   - Model dispositions outside the known set escalate to a human.
+- **A client's resilience timeouts follow its own `HttpClient.Timeout`.**
+  The shared pipeline had given every client a 10 s attempt and a 30 s total
+  timeout. That cut Stedi (30 s), FHIR Payer-to-Payer (up to 300 s), the
+  Anthropic model call (60 s) and other longer calls at 10 s. A client's own
+  `HttpClient.Timeout` also still capped all of its attempts together.
+  - The client's configured timeout is now its attempt timeout.
+  - The total covers every attempt and its back-off.
+  - `HttpClient.Timeout` is raised just past the total.
+  - The Anthropic clients set their timeout at registration, not in their
+    constructors.
+
+  The inventory is in `docs/architecture/service-client-resilience.md`.
 - **eligibility-service uses its configured HttpClient.** A duplicate
   `AddScoped` registration had replaced the typed client and its 5 s timeout.
 
