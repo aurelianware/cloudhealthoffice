@@ -401,4 +401,36 @@ public class StediClaimAttachmentTests
         second.IsSuccess.Should().BeTrue();
         (await attachments.ListByClaimTransmissionIdAsync(tx.TransmissionId)).Should().HaveCount(1);
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("60054")]
+    public async Task OtherTenantsTransmission_BehavesExactlyLikeNonexistentTransmission(string? payerId)
+    {
+        var handler = new StubHttpMessageHandler();
+        var (gateway, _, transmissions, attachments, content) = NewGateway(handler);
+        var (tx, stored) = await SeedAsync(transmissions, content);
+
+        ClaimAttachmentSubmissionRequest FromTenantBeta(string transmissionId)
+        {
+            var request = Request(tx, stored);
+            request.TenantId = "tenant-beta";
+            request.TransmissionId = transmissionId;
+            request.PayerId = payerId;
+            return request;
+        }
+
+        var crossTenant = await gateway.SubmitAttachmentAsync(FromTenantBeta(tx.TransmissionId));
+        var nonexistent = await gateway.SubmitAttachmentAsync(FromTenantBeta("tx-does-not-exist"));
+
+        nonexistent.IsSuccess.Should().BeFalse();
+        crossTenant.IsSuccess.Should().Be(nonexistent.IsSuccess);
+        crossTenant.ErrorMessage.Should().Be(nonexistent.ErrorMessage);
+        crossTenant.Result.Should().BeNull();
+        crossTenant.Metadata.ErrorCategory.Should().Be(nonexistent.Metadata.ErrorCategory);
+        crossTenant.Metadata.Status.Should().Be(nonexistent.Metadata.Status);
+        crossTenant.Metadata.TenantId.Should().Be("tenant-beta");
+        handler.CallCount.Should().Be(0);
+        (await attachments.ListByClaimTransmissionIdAsync(tx.TransmissionId)).Should().BeEmpty();
+    }
 }
