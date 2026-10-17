@@ -287,10 +287,43 @@ Delivery uses the same adapter pattern as `IIdCardAdapter`: one `IDeliveryChanne
 
 ## 11. Beside another core system
 
-The correspondence service runs inside CHO or beside QNXT (or another core), the same way [cho-service.md](cho-service.md) does:
-- **Triggers** come from CHO's own services, or from the other core's events or extracts through adapters.
-- **CHO never writes to the other core.** Letter status can be mirrored back where a plan wants it, the same way idcard-service mirrors to QNXT.
-- **A plan can start with one letter family** (for example, appeal notices) and leave everything else with its current fulfillment process.
+The correspondence service runs inside CHO or beside QNXT, Facets or another core system, the same way [cho-service.md](cho-service.md) does. A plan on another core is a primary audience: it keeps its core system and its print vendor, and gains template control and proof of mailing.
+
+**Rules in both modes:**
+- **CHO never writes to the core system.** Results go back as files or messages the plan loads, the same way idcard-service mirrors to QNXT.
+- **A plan can start with one letter family** (for example, appeal and grievance notices) and leave everything else with its current fulfillment process.
+- **Reading the core is adapter work, scoped per plan.** The QNXT and Facets adapters are implemented per engagement, because each plan's configuration, extracts and reporting databases differ (scoped through a requirements questionnaire, like Availity's QREs).
+
+### 11.1 Mode A: letters only
+
+The plan keeps working cases where it does today: in the core system or a case tool beside it. CHO takes over what the fulfillment vendor's data feed does now, with proof added.
+
+| Direction | What | How |
+|---|---|---|
+| Core → CHO | **Notice request:** letter type, case or claim id, recipient, decision and reason fields, due-by time, and the rule pack (line of business, state) | An event or API call where the core or its integration layer can send one; otherwise an intraday or nightly extract from the plan's reporting database or existing fulfillment feed |
+| Core → CHO | **Reference data** the letters need: member name, address, language and format preferences | Same feed, or adapter reads of the reporting database |
+| CHO → Core | **Per-letter result:** request id, letter id, document link, letter date, **left-plan-control date and evidence**, returns | A result file or message the plan loads into its case records |
+
+- **What the plan gets:** locked standardized and State templates, rendered letters stored and auditable, per-piece proof of mailing, and the left-plan-control date to report in place of the generation date.
+- **What it doesn't get:** the case clock stays in the core. CHO flags letters at risk of missing their own due-by time, but it can't see a case that never produced a notice request.
+- **Effort:** one notice-request feed and one result feed. This is the smallest footprint and the fastest to pilot.
+
+### 11.2 Mode B: cases and letters
+
+The plan runs appeals, grievances and complaints in CHO (see [appeals-grievances-compliance.md](appeals-grievances-compliance.md)), beside the core.
+
+| Direction | What | How |
+|---|---|---|
+| Core → CHO | **Members, eligibility, providers, claims and authorizations** the cases refer to | Adapter reads (API, reporting database or extracts), refreshed per the plan's needs |
+| Calls → CHO | **Cases opened from calls** | [cho-service.md](cho-service.md), in CHO or beside the core's call tracking |
+| CHO → Core | **Outcomes the core must act on:** effectuation of a reversal (authorize or pay), adjustments | Work items routed to the plan's staff, or a file or message the plan loads; CHO doesn't write to the core |
+
+- **What the plan gets:** the full design: rule-pack clocks, work routing and reviewer separation, notices as case events, and audit universe exports built from those events.
+- **Effort:** more adapter work (several read feeds) and a process change for the appeals team.
+
+### 11.3 Moving from A to B
+
+Mode A builds what Mode B needs: the templates, delivery channels, proof and the member reference feed carry over unchanged. A plan can start with letters only for one family, then move case work into CHO when it's ready, one case type at a time.
 
 ## 12. Security and privacy
 
