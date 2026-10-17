@@ -203,7 +203,7 @@ public class PricingStageTests
 
         // In-process stand-in for the resolve-rates HTTP hop.
         _client.ResolveBatchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<PricingRequest>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => realEngine.ResolveBatchAsync(ci.ArgAt<IReadOnlyList<PricingRequest>>(1)));
+            .Returns(async ci => (PricingResultSet?)await realEngine.ResolveBatchAsync(ci.ArgAt<IReadOnlyList<PricingRequest>>(1)));
 
         var pricingResult = await _sut.ExecuteAsync(ctx, CancellationToken.None);
 

@@ -196,11 +196,12 @@ public class ReversalRunServiceTests
         // Override void response to 422 InvalidSourceState.
         _claimsHandler.NextResponse = req =>
         {
-            if (req.Method == HttpMethod.Get && req.RequestUri!.AbsolutePath.Contains("/api/v1/adjustments"))
+            var path = req.RequestUri?.AbsolutePath ?? string.Empty;
+            if (req.Method == HttpMethod.Get && path.Contains("/api/v1/adjustments"))
                 return _adjustmentsResponse!;
-            if (req.Method == HttpMethod.Get && req.RequestUri.AbsolutePath.StartsWith("/api/claims/"))
+            if (req.Method == HttpMethod.Get && path.StartsWith("/api/claims/"))
                 return _claimResponse!;
-            if (req.Method == HttpMethod.Post && req.RequestUri.AbsolutePath.EndsWith("/void"))
+            if (req.Method == HttpMethod.Post && path.EndsWith("/void"))
                 return new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
                 {
                     Content = new StringContent("{\"message\":\"already voided in another flow\"}"),
@@ -308,9 +309,10 @@ public class ReversalRunServiceTests
     {
         _claimsHandler.NextResponse = req =>
         {
-            if (req.Method == HttpMethod.Get && req.RequestUri!.AbsolutePath.Contains("/api/v1/adjustments"))
+            var path = req.RequestUri?.AbsolutePath ?? string.Empty;
+            if (req.Method == HttpMethod.Get && path.Contains("/api/v1/adjustments"))
                 return _adjustmentsResponse ?? new HttpResponseMessage(HttpStatusCode.OK);
-            if (req.Method == HttpMethod.Get && req.RequestUri.AbsolutePath.StartsWith("/api/claims/"))
+            if (req.Method == HttpMethod.Get && path.StartsWith("/api/claims/"))
                 return _claimResponse ?? new HttpResponseMessage(HttpStatusCode.OK);
             // Default: void POST returns 200.
             return new HttpResponseMessage(HttpStatusCode.OK)

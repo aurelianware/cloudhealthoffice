@@ -129,7 +129,7 @@ public class BatchEraGeneratorReversalTests
 
         Assert.Equal(-60m, envelope.ForwardBalanceAmount);
         Assert.Empty(envelope.ForwardBalanceByProvider!);
-        var plb = Assert.Single(Segments(envelope.EdiContent).Where(s => s[0] == "PLB"));
+        var plb = Assert.Single(Segments(envelope.EdiContent), s => s[0] == "PLB");
         Assert.Equal(-60m, decimal.Parse(plb[4]));
     }
 

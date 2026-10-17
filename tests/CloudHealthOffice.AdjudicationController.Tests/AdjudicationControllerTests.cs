@@ -333,7 +333,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         _factory.ProviderIntegrityGate
             .CheckAsync(
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<bool>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ProviderIntegrityResult { Passed = true, Rating = "Clear", IntegrityScore = 95 });
@@ -476,7 +476,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         SetupBenefitResult(allowedAmount: 150m);
 
         IReadOnlyList<PricingRequest>? captured = null;
-        _factory.RateEngine
+        _ = _factory.RateEngine
             .ResolveBatchAsync(Arg.Do<IReadOnlyList<PricingRequest>>(r => captured = r), Arg.Any<CancellationToken>());
 
         var baseRequest = MakeAdjudicationRequest(lineCount: 2);
@@ -517,7 +517,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         SetupBenefitResult(allowedAmount: 150m);
 
         IReadOnlyList<PricingRequest>? captured = null;
-        _factory.RateEngine
+        _ = _factory.RateEngine
             .ResolveBatchAsync(Arg.Do<IReadOnlyList<PricingRequest>>(r => captured = r), Arg.Any<CancellationToken>());
 
         using var client = CreateClientWithTenant();
@@ -543,7 +543,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         SetupBenefitResult(allowedAmount: 150m);
 
         IReadOnlyList<PricingRequest>? captured = null;
-        _factory.RateEngine
+        _ = _factory.RateEngine
             .ResolveBatchAsync(Arg.Do<IReadOnlyList<PricingRequest>>(r => captured = r), Arg.Any<CancellationToken>());
 
         using var client = CreateClientWithTenant();
@@ -1029,7 +1029,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         SetupScrubPass();
         SetupNcciPass();
         _factory.ProviderIntegrityGate
-            .CheckAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .CheckAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new ProviderIntegrityResult
             {
                 Passed = false,
@@ -1057,7 +1057,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         SetupScrubPass();
         SetupNcciPass();
         _factory.ProviderIntegrityGate
-            .CheckAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .CheckAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new ProviderIntegrityResult
             {
                 Passed = false,
@@ -1085,7 +1085,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         SetupScrubPass();
         SetupNcciPass();
         _factory.ProviderIntegrityGate
-            .CheckAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .CheckAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new ProviderIntegrityResult
             {
                 Passed = false,
@@ -1118,7 +1118,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         SetupScrubPass();
         SetupNcciPass();
         _factory.ProviderIntegrityGate
-            .CheckAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .CheckAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new ProviderIntegrityResult { Passed = false });
 
         using var client = CreateClientWithTenant();
@@ -1750,16 +1750,18 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
     // Claim type normalization: Institutional → 837I, Dental → 837D
     // ═══════════════════════════════════════════════════════════════
 
+    // NormalizeClaimType itself is private and not asserted here: this
+    // theory only checks that every claim-type spelling routes to the CHO
+    // engine in Replace mode. (It used to take an expected 837 code that
+    // it never checked.)
     [Theory]
-    [InlineData("Professional", "837P")]
-    [InlineData("Institutional", "837I")]
-    [InlineData("Dental", "837D")]
-    [InlineData("professional", "837P")]  // case-insensitive
-    [InlineData(null, "837P")]            // default
-    public void NormalizeClaimType_ProducesCorrectCode(string? claimType, string expectedCode)
+    [InlineData("Professional")]
+    [InlineData("Institutional")]
+    [InlineData("Dental")]
+    [InlineData("professional")]  // case-insensitive
+    [InlineData(null)]            // default
+    public void EveryClaimTypeSpelling_RoutesToChoReplace(string? claimType)
     {
-        // The NormalizeClaimType helper is private, so we test it indirectly
-        // through the routing behavior. This theory verifies the mapping logic.
         var router = new ClaimTypeRouter();
         var config = new OperatingModeConfiguration
         {
