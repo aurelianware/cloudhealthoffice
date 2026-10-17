@@ -10,6 +10,7 @@
 @inject IMemberNoteService MemberNoteService
 @inject IMemberDocumentService MemberDocumentService
 @inject IUserContextService UserContextService
+@inject IRecordAccessLogService AccessLogService
 @inject IIdCardService IdCardService
 @inject IClaimsService ClaimsService
 @inject IArService ArService
@@ -1448,6 +1449,13 @@
                     </div>
                 </div>
             }
+            else if (ActiveTab == "access-log")
+            {
+                <div data-testid="member-tab-access-log">
+                    <RecordAccessLogPanel Log="_accessLog" Error="@_accessLogError" PrimaryType="Member" Subject="member"
+                                          Description="Every read of this member and of their claims: views, and searches that returned them." />
+                </div>
+            }
         }
         else
         {
@@ -1468,8 +1476,9 @@
     public string BaseHref { get; set; } = string.Empty;
 
     // Fixed order (portal-navigation.md §8 decision 3). Authorizations,
-    // Appeals, Calls and Access log join when their data is wired.
-    private static readonly IReadOnlyList<RecordTab> MemberTabs =
+    // Appeals and Calls join when their data is wired. Access log is for
+    // audit:read holders (compliance) only.
+    private IReadOnlyList<RecordTab> MemberTabs =>
     [
         new("overview", "Overview", Icons.Material.Filled.Person),
         new("enrollment", "Enrollment", Icons.Material.Filled.Timeline),
@@ -1481,6 +1490,7 @@
         new("premium", "Premium & AR", Icons.Material.Filled.CreditCard),
         new("notes", "Notes", Icons.Material.Filled.Notes),
         new("documents", "Documents", Icons.Material.Filled.Description),
+        new("access-log", "Access log", Icons.Material.Filled.Visibility, Visible: CanReadAccessLog),
     ];
 
     private string ActiveTab => RecordTabs.Resolve(MemberTabs, Tab, "overview");
@@ -1491,6 +1501,7 @@
         switch (ActiveTab)
         {
             case "notes": await OnNotesTabActivated(); break;
+            case "access-log": await OnAccessLogTabActivated(); break;
             case "claims": await OnClaimsTabActivated(); break;
             case "premium":
                 await Task.WhenAll(OnArTabActivated(), OnPremiumTabActivated());
@@ -2139,6 +2150,25 @@
     {
         _activeAlertCount = count;
         return InvokeAsync(StateHasChanged);
+    }
+
+    // ── Access log tab ───────────────────────────────────────────────────
+    private RecordAccessLog? _accessLog;
+    private string? _accessLogError;
+    private bool CanReadAccessLog => UserContextService.HasPermission("audit:read");
+
+    private async Task OnAccessLogTabActivated()
+    {
+        if (_accessLog is not null || !CanReadAccessLog) return;
+        try
+        {
+            _accessLog = await AccessLogService.GetMemberAccessLogAsync(MemberId);
+            _accessLogError = null;
+        }
+        catch (Exception ex)
+        {
+            _accessLogError = $"The access log couldn't be loaded: {ex.Message}";
+        }
     }
 
     // ── Notes tab ────────────────────────────────────────────────────────

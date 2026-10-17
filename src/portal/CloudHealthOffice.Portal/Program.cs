@@ -299,6 +299,7 @@ builder.Services.AddScoped<IWorkQueueService, WorkQueueService>();
 builder.Services.AddScoped<IWorkManagementService, WorkManagementService>();
 builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IRecordAccessLogService, RecordAccessLogService>();
 builder.Services.AddScoped<IEnrollmentOperationsService, EnrollmentOperationsService>();
 builder.Services.AddScoped<IAppealsService, AppealsService>();
 builder.Services.AddScoped<ICorrespondenceService, CorrespondenceService>();

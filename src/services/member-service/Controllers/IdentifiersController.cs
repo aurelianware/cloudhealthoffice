@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
 using MemberService.Middleware;
@@ -41,6 +42,7 @@ public class IdentifiersController : ControllerBase
     }
 
     /// <summary>List typed identifiers for a member. PII values are redacted.</summary>
+    [AuditRecordAccess("Member", "Identifiers", RecordIdRouteValue = "memberId", MemberIdRouteValue = "memberId")]
     [HttpGet]
     [ProducesResponseType(typeof(List<IdentifierResponse>), 200)]
     [ProducesResponseType(404)]
