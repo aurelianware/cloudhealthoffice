@@ -1,6 +1,4 @@
 using System.Collections.Concurrent;
-using CloudHealthOffice.Infrastructure.Serialization;
-using CloudHealthOffice.Testing.Cosmos;
 using CloudHealthOffice.Testing.Mongo;
 using WorkManagementService.Models;
 using WorkManagementService.Repositories;
@@ -140,46 +138,6 @@ public class MongoConcurrencyTests
         {
             await _mongo.DropDatabaseAsync(db);
         }
-    }
-}
-
-/// <summary>The same guarantees against the Cosmos emulator (ReplaceItem with IfMatchEtag).</summary>
-[Collection(CosmosEmulatorFixture.CollectionName)]
-[Trait("Category", CosmosEmulator.Category)]
-public class CosmosConcurrencyTests
-{
-    private readonly CosmosEmulatorFixture _cosmos;
-
-    public CosmosConcurrencyTests(CosmosEmulatorFixture cosmos) => _cosmos = cosmos;
-
-    private async Task<IWorkStore> StoreAsync()
-    {
-        var client = _cosmos.CreateClient(serializer: new CosmosSystemTextJsonSerializer());
-        var database = await _cosmos.CreateDatabaseAsync(client, "workmgmt");
-        var options = new CosmosWorkStoreOptions { DatabaseName = database.Id };
-        await CosmosWorkStore.EnsureContainersAsync(client, options);
-        return new CosmosWorkStore(client, options);
-    }
-
-    [SkippableFact]
-    public async Task ParallelGetNext_NeverReturnsTheSameItemTwice()
-    {
-        _cosmos.SkipIfUnavailable();
-        await GetNextConcurrency.NoItemIsHandedOutTwice(await StoreAsync(), 10);
-    }
-
-    [SkippableFact]
-    public async Task ConditionalLease_HasExactlyOneWinner()
-    {
-        _cosmos.SkipIfUnavailable();
-        await GetNextConcurrency.ConditionalLease_HasExactlyOneWinner(await StoreAsync());
-    }
-
-    [SkippableFact]
-    public async Task Store_RoundTrips_QueriesAndCounts()
-    {
-        _cosmos.SkipIfUnavailable();
-        await StoreContract.Exercise(await StoreAsync());
     }
 }
 

@@ -127,13 +127,12 @@ Every item write is conditional on the item's `Version`:
 | Store | Mechanism |
 |---|---|
 | MongoDB | `ReplaceOne({_id, tenantId, version: expected}, item with version+1)`; `MatchedCount == 0` = lost |
-| Cosmos DB | `ReplaceItem(..., IfMatchEtag = _etag read with the item)`; 412 = lost |
 | In-memory (Development / tests) | compare-and-swap under one lock |
 
 Of N callers leasing the same item exactly one write succeeds. The tests run 24
-parallel Get Next calls against the in-memory store and a real mongod (and the
-Cosmos emulator, `Category=Cosmos`) and assert no item is handed out twice and
-nothing eligible is left while a caller came back empty.
+parallel Get Next calls against the in-memory store and a real mongod and
+assert no item is handed out twice and nothing eligible is left while a caller
+came back empty.
 
 Known limit: two concurrent Get Next calls **by the same user** can each lease an
 item (the own-lease check is a read). Harmless (both are theirs; one can be
@@ -282,10 +281,9 @@ the `workqueue:*` names claims-service and the role catalogue already had.
 `CandidatesPerQueue` (25), `GetNextRounds` (3), `RescoreIntervalMinutes` (15,
 0 = off), `Reconcile:*` (above), `SeedMemberUserIds` (demo only: users given a
 primary membership in every active claim queue of a tenant where they have none,
-checked once per tenant per process; the GKE demo seeds `local-demo-admin`). Store: MongoDB (`MongoDb:ConnectionString`), or
-Cosmos (`Database:Provider=Cosmos`; containers `WorkQueues`, `WorkTeams`,
-`WorkMemberships`, `WorkItems`, `WorkAudit`, partition `/tenantId`); with neither,
-the in-memory store, Development / Testing hosts only.
+checked once per tenant per process; the GKE demo seeds `local-demo-admin`). Store: MongoDB (`MongoDb:ConnectionString`);
+without it, the in-memory store, Development / Testing hosts only (any other host
+refuses to start).
 
 ## Phase plan
 
