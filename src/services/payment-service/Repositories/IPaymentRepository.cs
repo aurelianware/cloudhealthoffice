@@ -9,6 +9,13 @@ public interface IPaymentRepository
     Task<IEnumerable<Payment>> GetByClaimIdAsync(string claimId);
 
     /// <summary>
+    /// A payee's payments (checks and EFTs to that NPI), newest first: the
+    /// provider record's Payments tab.
+    /// </summary>
+    Task<IReadOnlyList<Payment>> GetByPayeeNpiAsync(string payeeNpi, int limit)
+        => throw new NotSupportedException("Payments by payee need the MongoDB payment store.");
+
+    /// <summary>
     /// Of <paramref name="claimIds"/>, those that already appear in a payment of
     /// the current tenant: a payment issued for them (<paramref name="reversal"/>
     /// false) or a reversal payment recouping them (true). Payment-service's own

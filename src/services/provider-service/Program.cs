@@ -1,5 +1,4 @@
 using CloudHealthOffice.Infrastructure.Audit;
-using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using ProviderService.Adapters;

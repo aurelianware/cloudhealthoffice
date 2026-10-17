@@ -23,6 +23,14 @@ public interface IAuthorizationRepository
     /// for CMS-0057-F reporting (metrics and the recent-decision list).
     /// </summary>
     Task<IEnumerable<Authorization>> ListActivityBetweenAsync(DateTime from, DateTime to);
+
+    /// <summary>
+    /// The current tenant's approved authorizations (Approved or Modified)
+    /// whose approved service period ended in [from, to]: the approved end
+    /// date, or the expiration date when no end date was approved.
+    /// </summary>
+    Task<IReadOnlyList<Authorization>> ListApprovedEndingBetweenAsync(DateTime from, DateTime to)
+        => throw new NotSupportedException("Approved authorizations by end date need the MongoDB authorization store.");
     Task<Authorization> CreateAsync(Authorization authorization);
     Task<Authorization> UpdateAsync(Authorization authorization);
     Task DeleteAsync(string id);
