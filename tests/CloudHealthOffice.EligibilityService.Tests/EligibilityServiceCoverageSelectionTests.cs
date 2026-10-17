@@ -48,11 +48,13 @@ public class EligibilityServiceCoverageSelectionTests
     private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
-    private static (EligibilityServiceImpl Service, RoutingHandler Handler) Build(string activeBody, HttpStatusCode activeStatus = HttpStatusCode.OK)
+    private static (EligibilityServiceImpl Service, RoutingHandler Handler) Build(
+        string activeBody, HttpStatusCode activeStatus = HttpStatusCode.OK,
+        ILogger<EligibilityServiceImpl>? logger = null, HttpStatusCode benefitsStatus = HttpStatusCode.OK)
     {
         var handler = new RoutingHandler(r =>
             r.RequestUri!.AbsolutePath.EndsWith("/active") ? Json(activeStatus, activeBody)
-            : r.RequestUri.AbsolutePath.EndsWith("/benefits") ? Json(HttpStatusCode.OK, "[]")
+            : r.RequestUri.AbsolutePath.EndsWith("/benefits") ? Json(benefitsStatus, "[]")
             : Json(HttpStatusCode.NotFound, "{}"));
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -65,7 +67,7 @@ public class EligibilityServiceCoverageSelectionTests
         var service = new EligibilityServiceImpl(
             Substitute.For<IEligibilityRepository>(),
             new HttpClient(handler),
-            NullLogger<EligibilityServiceImpl>.Instance,
+            logger ?? NullLogger<EligibilityServiceImpl>.Instance,
             configuration,
             new EligibilityAdapterFactory(System.Array.Empty<IEligibilityAdapter>(), factory, configuration,
                 NullLogger<EligibilityAdapterFactory>.Instance));
@@ -118,6 +120,29 @@ public class EligibilityServiceCoverageSelectionTests
         var result = await svc.QuickEligibilityCheckAsync(Tenant, "M1", null, new DateTime(2025, 3, 15));
 
         Assert.False(result.IsActive);
+    }
+
+    [Fact]
+    public async Task BenefitsNotFound_LogsThePlanIdOnOneLine()
+    {
+        // The plan id comes from coverage-service's answer, not from CHO code.
+        var logger = new ListLogger<EligibilityServiceImpl>();
+        var (svc, _) = Build(Array(Wire("cov-1", "PLAN\\nFORGED ENTRY", "HLT", "Active", "2025-01-01")),
+            logger: logger, benefitsStatus: HttpStatusCode.NotFound);
+
+        await svc.GetBenefitDetailsAsync(Tenant, "M1", "30", new DateTime(2025, 3, 15));
+
+        var line = Assert.Single(logger.Messages, m => m.StartsWith("Benefits not found for plan"));
+        Assert.Equal("Benefits not found for plan PLAN_FORGED ENTRY", line);
+    }
+
+    private sealed class ListLogger<T> : ILogger<T>
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<string> Messages { get; } = new();
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => Messages.Enqueue(formatter(state, exception));
     }
 
     [Theory]
