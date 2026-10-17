@@ -19,7 +19,7 @@ namespace MemberService.Tests.Integration;
 
 /// <summary>
 /// End-to-end smoke over the real Program pipeline using an in-memory repo so the
-/// test doesn't require Cosmos/Mongo. Exercises: create member → event written →
+/// test doesn't require MongoDB. Exercises: create member → event written →
 /// GET FHIR returns a Patient resource with the expected extensions and identifiers.
 /// </summary>
 public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
@@ -38,12 +38,14 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
         protected override IHost CreateHost(IHostBuilder builder)
         {
             builder.UseEnvironment("Development");
-            builder.ConfigureAppConfiguration((ctx, cfg) =>
+            // Host configuration, not app configuration: Program.cs reads the Mongo
+            // connection string before ConfigureAppConfiguration callbacks apply.
+            builder.ConfigureHostConfiguration(cfg =>
             {
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    // Force the Mongo branch in Program.cs so we never try to contact Cosmos
-                    // before our overrides land. The Mongo db registration is replaced below.
+                    // Program.cs requires a Mongo connection string; the Mongo db
+                    // registration is replaced below so nothing connects to this host.
                     ["MongoDb:ConnectionString"] = "mongodb://fake-host:27017",
                     ["MongoDb:DatabaseName"] = "CloudHealthOffice",
                     ["Member:IdentifierEncryption:KeySecretName"] = ""
@@ -54,6 +56,10 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
                 RemoveAll<IMemberRepository>(services);
                 RemoveAll<IMemberEventRepository>(services);
                 RemoveAll<IFamilyRelationshipRepository>(services);
+                // Only the Mongo alert/note registrations: a test that installs its
+                // own repository through WithWebHostBuilder keeps it.
+                RemoveAll<MemberAlertRepositoryMongo>(services);
+                RemoveAll<MemberNoteRepositoryMongo>(services);
                 RemoveAll<MongoDB.Driver.IMongoClient>(services);
                 RemoveAll<MongoDB.Driver.IMongoDatabase>(services);
 
@@ -61,24 +67,32 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
                 // fake MongoDB host at startup. Don't use RemoveAll<IHostedService>() as
                 // that would also remove the Kestrel host service and prevent the test
                 // server from starting. RemoveAll checks both ServiceType and
-                // ImplementationType so it catches both factory-less AddHostedService<T>
-                // registrations and explicit factory-style AddSingleton<IHostedService>
-                // registrations.
+                // ImplementationType, which catches the AddHostedService<T>
+                // registrations. MemberEventIndexInitializer is registered through a
+                // Program.cs factory (it takes the configured collection name), so
+                // its descriptor has no ImplementationType: drop the hosted-service
+                // factories declared in member-service instead.
                 RemoveAll<MemberEventIndexInitializer>(services);
                 RemoveAll<MemberIndexInitializer>(services);
                 RemoveAll<FamilyRelationshipIndexInitializer>(services);
+                foreach (var d in services.Where(d =>
+                             d.ServiceType == typeof(IHostedService)
+                             && d.ImplementationFactory?.Method.DeclaringType?.Assembly == typeof(Program).Assembly)
+                         .ToList())
+                {
+                    services.Remove(d);
+                }
 
-                // Alert/note repositories are only registered on the Cosmos branch
-                // in Program.cs. If the test happens to land on the Cosmos branch,
-                // resolving IMemberAlertGuard cascades into a CosmosClient factory
-                // that requires CosmosDb:Endpoint (not configured in tests). Drop
-                // the guard entirely; MembersController's IMemberAlertGuard parameter
-                // is optional and falls through to null.
+                // The smoke flow does not exercise alerts: drop the guard entirely;
+                // MembersController's IMemberAlertGuard parameter is optional and
+                // falls through to null.
                 RemoveAll<IMemberAlertGuard>(services);
 
                 services.AddSingleton<IMemberRepository>(MemberRepo);
                 services.AddSingleton<IMemberEventRepository>(EventRepo);
                 services.AddSingleton<IFamilyRelationshipRepository>(new InMemoryFamilyRelationshipRepository());
+                services.TryAddSingleton<IMemberAlertRepository>(new InMemoryMemberAlertRepository());
+                services.TryAddSingleton<IMemberNoteRepository>(new InMemoryMemberNoteRepository());
             });
             return base.CreateHost(builder);
         }

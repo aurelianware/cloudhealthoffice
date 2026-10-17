@@ -8,8 +8,8 @@ namespace MemberService.Tests.Services;
 
 public class MemberEventPublisherTests
 {
-    private static CosmosMemberEventPublisher NewPublisher(InMemoryMemberEventRepository repo)
-        => new(repo, NullLogger<CosmosMemberEventPublisher>.Instance);
+    private static MemberEventPublisher NewPublisher(InMemoryMemberEventRepository repo)
+        => new(repo, NullLogger<MemberEventPublisher>.Instance);
 
     [Fact]
     public async Task Publish_StampsVersionAndPartitionKey()

@@ -74,7 +74,7 @@ public class MemberEventRepositoryMongo : IMemberEventRepository
 
         // Mongo's _id index is global to the collection, while EventId is only
         // unique within (TenantId, MemberId). Always replace the publisher's
-        // Cosmos-compatible Id so the same idempotency key can be reused safely
+        // default Id (the bare EventId) so the same idempotency key can be reused safely
         // by another tenant or member.
         evt.Id = MemberEvent.BuildMongoDocumentId(evt.TenantId, evt.MemberId, evt.EventId);
         if (string.IsNullOrEmpty(evt.PartitionKey))

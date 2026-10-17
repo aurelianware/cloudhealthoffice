@@ -12,7 +12,7 @@ public class VersionConflictRetryTests
     {
         var inner = new InMemoryMemberEventRepository();
         var racing = new ConflictingMemberEventRepository(inner, conflicts: 3);
-        var pub = new CosmosMemberEventPublisher(racing, NullLogger<CosmosMemberEventPublisher>.Instance);
+        var pub = new MemberEventPublisher(racing, NullLogger<MemberEventPublisher>.Instance);
 
         var result = await pub.PublishAsync(new MemberEvent
         {
@@ -32,7 +32,7 @@ public class VersionConflictRetryTests
     {
         var inner = new InMemoryMemberEventRepository();
         var racing = new ConflictingMemberEventRepository(inner, conflicts: 10);
-        var pub = new CosmosMemberEventPublisher(racing, NullLogger<CosmosMemberEventPublisher>.Instance);
+        var pub = new MemberEventPublisher(racing, NullLogger<MemberEventPublisher>.Instance);
 
         var act = async () => await pub.PublishAsync(new MemberEvent
         {

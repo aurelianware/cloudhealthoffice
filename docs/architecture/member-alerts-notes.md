@@ -11,7 +11,7 @@ Adds two member-bound resources to the member-service:
 ## Scope of this PR
 
 - `MemberAlert` and `MemberNote` models with their enums.
-- `IMemberAlertRepository` / `IMemberNoteRepository` (Cosmos + Mongo).
+- `IMemberAlertRepository` / `IMemberNoteRepository` (MongoDB).
 - `MemberAlertsController` at `/api/v1/members/{memberId}/alerts`.
 - `MemberNotesController` at `/api/v1/members/{memberId}/notes`.
 - `IFhirFlagProjector` + endpoint `/api/v1/members/{id}/fhir/Flag?status=active`.

@@ -21,7 +21,7 @@ public class IdentifiersControllerTests
         var events = new InMemoryMemberEventRepository();
         var enc = new NoOpIdentifierEncryptor();
         var fp = new NoOpIdentifierFingerprinter();
-        var publisher = new CosmosMemberEventPublisher(events, NullLogger<CosmosMemberEventPublisher>.Instance);
+        var publisher = new MemberEventPublisher(events, NullLogger<MemberEventPublisher>.Instance);
         var ctl = new IdentifiersController(repo, enc, fp, publisher);
         var http = new DefaultHttpContext();
         http.Items["TenantId"] = Tenant;

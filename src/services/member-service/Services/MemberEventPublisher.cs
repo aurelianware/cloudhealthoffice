@@ -6,7 +6,7 @@ namespace MemberService.Services;
 
 /// <summary>
 /// Default <see cref="IMemberEventPublisher"/>. Writes events to the append-only
-/// Cosmos/Mongo stream via <see cref="IMemberEventRepository"/>.
+/// MongoDB stream via <see cref="IMemberEventRepository"/>.
 ///
 /// Concurrency: repositories surface a version conflict as
 /// <see cref="AppendResult.Appended"/> <c>false</c> with no existing event.
@@ -17,17 +17,17 @@ namespace MemberService.Services;
 /// the repository returns <c>Appended=false</c> with the existing event and the
 /// publisher short-circuits.
 /// </summary>
-public sealed class CosmosMemberEventPublisher : IMemberEventPublisher
+public sealed class MemberEventPublisher : IMemberEventPublisher
 {
     private const int MaxVersionRetries = 5;
     private static readonly int[] BackoffMs = { 2, 5, 25, 100, 250 };
 
     private readonly IMemberEventRepository _repository;
-    private readonly ILogger<CosmosMemberEventPublisher> _logger;
+    private readonly ILogger<MemberEventPublisher> _logger;
 
-    public CosmosMemberEventPublisher(
+    public MemberEventPublisher(
         IMemberEventRepository repository,
-        ILogger<CosmosMemberEventPublisher> logger)
+        ILogger<MemberEventPublisher> logger)
     {
         _repository = repository;
         _logger = logger;
