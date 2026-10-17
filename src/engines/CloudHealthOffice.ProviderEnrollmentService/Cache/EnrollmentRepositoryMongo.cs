@@ -169,7 +169,11 @@ public sealed class EnrollmentRepositoryMongo : IEnrollmentRepository
 
     private sealed class MongoEnrollmentDocument
     {
+        // Left out of the document while unset: an upsert that inserts lets
+        // the server assign _id, and a replace keeps the stored one. Written
+        // as ObjectId.Empty, every new (NPI, state) collided on the same _id.
         [BsonId]
+        [BsonIgnoreIfDefault]
         public ObjectId Id              { get; set; }
         public string Npi               { get; set; } = string.Empty;
         public string StateCode         { get; set; } = string.Empty;
