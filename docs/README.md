@@ -111,6 +111,7 @@ healthcare payer systems.
 - [Product-led professional services and labelled operating models](adr/012-product-led-professional-services.md)
 - [cms-0057-f.com as a companion educational property](adr/013-cms-0057-f-com-companion-property.md)
 - [One contract model feeding one pricing engine](adr/016-unified-contract-pricing.md)
+- [MongoDB API is the only document persistence path](adr/017-mongodb-api-only-persistence.md)
 
 ## Roadmap
 
