@@ -201,6 +201,31 @@ pend codes, and never the reason text. Before, these decisions
 substring-matched the reason against a list of phrases, so rewording a
 message could make an outage overridable.
 
+## claims-examiner: an Anthropic outage is retried, not escalated
+
+Some Anthropic failures outlast the client's own retries:
+- 429 (rate limited);
+- 529 (overloaded);
+- an open circuit (a 503 `HttpRequestException` around a
+  `BrokenCircuitException`, or the bare exception);
+- a timed-out attempt (`TaskCanceledException` around a `TimeoutException`,
+  or a bare `TimeoutRejectedException`).
+
+In these cases `ExaminerOrchestrator` throws `ExaminerTransientException`
+and writes nothing. The claims.pended.v1 consumer retries the message with
+back-off and dead-letters it after `MaxAttempts`.
+
+Before this was fixed, the orchestrator's catch-all wrote a permanent
+`EscalateToHuman` recommendation, so a rate-limit burst sent every claim
+pended during it to a person for good.
+
+- **Host shutdown** (the consumer's token cancelled) is rethrown as
+  cancellation. It is neither transient nor an escalation.
+- **Every other Anthropic failure still escalates.** That includes a 400 or
+  401, an unreadable response, other 5xx after retries, and a connection
+  failure with no status code. Treating those last two as transient as well
+  is a possible follow-up; it was not part of this fix.
+
 ## Not covered
 
 - `HttpClient` instances created with `new HttpClient()`, which bypass the

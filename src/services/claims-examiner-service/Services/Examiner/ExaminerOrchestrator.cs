@@ -1,8 +1,11 @@
+using System.Net;
 using System.Text.Json.Nodes;
 using ClaimsExaminerService.Models;
 using ClaimsExaminerService.Services.Anthropic;
 using ClaimsExaminerService.Services.Events;
 using CloudHealthOffice.Events;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 
 namespace ClaimsExaminerService.Services.Examiner;
 
@@ -14,8 +17,10 @@ public interface IExaminerOrchestrator
     /// cannot be reached, or does not take the write-back,
     /// <see cref="ExaminerTransientException"/> is thrown, and the consumer
     /// retries the message and dead-letters it after its last attempt instead
-    /// of advancing past it. An Anthropic failure, after the client's own
-    /// retries of 429 / 529 / 5xx, writes the EscalateToHuman fallback.
+    /// of advancing past it. So it is when Anthropic stays rate limited (429)
+    /// or overloaded (529) through the client's own retries, its circuit is
+    /// open, or the call timed out. Any other Anthropic failure writes the
+    /// EscalateToHuman fallback.
     /// </summary>
     Task ProcessAsync(ClaimPendedEvent evt, CancellationToken ct);
 }
@@ -121,6 +126,19 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
         {
             result = await _anthropic.CallWithToolAsync(systemPrompt, userMessage, tool, ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw; // the host is stopping: neither an outage nor a reason to escalate
+        }
+        catch (Exception ex) when (IsTransientAnthropicFailure(ex))
+        {
+            // Rate limited, overloaded, circuit open or timed out after the client's own
+            // retries. An EscalateToHuman written now would route the claim to a person
+            // for good because of a burst; the consumer retries the message instead and
+            // dead-letters it after its last attempt.
+            _logger.LogWarning(ex, "Anthropic unavailable for claim {ClaimId}; the event will be retried", evt.ClaimId);
+            throw new ExaminerTransientException($"Anthropic unavailable examining claim {evt.ClaimId}", ex);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex,
@@ -152,6 +170,23 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
                 evt.ClaimId, evt.TenantId, examination, evt.EventId, ct);
         }
     }
+
+    /// <summary>
+    /// An Anthropic failure that a later attempt may not repeat: 429 (rate limited),
+    /// 529 (overloaded), an open circuit (<see cref="BrokenCircuitException"/>, which
+    /// the shared client resilience surfaces as a 503 <see cref="HttpRequestException"/>
+    /// around it) or a timed-out attempt (<see cref="TimeoutRejectedException"/>, which
+    /// it surfaces as a <see cref="TaskCanceledException"/> around a <see cref="TimeoutException"/>).
+    /// Host shutdown is handled before this is asked.
+    /// </summary>
+    internal static bool IsTransientAnthropicFailure(Exception ex) => ex switch
+    {
+        BrokenCircuitException or TimeoutRejectedException => true,
+        HttpRequestException { InnerException: BrokenCircuitException } => true,
+        HttpRequestException { StatusCode: HttpStatusCode.TooManyRequests or (HttpStatusCode)529 } => true,
+        TaskCanceledException { InnerException: TimeoutException or TimeoutRejectedException } => true,
+        _ => false,
+    };
 
     /// <summary>
     /// Pick the first NCCI pair edit (NE001) from the pend details. V1 only handles
