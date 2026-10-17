@@ -415,6 +415,12 @@
                     }
                 </div>
             }
+            else if (ActiveTab == "payments")
+            {
+                <div data-testid="provider-tab-payments">
+                    <ProviderPaymentsPanel Npi="@_provider.NPI" />
+                </div>
+            }
             else if (ActiveTab == "performance")
             {
                 <div data-testid="provider-tab-performance">
@@ -510,7 +516,7 @@
     /// <summary>The record's path without a tab, e.g. <c>/providers/P1</c>.</summary>
     [Parameter, EditorRequired] public string BaseHref { get; set; } = string.Empty;
 
-    // Fixed order (portal-navigation.md §8). Payments, Authorizations,
+    // Fixed order (portal-navigation.md §8). Authorizations,
     // Calls, Notes and Documents join when that data is wired.
     private IReadOnlyList<RecordTab> ProviderTabs =>
     [
@@ -520,6 +526,7 @@
         new("credentials", "Credentials", Icons.Material.Filled.Badge),
         new("contract", "Contract", Icons.Material.Filled.Description),
         new("claims", "Claims", Icons.Material.Filled.Receipt),
+        new("payments", "Payments", Icons.Material.Filled.Payments, Visible: UserContextService.HasPermission("payments:read")),
         new("performance", "Performance", Icons.Material.Filled.Analytics),
         new("access-log", "Access log", Icons.Material.Filled.Visibility, Visible: _canReadAccessLog),
     ];

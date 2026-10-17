@@ -55,6 +55,17 @@ public class PaymentRepositoryMongo : IPaymentRepository
         return await _collection.Find(filter).ToListAsync();
     }
 
+    public async Task<IReadOnlyList<Payment>> GetByPayeeNpiAsync(string payeeNpi, int limit)
+    {
+        var filter = Builders<Payment>.Filter.And(
+            Builders<Payment>.Filter.Eq(x => x.TenantId, GetTenantId()),
+            Builders<Payment>.Filter.Eq(x => x.PayeeNPI, payeeNpi.Trim()));
+        return await _collection.Find(filter)
+            .SortByDescending(x => x.PaymentDate)
+            .Limit(Math.Clamp(limit, 1, 500))
+            .ToListAsync();
+    }
+
     public async Task<IReadOnlyCollection<string>> GetClaimIdsWithPaymentAsync(IReadOnlyCollection<string> claimIds, bool reversal)
     {
         var found = new HashSet<string>(StringComparer.Ordinal);
