@@ -368,9 +368,9 @@ jobs:
             echo "Fetching secrets from Key Vault: $KV"
 
             # Database
-            fetch_secret "CosmosDb--ConnectionString"   "KV_COSMOS_DB_CONNECTION_STRING"
-            fetch_secret "CosmosDb--Endpoint"            "KV_COSMOS_DB_ENDPOINT"
-            fetch_secret "CosmosDb--Key"                 "KV_COSMOS_DB_KEY"
+            # MongoDb--ConnectionString: the Azure DocumentDB (MongoDB vCore)
+            # connection string, with retrywrites=false (ADR 017).
+            fetch_secret "MongoDb--ConnectionString"     "KV_MONGODB_CONNECTION_STRING"
             fetch_secret "MongoDb--Username"             "KV_MONGODB_USERNAME"
             fetch_secret "MongoDb--Password"             "KV_MONGODB_PASSWORD"
 
@@ -387,15 +387,6 @@ jobs:
 
             # Azure Storage
             fetch_secret "Azure--StorageConnectionString" "KV_AZURE_STORAGE_CONNECTION_STRING"
-
-            # BatchEligibility (eligibility-service) fallback: Cosmos DB for
-            # NoSQL (Core/SQL API). Only used when MongoDB isn't configured --
-            # the k8s manifest wires BatchEligibility__MongoDb__ConnectionString
-            # from the same database-secret every other Mongo-backed service
-            # uses, and that's checked first (see
-            # BatchEligibilityServiceCollectionExtensions). Kept for
-            # environments that deliberately run Cosmos DB for NoSQL instead.
-            fetch_secret "BatchEligibility--CosmosDb--ConnectionString" "KV_BATCH_ELIGIBILITY_COSMOS_CONNECTION_STRING"
 
             # Azure AD
             fetch_secret "AzureAd--TenantId"             "KV_AZURE_AD_TENANT_ID"
@@ -472,27 +463,21 @@ jobs:
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Create database secret (MongoDB or CosmosDB)
+      - name: Create database secret (MongoDB / Azure DocumentDB)
         run: |
           # Key Vault env vars (KV_*) override GitHub Secrets when present
-          CONN="${KV_COSMOS_DB_CONNECTION_STRING:-${{ secrets.COSMOS_DB_CONNECTION_STRING }}}"
+          CONN="${KV_MONGODB_CONNECTION_STRING:-${{ secrets.MONGODB_CONNECTION_STRING }}}"
           if [ -z "$CONN" ]; then
             MONGO_USER="${KV_MONGODB_USERNAME:-${{ secrets.MONGODB_USERNAME }}}"
             MONGO_PASS="${KV_MONGODB_PASSWORD:-${{ secrets.MONGODB_PASSWORD }}}"
             : "${MONGO_USER:=admin}"
             : "${MONGO_PASS:=admin}"
             CONN="mongodb://${MONGO_USER}:${MONGO_PASS}@mongodb.cloudhealthoffice.svc.cluster.local:27017"
-            echo "No COSMOS_DB_CONNECTION_STRING set — using standalone MongoDB"
+            echo "No MongoDb--ConnectionString / MONGODB_CONNECTION_STRING set — using standalone MongoDB"
           fi
-
-          # CosmosDB endpoint/key: leave empty when using standalone MongoDB
-          ENDPOINT="${KV_COSMOS_DB_ENDPOINT:-${{ secrets.COSMOS_DB_ENDPOINT }}}"
-          KEY="${KV_COSMOS_DB_KEY:-${{ secrets.COSMOS_DB_KEY }}}"
 
           kubectl create secret generic database-secret \
             --from-literal=connectionString="${CONN}" \
-            --from-literal=endpoint="${ENDPOINT}" \
-            --from-literal=key="${KEY}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
@@ -548,13 +533,6 @@ jobs:
         run: |
           kubectl create secret generic azure-storage-secret \
             --from-literal=connectionString="${KV_AZURE_STORAGE_CONNECTION_STRING:-${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}}" \
-            -n ${{ env.NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Create BatchEligibility Cosmos secret
-        run: |
-          kubectl create secret generic batch-eligibility-secret \
-            --from-literal=cosmosConnectionString="${KV_BATCH_ELIGIBILITY_COSMOS_CONNECTION_STRING:-${{ secrets.BATCH_ELIGIBILITY_COSMOS_CONNECTION_STRING }}}" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
