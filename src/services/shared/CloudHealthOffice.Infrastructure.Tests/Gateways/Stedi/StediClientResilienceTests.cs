@@ -4,6 +4,7 @@ using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi.Models;
+using CloudHealthOffice.Infrastructure.Http;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.Infrastructure.Tests.Http;
 using Microsoft.Extensions.Configuration;
@@ -88,6 +89,7 @@ public class StediClientResilienceTests
                  {
                      StediEligibilityApiClient.HttpClientName, StediClaimAttachmentApiClient.HttpClientName,
                      StediClaimAttachmentApiClient.UploadHttpClientName, StediClaimAcknowledgmentApiClient.CoreHttpClientName,
+                     CloudHealthOffice.Infrastructure.ReferenceData.Payers.Stedi.StediPayerDirectoryClient.HttpClientName,
                  })
         {
             services.Configure<HttpClientFactoryOptions>(name,
@@ -131,5 +133,57 @@ public class StediClientResilienceTests
 
         result.RetryCount.Should().Be(0);
         stedi.Calls.Should().ContainSingle();
+    }
+
+    // ── One retry layer: StediHttpSender's ─────────────────────────────
+
+    // Stedi:MaxRetries defaults to 2: three attempts in all.
+    private const int StediAttempts = 3;
+
+    [Fact]
+    public async Task AFailingClaimSubmission_IsTriedOnlyAsOftenAsStedisOwnRetriesAllow()
+    {
+        // A POST with an Idempotency-Key, which the shared pipeline would also retry.
+        var clock = new ManualClock();
+        var stedi = new FakeStedi(clock) { Otherwise = (TimeSpan.Zero, HttpStatusCode.ServiceUnavailable, "{}") };
+        using var provider = EligibilityServiceStedi(stedi, clock);
+
+        var act = () => clock.Drive(provider.GetRequiredService<StediClaimApiClient>().SubmitAsync(
+            GatewayClaimType.Professional, new StediClaimSubmissionRequestDto(), "idem-1", CancellationToken.None));
+
+        (await act.Should().ThrowAsync<StediApiException>()).Which.RetryCount.Should().Be(StediAttempts - 1);
+        stedi.Calls.Should().HaveCount(StediAttempts);
+    }
+
+    [Fact]
+    public async Task AFailingReportFetch_IsTriedOnlyAsOftenAsStedisOwnRetriesAllow()
+    {
+        // A GET, which the shared pipeline would also retry.
+        var clock = new ManualClock();
+        var stedi = new FakeStedi(clock) { Otherwise = (TimeSpan.Zero, HttpStatusCode.BadGateway, "{}") };
+        using var provider = EligibilityServiceStedi(stedi, clock);
+
+        var act = () => clock.Drive(provider.GetRequiredService<StediClaimAcknowledgmentApiClient>()
+            .GetReportAsync("tx-1", CancellationToken.None));
+
+        await act.Should().ThrowAsync<StediApiException>();
+        stedi.Calls.Should().HaveCount(StediAttempts);
+    }
+
+    [Fact]
+    public void EveryStediClient_IsOutsideTheSharedPipeline()
+    {
+        using var provider = EligibilityServiceStedi(new FakeStedi(new ManualClock()), new ManualClock());
+        var pipelines = provider.GetRequiredService<ChoResiliencePipelines>();
+
+        foreach (var name in new[]
+                 {
+                     StediEligibilityApiClient.HttpClientName, StediClaimAttachmentApiClient.HttpClientName,
+                     StediClaimAttachmentApiClient.UploadHttpClientName, StediClaimAcknowledgmentApiClient.CoreHttpClientName,
+                     CloudHealthOffice.Infrastructure.ReferenceData.Payers.Stedi.StediPayerDirectoryClient.HttpClientName,
+                 })
+        {
+            pipelines.For(name).Should().BeNull($"{name} retries in StediHttpSender (or, for the upload, not at all)");
+        }
     }
 }

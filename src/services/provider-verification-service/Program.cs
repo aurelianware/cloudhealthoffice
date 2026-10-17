@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Http;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
 
@@ -57,7 +58,10 @@ public class Program
             client.Timeout = TimeSpan.FromSeconds(30);
         })
         .WithoutChoTokens()
-        .AddStandardResilienceHandler(); // Polly retry + circuit breaker via MS.Ext.Http.Resilience
+        // One retry layer: its standard handler (Polly retry + circuit breaker via
+        // MS.Ext.Http.Resilience), not the shared service-client pipeline as well.
+        .WithoutChoResilience()
+        .AddStandardResilienceHandler();
 
         // Tier 1: NLM Taxonomy Crosswalk (free, no auth)
         // TODO: Register NlmTaxonomyCrosswalkAdapter
