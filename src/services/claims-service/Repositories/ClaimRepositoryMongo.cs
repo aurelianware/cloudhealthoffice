@@ -195,6 +195,28 @@ public class ClaimRepositoryMongo : IClaimRepository
         return (docs.Select(Hydrate).ToList(), totalCount);
     }
 
+    public async Task<IReadOnlyDictionary<string, int>> GetAuthorizationUsageAsync(IReadOnlyCollection<string> authorizationNumbers, CancellationToken ct = default)
+    {
+        var wanted = authorizationNumbers.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n.Trim()).ToHashSet(StringComparer.Ordinal);
+        var usage = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (wanted.Count == 0) return usage;
+
+        var b = Builders<Claim>.Filter;
+        var filter = ClaimCriteriaFilter.Build(GetTenantId(), new ClaimCriteria())
+                     & b.Or(b.In(c => c.PriorAuthorizationNumber, wanted),
+                            b.ElemMatch(c => c.ClaimLines, Builders<ClaimLine>.Filter.In(l => l.PriorAuthorizationNumber, wanted)));
+        var rows = await _collection.Find(filter)
+            .Project(c => new { Header = c.PriorAuthorizationNumber, Lines = c.ClaimLines.Select(l => l.PriorAuthorizationNumber) })
+            .ToListAsync(ct);
+        foreach (var row in rows)
+        {
+            // A claim counts once per number it carries, however many lines carry it.
+            var numbers = row.Lines.Prepend(row.Header).Where(n => n is not null).Select(n => n!.Trim()).Where(wanted.Contains).Distinct();
+            foreach (var n in numbers) usage[n] = usage.TryGetValue(n, out var count) ? count + 1 : 1;
+        }
+        return usage;
+    }
+
     public async Task<ClaimInsights> GetInsightsAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness, DateTime asOf, CancellationToken ct = default)
     {
         var tenantId = GetTenantId();

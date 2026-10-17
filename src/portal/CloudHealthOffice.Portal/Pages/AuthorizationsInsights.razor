@@ -148,7 +148,31 @@
                                     EmptyText="The queue is empty." />
                 </MudPaper>
             </MudItem>
-            <MudItem xs="12">
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Elevation="1" data-testid="insights-unused">
+                    <MudText Typo="Typo.h6">Approved but unused</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">
+                        Approved authorizations whose service period ended in the period with no claim yet.
+                    </MudText>
+                    @if (i.Unused.WithoutClaim is { } unused)
+                    {
+                        <div class="d-flex align-baseline gap-2">
+                            <span style="font-size: 1.75rem; font-weight: 600;">@Num(unused, AuthorizationDrillDown.Unused(i.From, i.To, lob), "stat-unused")</span>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">of @i.Unused.Ended.ToString("N0") ended@(i.Unused.Ended == 0 ? "" : $" ({Pct((double)unused / i.Unused.Ended)})")</MudText>
+                        </div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                            Providers can still bill within timely filing, so recent ones may yet be used.
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" data-testid="insights-unused-unavailable">
+                            @i.Unused.Ended.ToString("N0") approvals ended in the period. @(i.Unused.UnavailableReason ?? "Claim usage couldn't be checked.")
+                        </MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="8">
                 <MudPaper Class="pa-4" Elevation="1">
                     <MudText Typo="Typo.h6">Top denial reasons</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">Requests submitted in the period and denied (top 10).</MudText>

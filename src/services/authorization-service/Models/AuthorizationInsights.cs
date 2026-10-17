@@ -24,6 +24,20 @@ public sealed class AuthorizationInsights
 
     /// <summary>Requests submitted in the period and denied, by reason code (top 10).</summary>
     public List<AuthorizationDenialReasonInsight> DenialReasons { get; init; } = new();
+
+    /// <summary>Approved authorizations whose service period ended in the period with no claim yet.</summary>
+    public AuthorizationUnusedInsight Unused { get; init; } = new();
+}
+
+public sealed class AuthorizationUnusedInsight
+{
+    /// <summary>Approved authorizations whose approved service period ended in the period.</summary>
+    public int Ended { get; init; }
+
+    /// <summary>Of those, the ones no claim carries yet; null when claim usage couldn't be checked.</summary>
+    public int? WithoutClaim { get; init; }
+
+    public string? UnavailableReason { get; init; }
 }
 
 public sealed class AuthorizationQueueInsight
@@ -80,6 +94,8 @@ public static class AuthorizationInsightSets
 {
     public const string PeriodScope = "period";
     public const string QueueScope = "queue";
+    /// <summary>Approved, service period ended in the period, no claim yet (<see cref="Services.Insights.UnusedAuthorizations"/>).</summary>
+    public const string UnusedScope = "unused";
     public const string UnspecifiedDenialCode = "UNSPECIFIED";
 
     public static AuthorizationInsights Build(
