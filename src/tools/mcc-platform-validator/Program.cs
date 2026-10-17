@@ -566,7 +566,8 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             TimeSpan.Zero,
             observedDenialCode,
             null,
-            null);
+            null,
+            PendCode: observed.PendCode);
     }
     catch (Exception ex)
     {
@@ -3430,12 +3431,12 @@ static void PrintUsage()
                                  Poll interval for persisted claim status, also used by post-window
                                  reconciliation (default: 1000)
       --pend-diagnostics <path>  Write a per-claim pend diagnostic report (JSON) for expected-pend
-                                 scenarios and a sample of NCCI/MUE denials; prints an aggregate
+                                 scenarios and a sample of NCCI/MUE pends; prints an aggregate
                                  scenario table to the run summary. Off by default; adds one
                                  claims-service read per diagnosed claim AFTER the timed benchmark
                                  window closes — a diagnostics-on run is not a throughput benchmark.
       --pend-diagnostics-ncci-sample <n>
-                                 Max NCCI/MUE-denied claims (outside expected-pend) to include in
+                                 Max claims with pend code NCCI or MUE (outside expected-pend) in
                                  the diagnostic report (default: 200)
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 10)
@@ -3505,7 +3506,8 @@ internal sealed record ClaimValidationResult(
     string? FailureStage,
     string? Error,
     bool ServiceBusObservationTimedOut = false,
-    bool ReconciledAfterObservationTimeout = false);
+    bool ReconciledAfterObservationTimeout = false,
+    string? PendCode = null);
 
 internal sealed record MassAdjudicationRunSummary(
     string Id,

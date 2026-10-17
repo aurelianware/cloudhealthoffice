@@ -115,6 +115,7 @@ internal sealed class MccServiceBusReconciler
                         AdjudicationSuccess = observed.Outcome is ClaimValidationOutcome.Paid,
                         ActualPlanPayment = observed.PlanPayment,
                         BusinessDenialCode = businessDenialCode,
+                        PendCode = observed.PendCode,
                         ValidationStatus = MccWorkflowValidation.ValidationStatus(
                             expected,
                             observed.Outcome,
