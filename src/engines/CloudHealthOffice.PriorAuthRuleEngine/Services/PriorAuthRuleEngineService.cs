@@ -14,7 +14,7 @@ namespace CloudHealthOffice.PriorAuthRuleEngine.Services;
 ///
 /// Evaluation order:
 ///   1. Resolve RuleSetKey from context (StateCode + Lob + Program + TenantId)
-///   2. Load applicable rules from repository (Redis cache → Cosmos/Mongo)
+///   2. Load applicable rules from repository (Redis cache → Mongo)
 ///   3. Sort by Category (band) then Priority within band
 ///   4. Iterate — first non-null result short-circuits
 ///   5. Exhausted with no match → Pend
