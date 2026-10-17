@@ -225,7 +225,7 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
 
         // ── 1000A ─ Payer Identification ───────────────────────────────
         sb.Append(Seg(ref segmentCount, true,
-            $"N1*PR*{Esc(first.PayerName)}*XV*{first.PayerId ?? "UNASSIGNED"}~"));
+            CloudHealthOffice.Infrastructure.Edi.Era835FinancialSegmentBuilder.BuildPayerN1(first.PayerName, first.PayerId)));
 
         // ── 1000B ─ Payee Identification ───────────────────────────────
         var payeeNpiQual = string.IsNullOrEmpty(first.PayeeNPI) ? "" : $"*XX*{first.PayeeNPI}";
