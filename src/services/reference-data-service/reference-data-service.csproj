@@ -14,7 +14,6 @@
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ReferenceData\CloudHealthOffice.ReferenceData.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">

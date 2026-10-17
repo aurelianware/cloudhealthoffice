@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
 using ReferenceDataService.Repositories;
 using CloudHealthOffice.Infrastructure.Configuration;
@@ -37,46 +36,28 @@ builder.Services.AddScoped<ReferenceDataSchemaMigrator>();
 builder.Services.AddScoped<IReferenceDataRepository, ReferenceDataRepository>();
 builder.Services.AddScoped<CloudHealthOffice.ReferenceData.Persistence.IReferenceDataRepository, CanonicalReferenceDataRepository>();
 
-// Cosmos DB Client — hosts the ComplianceConfig container
-var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT")
-    ?? builder.Configuration["CosmosDb:Endpoint"];
-var cosmosKey = Environment.GetEnvironmentVariable("COSMOS_KEY")
-    ?? builder.Configuration["CosmosDb:Key"];
-
-// MongoDB is preferred so the service stays cloud-agnostic; Cosmos DB's native SDK is opt-in
-// via Database:Provider=CosmosDb. With neither configured the in-memory repository is used,
-// which does not survive a restart and is only suitable for local runs and tests.
-var useCosmosCompliance =
-    string.Equals(builder.Configuration["Database:Provider"], "CosmosDb", StringComparison.OrdinalIgnoreCase)
-    && !string.IsNullOrEmpty(cosmosEndpoint)
-    && !string.IsNullOrEmpty(cosmosKey);
-
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-
-if (useCosmosCompliance)
+// Compliance configuration lives in MongoDB (ADR 006). With no database configured,
+// only a Development / Testing host may use the in-memory repository (it does not
+// survive a restart); any other host refuses to start.
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton(sp =>
-    {
-        var options = new CosmosClientOptions
-        {
-            SerializerOptions = new CosmosSerializationOptions
-            {
-                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-            }
-        };
-        return new CosmosClient(cosmosEndpoint, cosmosKey, options);
-    });
-    builder.Services.AddSingleton<IComplianceConfigRepository, CosmosComplianceConfigRepository>();
-}
-else if (!string.IsNullOrEmpty(mongoConnectionString))
-{
-    builder.Services.AddChoDatabase(builder.Configuration);
     // Scoped, not singleton: IMongoDatabase is resolved per request so tenant-scoped database
     // names stay correct.
     builder.Services.AddScoped<IComplianceConfigRepository, MongoComplianceConfigRepository>();
 }
+else if (databaseProvider is not null)
+{
+    throw new InvalidOperationException(
+        "reference-data-service supports MongoDB only for compliance configuration. " +
+        "Remove Database:Provider or set it to MongoDb.");
+}
 else
 {
+    if (!ChoTestingEnvironment.AllowsDevelopmentSecrets(builder.Environment))
+        throw new InvalidOperationException(
+            "reference-data-service requires a database for compliance configuration. " +
+            "Configure MongoDb:ConnectionString.");
     builder.Services.AddSingleton<IComplianceConfigRepository, InMemoryComplianceConfigRepository>();
 }
 

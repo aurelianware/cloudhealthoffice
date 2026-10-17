@@ -4,7 +4,7 @@ namespace ReferenceDataService.Repositories;
 
 /// <summary>
 /// Thread-safe in-memory fallback for <see cref="IComplianceConfigRepository"/>,
-/// used when Cosmos DB is not configured (local dev without Azure credentials).
+/// used on Development / Testing hosts when MongoDB is not configured.
 /// Data is scoped to the process lifetime — use only in development or testing.
 /// </summary>
 public class InMemoryComplianceConfigRepository : IComplianceConfigRepository
