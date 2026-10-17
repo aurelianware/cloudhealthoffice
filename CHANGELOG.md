@@ -38,11 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Database:Provider` set to anything but `MongoDb` fails at start-up.
   - `CosmosDb:ConnectionString` or `CosmosDb:Endpoint` without
     `MongoDb:ConnectionString` fails at start-up.
-  - Services that used to fall back to Cosmos, or start with no database, now
-    require `MongoDb:ConnectionString`.
-  - idcard, reference-data, fhir, authorization, rfai, consent,
-    personal-representative and attachment keep a no-database mode only on
-    Development and Testing hosts.
+  - Every service now requires `MongoDb:ConnectionString` in every
+    environment, Development and Testing included. Before this, some services
+    fell back to Cosmos, started with no database, or ran on in-memory stores:
+    idcard, reference-data, fhir, authorization, rfai, consent,
+    personal-representative and attachment. Their in-memory stores remain
+    only as test doubles.
 - **eligibility-service batch storage is configured under
   `BatchEligibility:MongoDb`** instead of `BatchEligibility:CosmosDb`.
 - **Some `CosmosDb:*` keys are still read**, as Mongo collection-name
