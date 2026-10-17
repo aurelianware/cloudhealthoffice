@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <PackageReference Include="System.Security.Cryptography.Pkcs" VersionOverride="10.0.13" />
-    <PackageReference Include="System.Security.Cryptography.Xml" VersionOverride="9.0.18" />
+    <PackageReference Include="System.Security.Cryptography.Xml" VersionOverride="9.0.21" />
     <ProjectReference Include="..\..\services\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
   </ItemGroup>
 
