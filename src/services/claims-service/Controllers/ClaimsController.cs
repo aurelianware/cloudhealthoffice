@@ -9,6 +9,7 @@ using ClaimsService.Services;
 using ClaimsService.Services.Adjudication;
 using ClaimsService.Models.Adjudication;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Controllers;
 
@@ -178,7 +179,7 @@ public class ClaimsController : ControllerBase
 
         _logger.LogInformation(
             "Legacy claim submission for member {MemberId}, provider {ProviderNPI}, service date {ServiceDate}",
-            SanitizeForLog(claim.MemberId), SanitizeForLog(claim.BillingProviderNPI), claim.ServiceDateFrom);
+            LogSanitizer.MaskId(claim.MemberId), LogSanitizer.Sanitize(claim.BillingProviderNPI), claim.ServiceDateFrom);
 
         var tenantId = GetTenantId();
         var actorId = ResolveActorId();
@@ -204,7 +205,7 @@ public class ClaimsController : ControllerBase
         var created = result.Claim!.ToClaim();
         _logger.LogInformation(
             "Claim {ClaimNumber} submitted successfully (legacy path)",
-            SanitizeForLog(created.ClaimNumber));
+            LogSanitizer.Sanitize(created.ClaimNumber));
 
         return CreatedAtAction(nameof(GetClaimById), new { id = created.Id }, created);
     }
@@ -279,7 +280,7 @@ public class ClaimsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Claim>> GetClaimById(string id)
     {
-        _logger.LogInformation("Fetching claim by ID: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Fetching claim by ID: {Id}", LogSanitizer.Sanitize(id));
 
         var claim = await _claimRepository.GetByIdAsync(id);
         if (claim == null)
@@ -383,7 +384,7 @@ public class ClaimsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AdjudicationTransparencyData>> GetAdjudicationDetail(string id)
     {
-        _logger.LogInformation("Fetching adjudication detail for claim ID: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Fetching adjudication detail for claim ID: {Id}", LogSanitizer.Sanitize(id));
 
         var claim = await _claimRepository.GetByIdAsync(id);
         if (claim == null)
@@ -443,7 +444,7 @@ public class ClaimsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Claim>> GetClaimByNumber(string claimNumber)
     {
-        _logger.LogInformation("Fetching claim by number: {ClaimNumber}", SanitizeForLog(claimNumber));
+        _logger.LogInformation("Fetching claim by number: {ClaimNumber}", LogSanitizer.Sanitize(claimNumber));
 
         var claim = await _claimRepository.GetByClaimNumberAsync(claimNumber);
         if (claim == null)
@@ -473,7 +474,7 @@ public class ClaimsController : ControllerBase
     {
         _logger.LogInformation(
             "Searching claims: member={Member}, provider={Provider}, dateFrom={From}, dateTo={To}, status={Status}, lob={LOB}",
-            SanitizeForLog(memberId), SanitizeForLog(providerNPI), serviceDateFrom, serviceDateTo, status, lineOfBusiness);
+            LogSanitizer.Sanitize(memberId), LogSanitizer.Sanitize(providerNPI), serviceDateFrom, serviceDateTo, status, lineOfBusiness);
 
         var claims = await _claimRepository.SearchAsync(
             memberId, providerNPI, serviceDateFrom, serviceDateTo, status, lineOfBusiness, page, pageSize);
@@ -665,7 +666,7 @@ public class ClaimsController : ControllerBase
         {
             _logger.LogWarning(
                 "Rejected AI examination for claim {Id}: status is {Status}, not Pended",
-                SanitizeForLog(id), claim.Status);
+                LogSanitizer.Sanitize(id), claim.Status);
             return Conflict($"Claim {id} is in status {claim.Status}, not Pended; AI examination ignored");
         }
 
@@ -722,16 +723,16 @@ public class ClaimsController : ControllerBase
             // can still function without the latest audit row.
             _logger.LogError(ex,
                 "Failed to append AI examination audit for claim {Id}; live recommendation persisted, audit lost",
-                SanitizeForLog(id));
+                LogSanitizer.Sanitize(id));
         }
 
         _logger.LogInformation(
             "AI examination set on claim {Id}: disposition={Disposition} confidence={Confidence:F2} model={Model} prompt={Prompt}",
-            SanitizeForLog(id),
+            LogSanitizer.Sanitize(id),
             examination.RecommendedDisposition,
             examination.ConfidenceScore,
-            SanitizeForLog(examination.ModelId),
-            SanitizeForLog(examination.PromptVersion));
+            LogSanitizer.Sanitize(examination.ModelId),
+            LogSanitizer.Sanitize(examination.PromptVersion));
 
         return Ok(updated);
     }
@@ -807,12 +808,12 @@ public class ClaimsController : ControllerBase
         {
             _logger.LogWarning(
                 "No audit row found for claim {Id} when setting examiner agreement; live AiExamination updated only",
-                SanitizeForLog(id));
+                LogSanitizer.Sanitize(id));
         }
 
         _logger.LogInformation(
             "Examiner {User} marked claim {Id} as {Agreement} (recommended {Disposition})",
-            SanitizeForLog(examinerUserId), SanitizeForLog(id),
+            LogSanitizer.Sanitize(examinerUserId), LogSanitizer.Sanitize(id),
             request.Agreement, claim.AiExamination.RecommendedDisposition);
 
         return Ok(updated);
@@ -859,7 +860,7 @@ public class ClaimsController : ControllerBase
     {
         _logger.LogInformation(
             "Processing remittance for claim {Id}, check number {CheckNumber}",
-            SanitizeForLog(id), SanitizeForLog(remittance.CheckNumber));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(remittance.CheckNumber));
 
         if (remittance.PaymentAmount < 0m)
         {
@@ -961,7 +962,7 @@ public class ClaimsController : ControllerBase
 
         _logger.LogInformation(
             "Recording inbound remittance for claim {Id}",
-            SanitizeForLog(id));
+            LogSanitizer.Sanitize(id));
 
         claim.InboundRemittanceId = request.RemittanceId;
         claim.AdjudicationResult ??= new AdjudicationResult();
@@ -1148,7 +1149,7 @@ public class ClaimsController : ControllerBase
 
         _logger.LogInformation(
             "Generating 277CA for claim {ClaimId} ({ClaimNumber}), status={Status}",
-            SanitizeForLog(id), SanitizeForLog(claim.ClaimNumber), claim.Status);
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(claim.ClaimNumber), claim.Status);
 
         var edi = _ackService.Generate277CA(claim, cfg);
 
@@ -1231,7 +1232,7 @@ public class ClaimsController : ControllerBase
 
         _logger.LogDebug(
             "Accumulator totals request: owner={OwnerId}, scope={Scope}, plan={PlanId}, year={Year}",
-            SanitizeForLog(ownerId), scope, SanitizeForLog(benefitPlanId), planYear);
+            LogSanitizer.Sanitize(ownerId), scope, LogSanitizer.Sanitize(benefitPlanId), planYear);
 
         var result = await _claimRepository.GetAccumulatorTotalsAsync(
             ownerId, scope, benefitPlanId, planYear, ct);
@@ -1424,7 +1425,7 @@ public class ClaimsController : ControllerBase
 
         // In a full implementation, this would update an AssignedTo field.
         // For now, just log and return success.
-        _logger.LogInformation("Claim {ClaimId} assigned to {AssignedTo}", SanitizeForLog(claimId), SanitizeForLog(request.AssignTo));
+        _logger.LogInformation("Claim {ClaimId} assigned to {AssignedTo}", LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(request.AssignTo));
         return Ok(new { claimId, assignedTo = request.AssignTo });
     }
 
@@ -1530,12 +1531,6 @@ public class ClaimsController : ControllerBase
         _ => "Pending Review"
     };
 
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }
 
 /// <summary>One accumulator adjustment review (<c>GET work-queue/accumulator-adjustments</c>).</summary>
