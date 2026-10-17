@@ -30,7 +30,7 @@ public class Consent
     [Required]
     public string TenantId { get; set; } = string.Empty;
 
-    /// <summary>Stable consent id. Cosmos document id and Mongo `_id`.</summary>
+    /// <summary>Stable consent id (Mongo `_id`).</summary>
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>External member id (matches <c>Member.MemberId</c> in member-service).</summary>

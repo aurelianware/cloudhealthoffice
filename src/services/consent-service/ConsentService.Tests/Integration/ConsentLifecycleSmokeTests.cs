@@ -18,7 +18,7 @@ namespace ConsentService.Tests.Integration;
 
 /// <summary>
 /// End-to-end smoke test over the real Program pipeline using in-memory fakes
-/// so the test does not require Cosmos, Mongo, Key Vault, or Kafka.
+/// so the test does not require Mongo, Key Vault, or Kafka.
 /// Mirrors the pattern used by <c>MemberService.Tests.Integration.MemberFhirSmokeTests</c>.
 /// </summary>
 public class ConsentLifecycleSmokeTests : IClassFixture<ConsentLifecycleSmokeTests.Factory>
@@ -41,9 +41,9 @@ public class ConsentLifecycleSmokeTests : IClassFixture<ConsentLifecycleSmokeTes
             {
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    // Leave MongoDb/CosmosDb connection unset; we swap the repository
-                    // implementations below so the Cosmos branch in Program.cs never
-                    // resolves a CosmosClient. Kafka bootstrap stays empty so the
+                    // Leave the MongoDb connection unset; we swap the repository
+                    // implementations below so nothing resolves the Mongo
+                    // database. Kafka bootstrap stays empty so the
                     // ConsentEventPublisher hosted service goes into degraded mode.
                     ["ConsentEncryption:KeySecretPrefix"] = "consent-body-encryption-key",
                     ["ConsentEncryption:CurrentKeyVersion"] = "v1",

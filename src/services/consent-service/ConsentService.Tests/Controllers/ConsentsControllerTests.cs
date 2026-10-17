@@ -498,8 +498,8 @@ public class ConsentsControllerTests
     }
 
     /// <summary>
-    /// Repository-level concurrent-writer races (Cosmos 412 PreconditionFailed
-    /// from the IfMatchEtag check, Mongo ReplaceOneAsync MatchedCount == 0)
+    /// Repository-level concurrent-writer races (Mongo ReplaceOneAsync
+    /// MatchedCount == 0)
     /// surface as <see cref="InvalidConsentTransitionException"/>. The
     /// controller must translate them into 409 ProblemDetails rather than
     /// letting them escape as 500 — the same shape used for state-machine
