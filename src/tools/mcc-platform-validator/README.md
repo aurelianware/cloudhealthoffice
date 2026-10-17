@@ -116,8 +116,13 @@ empty: only the removed dry-run endpoint reported them.
 ## Pend Diagnostics (`--pend-diagnostics`)
 
 Off by default. When given a path, the validator captures, for every
-expected-pend claim and a bounded sample of claims whose observed denial code is
-`NCCI_MUE_EDIT_FAILURE` (see `--pend-diagnostics-ncci-sample`, default 200):
+expected-pend claim and a bounded sample of claims the claims-service pipeline
+recorded an NCCI edit failure on (see `--pend-diagnostics-ncci-sample`, default
+200). The sample picks claims whose persisted `pendDetails.pendCode` is `NCCI`
+(PTP pair edits, a pair+MUE mix, or an NCCI engine outage) or `MUE` (MUE-only
+failures), the codes `NcciEditsStage` writes in both `PendForReview` and `Deny`
+modes. It used to select on the `NCCI_MUE_EDIT_FAILURE` denial code, which only
+the removed `/adjudicate` dry run produced. For each diagnosed claim it captures:
 
 - The answer-key expectation (scenario, expected disposition).
 - The observed pipeline outcome (paid or not, normalized business denial code).

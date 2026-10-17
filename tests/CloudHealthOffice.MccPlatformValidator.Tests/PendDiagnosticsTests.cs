@@ -21,27 +21,47 @@ public class PendDiagnosticsTests
         Assert.Contains(candidates, r => r.GeneratedClaimId == "MCC-2");
     }
 
-    [Fact]
-    public void SelectCandidates_SamplesNcciMueDenialsRegardlessOfAnswerKey()
+    [Theory]
+    [InlineData("NCCI")]
+    [InlineData("MUE")]
+    public void SelectCandidates_SamplesClaimsService_NcciPendCodes_RegardlessOfAnswerKey(string pendCode)
     {
+        // NcciEditsStage persists PendDetails.PendCode "MUE" (MUE-only
+        // failures) or "NCCI" (pair edits, or mixed) — as a pend, or still on
+        // the claim when NcciMode=Deny denies it.
         var results = new List<ClaimValidationResult>
         {
             Result("MCC-1", "ExcludedProviderDenied", ClaimValidationOutcome.BusinessDenial, expectedPend: false, businessDenialCode: "PROVIDER_EXCLUDED"),
-            Result("MCC-2", null, ClaimValidationOutcome.BusinessDenial, expectedPend: false, businessDenialCode: "NCCI_MUE_EDIT_FAILURE"),
-            Result("MCC-3", null, ClaimValidationOutcome.BusinessDenial, expectedPend: false, businessDenialCode: "NCCI_MUE_EDIT_FAILURE"),
+            Result("MCC-2", null, ClaimValidationOutcome.Pended, expectedPend: false, businessDenialCode: null, pendCode: pendCode),
+            Result("MCC-3", null, ClaimValidationOutcome.BusinessDenial, expectedPend: false, businessDenialCode: "CARC_236", pendCode: pendCode),
+            Result("MCC-4", null, ClaimValidationOutcome.Pended, expectedPend: false, businessDenialCode: null, pendCode: "COB"),
         };
 
         var candidates = PendDiagnostics.SelectCandidates(results, ncciSampleSize: 200);
 
-        Assert.Equal(2, candidates.Count);
-        Assert.All(candidates, r => Assert.Equal("NCCI_MUE_EDIT_FAILURE", r.BusinessDenialCode));
+        Assert.Equal(["MCC-2", "MCC-3"], candidates.Select(r => r.GeneratedClaimId));
+        Assert.All(candidates, r => Assert.Equal(pendCode, r.PendCode));
+    }
+
+    [Fact]
+    public void SelectCandidates_IgnoresRemovedDryRunDenialCode()
+    {
+        // NCCI_MUE_EDIT_FAILURE was only ever produced by benefit-plan's
+        // removed /adjudicate dry run; the claims-service pipeline never
+        // persists it, so it must not drive the sample.
+        var results = new List<ClaimValidationResult>
+        {
+            Result("MCC-1", null, ClaimValidationOutcome.BusinessDenial, expectedPend: false, businessDenialCode: "NCCI_MUE_EDIT_FAILURE"),
+        };
+
+        Assert.Empty(PendDiagnostics.SelectCandidates(results, ncciSampleSize: 200));
     }
 
     [Fact]
     public void SelectCandidates_CapsNcciMueSampleAtConfiguredSize()
     {
         var results = Enumerable.Range(1, 10)
-            .Select(i => Result($"MCC-{i:D2}", null, ClaimValidationOutcome.BusinessDenial, expectedPend: false, businessDenialCode: "NCCI_MUE_EDIT_FAILURE"))
+            .Select(i => Result($"MCC-{i:D2}", null, ClaimValidationOutcome.Pended, expectedPend: false, businessDenialCode: null, pendCode: i % 2 == 0 ? "NCCI" : "MUE"))
             .ToList();
 
         var candidates = PendDiagnostics.SelectCandidates(results, ncciSampleSize: 3);
@@ -80,7 +100,8 @@ public class PendDiagnosticsTests
     {
         var rows = new List<PendDiagnosticRow>
         {
-            Row("MCC-1", "(unlabeled NCCI/MUE sample)", expectedOutcome: "BusinessDenial", outcome: "BusinessDenial", observedDenialCode: "NCCI_MUE_EDIT_FAILURE", persistedDenialCode: "NCCI_MUE_EDIT_FAILURE"),
+            // NcciMode=Deny: denied with CARC 236, pend code still recorded.
+            Row("MCC-1", "(unlabeled NCCI/MUE sample)", expectedOutcome: "Paid", outcome: "BusinessDenial", observedDenialCode: "CARC_236", persistedDenialCode: "236"),
         };
 
         var summaries = PendDiagnostics.BuildScenarioSummaries(rows);
@@ -88,7 +109,7 @@ public class PendDiagnosticsTests
         var sample = Assert.Single(summaries);
         Assert.Equal(0, sample.ExpectedPendCount);
         var denialCount = Assert.Single(sample.DeniedBreakdown);
-        Assert.Equal("NCCI_MUE_EDIT_FAILURE", denialCount.Code);
+        Assert.Equal("CARC_236", denialCount.Code);
     }
 
     private static ClaimValidationResult Result(
@@ -96,14 +117,17 @@ public class PendDiagnosticsTests
         string? scenario,
         ClaimValidationOutcome outcome,
         bool expectedPend,
-        string? businessDenialCode)
+        string? businessDenialCode,
+        string? pendCode = null)
     {
         return new ClaimValidationResult(
             claimId,
             $"submitted-{claimId}",
             "EdgeCase",
             scenario,
-            expectedPend ? ClaimValidationOutcome.Pended.ToString() : outcome.ToString(),
+            // A claim the answer key does not expect to pend expects to pay.
+            expectedPend ? ClaimValidationOutcome.Pended.ToString()
+                : outcome is ClaimValidationOutcome.Pended ? ClaimValidationOutcome.Paid.ToString() : outcome.ToString(),
             null,
             MccWorkflowValidation.MatchedStatus,
             outcome,
@@ -116,7 +140,8 @@ public class PendDiagnosticsTests
             TimeSpan.FromMilliseconds(10),
             businessDenialCode,
             null,
-            null);
+            null,
+            PendCode: pendCode);
     }
 
     private static PendDiagnosticRow Row(

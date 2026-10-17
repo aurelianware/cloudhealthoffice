@@ -69,6 +69,28 @@ public class MccServiceBusReconcilerTests
     }
 
     [Fact]
+    public async Task ReconcileAsync_WhenLatePendExists_CarriesPersistedPendCode()
+    {
+        var reconciler = new MccServiceBusReconciler(new SequenceClaimStatusSource([
+            new ObservedClaimStatus(
+                ClaimValidationOutcome.Pended,
+                "Pended",
+                "MUE",
+                IsTerminal: true)
+        ]));
+
+        var result = await reconciler.ReconcileAsync(
+            [TimedOutResult()],
+            TimeSpan.FromSeconds(1),
+            TimeSpan.Zero,
+            maxParallelism: 1);
+
+        var claim = Assert.Single(result.Results);
+        Assert.Equal(ClaimValidationOutcome.Pended, claim.Outcome);
+        Assert.Equal("MUE", claim.PendCode);
+    }
+
+    [Fact]
     public async Task ReconcileAsync_WhenClaimRemainsNonterminal_PreservesUnresolvedTimeout()
     {
         var reconciler = new MccServiceBusReconciler(new SequenceClaimStatusSource([

@@ -24,19 +24,26 @@ namespace CloudHealthOffice.Tools.MccPlatformValidator;
 internal static class PendDiagnostics
 {
     /// <summary>
-    /// NCCI/MUE edit-failure denial code used to pick the NCCI sample. It was
-    /// emitted by benefit-plan's removed dry-run /adjudicate endpoint; the sample
-    /// only fills when a persisted pipeline outcome normalizes to the same code.
+    /// Pend codes the claims-service pipeline persists on
+    /// <c>pendDetails.pendCode</c> for NCCI edit failures, used to pick the
+    /// NCCI sample: <c>NcciEditsStage.ResolvePendCode</c> writes <c>"MUE"</c>
+    /// when only MUE edits fail and <c>"NCCI"</c> for PTP pair edits (or a
+    /// pair+MUE mix, or an NCCI engine outage). The stage records them in both
+    /// <c>PendForReview</c> and <c>Deny</c> modes. They mirror the stage and
+    /// work-management's <c>claim.ncci</c> queue criteria
+    /// (<c>WorkDefaults</c>); there is no shared constant the validator can
+    /// reference, so keep these in step with <c>NcciEditsStage</c>.
     /// </summary>
-    public const string NcciMueDenialCode = "NCCI_MUE_EDIT_FAILURE";
+    public static readonly IReadOnlyList<string> NcciPendCodes = ["NCCI", "MUE"];
 
     private const string UnlabeledNcciSampleScenario = "(unlabeled NCCI/MUE sample)";
 
     /// <summary>
-    /// Every expected-pend claim, plus a bounded sample of claims that failed
-    /// NCCI/MUE edits (denied today) regardless of what the answer key expects —
-    /// the Argo design treats NCCI/MUE as pendable, so their current denial
-    /// codes are evidence for the edit-model severity design (Deliverable 3.3).
+    /// Every expected-pend claim, plus a bounded sample of claims the pipeline
+    /// recorded an NCCI/MUE edit failure on (<see cref="NcciPendCodes"/>)
+    /// regardless of what the answer key expects — their persisted pend and
+    /// denial state is evidence for the edit-model severity design
+    /// (Deliverable 3.3).
     /// </summary>
     public static IReadOnlyList<ClaimValidationResult> SelectCandidates(
         IReadOnlyList<ClaimValidationResult> results,
@@ -48,7 +55,8 @@ internal static class PendDiagnostics
 
         var ncciSample = results
             .Where(r => r.ExpectedOutcome != ClaimValidationOutcome.Pended.ToString()
-                && string.Equals(r.BusinessDenialCode, NcciMueDenialCode, StringComparison.Ordinal))
+                && r.PendCode is { } pendCode
+                && NcciPendCodes.Contains(pendCode.Trim(), StringComparer.OrdinalIgnoreCase))
             .OrderBy(r => r.GeneratedClaimId, StringComparer.Ordinal)
             .Take(Math.Max(0, ncciSampleSize))
             .ToList();

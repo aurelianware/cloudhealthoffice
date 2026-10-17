@@ -120,7 +120,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (docs/architecture/adjudicate-endpoint-decision.md, Option B). Callers
   now get 404. Removed with it: the MCC validator's `--synchronous-diagnostic`
   mode (it now fails with a clear error) and the scripts' `SERVICEBUS_ONLY=false`
-  path; `ITerminologyCrosswalkClient`, used only by this endpoint; the
+  path. The validator's `--pend-diagnostics` NCCI sample, which selected on
+  the endpoint's `NCCI_MUE_EDIT_FAILURE` code, now selects on the pend codes
+  the pipeline's `NcciEditsStage` persists (`NCCI`, `MUE`). Also removed:
+  `ITerminologyCrosswalkClient`, used only by this endpoint; the
   `cho.claims.processing.duration` metric (`ChoMetrics.ClaimProcessingLatency`)
   and the Grafana `cho-adjudication` panels fed only by it. Use
   `POST /api/v1/adjudication/estimate` for what-if pricing. No longer runs
