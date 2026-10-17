@@ -285,6 +285,28 @@ Delivery uses the same adapter pattern as `IIdCardAdapter`: one `IDeliveryChanne
 - **Bulk reissue** (open enrollment, plan-wide changes) is a correspondence batch job: one batch, one manifest, per-member proof.
 - **Storage moves to the document store.** Today idcard-service writes through member-document-service, which uses Azure Blob directly. Once the document store's storage providers and catalog exist, cards are stored and linked like any other document.
 
+### 10.1 ID card requests in the portal
+
+**Today:** the member record's ID Cards tab (`/members/{id}/id-cards`) lists **issued** cards only: issue date, card id, plan, sponsor, language, active or revoked, scan count, PDF and PNG download, revoke, and "Order New Card." A request that is still pending or failed (for example `NO_TEMPLATE_AVAILABLE`) is visible only in the order dialog right after it's placed. idcard-service has no endpoint that lists a member's orders, so once the dialog closes there's no record in the portal that anyone asked. The Eligibility page is the 270/271 simulator and the Coverage tab shows no card status.
+
+**Change:** the ID Cards tab shows every request, not just every card.
+
+| Column | Source | When |
+|---|---|---|
+| Requested (date and time), requested by, reason (enrollment, plan change, PCP change, lost card, member call, bulk reissue) | Order | Now |
+| Channel (digital, mail, wallet) and language | Order | Now |
+| Status: Pending, Issued, Failed (with the failure code in plain words and a retry action), Cancelled | Order | Now |
+| The issued card it produced: card id, active or revoked, downloads, scans | Card record | Now (exists) |
+| Due by (MA: later of 10 days after CMS confirmation or the last day of the month before the effective date; State values for Medicaid) | Rule pack | With build step 8 |
+| Mailed (left plan control), returned, reissued | Correspondence letter events | With build step 8 |
+
+**Also:**
+- **Card status on the member Overview:** one line, such as "Card mailed Dec 18" or "Card requested Dec 15, pending," linking to the tab, so a call rep can answer "did my card go out?" without switching tabs.
+- **A request made on a call** records the call as its source, so the CHO Service contact links to the order.
+- **Failed and overdue requests become work items** (a failed order, or an MA card past its due date), rather than waiting for someone to open the tab.
+
+**Buildable now:** the order-list endpoint (`GET /api/v1/members/{memberId}/id-cards/orders`), the request reason and requester on orders, the tab's request history, the Overview status line, and work items for failed orders don't depend on correspondence. The due-by and delivery columns arrive with build step 8.
+
 ## 11. Beside another core system
 
 The correspondence service runs inside CHO or beside QNXT, Facets or another core system, the same way [cho-service.md](cho-service.md) does. A plan on another core is a primary audience: it keeps its core system and its print vendor, and gains template control and proof of mailing.
@@ -396,6 +418,8 @@ Seven scripted scenarios, each showing one thing the design does that a fulfillm
 
 Depends on [document-store.md](document-store.md) §9 steps 1–2 (storage providers and the catalog).
 
+**Independent, can start now:** ID card request history in the portal (§10.1): the order-list endpoint, request reason and requester, the tab's request history, the Overview status line, and work items for failed orders.
+
 1. **Model, template registry and rendering:** letter types, the four template kinds with locked text, required blocks and attachments, QuestPDF rendering with Fluid merge fields, pre-release checks, write-once storage in the document store.
 2. **Appeal notices:** acknowledgment, extension and resolution letters for the Texas Medicaid and Medicare Advantage packs, including the IDN and the HHSC Notice 1 and 2 templates; triggers from appeals-service; rule pack `notices` entries.
 3. **Approval gate** through work management.
@@ -403,7 +427,7 @@ Depends on [document-store.md](document-store.md) §9 steps 1–2 (storage provi
 5. **Proof loop:** `WrittenNoticeSent` from `LeftPlanControl`, at-risk and date-mismatch work items, returned mail, reprints.
 6. **Electronic delivery consent and paper fallback.**
 7. **Batch adapter** for the first pilot plan's fulfillment vendor.
-8. **ID cards on the shared layer:** physical delivery, bulk reissue, CARIN digital card; card storage moves to the document store.
+8. **ID cards on the shared layer:** physical delivery, bulk reissue, CARIN digital card, and the due-by and delivery columns on the ID Cards tab (§10.1); card storage moves to the document store.
 9. **More letter families:** authorization and claim notices, RFAI letters, EOBs, provider letters.
 10. **Template authoring UI** with preview, version diff and checks.
 
