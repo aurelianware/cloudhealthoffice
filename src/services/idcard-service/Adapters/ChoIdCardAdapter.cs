@@ -59,8 +59,8 @@ public class ChoIdCardAdapter : IIdCardAdapter
 
         await Task.WhenAll(memberTask, coverageTask);
 
-        var member = memberTask.Result;
-        var coverage = coverageTask.Result;
+        var member = await memberTask;
+        var coverage = await coverageTask;
 
         if (member == null)
         {
@@ -83,8 +83,8 @@ public class ChoIdCardAdapter : IIdCardAdapter
 
         await Task.WhenAll(sponsorTask, planTask);
 
-        var sponsor = sponsorTask.Result;
-        var plan = planTask.Result;
+        var sponsor = await sponsorTask;
+        var plan = await planTask;
 
         var languageCode = request.LanguageCode ?? member.PreferredLanguage ?? "en-US";
         var template = await _templateResolver.ResolveAsync(tenantId, coverage.GroupNumber, coverage.PlanId, languageCode, ct);

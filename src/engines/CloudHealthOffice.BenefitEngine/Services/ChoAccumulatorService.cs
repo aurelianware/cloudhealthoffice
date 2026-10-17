@@ -76,13 +76,15 @@ internal class ChoAccumulatorService : IAccumulatorService
 
         await Task.WhenAll(individualTask, familyTask);
 
+        var individual = await individualTask;
+        var family = await familyTask;
         var snapshots = new List<AccumulatorSnapshot>();
 
-        if (individualTask.Result is not null)
-            snapshots.AddRange(ToSnapshots(individualTask.Result, AccumulatorScope.Individual));
+        if (individual is not null)
+            snapshots.AddRange(ToSnapshots(individual, AccumulatorScope.Individual));
 
-        if (familyTask.Result is not null)
-            snapshots.AddRange(ToSnapshots(familyTask.Result, AccumulatorScope.Family));
+        if (family is not null)
+            snapshots.AddRange(ToSnapshots(family, AccumulatorScope.Family));
 
         _logger.LogDebug(
             "Loaded {Count} accumulator snapshots for member {MemberId}, plan {PlanId} / {PlanYear}",

@@ -279,9 +279,9 @@
             var decisions = Cms0057.GetRecentDecisionsAsync();
             var metrics = Cms0057.GetMetricsAsync(from, to);
             await Task.WhenAll(clocks, decisions, metrics);
-            _clocks = clocks.Result.OrderBy(c => c.HoursRemaining).ToList();
-            _decisions = decisions.Result;
-            _metrics = metrics.Result;
+            _clocks = (await clocks).OrderBy(c => c.HoursRemaining).ToList();
+            _decisions = await decisions;
+            _metrics = await metrics;
         }
         catch (ServiceUnavailableException)
         {

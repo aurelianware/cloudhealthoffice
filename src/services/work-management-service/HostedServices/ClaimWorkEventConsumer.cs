@@ -42,10 +42,12 @@ public sealed class ClaimWorkEventConsumer : BackgroundService
             _logger.LogWarning("Kafka:BootstrapServers not configured — claims.work.v1 consumer disabled; the periodic reconcile keeps work in step");
             return Task.CompletedTask;
         }
-        return Task.Run(() => RunLoop(bootstrap!, stoppingToken), stoppingToken);
+        return Task.Run(() => RunLoopAsync(bootstrap!, stoppingToken), stoppingToken);
     }
 
-    private void RunLoop(string bootstrap, CancellationToken stoppingToken)
+    // Consume() is blocking (Confluent.Kafka has no async consume), so the loop runs on its
+    // own thread via Task.Run; message handling itself is awaited rather than blocked on.
+    private async Task RunLoopAsync(string bootstrap, CancellationToken stoppingToken)
     {
         var cfg = new ConsumerConfig
         {
@@ -91,7 +93,7 @@ public sealed class ClaimWorkEventConsumer : BackgroundService
 
                 try
                 {
-                    ProcessAsync(result.Message.Value, stoppingToken).GetAwaiter().GetResult();
+                    await ProcessAsync(result.Message.Value, stoppingToken);
                     consumer.StoreOffset(result);
                     consumer.Commit(result);
                 }
@@ -101,7 +103,7 @@ public sealed class ClaimWorkEventConsumer : BackgroundService
                         result.Topic, result.Partition.Value, result.Offset.Value);
                     try { consumer.Seek(result.TopicPartitionOffset); }
                     catch (KafkaException seekEx) { _logger.LogWarning(seekEx, "Seek back failed; redelivery waits for a rebalance"); }
-                    stoppingToken.WaitHandle.WaitOne(RetryDelay);
+                    await Task.Delay(RetryDelay, stoppingToken);
                 }
             }
         }

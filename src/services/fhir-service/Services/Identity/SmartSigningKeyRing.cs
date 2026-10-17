@@ -181,6 +181,9 @@ public sealed class SmartSigningKeyRing
             if (now - entry.LastAttemptUtc < MinRefreshInterval && entry.Metadata != null)
                 return;
 
+            // Sync by necessity (see summary): called from the JWT handler's synchronous
+            // key resolver. No SynchronizationContext in ASP.NET Core, so no deadlock; the
+            // single-flight gate above bounds it to one blocked caller per issuer.
             FetchIntoAsync(entry, now, CancellationToken.None).GetAwaiter().GetResult();
         }
         finally { entry.Gate.Release(); }

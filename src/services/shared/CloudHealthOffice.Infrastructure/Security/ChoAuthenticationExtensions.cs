@@ -117,6 +117,11 @@ public static class ChoAuthenticationExtensions
                         var iss = token.Issuer;
                         if (!issuersByName.TryGetValue(iss, out var issuer))
                             return [];
+                        // IssuerSigningKeyResolver is a synchronous delegate (Microsoft.IdentityModel),
+                        // so this cannot be awaited. ConfigurationManager caches the metadata and
+                        // returns a completed task except on the first fetch and the periodic
+                        // refresh; ASP.NET Core has no SynchronizationContext, so the occasional
+                        // block holds one thread-pool thread for one HTTP fetch and cannot deadlock.
                         if (metadataManagers.TryGetValue(iss, out var manager))
                             return manager.GetConfigurationAsync(CancellationToken.None)
                                 .GetAwaiter().GetResult().SigningKeys;

@@ -44,8 +44,8 @@ public partial class PaRuleExplorer
             var editionsTask = RuleService.GetAllEditionsAsync();
             var currentTask = RuleService.GetCurrentEditionAsync();
             await Task.WhenAll(editionsTask, currentTask);
-            _allEditions = editionsTask.Result;
-            _currentEdition = currentTask.Result;
+            _allEditions = await editionsTask;
+            _currentEdition = await currentTask;
         }
         catch (Exception ex)
         {
