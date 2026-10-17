@@ -10,7 +10,7 @@ namespace CloudHealthOffice.Tools.MccPlatformValidator;
 /// <para>
 /// Read-only with respect to adjudication: this collector performs additional
 /// <c>GET /api/claims/{id}</c> reads after the timed benchmark window closes
-/// (same posture as <see cref="MccClaimStatusObserver"/> pend observation) and
+/// (same posture as <see cref="MccServiceBusReconciler"/>) and
 /// writes a report artifact. It never calls any write endpoint and never
 /// changes a claim's disposition.
 /// </para>
@@ -24,11 +24,9 @@ namespace CloudHealthOffice.Tools.MccPlatformValidator;
 internal static class PendDiagnostics
 {
     /// <summary>
-    /// Business denial code emitted by <c>AdjudicationController.Adjudicate</c>
-    /// (src/services/benefit-plan-service/Controllers/AdjudicationController.cs)
-    /// when the NCCI/MUE engine fails an edit. The Argo workflow's
-    /// <c>update-claim-step</c> is the only code path that redirects this code to
-    /// a pend instead of a denial — see PR description for the full trace.
+    /// NCCI/MUE edit-failure denial code used to pick the NCCI sample. It was
+    /// emitted by benefit-plan's removed dry-run /adjudicate endpoint; the sample
+    /// only fills when a persisted pipeline outcome normalizes to the same code.
     /// </summary>
     public const string NcciMueDenialCode = "NCCI_MUE_EDIT_FAILURE";
 
@@ -83,7 +81,7 @@ internal static class PendDiagnostics
             orderedRows.Count,
             "Diagnostics-on runs are NOT valid throughput benchmarks. This report performs one " +
             "additional claims-service read per diagnosed claim after the timed benchmark window " +
-            "closes (same posture as --pend-observation); it does not affect P95/P99/throughput.",
+            "closes (same posture as Service Bus reconciliation); it does not affect P95/P99/throughput.",
             orderedRows,
             BuildScenarioSummaries(orderedRows));
     }
@@ -138,7 +136,6 @@ internal static class PendDiagnostics
             result.AdjudicationSuccess,
             result.BusinessDenialCode,
             result.Error,
-            result.SyncAdjudicationSnapshot,
             state?.Status,
             state?.PendCode,
             state?.PendReason,
@@ -158,7 +155,7 @@ internal static class PendDiagnostics
             {
                 var deniedBreakdown = g
                     .Where(r => r.Outcome == ClaimValidationOutcome.BusinessDenial.ToString())
-                    .GroupBy(r => r.SynchronousBusinessDenialCode ?? r.PersistedDenialReasonCode ?? "UNKNOWN", StringComparer.Ordinal)
+                    .GroupBy(r => r.BusinessDenialCode ?? r.PersistedDenialReasonCode ?? "UNKNOWN", StringComparer.Ordinal)
                     .OrderByDescending(dg => dg.Count())
                     .ThenBy(dg => dg.Key, StringComparer.Ordinal)
                     .Select(dg => new PendDiagnosticDenialCount(dg.Key, dg.Count()))
@@ -330,10 +327,9 @@ internal sealed record PendDiagnosticRow(
     string? ExpectedBusinessDenialCode,
     string ValidationStatus,
     string Outcome,
-    bool SynchronousAdjudicationSuccess,
-    string? SynchronousBusinessDenialCode,
+    bool AdjudicationSuccess,
+    string? BusinessDenialCode,
     string? Error,
-    JsonElement? SynchronousAdjudicationResponse,
     string? PersistedClaimStatus,
     string? PendCode,
     string? PendReason,

@@ -54,11 +54,11 @@ public class PendDiagnosticsTests
     {
         var rows = new List<PendDiagnosticRow>
         {
-            Row("MCC-1", "EdgeCase:CobSecondaryPayer", expectedOutcome: "Pended", outcome: "Pended", syncDenialCode: null, persistedDenialCode: null),
-            Row("MCC-2", "EdgeCase:CobSecondaryPayer", expectedOutcome: "Pended", outcome: "Paid", syncDenialCode: null, persistedDenialCode: null),
-            Row("MCC-3", "EdgeCase:CobSecondaryPayer", expectedOutcome: "Pended", outcome: "BusinessDenial", syncDenialCode: "CARC_22", persistedDenialCode: "CARC_22"),
-            Row("MCC-4", "EdgeCase:CobSecondaryPayer", expectedOutcome: "Pended", outcome: "BusinessDenial", syncDenialCode: "CARC_22", persistedDenialCode: "CARC_22"),
-            Row("MCC-5", "EdgeCase:CobSecondaryPayer", expectedOutcome: "Pended", outcome: "ObservationTimeout", syncDenialCode: null, persistedDenialCode: null),
+            Row("MCC-1", "EdgeCase:CobSecondaryPayer", expectedOutcome: "Pended", outcome: "Pended", observedDenialCode: null, persistedDenialCode: null),
+            Row("MCC-2", "EdgeCase:CobSecondaryPayer", expectedOutcome: "Pended", outcome: "Paid", observedDenialCode: null, persistedDenialCode: null),
+            Row("MCC-3", "EdgeCase:CobSecondaryPayer", expectedOutcome: "Pended", outcome: "BusinessDenial", observedDenialCode: "CARC_22", persistedDenialCode: "CARC_22"),
+            Row("MCC-4", "EdgeCase:CobSecondaryPayer", expectedOutcome: "Pended", outcome: "BusinessDenial", observedDenialCode: "CARC_22", persistedDenialCode: "CARC_22"),
+            Row("MCC-5", "EdgeCase:CobSecondaryPayer", expectedOutcome: "Pended", outcome: "ObservationTimeout", observedDenialCode: null, persistedDenialCode: null),
         };
 
         var summaries = PendDiagnostics.BuildScenarioSummaries(rows);
@@ -80,7 +80,7 @@ public class PendDiagnosticsTests
     {
         var rows = new List<PendDiagnosticRow>
         {
-            Row("MCC-1", "(unlabeled NCCI/MUE sample)", expectedOutcome: "BusinessDenial", outcome: "BusinessDenial", syncDenialCode: "NCCI_MUE_EDIT_FAILURE", persistedDenialCode: "NCCI_MUE_EDIT_FAILURE"),
+            Row("MCC-1", "(unlabeled NCCI/MUE sample)", expectedOutcome: "BusinessDenial", outcome: "BusinessDenial", observedDenialCode: "NCCI_MUE_EDIT_FAILURE", persistedDenialCode: "NCCI_MUE_EDIT_FAILURE"),
         };
 
         var summaries = PendDiagnostics.BuildScenarioSummaries(rows);
@@ -114,7 +114,6 @@ public class PendDiagnosticsTests
             TimeSpan.FromMilliseconds(10),
             TimeSpan.FromMilliseconds(80),
             TimeSpan.FromMilliseconds(10),
-            new Dictionary<string, double>(),
             businessDenialCode,
             null,
             null);
@@ -125,7 +124,7 @@ public class PendDiagnosticsTests
         string scenario,
         string expectedOutcome,
         string outcome,
-        string? syncDenialCode,
+        string? observedDenialCode,
         string? persistedDenialCode)
     {
         return new PendDiagnosticRow(
@@ -137,10 +136,9 @@ public class PendDiagnosticsTests
             null,
             MccWorkflowValidation.MatchedStatus,
             outcome,
-            SynchronousAdjudicationSuccess: outcome == "Paid",
-            SynchronousBusinessDenialCode: syncDenialCode,
+            AdjudicationSuccess: outcome == "Paid",
+            BusinessDenialCode: observedDenialCode,
             Error: null,
-            SynchronousAdjudicationResponse: null,
             PersistedClaimStatus: outcome,
             PendCode: null,
             PendReason: null,

@@ -19,13 +19,11 @@ MAX_CLAIMS="${MAX_CLAIMS:-$CLAIMS}"
 TENANT="${TENANT:-demo}"
 SEED_MEMBERS="${SEED_MEMBERS:-true}"
 SEED_PROVIDERS="${SEED_PROVIDERS:-true}"
-# Score the claims-service pipeline's persisted outcome (the single adjudicator).
-# SERVICEBUS_ONLY=false runs the dry-run synchronous diagnostic instead.
-SERVICEBUS_ONLY="${SERVICEBUS_ONLY:-true}"
+# The validator always scores the claims-service pipeline's persisted outcome
+# (the single adjudicator).
 SERVICEBUS_RECONCILIATION_ENABLED="${SERVICEBUS_RECONCILIATION_ENABLED:-true}"
 SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS="${SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS:-300}"
 CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS="${CLAIMS_SERVICE_BENEFIT_TIMEOUT_SECONDS:-15}"
-PEND_OBSERVATION_ENABLED="${PEND_OBSERVATION_ENABLED:-true}"
 PEND_OBSERVATION_TIMEOUT_SECONDS="${PEND_OBSERVATION_TIMEOUT_SECONDS:-45}"
 PEND_OBSERVATION_INTERVAL_MS="${PEND_OBSERVATION_INTERVAL_MS:-1000}"
 PARALLELISM_VALUES="${PARALLELISM_VALUES:-8 10 11 12}"
@@ -62,23 +60,12 @@ json_number() {
   jq -r "$filter // 0 | if type == \"number\" then . else 0 end" "$file"
 }
 
-stage_p95() {
-  local file="$1"
-  local label="$2"
-  jq -r --arg label "$label" '
-    (.adjudicationStepTimings // [])
-    | map(select(.label == $label))
-    | first
-    | .p95Milliseconds // 0
-  ' "$file"
-}
-
 print_row() {
   local file="$1"
   local parallelism="$2"
   local repeat="$3"
   local status="$4"
-  local throughput p95 p99 failures matches scenarios accum ncci provider rate
+  local throughput p95 p99 failures matches scenarios
 
   throughput="$(json_number "$file" '.throughputClaimsPerSecond')"
   p95="$(json_number "$file" '.p95LatencyMilliseconds')"
@@ -86,14 +73,10 @@ print_row() {
   failures="$(json_number "$file" '.platformFailures')"
   matches="$(json_number "$file" '.workflowMatches')"
   scenarios="$(json_number "$file" '.workflowScenarios')"
-  accum="$(stage_p95 "$file" 'Adjudicate.benefitCalculation.accumulatorRead')"
-  ncci="$(stage_p95 "$file" 'Adjudicate.ncci')"
-  provider="$(stage_p95 "$file" 'Adjudicate.providerIntegrity')"
-  rate="$(stage_p95 "$file" 'Adjudicate.rateResolution')"
 
-  printf '%-5s %-6s %-7s %10.2f %8.0f %8.0f %9.0f %8.0f %8.0f %8.0f %9s %9s\n' \
+  printf '%-5s %-6s %-7s %10.2f %8.0f %8.0f %9s %9s\n' \
     "$parallelism" "$repeat" "$status" "$throughput" "$p95" "$p99" \
-    "$accum" "$ncci" "$provider" "$rate" "$failures" "${matches}/${scenarios}"
+    "$failures" "${matches}/${scenarios}"
 }
 
 run_case() {
@@ -104,9 +87,7 @@ run_case() {
   local json_file="$OUTPUT_DIR/${job_name}.json"
   local seed_member_arg=""
   local seed_provider_arg=""
-  local servicebus_only_arg=""
   local servicebus_reconciliation_arg=""
-  local pend_observation_arg=""
   local status="ok"
 
   if [[ "$SEED_MEMBERS" != "true" ]]; then
@@ -115,16 +96,8 @@ run_case() {
   if [[ "$SEED_PROVIDERS" != "true" ]]; then
     seed_provider_arg='                --no-seed-providers \'
   fi
-  if [[ "$SERVICEBUS_ONLY" == "true" ]]; then
-    servicebus_only_arg='                --servicebus-only \'
-  else
-    servicebus_only_arg='                --synchronous-diagnostic \'
-  fi
   if [[ "$SERVICEBUS_RECONCILIATION_ENABLED" != "true" ]]; then
     servicebus_reconciliation_arg='                --no-servicebus-reconciliation \'
-  fi
-  if [[ "$PEND_OBSERVATION_ENABLED" != "true" ]]; then
-    pend_observation_arg='                --no-pend-observation \'
   fi
 
   log "Running MCC sweep case parallelism=${parallelism}, repeat=${repeat}"
@@ -167,9 +140,7 @@ spec:
                 --progress-every "${PROGRESS_EVERY}" \
 ${seed_member_arg}
 ${seed_provider_arg}
-${servicebus_only_arg}
 ${servicebus_reconciliation_arg}
-${pend_observation_arg}
                 --summary-json /tmp/mcc-summary.json
               status=\$?
               echo "__MCC_SUMMARY_JSON_BEGIN__"
@@ -231,8 +202,8 @@ if kubectl get deployment -n "$NAMESPACE" claims-service >/dev/null 2>&1; then
 fi
 
 log "Writing sweep artifacts to ${OUTPUT_DIR}"
-printf '%-5s %-6s %-7s %10s %8s %8s %9s %8s %8s %8s %9s %9s\n' \
-  "P" "Run" "Status" "Claims/s" "P95" "P99" "AccP95" "NCCI95" "Prov95" "Rate95" "Failures" "Workflow"
+printf '%-5s %-6s %-7s %10s %8s %8s %9s %9s\n' \
+  "P" "Run" "Status" "Claims/s" "P95" "P99" "Failures" "Workflow"
 
 for parallelism in $PARALLELISM_VALUES; do
   if [[ ! "$parallelism" =~ ^[0-9]+$ ]]; then
@@ -255,12 +226,6 @@ jq -s -r '
       throughput: (map(.throughputClaimsPerSecond) | add / length),
       p95: (map(.p95LatencyMilliseconds) | add / length),
       p99: (map(.p99LatencyMilliseconds) | add / length),
-      accumulatorP95: (
-        map((.adjudicationStepTimings // [])
-          | map(select(.label == "Adjudicate.benefitCalculation.accumulatorRead"))
-          | first
-          | .p95Milliseconds // 0)
-        | add / length),
       failures: (map(.platformFailures) | add),
       workflowMatches: (map(.workflowMatches) | add),
       workflowScenarios: (map(.workflowScenarios) | add)
@@ -273,7 +238,6 @@ jq -s -r '
       .throughput,
       .p95,
       .p99,
-      .accumulatorP95,
       .failures,
       .workflowMatches,
       .workflowScenarios
@@ -281,10 +245,10 @@ jq -s -r '
   | @tsv
 ' "$OUTPUT_DIR"/*.json \
   | awk 'BEGIN {
-      printf "%-5s %-5s %10s %8s %8s %9s %9s %11s\n", "P", "Runs", "Claims/s", "P95", "P99", "AccP95", "Failures", "Workflow"
+      printf "%-5s %-5s %10s %8s %8s %9s %11s\n", "P", "Runs", "Claims/s", "P95", "P99", "Failures", "Workflow"
     }
     {
-      printf "%-5s %-5s %10.2f %8.0f %8.0f %9.0f %9s %11s\n", $1, $2, $3, $4, $5, $6, $7, $8 "/" $9
+      printf "%-5s %-5s %10.2f %8.0f %8.0f %9s %11s\n", $1, $2, $3, $4, $5, $6, $7 "/" $8
     }'
 
 log "Sweep complete: ${OUTPUT_DIR}"

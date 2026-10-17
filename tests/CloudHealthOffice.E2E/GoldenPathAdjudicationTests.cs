@@ -101,14 +101,20 @@ public class DockerComposeFixture : IAsyncLifetime
 public class DockerComposeCollection : ICollectionFixture<DockerComposeFixture> { }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Golden-path adjudication E2E test
+// Golden-path claim-to-payment E2E test
 //
-// Exercises the core claim lifecycle:
+// Exercises the claim lifecycle around adjudication:
 //   1. Submit 837P claim → claims-service
-//   2. Adjudicate (pricing + benefit calc + NCCI edits) → benefit-plan-service
-//   3. Verify adjudication response
-//   4. Create 835 ERA payment → payment-service
-//   5. Download 835 and verify payment amounts
+//   2. Create 835 ERA payment → payment-service
+//   3. Download 835 and verify payment amounts
+//
+// Adjudication itself is the claims-service pipeline, run on submission.
+// This test used to call benefit-plan-service's synchronous
+// /api/v1/adjudication/adjudicate dry run between steps 1 and 2; that
+// endpoint was removed (docs/architecture/adjudicate-endpoint-decision.md).
+// Asserting the pipeline's persisted outcome here would need member,
+// coverage, provider and network fixtures this suite does not seed, so the
+// payment amounts below are fixed.
 // ═══════════════════════════════════════════════════════════════════════════
 
 [Collection("DockerCompose")]
@@ -123,7 +129,7 @@ public class GoldenPathAdjudicationTests
     }
 
     [Fact]
-    public async Task FullAdjudicationGoldenPath_SubmitAdjudicateAndPay()
+    public async Task GoldenPath_SubmitClaimAndPay835()
     {
         // ── Arrange: build a professional claim (837P) ──────────────────
         var serviceDate = DateTime.UtcNow.Date;
@@ -196,170 +202,14 @@ public class GoldenPathAdjudicationTests
         var claimId = createdClaim.GetProperty("id").GetString()!;
         Assert.False(string.IsNullOrEmpty(claimId), "Claim ID should not be empty");
 
-        // ── Step 2: Create a benefit plan and adjudicate ────────────────
-        // A benefit plan must exist before adjudication; seed one for this run.
-        var planBusinessId = $"E2E-PLN-{Guid.NewGuid():N}".Substring(0, 20);
-        var benefitPlanPayload = new
-        {
-            tenantId = "e2e-test-tenant",
-            planId = planBusinessId,
-            planName = "E2E Golden Path PPO Plan",
-            payer = "E2E Health Plan",
-            effectiveDate = DateTime.UtcNow.AddYears(-1),
-            planType = "PPO",
-            lineOfBusiness = "Commercial",
-            costSharing = new
-            {
-                individualDeductible = 0m,
-                familyDeductible = 0m,
-                individualOutOfPocketMax = 5000m,
-                familyOutOfPocketMax = 10000m,
-                inNetworkDeductible = 0m,
-                outOfNetworkDeductible = 0m,
-                inNetworkOutOfPocketMax = 5000m,
-                outOfNetworkOutOfPocketMax = 10000m
-            },
-            benefits = new[]
-            {
-                new
-                {
-                    serviceCategory = "OutpatientServices",
-                    description = "Office visits and lab",
-                    cptCodes = new[] { "99213", "36415" },
-                    inNetworkCopay = 30m,
-                    inNetworkCoinsurance = 0.20m,
-                    deductibleApplies = false
-                }
-            },
-            networkTiers = new[]
-            {
-                new
-                {
-                    tierName = "InNetwork",
-                    tierLevel = 1,
-                    providerNpis = new[] { providerNpi }
-                }
-            },
-            isActive = true
-        };
+        // ── Payment amounts (fixed; see the class comment) ──────────────
+        const decimal billedAmount = 175.00m;
+        const decimal line1Payment = 96.00m;   // 99213: $120 allowed − $24 coinsurance
+        const decimal line2Payment = 16.00m;   // 36415: $20 allowed − $4 coinsurance
+        const decimal planPayment = line1Payment + line2Payment;
+        const decimal memberResponsibility = 28.00m;
 
-        var planCreateResponse = await _fixture.BenefitPlanClient.PostAsJsonAsync(
-            "/api/v1/plans", benefitPlanPayload, Json);
-
-        var planCreateContent = await planCreateResponse.Content.ReadAsStringAsync();
-        Assert.True(
-            planCreateResponse.StatusCode is HttpStatusCode.Created or HttpStatusCode.OK,
-            $"Benefit plan creation failed: {planCreateResponse.StatusCode} — {planCreateContent}");
-
-        var createdPlan = JsonSerializer.Deserialize<JsonElement>(planCreateContent, Json);
-        var benefitPlanId = Guid.Parse(createdPlan.GetProperty("id").GetString()!);
-
-        var adjudicationRequest = new
-        {
-            claimId,
-            memberId,
-            subscriberId,
-            benefitPlanId,
-            serviceDate = DateOnly.FromDateTime(serviceDate).ToString("yyyy-MM-dd"),
-            providerNpi = providerNpi,
-            networkTier = "InNetwork",
-            lineOfBusiness = 1,
-            lines = new[]
-            {
-                new
-                {
-                    lineNumber = 1,
-                    procedureCode = "99213",
-                    codeType = "CPT",
-                    modifiers = Array.Empty<string>(),
-                    placeOfService = "11",
-                    billedAmount = 150.00m,
-                    units = 1m,
-                    diagnosisCodes = new[] { "Z00.00" }
-                },
-                new
-                {
-                    lineNumber = 2,
-                    procedureCode = "36415",
-                    codeType = "CPT",
-                    modifiers = Array.Empty<string>(),
-                    placeOfService = "11",
-                    billedAmount = 25.00m,
-                    units = 1m,
-                    diagnosisCodes = new[] { "Z00.00" }
-                }
-            }
-        };
-
-        var adjResponse = await _fixture.BenefitPlanClient.PostAsJsonAsync(
-            "/api/v1/adjudication/adjudicate", adjudicationRequest, Json);
-
-        // NCCI edits may return 422 if lines are bundled — that's a valid
-        // adjudication outcome, not a test failure. We assert on 200 OR 422.
-        Assert.True(
-            adjResponse.StatusCode is HttpStatusCode.OK or HttpStatusCode.UnprocessableEntity,
-            $"Adjudication returned unexpected status: {adjResponse.StatusCode} — " +
-            $"{await adjResponse.Content.ReadAsStringAsync()}");
-
-        if (adjResponse.StatusCode == HttpStatusCode.UnprocessableEntity)
-        {
-            // NCCI edit failure — verify the edit response structure
-            var ncciError = await adjResponse.Content.ReadFromJsonAsync<JsonElement>(Json);
-            Assert.Equal("NCCI_MUE_EDIT_FAILURE", ncciError.GetProperty("error").GetString());
-            Assert.True(ncciError.GetProperty("editFailures").GetArrayLength() > 0,
-                "NCCI edit failures array should not be empty");
-
-            // The golden path still validates the NCCI edit plumbing works E2E.
-            // Log and return — payment step doesn't apply for denied/edited claims.
-            return;
-        }
-
-        // ── Step 3: Verify adjudication response structure ──────────────
-        var adjResult = await adjResponse.Content.ReadFromJsonAsync<JsonElement>(Json);
-
-        // Claim ID echoed back
-        Assert.Equal(claimId, adjResult.GetProperty("claimId").GetString());
-
-        // Totals block present with expected fields
-        var totals = adjResult.GetProperty("totals");
-        var allowedAmount = totals.GetProperty("allowedAmount").GetDecimal();
-        var deductibleAmount = totals.GetProperty("deductibleAmount").GetDecimal();
-        var copayAmount = totals.GetProperty("copayAmount").GetDecimal();
-        var coinsuranceAmount = totals.GetProperty("coinsuranceAmount").GetDecimal();
-        var memberResponsibility = totals.GetProperty("memberResponsibility").GetDecimal();
-        var planPayment = totals.GetProperty("planPayment").GetDecimal();
-        var billedAmount = totals.GetProperty("billedAmount").GetDecimal();
-
-        Assert.Equal(175.00m, billedAmount);
-        Assert.True(allowedAmount > 0, "Allowed amount should be positive");
-        Assert.True(allowedAmount <= billedAmount, "Allowed should not exceed billed");
-
-        // Member cost-sharing adds up
-        var expectedMemberResp = deductibleAmount + copayAmount + coinsuranceAmount;
-        Assert.Equal(expectedMemberResp, memberResponsibility);
-
-        // Plan payment = allowed - member responsibility
-        Assert.Equal(allowedAmount - memberResponsibility, planPayment);
-
-        // Lines array
-        var lines = adjResult.GetProperty("lines");
-        Assert.Equal(2, lines.GetArrayLength());
-
-        foreach (var line in lines.EnumerateArray())
-        {
-            var lineProcedure = line.GetProperty("procedureCode").GetString();
-            Assert.Contains(lineProcedure, new[] { "99213", "36415" });
-            Assert.True(line.GetProperty("allowedAmount").GetDecimal() >= 0,
-                $"Line {lineProcedure}: allowed amount should be non-negative");
-            Assert.True(line.TryGetProperty("isCovered", out _),
-                $"Line {lineProcedure}: should have isCovered field");
-        }
-
-        // Build a stable lookup by lineNumber so indexing doesn't depend on array order
-        var adjLinesByNumber = lines.EnumerateArray()
-            .ToDictionary(l => l.GetProperty("lineNumber").GetInt32());
-
-        // ── Step 4: Create 835 ERA payment via payment-service ──────────
+        // ── Step 2: Create 835 ERA payment via payment-service ──────────
         var checkNumber = $"E2E-CHK-{Guid.NewGuid():N}".Substring(0, 20);
         var payment = new
         {
@@ -392,7 +242,7 @@ public class GoldenPathAdjudicationTests
                             lineNumber = 1,
                             procedureCode = "99213",
                             chargeAmount = 150.00m,
-                            paymentAmount = adjLinesByNumber[1].GetProperty("planPayment").GetDecimal(),
+                            paymentAmount = line1Payment,
                             units = 1m,
                             serviceDateFrom = serviceDate,
                             serviceDateTo = serviceDate,
@@ -403,7 +253,7 @@ public class GoldenPathAdjudicationTests
                             lineNumber = 2,
                             procedureCode = "36415",
                             chargeAmount = 25.00m,
-                            paymentAmount = adjLinesByNumber[2].GetProperty("planPayment").GetDecimal(),
+                            paymentAmount = line2Payment,
                             units = 1m,
                             serviceDateFrom = serviceDate,
                             serviceDateTo = serviceDate,
@@ -426,7 +276,7 @@ public class GoldenPathAdjudicationTests
         var paymentId = createdPayment.GetProperty("id").GetString()!;
         Assert.False(string.IsNullOrEmpty(paymentId), "Payment ID should not be empty");
 
-        // ── Step 5: Download 835 ERA and verify ─────────────────────────
+        // ── Step 3: Download 835 ERA and verify ─────────────────────────
         var eraResponse = await _fixture.PaymentClient.GetAsync($"/api/payments/{paymentId}/835");
 
         Assert.True(

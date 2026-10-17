@@ -114,6 +114,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Nothing references `Microsoft.Azure.Cosmos` any more; the package is gone
   from `Directory.Packages.props`.
 
+- **API removal: benefit-plan-service `POST /api/v1/adjudication/adjudicate`.**
+  The deprecated synchronous dry run ran its own engine chain and its
+  answers diverged from the claims-service pipeline, the only adjudicator
+  (docs/architecture/adjudicate-endpoint-decision.md, Option B). Callers
+  now get 404. Removed with it: the MCC validator's `--synchronous-diagnostic`
+  mode (it now fails with a clear error) and the scripts' `SERVICEBUS_ONLY=false`
+  path; `ITerminologyCrosswalkClient`, used only by this endpoint; the
+  `cho.claims.processing.duration` metric (`ChoMetrics.ClaimProcessingLatency`)
+  and the Grafana `cho-adjudication` panels fed only by it. Use
+  `POST /api/v1/adjudication/estimate` for what-if pricing. No longer runs
+  anywhere on the claim path: Legacy-Only / Augment routing of a claim, the
+  plan terminology crosswalk before pricing, and in-process prior-auth rule
+  evaluation for a claim.
+
 ### Changed
 
 - **Services refuse to start against a missing or Cosmos database.**

@@ -39,9 +39,8 @@
 > map, so the benefit engine fell back to allowed = billed, and the
 > network tier was hardcoded `InNetwork`. `PricingStage` (Order=250)
 > now prices every line through the fee schedule engine
-> (`POST /api/v1/adjudication/resolve-rates` on benefit-plan-service —
-> the same `IRateResolutionService.ResolveBatchAsync` the synchronous
-> `Adjudicate` endpoint uses). Any line the engine could only price at
+> (`POST /api/v1/adjudication/resolve-rates` on benefit-plan-service,
+> `IRateResolutionService.ResolveBatchAsync`). Any line the engine could only price at
 > billed charges (no contract / fee schedule / rate line), or a pricing
 > service outage, pends the claim (`NOCONTRACT` / `PRICING`) and
 > `BenefitCalculationStage` refuses to call the engine — there is no
@@ -72,11 +71,8 @@
 > **Allowed above billed:** a contract without a lesser-of-billed provision
 > can pay more than total billed, which would need a negative line-level
 > CO-45. The benefit engine pends such a stay (`PRICING`, manual pricing
-> review) before computing cost share or writing accumulators; the
-> synchronous `Adjudicate` endpoint returns 422 `PRICING_REVIEW`.
-> `BenefitCalculationStage` (and the synchronous `Adjudicate` endpoint,
-> which forwards the claim type, original billed charges and the priced
-> `AllowedAmounts`) sends such per-stay-priced claims through the
+> review) before computing cost share or writing accumulators.
+> `BenefitCalculationStage` sends such per-stay-priced claims through the
 > benefit engine's claim-level inpatient path (`InpatientPricingMethod`
 > on the request overrides the plan default): deductible, one inpatient
 > copay and coinsurance are computed once on the claim's total allowed,
@@ -368,7 +364,7 @@ write-back side doors were removed:
 | Removed | Was | Use instead |
 |---------|-----|-------------|
 | `PUT /api/claims/{id}/adjudication` | Full-document replace of `AdjudicationResult` + Approved/Denied | Submit the claim and let the pipeline adjudicate it |
-| `PUT /api/claims/{id}/adjudication-summary` | MCC validator's summary write-back | Submit and poll `GET /api/claims/{id}` (validator `--servicebus-only`) |
+| `PUT /api/claims/{id}/adjudication-summary` | MCC validator's summary write-back | Submit and poll `GET /api/claims/{id}` (the validator's only mode) |
 | `PUT /api/claims/{id}/pend` | Raw Pended + `PendDetails` replace | The pipeline's pend stages |
 
 `PUT /api/claims/{id}/status` now accepts only operational statuses
@@ -444,8 +440,8 @@ workflow).
 ## Provider integrity stage (added July 2026)
 
 `ProviderIntegrityStage`, `Order=150`, runs the same federal-exclusion
-(OIG/LEIE/SAM.gov) check `HttpProviderIntegrityGate` has always run for
-`AdjudicationController.Adjudicate` callers — reached here through a new,
+(OIG/LEIE/SAM.gov) check `HttpProviderIntegrityGate` runs, reached
+through a
 side-effect-free endpoint rather than through `calculate-benefits`
 (D14's shim target), which stays exclusion-check-free by design since
 portal/preview features also call it and must not be blocked by a live

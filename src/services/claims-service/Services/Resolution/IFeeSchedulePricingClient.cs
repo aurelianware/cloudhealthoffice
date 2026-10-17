@@ -5,8 +5,7 @@ namespace ClaimsService.Services.Resolution;
 /// <summary>
 /// Client for benefit-plan-service's <c>POST /api/v1/adjudication/resolve-rates</c>
 /// endpoint — the fee schedule engine's
-/// <c>IRateResolutionService.ResolveBatchAsync</c>, the same resolution the
-/// synchronous <c>AdjudicationController.Adjudicate</c> path runs in-process.
+/// <c>IRateResolutionService.ResolveBatchAsync</c>.
 /// Consumed by <c>PricingStage</c> (Order=250) so the async adjudication
 /// pipeline prices lines with the identical contract → fee schedule →
 /// modifier → multiple-procedure logic instead of letting the benefit

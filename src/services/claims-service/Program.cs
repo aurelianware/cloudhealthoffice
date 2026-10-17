@@ -334,8 +334,7 @@ builder.Services.AddScoped<ICredentialingStatusClient>(sp =>
 builder.Services.AddScoped<IProviderIntegrityClient, HttpProviderIntegrityClient>();
 
 // PricingStage (Order=250) — fee schedule resolution via benefit-plan-service's
-// resolve-rates endpoint (same IRateResolutionService the sync Adjudicate path
-// uses). Reuses the BenefitPlanService named HttpClient; never fails open.
+// resolve-rates endpoint (IRateResolutionService). Reuses the BenefitPlanService named HttpClient; never fails open.
 builder.Services.AddScoped<IFeeSchedulePricingClient, HttpFeeSchedulePricingClient>();
 
 // 5.4 — Claims Scrub Engine (class library). Default standard rule set;
