@@ -397,6 +397,35 @@ public class ProviderBankAccountEncryptionAtRestTests : IAsyncLifetime
         again.Complete.Should().BeTrue();
     }
 
+    /// <summary>
+    /// Ported from the store-neutral (Cosmos) migration test: a provider row
+    /// the service rewrites between the migration's read and its write is a
+    /// conflict, left in place for the next run, which then encrypts it.
+    /// </summary>
+    [Fact]
+    public async Task Migration_does_not_overwrite_a_provider_row_the_service_changed_meanwhile()
+    {
+        await SeedLegacyPlaintextAsync();
+        var counts = await EncryptProviderBankAccounts.MigrateAsync(_database, _protector, new[] { Tenant }, "ProviderBankAccounts", false,
+            new StringWriter(), beforeWrite: async id =>
+            {
+                // The service stores a new account number on this row in between.
+                if (id == "m-1")
+                    await RawProviders.UpdateOneAsync(Builders<BsonDocument>.Filter.Eq("_id", "m-1"),
+                        Builders<BsonDocument>.Update.Set("BankAccount.AccountNumber", NewAccount));
+            });
+
+        counts.ProviderConflicts.Should().Be(1);
+        counts.Complete.Should().BeFalse();
+        (await RawAsync(RawProviders, "m-1"))["BankAccount"]["AccountNumber"].AsString.Should().Be(NewAccount, "the service's write is kept");
+
+        var again = await EncryptProviderBankAccounts.MigrateAsync(_database, _protector, new[] { Tenant }, "ProviderBankAccounts", false, new StringWriter());
+        again.ProviderConflicts.Should().Be(0);
+        again.Complete.Should().BeTrue();
+        AssertEncrypted((await RawAsync(RawProviders, "m-1"))["BankAccount"].AsBsonDocument, Routing, NewAccount, TaxId);
+        (await Providers().GetVersionAsync("m-1", "m-1-v1"))!.BankAccount!.AccountNumber.Should().Be(NewAccount);
+    }
+
     // ── binding to the record (enc:v2) ─────────────────────────────────
 
     [Fact]
