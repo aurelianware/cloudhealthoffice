@@ -21,15 +21,19 @@ public sealed class ExaminerHostFactory : WebApplicationFactory<Program>
 {
     private readonly Func<int, CancellationToken, Task<HttpResponseMessage>> _anthropic;
     private readonly IReadOnlyDictionary<string, string> _settings;
+    private readonly Action<IServiceCollection>? _testServices;
     private int _calls;
 
     /// <param name="anthropic">Answers the n-th (1-based) call to the Messages API.</param>
     /// <param name="settings">Configuration Program.cs reads while it builds its services.</param>
+    /// <param name="testServices">Replaces other dependencies (claims-service, a manual clock).</param>
     public ExaminerHostFactory(
-        Func<int, CancellationToken, Task<HttpResponseMessage>> anthropic, IReadOnlyDictionary<string, string>? settings = null)
+        Func<int, CancellationToken, Task<HttpResponseMessage>> anthropic, IReadOnlyDictionary<string, string>? settings = null,
+        Action<IServiceCollection>? testServices = null)
     {
         _anthropic = anthropic;
         _settings = settings ?? new Dictionary<string, string>();
+        _testServices = testServices;
     }
 
     public int AnthropicCalls => Volatile.Read(ref _calls);
@@ -50,6 +54,7 @@ public sealed class ExaminerHostFactory : WebApplicationFactory<Program>
             }
             services.Configure<HttpClientFactoryOptions>(nameof(IAnthropicClient),
                 o => o.HttpMessageHandlerBuilderActions.Add(b => b.PrimaryHandler = new Scripted(this)));
+            _testServices?.Invoke(services);
         });
     }
 
