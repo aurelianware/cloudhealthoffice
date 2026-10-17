@@ -231,6 +231,23 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<ClaimInsightsView> GetClaimInsightsAsync(DateTime from, DateTime to, string? lineOfBusiness = null)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        var query = $"from={Uri.EscapeDataString(from.ToUniversalTime().ToString("o"))}&to={Uri.EscapeDataString(to.ToUniversalTime().ToString("o"))}"
+                    + (string.IsNullOrWhiteSpace(lineOfBusiness) ? "" : $"&lineOfBusiness={Uri.EscapeDataString(lineOfBusiness)}");
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ClaimInsightsView>($"{baseUrl}/claims/insights?{query}", JsonOptions)
+                   ?? new ClaimInsightsView();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
     public async Task<ClaimSearchResult> SearchClaimsAsync(ClaimSearchRequest request)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
@@ -351,6 +368,38 @@ public class ClaimsService : IClaimsService
             return await _httpClient.GetFromJsonAsync<List<ClaimNoteView>>(
                        $"{baseUrl}/claims/{Uri.EscapeDataString(claimId)}/notes", JsonOptions)
                    ?? new List<ClaimNoteView>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
+    public async Task<List<RecentClaimView>> GetRecentlyViewedClaimsAsync(int limit = 10)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<RecentClaimView>>(
+                       $"{baseUrl}/claims/recently-viewed?limit={limit}", JsonOptions)
+                   ?? new List<RecentClaimView>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
+    public async Task<List<ClaimAccessEntry>> GetClaimAccessLogAsync(string claimId, int limit = 200)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<ClaimAccessEntry>>(
+                       $"{baseUrl}/claims/{Uri.EscapeDataString(claimId)}/access-log?limit={limit}", JsonOptions)
+                   ?? new List<ClaimAccessEntry>();
         }
         catch (HttpRequestException ex)
         {

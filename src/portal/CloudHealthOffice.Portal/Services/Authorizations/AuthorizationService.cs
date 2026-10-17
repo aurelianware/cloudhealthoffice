@@ -20,6 +20,47 @@ public class AuthorizationService : IAuthorizationService
         _logger = logger;
     }
 
+    public async Task<AuthorizationInsightsView> GetAuthorizationInsightsAsync(DateTime from, DateTime to, string? lineOfBusiness = null)
+    {
+        var baseUrl = _configuration["Services:AuthorizationService"];
+        var query = $"from={Uri.EscapeDataString(from.ToUniversalTime().ToString("o"))}&to={Uri.EscapeDataString(to.ToUniversalTime().ToString("o"))}"
+                    + (string.IsNullOrWhiteSpace(lineOfBusiness) ? "" : $"&lineOfBusiness={Uri.EscapeDataString(lineOfBusiness)}");
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<AuthorizationInsightsView>($"{baseUrl}/authorizations/insights?{query}")
+                   ?? new AuthorizationInsightsView();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Authorization Service");
+            throw new ServiceUnavailableException("Authorization Service", ex);
+        }
+    }
+
+    public async Task<List<AuthorizationSummary>> ListAuthorizationInsightAsync(IReadOnlyDictionary<string, string> query)
+    {
+        var baseUrl = _configuration["Services:AuthorizationService"];
+        // The service names line of business "lineOfBusiness"; the portal URL keeps it short.
+        var parts = query
+            .Where(kv => AuthorizationDrillDown.Keys.Contains(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+            .Select(kv => $"{(kv.Key == "lob" ? "lineOfBusiness" : kv.Key)}={Uri.EscapeDataString(kv.Value)}");
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<AuthorizationSummary>>($"{baseUrl}/authorizations/insights/list?{string.Join("&", parts)}")
+                   ?? new List<AuthorizationSummary>();
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable)
+        {
+            // The "approved but unused" list needs claim usage from claims-service.
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Authorization Service");
+            throw new ServiceUnavailableException("Authorization Service", ex);
+        }
+    }
+
     public async Task<List<AuthorizationSummary>> GetAuthorizationsAsync(string? memberId = null)
     {
         var baseUrl = _configuration["Services:AuthorizationService"];
