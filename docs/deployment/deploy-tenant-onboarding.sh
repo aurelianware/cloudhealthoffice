@@ -20,17 +20,6 @@ fi
 # Create necessary secrets if they don't exist
 echo "📋 Checking required secrets..."
 
-# Check cosmos-db-credentials
-if ! kubectl -n cho-workflows get secret cosmos-db-credentials &> /dev/null; then
-    echo "Creating cosmos-db-credentials secret..."
-    read -p "Cosmos DB Account Name: " COSMOS_ACCOUNT
-    read -p "Cosmos DB Resource Group: " COSMOS_RG
-    
-    kubectl -n cho-workflows create secret generic cosmos-db-credentials \
-        --from-literal=account-name="$COSMOS_ACCOUNT" \
-        --from-literal=resource-group="$COSMOS_RG"
-fi
-
 # Check azure-service-principal
 if ! kubectl -n cho-workflows get secret azure-service-principal &> /dev/null; then
     echo "⚠️  azure-service-principal secret not found"
