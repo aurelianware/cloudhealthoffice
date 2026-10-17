@@ -333,7 +333,66 @@ Mode A builds what Mode B needs: the templates, delivery channels, proof and the
 - **Sensitive letters** inherit the document store's sensitivity tags; for example, a letter about a Part 2 record is restricted the same way.
 - **Address used is frozen.** The recipient address comes from the member or provider record at render time, is verified, and is part of the data snapshot.
 
-## 13. Build order
+## 13. Demo scenarios
+
+Seven scripted scenarios, each showing one thing the design does that a fulfillment feed can't. They are the acceptance tests for the design and the script for plan demos.
+
+**Demo data rules:**
+- **All synthetic.** Members, providers, addresses and case details are invented and follow the repo's synthetic-data conventions (for example `.test` email addresses) so the PHI scan stays clean.
+- **Vendor and USPS events are mocked** by a simulated print-and-mail channel that emits acceptance, scan and return events on a script, including late and failed cases.
+- **Seeds ship with the code** that runs them (§14): each build step adds the seeds for the scenarios it makes runnable.
+- **Each scenario names its rule** (from §3), so the demo shows the regulation being met, not just a letter being printed.
+
+### 13.1 Texas Medicaid appeal with a plan-taken extension
+
+- **Setup:** a STAR member whose language preference is Spanish appeals a denied service authorization. On day 20 the plan needs more records and takes a 14-day extension.
+- **What happens:** `ExtensionTaken` triggers the extension notice in Spanish, due within 2 calendar days. It's rendered, linked to the appeal and released. The simulated vendor reports USPS acceptance the next day, and appeals-service records `WrittenNoticeSent` from that event.
+- **What it proves:** the notice clock is met from the USPS acceptance date, not the print date; the member's language preference is honored without anyone asking; the letter sits on the appeal record.
+- **Rules:** 42 CFR 438.408(c)(2); UMCM 3.21.
+
+### 13.2 Medicare Advantage denial on the standardized IDN
+
+- **Setup:** a pre-service request for an item under the prior authorization rules is denied on day 5 of its 7-day clock.
+- **What happens:** the IDN renders with only its variable fields filled; an edit to locked text is rejected by the pre-release check. The Section 1557 notice of availability is attached. A copy goes to the requesting provider by fax. The ODAG organization-determination export shows the left-plan-control date and time, not the generation date.
+- **What it proves:** standardized text can't drift; the provider is notified; the audit export reports the date CMS asks for.
+- **Rules:** 422.568(b)(1)(ii), (d), (e); 422.2267(b)(1), (e)(16); 45 CFR 92.11.
+
+### 13.3 A letter that mails a day late
+
+- **Setup:** a Medicaid adverse benefit determination is dated and released on Monday. The simulated vendor deposits it with USPS on Tuesday.
+- **What happens:** `LeftPlanControl` (Tuesday) doesn't match the letter date (Monday), so a date-mismatch work item opens. The demo rule pack's `onDateMismatch` is `Reissue`: a corrected letter dated for its actual mail date is linked to the original, which is kept unchanged.
+- **What it proves:** CHO catches the gap between the date on a notice and the day it actually left, which a fulfillment feed hides.
+- **Rules:** 438.402(c)(2)(ii); 81 FR 27511 (mail on the date the notice is dated).
+
+### 13.4 Returned mail
+
+- **Setup:** a grievance resolution letter is mailed to an address the member moved away from.
+- **What happens:** Full-Service ACS reports the piece undeliverable with a new address. CHO records `Returned`, flags the member's address, opens an address-research work item, and posts the letter to the member's portal inbox.
+- **What it proves:** a returned notice becomes work for a person, not a bin in the mailroom.
+- **Rules:** USPS Move Update and ACS (§3.6).
+
+### 13.5 Electronic delivery fails
+
+- **Setup:** a Medicare Advantage member has opted in to electronic delivery of denial notices by email and portal.
+- **What happens:** the notice posts to the portal and the PHI-free email alert bounces. CHO records `ElectronicDeliveryFailed` and mails a paper copy automatically; the case shows both.
+- **What it proves:** consent is per medium and per letter type, and failure falls back to paper without anyone noticing it first.
+- **Rules:** 422.2267(d)(2)(ii); PCD Guidance §10.4.4.
+
+### 13.6 Beside QNXT: letters only
+
+- **Setup:** a mocked QNXT extract delivers notice requests for three appeal resolutions (Mode A, §11.1).
+- **What happens:** CHO renders and delivers all three and writes a result file with each letter's id, document link, letter date and left-plan-control date and evidence. One request has a missing template translation and opens a work item instead of being skipped.
+- **What it proves:** a plan can keep its core system and print vendor and still get proof back; nothing fails silently.
+- **Rules:** §11.1.
+
+### 13.7 ID card on enrollment
+
+- **Setup:** CMS confirms a Medicare Advantage enrollment on November 3 for a January 1 effective date.
+- **What happens:** the rule pack sets the card deadline to the later of November 13 (10 calendar days) and December 31 (last day of the month before the effective date): December 31. idcard-service issues the card; the carrier letter and card go through the print-and-mail channel; the CARIN digital card is available through FHIR; a later PCP change triggers a reissue.
+- **What it proves:** ID cards follow the same deadlines, delivery and proof as every other letter.
+- **Rules:** 422.2267(e)(30).
+
+## 14. Build order
 
 Depends on [document-store.md](document-store.md) §9 steps 1–2 (storage providers and the catalog).
 
@@ -348,7 +407,9 @@ Depends on [document-store.md](document-store.md) §9 steps 1–2 (storage provi
 9. **More letter families:** authorization and claim notices, RFAI letters, EOBs, provider letters.
 10. **Template authoring UI** with preview, version diff and checks.
 
-## 14. Open questions
+Each step ships the seeds and the simulated-channel scripts for the §13 scenarios it makes runnable: 13.1–13.2 with step 4, 13.3–13.4 with step 5, 13.5 with step 6, 13.6 with step 7, 13.7 with step 8.
+
+## 15. Open questions
 
 1. **Texas currency:** confirm the current UMCM 3.21 version and its HHSC notice templates, ID card issuance timing, and member-materials reading level against the current UMCC and UMCM 4.3.
 2. **Medicaid electronic notices:** how §438.10(c)(6)'s website condition applies to an individual notice, and the opt-in rules in §435.918.
