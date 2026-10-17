@@ -37,6 +37,10 @@ public class PersonalRepLifecycleSmokeTests : IClassFixture<PersonalRepLifecycle
 
     public sealed class Factory : WebApplicationFactory<Program>
     {
+        /// <summary>A MongoDB address that is never listening; the driver connects lazily.</summary>
+        public const string UnreachableMongo =
+            "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=100&connectTimeoutMS=100";
+
         public InMemoryPersonalRepRepository Repo { get; } = new();
         public RecordingPersonalRepEventPublisher Publisher { get; } = new();
         public ReversiblePersonalRepFieldEncryptor Encryptor { get; } = new();
@@ -48,15 +52,21 @@ public class PersonalRepLifecycleSmokeTests : IClassFixture<PersonalRepLifecycle
         {
             builder.UseEnvironment("Development");
             builder.ConfigureLogging(logging => logging.AddProvider(Logs));
+            // Program.cs requires MongoDB in every environment and reads the
+            // connection string while registering services, so it goes in as
+            // host configuration. The server is never there and nothing
+            // reaches it: the repositories and the index initializer are
+            // swapped out below.
+            builder.ConfigureHostConfiguration(cfg => cfg.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MongoDb:ConnectionString"] = UnreachableMongo,
+            }));
             builder.ConfigureAppConfiguration((ctx, cfg) =>
             {
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    // Leave the MongoDb connection unset; swap repository
-                    // implementations below so nothing resolves the Mongo
-                    // database. Kafka bootstrap empty so
-                    // the PersonalRepEventPublisher hosted service goes into
-                    // degraded mode.
+                    // Kafka bootstrap empty so the PersonalRepEventPublisher
+                    // hosted service goes into degraded mode.
                     ["PersonalRepEncryption:KeySecretPrefix"] = "personal-rep-body-encryption-key",
                     ["PersonalRepEncryption:CurrentKeyVersion"] = "v1",
                     ["PersonalRepEncryption:AcceptedKeyVersions:0"] = "v1"
