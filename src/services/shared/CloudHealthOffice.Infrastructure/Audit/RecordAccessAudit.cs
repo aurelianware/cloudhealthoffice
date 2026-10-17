@@ -133,10 +133,14 @@ public sealed class RecordAccessWriter
             // (with who and what) so it can be reconciled.
             _logger.LogError(ex,
                 "Record access audit write failed: {RecordType} {Action} {Outcome} by {ActorId} on {RecordId} ({Route})",
-                accessEvent.RecordType, accessEvent.Action, accessEvent.Outcome, accessEvent.ActorId,
-                accessEvent.RecordId ?? "(search)", accessEvent.Route);
+                ForLog(accessEvent.RecordType), ForLog(accessEvent.Action), ForLog(accessEvent.Outcome), ForLog(accessEvent.ActorId),
+                ForLog(accessEvent.RecordId ?? "(search)"), ForLog(accessEvent.Route));
         }
     }
+
+    // Record ids come from the URL: strip line breaks so they can't forge log entries.
+    private static string ForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
     private static string? RouteValue(HttpContext http, string? name) =>
         name is not null && http.GetRouteValue(name)?.ToString() is { Length: > 0 } value ? value : null;
