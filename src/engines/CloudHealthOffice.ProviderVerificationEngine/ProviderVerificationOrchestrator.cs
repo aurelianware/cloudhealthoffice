@@ -1,3 +1,5 @@
+using CloudHealthOffice.Infrastructure.Logging;
+
 namespace CloudHealthOffice.ProviderVerificationEngine;
 
 using CloudHealthOffice.ProviderVerificationEngine.DataSources;
@@ -65,7 +67,7 @@ public class ProviderVerificationOrchestrator
         CancellationToken ct = default)
     {
         // NPI is public data published in the NPPES registry — intentionally logged for audit trail.
-        var safeNpi = SanitizeForLog(npi);
+        var safeNpi = LogSanitizer.Sanitize(npi);
         _logger.LogInformation("Starting {Tier} verification for NPI {Npi}", tier, safeNpi);
 
         var record = new ProviderVerificationRecord { Npi = npi };
@@ -180,7 +182,7 @@ public class ProviderVerificationOrchestrator
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            _logger.LogWarning(ex, "{Source} data source failed for NPI {Npi}; continuing with partial result", source, SanitizeForLog(npi));
+            _logger.LogWarning(ex, "{Source} data source failed for NPI {Npi}; continuing with partial result", source, LogSanitizer.Sanitize(npi));
             return default;
         }
     }
@@ -190,7 +192,7 @@ public class ProviderVerificationOrchestrator
         var data = await _nppes.LookupByNpiAsync(npi, ct);
         if (data is null)
         {
-            _logger.LogWarning("NPI {Npi} not found in NPPES registry", SanitizeForLog(npi));
+            _logger.LogWarning("NPI {Npi} not found in NPPES registry", LogSanitizer.Sanitize(npi));
         }
         return data;
     }
@@ -218,13 +220,6 @@ public class ProviderVerificationOrchestrator
         }
 
         return request;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     private async Task EnrichTaxonomiesAsync(List<NppesTaxonomy> taxonomies, CancellationToken ct)

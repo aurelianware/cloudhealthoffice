@@ -1,5 +1,6 @@
 using CloudHealthOffice.BenefitEngine.Domain;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.BenefitEngine.Services;
 
@@ -170,8 +171,8 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
                 _logger.LogWarning(
                     "No explicit mapping for institutional {CodeType} {ProcedureCode} REV {RevenueCode} — " +
                     "falling back to type-of-bill / revenue-code inference ({Rule}): {ServiceTypeCode}",
-                    SanitizeForLog(codeType), SanitizeForLog(procedureCode), SanitizeForLog(revenueCode),
-                    SanitizeForLog(institutional.MatchedRule), institutional.ServiceTypeCode);
+                    LogSanitizer.Sanitize(codeType, MaxLoggedCodeLength), LogSanitizer.Sanitize(procedureCode, MaxLoggedCodeLength), LogSanitizer.Sanitize(revenueCode, MaxLoggedCodeLength),
+                    LogSanitizer.Sanitize(institutional.MatchedRule, MaxLoggedCodeLength), institutional.ServiceTypeCode);
                 return institutional;
             }
         }
@@ -184,8 +185,8 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
         {
             _logger.LogError(
                 "No service category mapping found for institutional {CodeType} {ProcedureCode} REV {RevenueCode} TOB {TypeOfBill}",
-                SanitizeForLog(codeType), SanitizeForLog(procedureCode), SanitizeForLog(revenueCode),
-                SanitizeForLog(claim.NormalizedTypeOfBill ?? "(none)"));
+                LogSanitizer.Sanitize(codeType, MaxLoggedCodeLength), LogSanitizer.Sanitize(procedureCode, MaxLoggedCodeLength), LogSanitizer.Sanitize(revenueCode, MaxLoggedCodeLength),
+                LogSanitizer.Sanitize(claim.NormalizedTypeOfBill ?? "(none)", MaxLoggedCodeLength));
             return null;
         }
 
@@ -198,28 +199,15 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
             _logger.LogWarning(
                 "No explicit mapping for {CodeType} {ProcedureCode} POS {POS} — " +
                 "falling back to POS-based inference: {ServiceTypeCode}",
-                SanitizeForLog(codeType), SanitizeForLog(procedureCode), SanitizeForLog(placeOfService),
+                LogSanitizer.Sanitize(codeType, MaxLoggedCodeLength), LogSanitizer.Sanitize(procedureCode, MaxLoggedCodeLength), LogSanitizer.Sanitize(placeOfService, MaxLoggedCodeLength),
                 fallback.ServiceTypeCode);
             return fallback;
         }
 
         _logger.LogError(
             "No service category mapping found for {CodeType} {ProcedureCode} POS {POS}",
-            SanitizeForLog(codeType), SanitizeForLog(procedureCode), SanitizeForLog(placeOfService));
+            LogSanitizer.Sanitize(codeType, MaxLoggedCodeLength), LogSanitizer.Sanitize(procedureCode, MaxLoggedCodeLength), LogSanitizer.Sanitize(placeOfService, MaxLoggedCodeLength));
         return null;
-    }
-
-    /// <summary>
-    /// Claim codes come from submitted claims; strip line breaks and other
-    /// control characters and cap the length before logging them (log forging).
-    /// </summary>
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        var cleaned = value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-        cleaned = new string(cleaned.Where(c => !char.IsControl(c)).ToArray());
-        return cleaned.Length <= MaxLoggedCodeLength ? cleaned : cleaned[..MaxLoggedCodeLength];
     }
 
     private const int MaxLoggedCodeLength = 32;
