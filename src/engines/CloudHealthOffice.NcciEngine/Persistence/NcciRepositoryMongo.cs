@@ -16,7 +16,7 @@ namespace CloudHealthOffice.NcciEngine.Persistence;
 ///   ncci_load_ledger — NcciLoadRecord, one document per (tenant, quarter, file kind, setting)
 ///
 /// Both lookup methods use a server-side sort + limit 1 to return
-/// the most-recent active quarterly entry, consistent with the Cosmos impl.
+/// the most-recent active quarterly entry.
 /// </summary>
 internal class NcciRepositoryMongo : INcciRepository
 {

@@ -13,19 +13,10 @@ namespace CloudHealthOffice.NcciEngine.Configuration;
 /// <summary>
 /// DI registration for the NCCI Edit Engine.
 ///
-/// Usage in the host service's Program.cs:
+/// Usage in the host service's Program.cs (MongoDB is the only store):
 ///
-///   // CHO-native mode (Cosmos DB)
-///   builder.Services.AddNcciEngine()
-///       .UseCosmosRepository();
-///
-///   // CHO-native mode (MongoDB)
 ///   builder.Services.AddNcciEngine()
 ///       .UseMongoRepository();
-///
-///   // Auto-detect from configuration
-///   builder.Services.AddNcciEngine()
-///       .UseRepositoryFromConfiguration(builder.Configuration);
 ///
 /// Seed data (development/new tenant bootstrap):
 ///
@@ -110,21 +101,6 @@ public class NcciEngineBuilder
     }
 
     /// <summary>
-    /// Use Cosmos DB for NCCI/MUE storage.
-    /// Requires <c>CosmosClient</c> to be registered by the host.
-    /// </summary>
-    public NcciEngineBuilder UseCosmosRepository()
-    {
-        _services.AddScoped<INcciRepository, NcciRepositoryCosmos>();
-        _services.AddSingleton<IHostedService>(sp =>
-            new NcciCosmosContainerInitializer(
-                sp,
-                sp.GetRequiredService<IConfiguration>(),
-                sp.GetRequiredService<ILogger<NcciCosmosContainerInitializer>>()));
-        return this;
-    }
-
-    /// <summary>
     /// Use MongoDB for NCCI/MUE storage.
     /// Requires <c>IMongoDatabase</c> to be registered by the host.
     /// </summary>
@@ -140,14 +116,10 @@ public class NcciEngineBuilder
     }
 
     /// <summary>
-    /// Auto-detect backend from configuration:
-    ///   <c>MongoDb:ConnectionString</c> present → MongoDB
-    ///   Otherwise → Cosmos DB
+    /// Kept for existing callers (claims-service): binds the MongoDB
+    /// repository, the only store. <paramref name="configuration"/> no longer
+    /// selects a backend.
     /// </summary>
     public NcciEngineBuilder UseRepositoryFromConfiguration(IConfiguration configuration)
-    {
-        return !string.IsNullOrEmpty(configuration["MongoDb:ConnectionString"])
-            ? UseMongoRepository()
-            : UseCosmosRepository();
-    }
+        => UseMongoRepository();
 }
