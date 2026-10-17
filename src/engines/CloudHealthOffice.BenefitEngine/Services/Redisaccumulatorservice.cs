@@ -14,7 +14,7 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 ///
 ///   Source of truth:  Finalized claim lines in claims-service
 ///   Hot cache:        Redis hash per member per plan year
-///   Audit trail:      MongoDB/Cosmos AccumulatorDocument (async, non-blocking)
+///   Audit trail:      MongoDB/Cosmos AccumulatorDocument (written before the operation returns)
 ///
 /// ── Why this approach ──────────────────────────────────────────────
 ///
@@ -24,7 +24,8 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 /// QNXT avoids this entirely by calculating accumulators at runtime.
 ///
 /// Redis gives us the best of both worlds:
-///   - HINCRBYFLOAT is atomic — no read-modify-write race
+///   - HINCRBY (integer cents) is atomic — no read-modify-write race and no
+///     floating-point drift
 ///   - HGETALL is sub-millisecond — within the 500ms adjudication target
 ///   - TTL handles annual reset — no batch delete job
 ///   - Cache miss → recalculate from claims → populate Redis
@@ -32,19 +33,25 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 /// ── Redis key layout ──────────────────────────────────────────────
 ///
 ///   Hash key: "accum:{tenantId}:{memberId}:{planId}:{planYear}"
-///   Fields:   "{AccumulatorType}:{NetworkTier}"  →  accumulated amount
+///   Fields:   "{AccumulatorType}:{NetworkTier}"  →  accumulated amount in
+///             hundredths (cents for money, 1/100 for counts), an integer
+///   Marker:   "__v" = "2" — the integer-cents schema. A hash without it was
+///             written with HINCRBYFLOAT dollars; it is never read: the next
+///             script drops its amounts and journals (keeping fences) and the
+///             next read rebuilds it from claims-service.
 ///
 ///   Example:
-///     accum:tenant-001:M12345:plan-abc:2026
-///       IndividualDeductible:InNetwork        → "750.00"
-///       IndividualDeductible:OutOfNetwork      → "0.00"
-///       IndividualOopMax:InNetwork             → "1250.00"
-///       VisitCount:98                          → "3"
+///     accum:tenant-001:IND:M12345:plan-abc:2026
+///       __v                                    → "2"
+///       IndividualDeductible:InNetwork         → "75000"   ($750.00)
+///       IndividualDeductible:OutOfNetwork      → "0"
+///       IndividualOopMax:InNetwork             → "125000"  ($1,250.00)
+///       VisitCount:98                          → "300"     (3 visits)
 ///
 ///   Family aggregates use subscriberId instead of memberId:
 ///     accum:tenant-001:FAM:S67890:plan-abc:2026
-///       FamilyDeductible:InNetwork             → "1500.00"
-///       FamilyOopMax:InNetwork                 → "2100.00"
+///       FamilyDeductible:InNetwork             → "150000"
+///       FamilyOopMax:InNetwork                 → "210000"
 ///
 /// ── Cache miss / rebuild ──────────────────────────────────────────
 ///
@@ -55,16 +62,14 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 ///
 /// ── Reversal ──────────────────────────────────────────────────────
 ///
-/// When a claim is voided, HINCRBYFLOAT with negative amounts adjusts
-/// the cache atomically. If the key was evicted, the next read rebuilds
-/// from claim history (which no longer includes the voided claim).
-/// Either way, the result is correct.
+/// When a claim is voided, the hash is invalidated and the next read
+/// rebuilds from claim history (which no longer includes the voided claim).
 /// </summary>
 /// <remarks>
 /// This service intentionally does NOT use the shared
 /// <see cref="CloudHealthOffice.Infrastructure.Caching.ICacheProvider"/>
 /// abstraction introduced in Addendum A.7.2. Accumulators use Redis hashes
-/// with server-side atomic <c>HINCRBYFLOAT</c> to avoid read-modify-write
+/// with server-side atomic integer increments to avoid read-modify-write
 /// races between concurrent claim adjudications — behaviour that a
 /// string-K/V cache abstraction cannot express. Moving this class onto
 /// <c>ICacheProvider</c> would either require expanding the interface with
@@ -160,6 +165,14 @@ public class RedisAccumulatorService : IAccumulatorService
 
         var db = _redis.GetDatabase();
 
+        // The audit row is written first and awaited. These increments are not
+        // idempotent, so a failure must stop the operation before anything is
+        // added (the caller's retry then repeats the whole step); the audit
+        // writer skips a claim it already recorded, so a retry after a failed
+        // increment writes no second row.
+        await WriteAuditOrThrowAsync(claimId, ct => _auditWriter!.WriteAuditAsync(
+            _tenantContext.TenantId, memberId, subscriberId, benefitPlanId, planYear, claimId, updates, ct), ct);
+
         // Partition updates by scope
         var individualUpdates = updates.Where(u => u.Scope == AccumulatorScope.Individual).ToList();
         var familyUpdates = updates.Where(u => u.Scope == AccumulatorScope.Family).ToList();
@@ -181,27 +194,29 @@ public class RedisAccumulatorService : IAccumulatorService
         _logger.LogDebug(
             "Applied {Count} accumulator updates for claim {ClaimId} (member {MemberId})",
             updates.Count, SanitizeForLog(claimId), SanitizeForLog(memberId));
+    }
 
-        // Fire-and-forget: write audit trail to MongoDB/Cosmos
-        // This is non-blocking — adjudication doesn't wait for the audit write
-        if (_auditWriter is not null)
+    /// <summary>
+    /// Writes an accumulator audit row (a compliance record) and waits for
+    /// it. No audit writer registered: nothing to do. A failure is logged and
+    /// rethrown as <see cref="AccumulatorAuditException"/>: the operation
+    /// fails and its caller retries it (every audited operation here is safe
+    /// to repeat, and the writer is idempotent per claim), so an audit row is
+    /// never dropped — not on a write error, and not on shutdown, as a
+    /// detached background write could be.
+    /// </summary>
+    private async Task WriteAuditOrThrowAsync(string claimId, Func<CancellationToken, Task> write, CancellationToken ct)
+    {
+        if (_auditWriter is null) return;
+        try
         {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _auditWriter.WriteAuditAsync(
-                        _tenantContext.TenantId, memberId, subscriberId,
-                        benefitPlanId, planYear, claimId, updates, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex,
-                        "Failed to write accumulator audit for claim {ClaimId}. " +
-                        "Audit trail will self-heal on next rebuild.",
-                        SanitizeForLog(claimId));
-                }
-            }, ct);
+            await write(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "Accumulator audit write failed for claim {ClaimId}; the operation fails and must be retried",
+                SanitizeForLog(claimId));
+            throw new AccumulatorAuditException(claimId, ex);
         }
     }
 
@@ -227,24 +242,9 @@ public class RedisAccumulatorService : IAccumulatorService
 
         await InvalidateAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, fence: false);
 
-        // Write reversal to audit trail
-        if (_auditWriter is not null)
-        {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _auditWriter.WriteReversalAuditAsync(
-                        _tenantContext.TenantId, memberId, subscriberId,
-                        benefitPlanId, planYear, claimId, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex,
-                        "Failed to write reversal audit for claim {ClaimId}", claimId);
-                }
-            }, ct);
-        }
+        // The invalidation is idempotent, so the audit follows it; a failure fails the reversal.
+        await WriteAuditOrThrowAsync(claimId, ct => _auditWriter!.WriteReversalAuditAsync(
+            _tenantContext.TenantId, memberId, subscriberId, benefitPlanId, planYear, claimId, ct), ct);
     }
 
     /// <summary>
@@ -318,23 +318,8 @@ return 'REVERSED'
         CancellationToken ct = default)
     {
         await InvalidateAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, fence: true);
-        if (_auditWriter is not null)
-        {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _auditWriter.WriteReversalAuditAsync(
-                        _tenantContext.TenantId, memberId, subscriberId,
-                        benefitPlanId, planYear, claimId, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex,
-                        "Failed to write reversal audit for claim {ClaimId}", SanitizeForLog(claimId));
-                }
-            }, ct);
-        }
+        await WriteAuditOrThrowAsync(claimId, ct => _auditWriter!.WriteReversalAuditAsync(
+            _tenantContext.TenantId, memberId, subscriberId, benefitPlanId, planYear, claimId, ct), ct);
     }
 
     /// <summary>
@@ -380,8 +365,8 @@ return 'REVERSED'
             foreach (var u in updates)
             {
                 args.Add(MakeField(u));
-                args.Add(Num(u.Amount));
-                args.Add(u.ClampAtLimit is decimal limit ? Num(limit) : string.Empty);
+                args.Add(AccumulatorCents.ToCents(u.Amount));
+                args.Add(u.ClampAtLimit is decimal limit ? AccumulatorCents.ToCents(limit) : string.Empty);
                 args.Add(u.Type.ToString());
                 args.Add(u.NetworkTier.ToString());
                 args.Add(u.Source ?? string.Empty);
@@ -403,8 +388,8 @@ return 'REVERSED'
                         clamped.Add(new AccumulatorClamp
                         {
                             Type = update.Type, Scope = update.Scope, NetworkTier = update.NetworkTier,
-                            Requested = (decimal)c.GetProperty("r").GetDouble(),
-                            Applied = (decimal)c.GetProperty("a").GetDouble(),
+                            Requested = AccumulatorCents.FromJson(c.GetProperty("r")),
+                            Applied = AccumulatorCents.FromJson(c.GetProperty("a")),
                             Limit = update.ClampAtLimit ?? 0m,
                         });
                     }
@@ -436,6 +421,14 @@ return 'REVERSED'
         if (outcomes.All(o => o.Outcome == "ALREADY"))
         {
             // A repeat: the clamps the first attempt recorded come back too.
+            // The audit is written again (idempotent per claim): a first attempt
+            // whose audit write failed is completed by this retry.
+            if (commit.Updates.Count > 0)
+            {
+                await WriteAuditOrThrowAsync(commit.ClaimId, ct => _auditWriter!.WriteAuditAsync(
+                    _tenantContext.TenantId, commit.MemberId, commit.SubscriberId,
+                    commit.BenefitPlanId, commit.PlanYear, commit.ClaimId, commit.Updates, ct), ct);
+            }
             return new AccumulatorCommitResult
             {
                 Outcome = AccumulatorCommitOutcome.AlreadyCommitted,
@@ -443,22 +436,13 @@ return 'REVERSED'
             };
         }
 
-        if (_auditWriter is not null && commit.Updates.Count > 0)
+        // Awaited: a failure fails the commit, and its retry (the claims-service
+        // accumulator outbox) comes back ALREADY and writes the audit then.
+        if (commit.Updates.Count > 0)
         {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _auditWriter.WriteAuditAsync(
-                        _tenantContext.TenantId, commit.MemberId, commit.SubscriberId,
-                        commit.BenefitPlanId, commit.PlanYear, commit.ClaimId, commit.Updates, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex,
-                        "Failed to write accumulator audit for claim {ClaimId}", SanitizeForLog(commit.ClaimId));
-                }
-            }, ct);
+            await WriteAuditOrThrowAsync(commit.ClaimId, ct => _auditWriter!.WriteAuditAsync(
+                _tenantContext.TenantId, commit.MemberId, commit.SubscriberId,
+                commit.BenefitPlanId, commit.PlanYear, commit.ClaimId, commit.Updates, ct), ct);
         }
         return new AccumulatorCommitResult
         {
@@ -483,9 +467,11 @@ return 'REVERSED'
         var updates = new List<AccumulatorUpdate>();
         foreach (var (owner, scope) in new[] { (memberId, AccumulatorScope.Individual), (subscriberId, AccumulatorScope.Family) })
         {
-            var record = await db.HashGetAsync(MakeKey(owner, scope, benefitPlanId, planYear), CommitFieldPrefix + claimId);
-            if (record.IsNullOrEmpty) continue;
-            updates.AddRange(ParseJournal(record.ToString(), scope));
+            var values = await db.HashGetAsync(MakeKey(owner, scope, benefitPlanId, planYear),
+                new RedisValue[] { SchemaVersionField, CommitFieldPrefix + claimId });
+            // A journal in a hash written before integer cents holds dollars: not read.
+            if (values[0] != SchemaVersion || values[1].IsNullOrEmpty) continue;
+            updates.AddRange(ParseJournal(values[1].ToString(), scope));
         }
         return updates;
     }
@@ -517,7 +503,7 @@ return 'REVERSED'
         foreach (var entry in doc.RootElement.EnumerateObject())
         {
             if (entry.Value.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
-            var amount = (decimal)entry.Value.GetProperty("a").GetDouble();
+            var amount = AccumulatorCents.FromJson(entry.Value.GetProperty("a"));
             if (amount <= 0) continue;
             if (!Enum.TryParse<AccumulatorType>(entry.Value.GetProperty("t").GetString(), out var type)) continue;
             if (!Enum.TryParse<NetworkTier>(entry.Value.GetProperty("n").GetString(), out var tier)) tier = NetworkTier.InNetwork;
@@ -529,8 +515,6 @@ return 'REVERSED'
         }
         foreach (var u in parsed) yield return u;
     }
-
-    private static string Num(decimal value) => value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Marker fields in an accumulator hash; never amounts.</summary>
     internal const string CommitFieldPrefix = "__commit:";
@@ -545,6 +529,14 @@ return 'REVERSED'
     /// </summary>
     internal const string GenerationField = "__gen";
 
+    /// <summary>
+    /// Schema marker: <c>__v</c> = <see cref="SchemaVersion"/> on every hash
+    /// written with integer cents. A hash without it holds HINCRBYFLOAT
+    /// dollars and is treated as cold (see the type's remarks).
+    /// </summary>
+    internal const string SchemaVersionField = "__v";
+    internal const string SchemaVersion = "2";
+
     private static string NewGeneration() => Guid.NewGuid().ToString("N");
 
     private static bool IsMarkerField(RedisValue name)
@@ -552,16 +544,30 @@ return 'REVERSED'
         var field = name.ToString();
         return field.StartsWith(CommitFieldPrefix, StringComparison.Ordinal)
                || field.StartsWith(FenceFieldPrefix, StringComparison.Ordinal)
-               || field == GenerationField;
+               || field == GenerationField
+               || field == SchemaVersionField;
     }
 
     /// <summary>Shared Lua: is the hash holding amounts; undo a claim's journalled contribution.</summary>
     private const string JournalLua = @"
 local function populated(key)
+  if redis.call('HGET', key, '__v') ~= '2' then return false end
   for _, f in ipairs(redis.call('HKEYS', key)) do
-    if string.sub(f, 1, 9) ~= '__commit:' and string.sub(f, 1, 8) ~= '__fence:' and f ~= '__gen' then return true end
+    if string.sub(f, 1, 9) ~= '__commit:' and string.sub(f, 1, 8) ~= '__fence:' and f ~= '__gen' and f ~= '__v' then return true end
   end
   return false
+end
+-- A hash written before integer cents (no __v = 2): drop its amounts and
+-- commit journals (dollars), keep its fences and generation. It is then cold
+-- and the next read rebuilds it from claims-service. True when it dropped any.
+local function dropLegacy(key)
+  if redis.call('HGET', key, '__v') == '2' then return false end
+  local drop = {}
+  for _, f in ipairs(redis.call('HKEYS', key)) do
+    if string.sub(f, 1, 8) ~= '__fence:' and f ~= '__gen' then table.insert(drop, f) end
+  end
+  for _, f in ipairs(drop) do redis.call('HDEL', key, f) end
+  return #drop > 0
 end
 local function clampsOf(journal)
   local clamps = {}
@@ -579,7 +585,8 @@ end
     /// <summary>
     /// KEYS[1] the hash. ARGV: claim id, commit id, replaced claim id (or
     /// empty), TTL seconds, a fresh generation token, then (field, amount,
-    /// limit-or-empty, type, tier, source) sextuples. Returns REFUSED,
+    /// limit-or-empty, type, tier, source) sextuples, amounts and limits in
+    /// integer cents. Returns REFUSED,
     /// ALREADY|[clamps] (what the first attempt clamped) or COMMITTED|[clamps].
     /// A replacement fences the claim it replaces (superseded for good: a
     /// late commit of it is refused). On a cold hash nothing is added and
@@ -592,6 +599,8 @@ local claim = ARGV[1]
 local commitId = ARGV[2]
 if redis.call('HEXISTS', key, '__fence:' .. claim) == 1 then return 'REFUSED' end
 if redis.call('HEXISTS', key, '__fence:commit:' .. commitId) == 1 then return 'REFUSED_COMMIT' end
+dropLegacy(key)
+redis.call('HSET', key, '__v', '2')
 local own = redis.call('HGET', key, '__commit:' .. claim)
 if own then
   local sep = string.find(own, '|', 1, true)
@@ -616,7 +625,7 @@ local function undo(c)
       local cur = tonumber(redis.call('HGET', key, f) or '0') or 0
       local nv = cur - amountOf(e)
       if nv < 0 then nv = 0 end
-      redis.call('HSET', key, f, tostring(nv))
+      redis.call('HSET', key, f, string.format('%d', nv))
     end
   end
   redis.call('HDEL', key, '__commit:' .. c)
@@ -643,7 +652,7 @@ while i <= #ARGV do
       if a > room then a = room end
     end
     if a ~= requested then table.insert(clamps, { f = f, r = requested, a = a }) end
-    redis.call('HSET', key, f, tostring(cur + a))
+    redis.call('HSET', key, f, string.format('%d', cur + a))
     local e = journal[f]
     if e then e.a = e.a + a else journal[f] = { a = a, t = ARGV[i + 3], n = ARGV[i + 4], s = ARGV[i + 5] } end
     if a ~= requested then journal[f].r = (journal[f].r or 0) + requested end
@@ -662,7 +671,7 @@ return 'COMMITTED'
 
     /// <summary>
     /// KEYS[1] the hash. ARGV[1] TTL seconds, ARGV[2] the totals as JSON
-    /// (field → amount; empty object = authoritatively empty), ARGV[3] the
+    /// (field → integer cents; empty object = authoritatively empty), ARGV[3] the
     /// per-claim contributions as JSON (claim id → journal). Populates a hash
     /// holding no amounts — totals plus one journal record per counted claim
     /// (keeping the commit id of a commit that landed while the hash was cold,
@@ -678,11 +687,13 @@ local key = KEYS[1]
 if populated(key) then return 'SKIPPED' end
 local gen = redis.call('HGET', key, '__gen') or ''
 if gen ~= ARGV[4] then return 'STALE' end
+dropLegacy(key)
+redis.call('HSET', key, '__v', '2')
 local totals = cjson.decode(ARGV[2])
 local claims = cjson.decode(ARGV[3])
 local anyTotal = false
 for f, a in pairs(totals) do
-  redis.call('HSET', key, f, tostring(a))
+  redis.call('HSET', key, f, string.format('%d', a))
   anyTotal = true
 end
 if not anyTotal then redis.call('HSET', key, '__empty', '') end
@@ -775,8 +786,9 @@ return #fences
         var key = MakeKey(ownerId, scope, benefitPlanId, planYear);
 
         // Try Redis first. Marker fields (commit records, fences) are not
-        // amounts: a hash holding only those is a miss.
-        var entries = (await db.HashGetAllAsync(key)).Where(e => !IsMarkerField(e.Name)).ToArray();
+        // amounts: a hash holding only those is a miss. So is a hash written
+        // before integer cents (no schema marker): its dollars are never read.
+        var entries = AmountEntries(await db.HashGetAllAsync(key));
 
         if (entries.Length > 0)
         {
@@ -827,11 +839,11 @@ return #fences
         // so a later commit can undo exactly what the rebuild put in for it
         // (a replacement taking its predecessor back, a re-commit of the same
         // claim) and pricing can exclude a claim's own contribution.
-        var totals = new Dictionary<string, double>(StringComparer.Ordinal);
+        var totals = new Dictionary<string, long>(StringComparer.Ordinal);
         foreach (var snapshot in rebuild.Snapshots)
         {
             var field = MakeField(snapshot.Type, snapshot.NetworkTier).ToString();
-            totals[field] = (totals.TryGetValue(field, out var t) ? t : 0d) + (double)snapshot.AccumulatedAmountAfter;
+            totals[field] = (totals.TryGetValue(field, out var t) ? t : 0L) + AccumulatorCents.ToCents(snapshot.AccumulatedAmountAfter);
         }
         var claims = new Dictionary<string, Dictionary<string, object>>(StringComparer.Ordinal);
         foreach (var claim in rebuild.Claims)
@@ -840,7 +852,7 @@ return #fences
             foreach (var u in claim.Updates.Where(u => u.Amount > 0))
             {
                 var field = MakeField(u).ToString();
-                var amount = (double)u.Amount + (journal.TryGetValue(field, out var e) ? ((JournalEntry)e).a : 0d);
+                var amount = AccumulatorCents.ToCents(u.Amount) + (journal.TryGetValue(field, out var e) ? ((JournalEntry)e).a : 0L);
                 journal[field] = new JournalEntry(amount, u.Type.ToString(), u.NetworkTier.ToString(), u.Source ?? string.Empty);
             }
             if (journal.Count > 0) claims[claim.ClaimId] = journal;
@@ -857,7 +869,7 @@ return #fences
         if (outcome == "SKIPPED")
         {
             // Another writer populated it meanwhile: read what is there.
-            var now = (await db.HashGetAllAsync(key)).Where(e => !IsMarkerField(e.Name)).ToArray();
+            var now = AmountEntries(await db.HashGetAllAsync(key));
             return (outcome, ParseSnapshots(now, scope));
         }
         if (outcome == "STALE")
@@ -873,8 +885,8 @@ return #fences
         return (outcome, rebuild.Snapshots.ToList());
     }
 
-    /// <summary>One journalled field (Lua reads <c>a</c>, <c>t</c>, <c>n</c>, <c>s</c>).</summary>
-    private sealed record JournalEntry(double a, string t, string n, string s);
+    /// <summary>One journalled field, <c>a</c> in integer cents (Lua reads <c>a</c>, <c>t</c>, <c>n</c>, <c>s</c>).</summary>
+    private sealed record JournalEntry(long a, string t, string n, string s);
 
     // ═══════════════════════════════════════════════════════════════════
     // PRIVATE — ATOMIC INCREMENTS
@@ -883,25 +895,46 @@ return #fences
     private async Task ApplyIncrementsAsync(
         IDatabase db, RedisKey key, List<AccumulatorUpdate> updates)
     {
-        // Use a Redis pipeline (batch) to send all increments in one round trip.
-        // Each HINCRBYFLOAT is individually atomic; the batch reduces latency.
-        var batch = db.CreateBatch();
-        var tasks = new List<Task>();
-
-        tasks.Add(batch.HashDeleteAsync(key, EmptySnapshotField));
-
+        // One script: integer-cent HINCRBYs, atomic together. A hash written
+        // before integer cents is not added to (its dollars are dropped and the
+        // next read rebuilds it from claims-service).
+        var args = new List<RedisValue> { (long)DefaultKeyTtl.TotalSeconds, NewGeneration() };
         foreach (var update in updates)
         {
-            var field = MakeField(update);
-            tasks.Add(batch.HashIncrementAsync(key, field, (double)update.Amount));
+            args.Add(MakeField(update));
+            args.Add(AccumulatorCents.ToCents(update.Amount));
         }
 
-        // Ensure the key has a TTL (set only if it doesn't already have one)
-        tasks.Add(batch.KeyExpireAsync(key, DefaultKeyTtl, ExpireWhen.HasNoExpiry));
-
-        batch.Execute();
-        await Task.WhenAll(tasks);
+        var outcome = (await db.ScriptEvaluateAsync(ApplyScript, new[] { key }, args.ToArray())).ToString();
+        if (outcome == "LEGACY")
+        {
+            _logger.LogWarning(
+                "Accumulator hash {Key} predates integer cents: its amounts were dropped and the next read rebuilds it from claims-service; {Count} increment(s) not applied to it",
+                key.ToString(), updates.Count);
+        }
     }
+
+    /// <summary>
+    /// KEYS[1] the hash. ARGV[1] TTL seconds, ARGV[2] a fresh generation
+    /// token, then (field, integer cents) pairs. Returns APPLIED, or LEGACY
+    /// for a hash written before integer cents (dropped, nothing added).
+    /// </summary>
+    private const string ApplyScript = JournalLua + @"
+local key = KEYS[1]
+if dropLegacy(key) then
+  redis.call('HSET', key, '__gen', ARGV[2])
+  return 'LEGACY'
+end
+redis.call('HSET', key, '__v', '2')
+redis.call('HDEL', key, '__empty')
+local i = 3
+while i <= #ARGV do
+  redis.call('HINCRBY', key, ARGV[i], ARGV[i + 1])
+  i = i + 2
+end
+if redis.call('TTL', key) < 0 then redis.call('EXPIRE', key, ARGV[1]) end
+return 'APPLIED'
+";
 
     private static async Task MarkEmptySnapshotAsync(IDatabase db, RedisKey key)
     {
@@ -940,6 +973,12 @@ return #fences
         return $"{update.Type}:{update.NetworkTier}";
     }
 
+    /// <summary>The amount fields of a hash, or none when it predates integer cents.</summary>
+    private static HashEntry[] AmountEntries(HashEntry[] all) =>
+        all.Any(e => e.Name == SchemaVersionField && e.Value == SchemaVersion)
+            ? all.Where(e => !IsMarkerField(e.Name)).ToArray()
+            : [];
+
     private static List<AccumulatorSnapshot> ParseSnapshots(
         HashEntry[] entries, AccumulatorScope scope)
     {
@@ -950,7 +989,7 @@ return #fences
             var field = entry.Name.ToString();
             if (entry.Name == EmptySnapshotField) continue;
 
-            var amount = (decimal)(double)entry.Value;
+            var amount = AccumulatorCents.FromRedis(entry.Value, field);
 
             // Parse "AccumulatorType:NetworkTier" field format
             var parts = field.Split(':', 2);
@@ -1050,8 +1089,9 @@ public sealed record ClaimAccumulatorContribution(string ClaimId, IReadOnlyList<
 
 /// <summary>
 /// Optional: writes accumulator audit trail to durable storage.
-/// The audit trail is non-blocking — adjudication does not wait for it.
-/// Used for compliance reporting and portal display.
+/// Every write is awaited by the operation it records; a failure fails that
+/// operation, which its caller retries, so implementations must be idempotent
+/// per claim. Used for compliance reporting and portal display.
 ///
 /// If not registered in DI, no audit trail is written.
 /// The MongoDB/Cosmos AccumulatorDocument and ChoAccumulatorService
@@ -1070,4 +1110,16 @@ public interface IAccumulatorAuditWriter
         Guid benefitPlanId, string planYear,
         string claimId,
         CancellationToken ct = default);
+}
+
+/// <summary>An accumulator audit row could not be written; the operation it records must be retried.</summary>
+public sealed class AccumulatorAuditException : Exception
+{
+    public AccumulatorAuditException(string claimId, Exception inner)
+        : base($"The accumulator audit row for claim {claimId} could not be written; retry the operation.", inner)
+    {
+        ClaimId = claimId;
+    }
+
+    public string ClaimId { get; }
 }
