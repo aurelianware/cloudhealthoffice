@@ -47,6 +47,18 @@ public interface IAppealRepository
     Task<AppealsSummary> GetAppealsSummaryAsync(string tenantId, DateTime from, DateTime to, CancellationToken ct = default);
 
     /// <summary>
+    /// The tenant's appeals and grievances received (ReceivedDate, else
+    /// SubmittedDate) or decided (DecisionDate, else ClosedAt) in [from, to],
+    /// drafts excluded: what Appeals Insights' period figures count.
+    /// </summary>
+    Task<IReadOnlyList<Appeal>> ListInsightActivityAsync(string tenantId, DateTime from, DateTime to, CancellationToken ct = default)
+        => throw new NotSupportedException("Appeals Insights needs the MongoDB appeal store.");
+
+    /// <summary>The tenant's open appeals and grievances (Submitted, InReview, PendingInfo).</summary>
+    Task<IReadOnlyList<Appeal>> ListOpenAsync(string tenantId, CancellationToken ct = default)
+        => throw new NotSupportedException("Appeals Insights needs the MongoDB appeal store.");
+
+    /// <summary>
     /// Atomic: persist the new status on <paramref name="appeal"/> AND
     /// append <paramref name="auditEvent"/>. Caller must set
     /// <c>appeal.Status</c> to the new value and populate any lifecycle
