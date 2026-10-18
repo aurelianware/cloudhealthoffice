@@ -1,37 +1,57 @@
-using System.Text;
 using System.Text.Json;
 using ClaimsService.Models;
+using ClaimsService.Repositories;
 using CloudHealthOffice.Events;
-using Confluent.Kafka;
+using CloudHealthOffice.Events.Kafka;
 
 namespace ClaimsService.Services;
 
 /// <summary>
-/// Publishes claim lifecycle events to Kafka. Currently emits ClaimPendedEvent;
-/// designed so additional event types (claim-approved, claim-finalized) can be
-/// added without further consumer-side coupling — each event is its own type
-/// with its own topic, no shared envelope schema to break.
+/// Publishes claim lifecycle events to Kafka through the shared
+/// <see cref="IChoEventProducer"/> (idempotent, acks=all). Each event is its
+/// own type with its own topic, so there is no shared envelope schema to break.
 /// </summary>
 public interface IClaimEventPublisher
 {
     /// <summary>
-    /// Emit a ClaimPendedEvent. Safe to call when Kafka is unavailable —
-    /// failures are logged but never propagated; the claim status update
-    /// must succeed even if the event bus is degraded (claim DB is the
-    /// source of truth, not the event stream).
+    /// Emit a ClaimPendedEvent (advisory, for claims-examiner-service). Safe
+    /// to call when Kafka is unavailable: a failure is logged, never thrown.
     /// </summary>
     Task PublishClaimPendedAsync(Claim claim, string tenantId, CancellationToken ct = default);
 
     /// <summary>
-    /// Emit a ClaimFinalizedEvent when a claim reaches a terminal adjudication
-    /// state (Approved, Paid, PartiallyPaid, Denied). Consumed by accumulator-service
-    /// (member deductible/OOP projection) and downstream analytics. Same degraded-mode
-    /// semantics as PublishClaimPendedAsync — claim DB is truth, event is a notification.
+    /// The <c>claims.finalized.v1</c> event for <paramref name="claim"/> as
+    /// it stands now, as an outbox entry. The caller appends it to
+    /// <see cref="Claim.PendingClaimEvents"/> (<see cref="ClaimEventOutboxExtensions.AddPendingClaimEvent"/>)
+    /// before the write that changes the claim's status, so the event and the
+    /// state change are stored together or not at all.
+    /// <paramref name="finalStatus"/> overrides the label derived from the
+    /// claim's status (a void passes "Reversed" before its write).
+    /// Null when Kafka is not configured (nothing would ever publish it).
+    /// </summary>
+    ClaimEventOutboxItem? PrepareClaimFinalized(Claim claim, string tenantId, string? finalStatus = null);
+
+    /// <summary>
+    /// After that write: publishes the claim's pending events, oldest first,
+    /// and removes each one Kafka acknowledges. Never throws. An event that is
+    /// not acknowledged stays in the outbox, and <c>ClaimEventOutboxDispatcher</c>
+    /// retries it, so accumulator-service and analytics cannot silently miss it.
     /// </summary>
     Task PublishClaimFinalizedAsync(Claim claim, string tenantId, CancellationToken ct = default);
 }
 
-public class ClaimEventPublisher : IClaimEventPublisher, IClaimWorkEventPublisher, IHostedService, IAsyncDisposable
+/// <summary>Outbox helpers on <see cref="Claim"/>.</summary>
+public static class ClaimEventOutboxExtensions
+{
+    /// <summary>Appends <paramref name="item"/> (when there is one) to the claim's pending events.</summary>
+    public static void AddPendingClaimEvent(this Claim claim, ClaimEventOutboxItem? item)
+    {
+        if (item is null) return;
+        (claim.PendingClaimEvents ??= new List<ClaimEventOutboxItem>()).Add(item);
+    }
+}
+
+public class ClaimEventPublisher : IClaimEventPublisher, IClaimWorkEventPublisher
 {
     public const string ClaimPendedTopic = "claims.pended.v1";
     public const string ClaimFinalizedTopic = "claims.finalized.v1";
@@ -39,10 +59,11 @@ public class ClaimEventPublisher : IClaimEventPublisher, IClaimWorkEventPublishe
     /// <summary>Claim work needed / resolved, consumed by work-management-service.</summary>
     public const string ClaimWorkTopic = ClaimWorkEventTopics.Topic;
 
+    private readonly IChoEventProducer _producer;
+    private readonly ClaimEventOutboxDrainer _drainer;
+    private readonly IServiceScopeFactory _scopes;
     private readonly ILogger<ClaimEventPublisher> _logger;
-    private readonly IConfiguration _configuration;
-    private IProducer<string, string>? _producer;
-    private bool _available;
+    private readonly TimeProvider _clock;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -50,78 +71,24 @@ public class ClaimEventPublisher : IClaimEventPublisher, IClaimWorkEventPublishe
         WriteIndented = false
     };
 
-    public ClaimEventPublisher(ILogger<ClaimEventPublisher> logger, IConfiguration configuration)
+    public ClaimEventPublisher(
+        IChoEventProducer producer, ClaimEventOutboxDrainer drainer, IServiceScopeFactory scopes,
+        ILogger<ClaimEventPublisher> logger, TimeProvider? clock = null)
     {
+        _producer = producer;
+        _drainer = drainer;
+        _scopes = scopes;
         _logger = logger;
-        _configuration = configuration;
-    }
-
-    public Task StartAsync(CancellationToken cancellationToken)
-    {
-        var bootstrapServers = _configuration["Kafka:BootstrapServers"];
-        if (string.IsNullOrEmpty(bootstrapServers))
-        {
-            _logger.LogWarning("Kafka:BootstrapServers not configured — claim event publisher disabled");
-            return Task.CompletedTask;
-        }
-
-        var producerConfig = new ProducerConfig
-        {
-            BootstrapServers = bootstrapServers,
-            ClientId = _configuration["Kafka:ClientId"] ?? "claims-service",
-            MessageTimeoutMs = 10_000,
-            RequestTimeoutMs = 10_000,
-            SocketTimeoutMs = 10_000,
-            EnableIdempotence = true
-        };
-
-        var saslUsername = _configuration["Kafka:SaslUsername"];
-        if (!string.IsNullOrEmpty(saslUsername))
-        {
-            producerConfig.SaslUsername = saslUsername;
-            producerConfig.SaslPassword = _configuration["Kafka:SaslPassword"];
-            producerConfig.SaslMechanism = SaslMechanism.ScramSha512;
-            producerConfig.SecurityProtocol = SecurityProtocol.SaslSsl;
-        }
-
-        try
-        {
-            _producer = new ProducerBuilder<string, string>(producerConfig).Build();
-            _available = true;
-            _logger.LogInformation("Claim event publisher connected to Kafka at {Servers}", bootstrapServers);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Kafka producer init failed — claim event publisher running in degraded mode");
-            _producer?.Dispose();
-            _producer = null;
-            _available = false;
-        }
-
-        return Task.CompletedTask;
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            _producer?.Flush(TimeSpan.FromSeconds(5));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error flushing Kafka producer on shutdown");
-        }
-        _producer?.Dispose();
-        _producer = null;
-        _available = false;
-        return Task.CompletedTask;
+        _clock = clock ?? TimeProvider.System;
+        if (!producer.IsConfigured)
+            _logger.LogWarning("Kafka:BootstrapServers not configured — claim events are not queued or published");
     }
 
     public async Task PublishClaimPendedAsync(Claim claim, string tenantId, CancellationToken ct = default)
     {
-        if (!_available || _producer == null)
+        if (!_producer.IsConfigured)
         {
-            _logger.LogDebug("Kafka producer unavailable; skipping ClaimPendedEvent for claim {ClaimId}", claim.Id);
+            _logger.LogDebug("Kafka not configured; skipping ClaimPendedEvent for claim {ClaimId}", claim.Id);
             return;
         }
 
@@ -137,72 +104,55 @@ public class ClaimEventPublisher : IClaimEventPublisher, IClaimWorkEventPublishe
             ServiceDateFrom = claim.ServiceDateFrom,
             PendDetails = MapPendDetails(claim.PendDetails)
         };
-
-        var message = new Message<string, string>
+        var headers = new Dictionary<string, string>
         {
-            Key = claim.Id,
-            Value = JsonSerializer.Serialize(evt, JsonOptions),
-            Headers = new Headers
-            {
-                { "tenant-id", Encoding.UTF8.GetBytes(tenantId) },
-                { "event-type", Encoding.UTF8.GetBytes(evt.EventType) },
-                { "event-version", Encoding.UTF8.GetBytes(evt.EventVersion) }
-            }
+            ["tenant-id"] = tenantId,
+            ["event-type"] = evt.EventType,
+            ["event-version"] = evt.EventVersion,
         };
 
         try
         {
-            await _producer.ProduceAsync(ClaimPendedTopic, message, ct);
-            _logger.LogInformation("Published ClaimPendedEvent for claim {ClaimId} to {Topic}",
-                claim.Id, ClaimPendedTopic);
+            await _producer.ProduceAsync(ClaimPendedTopic, claim.Id, JsonSerializer.Serialize(evt, JsonOptions), headers, ct);
+            _logger.LogInformation("Published ClaimPendedEvent for claim {ClaimId} to {Topic}", claim.Id, ClaimPendedTopic);
         }
-        catch (ProduceException<string, string> ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            _logger.LogError(ex, "Failed to publish ClaimPendedEvent for claim {ClaimId}: {Reason}",
-                claim.Id, ex.Error.Reason);
+            _logger.LogError(ex, "Failed to publish ClaimPendedEvent for claim {ClaimId}", claim.Id);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error publishing ClaimPendedEvent for claim {ClaimId}", claim.Id);
-        }
+    }
+
+    public ClaimEventOutboxItem? PrepareClaimFinalized(Claim claim, string tenantId, string? finalStatus = null)
+    {
+        if (!_producer.IsConfigured) return null;
+
+        var evt = BuildFinalizedEvent(claim, tenantId);
+        if (finalStatus is not null) evt.FinalStatus = finalStatus;
+        return ClaimEventOutboxItem.Create(
+            evt.EventId, ClaimFinalizedTopic, claim.Id, JsonSerializer.Serialize(evt, JsonOptions),
+            new Dictionary<string, string>
+            {
+                ["tenant-id"] = tenantId,
+                ["event-type"] = evt.EventType,
+                ["event-schema-version"] = evt.EventSchemaVersion.ToString(),
+                ["event-id"] = evt.EventId,
+            },
+            _clock.GetUtcNow().UtcDateTime);
     }
 
     public async Task PublishClaimFinalizedAsync(Claim claim, string tenantId, CancellationToken ct = default)
     {
-        if (!_available || _producer == null)
-        {
-            _logger.LogDebug("Kafka producer unavailable; skipping ClaimFinalizedEvent for claim {ClaimId}", claim.Id);
-            return;
-        }
-
-        var evt = BuildFinalizedEvent(claim, tenantId);
-
-        var message = new Message<string, string>
-        {
-            Key = claim.Id,
-            Value = JsonSerializer.Serialize(evt, JsonOptions),
-            Headers = new Headers
-            {
-                { "tenant-id", Encoding.UTF8.GetBytes(tenantId) },
-                { "event-type", Encoding.UTF8.GetBytes(evt.EventType) },
-                { "event-schema-version", Encoding.UTF8.GetBytes(evt.EventSchemaVersion.ToString()) }
-            }
-        };
-
+        if (!_producer.IsConfigured || claim.PendingClaimEvents is not { Count: > 0 }) return;
         try
         {
-            await _producer.ProduceAsync(ClaimFinalizedTopic, message, ct);
-            _logger.LogInformation("Published ClaimFinalizedEvent for claim {ClaimId} ({Status}) to {Topic}",
-                claim.Id, claim.Status, ClaimFinalizedTopic);
+            using var scope = _scopes.CreateScope();
+            var claims = scope.ServiceProvider.GetRequiredService<IClaimRepository>();
+            await _drainer.DrainAsync(claims, claim, respectDueTimes: false, ct);
         }
-        catch (ProduceException<string, string> ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            _logger.LogError(ex, "Failed to publish ClaimFinalizedEvent for claim {ClaimId}: {Reason}",
-                claim.Id, ex.Error.Reason);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error publishing ClaimFinalizedEvent for claim {ClaimId}", claim.Id);
+            // Still pending in the claim document; the dispatcher publishes it.
+            _logger.LogError(ex, "Publishing the pending events of claim {ClaimId} failed; the outbox dispatcher retries them", claim.Id);
         }
     }
 
@@ -213,36 +163,30 @@ public class ClaimEventPublisher : IClaimEventPublisher, IClaimWorkEventPublishe
         PublishWorkAsync(ClaimWorkEvents.Resolved(claim, tenantId, resolution, actorId), ct);
 
     /// <summary>
-    /// Same degraded-mode posture as the other claim events: never throws.
+    /// Same degraded-mode posture as the pended event: never throws.
     /// work-management-service reconciles against claims-service, so a lost
     /// event is repaired rather than leaving a stale work item forever.
     /// </summary>
     private async Task PublishWorkAsync(ClaimWorkEvent evt, CancellationToken ct)
     {
-        if (!_available || _producer == null)
+        if (!_producer.IsConfigured)
         {
-            _logger.LogDebug("Kafka producer unavailable; skipping {EventType} for claim {ClaimId}", evt.EventType, evt.ClaimId);
+            _logger.LogDebug("Kafka not configured; skipping {EventType} for claim {ClaimId}", evt.EventType, evt.ClaimId);
             return;
         }
 
-        var message = new Message<string, string>
+        var headers = new Dictionary<string, string>
         {
-            Key = evt.ClaimId,
-            Value = JsonSerializer.Serialize(evt, JsonOptions),
-            Headers = new Headers
-            {
-                { "tenant-id", Encoding.UTF8.GetBytes(evt.TenantId) },
-                { "event-type", Encoding.UTF8.GetBytes(evt.EventType) },
-                { "event-version", Encoding.UTF8.GetBytes(evt.EventVersion) }
-            }
+            ["tenant-id"] = evt.TenantId,
+            ["event-type"] = evt.EventType,
+            ["event-version"] = evt.EventVersion,
         };
-
         try
         {
-            await _producer.ProduceAsync(ClaimWorkTopic, message, ct);
+            await _producer.ProduceAsync(ClaimWorkTopic, evt.ClaimId, JsonSerializer.Serialize(evt, JsonOptions), headers, ct);
             _logger.LogInformation("Published {EventType} for claim {ClaimId} to {Topic}", evt.EventType, evt.ClaimId, ClaimWorkTopic);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogError(ex, "Failed to publish {EventType} for claim {ClaimId}; work-management reconcile repairs it",
                 evt.EventType, evt.ClaimId);
@@ -341,12 +285,6 @@ public class ClaimEventPublisher : IClaimEventPublisher, IClaimWorkEventPublishe
         line?.AdjustmentReasons
             .Where(r => r.GroupCode == "PR" && r.ReasonCode == carc)
             .Sum(r => r.Amount) ?? 0m;
-
-    public async ValueTask DisposeAsync()
-    {
-        await StopAsync(CancellationToken.None);
-        GC.SuppressFinalize(this);
-    }
 
     private static CloudHealthOffice.Events.PendDetails? MapPendDetails(ClaimsService.Models.PendDetails? source)
     {

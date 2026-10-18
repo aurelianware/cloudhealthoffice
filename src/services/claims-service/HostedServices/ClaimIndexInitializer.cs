@@ -67,6 +67,16 @@ public sealed class ClaimIndexInitializer : IHostedService
                 new CreateIndexOptions { Sparse = true, Name = "accumulator_outbox_commit_due" }),
             new CreateIndexModel<Claim>(keys.Ascending(c => c.PendingAccumulatorReversal!.DueAtMs),
                 new CreateIndexOptions { Sparse = true, Name = "accumulator_outbox_reversal_due" }),
+            // Claim-event outbox: the dispatcher's due scan over the pending
+            // events (multikey; sparse — claims without one are not indexed).
+            new CreateIndexModel<Claim>(new IndexKeysDefinitionBuilder<Claim>().Ascending("PendingClaimEvents.DueAtMs"),
+                new CreateIndexOptions { Sparse = true, Name = "claim_event_outbox_due" }),
+            // Claim-event outbox: the age query (OldestClaimEventAsync) reads
+            // only claims with a pending event through this index. MongoDB
+            // also takes the order from it; Azure DocumentDB sorts in memory,
+            // over the pending claims only.
+            new CreateIndexModel<Claim>(new IndexKeysDefinitionBuilder<Claim>().Ascending("PendingClaimEvents.CreatedAtMs"),
+                new CreateIndexOptions { Sparse = true, Name = "claim_event_outbox_created" }),
         };
 
         collection.Indexes.CreateMany(indexes, cancellationToken);
