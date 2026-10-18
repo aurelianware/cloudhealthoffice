@@ -199,17 +199,33 @@ builder.Services.AddScoped<FmmisFileBuilder>();
 builder.Services.AddScoped<IMpipRateClient, MpipRateClient>();
 builder.Services.AddScoped<IMpipAdjudicationEnhancer, MpipAdjudicationEnhancer>();
 
-// Claim lifecycle event publisher (Kafka). Singleton + IHostedService so the
-// underlying producer is initialized at app start and cleanly shut down.
-// Always registered: when Kafka:BootstrapServers is unset the publisher runs
-// in degraded mode and logs a warning, so dev/test environments without Kafka
-// remain functional.
+// Claim lifecycle event publisher (Kafka).
+// Always registered: when Kafka:BootstrapServers is unset nothing is queued
+// or published and a warning is logged, so dev/test environments without
+// Kafka remain functional.
+// The shared CHO producer (idempotent, acks=all, bounded delivery timeout).
+builder.Services.AddSingleton<CloudHealthOffice.Events.Kafka.IChoEventProducer>(sp =>
+{
+    var kafka = sp.GetRequiredService<IConfiguration>().GetSection("Kafka");
+    return new CloudHealthOffice.Events.Kafka.ChoKafkaProducer(new CloudHealthOffice.Events.Kafka.ChoKafkaProducerSettings
+    {
+        BootstrapServers = kafka["BootstrapServers"],
+        ClientId = kafka["ClientId"] ?? "claims-service",
+        SaslUsername = kafka["SaslUsername"],
+        SaslPassword = kafka["SaslPassword"],
+    });
+});
+// claims.finalized.v1 goes through the claim-event outbox: the event is stored
+// on the claim with the status change and published (inline, then retried by
+// the dispatcher) until Kafka acknowledges it.
+builder.Services.Configure<ClaimEventOutboxOptions>(builder.Configuration.GetSection(ClaimEventOutboxOptions.SectionName));
+builder.Services.AddSingleton<ClaimEventOutboxDrainer>();
+builder.Services.AddHostedService<ClaimEventOutboxDispatcher>();
 builder.Services.AddSingleton<ClaimEventPublisher>();
 builder.Services.AddSingleton<IClaimEventPublisher>(sp => sp.GetRequiredService<ClaimEventPublisher>());
 // Work needed / resolved for work-management-service (claims.work.v1), on the
 // same producer. Publishing never blocks or fails a claim write.
 builder.Services.AddSingleton<IClaimWorkEventPublisher>(sp => sp.GetRequiredService<ClaimEventPublisher>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<ClaimEventPublisher>());
 
 // Claim adapter pattern (5.2 — tenant-routed claims backends). Cache is
 // singleton (TTL across requests); adapters and factory are scoped because

@@ -361,6 +361,8 @@ public sealed class AccumulatorOperationsService
                 RequestedAt = actedAt,
                 ResolvedAt = actedAt,
             });
+            // The finalized event is stored with the final write (outbox).
+            claim.AddPendingClaimEvent(_events.PrepareClaimFinalized(claim, tenantId));
             var updated = await _claims.UpdateHoldingResolutionLockAsync(claim, lockToken, CancellationToken.None);
             if (updated is null) return Item("Failed", "the final write was refused (lock lost)");
 

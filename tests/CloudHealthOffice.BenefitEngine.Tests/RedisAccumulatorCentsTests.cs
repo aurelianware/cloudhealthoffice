@@ -37,7 +37,6 @@ public sealed class RedisAccumulatorCentsTests : IClassFixture<RedisServerFixtur
     {
         get
         {
-            // Tests that seed raw hashes reach Redis before Store(), so they skip here too.
             Skip.If(_redis.Unavailable is not null, _redis.Unavailable);
             return _redis.Connection!.GetDatabase();
         }

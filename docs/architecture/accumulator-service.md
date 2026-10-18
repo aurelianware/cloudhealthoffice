@@ -109,6 +109,11 @@ Currently Kafka via `Confluent.Kafka`, consistent with claims-service:
 - Consumer: `claims.finalized.v1` (group
   `accumulator-service.claims-finalized`,
   `EnableAutoCommit=false`, commit only on terminal outcome).
+  Delivery is at least once: claims-service publishes this topic from a
+  transactional outbox on the claim document
+  (`docs/architecture/claim-event-outbox.md`), so the same event, with the
+  same `eventId`, can arrive again. The consumer is idempotent per claim: a
+  redelivery is a `Duplicate`.
 - Producer: `accumulators.adjusted.v1`, `accumulators.orphan.v1`.
 
 **TODO(addendum-a)**: evaluate migration to the Service Bus-backed
