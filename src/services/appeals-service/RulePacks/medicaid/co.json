@@ -1,0 +1,55 @@
+{
+  // Colorado Health First Colorado managed care. Source: docs/architecture/appeals-case-model.md §5.5.
+  "id": "co-medicaid",
+  "state": "CO",
+  "lineOfBusiness": "medicaid",
+  "program": "Health First Colorado managed care (RAEs, Elevate Medicaid Choice)",
+  "version": "2026.10.1",
+  "effectiveFrom": "2025-07-01",
+  "verifiedOn": "2026-10-17",
+  "sources": {
+    "ccr-8-209": { "citation": "10 CCR 2505-10 §8.209", "url": "https://regulations.justia.com/states/colorado/2505/2505-d-1/rule-10-ccr-2505-10-8-200/section-10-ccr-2505-10-8-209/" },
+    "ccr-8-050": { "citation": "10 CCR 2505-10 §8.050", "url": "https://regulations.justia.com/states/colorado/2505/2505-d-1/rule-10-ccr-2505-10-8-000/section-10-ccr-2505-10-8-050/" },
+    "hfc-appeals": { "citation": "Health First Colorado member appeals page", "url": "https://www.healthfirstcolorado.gov/benefits-services/appeals" },
+    "cfr-438-408": { "citation": "42 CFR 438.408", "url": "https://www.ecfr.gov/current/title-42/section-438.408" }
+  },
+  "memberAppeal": {
+    "filingWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "ccr-8-209" },
+    "acknowledgment": { "amount": 2, "unit": "workingDays", "source": "ccr-8-209" },
+    "resolution": { "amount": 10, "unit": "workingDays", "source": "ccr-8-209" },
+    "resolutionExpedited": { "amount": 72, "unit": "hours", "source": "ccr-8-209" },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "ccr-8-209" }, "source": "ccr-8-209" },
+    "onMissed": "deemedExhaustion",
+    "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "ccr-8-209" },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "ccr-8-209", "note": "Or by the intended effective date, whichever is later." },
+    "chain": [
+      { "name": "State Fair Hearing (Office of Administrative Courts)", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "ccr-8-209" } }
+    ]
+  },
+  "memberGrievance": {
+    "acknowledgment": { "amount": 2, "unit": "businessDays", "source": "ccr-8-209" },
+    "resolution": { "amount": 90, "unit": "calendarDays", "source": "ccr-8-209" },
+    "variants": [
+      { "name": "safety concern", "clock": { "amount": 72, "unit": "hours", "source": "ccr-8-209" } }
+    ],
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "cfr-438-408" }, "source": "cfr-438-408" }
+  },
+  "providerDispute": {
+    "planDefined": true,
+    "notes": [
+      "No State-set provider dispute process for managed care; each plan's provider manual governs.",
+      "Fee-for-service: informal reconsideration within 30 days, then appeal to the Office of Administrative Courts within 30 days (10 CCR 2505-10 §8.050)."
+    ],
+    "clocks": [
+      { "name": "Fee-for-service informal reconsideration", "clock": { "amount": 30, "unit": "calendarDays", "from": "decision", "source": "ccr-8-050" } },
+      { "name": "Fee-for-service appeal to the OAC", "clock": { "amount": 30, "unit": "calendarDays", "from": "decision", "source": "ccr-8-050" } }
+    ]
+  },
+  "recoupment": [
+    { "hold": "unknown", "summary": "Managed care: no State rule found; the plan contract governs. Fee-for-service recovery waits until the appeal is complete (§8.050.3.D).", "source": "ccr-8-050" }
+  ],
+  "conflicts": [
+    { "item": "Fair hearing request window", "enforced": "120 days from the plan's decision (10 CCR 2505-10 §8.209.4.N)", "alternative": "60 days, per the Health First Colorado member page", "sources": [ "ccr-8-209", "hfc-appeals" ] }
+  ],
+  "toConfirm": [ "Fair hearing window with HCPF.", "Managed care recoupment rules." ]
+}

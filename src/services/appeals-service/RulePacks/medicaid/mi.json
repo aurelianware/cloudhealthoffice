@@ -1,0 +1,56 @@
+{
+  // Michigan Medicaid Health Plans. Source: docs/architecture/appeals-case-model.md §5.9.
+  "id": "mi-medicaid",
+  "state": "MI",
+  "lineOfBusiness": "medicaid",
+  "program": "Comprehensive Health Care Program (Medicaid Health Plans)",
+  "version": "2026.10.1",
+  "effectiveFrom": "2024-10-01",
+  "verifiedOn": "2026-10-17",
+  "sources": {
+    "chcp": { "citation": "MDHHS CHCP contract (FY24, updated 6-2024) §1.1.XIII.H", "url": "https://michigan.gov/mdhhs/-/media/Project/Websites/mdhhs/Assistance-Programs/Medicaid-BPHASA/Other-Prov-Specific-Page-Docs/FY24-CHCP-FINAL-Contract-Updated-6-2024.pdf" },
+    "chcp-xiv": { "citation": "MDHHS CHCP contract (FY24, updated 6-2024) §XIV.F", "url": "https://michigan.gov/mdhhs/-/media/Project/Websites/mdhhs/Assistance-Programs/Medicaid-BPHASA/Other-Prov-Specific-Page-Docs/FY24-CHCP-FINAL-Contract-Updated-6-2024.pdf" },
+    "mcl-550-1911": { "citation": "MCL 550.1911, 550.1913", "url": "https://www.legislature.mi.gov/Laws/MCL?objectName=mcl-550-1911" },
+    "rdrp": { "citation": "MDHHS Rapid Dispute Resolution Process; Hospital Access Agreement §1.10.1", "url": "https://www.michigan.gov/documents/RAPID_DISPUTE_RESOLUTION_PROCESS_88671_7.pdf" },
+    "cfr-438-408": { "citation": "42 CFR 438.408", "url": "https://www.ecfr.gov/current/title-42/section-438.408" }
+  },
+  "memberAppeal": {
+    "filingWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "chcp" },
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "chcp" },
+    "resolutionExpedited": { "amount": 72, "unit": "hours", "source": "chcp" },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "chcp" }, "source": "chcp" },
+    "onMissed": "deemedExhaustion",
+    "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "chcp" },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "chcp", "note": "Or by the intended effective date, whichever is later." },
+    "chain": [
+      { "name": "State Fair Hearing (MOAHR)", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "chcp" } },
+      { "name": "DIFS external review", "owner": "independentReviewer", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "mcl-550-1911" }, "note": "IRO recommends in 14 days; director decides in 7 business days. Expedited: request within 10 days; IRO 36 hours, director 24 hours after." }
+    ],
+    "notes": [ "Expedited appeals are requested within 10 days of the notice.", "Notices below a 6.9 reading level, in prevalent languages, in alternative formats." ]
+  },
+  "memberGrievance": {
+    "resolution": { "amount": 90, "unit": "calendarDays", "source": "chcp" },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "cfr-438-408" }, "source": "cfr-438-408" }
+  },
+  "providerDispute": {
+    "chain": [
+      { "name": "Plan appeal", "owner": "plan", "source": "chcp-xiv" },
+      { "name": "Accounts Receivable Reconciliation Group (HAA hospitals)", "owner": "plan", "source": "rdrp", "note": "Meets at least every 90 days." },
+      { "name": "Rapid Dispute Resolution (HAA hospitals)", "owner": "state", "binding": true, "source": "rdrp" },
+      { "name": "Binding arbitration (other providers)", "owner": "arbitrator", "binding": true, "source": "chcp-xiv", "note": "Arbitrator from an MDHHS list, after the plan's internal appeal." }
+    ],
+    "clocks": [
+      { "name": "RDRP mediator selected", "clock": { "amount": 15, "unit": "calendarDays", "source": "rdrp" } },
+      { "name": "RDRP session held", "clock": { "amount": 15, "unit": "calendarDays", "source": "rdrp" } },
+      { "name": "RDRP decision", "clock": { "amount": 15, "unit": "calendarDays", "source": "rdrp" } },
+      { "name": "RDRP payment", "clock": { "amount": 30, "unit": "calendarDays", "from": "decision", "source": "rdrp" } }
+    ]
+  },
+  "recoupment": [
+    { "hold": "unknown", "summary": "No statewide notice, lookback or hold rule found; limits apply to recoupment after retroactive disenrollment.", "source": "chcp-xiv" }
+  ],
+  "conflicts": [
+    { "item": "DIFS external review request window", "enforced": "120 days (MCL 550.1911)", "alternative": "127 days, shown on some plan member notices", "sources": [ "mcl-550-1911" ] }
+  ],
+  "toConfirm": [ "Values against the current CHCP contract.", "Recoupment hold while disputed." ]
+}

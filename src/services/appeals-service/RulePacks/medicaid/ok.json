@@ -1,0 +1,58 @@
+{
+  // Oklahoma SoonerSelect. Source: docs/architecture/appeals-case-model.md §5.8.
+  "id": "ok-medicaid",
+  "state": "OK",
+  "lineOfBusiness": "medicaid",
+  "program": "SoonerSelect",
+  "version": "2026.10.1",
+  "effectiveFrom": "2025-11-01",
+  "verifiedOn": "2026-10-17",
+  "sources": {
+    "oac-317-2-3-5": { "citation": "Okla. Admin. Code 317:2-3-5, 317:2-3-5.1", "url": "https://oklahoma.gov/ohca/policies-and-rules/xpolicy/grievance-procedures-and-process/subchapter-three-member-grievances-and-appeals-provider-complaints-and-state-fair-hearings-in-soonerselect/member-appeals.html" },
+    "oac-317-2-3-4": { "citation": "Okla. Admin. Code 317:2-3-4", "url": "https://oklahoma.gov/ohca/policies-and-rules/xpolicy/grievance-procedures-and-process/subchapter-three-member-grievances-and-appeals-provider-complaints-and-state-fair-hearings-in-soonerselect/member-grievances.html" },
+    "oac-317-2-3-12": { "citation": "Okla. Admin. Code 317:2-3-12", "url": "https://oklahoma.gov/ohca/policies-and-rules/xpolicy/grievance-procedures-and-process/subchapter-three-member-grievances-and-appeals-provider-complaints-and-state-fair-hearings-in-soonerselect/state-fair-hearing-for-members.html" },
+    "oac-317-2-3-10": { "citation": "Okla. Admin. Code 317:2-3-10, 317:2-3-13; 56 O.S. §4002.8", "url": "https://oklahoma.gov/ohca/policies-and-rules/xpolicy/grievance-procedures-and-process/subchapter-three-member-grievances-and-appeals-provider-complaints-and-state-fair-hearings-in-soonerselect/provider-complaint-system.html" },
+    "os-4002-8": { "citation": "56 O.S. §4002.8(F)", "url": "https://law.justia.com/codes/oklahoma/title-56/section-56-4002-8/" },
+    "cfr-438-408": { "citation": "42 CFR 438.408", "url": "https://www.ecfr.gov/current/title-42/section-438.408" },
+    "sb-1645": { "citation": "63 O.S. §5051.11 (SB 1645, 2026, signed May 1, 2026)", "url": "https://www.oklegislature.gov/cf_pdf/2025-26%20ENR/SB/SB1645%20ENR.PDF" }
+  },
+  "memberAppeal": {
+    "filingWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "oac-317-2-3-5" },
+    "acknowledgment": { "amount": 5, "unit": "calendarDays", "source": "oac-317-2-3-5" },
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "oac-317-2-3-5" },
+    "resolutionExpedited": { "amount": 72, "unit": "hours", "source": "cfr-438-408", "note": "The rule states no hours; the federal 72 hours applies. Step therapy: 24 hours if exigent." },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "oac-317-2-3-5" }, "source": "oac-317-2-3-5" },
+    "onMissed": "deemedExhaustion",
+    "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "oac-317-2-3-12" },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "oac-317-2-3-5", "note": "Or by the effective date, whichever is later." },
+    "chain": [
+      { "name": "State Fair Hearing (OHCA)", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "oac-317-2-3-12" } }
+    ],
+    "notes": [ "Resolution notice within 3 calendar days of resolving.", "No external medical review." ]
+  },
+  "memberGrievance": {
+    "acknowledgment": { "amount": 10, "unit": "calendarDays", "source": "oac-317-2-3-4" },
+    "resolution": { "amount": 90, "unit": "calendarDays", "source": "oac-317-2-3-4" },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "oac-317-2-3-4" }, "source": "oac-317-2-3-4" }
+  },
+  "providerDispute": {
+    "chain": [
+      { "name": "Plan reconsideration", "owner": "plan", "requestWindow": { "amount": 6, "unit": "months", "from": "decision", "source": "oac-317-2-3-10" }, "source": "oac-317-2-3-10" },
+      { "name": "Plan appeal panel (3 or 5 uninvolved reviewers)", "owner": "plan", "source": "oac-317-2-3-10" },
+      { "name": "OHCA administrative appeal", "owner": "state", "requestWindow": { "amount": 30, "unit": "calendarDays", "from": "decision", "source": "oac-317-2-3-10" } }
+    ],
+    "clocks": [
+      { "name": "Reconsideration of audit findings or terminations", "clock": { "amount": 15, "unit": "calendarDays", "from": "decision", "source": "oac-317-2-3-10" } },
+      { "name": "Reconsideration resolution notice", "clock": { "amount": 5, "unit": "calendarDays", "from": "decision", "source": "oac-317-2-3-10", "note": "Within 5 days of resolving; no acknowledgment deadline." } }
+    ],
+    "notes": [ "Medical-necessity appeals are reviewed by a same- or similar-specialty clinician, without automated review software (56 O.S. §4002.8, HB 1810)." ]
+  },
+  "recoupment": [
+    { "hold": "unknown", "summary": "No Medicaid managed care recoupment hold found before SB 1645 takes effect.", "source": "sb-1645" },
+    { "hold": "required", "effectiveFrom": "2027-01-01", "summary": "24-month audit lookback; at least 60 days after an overpayment notice to correct the claim, with recoupment limited to the excess; disputed funds recouped only after all appeals are final.", "source": "sb-1645" }
+  ],
+  "conflicts": [
+    { "item": "Provider fair hearing", "enforced": "No State Fair Hearing for providers; OHCA administrative appeal (OAC 317:2-3-13)", "alternative": "56 O.S. §4002.8(F) says a member or provider may request a fair hearing", "sources": [ "oac-317-2-3-10", "os-4002-8" ] }
+  ],
+  "toConfirm": [ "Expedited appeal hours in the SoonerSelect contract.", "Provider fair hearing conflict (legal review)." ]
+}

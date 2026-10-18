@@ -1,0 +1,67 @@
+{
+  // Texas STAR and CHIP managed care. Source: docs/architecture/appeals-case-model.md §5.1.
+  "id": "tx-medicaid",
+  "state": "TX",
+  "lineOfBusiness": "medicaid",
+  "program": "STAR and CHIP managed care",
+  "version": "2026.10.1",
+  "effectiveFrom": "2026-01-01",
+  "verifiedOn": "2026-10-17",
+  "sources": {
+    "umcm-3-21": { "citation": "Texas UMCM Chapter 3.21 (v2.6, May 31, 2022)", "url": "https://fhb.hhs.texas.gov/sites/default/files/documents/3-21.pdf" },
+    "umcm-3-21-1": { "citation": "Texas UMCM Chapter 3.21.1 (Independent Review Organization process)", "url": "https://fhb.hhs.texas.gov/sites/default/files/documents/3-21-1.pdf" },
+    "cfr-438-408": { "citation": "42 CFR 438.408", "url": "https://www.ecfr.gov/current/title-42/section-438.408" },
+    "gov-540": { "citation": "Tex. Gov't Code §540.0267", "url": "https://statutes.capitol.texas.gov/Docs/GV/htm/GV.540.htm" },
+    "ins-843": { "citation": "Tex. Ins. Code §843.252", "url": "https://statutes.capitol.texas.gov/Docs/IN/htm/IN.843.htm" },
+    "umcc-8": { "citation": "Texas UMCC §8.2.4.1, §8.4.1 (to confirm)" },
+    "tac-353-1454": { "citation": "1 TAC §353.1454(b); Tex. Gov't Code §544.0503(b)", "url": "https://www.law.cornell.edu/regulations/texas/1-Tex-Admin-Code-SS-353-1454" }
+  },
+  "memberAppeal": {
+    "filingWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "umcm-3-21" },
+    "acknowledgment": { "amount": 5, "unit": "businessDays", "source": "umcm-3-21" },
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "umcm-3-21" },
+    "resolutionExpedited": { "amount": 72, "unit": "hours", "source": "umcm-3-21" },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "cfr-438-408" }, "source": "cfr-438-408" },
+    "onMissed": "deemedExhaustion",
+    "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "umcm-3-21" },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "umcm-3-21", "note": "Or by the date services change, whichever is later." },
+    "chain": [
+      { "name": "State Fair Hearing", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "umcm-3-21" } },
+      { "name": "External Medical Review", "owner": "independentReviewer", "decision": { "amount": 15, "unit": "calendarDays", "source": "umcm-3-21-1" }, "source": "umcm-3-21-1" }
+    ],
+    "notes": [
+      "Reductions, suspensions and terminations are mailed at least 15 business days before the change (stricter than the federal 10 days).",
+      "HHSC Notice 1 (A, B, C) and Notice 2 (A, B, C) templates are required, in English and Spanish, at a 4th–6th grade reading level.",
+      "The mailing date is the postmark; without one, the meter date; without either, the date on the notice."
+    ]
+  },
+  "memberGrievance": {
+    "resolution": { "amount": 90, "unit": "calendarDays", "source": "cfr-438-408", "note": "Federal maximum; Texas member complaint timeframes not yet researched." },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "cfr-438-408" }, "source": "cfr-438-408" }
+  },
+  "providerDispute": {
+    "chain": [
+      { "name": "MCO complaint or claims appeal", "owner": "plan", "source": "gov-540" },
+      { "name": "HHSC (STAR) or Texas Department of Insurance (CHIP)", "owner": "regulator" }
+    ],
+    "clocks": [
+      { "name": "CHIP complaint acknowledgment", "clock": { "amount": 5, "unit": "businessDays", "source": "ins-843" } },
+      { "name": "CHIP complaint resolution", "clock": { "amount": 30, "unit": "calendarDays", "source": "ins-843" } },
+      { "name": "Complaint filing window", "clock": { "amount": 180, "unit": "calendarDays", "source": "umcc-8" } },
+      { "name": "Claim appeal filing window", "clock": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "umcc-8" } },
+      { "name": "Claim appeal resolution", "clock": { "amount": 30, "unit": "calendarDays", "source": "umcc-8" } }
+    ],
+    "notes": [
+      "Unresolved medical-necessity denials go to an out-of-network physician of the same or a related specialty; the decision binds both sides (Gov't Code §540.0267)."
+    ]
+  },
+  "recoupment": [
+    { "hold": "partial", "summary": "Fraud and abuse recoupment only if the provider doesn't appeal or loses; EVV-based overpayments not recovered until appeals are exhausted. A general hold is to confirm.", "source": "tac-353-1454" }
+  ],
+  "toConfirm": [
+    "Current UMCM 3.21 version.",
+    "UMCC provider complaint and claim appeal windows (HHSC documents could not be read).",
+    "General recoupment hold beyond fraud, abuse and EVV findings.",
+    "Texas member complaint timeframes."
+  ]
+}
