@@ -67,6 +67,25 @@ public sealed class AccumulatorMongoStoreTests(MongoRunnerFixture mongo) : IAsyn
         MemberResponsibility = deductible,
     };
 
+    /// <summary>
+    /// claims-service's event outbox delivers at least once: the same
+    /// claims.finalized.v1 message (same event id) arrives again after a
+    /// crash between Kafka's acknowledgement and the outbox clear.
+    /// </summary>
+    [Fact]
+    public async Task TheSameFinalizedEvent_DeliveredTwice_CountsOnce()
+    {
+        var sut = Service();
+        var evt = Claim("C1", 125m);
+
+        var first = await sut.ApplyClaimFinalizedAsync(evt);
+        var again = await sut.ApplyClaimFinalizedAsync(evt);
+
+        Assert.Equal(ApplyOutcome.Applied, first.Outcome);
+        Assert.Equal(ApplyOutcome.Duplicate, again.Outcome);
+        Assert.Equal(125m, (await Snapshot()).IndividualDeductibleUsed);
+    }
+
     [Fact]
     public async Task ReplacementBeforeOriginal_CountsOnce()
     {

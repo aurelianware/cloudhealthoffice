@@ -251,6 +251,21 @@ public interface IClaimRepository
         string tenantId, string claimId, AccumulatorOutboxKind kind, string itemId,
         int attempts, DateTime nextAttemptAt, string? lastError, CancellationToken ct = default);
 
+    // ── claim-event outbox (see Claim.PendingClaimEvents) ───────────────
+
+    /// <summary>Up to <paramref name="limit"/> claims of every tenant with a pending claim event due at <paramref name="nowMs"/> (Unix ms).</summary>
+    Task<IReadOnlyList<Claim>> FindDueClaimEventsAsync(long nowMs, int limit, CancellationToken ct = default);
+
+    /// <summary>The oldest pending claim event's creation time (Unix ms), any tenant; null when there is none.</summary>
+    Task<long?> OldestClaimEventAsync(CancellationToken ct = default);
+
+    /// <summary>Removes the pending event <paramref name="eventId"/> once it is published; false when it is no longer there.</summary>
+    Task<bool> CompleteClaimEventAsync(string tenantId, string claimId, string eventId, CancellationToken ct = default);
+
+    /// <summary>Records a failed publish and the next due time of the pending event <paramref name="eventId"/>.</summary>
+    Task<bool> RescheduleClaimEventAsync(
+        string tenantId, string claimId, string eventId, int attempts, long dueAtMs, string? lastError, CancellationToken ct = default);
+
     /// <summary>Claims of the request's tenant with an unresolved accumulator clamp review (work queue).</summary>
     Task<IReadOnlyList<Claim>> GetAccumulatorClampReviewsAsync(int limit, CancellationToken ct = default);
 
@@ -383,7 +398,8 @@ public interface IClaimRepository
         DateTime voidedAt,
         string? actorId,
         CancellationToken ct = default,
-        AccumulatorOutboxItem? pendingAccumulatorReversal = null);
+        AccumulatorOutboxItem? pendingAccumulatorReversal = null,
+        ClaimEventOutboxItem? claimEvent = null);
 
     /// <summary>
     /// Takes the examiner-resolution lock on a reprocessable claim (PR #1278
@@ -1819,6 +1835,91 @@ public class ClaimRepository : IClaimRepository
         return await PatchOutboxAsync(tenantId, claimId, path, itemId, ops, ct);
     }
 
+    // ── claim-event outbox ──────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<Claim>> FindDueClaimEventsAsync(long nowMs, int limit, CancellationToken ct = default)
+    {
+        // Cross-partition on purpose: the dispatcher serves every tenant.
+        var query = new QueryDefinition(@"
+            SELECT TOP @limit * FROM c
+            WHERE IS_ARRAY(c.pendingClaimEvents)
+              AND EXISTS(SELECT VALUE e FROM e IN c.pendingClaimEvents WHERE e.dueAtMs <= @now)")
+            .WithParameter("@limit", limit)
+            .WithParameter("@now", nowMs);
+        var claims = new List<Claim>();
+        using var iterator = _container.GetItemQueryIterator<Claim>(query);
+        while (iterator.HasMoreResults && claims.Count < limit)
+            claims.AddRange((await iterator.ReadNextAsync(ct)).Select(Hydrate));
+        return claims;
+    }
+
+    public async Task<long?> OldestClaimEventAsync(CancellationToken ct = default)
+    {
+        var query = new QueryDefinition(
+            "SELECT VALUE MIN(e.createdAtMs) FROM c JOIN e IN c.pendingClaimEvents");
+        long? oldest = null;
+        using var iterator = _container.GetItemQueryIterator<long?>(query);
+        while (iterator.HasMoreResults)
+        {
+            foreach (var value in await iterator.ReadNextAsync(ct))
+            {
+                if (value is { } v && (oldest is null || v < oldest)) oldest = v;
+            }
+        }
+        return oldest;
+    }
+
+    public Task<bool> CompleteClaimEventAsync(string tenantId, string claimId, string eventId, CancellationToken ct = default) =>
+        MutateClaimEventsAsync(tenantId, claimId, eventId, pending => pending.RemoveAll(e => e.Id == eventId), ct);
+
+    public Task<bool> RescheduleClaimEventAsync(
+        string tenantId, string claimId, string eventId, int attempts, long dueAtMs, string? lastError, CancellationToken ct = default) =>
+        MutateClaimEventsAsync(tenantId, claimId, eventId, pending =>
+        {
+            var item = pending.First(e => e.Id == eventId);
+            item.Attempts = attempts;
+            item.DueAtMs = dueAtMs;
+            item.LastError = lastError;
+        }, ct);
+
+    /// <summary>
+    /// Changes the claim's pending events while <paramref name="eventId"/> is
+    /// among them: read, change, then a patch of the list fenced on the
+    /// document's ETag (a concurrent write makes it re-read). False when the
+    /// event is no longer pending.
+    /// </summary>
+    private async Task<bool> MutateClaimEventsAsync(
+        string tenantId, string claimId, string eventId, Action<List<ClaimEventOutboxItem>> change, CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            ItemResponse<Claim> read;
+            try
+            {
+                read = await _container.ReadItemAsync<Claim>(claimId, new PartitionKey(tenantId), cancellationToken: ct);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+            var pending = read.Resource.PendingClaimEvents;
+            if (pending is null || pending.All(e => e.Id != eventId)) return false;
+            change(pending);
+            try
+            {
+                await _container.PatchItemAsync<Claim>(claimId, new PartitionKey(tenantId),
+                    new[] { PatchOperation.Set("/pendingClaimEvents", pending) },
+                    new PatchItemRequestOptions { IfMatchEtag = read.ETag }, ct);
+                return true;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+            {
+                // Another write landed between the read and the patch: read again.
+            }
+        }
+        return false;
+    }
+
     /// <summary>Patches the claim only while its outbox slot still holds <paramref name="itemId"/> (evaluated at commit).</summary>
     private async Task<bool> PatchOutboxAsync(
         string tenantId, string claimId, string path, string itemId, List<PatchOperation> ops, CancellationToken ct)
@@ -2394,7 +2495,8 @@ public class ClaimRepository : IClaimRepository
         DateTime voidedAt,
         string? actorId,
         CancellationToken ct = default,
-        AccumulatorOutboxItem? pendingAccumulatorReversal = null)
+        AccumulatorOutboxItem? pendingAccumulatorReversal = null,
+        ClaimEventOutboxItem? claimEvent = null)
     {
         Claim? existing;
         try
@@ -2419,6 +2521,10 @@ public class ClaimRepository : IClaimRepository
         // The void's accumulator reversal lands with the void, or not at all.
         if (pendingAccumulatorReversal is not null)
             ops.Add(PatchOperation.Set("/pendingAccumulatorReversal", pendingAccumulatorReversal));
+        // So does the claim event that reports it (appended to the ones still pending).
+        if (claimEvent is not null)
+            ops.Add(PatchOperation.Set("/pendingClaimEvents",
+                (existing.PendingClaimEvents ?? new List<ClaimEventOutboxItem>()).Append(claimEvent).ToList()));
 
         try
         {
