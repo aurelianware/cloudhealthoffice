@@ -10,7 +10,7 @@
 
 **Related:**
 - [appeals-grievances-compliance.md](appeals-grievances-compliance.md): the case model, rule pack schema, work distribution and audit exports this document builds on.
-- [correspondence.md](correspondence.md): the notices each rule pack requires (in review on its own PR).
+- [correspondence.md](correspondence.md): the notices each rule pack requires.
 - [cho-service.md](cho-service.md): cases opened from calls.
 
 > **Not legal advice.** §5 summarizes federal and State rules as researched on 2026-10-17, with citations. Each pack is checked against current text and the plan's contract before it ships. Items marked *to confirm* were not verified against primary text.
