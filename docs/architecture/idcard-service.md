@@ -4,6 +4,14 @@ Digital-first member ID card issuance, QR scan verification, and card history.
 Phase 1: PDF + PNG delivered via member-document-service. Phase 2: Apple/Google
 Wallet and physical mail fulfillment.
 
+> **Direction (2026-10-17):** physical cards, carrier letters and bulk
+> reissue will use the shared correspondence delivery layer rather than a
+> separate vendor integration inside this service, and card storage moves
+> from member-document-service to the document store catalog. idcard-service
+> stays the owner of card records, templates, QR signing, scan verification,
+> revocation and the QNXT mirror. See [correspondence.md](correspondence.md) §10
+> and [document-store.md](document-store.md).
+
 ## Service context
 
 ```
@@ -229,7 +237,10 @@ falls back to Cosmos (`CosmosDb:ConnectionString`), falls back to in-memory
 ## Phase-2 backlog
 
 - `.pkpass` (Apple Wallet) and Google Wallet object generation.
-- `FulfillmentVendorAdapter` physical-card mail vendor integration.
-- Bulk re-issuance (e.g. on plan-wide change).
+- `FulfillmentVendorAdapter` physical-card mail, as a thin adapter onto the
+  correspondence print and mail channel ([correspondence.md](correspondence.md) §8).
+- Bulk re-issuance (e.g. on plan-wide change), as a correspondence batch job.
+- Card PDFs and PNGs stored through the document store catalog instead of
+  member-document-service's Azure-only blob client.
 - Template admin UI in the portal.
 - Per-card HMAC key pinning for compromise response (revoke-by-key).
