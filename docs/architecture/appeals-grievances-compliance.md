@@ -6,6 +6,7 @@
 **Related:**
 - [cho-service.md](cho-service.md): where many of these cases start, on a call.
 - [document-store.md](document-store.md): case files and letters.
+- [correspondence.md](correspondence.md): generating and delivering the notices, and recording when they were sent.
 - [claim-review-workbench.md](claim-review-workbench.md) §3.3: the same dated-rule approach, applied to prompt pay.
 
 ---
@@ -143,7 +144,7 @@ The point of compliance isn't the report; it's that people decide cases on time.
 
 1. **Case model and event log**; rule pack schema with validation against the federal floors; Texas Medicaid, federal Medicaid and MA packs.
 2. **Clocks to work items:** next-deadline work items, priority by time remaining, reviewer-separation routing, expedited queues.
-3. **Notices:** acknowledgment, extension and resolution letters generated into the document store, with sent events.
+3. **Notices:** acknowledgment, extension and resolution letters generated into the document store, with sent events taken from delivery proof rather than typed in (see [correspondence.md](correspondence.md)).
 4. **Downstream automation:** IRE auto-forward, deemed exhaustion, effectuation clocks, continuation of benefits.
 5. **Exports:** ODAG universe templates (current protocol), Texas quarterly reports; the integrity checks.
 6. **Mock audit dashboard and demand/capacity view.**
