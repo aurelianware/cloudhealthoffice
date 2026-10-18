@@ -191,6 +191,7 @@ public class RulePackTests
         var e = Appeal("AZ", Utc(2026, 11, 2), decided: Utc(2026, 11, 20));
         Deadline(e, "fairHearingRequest").DueAt.Should().Be(Utc(2027, 2, 18));
         Pack("AZ").Conflicts.Should().Contain(c => c.Item == "Fair hearing request window");
+        Pack("AZ").MemberAppeal.OnMissed.Should().Be(MissedDeadlineOutcome.DeemedDenied);
     }
 
     [Fact]

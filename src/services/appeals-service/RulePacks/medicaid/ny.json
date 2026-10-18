@@ -8,6 +8,7 @@
   "effectiveFrom": "2026-04-01",
   "verifiedOn": "2026-10-17",
   "sources": {
+    "cfr-438-420": { "citation": "42 CFR 438.420(a)", "url": "https://www.ecfr.gov/current/title-42/section-438.420" },
     "doh-timeframes": { "citation": "NY DOH service authorization and appeals timeframe comparison (rev. 6/2026)", "url": "https://healthweb-back.health.ny.gov/health_care/managed_care/plans/appeals/authorize-appeals_timeframe_comparison.htm" },
     "cfr-438-408": { "citation": "42 CFR 438.408", "url": "https://www.ecfr.gov/current/title-42/section-438.408" },
     "phl-4904": { "citation": "N.Y. Public Health Law §4904", "url": "https://www.nysenate.gov/legislation/laws/PBH/4904" },
@@ -23,7 +24,7 @@
     "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "cfr-438-408" }, "source": "doh-timeframes" },
     "onMissed": "deemedExhaustion",
     "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "doh-timeframes" },
-    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "doh-timeframes", "note": "Or by the effective date, whichever is later." },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "cfr-438-420", "note": "Or by the effective date, whichever is later." },
     "chain": [
       { "name": "State Fair Hearing (OTDA)", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "doh-timeframes" } },
       { "name": "State external appeal (DFS)", "owner": "independentReviewer", "source": "phl-4910", "note": "May run alongside the fair hearing; the fair hearing decision controls." }

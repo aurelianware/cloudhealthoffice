@@ -153,7 +153,10 @@ public enum MissedDeadlineOutcome
     DeemedExhaustion,
 
     /// <summary>The adverse determination is reversed (New York utilization review appeals, PHL §4904).</summary>
-    Reversal
+    Reversal,
+
+    /// <summary>The appeal is treated as denied, so the member may request the State Fair Hearing (Arizona).</summary>
+    DeemedDenied
 }
 
 public sealed class MemberGrievanceRules

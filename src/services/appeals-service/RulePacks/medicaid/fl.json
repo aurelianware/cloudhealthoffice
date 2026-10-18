@@ -8,6 +8,7 @@
   "effectiveFrom": "2026-07-01",
   "verifiedOn": "2026-10-17",
   "sources": {
+    "cfr-438-420": { "citation": "42 CFR 438.420(a)", "url": "https://www.ecfr.gov/current/title-42/section-438.420" },
     "smmc-vi": { "citation": "SMMC Attachment II §VI (July 2026)", "url": "https://ahca.myflorida.com/file/medicaid/Health_Attachment%20II%20-Core%20Contract%20Provisions_July%202026.pdf" },
     "smmc-vii": { "citation": "SMMC Attachment II §VII.D.6 (July 2026)", "url": "https://ahca.myflorida.com/file/medicaid/Health_Attachment%20II%20-Core%20Contract%20Provisions_July%202026.pdf" },
     "rule-59g": { "citation": "Fla. Admin. Code R. 59G-1.100", "url": "https://www.law.cornell.edu/regulations/florida/Fla-Admin-Code-Ann-R-59G-1-100" },
@@ -22,7 +23,7 @@
     "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "smmc-vi", "note": "Oral notice by close of business the same day." }, "source": "smmc-vi" },
     "onMissed": "deemedExhaustion",
     "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "rule-59g" },
-    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "smmc-vi" },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "cfr-438-420" },
     "chain": [
       { "name": "Medicaid Fair Hearing", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "rule-59g" } },
       { "name": "Independent review organization (if the plan elects one)", "owner": "independentReviewer", "source": "smmc-vi" }

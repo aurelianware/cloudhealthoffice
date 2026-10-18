@@ -8,6 +8,7 @@
   "effectiveFrom": "2025-11-01",
   "verifiedOn": "2026-10-17",
   "sources": {
+    "cfr-438-420": { "citation": "42 CFR 438.420(a)", "url": "https://www.ecfr.gov/current/title-42/section-438.420" },
     "oac-317-2-3-5": { "citation": "Okla. Admin. Code 317:2-3-5, 317:2-3-5.1", "url": "https://oklahoma.gov/ohca/policies-and-rules/xpolicy/grievance-procedures-and-process/subchapter-three-member-grievances-and-appeals-provider-complaints-and-state-fair-hearings-in-soonerselect/member-appeals.html" },
     "oac-317-2-3-4": { "citation": "Okla. Admin. Code 317:2-3-4", "url": "https://oklahoma.gov/ohca/policies-and-rules/xpolicy/grievance-procedures-and-process/subchapter-three-member-grievances-and-appeals-provider-complaints-and-state-fair-hearings-in-soonerselect/member-grievances.html" },
     "oac-317-2-3-12": { "citation": "Okla. Admin. Code 317:2-3-12", "url": "https://oklahoma.gov/ohca/policies-and-rules/xpolicy/grievance-procedures-and-process/subchapter-three-member-grievances-and-appeals-provider-complaints-and-state-fair-hearings-in-soonerselect/state-fair-hearing-for-members.html" },
@@ -24,7 +25,7 @@
     "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "oac-317-2-3-5" }, "source": "oac-317-2-3-5" },
     "onMissed": "deemedExhaustion",
     "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "oac-317-2-3-12" },
-    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "oac-317-2-3-5", "note": "Or by the effective date, whichever is later." },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "cfr-438-420", "note": "Or by the effective date, whichever is later." },
     "chain": [
       { "name": "State Fair Hearing (OHCA)", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "oac-317-2-3-12" } }
     ],

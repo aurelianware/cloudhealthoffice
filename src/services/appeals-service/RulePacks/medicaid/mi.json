@@ -5,9 +5,10 @@
   "lineOfBusiness": "medicaid",
   "program": "Comprehensive Health Care Program (Medicaid Health Plans)",
   "version": "2026.10.1",
-  "effectiveFrom": "2024-10-01",
+  "effectiveFrom": "2023-10-01",
   "verifiedOn": "2026-10-17",
   "sources": {
+    "cfr-438-420": { "citation": "42 CFR 438.420(a)", "url": "https://www.ecfr.gov/current/title-42/section-438.420" },
     "chcp": { "citation": "MDHHS CHCP contract (FY24, updated 6-2024) §1.1.XIII.H", "url": "https://michigan.gov/mdhhs/-/media/Project/Websites/mdhhs/Assistance-Programs/Medicaid-BPHASA/Other-Prov-Specific-Page-Docs/FY24-CHCP-FINAL-Contract-Updated-6-2024.pdf" },
     "chcp-xiv": { "citation": "MDHHS CHCP contract (FY24, updated 6-2024) §XIV.F", "url": "https://michigan.gov/mdhhs/-/media/Project/Websites/mdhhs/Assistance-Programs/Medicaid-BPHASA/Other-Prov-Specific-Page-Docs/FY24-CHCP-FINAL-Contract-Updated-6-2024.pdf" },
     "mcl-550-1911": { "citation": "MCL 550.1911, 550.1913", "url": "https://www.legislature.mi.gov/Laws/MCL?objectName=mcl-550-1911" },
@@ -21,7 +22,7 @@
     "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "chcp" }, "source": "chcp" },
     "onMissed": "deemedExhaustion",
     "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "chcp" },
-    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "chcp", "note": "Or by the intended effective date, whichever is later." },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "cfr-438-420", "note": "Or by the intended effective date, whichever is later." },
     "chain": [
       { "name": "State Fair Hearing (MOAHR)", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "chcp" } },
       { "name": "DIFS external review", "owner": "independentReviewer", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "mcl-550-1911" }, "note": "IRO recommends in 14 days; director decides in 7 business days. Expedited: request within 10 days; IRO 36 hours, director 24 hours after." }

@@ -8,6 +8,7 @@
   "effectiveFrom": "2025-07-01",
   "verifiedOn": "2026-10-17",
   "sources": {
+    "cfr-438-420": { "citation": "42 CFR 438.420(a)", "url": "https://www.ecfr.gov/current/title-42/section-438.420" },
     "ccr-8-209": { "citation": "10 CCR 2505-10 §8.209", "url": "https://regulations.justia.com/states/colorado/2505/2505-d-1/rule-10-ccr-2505-10-8-200/section-10-ccr-2505-10-8-209/" },
     "ccr-8-050": { "citation": "10 CCR 2505-10 §8.050", "url": "https://regulations.justia.com/states/colorado/2505/2505-d-1/rule-10-ccr-2505-10-8-000/section-10-ccr-2505-10-8-050/" },
     "hfc-appeals": { "citation": "Health First Colorado member appeals page", "url": "https://www.healthfirstcolorado.gov/benefits-services/appeals" },
@@ -21,7 +22,7 @@
     "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "ccr-8-209" }, "source": "ccr-8-209" },
     "onMissed": "deemedExhaustion",
     "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "ccr-8-209" },
-    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "ccr-8-209", "note": "Or by the intended effective date, whichever is later." },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "cfr-438-420", "note": "Or by the intended effective date, whichever is later." },
     "chain": [
       { "name": "State Fair Hearing (Office of Administrative Courts)", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "ccr-8-209" } }
     ]

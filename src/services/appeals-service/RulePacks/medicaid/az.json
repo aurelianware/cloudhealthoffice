@@ -8,6 +8,7 @@
   "effectiveFrom": "2023-10-01",
   "verifiedOn": "2026-10-17",
   "sources": {
+    "cfr-438-420": { "citation": "42 CFR 438.420(a)", "url": "https://www.ecfr.gov/current/title-42/section-438.420" },
     "att-f1": { "citation": "AHCCCS contract Attachment F1 (ACC-RBHA amendment, eff. 10/1/2023)", "url": "https://azahcccs.gov/Resources/Downloads/ContractAmendments/ACC-RBHA/ACC-RBHA_T19-21_AZCH-3_CARE1ST-3,MC-3-EFF100123.pdf" },
     "att-f2": { "citation": "AHCCCS contract Attachment F2 (ACC-RBHA amendment, eff. 10/1/2023)", "url": "https://azahcccs.gov/Resources/Downloads/ContractAmendments/ACC-RBHA/ACC-RBHA_T19-21_AZCH-3_CARE1ST-3,MC-3-EFF100123.pdf" },
     "r9-34-2": { "citation": "Ariz. Admin. Code R9-34-209, -212, -213, -217", "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R9-34-213" },
@@ -22,9 +23,9 @@
     "resolution": { "amount": 30, "unit": "calendarDays", "source": "att-f1" },
     "resolutionExpedited": { "amount": 72, "unit": "hours", "source": "att-f1" },
     "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "att-f1" }, "source": "r9-34-2" },
-    "onMissed": "deemedExhaustion",
+    "onMissed": "deemedDenied",
     "fairHearingRequestWindow": { "amount": 90, "unit": "calendarDays", "from": "decision", "source": "att-f1" },
-    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "att-f1", "note": "Or by the action's effective date, whichever is later." },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "cfr-438-420", "note": "Or by the action's effective date, whichever is later." },
     "chain": [
       { "name": "State Fair Hearing (filed with the contractor, heard by an OAH judge)", "owner": "state", "requestWindow": { "amount": 90, "unit": "calendarDays", "from": "decision", "source": "att-f1" } },
       { "name": "AHCCCS Director's Decision", "owner": "state" }
