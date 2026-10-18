@@ -7,6 +7,7 @@
 - [cho-service.md](cho-service.md): where many of these cases start, on a call.
 - [document-store.md](document-store.md): case files and letters.
 - [correspondence.md](correspondence.md): generating and delivering the notices, and recording when they were sent.
+- [appeals-case-model.md](appeals-case-model.md): member vs provider tracks, the requester party, and researched State rule packs.
 - [claim-review-workbench.md](claim-review-workbench.md) §3.3: the same dated-rule approach, applied to prompt pay.
 
 ---
