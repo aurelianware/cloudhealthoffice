@@ -285,7 +285,9 @@ Medicaid managed care first, which is CHO's main market; commercial values are n
 ## 8. Build order
 
 1. **Case model and migration:** track, case type, requester party, subjects; schema version; Mongo migrator and Cosmos script; contract and event 2.0; FHIR mapping; portal record page.
-2. **Rule pack evaluation:** per-State level chains and units from reference-data-service; federal floors from the existing policy; Texas, then the other nine States from §5.
+2. **Rule pack evaluation:** per-State level chains and units; federal floors from the existing policy; Texas, then the other nine States from §5.
+   - *Shipped first, read-only:* the ten Medicaid packs as JSON embedded in appeals-service (`RulePacks/medicaid/`), loaded and validated at startup against the federal floor (`RulePackValidator`; a bad pack fails startup), with an evaluator that clamps every decision deadline to the federal ceiling. `GET api/appeals/rule-packs`, `/{state}`, `/{state}/deadlines` and `/{state}/recoupment` expose them. Appeal creation does not use them yet: that waits for the track from step 1, so provider disputes never get member clocks.
+   - *Later:* move the packs to reference-data-service (`StateComplianceConfig`) with tenant and product overrides, keeping the same validator.
 3. **Intake by track:** the §2 decision at intake (portal, Availity, FHIR, call tracking), with work items for missing waivers, AORs or consent.
 4. **Provider complaints** and member grievances without a claim.
 5. **Recoupment holds** in claims-service and ar-service (§6).
