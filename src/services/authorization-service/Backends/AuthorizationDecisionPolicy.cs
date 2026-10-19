@@ -14,6 +14,17 @@ public static class AuthorizationDecisionPolicy
         _ => null,
     };
 
+    public static void InitializeLines(Authorization authorization)
+    {
+        var services = authorization.RequestedServices ?? new();
+        if (services.Any(s => s is null || s.RequestedUnits <= 0))
+            throw new ArgumentException("Requested service lines must have positive units.");
+        var numbers = services.Select((s, i) => s.LineNumber ?? i + 1).ToArray();
+        if (numbers.Any(n => n <= 0) || numbers.Distinct().Count() != numbers.Length)
+            throw new ArgumentException("Requested service line numbers must be positive and unique.");
+        for (var i = 0; i < services.Count; i++) services[i].LineNumber = numbers[i];
+    }
+
     public static List<AuthorizationLineDecision> Prepare(
         Authorization authorization, AuthorizationStatus status, string? decision,
         AuthorizationDecisionDetails details)
@@ -30,6 +41,7 @@ public static class AuthorizationDecisionPolicy
         }
 
         var services = authorization.RequestedServices ?? new();
+        if (services.Any(s => s is null)) throw new ArgumentException("Requested service lines cannot be null.");
         var numbers = services.Select((s, i) => s.LineNumber ?? i + 1).ToArray();
         if (numbers.Any(n => n <= 0) || numbers.Distinct().Count() != numbers.Length)
             throw new ArgumentException("Requested service line numbers must be positive and unique.");
@@ -38,6 +50,7 @@ public static class AuthorizationDecisionPolicy
         if (services.Count > 1 && details.ApprovedUnits.HasValue)
             throw new ArgumentException("Specify quantities per line for a multi-line authorization.");
         var explicitLines = details.LineDecisions ?? new();
+        if (explicitLines.Any(l => l is null)) throw new ArgumentException("Service-line decisions cannot be null.");
         if (explicitLines.Count > 0 && (explicitLines.Count != services.Count ||
             explicitLines.Select(l => l.LineNumber).Distinct().Count() != explicitLines.Count ||
             explicitLines.Any(l => !numbers.Contains(l.LineNumber))))
