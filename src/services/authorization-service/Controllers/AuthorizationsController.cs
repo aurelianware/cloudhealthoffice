@@ -277,8 +277,16 @@ public class AuthorizationsController : ControllerBase
             return BadRequest(new { error = "A positive line number requires a procedure code." });
         }
 
-        var isValid = authorization.Status == AuthorizationStatus.Approved ||
-                     authorization.Status == AuthorizationStatus.Modified;
+        var originalDecision = AuthorizationLifecyclePolicy.ClinicalDecisionStatus(authorization);
+        var today = DateTime.UtcNow.Date;
+        var periodEnded = (authorization.ApprovedServiceDateTo is { } ended && ended.Date < today)
+            || (authorization.ExpirationDate is { } expired && expired.Date < today);
+        // Expiry ends new coverage, not the ability to bill a service covered before the period ended.
+        var historicalApproval = authorization.Status == AuthorizationStatus.Expired
+            && originalDecision is AuthorizationStatus.Approved or AuthorizationStatus.Modified
+            && serviceDate.HasValue && checkDate.Date < today && periodEnded;
+        var isValid = authorization.Status is AuthorizationStatus.Approved or AuthorizationStatus.Modified
+            || historicalApproval;
 
         var isActive = checkDate >= authorization.ApprovedServiceDateFrom &&
                       (authorization.ExpirationDate == null || checkDate <= authorization.ExpirationDate) &&

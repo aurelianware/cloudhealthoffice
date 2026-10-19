@@ -28,6 +28,23 @@ public static class AuthorizationLifecyclePolicy
             throw new AuthorizationTransitionException(current, target);
     }
 
+    public static AuthorizationStatus ClinicalDecisionStatus(Authorization auth)
+    {
+        static bool IsClinical(AuthorizationStatus status) => status is AuthorizationStatus.Approved or AuthorizationStatus.Modified or AuthorizationStatus.Denied;
+        if (IsClinical(auth.Status) || auth.Status is not (AuthorizationStatus.Expired or AuthorizationStatus.Cancelled))
+            return auth.Status;
+        var recorded = (auth.StatusHistory ?? new()).Where(h => IsClinical(h.Status))
+            .MaxBy(h => h.ChangedAt);
+        if (recorded is not null) return recorded.Status;
+        return auth.ReviewDecision switch
+        {
+            "A1" => AuthorizationStatus.Approved,
+            "A2" => AuthorizationStatus.Modified,
+            "A3" when auth.Status == AuthorizationStatus.Cancelled => AuthorizationStatus.Denied,
+            _ => auth.Status,
+        };
+    }
+
     /// <summary>Approved end and expiration dates are inclusive UTC calendar dates.</summary>
     public static bool IsExpired(Authorization authorization, DateTime nowUtc) =>
         authorization.Status is AuthorizationStatus.Approved or AuthorizationStatus.Modified &&
