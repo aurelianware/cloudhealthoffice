@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -94,8 +95,8 @@ public sealed class RemittanceIngress : IRemittanceIngress
 
             _logger.LogWarning(
                 "Remittance retrieve failed gateway={Gateway} id={RemittanceId} category={Category}",
-                Sanitize(discovery.GatewayName),
-                Sanitize(discovery.ExternalAcknowledgmentId),
+                LogSanitizer.Sanitize(discovery.GatewayName, 128),
+                LogSanitizer.Sanitize(discovery.ExternalAcknowledgmentId, 128),
                 category);
 
             var quarantined = await _processor.ProcessAsync(
@@ -167,6 +168,4 @@ public sealed class RemittanceIngress : IRemittanceIngress
 
     private static bool IsTransient(GatewayErrorCategory category) =>
         TransientCategories.Contains(category.ToString());
-
-    private static string? Sanitize(string? value) => ClaimAttachmentRules.SanitizeForLog(value);
 }

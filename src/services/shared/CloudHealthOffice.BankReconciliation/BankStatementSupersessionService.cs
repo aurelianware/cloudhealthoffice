@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.BankReconciliation;
 
@@ -12,12 +13,6 @@ namespace CloudHealthOffice.BankReconciliation;
 /// </summary>
 public sealed class BankStatementSupersessionService
 {
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
-
     /// <summary>Statuses that mean a line was acted on: the statement can no longer be superseded.</summary>
     private static readonly ReconciliationStatus[] ActedOn =
         [ReconciliationStatus.Applied, ReconciliationStatus.Matched, ReconciliationStatus.Resolved];
@@ -202,7 +197,7 @@ public sealed class BankStatementSupersessionService
 
     private void Log(string what, string statementId, string actor) =>
         _logger.LogWarning("Supersession of bank statement {StatementId} {What} by {Actor}",
-            SanitizeForLog(statementId), what, SanitizeForLog(actor));
+            LogSanitizer.Sanitize(statementId), what, LogSanitizer.Sanitize(actor));
 
     private async Task<BankStatementFile> SupersedableAsync(string tenantId, string statementId, bool refuseActiveClaims, CancellationToken ct)
     {

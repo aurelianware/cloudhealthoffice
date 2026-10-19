@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Middleware;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Tenancy;
 
@@ -99,7 +100,7 @@ public static class TenantPlatformLookup
                 logger.LogError(
                     "tenant-service refused the {PlatformKey} lookup for {TenantId} with {StatusCode}; this service is " +
                     "not authenticated or not authorized there. The platform is unknown and no default is used.",
-                    platformKey, Sanitize(tenantId), (int)response.StatusCode);
+                    platformKey, LogSanitizer.Sanitize(tenantId), (int)response.StatusCode);
                 return new(TenantPlatformOutcome.Refused, DefaultPlatform, new(), response.StatusCode);
             }
 
@@ -108,7 +109,7 @@ public static class TenantPlatformLookup
                 logger.LogWarning(
                     "tenant-service answered {StatusCode} to the {PlatformKey} lookup for {TenantId}; using '{Default}' " +
                     "for this call only (not cached)",
-                    (int)response.StatusCode, platformKey, Sanitize(tenantId), DefaultPlatform);
+                    (int)response.StatusCode, platformKey, LogSanitizer.Sanitize(tenantId), DefaultPlatform);
                 return new(TenantPlatformOutcome.Unavailable, DefaultPlatform, new(), response.StatusCode);
             }
 
@@ -128,7 +129,7 @@ public static class TenantPlatformLookup
             logger.LogWarning(ex,
                 "Could not read the {PlatformKey} configuration for {TenantId} from tenant-service; using '{Default}' " +
                 "for this call only (not cached)",
-                platformKey, Sanitize(tenantId), DefaultPlatform);
+                platformKey, LogSanitizer.Sanitize(tenantId), DefaultPlatform);
             return new(TenantPlatformOutcome.Unavailable, DefaultPlatform, new());
         }
     }
@@ -166,7 +167,4 @@ public static class TenantPlatformLookup
 
         return alternateParser?.Invoke(config);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

@@ -155,7 +155,7 @@
                          Variant="Variant.Outlined" 
                          Margin="Margin.Dense" />
             
-            <MudSwitch @bind-Checked="currentPartner.IsActive" 
+            <MudSwitch @bind-Value="currentPartner.IsActive" 
                       Label="Active" 
                       Color="Color.Primary" />
         </MudForm>
@@ -202,7 +202,7 @@
         await LoadTradingPartners();
     }
 
-    private async Task LoadTradingPartners()
+    private Task LoadTradingPartners()
     {
         loading = true;
         try
@@ -246,6 +246,7 @@
         {
             loading = false;
         }
+        return Task.CompletedTask;
     }
 
     private void OpenAddDialog()

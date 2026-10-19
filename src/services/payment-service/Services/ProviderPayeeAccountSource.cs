@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CloudHealthOffice.Infrastructure.Middleware;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Services;
 
@@ -127,7 +128,7 @@ public sealed class HttpProviderPayeeAccountSource : IProviderPayeeAccountSource
                 return PayeeAccountLookup.NoEft("the payee NPI is not a provider in provider-service");
 
             _logger.LogError("provider-service answered {StatusCode} to the payee-account read for NPI {Npi} in tenant {TenantId}",
-                (int)response.StatusCode, Sanitize(providerNpi), Sanitize(tenantId));
+                (int)response.StatusCode, LogSanitizer.Sanitize(providerNpi), LogSanitizer.Sanitize(tenantId));
             return PayeeAccountLookup.Unavailable(
                 $"provider-service answered {(int)response.StatusCode} {response.StatusCode} to the payee-account read for NPI {providerNpi}");
         }
@@ -135,7 +136,7 @@ public sealed class HttpProviderPayeeAccountSource : IProviderPayeeAccountSource
                                    || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
         {
             _logger.LogError("The payee-account read for NPI {Npi} in tenant {TenantId} failed: {Error}",
-                Sanitize(providerNpi), Sanitize(tenantId), ex.GetType().Name);
+                LogSanitizer.Sanitize(providerNpi), LogSanitizer.Sanitize(tenantId), ex.GetType().Name);
             return PayeeAccountLookup.Unavailable($"the payee-account read for NPI {providerNpi} failed ({ex.GetType().Name})");
         }
     }
@@ -154,9 +155,6 @@ public sealed class HttpProviderPayeeAccountSource : IProviderPayeeAccountSource
             return string.Empty;
         }
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
     private sealed class PayeeAccountResponse
     {

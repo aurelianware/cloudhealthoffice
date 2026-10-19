@@ -1,6 +1,7 @@
 using ClaimsService.Models.Adjudication;
 using ClaimsService.Services.Resolution;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication.Stages;
 
@@ -365,7 +366,7 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
         {
             _logger.LogInformation(
                 "NetworkCredentialingStage soft-validation observed for claim {ClaimVersionId}: would-{Intended} reason={Reason}",
-                SanitizeForLog(context.ClaimVersionId), intended, SanitizeForLog(reason));
+                LogSanitizer.Sanitize(context.ClaimVersionId), intended, LogSanitizer.Sanitize(reason));
         }
 
         return new EnforcementOutcome(
@@ -461,7 +462,4 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
 
     private static string FormatReason(EnforcementOutcome outcome)
         => $"{outcome.Check}: {outcome.Reason ?? outcome.Decision.ToString()} (mode={outcome.Mode})";
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

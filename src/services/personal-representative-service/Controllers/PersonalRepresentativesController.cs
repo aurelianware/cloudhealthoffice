@@ -6,6 +6,7 @@ using PersonalRepresentativeService.Repositories;
 using PersonalRepresentativeService.Services;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 // TODO(review-workflow-followup): multi-step approval workflows (legal
 // review pending, awaiting notary verification) are not modeled in this
@@ -374,8 +375,8 @@ public class PersonalRepresentativesController : ControllerBase
             _logger?.LogWarning(MemberAdditionRefusedAuditEvent,
                 "AUDIT member addition refused: user {UserId} tried to add member {MemberId} to {Status} personal " +
                 "representative {PersonalRepId} ({CredentialType}) in tenant {TenantId}",
-                LogSanitizer.SafeForLog(Actor), LogSanitizer.SafeForLog(request.MemberId), rep.ObservedStatus(),
-                LogSanitizer.SafeForLog(repId), rep.CredentialType, LogSanitizer.SafeForLog(TenantId));
+                LogSanitizer.Sanitize(Actor, 256), LogSanitizer.Sanitize(request.MemberId, 256), rep.ObservedStatus(),
+                LogSanitizer.Sanitize(repId, 256), rep.CredentialType, LogSanitizer.Sanitize(TenantId, 256));
             return MemberAdditionConflict(repId, rep.ObservedStatus());
         }
 
@@ -538,8 +539,8 @@ public class PersonalRepresentativesController : ControllerBase
         _logger?.LogWarning(UnapprovedAssociationWithdrawnAuditEvent,
             "AUDIT unapproved association withdrawn: member {MemberId} (added by {AddedBy}) removed from personal " +
             "representative {PersonalRepId} in tenant {TenantId}: {Reason}",
-            LogSanitizer.SafeForLog(association.MemberId), LogSanitizer.SafeForLog(association.CreatedBy),
-            LogSanitizer.SafeForLog(rep.Id), LogSanitizer.SafeForLog(TenantId), reason);
+            LogSanitizer.Sanitize(association.MemberId, 256), LogSanitizer.Sanitize(association.CreatedBy, 256),
+            LogSanitizer.Sanitize(rep.Id, 256), LogSanitizer.Sanitize(TenantId, 256), reason);
     }
 
     /// <summary>

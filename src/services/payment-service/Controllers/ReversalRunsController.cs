@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PaymentService.Models;
 using PaymentService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Controllers;
 
@@ -63,7 +64,7 @@ public class ReversalRunsController : ControllerBase
     {
         _logger.LogInformation(
             "Creating reversal run with criteria: Provider={Provider}",
-            SanitizeForLog(request.Criteria.ProviderNPI));
+            LogSanitizer.Sanitize(request.Criteria.ProviderNPI));
 
         // The creator is the token subject; request.CreatedBy is never read.
         var run = await _reversalRunService.CreateReversalRunAsync(
@@ -83,7 +84,7 @@ public class ReversalRunsController : ControllerBase
     public ActionResult<ReversalRun> CreateAndExecuteReversalRun([FromBody] CreateReversalRunRequest request)
     {
         _logger.LogWarning("Refused create-and-execute reversal run by {User}: the creator cannot execute",
-            SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(_actor.UserId));
         return SeparationOfDuties(new SeparationOfDutiesException(
             "Separation of duties: a reversal run cannot be created and executed by the same caller. " +
             "Create it with POST /api/reversalruns; a different user with payments:approve executes it."));
@@ -99,7 +100,7 @@ public class ReversalRunsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ReversalRun>> ExecuteReversalRun(string id)
     {
-        _logger.LogInformation("Executing reversal run {ReversalRunId}", SanitizeForLog(id));
+        _logger.LogInformation("Executing reversal run {ReversalRunId}", LogSanitizer.Sanitize(id));
         try
         {
             var run = await _reversalRunService.ExecuteReversalRunAsync(id);
@@ -137,7 +138,7 @@ public class ReversalRunsController : ControllerBase
     public async Task<ActionResult<ReversalRun>> RetryVoids(string id)
     {
         _logger.LogInformation("Retrying voids for reversal run {ReversalRunId} by {User}",
-            SanitizeForLog(id), SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(_actor.UserId));
         try
         {
             return Ok(await _reversalRunService.RetryVoidsAsync(id));
@@ -212,12 +213,6 @@ public class ReversalRunsController : ControllerBase
 
     private ObjectResult SeparationOfDuties(SeparationOfDutiesException ex)
         => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden);
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }
 
 public class CreateReversalRunRequest

@@ -5,6 +5,7 @@ using CloudHealthOffice.PriorAuthRuleEngine.Models;
 using CloudHealthOffice.PriorAuthRuleEngine.Persistence;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.PriorAuthRuleEngine.Services;
 
@@ -184,7 +185,7 @@ public sealed class PriorAuthRuleEngineService : IPriorAuthRuleEngine
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to fetch member auth history for {MemberId}",
-                    context.MemberId);
+                    LogSanitizer.MaskId(context.MemberId));
             }
         }
 

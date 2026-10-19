@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using ClaimsService.Models;
+using CloudHealthOffice.Infrastructure.Money;
 
 namespace ClaimsService.Services;
 
@@ -68,7 +69,7 @@ public class MpipAdjudicationEnhancer : IMpipAdjudicationEnhancer
             if (line.AdjudicationResult is null) continue;
 
             var originalAllowed = line.AdjudicationResult.AllowedAmount;
-            var enhancedAllowed = Math.Round(originalAllowed * multiplier, 2);
+            var enhancedAllowed = MoneyRounding.ToCents(originalAllowed * multiplier);
             var difference = enhancedAllowed - originalAllowed;
 
             line.AdjudicationResult.AllowedAmount = enhancedAllowed;

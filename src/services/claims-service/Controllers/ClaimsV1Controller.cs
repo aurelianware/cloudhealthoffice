@@ -11,6 +11,7 @@ using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using Snip = ClaimsService.EDI.Validation;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Controllers;
 
@@ -116,7 +117,7 @@ public class ClaimsV1Controller : ControllerBase
 
         _logger.LogInformation(
             "v1 claim submission: member={Member}, provider={Provider}, lines={LineCount}",
-            SanitizeForLog(claim.MemberId), SanitizeForLog(claim.BillingProviderNPI),
+            LogSanitizer.MaskId(claim.MemberId), LogSanitizer.Sanitize(claim.BillingProviderNPI),
             claim.ClaimLines?.Count ?? 0);
 
         var actorId = ResolveActorId();
@@ -186,7 +187,7 @@ public class ClaimsV1Controller : ControllerBase
 
             if (envelope.IsRejected)
             {
-                _logger.LogWarning("Uploaded 837 file {FileName} rejected at the interchange envelope", SanitizeForLog(file.FileName));
+                _logger.LogWarning("Uploaded 837 file {FileName} rejected at the interchange envelope", LogSanitizer.Sanitize(file.FileName));
                 return BadRequest(EnvelopeFailure(file.FileName, envelope));
             }
             ediContent = envelope.AcceptedContent!;
@@ -241,7 +242,7 @@ public class ClaimsV1Controller : ControllerBase
 
                 if (snip.Document is null || !snip.FunctionalGroups.Any())
                 {
-                    _logger.LogWarning("Uploaded 837 file {FileName} is not readable X12", SanitizeForLog(file.FileName));
+                    _logger.LogWarning("Uploaded 837 file {FileName} is not readable X12", LogSanitizer.Sanitize(file.FileName));
                     return BadRequest(WithTa1(SnipFailure(file.FileName, "Could not parse 837 file: the file is not a readable X12 interchange.", snip, acknowledgment), envelope));
                 }
 
@@ -257,7 +258,7 @@ public class ClaimsV1Controller : ControllerBase
         }
         catch (ClaimsService.EDI.Inbound.X12FormatException ex)
         {
-            _logger.LogWarning(ex, "Failed to parse uploaded 837 file {FileName}", SanitizeForLog(file.FileName));
+            _logger.LogWarning(ex, "Failed to parse uploaded 837 file {FileName}", LogSanitizer.Sanitize(file.FileName));
             return BadRequest(new { error = $"Could not parse 837 file: {ex.Message}" });
         }
 
@@ -275,7 +276,7 @@ public class ClaimsV1Controller : ControllerBase
 
         _logger.LogInformation(
             "Parsed uploaded 837 file {FileName} for tenant {TenantId}: {Count} claim(s), {Rejected} rejected by SNIP validation ({Ack}), submitting with max concurrency {MaxConcurrency}",
-            SanitizeForLog(file.FileName), SanitizeForLog(tenantId), parsedClaims.Count,
+            LogSanitizer.Sanitize(file.FileName), LogSanitizer.Sanitize(tenantId), parsedClaims.Count,
             parsedClaims.Count(c => c.SnipErrors is not null), snip?.AcknowledgmentCode ?? "n/a", _raw837MaxConcurrency);
 
         var results = new Raw837ClaimResult[parsedClaims.Count];
@@ -353,7 +354,7 @@ public class ClaimsV1Controller : ControllerBase
                 // RecordTransactionAsync.
                 _logger.LogWarning(ex,
                     "Failed to persist ClaimImportTransaction for claim {ClaimNumber}",
-                    SanitizeForLog(parsed.ClaimId));
+                    LogSanitizer.Sanitize(parsed.ClaimId));
             }
         });
 
@@ -512,12 +513,12 @@ public class ClaimsV1Controller : ControllerBase
                         "ISA13 {InterchangeControlNumber}, GS06 {GroupControlNumber}, ST02 {TransactionSetControlNumber}, CLM01 {ClaimNumber}; " +
                         "tenant {TenantId}; SNIP policy {SnipPolicy}",
                         issue.RuleId, SnipLocation(doc, ts, issue), ts.Accepted,
-                        SanitizeForLog(group.Interchange.SenderQualifier), SanitizeForLog(group.Interchange.SenderId),
-                        SanitizeForLog(group.ApplicationSenderCode),
-                        SanitizeForLog(group.Interchange.ControlNumber), SanitizeForLog(group.ControlNumber),
-                        SanitizeForLog(ts.ControlNumber), SanitizeForLog(issue.ClaimId),
-                        SanitizeForLog(tenantId),
-                        ts.PartnerOverrideKey is null ? "default" : "partner:" + SanitizeForLog(ts.PartnerOverrideKey));
+                        LogSanitizer.Sanitize(group.Interchange.SenderQualifier), LogSanitizer.Sanitize(group.Interchange.SenderId),
+                        LogSanitizer.Sanitize(group.ApplicationSenderCode),
+                        LogSanitizer.Sanitize(group.Interchange.ControlNumber), LogSanitizer.Sanitize(group.ControlNumber),
+                        LogSanitizer.Sanitize(ts.ControlNumber), LogSanitizer.Sanitize(issue.ClaimId),
+                        LogSanitizer.Sanitize(tenantId),
+                        ts.PartnerOverrideKey is null ? "default" : "partner:" + LogSanitizer.Sanitize(ts.PartnerOverrideKey));
                 }
             }
         }
@@ -689,7 +690,7 @@ public class ClaimsV1Controller : ControllerBase
 
         _logger.LogInformation(
             "v1 claims member search: member={Member}, status={Status}, type={Type}, amount=[{Min},{Max}]",
-            SanitizeForLog(memberId), status, claimType, amountMin, amountMax);
+            LogSanitizer.MaskId(memberId), status, claimType, amountMin, amountMax);
 
         var adapter = await _adapterFactory.GetAdapterAsync(tenantId, ct);
         var adapterResponse = await adapter.SearchClaimsForMemberAsync(
@@ -787,12 +788,6 @@ public class ClaimsV1Controller : ControllerBase
     /// <summary>Submitter ids (ISA06, GS02) as stored for lookup: trimmed, upper-case, null when blank.</summary>
     internal static string? NormalizeSubmitter(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }
 
 /// <summary>

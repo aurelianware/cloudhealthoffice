@@ -346,8 +346,8 @@
             var itemsTask = WorkQueueService.GetQueueItemsAsync();
             await Task.WhenAll(summaryTask, itemsTask);
 
-            _summary = summaryTask.Result;
-            _allItems = itemsTask.Result;
+            _summary = await summaryTask;
+            _allItems = await itemsTask;
             await LoadWorkAsync();
             ApplyFilters();
         }

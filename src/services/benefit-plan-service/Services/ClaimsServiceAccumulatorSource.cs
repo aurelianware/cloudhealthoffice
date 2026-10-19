@@ -5,6 +5,7 @@ using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -73,7 +74,7 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
 
         _logger.LogDebug(
             "Fetching accumulator totals from claims-service: owner={OwnerId}, scope={Scope}, plan={PlanId}, year={Year}",
-            SanitizeForLog(ownerId), scopeStr, benefitPlanId, planYear);
+            LogSanitizer.Sanitize(ownerId), scopeStr, benefitPlanId, planYear);
 
         HttpResponseMessage response;
         try
@@ -89,7 +90,7 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
             _logger.LogWarning(ex,
                 "claims-service unavailable during accumulator rebuild for owner {OwnerId}. " +
                 "Returning empty snapshot — Redis cache will remain cold.",
-                SanitizeForLog(ownerId));
+                LogSanitizer.Sanitize(ownerId));
             return new AccumulatorRebuildData(false, [], []);
         }
 
@@ -98,7 +99,7 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
             _logger.LogWarning(
                 "claims-service returned {Status} for accumulator-totals (owner={OwnerId}). " +
                 "Returning empty snapshot.",
-                (int)response.StatusCode, SanitizeForLog(ownerId));
+                (int)response.StatusCode, LogSanitizer.Sanitize(ownerId));
             return new AccumulatorRebuildData(false, [], []);
         }
 
@@ -163,9 +164,6 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
         public string ClaimId { get; set; } = string.Empty;
         public List<AccumulatorTotalEntryDto>? Totals { get; set; }
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private sealed class AccumulatorTotalEntryDto
     {

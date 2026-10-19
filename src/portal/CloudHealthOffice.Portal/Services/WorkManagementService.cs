@@ -64,6 +64,7 @@ public sealed class WorkManagementService : IWorkManagementService
         }
         catch (JsonException)
         {
+            // Not a JSON error body: the status-based message (or the raw text) below is used instead.
         }
         return response.StatusCode switch
         {

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AttachmentService.Services;
 
@@ -89,7 +90,7 @@ public sealed class HttpAttachmentParentLookup : IAttachmentParentLookup
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             _logger.LogError(ex, "{Client} unreachable checking a {ParentType} for tenant {TenantId}",
-                clientName, type, Sanitize(tenantId));
+                clientName, type, LogSanitizer.Sanitize(tenantId));
             throw new AttachmentParentLookupException($"{clientName} unreachable", ex);
         }
 
@@ -99,7 +100,7 @@ public sealed class HttpAttachmentParentLookup : IAttachmentParentLookup
             if (response.StatusCode == HttpStatusCode.NotFound) return false;
 
             _logger.LogError("{Client} answered {Status} checking a {ParentType} for tenant {TenantId}",
-                clientName, (int)response.StatusCode, type, Sanitize(tenantId));
+                clientName, (int)response.StatusCode, type, LogSanitizer.Sanitize(tenantId));
             throw new AttachmentParentLookupException($"{clientName} answered {(int)response.StatusCode}");
         }
     }
@@ -115,9 +116,6 @@ public sealed class HttpAttachmentParentLookup : IAttachmentParentLookup
 
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokens.GetTokenAsync(tenantId));
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>Whether an attachment's parent exists could not be established.</summary>

@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Money is rounded to the cent half away from zero everywhere
+  (`MoneyRounding.ToCents`).** Several calculations used `Math.Round(x, 2)`,
+  whose default is banker's rounding (half to even). They now round a half
+  cent away from zero. A result changes only when the unrounded amount is
+  exactly half a cent and the cent below it is even, and then by one cent
+  (up for a positive amount): $10.125 was $10.12 and is now $10.13; $10.135
+  was and stays $10.14. The calculations that change:
+  - **Benefit engine coinsurance** (`BenefitCalculationEngine`), in all three
+    copay modes: remaining allowed × coinsurance %. 15% of $100.30 = $15.045:
+    was $15.04, now $15.05, so plan paid falls by one cent.
+  - **Fee schedule allowed amounts** (`RateResolutionService`):
+    - the final line amount (rate × units after modifier adjustments);
+    - a DRG case rate (base rate × weight): $6,543.23 × 1.5 = $9,814.845, was
+      $9,814.84, now $9,814.85;
+    - a percent-of-Medicare line (Medicare rate × multiplier);
+    - an RVU amount (total RVU × conversion factor): 1.00 × 10.125 was $10.12,
+      now $10.13;
+    - Medicaid amounts (inline RVU, percent of the Medicare MPFS rate, and the
+      stored-rate fallback): 70% of $50.35 = $35.245, was $35.24, now $35.25;
+    - the multiple-procedure reduction (50% of a rank-2+ line): 50% of
+      $100.01, was $50.00, now $50.01;
+    - billed charges used for lesser-of and per-stay allocation (only a
+      billed amount with sub-cent precision can change).
+  - **Seeded Pricing API rates** (`FeeScheduleLoaderService`): RBRVS
+    facility and non-facility rates (total RVU × conversion factor) and DRG
+    rates (weight × base rate). (1.00 + 0.25) × 10.10 = $12.625, was $12.62,
+    now $12.63. Only rates seeded after this change are affected.
+  - **Capitation** (`CapitationRunService`): risk-adjusted PMPM (base PMPM ×
+    risk score), gross amount (× proration) and withhold (× withhold %).
+    $50.15 × 1.5 = $75.225, was $75.22, now $75.23; a 10% withhold of $100.25
+    was $10.02, now $10.03.
+  - **MPIP-enhanced allowed amount** (`MpipAdjudicationEnhancer`): allowed ×
+    MPIP multiplier. $15.00 × 1.063 = $15.945, was $15.94, now $15.95.
+    claims-service registers the enhancer but nothing calls it today, so no
+    paid amount changes through it yet.
+  - **Legacy premium billing lines** (`PremiumBillingService`): subscriber
+    premium, employer contribution and total. $100.125 was $100.12, now
+    $100.13; $50.005 was $50.00, now $50.01.
+  - **The Million Claim Challenge answer key** (`ExpectedMoney` in the
+    benchmark generator) uses the same rule for expected allowed, coinsurance,
+    paid and member liability.
+
+  Sites that already rounded half away from zero now call the helper with no
+  change: accumulator cents, examiner edit dispositions, the EOB unit price,
+  the 820 and lockbox parsers, `PremiumRatingEngine.RoundMoney`, and the
+  whole-cent checks in ar-service and `RatedInvoiceGenerator`. Amounts already
+  stored are not recalculated. The figures that change for the MCC benchmark,
+  and the sign-off this needs, are in
+  `docs/architecture/money-rounding-impact.md`.
+- **Every .NET project builds with `TreatWarningsAsErrors`** (root
+  `Directory.Build.props`, imported by `src/Directory.Build.props`). No
+  warning codes are exempted.
+- **The portal's System.Security.Cryptography.Xml override is 9.0.21**, the
+  first 9.0.x release outside GHSA-7hqp-7c5m-4vq6, GHSA-c399-9853-6jmj and
+  GHSA-r955-8q5j-3h83.
+
+### Fixed
+
+- **837 amounts parse with the invariant culture.** CLM02 and the SV1/SV2
+  charge and units used the thread culture, so on a host with ',' as the
+  decimal mark 180.50 parsed as 18050 (de-DE) or 0 (fr-FR).
+- **Capitation contracts: New Contract opened an editor with no contract**
+  and failed on render. It now starts a new contract.
+- **Capitation statements "Approve All"** reported every Generated statement
+  as approved even when some approvals were refused; it now names the refused
+  ones. The provider dialog no longer swallows save failures.
+- **fhir-service DTR and payer-to-payer stores use the host's database
+  name** when `MongoDb:DatabaseName` is unset, instead of a name differing
+  only in case (which MongoDB refuses).
+- **No sync-over-async on request and message paths** (Kafka consume loops,
+  batch eligibility index creation, `Task.WhenAll` followed by `.Result`).
+- **smart-auth-service no longer builds a second service container** for
+  OpenIddict's MongoDB stores; they use the registered database.
+
+### Security
+
+- **Member and subscriber ids are masked in log lines** (`***6789`) through
+  the shared `LogSanitizer`, which also replaces control characters in
+  logged values. Claim, tenant and provider ids are not masked.
+
 ### Removed
 
 - **The native Cosmos DB SDK persistence path (ADR 017).** MongoDB, through
@@ -31,6 +113,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Nothing references `Microsoft.Azure.Cosmos` any more; the package is gone
   from `Directory.Packages.props`.
+
+- **API removal: benefit-plan-service `POST /api/v1/adjudication/adjudicate`.**
+  The deprecated synchronous dry run ran its own engine chain and its
+  answers diverged from the claims-service pipeline, the only adjudicator
+  (docs/architecture/adjudicate-endpoint-decision.md, Option B). Callers
+  now get 404. Removed with it: the MCC validator's `--synchronous-diagnostic`
+  mode (it now fails with a clear error) and the scripts' `SERVICEBUS_ONLY=false`
+  path. The validator's `--pend-diagnostics` NCCI sample, which selected on
+  the endpoint's `NCCI_MUE_EDIT_FAILURE` code, now selects on the pend codes
+  the pipeline's `NcciEditsStage` persists (`NCCI`, `MUE`). Also removed:
+  `ITerminologyCrosswalkClient`, used only by this endpoint; the
+  `cho.claims.processing.duration` metric (`ChoMetrics.ClaimProcessingLatency`)
+  and the Grafana `cho-adjudication` panels fed only by it. Use
+  `POST /api/v1/adjudication/estimate` for what-if pricing. No longer runs
+  anywhere on the claim path: Legacy-Only / Augment routing of a claim, the
+  plan terminology crosswalk before pricing, and in-process prior-auth rule
+  evaluation for a claim.
 
 ### Changed
 

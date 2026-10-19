@@ -1,0 +1,16 @@
+<Project>
+  <!--
+    Build gate for every .NET project in the repository (src/, tests/, tools/).
+
+    Any compiler, analyzer or NuGet warning fails the build. MSBuild imports
+    only the nearest Directory.Build.props above a project, so a nested one
+    (src/Directory.Build.props) must import this file explicitly.
+
+    No warning codes are exempted. If a warning is genuinely noise, fix it at
+    the site or, for one call site, suppress it there with a comment that
+    says why; do not add a blanket NoWarn or WarningsNotAsErrors here.
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

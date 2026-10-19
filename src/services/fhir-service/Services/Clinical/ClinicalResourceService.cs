@@ -1,5 +1,6 @@
 using Hl7.Fhir.Model;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.Clinical;
 
@@ -228,7 +229,7 @@ public sealed class ClinicalResourceService : IClinicalResourceService
                 "Clinical search omitted {Omitted} of {Selected} stored {Resource} rows that could not be "
                 + "projected: tenant={Tenant}",
                 pageResult.Items.Count - projected.Count, pageResult.Items.Count,
-                Clean(type), Clean(context.TenantId));
+                LogSanitizer.Sanitize(type), LogSanitizer.Sanitize(context.TenantId));
         }
 
         Audit(context, type, null, "search", ClinicalAccessOutcome.Granted, projected.Count);
@@ -284,21 +285,15 @@ public sealed class ClinicalResourceService : IClinicalResourceService
         _logger.Log(level,
             "Clinical access {Interaction}: tenant={Tenant} caller={Caller} context={Context} member={Member} "
             + "resource={Resource} id={ResourceId} outcome={Outcome} results={Results} at={At}",
-            Clean(interaction),
-            Clean(context.TenantId),
-            Clean(context.CallerId),
+            LogSanitizer.Sanitize(interaction),
+            LogSanitizer.Sanitize(context.TenantId),
+            LogSanitizer.Sanitize(context.CallerId),
             context.IsPatientContext ? "patient" : "provider",
-            Clean(context.AuthorizedMemberId),
-            Clean(resourceType),
-            Clean(resourceId),
+            LogSanitizer.Sanitize(context.AuthorizedMemberId),
+            LogSanitizer.Sanitize(resourceType),
+            LogSanitizer.Sanitize(resourceId),
             outcome,
             resultCount,
             DateTime.UtcNow);
     }
-
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

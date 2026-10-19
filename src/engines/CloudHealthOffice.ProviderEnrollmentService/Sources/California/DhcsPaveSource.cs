@@ -3,6 +3,7 @@ using CloudHealthOffice.ProviderEnrollmentService.Cache;
 using CloudHealthOffice.ProviderEnrollmentService.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.ProviderEnrollmentService.Sources.California;
 
@@ -47,7 +48,7 @@ public sealed class DhcsPaveSource : IStateEnrollmentSource
     {
         // TODO: implement against DHCS PAVE API
         // Pattern: check _cache first, call _http on miss, upsert result
-        _logger.LogWarning("CA PAVE adapter not yet implemented for NPI {Npi}", SanitizeForLog(npi));
+        _logger.LogWarning("CA PAVE adapter not yet implemented for NPI {Npi}", LogSanitizer.Sanitize(npi));
         return Task.FromResult<StateEnrollmentRecord?>(null);
     }
 
@@ -81,11 +82,5 @@ public sealed class DhcsPaveSource : IStateEnrollmentSource
             Errors           = 0,
             ErrorDetails     = ["Not implemented"]
         });
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

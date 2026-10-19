@@ -66,6 +66,8 @@ public static class ConcurrentSaves
             }
             catch (PaymentConcurrencyException) when (attempt < MaxAttempts)
             {
+                // Lost the race: the loop re-reads the payment and re-applies. The final
+                // attempt's conflict is not caught and reaches the caller.
             }
         }
     }

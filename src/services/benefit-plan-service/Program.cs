@@ -316,16 +316,6 @@ builder.Services.Configure<NetworkTierBackfillOptions>(
 builder.Services.AddSingleton<INetworkTierSoftValidator, NetworkTierSoftValidator>();
 builder.Services.AddScoped<INetworkTierBackfillService, NetworkTierBackfillService>();
 
-// ── Terminology Crosswalk Client ─────────────────────────────────────────────
-// Resolves plan-specific procedure code mappings before fee schedule pricing.
-builder.Services.AddHttpClient<ITerminologyCrosswalkClient, HttpTerminologyCrosswalkClient>(client =>
-{
-    client.BaseAddress = new Uri(
-        builder.Configuration["Services:TerminologyServiceUrl"]
-        ?? "http://terminology-service/");
-    client.Timeout = TimeSpan.FromSeconds(5);
-});
-
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
 // ── Plan document locations ──────────────────────────────────────────────────
 // Plan document links are rendered by the portal, so a location must be an

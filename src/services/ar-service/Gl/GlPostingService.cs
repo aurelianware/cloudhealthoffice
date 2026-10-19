@@ -3,7 +3,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 using ArService.Models;
 using CloudHealthOffice.Finance.Contracts;
+using CloudHealthOffice.Infrastructure.Money;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ArService.Gl;
 
@@ -204,7 +206,7 @@ public sealed class GlPostingService
         record.Attempts++;
         record.LastAttemptAt = Now;
         record.LastAttemptBy = actor;
-        await PostAsync(envelope, record, entryDate?.Date, reason == null ? null : Clean(reason), actor, cancellationToken,
+        await PostAsync(envelope, record, entryDate?.Date, reason == null ? null : FlattenLineBreaks(reason), actor, cancellationToken,
             new PostOptions { IncludeBeforeCutover = includeBeforeCutover });
         if (!await _events.TryReplaceAsync(record, readVersion, cancellationToken))
             throw new GlStateException($"GL event {record.EventId} changed meanwhile; check it and retry.");
@@ -223,13 +225,13 @@ public sealed class GlPostingService
             throw new GlStateException($"GL event {eventId} is {record.Status}, not parked.");
         var readVersion = record.Version;
         record.Status = GlSourceEventStatus.Dismissed;
-        record.ParkDetail = $"dismissed by {actor}: {Clean(reason)} (was parked: {record.ParkReason} {record.ParkDetail})";
+        record.ParkDetail = $"dismissed by {actor}: {FlattenLineBreaks(reason)} (was parked: {record.ParkReason} {record.ParkDetail})";
         record.LastAttemptAt = Now;
         record.LastAttemptBy = actor;
         if (!await _events.TryReplaceAsync(record, readVersion, cancellationToken))
             throw new GlStateException($"GL event {eventId} changed meanwhile; check it and retry.");
         _logger.LogWarning(DismissedEvent, "AUDIT GL event {EventId} ({Type}) of tenant {TenantId} dismissed by {User}: {Reason}",
-            SanitizeForLog(record.EventId), SanitizeForLog(record.Type), SanitizeForLog(tenantId), SanitizeForLog(actor), SanitizeForLog(reason));
+            LogSanitizer.Sanitize(record.EventId), LogSanitizer.Sanitize(record.Type), LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(actor), LogSanitizer.Sanitize(reason));
         return GlIngestResult.From(record, duplicate: false);
     }
 
@@ -281,7 +283,7 @@ public sealed class GlPostingService
         attempt.Attempts++;
         attempt.LastAttemptAt = Now;
         attempt.LastAttemptBy = actor;
-        await PostAsync(envelope, attempt, entryDate?.Date, $"repost of {latest.Id}: {Clean(reason)}", actor, cancellationToken,
+        await PostAsync(envelope, attempt, entryDate?.Date, $"repost of {latest.Id}: {FlattenLineBreaks(reason)}", actor, cancellationToken,
             new PostOptions { EntryId = GlJournal.RepostId(baseId, n + 1), RepostOf = latest.Id });
         if (attempt.Status != GlSourceEventStatus.Posted)
             throw new GlStateException($"GL event {eventId} cannot be reposted: {attempt.ParkReason} {attempt.ParkDetail}. Nothing was posted.");
@@ -289,7 +291,7 @@ public sealed class GlPostingService
         if (!await _events.TryReplaceAsync(attempt, record.Version, cancellationToken))
             throw new GlStateException($"GL event {eventId} changed meanwhile; its repost {attempt.EntryId} is in the journal. Check the event.");
         _logger.LogWarning(RepostedEvent, "AUDIT GL event {EventId} of tenant {TenantId} reposted by {User} as {EntryId} (replaces reversed {Previous}): {Reason}",
-            SanitizeForLog(eventId), SanitizeForLog(tenantId), SanitizeForLog(actor), SanitizeForLog(attempt.EntryId), SanitizeForLog(latest.Id), SanitizeForLog(reason));
+            LogSanitizer.Sanitize(eventId), LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(actor), LogSanitizer.Sanitize(attempt.EntryId), LogSanitizer.Sanitize(latest.Id), LogSanitizer.Sanitize(reason));
         return GlIngestResult.From(attempt, duplicate: false);
     }
 
@@ -328,7 +330,7 @@ public sealed class GlPostingService
             LineOfBusiness = original.LineOfBusiness,
             Description = $"Reversal of {original.Id}: {original.Description}",
             ReversesEntryId = original.Id,
-            Reason = Clean(reason),
+            Reason = FlattenLineBreaks(reason),
             Lines = original.Lines.Select(l => new GlJournalLine
             {
                 LineNumber = l.LineNumber,
@@ -357,7 +359,7 @@ public sealed class GlPostingService
         if (!inserted)
             throw new GlStateException($"GL entry {entryId} has already been reversed.");
         _logger.LogWarning(ReversedEvent, "AUDIT GL entry {EntryId} of tenant {TenantId} reversed by {User} on {Date:yyyy-MM-dd}: {Reason}",
-            SanitizeForLog(original.Id), SanitizeForLog(tenantId), SanitizeForLog(actor), date, SanitizeForLog(reason));
+            LogSanitizer.Sanitize(original.Id), LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(actor), date, LogSanitizer.Sanitize(reason));
         return reversal;
     }
 
@@ -373,12 +375,12 @@ public sealed class GlPostingService
             throw new ArgumentException("A period is yyyy-MM.");
         if (string.CompareOrdinal(period, GlJournal.PeriodOf(Now)) > 0)
             throw new ArgumentException($"Period {period} is in the future; it cannot be closed yet.");
-        var outcome = await _periods.TryCloseAsync(tenantId, period, Now, actor, Clean(reason), cancellationToken);
+        var outcome = await _periods.TryCloseAsync(tenantId, period, Now, actor, FlattenLineBreaks(reason), cancellationToken);
         if (outcome == GlPeriodCloseOutcome.Busy)
             throw new GlStateException($"Entries are being posted into period {period} right now; it was not closed. Close it again in a moment.");
         if (outcome == GlPeriodCloseOutcome.Closed)
             _logger.LogWarning(PeriodClosedEvent, "AUDIT GL period {Period} of tenant {TenantId} closed by {User}: {Reason}",
-                SanitizeForLog(period), SanitizeForLog(tenantId), SanitizeForLog(actor), SanitizeForLog(reason));
+                LogSanitizer.Sanitize(period), LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(actor), LogSanitizer.Sanitize(reason));
         // Nothing can post into it any more: its extract is final.
         await GetExtractAsync(tenantId, period, cancellationToken);
         return await _periods.GetAsync(tenantId, period, cancellationToken)
@@ -408,7 +410,7 @@ public sealed class GlPostingService
         {
             _logger.LogCritical(IntegrityEvent,
                 "AUDIT GL closed period {Period} of tenant {TenantId}: extract sha256 {Now} differs from {AtClose} recorded at close; extract refused",
-                SanitizeForLog(period), SanitizeForLog(tenantId), extract.Control.Sha256, SanitizeForLog(state?.ExtractSha256));
+                LogSanitizer.Sanitize(period), LogSanitizer.Sanitize(tenantId), extract.Control.Sha256, LogSanitizer.Sanitize(state?.ExtractSha256));
             throw new GlIntegrityException(
                 $"The journal of closed period {period} no longer matches the extract recorded at close (sha256 {state?.ExtractSha256}). " +
                 "Nothing was extracted; this needs a person.");
@@ -465,7 +467,7 @@ public sealed class GlPostingService
         {
             // The lease expires on its own; until then the period cannot be closed.
             _logger.LogWarning("GL period {Period} lease could not be released ({Error}); it expires within {Lease}",
-                SanitizeForLog(lease.Period), ex.GetType().Name, LeaseDuration);
+                LogSanitizer.Sanitize(lease.Period), ex.GetType().Name, LeaseDuration);
         }
     }
 
@@ -614,7 +616,7 @@ public sealed class GlPostingService
         record.EntryId = entry.Id;
         _logger.LogInformation(PostedEvent,
             "AUDIT GL entry {EntryId} ({Kind}) of tenant {TenantId} posted from event {EventId} ({Reference}) on {Date:yyyy-MM-dd}: {Total:F2}",
-            SanitizeForLog(entry.Id), entry.Kind, SanitizeForLog(record.TenantId), SanitizeForLog(record.EventId), SanitizeForLog(entry.SourceReference),
+            LogSanitizer.Sanitize(entry.Id), entry.Kind, LogSanitizer.Sanitize(record.TenantId), LogSanitizer.Sanitize(record.EventId), LogSanitizer.Sanitize(entry.SourceReference),
             entry.EntryDate, entry.TotalDebit);
     }
 
@@ -690,7 +692,7 @@ public sealed class GlPostingService
             {
                 // Changed meanwhile, or its period lease lapsed: it stays parked and is retried with the next event or by hand.
                 _logger.LogWarning("GL event {EventId} waiting for {Settled} was not re-checked ({Error})",
-                    SanitizeForLog(waiter.EventId), SanitizeForLog(settled.EventId), SanitizeForLog(ex.Message));
+                    LogSanitizer.Sanitize(waiter.EventId), LogSanitizer.Sanitize(settled.EventId), LogSanitizer.Sanitize(ex.Message));
             }
         }
     }
@@ -700,8 +702,11 @@ public sealed class GlPostingService
     {
         ProviderRefundOwedEvent? refund = null;
         try { refund = System.Text.Json.JsonSerializer.Deserialize<ProviderRefundOwedEvent>(envelope.PayloadJson, GlEventTypes.Json); }
-        catch (System.Text.Json.JsonException) { }
-        if (refund == null || refund.Amount <= 0m || decimal.Round(refund.Amount, 2) != refund.Amount)
+        catch (System.Text.Json.JsonException)
+        {
+            // An unreadable payload leaves refund null and is parked as InvalidPayload just below.
+        }
+        if (refund == null || refund.Amount <= 0m || MoneyRounding.ToCents(refund.Amount) != refund.Amount)
         {
             Park(record, GlParkReason.InvalidPayload, "The ProviderRefundOwed payload has no money amount.");
             return;
@@ -740,11 +745,11 @@ public sealed class GlPostingService
     {
         record.Status = GlSourceEventStatus.Parked;
         record.ParkReason = reason;
-        record.ParkDetail = Clean(detail);
+        record.ParkDetail = FlattenLineBreaks(detail);
         record.WaitingForEventId = waitingFor;
         record.EntryId = null;
         _logger.LogWarning(ParkedEvent, "AUDIT GL event {EventId} ({Type}) of tenant {TenantId} parked ({Reason}): {Detail}",
-            SanitizeForLog(record.EventId), SanitizeForLog(record.Type), SanitizeForLog(record.TenantId), reason, SanitizeForLog(detail));
+            LogSanitizer.Sanitize(record.EventId), LogSanitizer.Sanitize(record.Type), LogSanitizer.Sanitize(record.TenantId), reason, LogSanitizer.Sanitize(detail));
     }
 
     private static GlProposedEntry? SafeBuild(GlEventEnvelope envelope)
@@ -761,15 +766,10 @@ public sealed class GlPostingService
 
     private static string Sha256(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 
-    /// <summary>Stored text: one line.</summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", " ");
-
-    /// <summary>Every value written to a log (the repo's log-forging guard).</summary>
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
+    /// <summary>
+    /// Keeps a stored free-text value on one line: CR removed, LF becomes a
+    /// space. For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string FlattenLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", " ");
 }

@@ -4,6 +4,7 @@ using FhirService.Models.PayerToPayer;
 using FhirService.Services.PayerToPayer.Ingestion;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.PayerToPayer.Outbound;
 
@@ -180,7 +181,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         {
             _logger.LogInformation(
                 "P2P outbound halted before export: exchange={Exchange} consent={Reason}",
-                Clean(exchange.ExchangeId), exportAuthorization.Reason);
+                LogSanitizer.Sanitize(exchange.ExchangeId), exportAuthorization.Reason);
             return await FailAsync(request, exchange, PayerToPayerOutboundStatus.NotAuthorized,
                 PayerToPayerOutboundFailure.NotAuthorized, ct);
         }
@@ -208,7 +209,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         {
             _logger.LogWarning(
                 "P2P outbound package rejected: exchange={Exchange} peer={EndpointKey} reason={Reason}",
-                Clean(exchange.ExchangeId), Clean(exchange.TargetEndpointKey), validation.Outcome);
+                LogSanitizer.Sanitize(exchange.ExchangeId), LogSanitizer.Sanitize(exchange.TargetEndpointKey), validation.Outcome);
             return await FailAsync(request, exchange, PayerToPayerOutboundStatus.Failed,
                 PayerToPayerOutboundFailure.InvalidRemoteResponse, ct);
         }
@@ -275,8 +276,8 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
             "P2P outbound completed: tenant={Tenant} member={Member} targetPayer={Payer} peer={EndpointKey} "
             + "exchange={Exchange} resources={Count} persisted={Persisted} duplicate={Duplicate} "
             + "unsupported={Unsupported}",
-            Clean(audit.TenantId), Clean(audit.MemberId), Clean(audit.TargetPayerId),
-            Clean(audit.TargetEndpointKey), Clean(audit.ExchangeId), audit.ResourceCount,
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.MaskId(audit.MemberId), LogSanitizer.Sanitize(audit.TargetPayerId),
+            LogSanitizer.Sanitize(audit.TargetEndpointKey), LogSanitizer.Sanitize(audit.ExchangeId), audit.ResourceCount,
             audit.PersistedResourceCount, audit.DuplicateResourceCount, audit.UnsupportedResourceCount);
 
         return new PayerToPayerOutboundResult { Exchange = exchange, Package = package, Audit = audit };
@@ -400,8 +401,8 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         _logger.LogInformation(
             "P2P outbound declined: tenant={Tenant} member={Member} targetPayer={Payer} exchange={Exchange} "
             + "status={Status} failure={Failure}",
-            Clean(audit.TenantId), Clean(audit.MemberId), Clean(audit.TargetPayerId),
-            Clean(audit.ExchangeId), audit.Outcome, audit.FailureCategory);
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.MaskId(audit.MemberId), LogSanitizer.Sanitize(audit.TargetPayerId),
+            LogSanitizer.Sanitize(audit.ExchangeId), audit.Outcome, audit.FailureCategory);
 
         return new PayerToPayerOutboundResult { Exchange = exchange, Audit = audit };
     }
@@ -428,7 +429,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         var audit = Audit(request, exchange);
         _logger.LogInformation(
             "P2P outbound refused: tenant={Tenant} targetPayer={Payer} failure={Failure}",
-            Clean(tenantId), Clean(targetPayerId), audit.FailureCategory);
+            LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(targetPayerId), audit.FailureCategory);
 
         return new PayerToPayerOutboundResult { Exchange = exchange, Audit = audit };
     }
@@ -442,7 +443,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         var audit = Audit(request, exchange);
         _logger.LogInformation(
             "P2P outbound replay: tenant={Tenant} member={Member} exchange={Exchange} status={Status}",
-            Clean(audit.TenantId), Clean(audit.MemberId), Clean(audit.ExchangeId), audit.Outcome);
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.MaskId(audit.MemberId), LogSanitizer.Sanitize(audit.ExchangeId), audit.Outcome);
 
         return new PayerToPayerOutboundResult { Exchange = exchange, Audit = audit, IsReplay = true };
     }
@@ -564,14 +565,4 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         UnsupportedResourceCount = exchange.UnsupportedResourceCount,
         RejectedResourceCount = exchange.RejectedResourceCount,
     };
-
-    /// <summary>
-    /// Strips CR/LF from caller/config-derived values before they reach a log
-    /// entry, preventing log-forging / injection (CWE-117).
-    /// </summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

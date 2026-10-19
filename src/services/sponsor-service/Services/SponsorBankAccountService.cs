@@ -2,6 +2,7 @@ using System.Text.Json;
 using CloudHealthOffice.FieldProtection;
 using SponsorService.Models;
 using SponsorService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace SponsorService.Services;
 
@@ -115,7 +116,7 @@ public sealed class SponsorBankAccountService : ISponsorBankAccountService
         {
             _logger.LogWarning(
                 "Bank-account record for sponsor {GroupNumber} in tenant {TenantId} belongs to an earlier sponsor document; not used",
-                Sanitize(sponsor.GroupNumber), Sanitize(sponsor.TenantId));
+                LogSanitizer.Sanitize(sponsor.GroupNumber), LogSanitizer.Sanitize(sponsor.TenantId));
             return null;
         }
         return record.Active;
@@ -200,7 +201,7 @@ public sealed class SponsorBankAccountService : ISponsorBankAccountService
             _logger.LogWarning(RefusedEvent,
                 "AUDIT sponsor bank-account change refused: user {UserId} tried to approve change {ChangeId} for sponsor {GroupNumber} " +
                 "in tenant {TenantId} that they proposed (separation of duties)",
-                Sanitize(actor.UserId), change.Id, Sanitize(sponsor.GroupNumber), Sanitize(sponsor.TenantId));
+                LogSanitizer.Sanitize(actor.UserId), change.Id, LogSanitizer.Sanitize(sponsor.GroupNumber), LogSanitizer.Sanitize(sponsor.TenantId));
             throw new SponsorBankAccountForbiddenException(
                 "Separation of duties: you proposed this bank-account change, so you cannot approve it. " +
                 "Another user with payments:approve must approve it.");
@@ -417,7 +418,7 @@ public sealed class SponsorBankAccountService : ISponsorBankAccountService
 
         _logger.LogWarning(RefusedEvent,
             "AUDIT sponsor bank-account change refused: service {UserId} tried to {Action} change {ChangeId} for sponsor {GroupNumber} in tenant {TenantId}",
-            Sanitize(actor.UserId), action, change.Id, Sanitize(change.GroupNumber), Sanitize(tenantId));
+            LogSanitizer.Sanitize(actor.UserId), action, change.Id, LogSanitizer.Sanitize(change.GroupNumber), LogSanitizer.Sanitize(tenantId));
         throw new SponsorBankAccountForbiddenException(
             $"A sponsor bank-account change must be decided by a user holding payments:approve; a service token cannot {action} it.");
     }
@@ -447,8 +448,8 @@ public sealed class SponsorBankAccountService : ISponsorBankAccountService
         _logger.LogInformation(eventId,
             "AUDIT sponsor bank-account change {Action}: change {ChangeId} for sponsor {GroupNumber} in tenant {TenantId} " +
             "by {UserId}; requested by {RequestedBy}; status {Status}",
-            action, change.Id, Sanitize(change.GroupNumber), Sanitize(tenantId),
-            Sanitize(actor), Sanitize(change.RequestedBy), change.Status);
+            action, change.Id, LogSanitizer.Sanitize(change.GroupNumber), LogSanitizer.Sanitize(tenantId),
+            LogSanitizer.Sanitize(actor), LogSanitizer.Sanitize(change.RequestedBy), change.Status);
     }
 
     private void Refused(string actor, string action, SponsorBankAccountChange change, string tenantId, string why)
@@ -456,7 +457,7 @@ public sealed class SponsorBankAccountService : ISponsorBankAccountService
         _logger.LogWarning(RefusedEvent,
             "AUDIT sponsor bank-account change refused: {UserId} could not {Action} change {ChangeId} for sponsor {GroupNumber} " +
             "in tenant {TenantId}: {Why}",
-            Sanitize(actor), action, change.Id, Sanitize(change.GroupNumber), Sanitize(tenantId), why);
+            LogSanitizer.Sanitize(actor), action, change.Id, LogSanitizer.Sanitize(change.GroupNumber), LogSanitizer.Sanitize(tenantId), why);
     }
 
     private static T Clone<T>(T value)
@@ -471,7 +472,4 @@ public sealed class SponsorBankAccountService : ISponsorBankAccountService
         var r = reason.Trim();
         return r.Length > 500 ? r[..500] : r;
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

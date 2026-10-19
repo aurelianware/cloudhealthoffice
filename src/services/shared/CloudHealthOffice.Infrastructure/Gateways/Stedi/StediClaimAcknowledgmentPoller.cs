@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Gateways.Models;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 
@@ -101,7 +102,7 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
                     {
                         _logger.LogWarning(
                             "Transient 835 poll ingest for transaction {TransactionId} category={Category}",
-                            Sanitize(item.TransactionId), remittance.ErrorCategory);
+                            LogSanitizer.Sanitize(item.TransactionId), remittance.ErrorCategory);
                         return;
                     }
 
@@ -113,7 +114,7 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
                 {
                     _logger.LogWarning(
                         "Transient 277CA poll ingest for transaction {TransactionId} category={Category}",
-                        Sanitize(item.TransactionId), result.ErrorCategory);
+                        LogSanitizer.Sanitize(item.TransactionId), result.ErrorCategory);
                     return;
                 }
 
@@ -121,7 +122,7 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
                 {
                     _logger.LogWarning(
                         "277CA poll ingest did not complete for transaction {TransactionId} category={Category}",
-                        Sanitize(item.TransactionId), result.ErrorCategory);
+                        LogSanitizer.Sanitize(item.TransactionId), result.ErrorCategory);
                     return;
                 }
             }
@@ -170,13 +171,12 @@ internal sealed class StediClaimAcknowledgmentPoller : BackgroundService
                 failed.LastFailureAtUtc = _timeProvider.GetUtcNow();
                 await _cursors.SaveAsync(failed, ct).ConfigureAwait(false);
             }
-            catch
+            catch (Exception cursorEx)
             {
-                // Preserve the original poll failure; cursor persistence is best-effort.
+                // Preserve the original poll failure (already logged); recording the failure
+                // time on the cursor is best-effort and the next cycle polls regardless.
+                _logger.LogWarning(cursorEx, "Recording the Stedi 277CA poll failure on the cursor failed");
             }
         }
     }
-
-    private static string? Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? value : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

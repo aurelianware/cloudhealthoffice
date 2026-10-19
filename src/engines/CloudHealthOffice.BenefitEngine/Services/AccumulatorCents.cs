@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Money;
 using StackExchange.Redis;
 
 namespace CloudHealthOffice.BenefitEngine.Services;
@@ -20,7 +21,7 @@ public static class AccumulatorCents
     /// </summary>
     public static long ToCents(decimal amount)
     {
-        var rounded = decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
+        var rounded = MoneyRounding.ToCents(amount);
         if (rounded != amount)
         {
             throw new ArgumentException(

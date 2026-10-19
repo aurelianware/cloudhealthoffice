@@ -5,6 +5,7 @@ using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication;
 
@@ -145,7 +146,7 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
             await _claims.RescheduleAccumulatorOutboxAsync(tenantId, claimId, kind, item.Id, attempts, next, error, CancellationToken.None);
             _logger.LogWarning(ex,
                 "Accumulator outbox {Kind} {ItemId} for claim {ClaimId} failed (attempt {Attempts}); next attempt at {Next:o}",
-                kindTag, SanitizeForLog(item.Id), SanitizeForLog(claimId), attempts, next);
+                kindTag, LogSanitizer.Sanitize(item.Id), LogSanitizer.Sanitize(claimId), attempts, next);
             result = AccumulatorOutboxResult.Rescheduled;
         }
         AccumulatorOutboxMetrics.Attempts.Add(1,
@@ -174,7 +175,7 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
         {
             _logger.LogWarning(
                 "AUDIT accumulator commit {ItemId} for claim {ClaimId} dropped, never written: {Reason}",
-                SanitizeForLog(item.Id), SanitizeForLog(claim.Id), SanitizeForLog(dropReason));
+                LogSanitizer.Sanitize(item.Id), LogSanitizer.Sanitize(claim.Id), LogSanitizer.Sanitize(dropReason));
             await _claims.CompleteAccumulatorOutboxAsync(claim.TenantId, claim.Id, AccumulatorOutboxKind.Commit, item.Id, ct: CancellationToken.None);
             return AccumulatorOutboxResult.Dropped;
         }
@@ -201,7 +202,7 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
             };
             _logger.LogWarning(
                 "Accumulator commit {ItemId} for claim {ClaimId}: {Count} update(s) clamped at a limit; adjustment review raised",
-                SanitizeForLog(item.Id), SanitizeForLog(claim.Id), result.Clamped.Count);
+                LogSanitizer.Sanitize(item.Id), LogSanitizer.Sanitize(claim.Id), result.Clamped.Count);
         }
         else if (result.Outcome == AccumulatorCommitOutcome.RefusedClaimReversed)
         {
@@ -216,7 +217,7 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
             };
             _logger.LogError(
                 "Accumulator commit {ItemId} for claim {ClaimId} refused: the claim id is fenced in the store while the claim is {Status}; review raised",
-                SanitizeForLog(item.Id), SanitizeForLog(claim.Id), claim.Status);
+                LogSanitizer.Sanitize(item.Id), LogSanitizer.Sanitize(claim.Id), claim.Status);
         }
         if (review is not null)
             await _claims.RecordAccumulatorReviewAsync(claim.TenantId, claim.Id, review, CancellationToken.None);
@@ -254,7 +255,7 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
             {
                 _logger.LogInformation(
                     "Accumulator reversal {ItemId} of commit {CommitId} for claim {ClaimId} superseded: a newer commit is applied",
-                    SanitizeForLog(item.Id), SanitizeForLog(order.CommitId), SanitizeForLog(order.ClaimId));
+                    LogSanitizer.Sanitize(item.Id), LogSanitizer.Sanitize(order.CommitId), LogSanitizer.Sanitize(order.ClaimId));
                 return AccumulatorOutboxResult.Superseded;
             }
             return AccumulatorOutboxResult.Reversed;
@@ -263,9 +264,6 @@ public sealed class AccumulatorOutboxProcessor : IAccumulatorOutboxProcessor
             _tenantContext.TenantId!, order.ClaimId, AccumulatorOutboxKind.Reversal, item.Id, ct: CancellationToken.None);
         return AccumulatorOutboxResult.Reversed;
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }
 
 /// <summary>

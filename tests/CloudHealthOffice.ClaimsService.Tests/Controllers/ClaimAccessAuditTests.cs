@@ -214,7 +214,8 @@ public class ClaimAccessAuditTests : IClassFixture<ClaimsApiFactory>
 
         var recent = await me.GetFromJsonAsync<List<global::ClaimsService.Controllers.RecentClaimView>>("/api/claims/recently-viewed", Json);
 
-        Assert.Equal(new[] { a.Id, b.Id }, recent!.Select(r => r.ClaimId).ToArray());
+        Assert.NotNull(recent);
+        Assert.Equal(new[] { a.Id, b.Id }, recent.Select(r => r.ClaimId).ToArray());
         Assert.Equal(a.ClaimNumber, recent[0].ClaimNumber);
     }
 }

@@ -313,8 +313,12 @@ public sealed class CdexTaskMapper
                 Value = new ResourceReference
                 {
                     Type = "DocumentReference",
-                    Identifier = new Identifier(
-                        CdexCanonicalUrls.SubmissionIdSystem, artifact.SubmissionId),
+                    // A received artifact without a submission id is still
+                    // listed, but carries no identifier rather than one with
+                    // a system and no value.
+                    Identifier = string.IsNullOrWhiteSpace(artifact.SubmissionId)
+                        ? null
+                        : new Identifier(CdexCanonicalUrls.SubmissionIdSystem, artifact.SubmissionId),
                     Display = BuildArtifactDisplay(artifact),
                 },
             });

@@ -1,6 +1,7 @@
 using RfaiService.Exceptions;
 using RfaiService.Models;
 using RfaiService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace RfaiService.Services;
 
@@ -107,7 +108,7 @@ public sealed class RfaiCaseService : IRfaiCaseService
         {
             _logger.LogInformation(
                 "RFAI request for auth {AuthNumber} reused open case {Id} (sequence {Sequence})",
-                Sanitize(request.AuthNumber), Sanitize(open.Id), open.Sequence);
+                LogSanitizer.Sanitize(request.AuthNumber), LogSanitizer.Sanitize(open.Id), open.Sequence);
 
             return new RfaiEnsureResult { Case = open, Created = false, ReusedOpenCycle = true };
         }
@@ -120,9 +121,9 @@ public sealed class RfaiCaseService : IRfaiCaseService
 
         _logger.LogInformation(
             "RFAI case {Id} {Verb} for auth {AuthNumber} (tenant {TenantId}, sequence {Sequence}, source {Source})",
-            Sanitize(stored.Id), created ? "created" : "already existed",
-            Sanitize(stored.AuthNumber), Sanitize(stored.TenantId),
-            stored.Sequence, Sanitize(stored.RequestSource));
+            LogSanitizer.Sanitize(stored.Id), created ? "created" : "already existed",
+            LogSanitizer.Sanitize(stored.AuthNumber), LogSanitizer.Sanitize(stored.TenantId),
+            stored.Sequence, LogSanitizer.Sanitize(stored.RequestSource));
 
         return new RfaiEnsureResult { Case = stored, Created = created };
     }
@@ -154,7 +155,7 @@ public sealed class RfaiCaseService : IRfaiCaseService
 
         _logger.LogInformation(
             "RFAI case {Id} delivered to requester (delivery {Count})",
-            Sanitize(id), updated.DeliveryCount);
+            LogSanitizer.Sanitize(id), updated.DeliveryCount);
 
         return updated;
     }
@@ -181,7 +182,7 @@ public sealed class RfaiCaseService : IRfaiCaseService
             {
                 _logger.LogInformation(
                     "RFAI case {Id} response not recorded: {Outcome}",
-                    Sanitize(id), result.Outcome);
+                    LogSanitizer.Sanitize(id), result.Outcome);
                 return result;
             }
 
@@ -199,7 +200,7 @@ public sealed class RfaiCaseService : IRfaiCaseService
 
         _logger.LogInformation(
             "RFAI case {Id} recorded {Count} artifact(s); status={Status}",
-            Sanitize(id), result.Recorded.Count, rfaiCase.Status);
+            LogSanitizer.Sanitize(id), result.Recorded.Count, rfaiCase.Status);
 
         // The announcement is published ONLY on the edge into DocsReceived, so a
         // replayed or supplementary submission cannot restart the review clock a
@@ -246,7 +247,7 @@ public sealed class RfaiCaseService : IRfaiCaseService
             // re-uploads content already stored.
             _logger.LogError(ex,
                 "RFAI case {Id} recorded a response but the resume-review announcement failed",
-                Sanitize(rfaiCase.Id));
+                LogSanitizer.Sanitize(rfaiCase.Id));
         }
     }
 
@@ -259,11 +260,5 @@ public sealed class RfaiCaseService : IRfaiCaseService
     private void LogConcurrentWrite(string id, int attempt) =>
         _logger.LogInformation(
             "RFAI case {Id} changed concurrently; re-reading (attempt {Attempt} of {Max})",
-            Sanitize(id), attempt, MaxConcurrencyAttempts);
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
+            LogSanitizer.Sanitize(id), attempt, MaxConcurrencyAttempts);
 }

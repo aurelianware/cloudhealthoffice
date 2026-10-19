@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ClaimsService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -71,7 +72,7 @@ public class HttpCoverageResolver : ICoverageResolver
             {
                 _logger.LogWarning(
                     "Coverage service returned {StatusCode} resolving active coverage for member {Member}",
-                    response.StatusCode, SanitizeForLog(memberId));
+                    response.StatusCode, LogSanitizer.MaskId(memberId));
                 return null;
             }
 
@@ -87,13 +88,10 @@ public class HttpCoverageResolver : ICoverageResolver
         {
             _logger.LogWarning(ex,
                 "Active-coverage lookup failed for member {Member} tenant {Tenant}",
-                SanitizeForLog(memberId), SanitizeForLog(tenantId));
+                LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(tenantId));
             return null;
         }
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private sealed class CoverageSummaryDto
     {

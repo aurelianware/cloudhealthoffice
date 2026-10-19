@@ -376,7 +376,6 @@ public class MccRunSummaryBuilderTests
             TimeSpan.FromMilliseconds(10),
             TimeSpan.FromMilliseconds(80),
             TimeSpan.FromMilliseconds(10),
-            new Dictionary<string, double> { ["benefit"] = 25 },
             outcome is ClaimValidationOutcome.BusinessDenial ? "CARC_96" : null,
             null,
             null);

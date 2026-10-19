@@ -5,6 +5,7 @@ using FhirService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Controllers;
 
@@ -94,7 +95,7 @@ public class CrdController : FhirControllerBase
         if (!HookIdToHookType.TryGetValue(hookId, out var expectedHookType))
         {
             _logger.LogWarning("CRD hook execution for unknown hookId: {HookId}",
-                SanitizeForLog(hookId));
+                LogSanitizer.Sanitize(hookId));
             return NotFound(new { error = $"Unknown hook: {hookId}" });
         }
 
@@ -126,16 +127,16 @@ public class CrdController : FhirControllerBase
             if (refusal != null)
             {
                 _logger.LogWarning("CRD hook {HookId} refused for SMART caller: {Reason}",
-                    SanitizeForLog(hookId), refusal);
+                    LogSanitizer.Sanitize(hookId), refusal);
                 return StatusCode(403, new { error = refusal });
             }
         }
 
         _logger.LogInformation(
             "CRD hook {HookId} received for tenant {TenantId}, patient {PatientId}",
-            SanitizeForLog(hookId),
-            SanitizeForLog(TenantId),
-            SanitizeForLog(request.Context.PatientId ?? "unknown"));
+            LogSanitizer.Sanitize(hookId),
+            LogSanitizer.Sanitize(TenantId),
+            request.Context.PatientId is null ? "unknown" : LogSanitizer.MaskId(request.Context.PatientId));
 
         try
         {
@@ -144,7 +145,7 @@ public class CrdController : FhirControllerBase
 
             _logger.LogInformation(
                 "CRD hook {HookId} completed in {ElapsedMs}ms, codes={CodesEvaluated}, translations={Translations}",
-                SanitizeForLog(hookId),
+                LogSanitizer.Sanitize(hookId),
                 sw.ElapsedMilliseconds,
                 result.CodesEvaluated,
                 result.TranslationsPerformed);
@@ -161,7 +162,7 @@ public class CrdController : FhirControllerBase
             // a 500 an EHR may simply drop (and so show as "no requirements").
             // One "could not be determined" card per draft order, at least one.
             _logger.LogError(ex, "CRD hook {HookId} failed after {ElapsedMs}ms; answering unknown",
-                SanitizeForLog(hookId), sw.ElapsedMilliseconds);
+                LogSanitizer.Sanitize(hookId), sw.ElapsedMilliseconds);
 
             var orders = request.Context?.DraftOrders?.Entry?.Count(e => e.Resource != null) ?? 0;
             var cards = Enumerable.Range(0, Math.Max(1, orders))

@@ -63,7 +63,6 @@ flowchart LR
 
   subgraph benefit-plan-service
     ResolveRates["POST /adjudication/resolve-rates"]
-    Adjudicate["POST /adjudication/adjudicate (sync)"]
     Estimate["POST /adjudication/estimate"]
     RRS[[RateResolutionService]]
   end
@@ -82,7 +81,6 @@ flowchart LR
   end
 
   X12 --> Pipeline --> PricingStage --> HttpClient --> ResolveRates --> RRS
-  Portal --> Adjudicate --> RRS
   Portal --> Estimate --> RRS
   RRS --> EngineStore
   Portal --> Reprice

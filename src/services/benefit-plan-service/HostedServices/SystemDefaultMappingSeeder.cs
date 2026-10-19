@@ -4,6 +4,7 @@ using BenefitPlanService.Repositories;
 using CloudHealthOffice.BenefitEngine.Domain;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.HostedServices;
 
@@ -171,7 +172,7 @@ public sealed class SystemDefaultMappingSeeder : IHostedService
                     _logger.LogInformation(
                         "SystemDefaultMappingSeeder: tenant={Tenant} already maps {CodeType} {CodePattern}-{CodeRangeEnd}; " +
                         "not adding the v{Version} default rule for {ServiceTypeCode}",
-                        Sanitize(tenantId), rule.CodeType, rule.CodePattern, rule.CodeRangeEnd ?? rule.CodePattern,
+                        LogSanitizer.Sanitize(tenantId), rule.CodeType, rule.CodePattern, rule.CodeRangeEnd ?? rule.CodePattern,
                         _bundle.Version, seed.ServiceTypeCode);
                     continue;
                 }
@@ -214,7 +215,7 @@ public sealed class SystemDefaultMappingSeeder : IHostedService
         _logger.LogInformation(
             "SystemDefaultMappingSeeder: applied bundle version={Version} (from version={FromVersion}) " +
             "mappings={Count} rulesAlreadyCovered={Skipped} tenant={Tenant}",
-            _bundle.Version, fromVersion, written, skippedCovered, Sanitize(tenantId));
+            _bundle.Version, fromVersion, written, skippedCovered, LogSanitizer.Sanitize(tenantId));
 
         return written;
     }
@@ -327,9 +328,6 @@ public sealed class SystemDefaultMappingSeeder : IHostedService
     {
         PropertyNameCaseInsensitive = true,
     };
-
-    private static string Sanitize(string value)
-        => value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
     /// <summary>Top-level seed bundle shape.</summary>
     public sealed class SeedBundle

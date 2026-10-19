@@ -45,7 +45,8 @@
         }
         catch
         {
-            // Clipboard API may not be available
+            // Clipboard API may not be available (no permission, insecure context); the key
+            // stays on screen to copy by hand and _copied stays false.
         }
     }
 

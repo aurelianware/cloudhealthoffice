@@ -14,10 +14,8 @@ public sealed record ValidatorOptions(
     bool SeedProviders,
     bool SeedAuthorizations,
     bool SkipClaimUpdate,
-    bool ServiceBusOnly,
     bool ServiceBusReconciliationEnabled,
     int ServiceBusReconciliationTimeoutSeconds,
-    bool PendObservationEnabled,
     int PendObservationTimeoutSeconds,
     int PendObservationIntervalMilliseconds,
     string? PendDiagnosticsPath,
@@ -86,11 +84,14 @@ public sealed record ValidatorOptions(
                     options.SkipClaimUpdate = true;
                     break;
                 case "--servicebus-only":
-                    options.ServiceBusOnly = true;
+                    // Accepted for compatibility. Scoring the persisted outcome of the
+                    // claims-service pipeline (the single adjudicator) is the only mode.
                     break;
                 case "--synchronous-diagnostic":
-                    options.ServiceBusOnly = false;
-                    break;
+                    throw new ArgumentException(
+                        "--synchronous-diagnostic was removed along with benefit-plan's dry-run "
+                        + "/api/v1/adjudication/adjudicate endpoint; the validator only scores the "
+                        + "persisted pipeline outcome.");
                 case "--no-servicebus-reconciliation":
                     options.ServiceBusReconciliationEnabled = false;
                     break;
@@ -98,7 +99,8 @@ public sealed record ValidatorOptions(
                     options.ServiceBusReconciliationTimeoutSeconds = int.Parse(args[++i]);
                     break;
                 case "--no-pend-observation":
-                    options.PendObservationEnabled = false;
+                    // Accepted for compatibility; no effect. The persisted-outcome poll is
+                    // the scoring path, so it always runs.
                     break;
                 case "--pend-observation-timeout" when i + 1 < args.Length:
                     options.PendObservationTimeoutSeconds = int.Parse(args[++i]);
@@ -180,10 +182,8 @@ public sealed record ValidatorOptions(
             options.SeedProviders,
             options.SeedAuthorizations,
             options.SkipClaimUpdate,
-            options.ServiceBusOnly,
             options.ServiceBusReconciliationEnabled,
             Math.Clamp(options.ServiceBusReconciliationTimeoutSeconds, 1, 900),
-            options.PendObservationEnabled,
             Math.Clamp(options.PendObservationTimeoutSeconds, 1, 300),
             Math.Clamp(options.PendObservationIntervalMilliseconds, 100, 30_000),
             string.IsNullOrWhiteSpace(options.PendDiagnosticsPath) ? null : options.PendDiagnosticsPath,
@@ -218,12 +218,8 @@ public sealed record ValidatorOptions(
         public bool SeedProviders { get; set; } = true;
         public bool SeedAuthorizations { get; set; } = true;
         public bool SkipClaimUpdate { get; set; }
-        // Score the persisted outcome of the claims-service pipeline, the single
-        // adjudicator. --synchronous-diagnostic turns this off for diagnostics.
-        public bool ServiceBusOnly { get; set; } = true;
         public bool ServiceBusReconciliationEnabled { get; set; } = true;
         public int ServiceBusReconciliationTimeoutSeconds { get; set; } = 300;
-        public bool PendObservationEnabled { get; set; } = true;
         public int PendObservationTimeoutSeconds { get; set; } = 45;
         public int PendObservationIntervalMilliseconds { get; set; } = 1000;
         public string? PendDiagnosticsPath { get; set; }

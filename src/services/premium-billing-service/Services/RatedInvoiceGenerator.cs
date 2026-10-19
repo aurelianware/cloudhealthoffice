@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Money;
 using Microsoft.Extensions.Options;
 using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
@@ -586,7 +587,7 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
     /// <summary>Every amount is whole cents and the invoice total is exactly the sum of its lines.</summary>
     private static void CheckMoney(PremiumInvoice invoice, InvoiceCalculation calculation)
     {
-        static bool Cents(decimal amount) => decimal.Round(amount, 2) == amount;
+        static bool Cents(decimal amount) => MoneyRounding.ToCents(amount) == amount;
         var amounts = invoice.LineItems.SelectMany(l => new[] { l.TotalPremium, l.EmployerContribution, l.SubscriberPremium })
             .Concat(invoice.Adjustments.Select(a => a.Amount));
         if (!amounts.All(Cents))

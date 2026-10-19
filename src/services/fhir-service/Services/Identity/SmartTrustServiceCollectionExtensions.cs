@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.Identity;
 
@@ -108,7 +109,7 @@ public static class SmartTrustServiceCollectionExtensions
                         .CreateLogger("FhirService.Identity")
                         .LogWarning(
                             "SMART token refused: its {ScopeClaim} and {ScpClaim} claims grant different scopes",
-                            SanitizeForLog(SmartScopeClaims.ScopeClaim), SanitizeForLog(SmartScopeClaims.ScpClaim));
+                            LogSanitizer.Sanitize(SmartScopeClaims.ScopeClaim), LogSanitizer.Sanitize(SmartScopeClaims.ScpClaim));
                     context.Fail(ScopeClaimConflictMessage);
                     return Task.CompletedTask;
                 }
@@ -194,7 +195,4 @@ public static class SmartTrustServiceCollectionExtensions
 
     /// <summary>The authentication failure for a token whose scope and scp claims differ.</summary>
     internal const string ScopeClaimConflictMessage = "The token's scope and scp claims grant different scopes.";
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

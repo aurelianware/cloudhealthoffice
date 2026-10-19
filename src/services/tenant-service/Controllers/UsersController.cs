@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using TenantService.Models;
 using TenantService.Security;
 using TenantService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace TenantService.Controllers;
 
@@ -53,7 +54,7 @@ public class UsersController : ControllerBase
                 return null;
         }
 
-        _logger.LogWarning("Refused to grant a platform-only role (caller {Subject})", TenantAuditLog.Sanitize(_actor.UserId));
+        _logger.LogWarning("Refused to grant a platform-only role (caller {Subject})", LogSanitizer.Sanitize(_actor.UserId));
         return StatusCode(StatusCodes.Status403Forbidden,
             new { error = "Granting PlatformAdmin or cho.service needs platform:tenants." });
     }

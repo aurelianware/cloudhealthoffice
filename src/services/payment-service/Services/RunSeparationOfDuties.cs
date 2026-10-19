@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Services;
 
@@ -81,7 +82,7 @@ public sealed class RunSeparationOfDuties : IRunSeparationOfDuties
         {
             _logger.LogWarning(NoMakerRecordedEvent,
                 "No executor recorded for {RunKind} {RunNumber}; reservation release by {User} allowed without an executor comparison",
-                runKind, Sanitize(runNumber), Sanitize(user));
+                runKind, LogSanitizer.Sanitize(runNumber), LogSanitizer.Sanitize(user));
             return user;
         }
 
@@ -134,7 +135,7 @@ public sealed class RunSeparationOfDuties : IRunSeparationOfDuties
         {
             _logger.LogWarning(NoMakerRecordedEvent,
                 "No creator recorded for {RunKind} {RunNumber}; execution by {User} allowed without a maker-checker comparison",
-                runKind, Sanitize(runNumber), Sanitize(user));
+                runKind, LogSanitizer.Sanitize(runNumber), LogSanitizer.Sanitize(user));
             return user;
         }
 
@@ -145,7 +146,4 @@ public sealed class RunSeparationOfDuties : IRunSeparationOfDuties
 
         return user;
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

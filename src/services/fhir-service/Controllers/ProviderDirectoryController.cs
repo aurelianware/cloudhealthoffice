@@ -4,6 +4,7 @@ using System.Text.Json;
 using FhirService.Mappers;
 using FhirService.Models;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Controllers;
 
@@ -234,7 +235,7 @@ public class ProviderDirectoryController : FhirControllerBase
     {
         if (!ProviderDirectoryMapper.ValidateNpi(npi))
         {
-            _logger.LogWarning("Invalid NPI format: {Npi}", SanitizeForLog(npi));
+            _logger.LogWarning("Invalid NPI format: {Npi}", LogSanitizer.Sanitize(npi));
             return null;
         }
 
@@ -251,7 +252,7 @@ public class ProviderDirectoryController : FhirControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "NPPES lookup failed for NPI {Npi}", SanitizeForLog(npi));
+            _logger.LogError(ex, "NPPES lookup failed for NPI {Npi}", LogSanitizer.Sanitize(npi));
             throw;
         }
     }
@@ -293,7 +294,7 @@ public class ProviderDirectoryController : FhirControllerBase
         {
             _logger.LogWarning(ex,
                 "Provider Verification Service unavailable for NPI {Npi} — returning without enrichment",
-                SanitizeForLog(npi));
+                LogSanitizer.Sanitize(npi));
         }
 
         return null;

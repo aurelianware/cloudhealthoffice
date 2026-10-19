@@ -273,9 +273,11 @@ public sealed class InvitationStoreTests : IAsyncLifetime
             var revoke = Task.Run(() => _store.RevokeAsync(Tenant, invitation.Id, "admin", default));
             await Task.WhenAll(redeem, revoke);
 
-            var redeemed = redeem.Result.Error == InvitationError.None;
-            var revoked = revoke.Result.Error == InvitationError.None;
-            (redeemed ^ revoked).Should().BeTrue($"round {i}: exactly one of redeem ({redeem.Result.Error}) and revoke ({revoke.Result.Error}) wins");
+            var redeemError = (await redeem).Error;
+            var revokeError = (await revoke).Error;
+            var redeemed = redeemError == InvitationError.None;
+            var revoked = revokeError == InvitationError.None;
+            (redeemed ^ revoked).Should().BeTrue($"round {i}: exactly one of redeem ({redeemError}) and revoke ({revokeError}) wins");
             var user = await UserAsync(invitation.UserId);
             (user.Status == TenantUserStatus.Active).Should().Be(redeemed);
             (await StoredAsync(invitation.Id)).Status.Should().Be(redeemed ? InvitationStatus.Redeemed : InvitationStatus.Revoked);

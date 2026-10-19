@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using TenantService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace TenantService.Services;
 
@@ -45,7 +46,7 @@ public class TenantRepository : ITenantRepository
 
         await _collection.InsertOneAsync(tenant);
         _logger.LogInformation("Created tenant {TenantId} ({TenantName})",
-            SanitizeForLog(tenant.TenantId), SanitizeForLog(tenant.TenantName));
+            LogSanitizer.Sanitize(tenant.TenantId), LogSanitizer.Sanitize(tenant.TenantName));
 
         return tenant;
     }
@@ -81,7 +82,7 @@ public class TenantRepository : ITenantRepository
             return tenant;
         }
 
-        _logger.LogInformation("Updated tenant {TenantId}", SanitizeForLog(tenant.TenantId));
+        _logger.LogInformation("Updated tenant {TenantId}", LogSanitizer.Sanitize(tenant.TenantId));
 
         return tenant;
     }
@@ -101,7 +102,7 @@ public class TenantRepository : ITenantRepository
         if (tenant != null)
         {
             await _collection.DeleteOneAsync(t => t.Id == tenant.Id);
-            _logger.LogInformation("Deleted tenant {TenantId}", SanitizeForLog(tenantId));
+            _logger.LogInformation("Deleted tenant {TenantId}", LogSanitizer.Sanitize(tenantId));
         }
     }
 
@@ -131,12 +132,5 @@ public class TenantRepository : ITenantRepository
                 .Set(t => t.UpdatedAt, now)
                 .Set(t => t.UpdatedBy, actor));
         return result.ModifiedCount == 1;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

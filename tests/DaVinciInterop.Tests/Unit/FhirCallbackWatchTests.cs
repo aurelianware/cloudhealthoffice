@@ -69,7 +69,7 @@ public sealed class FhirCallbackWatchTests
     }
 
     [Fact]
-    public void A_watch_records_a_callback_when_one_arrives()
+    public async Task A_watch_records_a_callback_when_one_arrives()
     {
         using var watch = FhirCallbackWatch.Start();
         var port = new Uri(watch.BaseUrl).Port;
@@ -80,7 +80,7 @@ public sealed class FhirCallbackWatchTests
 
         // The scenario asserts this list is empty; that assertion is only
         // meaningful if a real callback would actually show up in it.
-        _ = http.GetAsync($"http://127.0.0.1:{port}/fhir/Patient/interop-member-001").GetAwaiter().GetResult();
+        using var response = await http.GetAsync($"http://127.0.0.1:{port}/fhir/Patient/interop-member-001");
 
         watch.Requests.Should().ContainSingle()
             .Which.Should().Be("GET /fhir/Patient/interop-member-001");

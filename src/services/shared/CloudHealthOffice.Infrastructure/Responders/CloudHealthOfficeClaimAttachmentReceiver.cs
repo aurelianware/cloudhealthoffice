@@ -8,6 +8,7 @@ using CloudHealthOffice.Infrastructure.Responders.Models;
 using CloudHealthOffice.Infrastructure.Responders.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Responders;
 
@@ -134,7 +135,7 @@ public sealed class CloudHealthOfficeClaimAttachmentReceiver : IClaimAttachmentR
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Inbound attachment storage failed adapter={Adapter}",
-                ClaimAttachmentRules.SanitizeForLog(adapter));
+                LogSanitizer.Sanitize(adapter, 128));
             return Finish(FailResult(route.TenantId, GatewayErrorCategory.StorageUnavailable,
                 "Secure attachment storage is unavailable.", adapter, route.CanonicalPayerId),
                 started, stopwatch, adapter);
@@ -401,7 +402,7 @@ public sealed class CloudHealthOfficeClaimAttachmentReceiver : IClaimAttachmentR
                 entry.LastError = "outbox-publish-failed";
                 outcomes.Add((entry.EventType, null, true));
                 _logger.LogWarning(ex, "Inbound attachment outbox publish failed receipt={ReceiptId}",
-                    ClaimAttachmentRules.SanitizeForLog(record.ReceiptId));
+                    LogSanitizer.Sanitize(record.ReceiptId, 128));
             }
         }
 
@@ -551,11 +552,11 @@ public sealed class CloudHealthOfficeClaimAttachmentReceiver : IClaimAttachmentR
             "Inbound claim attachment adapter={Adapter} receipt={ReceiptId} status={Status} " +
             "category={ErrorCategory} contentType={ContentType} contentLength={ContentLength} " +
             "checksumPrefix={ChecksumPrefix} replay={Replay} matched={Matched}",
-            ClaimAttachmentRules.SanitizeForLog(metadata.GatewayName),
-            ClaimAttachmentRules.SanitizeForLog(result.ReceiptId),
+            LogSanitizer.Sanitize(metadata.GatewayName, 128),
+            LogSanitizer.Sanitize(result.ReceiptId, 128),
             result.Status,
             result.ErrorCategory,
-            ClaimAttachmentRules.SanitizeForLog(result.ContentType),
+            LogSanitizer.Sanitize(result.ContentType, 128),
             result.ContentLength,
             ClaimAttachmentRules.ChecksumPrefix(result.ChecksumSha256),
             result.Replay,

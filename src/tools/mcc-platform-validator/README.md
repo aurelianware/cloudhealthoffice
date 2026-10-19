@@ -18,16 +18,31 @@ The validator currently scores:
 - `ObservationTimeout` when an expected-pend claim does not reach a terminal or
   pended claim status within the bounded observation window.
 
+## Scoring Path
+
+The validator submits each claim to claims-service and scores only the outcome
+the claims-service adjudication pipeline persisted (the single adjudicator). It
+never adjudicates on the side and never writes an adjudication back. After
+submission it polls `GET /api/claims/{id}` until the claim reaches a terminal or
+pended status, or until `--pend-observation-timeout` expires (poll interval
+`--pend-observation-interval-ms`).
+
+`--servicebus-only` and `--no-pend-observation` are still accepted so older
+scripts keep working, but they have no effect: this is the only mode.
+The former `--synchronous-diagnostic` mode (benefit-plan's dry-run endpoint)
+was removed; passing it is now an error.
+
+Defaults:
+
+- `--pend-observation-timeout 45`
+- `--pend-observation-interval-ms 1000`
+
 ## Pended Edge Cases
 
 The MCC edge-case corpus does include expected-pend scenarios, including COB
 review, retro-eligibility coverage change, subrogation review, dual eligible,
-and spend-down cases.
-
-The synchronous benefit-plan adjudication response exposes `Success`, denial
-reason fields, totals, and timings, but not a claim/workflow pend status.
-Claims-service is the authoritative post-adjudication state source for this
-validator: `GET /api/claims/{id}` returns `ClaimStatus.Pended`, and
+and spend-down cases. Claims-service is the authoritative post-adjudication
+state source: `GET /api/claims/{id}` returns `ClaimStatus.Pended`, and
 `PendDetails.PendCode` provides the reason signal when available.
 
 Because the async claims-service adjudication path resolves member demographics
@@ -50,45 +65,19 @@ plan's one default schedule, so reruns are idempotent. Plain institutional claim
 remain unscored: their allowed amounts follow the seeded rates, but paid amounts
 depend on the validation plan's cost sharing, which the generator does not model.
 
-The validator therefore scores expected-pend scenarios in a post-adjudication
-observation pass. The timed benchmark pass completes first; then the validator
-polls claims-service for expected-pend claims only. `P95`, `P99`, stage timings,
-and claims/sec are computed from submission, adjudication, and writeback timing
-and exclude this polling window.
-For expected-pend claims, the synchronous adjudication projection is not written
-back to claims-service because that response cannot represent the pended state;
-the async claims workflow remains the source of truth for those claims.
-
-This observation pass is intentionally one-directional for benchmark cost: it
-polls only claims whose answer-key disposition is `Pended`. It can prove that
-expected-pend scenarios did or did not pend, but it does not detect the inverse
-failure mode where a non-pend scenario unexpectedly lands in `ClaimStatus.Pended`
-after the synchronous adjudication response said paid or denied.
-
-Defaults:
-
-- Pend observation is enabled by default. Pass `--no-pend-observation` to turn it
-  off.
-- `--pend-observation-timeout 45`
-- `--pend-observation-interval-ms 1000`
-
-The local-k8s scripts also default `PEND_OBSERVATION_ENABLED=true`. Set
-`PEND_OBSERVATION_ENABLED=false` only when reproducing the pre-observation
-validator behavior intentionally.
-
 Expected-pend scenarios score as:
 
 - `Matched` when claims-service observes `ClaimStatus.Pended`.
 - `Mismatched` when claims-service observes a different terminal state such as
   approved/paid or denied.
 - `ObservationTimeout` when the claim remains non-terminal until the configured
-  timeout.
+  timeout (and is still unresolved after post-window reconciliation).
 - `Unsupported` only when a future expected-pend subtype requires a signal the
   validator still cannot distinguish from persisted claim state.
 
 ## Service Bus Post-Window Reconciliation
 
-`--servicebus-only` polls each submitted claim for a persisted terminal outcome
+The validator polls each submitted claim for a persisted terminal outcome
 inside the configured observation window. If that window expires, the validator
 preserves the submitted claim ID and marks the result as an observation timeout
 instead of discarding the ID as a generic platform failure.
@@ -109,27 +98,34 @@ post-window lifecycle phase.
 
 Defaults:
 
-- Reconciliation is enabled whenever `--servicebus-only` is active.
+- Reconciliation is enabled by default.
 - `--servicebus-reconciliation-timeout 300`
 - The poll interval comes from `--pend-observation-interval-ms`.
 - Pass `--no-servicebus-reconciliation` only to reproduce the pre-reconciliation
   behavior intentionally.
 
-For `scripts/run-mcc-local-k8s.sh` and `scripts/sweep-mcc-local-k8s.sh`, set
-`SERVICEBUS_ONLY=true` to select the asynchronous path. Reconciliation can be
-controlled with `SERVICEBUS_RECONCILIATION_ENABLED` and
-`SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS`.
+For `scripts/run-mcc-local-k8s.sh` and `scripts/sweep-mcc-local-k8s.sh`,
+reconciliation can be controlled with `SERVICEBUS_RECONCILIATION_ENABLED` and
+`SERVICEBUS_RECONCILIATION_TIMEOUT_SECONDS`, and the observation window with
+`PEND_OBSERVATION_TIMEOUT_SECONDS` and `PEND_OBSERVATION_INTERVAL_MS`.
+
+The run summary's per-step adjudication timings (`adjudicationStepTimings`,
+per-claim `adjudicationStepMilliseconds`) stay in the published contract but are
+empty: only the removed dry-run endpoint reported them.
 
 ## Pend Diagnostics (`--pend-diagnostics`)
 
 Off by default. When given a path, the validator captures, for every
-expected-pend claim and a bounded sample of NCCI/MUE-denied claims (see
-`--pend-diagnostics-ncci-sample`, default 200):
+expected-pend claim and a bounded sample of claims the claims-service pipeline
+recorded an NCCI edit failure on (see `--pend-diagnostics-ncci-sample`, default
+200). The sample picks claims whose persisted `pendDetails.pendCode` is `NCCI`
+(PTP pair edits, a pair+MUE mix, or an NCCI engine outage) or `MUE` (MUE-only
+failures), the codes `NcciEditsStage` writes in both `PendForReview` and `Deny`
+modes. It used to select on the `NCCI_MUE_EDIT_FAILURE` denial code, which only
+the removed `/adjudicate` dry run produced. For each diagnosed claim it captures:
 
 - The answer-key expectation (scenario, expected disposition).
-- The full synchronous adjudication response from
-  `POST /api/v1/adjudication/adjudicate` (`Success`, every denial/error field
-  present, totals) — captured verbatim, not reshaped.
+- The observed pipeline outcome (paid or not, normalized business denial code).
 - The post-adjudication claim state read back from claims-service
   (`ClaimStatus`, `PendDetails`, persisted denial code/reason, per-line
   adjustment reasons when the claim model exposes them).
@@ -148,7 +144,7 @@ This produces two things:
 **This is diagnostic instrumentation only.** It changes no dispositions, no
 engine logic, no claim state handling. It performs one additional
 `GET /api/claims/{id}` read per diagnosed claim, and that read happens after
-`total.Stop()` — the same posture as `--pend-observation` — so it never
+`total.Stop()` — the same posture as Service Bus reconciliation — so it never
 affects P95/P99/throughput. But a diagnostics-on run reads more claims than a
 diagnostics-off run of the same size, so **do not report a diagnostics-on
 run's timing as a throughput benchmark result.**

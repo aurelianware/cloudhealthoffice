@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways;
 
@@ -94,8 +95,8 @@ public sealed class ClaimAcknowledgmentIngress : IClaimAcknowledgmentIngress
 
             _logger.LogWarning(
                 "Claim acknowledgment retrieve failed gateway={Gateway} ack={AckId} category={Category}",
-                Sanitize(discovery.GatewayName),
-                Sanitize(discovery.ExternalAcknowledgmentId),
+                LogSanitizer.Sanitize(discovery.GatewayName),
+                LogSanitizer.Sanitize(discovery.ExternalAcknowledgmentId),
                 category);
 
             var quarantined = await _processor.ProcessAsync(
@@ -170,7 +171,4 @@ public sealed class ClaimAcknowledgmentIngress : IClaimAcknowledgmentIngress
 
     private static bool IsTransient(GatewayErrorCategory category) =>
         TransientCategories.Contains(category.ToString());
-
-    private static string? Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? value : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

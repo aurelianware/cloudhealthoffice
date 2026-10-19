@@ -131,15 +131,17 @@ public abstract class AppealOutboxStoreScenarios<TRepo> : IAsyncLifetime
         await AddNoteAsync(submitted);
 
         var stored = await StoredAsync(appeal.Id);
-        stored.Outbox!.Select(m => m.EventType).Should().Equal(
+        stored.Outbox.Should().NotBeNull();
+        var outbox = stored.Outbox!; // asserted non-null above
+        outbox.Select(m => m.EventType).Should().Equal(
             AppealEventPublisher.AppealCreatedType,
             AppealEventPublisher.AppealStatusChangedType,
             AppealEventPublisher.AppealNoteAddedType);
-        stored.Outbox.Should().OnlyContain(m => m.Status == AppealOutboxStatus.Pending && m.TenantId == Tenant);
-        stored.Outbox.Select(m => m.Id).Should().OnlyHaveUniqueItems("every row has its own server id");
-        stored.Outbox[1].IdempotencyKey.Should().Be(transition.EventId);
-        stored.Outbox[1].EventId.Should().Be(AppealOutbox.WireEventId(Tenant, appeal.Id, transition.EventId));
-        stored.Outbox.Should().OnlyContain(m => !m.PayloadJson.Contains("enc::"), "encrypted fields never reach the payload");
+        outbox.Should().OnlyContain(m => m.Status == AppealOutboxStatus.Pending && m.TenantId == Tenant);
+        outbox.Select(m => m.Id).Should().OnlyHaveUniqueItems("every row has its own server id");
+        outbox[1].IdempotencyKey.Should().Be(transition.EventId);
+        outbox[1].EventId.Should().Be(AppealOutbox.WireEventId(Tenant, appeal.Id, transition.EventId));
+        outbox.Should().OnlyContain(m => !m.PayloadJson.Contains("enc::"), "encrypted fields never reach the payload");
 
         await AssertStoredDocumentAsync(appeal.Id);
     }

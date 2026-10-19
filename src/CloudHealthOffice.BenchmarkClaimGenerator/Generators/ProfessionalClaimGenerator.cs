@@ -233,8 +233,8 @@ public class ProfessionalClaimGenerator : IClaimGenerator
 
         foreach (var line in claim.Lines)
         {
-            var lineAllowed = Math.Round(line.ChargeAmount * line.Units * allowedRatio, 2);
-            var lineCoinsurance = Math.Round(lineAllowed * coinsuranceRate, 2);
+            var lineAllowed = ExpectedMoney.ToCents(line.ChargeAmount * line.Units * allowedRatio);
+            var lineCoinsurance = ExpectedMoney.ToCents(lineAllowed * coinsuranceRate);
             var linePaid = Math.Max(0, lineAllowed - lineCoinsurance);
             totalAllowed += lineAllowed;
             totalPaid += linePaid;
@@ -250,7 +250,7 @@ public class ProfessionalClaimGenerator : IClaimGenerator
         }
 
         totalPaid = Math.Max(0, totalPaid - copay - deductible);
-        var memberLiability = copay + deductible + Math.Round(totalAllowed * coinsuranceRate, 2);
+        var memberLiability = copay + deductible + ExpectedMoney.ToCents(totalAllowed * coinsuranceRate);
 
         return new ExpectedOutcome
         {
@@ -259,7 +259,7 @@ public class ProfessionalClaimGenerator : IClaimGenerator
             ExpectedPaidAmount = totalPaid,
             ExpectedMemberLiability = memberLiability,
             ExpectedCopay = copay,
-            ExpectedCoinsurance = Math.Round(totalAllowed * coinsuranceRate, 2),
+            ExpectedCoinsurance = ExpectedMoney.ToCents(totalAllowed * coinsuranceRate),
             ExpectedDeductible = deductible,
             LineOutcomes = lineOutcomes,
             ExpectedFhirCompliant = true,

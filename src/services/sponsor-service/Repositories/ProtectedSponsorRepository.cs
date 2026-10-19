@@ -1,5 +1,6 @@
 using CloudHealthOffice.FieldProtection;
 using SponsorService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace SponsorService.Repositories;
 
@@ -99,7 +100,7 @@ public sealed class ProtectedSponsorRepository : ISponsorRepository
                 _logger.LogWarning(LegacyPlaintextEvent,
                     "Sponsor {GroupNumber} in tenant {TenantId} has a billing account number stored before encryption; " +
                     "it is stored encrypted by the next create or update of this sponsor",
-                    Sanitize(sponsor!.GroupNumber), Sanitize(sponsor.TenantId));
+                    LogSanitizer.Sanitize(sponsor!.GroupNumber), LogSanitizer.Sanitize(sponsor.TenantId));
             }
         }
 
@@ -107,7 +108,4 @@ public sealed class ProtectedSponsorRepository : ISponsorRepository
         billing.BillingAccountNumber = _protector.Unprotect(billing.BillingAccountNumber, Context(sponsor!));
         return sponsor;
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

@@ -88,7 +88,7 @@ public class FhirPatientProjectorTests
     {
         var json = new FhirPatientProjector().Project(BuildMember());
         var extensions = json["extension"]!.AsArray();
-        var birthSex = extensions.Single(e => e!["url"]!.ToString() == FhirExtensionBuilder.UsCoreBirthSex);
+        var birthSex = extensions.Single(e => e!["url"]!.ToString() == FhirExtensionBuilder.UsCoreBirthSex)!;
         birthSex["valueCode"]!.ToString().Should().Be("F");
 
         extensions.Any(e => e!["url"]!.ToString() == FhirExtensionBuilder.UsCoreGenderIdentity).Should().BeTrue();
@@ -103,7 +103,7 @@ public class FhirPatientProjectorTests
         ids.Any(i => i!["system"]!.ToString() == "urn:cho:member-id").Should().BeTrue();
         ids.Any(i => i!["system"]!.ToString() == "http://hl7.org/fhir/sid/us-mbi").Should().BeTrue();
 
-        var ssn = ids.Single(i => i!["system"]!.ToString() == "http://hl7.org/fhir/sid/us-ssn");
+        var ssn = ids.Single(i => i!["system"]!.ToString() == "http://hl7.org/fhir/sid/us-ssn")!;
         ssn["value"]!.ToString().Should().Be("[REDACTED]");
     }
 
@@ -133,7 +133,7 @@ public class FhirPatientProjectorTests
     {
         var json = new FhirPatientProjector().Project(BuildMember());
         var comms = json["communication"]!.AsArray();
-        var preferred = comms.Single(c => c!["preferred"]!.GetValue<bool>());
+        var preferred = comms.Single(c => c!["preferred"]!.GetValue<bool>())!;
         preferred["language"]!["coding"]!.AsArray()[0]!["code"]!.ToString().Should().Be("en-US");
     }
 

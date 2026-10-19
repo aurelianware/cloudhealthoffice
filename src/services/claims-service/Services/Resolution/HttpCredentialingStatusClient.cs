@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using ClaimsService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -77,7 +78,7 @@ public class HttpCredentialingStatusClient : ICredentialingStatusClient
             {
                 _logger.LogWarning(
                     "Provider service returned {StatusCode} resolving credentialing status for provider {Provider}",
-                    response.StatusCode, SanitizeForLog(providerId));
+                    response.StatusCode, LogSanitizer.Sanitize(providerId));
                 return null;
             }
 
@@ -91,11 +92,8 @@ public class HttpCredentialingStatusClient : ICredentialingStatusClient
         {
             _logger.LogWarning(ex,
                 "Credentialing status lookup failed for provider {Provider} tenant {Tenant}",
-                SanitizeForLog(providerId), SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(providerId), LogSanitizer.Sanitize(tenantId));
             return null;
         }
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

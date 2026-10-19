@@ -2,6 +2,7 @@ using PersonalRepresentativeService.Models;
 using PersonalRepresentativeService.Services;
 using MongoDB.Driver;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PersonalRepresentativeService.Repositories;
 
@@ -188,10 +189,10 @@ public class PersonalRepRepositoryMongo : IPersonalRepRepository
                 "Personal Rep association pair committed but audit append failed " +
                 "(tenantId={TenantId}, pairId={PairId}, eventId={EventId}, correlationId={CorrelationId}). " +
                 "Pair persisted; audit row missing — manual reconciliation required.",
-                LogSanitizer.SafeForLog(forward.TenantId),
-                LogSanitizer.SafeForLog(forward.PairId),
-                LogSanitizer.SafeForLog(auditEvent.EventId),
-                LogSanitizer.SafeForLog(auditEvent.CorrelationId));
+                LogSanitizer.Sanitize(forward.TenantId, 256),
+                LogSanitizer.Sanitize(forward.PairId, 256),
+                LogSanitizer.Sanitize(auditEvent.EventId, 256),
+                LogSanitizer.Sanitize(auditEvent.CorrelationId, 256));
             throw;
         }
     }
@@ -241,10 +242,10 @@ public class PersonalRepRepositoryMongo : IPersonalRepRepository
                 "Personal Rep association pair removed but audit append failed " +
                 "(tenantId={TenantId}, pairId={PairId}, eventId={EventId}, correlationId={CorrelationId}). " +
                 "Pair soft-deleted; audit row missing — manual reconciliation required.",
-                LogSanitizer.SafeForLog(tenantId),
-                LogSanitizer.SafeForLog(pairId),
-                LogSanitizer.SafeForLog(auditEvent.EventId),
-                LogSanitizer.SafeForLog(auditEvent.CorrelationId));
+                LogSanitizer.Sanitize(tenantId, 256),
+                LogSanitizer.Sanitize(pairId, 256),
+                LogSanitizer.Sanitize(auditEvent.EventId, 256),
+                LogSanitizer.Sanitize(auditEvent.CorrelationId, 256));
             throw;
         }
     }

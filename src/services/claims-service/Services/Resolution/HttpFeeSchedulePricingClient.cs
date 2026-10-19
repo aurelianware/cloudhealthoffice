@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CloudHealthOffice.FeeScheduleEngine.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -58,7 +59,7 @@ public class HttpFeeSchedulePricingClient : IFeeSchedulePricingClient
             {
                 _logger.LogWarning(
                     "Benefit-plan-service resolve-rates returned {StatusCode} for tenant {Tenant} ({LineCount} lines)",
-                    response.StatusCode, SanitizeForLog(tenantId), requests.Count);
+                    response.StatusCode, LogSanitizer.Sanitize(tenantId), requests.Count);
                 return null;
             }
 
@@ -74,11 +75,8 @@ public class HttpFeeSchedulePricingClient : IFeeSchedulePricingClient
         {
             _logger.LogWarning(ex,
                 "Fee schedule pricing failed for tenant {Tenant} ({LineCount} lines)",
-                SanitizeForLog(tenantId), requests.Count);
+                LogSanitizer.Sanitize(tenantId), requests.Count);
             return null;
         }
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

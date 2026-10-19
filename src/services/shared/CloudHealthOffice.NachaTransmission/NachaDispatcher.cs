@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using CloudHealthOffice.FieldProtection;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.NachaTransmission;
 
@@ -166,7 +167,7 @@ public sealed class NachaDispatcher : INachaDispatcher
             _logger.LogInformation(TransmittedEvent,
                 "AUDIT NACHA file {FileReference} ({Service}) released by {User} for tenant {TenantId} delivered to the bank: " +
                 "{EntryCount} entries, debits {Debits}, credits {Credits}, sha256 {Sha256}",
-                Sanitize(request.FileReference), _options.ServiceName, Sanitize(request.TransmittedBy), Sanitize(request.TenantId),
+                LogSanitizer.Sanitize(request.FileReference), _options.ServiceName, LogSanitizer.Sanitize(request.TransmittedBy), LogSanitizer.Sanitize(request.TenantId),
                 receipt.EntryCount, receipt.TotalDebitAmount, receipt.TotalCreditAmount, receipt.Sha256);
             return new NachaDispatchOutcome { Status = NachaTransmissionStatus.Transmitted, Receipt = receipt };
         }
@@ -216,7 +217,7 @@ public sealed class NachaDispatcher : INachaDispatcher
             _logger.LogError(DeliveryUnknownEvent,
                 "AUDIT NACHA file {FileReference} ({Service}) for tenant {TenantId}: delivery to the bank is unknown ({Reason}) and the " +
                 "file could not be held ({Error}); verify with the bank",
-                Sanitize(request.FileReference), _options.ServiceName, Sanitize(request.TenantId), Sanitize(reason), ex.GetType().Name);
+                LogSanitizer.Sanitize(request.FileReference), _options.ServiceName, LogSanitizer.Sanitize(request.TenantId), LogSanitizer.Sanitize(reason), ex.GetType().Name);
             return new NachaDispatchOutcome { Status = NachaTransmissionStatus.DeliveryUnknown, Reason = reason };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -224,7 +225,7 @@ public sealed class NachaDispatcher : INachaDispatcher
             _logger.LogError(NotSentEvent,
                 "AUDIT NACHA file {FileReference} ({Service}) for tenant {TenantId} was not delivered ({Reason}) and could not be held " +
                 "({Error}); its payments stay Pending",
-                Sanitize(request.FileReference), _options.ServiceName, Sanitize(request.TenantId), Sanitize(reason), ex.GetType().Name);
+                LogSanitizer.Sanitize(request.FileReference), _options.ServiceName, LogSanitizer.Sanitize(request.TenantId), LogSanitizer.Sanitize(reason), ex.GetType().Name);
             return new NachaDispatchOutcome
             {
                 Status = NachaTransmissionStatus.NotSent,
@@ -237,14 +238,14 @@ public sealed class NachaDispatcher : INachaDispatcher
             _logger.LogError(DeliveryUnknownEvent,
                 "AUDIT NACHA file {FileReference} ({Service}) released by {User} for tenant {TenantId}: delivery to the bank is unknown: {Reason}. " +
                 "Held encrypted until {HeldUntil:o}; not retried or retrieved until the bank's answer is recorded",
-                Sanitize(request.FileReference), _options.ServiceName, Sanitize(request.TransmittedBy), Sanitize(request.TenantId), Sanitize(reason), heldUntil);
+                LogSanitizer.Sanitize(request.FileReference), _options.ServiceName, LogSanitizer.Sanitize(request.TransmittedBy), LogSanitizer.Sanitize(request.TenantId), LogSanitizer.Sanitize(reason), heldUntil);
             return new NachaDispatchOutcome { Status = NachaTransmissionStatus.DeliveryUnknown, Reason = reason, HeldUntil = heldUntil };
         }
 
         _logger.LogWarning(HeldEvent,
             "AUDIT NACHA file {FileReference} ({Service}) released by {User} for tenant {TenantId} was not delivered: {Reason}. " +
             "Held encrypted until {HeldUntil:o} for platform-admin retrieval or retry by another approver",
-            Sanitize(request.FileReference), _options.ServiceName, Sanitize(request.TransmittedBy), Sanitize(request.TenantId), Sanitize(reason), heldUntil);
+            LogSanitizer.Sanitize(request.FileReference), _options.ServiceName, LogSanitizer.Sanitize(request.TransmittedBy), LogSanitizer.Sanitize(request.TenantId), LogSanitizer.Sanitize(reason), heldUntil);
         return new NachaDispatchOutcome { Status = NachaTransmissionStatus.AwaitingRetrieval, Reason = reason, HeldUntil = heldUntil };
     }
 
@@ -289,7 +290,7 @@ public sealed class NachaDispatcher : INachaDispatcher
             await _store.MarkTransmittedAsync(tenantId, fileReference, receipt, cancellationToken);
             _logger.LogInformation(RetriedEvent,
                 "AUDIT NACHA file {FileReference} ({Service}) for tenant {TenantId}, released by {ReleasedBy}, retried by {User} and delivered: sha256 {Sha256}",
-                Sanitize(fileReference), _options.ServiceName, Sanitize(tenantId), Sanitize(held.ReleasedBy), Sanitize(actor.UserId), receipt.Sha256);
+                LogSanitizer.Sanitize(fileReference), _options.ServiceName, LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(held.ReleasedBy), LogSanitizer.Sanitize(actor.UserId), receipt.Sha256);
             return new NachaDispatchOutcome { Status = NachaTransmissionStatus.Transmitted, Receipt = receipt };
         }
         catch (NachaTransmissionException ex) when (ex.DeliveryUnknown)
@@ -297,7 +298,7 @@ public sealed class NachaDispatcher : INachaDispatcher
             await _store.MarkDeliveryUnknownAsync(tenantId, fileReference, ex.Message, CancellationToken.None);
             _logger.LogError(DeliveryUnknownEvent,
                 "AUDIT NACHA file {FileReference} ({Service}) for tenant {TenantId} retried by {User}: delivery to the bank is unknown: {Reason}",
-                Sanitize(fileReference), _options.ServiceName, Sanitize(tenantId), Sanitize(actor.UserId), Sanitize(ex.Message));
+                LogSanitizer.Sanitize(fileReference), _options.ServiceName, LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(actor.UserId), LogSanitizer.Sanitize(ex.Message));
             return new NachaDispatchOutcome { Status = NachaTransmissionStatus.DeliveryUnknown, Reason = ex.Message, HeldUntil = held.ExpiresAt };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -306,7 +307,7 @@ public sealed class NachaDispatcher : INachaDispatcher
             await _store.ReleaseClaimAsync(tenantId, fileReference, reason, CancellationToken.None);
             _logger.LogWarning(RetriedEvent,
                 "AUDIT NACHA file {FileReference} ({Service}) for tenant {TenantId} retried by {User} and still not delivered: {Reason}",
-                Sanitize(fileReference), _options.ServiceName, Sanitize(tenantId), Sanitize(actor.UserId), Sanitize(reason));
+                LogSanitizer.Sanitize(fileReference), _options.ServiceName, LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(actor.UserId), LogSanitizer.Sanitize(reason));
             return new NachaDispatchOutcome { Status = NachaTransmissionStatus.AwaitingRetrieval, Reason = reason, HeldUntil = held.ExpiresAt };
         }
     }
@@ -322,7 +323,7 @@ public sealed class NachaDispatcher : INachaDispatcher
                 "Separation of duties: you released this NACHA file, so you cannot retrieve it. Another platform admin must.");
         if (string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("A reason is required to retrieve a NACHA file.");
-        reason = Sanitize(reason.Trim());
+        reason = FlattenLineBreaks(reason.Trim());
         if (reason.Length > 500) reason = reason[..500];
         if (held.Status == NachaHeldFileStatus.DeliveryUnknown)
             throw new NachaHeldFileStateException(DeliveryUnknownMessage(fileReference));
@@ -337,7 +338,7 @@ public sealed class NachaDispatcher : INachaDispatcher
         _logger.LogWarning(RetrievedEvent,
             "AUDIT NACHA file {FileReference} ({Service}) for tenant {TenantId}, released by {ReleasedBy}, retrieved by platform admin {User}" +
             " (retrieval {Count}) for: {Reason}. sha256 {Sha256}",
-            Sanitize(fileReference), _options.ServiceName, Sanitize(tenantId), Sanitize(held.ReleasedBy), Sanitize(actor.UserId),
+            LogSanitizer.Sanitize(fileReference), _options.ServiceName, LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(held.ReleasedBy), LogSanitizer.Sanitize(actor.UserId),
             held.Retrievals.Count + 1, reason, held.Sha256);
         return new NachaRetrievedFile { FileName = held.FileName, Content = content, Record = held, FirstRetrieval = first };
     }
@@ -353,7 +354,7 @@ public sealed class NachaDispatcher : INachaDispatcher
                 "Separation of duties: you released this NACHA file, so you cannot record whether the bank received it. Another user with payments:approve must.");
         if (string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("A reason (what the bank said) is required.");
-        reason = Sanitize(reason.Trim());
+        reason = FlattenLineBreaks(reason.Trim());
         if (reason.Length > 500) reason = reason[..500];
         if (held.Status != NachaHeldFileStatus.DeliveryUnknown)
             throw new NachaHeldFileStateException($"NACHA file {fileReference} is {held.Status}, not awaiting the bank's answer.");
@@ -365,7 +366,7 @@ public sealed class NachaDispatcher : INachaDispatcher
         _logger.LogWarning(DeliveryResolvedEvent,
             "AUDIT NACHA file {FileReference} ({Service}) for tenant {TenantId}, released by {ReleasedBy}: {User} recorded that the bank " +
             "{Answer} it: {Reason}",
-            Sanitize(fileReference), _options.ServiceName, Sanitize(tenantId), Sanitize(held.ReleasedBy), Sanitize(actor.UserId),
+            LogSanitizer.Sanitize(fileReference), _options.ServiceName, LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(held.ReleasedBy), LogSanitizer.Sanitize(actor.UserId),
             bankReceived ? "received" : "did not receive", reason);
         return await _store.GetAsync(tenantId, fileReference, cancellationToken) ?? held;
     }
@@ -397,10 +398,14 @@ public sealed class NachaDispatcher : INachaDispatcher
     {
         _logger.LogWarning(RefusedEvent,
             "AUDIT refused: {User} (service: {IsService}) may not {Action} NACHA file {FileReference} ({Service}) for tenant {TenantId}",
-            Sanitize(actor.UserId), actor.IsService, action, Sanitize(held.FileReference), _options.ServiceName, Sanitize(held.TenantId));
+            LogSanitizer.Sanitize(actor.UserId), actor.IsService, action, LogSanitizer.Sanitize(held.FileReference), _options.ServiceName, LogSanitizer.Sanitize(held.TenantId));
         return new NachaSeparationOfDutiesException(message);
     }
 
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", " ");
+    /// <summary>
+    /// Keeps a stored free-text value on one line: CR removed, LF becomes a
+    /// space. For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string FlattenLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", " ");
 }

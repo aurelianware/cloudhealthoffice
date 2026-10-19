@@ -1,6 +1,7 @@
 using ArService.Models;
 using ArService.Repositories;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ArService.Controllers;
 
@@ -38,7 +39,7 @@ public class MembersArController : ControllerBase
         if (string.IsNullOrWhiteSpace(memberId))
             return BadRequest(new { error = "memberId is required" });
 
-        _logger.LogInformation("AR summary lookup for member {MemberId}", SanitizeForLog(memberId));
+        _logger.LogInformation("AR summary lookup for member {MemberId}", LogSanitizer.MaskId(memberId));
 
         var balances = (await _balanceRepository.GetBalancesContainingMemberAsync(memberId)).ToList();
         var summary = BuildSummary(memberId, balances, DateTime.UtcNow);
@@ -107,11 +108,5 @@ public class MembersArController : ControllerBase
             .ToList();
 
         return summary;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

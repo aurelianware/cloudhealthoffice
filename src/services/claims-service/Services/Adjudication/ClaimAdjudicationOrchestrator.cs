@@ -6,6 +6,7 @@ using ClaimsService.Services;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.Infrastructure.Messaging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication;
 
@@ -80,7 +81,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
 
         _logger.LogInformation(
             "Adjudication starting for tenant {TenantId} claim {ClaimVersionId} (delivery {DeliveryCount})",
-            SanitizeForLog(message.TenantId), SanitizeForLog(message.ClaimVersionId),
+            LogSanitizer.Sanitize(message.TenantId), LogSanitizer.Sanitize(message.ClaimVersionId),
             messageContext.DeliveryCount);
 
         var adapter = await _adapterFactory.GetAdapterAsync(message.TenantId, ct).ConfigureAwait(false);
@@ -98,7 +99,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         {
             _logger.LogWarning(
                 "Claim {ClaimVersionId} not found via adapter; completing message with no work",
-                SanitizeForLog(message.ClaimVersionId));
+                LogSanitizer.Sanitize(message.ClaimVersionId));
             return;
         }
 
@@ -110,7 +111,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         {
             _logger.LogInformation(
                 "Claim {ClaimVersionId} already adjudicated; skipping pipeline run",
-                SanitizeForLog(message.ClaimVersionId));
+                LogSanitizer.Sanitize(message.ClaimVersionId));
             return;
         }
 
@@ -142,7 +143,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         {
             _logger.LogWarning(ex,
                 "Accumulator commit for claim {ClaimId} not attempted now; the outbox dispatcher retries it",
-                SanitizeForLog(context.Claim.Id));
+                LogSanitizer.Sanitize(context.Claim.Id));
         }
     }
 
@@ -194,7 +195,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                 // (null) keeps the pre-existing path; only this is flagged.
                 _logger.LogWarning(ex,
                     "Benefit plan {PlanId} unavailable for claim {ClaimVersionId}",
-                    SanitizeForLog(claim.BenefitPlanId), SanitizeForLog(claimVersionId));
+                    LogSanitizer.Sanitize(claim.BenefitPlanId), LogSanitizer.Sanitize(claimVersionId));
                 context.PlanResolutionFailed = true;
             }
         }
@@ -377,7 +378,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         {
             _logger.LogWarning(
                 "Approval re-run for claim {ClaimId} lost its resolution lock; nothing emitted",
-                SanitizeForLog(claimId));
+                LogSanitizer.Sanitize(claimId));
             return new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Reject,
                 "The examiner resolution lock is no longer held.")
             {
@@ -455,7 +456,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                 _logger.LogDebug(
                     "Skipping stage {Stage} for claim {ClaimVersionId} " +
                     "(enabled={Enabled}, shortCircuited={ShortCircuited}, required={Required})",
-                    stage.Name, SanitizeForLog(context.ClaimVersionId),
+                    stage.Name, LogSanitizer.Sanitize(context.ClaimVersionId),
                     enabled, context.ShortCircuited, stage.IsRequired);
                 continue;
             }
@@ -482,7 +483,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                 // on the missing check.
                 _logger.LogError(ex,
                     "Stage {Stage} threw for claim {ClaimVersionId}; pending {PendCode}",
-                    stage.Name, SanitizeForLog(context.ClaimVersionId), ServiceUnavailablePendCode);
+                    stage.Name, LogSanitizer.Sanitize(context.ClaimVersionId), ServiceUnavailablePendCode);
                 var reason = $"{ServiceUnavailableReason}: {stage.Name} threw {ex.GetType().Name}; " +
                              "retried on an examiner approval re-run";
                 RecordServiceUnavailablePend(context, reason);
@@ -529,8 +530,8 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                 _logger.LogInformation(
                     "Stage {Stage} short-circuited pipeline for claim {ClaimVersionId} " +
                     "(outcome={Outcome}, reason={Reason})",
-                    stage.Name, SanitizeForLog(context.ClaimVersionId),
-                    result.Outcome, SanitizeForLog(result.Reason));
+                    stage.Name, LogSanitizer.Sanitize(context.ClaimVersionId),
+                    result.Outcome, LogSanitizer.Sanitize(result.Reason));
                 context.ShortCircuited = true;
             }
         }
@@ -668,7 +669,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             _logger.LogError(ex,
                 "ClaimVersionAdjudicated audit event emission failed for claim {ClaimVersionId}; " +
                 "adjudication persisted, audit chain has a gap",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
         }
 
         // 2) Service Bus topic emission — trigger transport for downstream
@@ -708,7 +709,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         {
             _logger.LogError(ex,
                 "ClaimVersionAdjudicated Service Bus emission failed for claim {ClaimVersionId}",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
         }
 
         // 3) Work management: a run that ends Pended (a first adjudication, or
@@ -735,7 +736,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             {
                 _logger.LogError(ex,
                     "Work-needed emission failed for claim {ClaimVersionId}; work-management reconcile repairs it",
-                    SanitizeForLog(context.ClaimVersionId));
+                    LogSanitizer.Sanitize(context.ClaimVersionId));
             }
         }
 
@@ -761,7 +762,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         {
             _logger.LogError(ex,
                 "Adjustment lifecycle callback failed for new version {ClaimId}; pipeline persisted, adjustment may stay in AwaitingReadjudication",
-                SanitizeForLog(context.Claim.Id));
+                LogSanitizer.Sanitize(context.Claim.Id));
         }
     }
 
@@ -800,7 +801,4 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         ClaimType.Dental => "DEN",
         _ => null,
     };
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

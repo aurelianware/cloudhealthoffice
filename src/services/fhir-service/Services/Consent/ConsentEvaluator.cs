@@ -1,4 +1,5 @@
 using CloudHealthOffice.Consent.Contracts;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.Consent;
 
@@ -88,17 +89,10 @@ public sealed class RegistryConsentEvaluator : IConsentEvaluator
             // Category only — the exception can carry registry detail.
             _logger.LogWarning(
                 "Consent lookup failed for tenant={Tenant} purpose={Purpose}; denying ({Fault}).",
-                Clean(tenantId), purpose, ex.GetType().Name);
+                LogSanitizer.Sanitize(tenantId), purpose, ex.GetType().Name);
             return ConsentDecision.Deny(purpose, ConsentAuthorizationReason.NoConsentOnRecord, asOf);
         }
 
         return ConsentAuthorizationPolicy.Evaluate(tenantId, memberId, purpose, consents, asOf);
     }
-
-    /// <summary>Strips CR/LF so an id cannot forge a log entry (CWE-117).</summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

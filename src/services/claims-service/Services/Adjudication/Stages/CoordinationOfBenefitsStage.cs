@@ -5,6 +5,7 @@ using ClaimsService.Services.Resolution;
 using CloudHealthOffice.CobEngine.Domain;
 using CloudHealthOffice.CobEngine.Services;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication.Stages;
 
@@ -230,7 +231,7 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             // and degrade.
             _logger.LogError(ex,
                 "Unexpected exception calling coverage-service /cob for claim {ClaimVersionId}",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
             entries = null;
         }
 
@@ -685,7 +686,7 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             // even if engine introspection failed.
             _logger.LogWarning(ex,
                 "PayerOrderService threw while labelling COB rule for claim {ClaimVersionId}; defaulting to ExplicitCoverageRecord",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
             return PayerOrderRule.ExplicitCoverageRecord;
         }
     }
@@ -842,9 +843,6 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
 
         return earliest ?? DateTime.UtcNow;
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private static string? TruncatePendReason(string? reason)
     {

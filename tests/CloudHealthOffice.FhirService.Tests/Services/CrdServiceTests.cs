@@ -271,19 +271,19 @@ public class CrdServiceTests
         public string? LastRequestUri { get; private set; }
         public int RequestCount { get; private set; }
 
-        protected override async Task<HttpResponseMessage> SendAsync(
+        protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             RequestCount++;
             LastRequestUri = request.RequestUri?.ToString();
 
             if (ShouldThrow)
-                throw new HttpRequestException("Terminology Service is unavailable");
+                return Task.FromException<HttpResponseMessage>(new HttpRequestException("Terminology Service is unavailable"));
 
-            return new HttpResponseMessage(HttpStatusCode.OK)
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(ResponseBody, System.Text.Encoding.UTF8, "application/json"),
-            };
+            });
         }
     }
 }

@@ -277,7 +277,6 @@ Need an integrity score?
 | FHIR Organization projection | `FhirOrganizationProjector` (provider-service) | Cached projection (only when score is on the Provider with `ProviderType.Organization`) |
 | Provider list grid | `Pages/Providers.razor` (portal) | Cached projection (via portal `ProviderService` HTTP client) |
 | Provider detail card | `Pages/ProviderDetailsDialog.razor` (portal) | Cached projection; "Refresh now" button calls live |
-| Adjudication critical path (standalone endpoint) | `HttpProviderIntegrityGate` via `AdjudicationController.Adjudicate` (benefit-plan-service) | Cached-or-live (default) |
 | Adjudication critical path (real pipeline) | `ProviderIntegrityStage` (claims-service) → `GET /api/v1/adjudication/provider-integrity/{npi}` → `HttpProviderIntegrityGate` (benefit-plan-service) | Cached-or-live (default); added July 2026 — see addendum above |
 | Admin tenant backfill | `IntegrityProjectionAdminController` (provider-service) | Live (per-provider in a loop) |
 | Scheduled re-verification | `IntegrityProjectionWorker` (provider-service) | Live (worker → verification-service) |

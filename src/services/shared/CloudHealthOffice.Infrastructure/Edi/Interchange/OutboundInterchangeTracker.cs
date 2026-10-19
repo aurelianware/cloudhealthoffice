@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Edi.Interchange;
 
@@ -84,7 +85,7 @@ public sealed class OutboundInterchangeTracker : IOutboundInterchangeTracker
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Outbound {TransactionType} lookup failed; recording it as new", X12InterchangeIntake.Sanitize(transactionType));
+            _logger.LogWarning(ex, "Outbound {TransactionType} lookup failed; recording it as new", LogSanitizer.Sanitize(transactionType, 64));
         }
         await RecordSentAsync(tenantId, ediContent, transactionType, sourceReference, ct);
         return ediContent;
@@ -98,7 +99,7 @@ public sealed class OutboundInterchangeTracker : IOutboundInterchangeTracker
             var env = read.Interchanges.FirstOrDefault();
             if (!read.IsReadable || env?.Header is null)
             {
-                _logger.LogWarning("Outbound {TransactionType} interchange not tracked: no readable ISA", X12InterchangeIntake.Sanitize(transactionType));
+                _logger.LogWarning("Outbound {TransactionType} interchange not tracked: no readable ISA", LogSanitizer.Sanitize(transactionType, 64));
                 return null;
             }
 
@@ -121,7 +122,7 @@ public sealed class OutboundInterchangeTracker : IOutboundInterchangeTracker
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Outbound {TransactionType} interchange not tracked", X12InterchangeIntake.Sanitize(transactionType));
+            _logger.LogWarning(ex, "Outbound {TransactionType} interchange not tracked", LogSanitizer.Sanitize(transactionType, 64));
             return null;
         }
     }
@@ -187,15 +188,15 @@ public sealed class OutboundInterchangeTracker : IOutboundInterchangeTracker
                 {
                     _logger.LogWarning(
                         "Partner {PartnerId} rejected outbound {TransactionType} interchange {ControlNumber} (TA105 {NoteCode}) for tenant {TenantId}; matched={Matched}",
-                        X12InterchangeIntake.Sanitize(partner), X12InterchangeIntake.Sanitize(match?.TransactionType ?? "unknown"),
-                        X12InterchangeIntake.Sanitize(ta1.AcknowledgedControlNumber), X12InterchangeIntake.Sanitize(ta1.NoteCode),
-                        X12InterchangeIntake.Sanitize(tenantId), match is not null);
+                        LogSanitizer.Sanitize(partner, 64), LogSanitizer.Sanitize(match?.TransactionType ?? "unknown", 64),
+                        LogSanitizer.Sanitize(ta1.AcknowledgedControlNumber, 64), LogSanitizer.Sanitize(ta1.NoteCode, 64),
+                        LogSanitizer.Sanitize(tenantId, 64), match is not null);
                 }
                 else if (match is null)
                 {
                     _logger.LogInformation(
                         "TA1 from {PartnerId} for interchange {ControlNumber} matches no tracked outbound interchange",
-                        X12InterchangeIntake.Sanitize(partner), X12InterchangeIntake.Sanitize(ta1.AcknowledgedControlNumber));
+                        LogSanitizer.Sanitize(partner, 64), LogSanitizer.Sanitize(ta1.AcknowledgedControlNumber, 64));
                 }
 
                 result.Results.Add(new Ta1MatchResult

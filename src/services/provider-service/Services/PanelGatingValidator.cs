@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Options;
 using ProviderService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Services;
 
@@ -95,20 +96,17 @@ public sealed class PanelGatingValidator : IPanelGatingValidator
         // dashboard might filter on must appear here.
         _logger.Log(level,
             "PanelGatingFieldsMissing on participation write. caller={Caller} tenantId={Tenant} providerId={ProviderId} npi={NPI} participationIndex={Index} planId={PlanId} networkId={NetworkId} lineOfBusiness={LOB}",
-            Sanitize(callSite),
-            Sanitize(tenantId),
-            Sanitize(provider.ProviderId),
-            Sanitize(provider.NPI),
+            LogSanitizer.Sanitize(callSite),
+            LogSanitizer.Sanitize(tenantId),
+            LogSanitizer.Sanitize(provider.ProviderId),
+            LogSanitizer.Sanitize(provider.NPI),
             index,
-            Sanitize(participation.PlanId),
-            Sanitize(participation.NetworkId),
+            LogSanitizer.Sanitize(participation.PlanId),
+            LogSanitizer.Sanitize(participation.NetworkId),
             participation.LineOfBusiness);
 
         ChoMetrics.PanelGatingMissingWrites.Add(1,
             new KeyValuePair<string, object?>("cho.caller", callSite),
             new KeyValuePair<string, object?>("cho.tenant_id", string.IsNullOrEmpty(tenantId) ? "unknown" : tenantId));
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

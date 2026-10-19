@@ -75,6 +75,7 @@ public sealed class AnthropicConnectivityCheck
         }
         catch (System.Text.Json.JsonException)
         {
+            // Not the API's JSON error shape (e.g. a proxy page): report the truncated body instead.
         }
         return errorBody.Length > 300 ? errorBody[..300] : errorBody;
     }

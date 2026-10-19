@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PersonalRepresentativeService.Services;
 
@@ -55,7 +56,7 @@ public sealed class TenantPersonalRepControls : ITenantPersonalRepControls
             {
                 _logger.LogWarning(
                     "tenant-service returned {Status} for tenant {TenantId}; personal representative activation still needs a second person",
-                    (int)response.StatusCode, LogSanitizer.SafeForLog(tenantId));
+                    (int)response.StatusCode, LogSanitizer.Sanitize(tenantId, 256));
                 return true; // not cached: a transient failure must not pin the answer
             }
 
@@ -68,7 +69,7 @@ public sealed class TenantPersonalRepControls : ITenantPersonalRepControls
         {
             _logger.LogWarning(ex,
                 "Could not read personal representative controls for tenant {TenantId}; activation still needs a second person",
-                LogSanitizer.SafeForLog(tenantId));
+                LogSanitizer.Sanitize(tenantId, 256));
             return true;
         }
     }

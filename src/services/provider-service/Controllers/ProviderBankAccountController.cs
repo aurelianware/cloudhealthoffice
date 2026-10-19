@@ -5,6 +5,7 @@ using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Security;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Controllers;
 
@@ -61,7 +62,7 @@ public class ProviderBankAccountController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProviderBankAccount>> GetBankAccount(string npi, CancellationToken ct)
     {
-        _logger.LogInformation("Fetching bank account for provider NPI: {NPI}", Sanitize(npi));
+        _logger.LogInformation("Fetching bank account for provider NPI: {NPI}", LogSanitizer.Sanitize(npi));
 
         var provider = await _providers.GetByNPIAsync(npi);
         if (provider == null)
@@ -177,7 +178,7 @@ public class ProviderBankAccountController : ControllerBase
     private async Task<ActionResult<BankAccountChangeView>> ProposeAsync(
         string npi, ProviderBankAccount bankAccount, string source, CancellationToken ct)
     {
-        _logger.LogInformation("Bank-account change proposed for provider NPI: {NPI}", Sanitize(npi));
+        _logger.LogInformation("Bank-account change proposed for provider NPI: {NPI}", LogSanitizer.Sanitize(npi));
 
         var provider = await _providers.GetByNPIAsync(npi);
         if (provider == null)
@@ -225,7 +226,4 @@ public class ProviderBankAccountController : ControllerBase
             return Conflict(new { message = ex.Message });
         }
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

@@ -230,6 +230,64 @@ public class PremiumBillingServiceTests
         result.ExecutionCompletedAt.Should().NotBeNull();
     }
 
+    // Money is rounded to the cent half away from zero (MoneyRounding.ToCents):
+    // $100.125 → $100.13 and $50.005 → $50.01; banker's rounding gave $100.12 and $50.00.
+    [Fact]
+    public async Task ExecuteBillingRunAsync_PremiumAtHalfCent_RoundsAwayFromZero()
+    {
+        var billingRun = new BillingRun
+        {
+            Id = "br-1",
+            TenantId = Tenant,
+            BillingRunNumber = "BR-2026-03-MIDP",
+            Status = BillingRunStatus.Pending,
+            BillingPeriod = new DateTime(2026, 3, 1),
+            Criteria = new BillingRunCriteria()
+        };
+        _billingRunRepo.Setup(r => r.GetByIdAsync("br-1")).ReturnsAsync(billingRun);
+        _billingRunRepo.Setup(r => r.UpdateAsync(It.IsAny<BillingRun>()))
+            .ReturnsAsync((BillingRun br) => br);
+
+        var sponsors = new List<SponsorDto>
+        {
+            new() { GroupNumber = "GRP001", EmployerName = "Acme Corp", BillingDay = 15, GracePeriodDays = 30 }
+        };
+        var coverages = new List<CoverageDto>
+        {
+            new()
+            {
+                CoverageId = "cov-1",
+                MemberId = "mem-1",
+                GroupNumber = "GRP001",
+                EffectiveDate = new DateTime(2025, 1, 1),
+                MonthlyPremium = 100.125m,
+                EmployerContribution = 50.005m
+            }
+        };
+        _httpClientFactory.Setup(f => f.CreateClient("SponsorService"))
+            .Returns(CreateMockHttpClient(new BillingMockHttpMessageHandler(
+                new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(SponsorPage(sponsors)) })));
+        _httpClientFactory.Setup(f => f.CreateClient("CoverageService"))
+            .Returns(CreateMockHttpClient(new BillingMockHttpMessageHandler(
+                new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(CoveragePage(coverages)) })));
+
+        PremiumInvoice? created = null;
+        _invoiceRepo.Setup(r => r.CreateAsync(It.IsAny<PremiumInvoice>()))
+            .ReturnsAsync((PremiumInvoice inv) =>
+            {
+                inv.RecalculateTotals();
+                created = inv;
+                return inv;
+            });
+
+        await _service.ExecuteBillingRunAsync("br-1");
+
+        var line = created!.LineItems.Single();
+        line.SubscriberPremium.Should().Be(100.13m);
+        line.EmployerContribution.Should().Be(50.01m);
+        line.TotalPremium.Should().Be(150.13m); // $150.13 exactly: 100.125 + 50.005
+    }
+
     [Fact]
     public async Task ExecuteBillingRunAsync_SponsorFetchFails_MarksFailed()
     {

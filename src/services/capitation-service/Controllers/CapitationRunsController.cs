@@ -3,6 +3,7 @@ using CapitationService.Models;
 using CapitationService.Repositories;
 using CapitationService.Services;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CapitationService.Controllers;
 
@@ -60,7 +61,7 @@ public class CapitationRunsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CapitationRun>> ExecuteRun(string id)
     {
-        _logger.LogInformation("Executing capitation run {RunId}", SanitizeForLog(id));
+        _logger.LogInformation("Executing capitation run {RunId}", LogSanitizer.Sanitize(id));
 
         try
         {
@@ -135,12 +136,5 @@ public class CapitationRunsController : ControllerBase
     {
         var statements = await _statementRepository.GetByRunIdAsync(id);
         return Ok(statements);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

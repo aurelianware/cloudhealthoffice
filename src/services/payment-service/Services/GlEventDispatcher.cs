@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using PaymentService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Services;
 
@@ -275,7 +276,7 @@ public sealed class GlEventDispatcher : BackgroundService
                 await _store.MarkPublishedAsync(pending, _clock.GetUtcNow().UtcDateTime, cancellationToken);
                 delivered++;
                 _logger.LogInformation(DeliveredEvent, "GL event {EventId} ({Type}) of tenant {TenantId} delivered",
-                    SanitizeForLog(envelope.EventId), SanitizeForLog(envelope.Type), SanitizeForLog(envelope.TenantId));
+                    LogSanitizer.Sanitize(envelope.EventId), LogSanitizer.Sanitize(envelope.Type), LogSanitizer.Sanitize(envelope.TenantId));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -284,14 +285,14 @@ public sealed class GlEventDispatcher : BackgroundService
                 var reason = ex is GlEventDeliveryException ? ex.Message : $"Delivery failed ({ex.GetType().Name}).";
                 _logger.LogWarning(DeliveryFailedEvent,
                     "GL event {EventId} ({Type}) of tenant {TenantId} not delivered (attempt {Attempt}): {Reason}; next attempt in {Backoff}",
-                    SanitizeForLog(envelope.EventId), SanitizeForLog(envelope.Type), SanitizeForLog(envelope.TenantId), attempts, SanitizeForLog(reason), backoff);
+                    LogSanitizer.Sanitize(envelope.EventId), LogSanitizer.Sanitize(envelope.Type), LogSanitizer.Sanitize(envelope.TenantId), attempts, LogSanitizer.Sanitize(reason), backoff);
                 try
                 {
                     await _store.MarkFailedAsync(pending, reason, now.Add(backoff), cancellationToken);
                 }
                 catch (Exception markError) when (markError is not OperationCanceledException)
                 {
-                    _logger.LogWarning("Could not record the failed delivery of GL event {EventId}: {Error}", SanitizeForLog(envelope.EventId), markError.GetType().Name);
+                    _logger.LogWarning("Could not record the failed delivery of GL event {EventId}: {Error}", LogSanitizer.Sanitize(envelope.EventId), markError.GetType().Name);
                 }
             }
         }
@@ -318,12 +319,5 @@ public sealed class GlEventDispatcher : BackgroundService
             try { await Task.Delay(_options.Interval, _clock, stoppingToken); }
             catch (OperationCanceledException) { return; }
         }
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

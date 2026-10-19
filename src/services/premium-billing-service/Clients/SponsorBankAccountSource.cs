@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using PremiumBillingService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PremiumBillingService.Clients;
 
@@ -122,7 +123,7 @@ public sealed class HttpSponsorBankAccountSource : ISponsorBankAccountSource
         if (_tokens == null)
         {
             _logger.LogError("Sponsor bank details for group {GroupNumber} cannot be fetched: ChoAuth:ServiceToken is not configured",
-                Sanitize(groupNumber));
+                LogSanitizer.Sanitize(groupNumber));
             return SponsorBankAccountLookup.Unavailable(
                 "Sponsor bank details unavailable: premium-billing-service has no service token configured (ChoAuth:ServiceToken). Needs attention.");
         }
@@ -151,7 +152,7 @@ public sealed class HttpSponsorBankAccountSource : ISponsorBankAccountSource
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
                 _logger.LogWarning("Sponsor {GroupNumber} in tenant {TenantId} has no approved bank account in sponsor-service: {Body}",
-                    Sanitize(groupNumber), Sanitize(tenantId), body);
+                    LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(tenantId), body);
                 return SponsorBankAccountLookup.Unavailable(
                     $"Sponsor {groupNumber} has no approved bank account in sponsor-service (a pending change must be approved " +
                     $"by a user with payments:approve): {body}. Needs attention.");
@@ -161,14 +162,14 @@ public sealed class HttpSponsorBankAccountSource : ISponsorBankAccountSource
             {
                 _logger.LogError("sponsor-service refused the bank-account read for sponsor {GroupNumber} in tenant {TenantId} " +
                                  "({StatusCode}); check service authentication",
-                    Sanitize(groupNumber), Sanitize(tenantId), (int)response.StatusCode);
+                    LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(tenantId), (int)response.StatusCode);
                 return SponsorBankAccountLookup.Unavailable(
                     $"sponsor-service refused the bank-account read for sponsor {groupNumber} " +
                     $"({(int)response.StatusCode} {response.StatusCode}). Needs attention.");
             }
 
             _logger.LogError("sponsor-service answered {StatusCode} to the bank-account read for sponsor {GroupNumber} in tenant {TenantId}",
-                (int)response.StatusCode, Sanitize(groupNumber), Sanitize(tenantId));
+                (int)response.StatusCode, LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(tenantId));
             return SponsorBankAccountLookup.Unavailable(
                 $"sponsor-service answered {(int)response.StatusCode} {response.StatusCode} to the bank-account read " +
                 $"for sponsor {groupNumber}: {body}. Needs attention.");
@@ -177,7 +178,7 @@ public sealed class HttpSponsorBankAccountSource : ISponsorBankAccountSource
                                    || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
         {
             _logger.LogError("The bank-account read for sponsor {GroupNumber} in tenant {TenantId} failed: {Error}",
-                Sanitize(groupNumber), Sanitize(tenantId), ex.GetType().Name);
+                LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(tenantId), ex.GetType().Name);
             return SponsorBankAccountLookup.Unavailable(
                 $"The bank-account read for sponsor {groupNumber} from sponsor-service failed ({ex.GetType().Name}). Needs attention.");
         }
@@ -197,7 +198,4 @@ public sealed class HttpSponsorBankAccountSource : ISponsorBankAccountSource
             return string.Empty;
         }
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

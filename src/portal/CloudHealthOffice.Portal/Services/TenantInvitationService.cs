@@ -89,7 +89,8 @@ public sealed class TenantInvitationService : ITenantInvitationService
         }
         catch (Exception)
         {
-            // fall through
+            // The error body is optional and may not be JSON (a proxy or gateway page):
+            // the generic status message below is the answer in that case.
         }
         return $"The request failed ({(int)response.StatusCode}).";
     }

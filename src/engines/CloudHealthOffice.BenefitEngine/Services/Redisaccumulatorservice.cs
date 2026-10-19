@@ -3,6 +3,7 @@ using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Persistence;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.BenefitEngine.Services;
 
@@ -92,10 +93,6 @@ public class RedisAccumulatorService : IAccumulatorService
     private readonly IBenefitEngineTenantContext _tenantContext;
     private readonly ILogger<RedisAccumulatorService> _logger;
 
-    /// <summary>
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
-
     /// TTL for accumulator keys. Set to cover the plan year plus a grace
     /// period for late claims (run-out). 14 months covers a calendar-year
     /// plan with 2 months of run-out.
@@ -145,7 +142,7 @@ public class RedisAccumulatorService : IAccumulatorService
 
         _logger.LogDebug(
             "Loaded {Count} accumulator snapshots for member {MemberId}, plan {PlanId}/{PlanYear}",
-            snapshots.Count, SanitizeForLog(memberId), benefitPlanId, SanitizeForLog(planYear));
+            snapshots.Count, LogSanitizer.MaskId(memberId), benefitPlanId, LogSanitizer.Sanitize(planYear));
 
         return snapshots;
     }
@@ -193,7 +190,7 @@ public class RedisAccumulatorService : IAccumulatorService
 
         _logger.LogDebug(
             "Applied {Count} accumulator updates for claim {ClaimId} (member {MemberId})",
-            updates.Count, SanitizeForLog(claimId), SanitizeForLog(memberId));
+            updates.Count, LogSanitizer.Sanitize(claimId), LogSanitizer.MaskId(memberId));
     }
 
     /// <summary>
@@ -215,7 +212,7 @@ public class RedisAccumulatorService : IAccumulatorService
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _logger.LogError(ex, "Accumulator audit write failed for claim {ClaimId}; the operation fails and must be retried",
-                SanitizeForLog(claimId));
+                LogSanitizer.Sanitize(claimId));
             throw new AccumulatorAuditException(claimId, ex);
         }
     }
@@ -285,7 +282,7 @@ public class RedisAccumulatorService : IAccumulatorService
         var superseded = outcomes.Any(o => o.ToString() == "SUPERSEDED");
         _logger.LogInformation(
             "Commit-scoped reversal of commit {CommitId} for claim {ClaimId}: {Outcome}",
-            SanitizeForLog(commitId), SanitizeForLog(claimId), superseded ? "superseded" : "reversed");
+            LogSanitizer.Sanitize(commitId), LogSanitizer.Sanitize(claimId), superseded ? "superseded" : "reversed");
         return superseded ? AccumulatorReversalOutcome.Superseded : AccumulatorReversalOutcome.Reversed;
     }
 
@@ -408,14 +405,14 @@ return 'REVERSED'
         {
             _logger.LogInformation(
                 "Commit {CommitId} for claim {ClaimId} refused: that commit was reversed (the claim was denied while it was in flight)",
-                SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId));
+                LogSanitizer.Sanitize(commit.CommitId), LogSanitizer.Sanitize(commit.ClaimId));
             return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedCommitReversed);
         }
         if (outcomes.Any(o => o.Outcome == "REFUSED"))
         {
             _logger.LogWarning(
                 "Commit {CommitId} for claim {ClaimId} refused: the claim was reversed terminally (void or denial)",
-                SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId));
+                LogSanitizer.Sanitize(commit.CommitId), LogSanitizer.Sanitize(commit.ClaimId));
             return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedClaimReversed);
         }
         if (outcomes.All(o => o.Outcome == "ALREADY"))
@@ -746,7 +743,7 @@ return #fences
 
         _logger.LogInformation(
             "Invalidated accumulator cache for claim reversal {ClaimId} (member {MemberId}, fenced: {Fenced})",
-            SanitizeForLog(claimId), SanitizeForLog(memberId), fence);
+            LogSanitizer.Sanitize(claimId), LogSanitizer.MaskId(memberId), fence);
     }
 
     // ═══════════════════════════════════════════════════════════════════

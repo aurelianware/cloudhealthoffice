@@ -7,6 +7,7 @@ using ClaimsService.Models.Messaging;
 using ClaimsService.Repositories;
 using ClaimsService.Services.Adjudication;
 using CloudHealthOffice.Infrastructure.Messaging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services;
 
@@ -234,13 +235,13 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
             {
                 _logger.LogInformation(
                     "Adjustment {AdjustmentId} replay (same Idempotency-Key {Key}, same body); returning existing",
-                    Sanitize(existing.Id), Sanitize(idempotencyKey));
+                    LogSanitizer.Sanitize(existing.Id), LogSanitizer.Sanitize(idempotencyKey));
                 return ClaimAdjustmentResult.AlreadyExists(existing);
             }
 
             _logger.LogWarning(
                 "Adjustment Idempotency-Key {Key} replay with different body; returning 409",
-                Sanitize(idempotencyKey));
+                LogSanitizer.Sanitize(idempotencyKey));
             return ClaimAdjustmentResult.IdempotencyConflict(
                 existing,
                 $"Idempotency-Key '{idempotencyKey}' already used with a different request body");
@@ -252,7 +253,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             _logger.LogInformation(
                 "Adjustment requested for unknown predecessor {ClaimId}",
-                Sanitize(predecessorClaimId));
+                LogSanitizer.Sanitize(predecessorClaimId));
             return ClaimAdjustmentResult.PredecessorNotFound(
                 $"Predecessor claim {predecessorClaimId} not found for tenant {tenantId}");
         }
@@ -261,7 +262,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             _logger.LogWarning(
                 "Adjustment rejected for {ClaimId}: source state {Status} not in Paid/Denied/PartiallyPaid",
-                Sanitize(predecessor.Id), predecessor.Status);
+                LogSanitizer.Sanitize(predecessor.Id), predecessor.Status);
             return ClaimAdjustmentResult.InvalidSourceState(
                 predecessor,
                 $"Predecessor must be Paid, Denied, or PartiallyPaid to adjust; current status is {predecessor.Status}");
@@ -274,7 +275,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             _logger.LogWarning(
                 "Adjustment rejected for {ClaimId}: predecessor is itself an adjustment (depth>1 deferred to Phase 2)",
-                Sanitize(predecessor.Id));
+                LogSanitizer.Sanitize(predecessor.Id));
             return ClaimAdjustmentResult.DepthLimitExceeded(
                 predecessor,
                 "Adjustment-of-adjustment is not supported in Phase 1; predecessor must be a first-generation claim");
@@ -290,7 +291,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             _logger.LogWarning(
                 "Adjustment rejected for chain {ChainKey}: in-flight adjustment {AdjustmentId} already exists",
-                Sanitize(chainKey), Sanitize(inflight.Id));
+                LogSanitizer.Sanitize(chainKey), LogSanitizer.Sanitize(inflight.Id));
             return ClaimAdjustmentResult.ConflictingAdjustment(
                 inflight,
                 $"Chain {chainKey} already has an in-flight adjustment {inflight.Id} in status {inflight.Status}");
@@ -395,7 +396,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
             var errSummary = string.Join("; ", submission.Errors.Select(e => $"{e.Field}:{e.Code}"));
             _logger.LogWarning(
                 "Adjustment submission failed for predecessor {ClaimId} ({FailureKind}): {ErrorSummary}",
-                Sanitize(predecessor.Id), submission.FailureKind, Sanitize(errSummary));
+                LogSanitizer.Sanitize(predecessor.Id), submission.FailureKind, LogSanitizer.Sanitize(errSummary));
             // Release the chain lock — no version was created, no
             // supersession occurred. Operator can retry against a clean
             // chain. Failure to delete is logged but doesn't change the
@@ -430,7 +431,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             _logger.LogError(
                 "Failed to supersede predecessor {ClaimId} after new version {NewClaimId} was created; manual triage required",
-                Sanitize(predecessor.Id), Sanitize(newVersion.Id));
+                LogSanitizer.Sanitize(predecessor.Id), LogSanitizer.Sanitize(newVersion.Id));
             // Release the chain lock so retry is possible. The new
             // version row is left behind on the audit chain (operator
             // can re-trigger supersession via a fresh adjustment with
@@ -467,7 +468,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             _logger.LogError(ex,
                 "ClaimVersionSuperseded emission failed for predecessor {ClaimId}; supersession persisted, audit chain has gap",
-                Sanitize(predecessor.Id));
+                LogSanitizer.Sanitize(predecessor.Id));
         }
 
         try
@@ -479,7 +480,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             _logger.LogError(ex,
                 "ClaimVersionReversed emission failed for predecessor {ClaimId}; supersession persisted, audit chain has gap",
-                Sanitize(predecessor.Id));
+                LogSanitizer.Sanitize(predecessor.Id));
         }
 
         // Step 10 — emit ClaimVersionReversedMessage to the Service Bus
@@ -513,7 +514,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             _logger.LogError(ex,
                 "ClaimVersionReversed Service Bus emission failed for predecessor {ClaimId}; supersession persisted, ReversalRun signal missed",
-                Sanitize(predecessor.Id));
+                LogSanitizer.Sanitize(predecessor.Id));
         }
 
         // Step 11 — finalize the placeholder ClaimAdjustment row with
@@ -537,13 +538,13 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         _logger.LogInformation(
             "Adjustment {AdjustmentId} created: predecessor {PredecessorClaimId} (chain {ChainKey} v{PredecessorVersion}) → " +
             "new version {NewClaimId} v{NewVersion}; reason='{Reason}'",
-            Sanitize(adjustment.Id),
-            Sanitize(predecessor.Id),
-            Sanitize(chainKey),
+            LogSanitizer.Sanitize(adjustment.Id),
+            LogSanitizer.Sanitize(predecessor.Id),
+            LogSanitizer.Sanitize(chainKey),
             predecessor.VersionNumber,
-            Sanitize(newVersion.Id),
+            LogSanitizer.Sanitize(newVersion.Id),
             newVersion.VersionNumber,
-            Sanitize(request.AdjustmentReason));
+            LogSanitizer.Sanitize(request.AdjustmentReason));
 
         return ClaimAdjustmentResult.Created(adjustment, newVersion);
     }
@@ -572,7 +573,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
             // path quiet on the steady state.
             _logger.LogDebug(
                 "OnNewVersionFinalizedAsync: no adjustment found for new claim {NewClaimId}; orchestrator no-op",
-                Sanitize(newClaimId));
+                LogSanitizer.Sanitize(newClaimId));
             return;
         }
 
@@ -584,7 +585,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             _logger.LogInformation(
                 "OnNewVersionFinalizedAsync: adjustment {AdjustmentId} already in {Status}; idempotent no-op",
-                Sanitize(adjustment.Id), adjustment.Status);
+                LogSanitizer.Sanitize(adjustment.Id), adjustment.Status);
             return;
         }
 
@@ -623,13 +624,13 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             _logger.LogInformation(
                 "OnNewVersionFinalizedAsync: adjustment {AdjustmentId} transitioned concurrently; idempotent no-op",
-                Sanitize(adjustment.Id));
+                LogSanitizer.Sanitize(adjustment.Id));
             return;
         }
 
         _logger.LogInformation(
             "Adjustment {AdjustmentId} transitioned AwaitingReadjudication → {Status} on outcome {Outcome} for new version {NewClaimId}",
-            Sanitize(adjustment.Id), nextStatus, outcome, Sanitize(newClaimId));
+            LogSanitizer.Sanitize(adjustment.Id), nextStatus, outcome, LogSanitizer.Sanitize(newClaimId));
     }
 
     public async Task MarkActiveOnReversalAsync(
@@ -651,7 +652,7 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
             // the adjustment lifecycle is not what's driving this void.
             _logger.LogDebug(
                 "MarkActiveOnReversalAsync: no PendingReversal adjustment for predecessor {ClaimId}; void completes without lifecycle transition",
-                Sanitize(predecessorClaimId));
+                LogSanitizer.Sanitize(predecessorClaimId));
             return;
         }
 
@@ -671,13 +672,13 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         {
             _logger.LogInformation(
                 "MarkActiveOnReversalAsync: adjustment {AdjustmentId} left PendingReversal concurrently; no lifecycle transition",
-                Sanitize(adjustment.Id));
+                LogSanitizer.Sanitize(adjustment.Id));
             return;
         }
 
         _logger.LogInformation(
             "Adjustment {AdjustmentId} transitioned PendingReversal → Active on ReversalRun {ReversalRunId} for predecessor {ClaimId}",
-            Sanitize(adjustment.Id), Sanitize(reversalRunId), Sanitize(predecessorClaimId));
+            LogSanitizer.Sanitize(adjustment.Id), LogSanitizer.Sanitize(reversalRunId), LogSanitizer.Sanitize(predecessorClaimId));
     }
 
     /// <summary>How many times an adjustment write is re-read and re-applied against concurrent writers.</summary>
@@ -721,14 +722,14 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
             {
                 _logger.LogWarning(
                     "Chain-lock release for adjustment {AdjustmentId} on chain {ClaimVersionId} matched 0 rows; chain may stay locked",
-                    Sanitize(placeholder.Id), Sanitize(placeholder.ClaimVersionId));
+                    LogSanitizer.Sanitize(placeholder.Id), LogSanitizer.Sanitize(placeholder.ClaimVersionId));
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 "Failed to release chain lock for adjustment {AdjustmentId} on chain {ClaimVersionId}; chain may stay locked",
-                Sanitize(placeholder.Id), Sanitize(placeholder.ClaimVersionId));
+                LogSanitizer.Sanitize(placeholder.Id), LogSanitizer.Sanitize(placeholder.ClaimVersionId));
         }
     }
 
@@ -757,7 +758,4 @@ public class ClaimAdjustmentService : IClaimAdjustmentService
         var hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

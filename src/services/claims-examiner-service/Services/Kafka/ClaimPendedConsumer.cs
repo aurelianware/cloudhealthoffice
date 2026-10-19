@@ -146,7 +146,10 @@ public class ClaimPendedConsumer : BackgroundService
         }
         finally
         {
-            try { consumer?.Close(); } catch { /* ignore on shutdown */ }
+            // Leaving the group cleanly only speeds up the next rebalance; a failed Close must
+            // not replace the exception (if any) that ended the loop.
+            try { consumer?.Close(); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Closing the claims-pended consumer failed"); }
             consumer?.Dispose();
         }
     }

@@ -1,5 +1,6 @@
 using ClaimsService.Models;
 using ClaimsService.Services.Resolution;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication.Stages;
 
@@ -109,7 +110,7 @@ public sealed class ProviderIntegrityStage : IClaimAdjudicationStage
                 // policy here.
                 _logger.LogWarning(
                     "Provider integrity check unreachable for claim {ClaimVersionId}, {Role} NPI {Npi}",
-                    SanitizeForLog(context.ClaimVersionId), role, SanitizeForLog(npi));
+                    LogSanitizer.Sanitize(context.ClaimVersionId), role, LogSanitizer.Sanitize(npi));
                 return PendForReview(context, role, UnreachableReason).AsCheckUnavailable(context);
             }
 
@@ -150,7 +151,4 @@ public sealed class ProviderIntegrityStage : IClaimAdjudicationStage
 
     private static string? TruncatePendReason(string? reason) =>
         reason is { Length: > 500 } ? reason[..500] : reason;
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

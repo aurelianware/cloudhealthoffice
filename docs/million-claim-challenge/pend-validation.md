@@ -10,11 +10,9 @@ The validator observes that state after the timed adjudication pass, so
 published throughput, P95, and P99 should continue to be described as excluding
 pend-observation polling.
 
-Run instructions should set pend observation explicitly, even though the scripts
-default it on:
+Run instructions should set the observation window explicitly:
 
 ```bash
-PEND_OBSERVATION_ENABLED=true \
 PEND_OBSERVATION_TIMEOUT_SECONDS=45 \
 PEND_OBSERVATION_INTERVAL_MS=1000 \
 SEED_MEMBERS=true \

@@ -7,6 +7,7 @@ using CloudHealthOffice.RiskAdjustmentEngine.Domain;
 using CloudHealthOffice.RiskAdjustmentEngine.Services;
 using EngineRiskAdjustmentEngine = CloudHealthOffice.RiskAdjustmentEngine.Services.RiskAdjustmentEngine;
 using ServiceHccCategory = RiskAdjustmentService.Models.HccCategory;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace RiskAdjustmentService.Controllers;
 
@@ -51,7 +52,7 @@ public class RiskAdjustmentController : ControllerBase
         int measurementYear)
     {
         _logger.LogInformation("Fetching risk score for member {MemberId}, year {Year}",
-            SanitizeForLog(memberId), measurementYear);
+            LogSanitizer.MaskId(memberId), measurementYear);
 
         var score = await _riskScoreRepository.GetByMemberAndYearAsync(memberId, measurementYear);
         if (score == null)
@@ -72,7 +73,7 @@ public class RiskAdjustmentController : ControllerBase
         int measurementYear)
     {
         _logger.LogInformation("Fetching risk score summary for member {MemberId}, year {Year}",
-            SanitizeForLog(memberId), measurementYear);
+            LogSanitizer.MaskId(memberId), measurementYear);
 
         var score = await _riskScoreRepository.GetByMemberAndYearAsync(memberId, measurementYear);
         if (score == null)
@@ -110,7 +111,7 @@ public class RiskAdjustmentController : ControllerBase
     public async Task<ActionResult<MemberScoreTrend>> GetMemberScoreTrend(string memberId)
     {
         _logger.LogInformation("Fetching risk score trend for member {MemberId}",
-            SanitizeForLog(memberId));
+            LogSanitizer.MaskId(memberId));
 
         var scores = await _riskScoreRepository.GetByMemberAsync(memberId);
         var scoreList = scores.ToList();
@@ -150,7 +151,7 @@ public class RiskAdjustmentController : ControllerBase
         [FromBody] MemberRiskScore score)
     {
         _logger.LogInformation("Upserting risk score for member {MemberId}, year {Year}, score={Score}",
-            SanitizeForLog(memberId), measurementYear, score.RiskScore);
+            LogSanitizer.MaskId(memberId), measurementYear, score.RiskScore);
 
         if (score.MemberId != memberId || score.MeasurementYear != measurementYear)
             return BadRequest("Member ID and measurement year in URL must match the request body");
@@ -204,7 +205,7 @@ public class RiskAdjustmentController : ControllerBase
     {
         _logger.LogInformation(
             "Score calculation requested for member {MemberId}, year {Year}, model {Model}",
-            SanitizeForLog(request.MemberId), request.MeasurementYear, SanitizeForLog(request.RiskModel));
+            LogSanitizer.MaskId(request.MemberId), request.MeasurementYear, LogSanitizer.Sanitize(request.RiskModel));
 
         var hccModel = MapHccModel(request.RiskModel);
         var gender   = MapGender(request.Gender);
@@ -391,7 +392,7 @@ public class RiskAdjustmentController : ControllerBase
     {
         _logger.LogInformation(
             "Searching risk scores: year={Year}, member={Member}, lob={LOB}, status={Status}",
-            measurementYear, SanitizeForLog(memberId), lineOfBusiness, status);
+            measurementYear, LogSanitizer.MaskId(memberId), lineOfBusiness, status);
 
         var scores = await _riskScoreRepository.SearchAsync(
             measurementYear, memberId, lineOfBusiness, status, minScore, maxScore, page, pageSize);
@@ -478,23 +479,16 @@ public class RiskAdjustmentController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteScore(string id)
     {
-        _logger.LogInformation("Deleting risk score: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Deleting risk score: {Id}", LogSanitizer.Sanitize(id));
 
         var score = await _riskScoreRepository.GetByIdAsync(id);
         if (score == null)
             return NotFound($"Risk score {id} not found");
 
         await _riskScoreRepository.DeleteAsync(id);
-        _logger.LogInformation("AUDIT risk score {Id} deleted by {Actor}", SanitizeForLog(id), SanitizeForLog(_actor.UserId));
+        _logger.LogInformation("AUDIT risk score {Id} deleted by {Actor}", LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(_actor.UserId));
         return NoContent();
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }

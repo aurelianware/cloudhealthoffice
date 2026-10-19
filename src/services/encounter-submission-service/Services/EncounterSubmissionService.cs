@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using EncounterSubmissionService.Models;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EncounterSubmissionService.Services;
 
@@ -98,7 +99,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
 
         _logger.LogInformation(
             "Found {Count} pending submissions for tenant {TenantId} (page {Page})",
-            submissions.Count, SanitizeForLog(tenantId), page);
+            submissions.Count, LogSanitizer.Sanitize(tenantId), page);
 
         return submissions;
     }
@@ -213,7 +214,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
 
     public async Task ProcessAcknowledgmentAsync(string batchId, string acknowledgmentContent, string tenantId)
     {
-        _logger.LogInformation("Processing 999 acknowledgment for batch {BatchId}", SanitizeForLog(batchId));
+        _logger.LogInformation("Processing 999 acknowledgment for batch {BatchId}", LogSanitizer.Sanitize(batchId));
 
         // Parse 999 acknowledgment code from content
         // A = Accepted, E = Accepted with errors (partial), R = Rejected
@@ -227,7 +228,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
 
         if (submissions.Count == 0)
         {
-            _logger.LogWarning("No submissions found for batch {BatchId}", SanitizeForLog(batchId));
+            _logger.LogWarning("No submissions found for batch {BatchId}", LogSanitizer.Sanitize(batchId));
             return;
         }
 
@@ -265,7 +266,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
 
             _logger.LogWarning(
                 "Batch {BatchId} REJECTED: {ErrorCount} errors, {Count} submissions affected — {Errors}",
-                SanitizeForLog(batchId), errors.Count, submissions.Count, SanitizeForLog(errorMessage));
+                LogSanitizer.Sanitize(batchId), errors.Count, submissions.Count, LogSanitizer.Sanitize(errorMessage));
         }
         else
         {
@@ -279,7 +280,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
 
             _logger.LogInformation(
                 "Batch {BatchId} acknowledged as {Status}: {Count} submissions updated",
-                SanitizeForLog(batchId), newStatus, submissions.Count);
+                LogSanitizer.Sanitize(batchId), newStatus, submissions.Count);
         }
     }
 
@@ -351,7 +352,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
         _logger.LogInformation(
             "Status summary for tenant {TenantId}: {Pending} pending, {Batched} batched, " +
             "{Accepted} accepted, {Warning} warning, {Rejected} rejected",
-            SanitizeForLog(tenantId), summary.Pending, summary.Batched,
+            LogSanitizer.Sanitize(tenantId), summary.Pending, summary.Batched,
             summary.Accepted, summary.DeadlineWarning, summary.Rejected);
 
         return summary;
@@ -397,18 +398,12 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
         _logger.LogInformation(
             "Submission {SubmissionId} (claim {ClaimId}) reset to Pending for retry " +
             "(attempt {RetryCount}/{MaxRetries})",
-            SanitizeForLog(submissionId), submission.ClaimId, submission.RetryCount + 1, MaxRetryCount);
+            LogSanitizer.Sanitize(submissionId), submission.ClaimId, submission.RetryCount + 1, MaxRetryCount);
 
         return submission;
     }
 
     // ── Private Helpers ──────────────────────────────────────────────
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 
     /// <summary>
     /// Fetch the encounter submission window (days) from the tenant's compliance config.

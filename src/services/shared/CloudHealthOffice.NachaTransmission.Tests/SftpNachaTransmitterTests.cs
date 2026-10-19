@@ -33,7 +33,7 @@ public class SftpNachaTransmitterTests
     }
 
     [Fact]
-    public async Task SshNetFactory_RefusesToConnectWithoutAPin()
+    public void SshNetFactory_RefusesToConnectWithoutAPin()
     {
         var factory = new SshNetSftpSessionFactory();
 

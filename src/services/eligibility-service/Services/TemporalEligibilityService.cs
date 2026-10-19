@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EligibilityService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EligibilityService.Services;
 
@@ -120,7 +121,7 @@ public class TemporalEligibilityService : ITemporalEligibilityService
         {
             _logger.LogWarning(ex,
                 "Coverage-service unreachable for tenant {Tenant} member {Member}",
-                SanitizeForLog(tenantId), SanitizeForLog(memberId));
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.MaskId(memberId));
             return new List<CoverageDto>();
         }
 
@@ -128,7 +129,7 @@ public class TemporalEligibilityService : ITemporalEligibilityService
         {
             _logger.LogDebug(
                 "Coverage-service returned {Status} for member {Member}",
-                response.StatusCode, SanitizeForLog(memberId));
+                response.StatusCode, LogSanitizer.MaskId(memberId));
             return new List<CoverageDto>();
         }
 
@@ -191,9 +192,6 @@ public class TemporalEligibilityService : ITemporalEligibilityService
             ? (LineOfBusiness)index
             : LineOfBusiness.Commercial;
     }
-
-    private static string SanitizeForLog(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     internal class CoverageDto
     {

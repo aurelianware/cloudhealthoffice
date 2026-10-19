@@ -2,6 +2,7 @@ using System.Diagnostics;
 using ClaimsService.Models;
 using ClaimsService.Models.Adjudication;
 using ClaimsService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication;
 
@@ -166,7 +167,7 @@ public sealed class AccumulatorOperationsService
         var result = await RerunAllAsync(tenantId, pended, actor, AccumCommitRerun, ct);
         _logger.LogInformation(
             "AUDIT ACCUMCOMMIT bulk re-run by {Operator} (tenant {TenantId}): {Examined} examined, {Approved} approved, {StillPended} still pended, {Skipped} skipped, {Failed} failed",
-            Sanitize(operatorId), Sanitize(tenantId), result.Examined, result.Approved, result.StillPended, result.Skipped, result.Failed);
+            LogSanitizer.Sanitize(operatorId), LogSanitizer.Sanitize(tenantId), result.Examined, result.Approved, result.StillPended, result.Skipped, result.Failed);
         return result;
     }
 
@@ -191,7 +192,7 @@ public sealed class AccumulatorOperationsService
         var result = await RerunAllAsync(tenantId, pended, actor, PriorAuthRerun, ct);
         _logger.LogInformation(
             "AUDIT PAUNAVAIL bulk re-run by {Operator} (tenant {TenantId}): {Examined} examined, {Approved} approved, {Denied} denied, {StillPended} still pended, {Skipped} skipped, {Failed} failed",
-            Sanitize(operatorId), Sanitize(tenantId), result.Examined, result.Approved, result.Denied, result.StillPended, result.Skipped, result.Failed);
+            LogSanitizer.Sanitize(operatorId), LogSanitizer.Sanitize(tenantId), result.Examined, result.Approved, result.Denied, result.StillPended, result.Skipped, result.Failed);
         return result;
     }
 
@@ -272,7 +273,7 @@ public sealed class AccumulatorOperationsService
         var lockToken = Guid.NewGuid().ToString("N");
         var now = DateTime.UtcNow;
         if (!await _claims.TryAcquireResolutionLockAsync(
-                tenantId, claim.Id, lockToken, actor, now, Controllers.ClaimsController.ResolutionLockDuration, ct))
+                tenantId, claim.Id, lockToken, actor, now, ClaimResolutionService.ResolutionLockDuration, ct))
             return Item("Skipped", "being resolved, or no longer Pended");
         var failed = false;
         var stillPended = false;
@@ -378,7 +379,7 @@ public sealed class AccumulatorOperationsService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Claim {ClaimId}: accumulator commit not driven now; the outbox dispatcher retries it", Sanitize(updated.Id));
+                    _logger.LogWarning(ex, "Claim {ClaimId}: accumulator commit not driven now; the outbox dispatcher retries it", LogSanitizer.Sanitize(updated.Id));
                 }
             }
             await _versionEvents.PublishVersionResolvedAsync(
@@ -390,7 +391,7 @@ public sealed class AccumulatorOperationsService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "{Kind} re-run of claim {ClaimId} failed", kind.Name, Sanitize(claim.Id));
+            _logger.LogError(ex, "{Kind} re-run of claim {ClaimId} failed", kind.Name, LogSanitizer.Sanitize(claim.Id));
             failed = true;
             return Item("Failed", Describe(ex));
         }
@@ -423,7 +424,7 @@ public sealed class AccumulatorOperationsService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Claim {ClaimId}: could not move the pend to the back of the re-run queue", Sanitize(claimId));
+            _logger.LogWarning(ex, "Claim {ClaimId}: could not move the pend to the back of the re-run queue", LogSanitizer.Sanitize(claimId));
         }
     }
 
@@ -438,9 +439,13 @@ public sealed class AccumulatorOperationsService
             .Select(l => l.Trim())
             .FirstOrDefault(l => l.Contains("ClaimsService.", StringComparison.Ordinal));
         var what = ex.GetType().Name;
-        return where is null ? what : $"{what} at {Sanitize(where)}";
+        return where is null ? what : $"{what} at {StripLineBreaks(where)}";
     }
 
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

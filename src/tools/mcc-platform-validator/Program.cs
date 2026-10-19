@@ -60,12 +60,12 @@ Console.WriteLine($"  Seed workers:{options.SeedParallelism:N0}");
 Console.WriteLine($"  LOB:         {LineOfBusinessName(options.LineOfBusiness)} ({options.LineOfBusiness})");
 Console.WriteLine($"  PA scenarios:{(options.PriorAuthScenariosEnabled ? $" enabled ({options.PriorAuthScenarioRate:P0})" : " disabled")}");
 Console.WriteLine($"  Auth fixtures:{(options.SeedAuthorizations ? " enabled" : " disabled")}");
-Console.WriteLine($"  Adjudication:{(options.ServiceBusOnly ? " Service Bus only (persisted outcome)" : " synchronous + workflow observation")}");
+Console.WriteLine("  Adjudication: Service Bus only (persisted pipeline outcome)");
 Console.WriteLine(
-    $"  SB reconcile:{(options.ServiceBusOnly && options.ServiceBusReconciliationEnabled
+    $"  SB reconcile:{(options.ServiceBusReconciliationEnabled
         ? $" enabled ({options.ServiceBusReconciliationTimeoutSeconds}s)"
         : " disabled")}");
-Console.WriteLine($"  Pend observe:{(options.PendObservationEnabled ? $" enabled ({options.PendObservationTimeoutSeconds}s/{options.PendObservationIntervalMilliseconds}ms)" : " disabled")}");
+Console.WriteLine($"  Outcome wait:{options.PendObservationTimeoutSeconds}s (poll {options.PendObservationIntervalMilliseconds}ms)");
 Console.WriteLine($"  Pend diag:   {(options.PendDiagnosticsPath is not null ? $"enabled -> {options.PendDiagnosticsPath}" : "disabled")}");
 Console.WriteLine();
 
@@ -252,7 +252,6 @@ await Parallel.ForEachAsync(
             http,
             options,
             claim,
-            validationPlanId,
             validationPlanBusinessId,
             answerKey,
             json);
@@ -341,7 +340,7 @@ var orderedResults = results
 postProcessingStopwatch.Stop();
 postProcessingTimings.Add(("Result ordering", postProcessingStopwatch.Elapsed));
 
-if (options.ServiceBusOnly && options.ServiceBusReconciliationEnabled)
+if (options.ServiceBusReconciliationEnabled)
 {
     await MeasureLifecyclePhaseAsync(lifecycleTimings, "Service Bus post-window reconciliation", "Observation", async () =>
     {
@@ -360,18 +359,6 @@ if (options.ServiceBusOnly && options.ServiceBusReconciliationEnabled)
                 $"{reconciliation.Unreconciled:N0} still unresolved");
             Console.WriteLine();
         }
-    });
-}
-
-if (options.PendObservationEnabled && !options.ServiceBusOnly)
-{
-    await MeasureLifecyclePhaseAsync(lifecycleTimings, "Expected-pend observation", "Observation", async () =>
-    {
-        orderedResults = await ObserveExpectedPendResultsAsync(http, options, orderedResults);
-    });
-    await MeasureLifecyclePhaseAsync(lifecycleTimings, "False-pend sweep", "Observation", async () =>
-    {
-        orderedResults = await DetectUnexpectedPendResultsAsync(http, options, orderedResults);
     });
 }
 
@@ -491,7 +478,6 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     HttpClient http,
     ValidatorOptions options,
     SyntheticClaim claim,
-    Guid validationPlanId,
     string validationPlanBusinessId,
     MccAnswerKey answerKey,
     JsonSerializerOptions json)
@@ -499,7 +485,6 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
     var sw = Stopwatch.StartNew();
     var submitElapsed = TimeSpan.Zero;
     var adjudicationElapsed = TimeSpan.Zero;
-    var updateElapsed = TimeSpan.Zero;
     var failureStage = "unknown";
     var expectedValidation = answerKey.ExpectedValidationFor(claim);
     string? submittedClaimId = null;
@@ -509,7 +494,6 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
 
     try
     {
-        var networkTier = NetworkTier(claim);
         failureStage = "submit";
         var stage = Stopwatch.StartNew();
         var submitted = await SubmitClaimAsync(
@@ -522,50 +506,18 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
         stage.Stop();
         submitElapsed = stage.Elapsed;
 
-        if (options.ServiceBusOnly)
+        failureStage = "servicebus-observation";
+        stage.Restart();
+        ObservedClaimStatus observed;
+        try
         {
-            failureStage = "servicebus-observation";
-            stage.Restart();
-            ObservedClaimStatus observed;
-            try
-            {
-                observed = await ObserveServiceBusOutcomeAsync(http, options, submitted.Id);
-            }
-            catch (TimeoutException ex)
-            {
-                stage.Stop();
-                adjudicationElapsed = stage.Elapsed;
-                sw.Stop();
-
-                return new ClaimValidationResult(
-                    claim.ClaimId,
-                    submitted.Id,
-                    claim.ClaimType,
-                    expectedValidation.Scenario,
-                    expectedValidation.ExpectedOutcome?.ToString(),
-                    expectedValidation.ExpectedBusinessDenialCode,
-                    MccWorkflowValidation.ObservationTimeoutStatus,
-                    ClaimValidationOutcome.ObservationTimeout,
-                    false,
-                    null,
-                    expectedPlanPayment,
-                    sw.Elapsed,
-                    submitElapsed,
-                    adjudicationElapsed,
-                    TimeSpan.Zero,
-                    new Dictionary<string, double>(),
-                    null,
-                    failureStage,
-                    ex.Message,
-                    ServiceBusObservationTimedOut: true);
-            }
+            observed = await ObserveServiceBusOutcomeAsync(http, options, submitted.Id);
+        }
+        catch (TimeoutException ex)
+        {
             stage.Stop();
             adjudicationElapsed = stage.Elapsed;
             sw.Stop();
-
-            var observedDenialCode = observed.Outcome is ClaimValidationOutcome.BusinessDenial
-                ? observed.BusinessDenialCode
-                : null;
 
             return new ClaimValidationResult(
                 claim.ClaimId,
@@ -574,51 +526,27 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
                 expectedValidation.Scenario,
                 expectedValidation.ExpectedOutcome?.ToString(),
                 expectedValidation.ExpectedBusinessDenialCode,
-                MccWorkflowValidation.ValidationStatus(expectedValidation, observed.Outcome, observedDenialCode),
-                observed.Outcome,
-                observed.Outcome is ClaimValidationOutcome.Paid,
-                observed.PlanPayment,
+                MccWorkflowValidation.ObservationTimeoutStatus,
+                ClaimValidationOutcome.ObservationTimeout,
+                false,
+                null,
                 expectedPlanPayment,
                 sw.Elapsed,
                 submitElapsed,
                 adjudicationElapsed,
                 TimeSpan.Zero,
-                new Dictionary<string, double>(),
-                observedDenialCode,
                 null,
-                null);
+                failureStage,
+                ex.Message,
+                ServiceBusObservationTimedOut: true);
         }
-
-        failureStage = "adjudicate";
-        stage.Restart();
-        var (adjudicated, adjudicationRawBody) = await AdjudicateClaimAsync(http, options, claim, submitted.Id, validationPlanId, networkTier, json);
         stage.Stop();
         adjudicationElapsed = stage.Elapsed;
-
-        // Diagnostic only (--synchronous-diagnostic): benefit-plan's /adjudicate is a
-        // dry run (no accumulators, nothing persisted), and its answer is never written
-        // back. The claims-service pipeline is the single adjudicator; the claim keeps
-        // whatever the pipeline decided.
-        var outcome = adjudicated.Success
-            ? ClaimValidationOutcome.Paid
-            : ClaimValidationOutcome.BusinessDenial;
-
         sw.Stop();
-        var businessDenialCode = NormalizeBusinessDenialCode(adjudicated.BusinessDenialCode
-            ?? adjudicated.DenialReasonCode
-            ?? (outcome is ClaimValidationOutcome.BusinessDenial ? "ADJUDICATION_DENIAL" : null));
 
-        // Diagnostics-only capture (Deliverable 1): only retained when --pend-diagnostics
-        // is on, and only for expected-pend claims or the NCCI/MUE denial sample — never
-        // parsed on the hot path otherwise, so benchmark timing is unaffected when off.
-        JsonElement? syncAdjudicationSnapshot = null;
-        if (!string.IsNullOrWhiteSpace(options.PendDiagnosticsPath)
-            && (expectedValidation.ExpectedOutcome is ClaimValidationOutcome.Pended
-                || string.Equals(businessDenialCode, PendDiagnostics.NcciMueDenialCode, StringComparison.Ordinal)))
-        {
-            using var rawDocument = JsonDocument.Parse(adjudicationRawBody);
-            syncAdjudicationSnapshot = rawDocument.RootElement.Clone();
-        }
+        var observedDenialCode = observed.Outcome is ClaimValidationOutcome.BusinessDenial
+            ? observed.BusinessDenialCode
+            : null;
 
         return new ClaimValidationResult(
             claim.ClaimId,
@@ -627,20 +555,19 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             expectedValidation.Scenario,
             expectedValidation.ExpectedOutcome?.ToString(),
             expectedValidation.ExpectedBusinessDenialCode,
-            MccWorkflowValidation.ValidationStatus(expectedValidation, outcome, businessDenialCode),
-            outcome,
-            adjudicated.Success,
-            adjudicated.Totals.PlanPayment,
+            MccWorkflowValidation.ValidationStatus(expectedValidation, observed.Outcome, observedDenialCode),
+            observed.Outcome,
+            observed.Outcome is ClaimValidationOutcome.Paid,
+            observed.PlanPayment,
             expectedPlanPayment,
             sw.Elapsed,
             submitElapsed,
             adjudicationElapsed,
-            updateElapsed,
-            adjudicated.Timings ?? new Dictionary<string, double>(),
-            businessDenialCode,
+            TimeSpan.Zero,
+            observedDenialCode,
             null,
             null,
-            syncAdjudicationSnapshot);
+            PendCode: observed.PendCode);
     }
     catch (Exception ex)
     {
@@ -660,8 +587,7 @@ static async Task<ClaimValidationResult> ProcessClaimAsync(
             sw.Elapsed,
             submitElapsed,
             adjudicationElapsed,
-            updateElapsed,
-            new Dictionary<string, double>(),
+            TimeSpan.Zero,
             null,
             failureStage,
             ex.Message);
@@ -2933,120 +2859,6 @@ static async Task<SubmittedClaim> SubmitClaimAsync(
     return new SubmittedClaim(id);
 }
 
-static async Task<(AdjudicationResponseDto Response, string RawBody)> AdjudicateClaimAsync(
-    HttpClient http,
-    ValidatorOptions options,
-    SyntheticClaim claim,
-    string submittedClaimId,
-    Guid validationPlanId,
-    string networkTier,
-    JsonSerializerOptions json)
-{
-    var memberEffectiveDate = claim.Member.CoverageEffectiveDate == default
-        ? claim.DateOfService.Date.AddYears(-1)
-        : claim.Member.CoverageEffectiveDate.Date;
-
-    var payload = new
-    {
-        claimId = submittedClaimId,
-        memberId = claim.Member.MemberId,
-        subscriberId = claim.Member.SubscriberId,
-        benefitPlanId = validationPlanId,
-        serviceDate = DateOnly.FromDateTime(claim.DateOfService),
-        memberEffectiveDate = DateOnly.FromDateTime(memberEffectiveDate),
-        memberTerminationDate = claim.Member.CoverageTermDate is DateTime termDate
-            ? DateOnly.FromDateTime(termDate)
-            : (DateOnly?)null,
-        memberEnrollmentStatus = claim.Member.EnrollmentStatus,
-        providerNpi = claim.RenderingProvider.Npi,
-        networkTier,
-        lineOfBusiness = options.LineOfBusiness,
-        claimType = NormalizeClaimType(claim),
-        stateCode = claim.RenderingProvider.State,
-        providerTaxonomy = claim.RenderingProvider.TaxonomyCode,
-        priorAuthorizationNumber = claim.PriorAuthNumber,
-        lines = claim.Lines.Select(line => new
-        {
-            lineNumber = line.LineNumber,
-            procedureCode = line.ProcedureCode,
-            codeType = claim.ClaimType.Equals("Dental", StringComparison.OrdinalIgnoreCase) ? "CDT" : "CPT",
-            modifiers = line.Modifiers,
-            revenueCode = line.RevenueCode,
-            placeOfService = line.PlaceOfService ?? claim.PlaceOfService,
-            billedAmount = MccPlanDefaultFeeSchedule.LineChargeTotal(line),
-            units = line.Units <= 0 ? 1 : line.Units,
-            diagnosisCodes = DiagnosisCodesForLine(claim, line)
-        })
-    };
-
-    using var response = await http.PostAsJsonAsync($"{options.BenefitUrl}/api/v1/adjudication/adjudicate", payload, json);
-    var body = await response.Content.ReadAsStringAsync();
-    if (!response.IsSuccessStatusCode)
-    {
-        if (response.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity
-            && TryParseBusinessDenial(body, json, out var denial))
-        {
-            return (denial with { ClaimId = submittedClaimId }, body);
-        }
-
-        throw new InvalidOperationException($"adjudication failed ({claim.ClaimId}): {(int)response.StatusCode} {body}");
-    }
-
-    var result = JsonSerializer.Deserialize<AdjudicationResponseDto>(body, json);
-    return (result ?? throw new InvalidOperationException($"adjudication returned empty response ({claim.ClaimId})"), body);
-}
-
-static bool TryParseBusinessDenial(
-    string body,
-    JsonSerializerOptions json,
-    out AdjudicationResponseDto denial)
-{
-    denial = default!;
-
-    try
-    {
-        var error = JsonSerializer.Deserialize<AdjudicationErrorDto>(body, json);
-        if (error?.Error is null || !IsKnownBusinessDenialCode(error.Error))
-        {
-            return false;
-        }
-
-        denial = new AdjudicationResponseDto(
-            error.ClaimId ?? string.Empty,
-            false,
-            error.Carc,
-            error.Message,
-            new AdjudicationTotalsDto(0, 0, 0, 0, 0, 0, 0, 0),
-            error.Error,
-            error.Timings);
-        return true;
-    }
-    catch (JsonException)
-    {
-        return false;
-    }
-}
-
-static bool IsKnownBusinessDenialCode(string errorCode)
-    => NormalizeBusinessDenialCode(errorCode) is
-        "SCRUB_VALIDATION_FAILURE" or
-        "NCCI_MUE_EDIT_FAILURE" or
-        "CARC_27" or
-        "CARC_96" or
-        "PROVIDER_EXCLUDED" or
-        "PRIOR_AUTH_REQUIRED";
-
-static string? NormalizeBusinessDenialCode(string? code)
-    => MccWorkflowValidation.NormalizeBusinessDenialCode(code);
-
-static bool RequiresClaimsServiceWorkflowObservation(SyntheticClaim claim, ExpectedValidation expected)
-    => expected.ExpectedOutcome is ClaimValidationOutcome.BusinessDenial
-        && string.Equals(
-            expected.ExpectedBusinessDenialCode,
-            MccWorkflowValidation.PriorAuthRequiredCode,
-            StringComparison.OrdinalIgnoreCase)
-        && !string.IsNullOrWhiteSpace(claim.PriorAuthNumber);
-
 static string LineOfBusinessName(int lineOfBusiness) => lineOfBusiness switch
 {
     1 => "Commercial",
@@ -3085,82 +2897,6 @@ static string NormalizeIdentifierSegment(string value)
     return string.IsNullOrWhiteSpace(normalized) ? "tenant" : normalized;
 }
 
-static async Task<List<ClaimValidationResult>> ObserveExpectedPendResultsAsync(
-    HttpClient http,
-    ValidatorOptions options,
-    List<ClaimValidationResult> results)
-{
-    var expectedPendResults = results
-        .Where(r => r.ExpectedOutcome == ClaimValidationOutcome.Pended.ToString())
-        .ToList();
-
-    if (expectedPendResults.Count == 0)
-    {
-        return results;
-    }
-
-    Console.WriteLine(
-        $"Observing {expectedPendResults.Count:N0} expected-pend claims for up to {options.PendObservationTimeoutSeconds:N0}s; benchmark timing excludes this polling window.");
-
-    var observer = new MccClaimStatusObserver(new HttpClaimStatusSource(http, options.ClaimsUrl));
-    var observed = new ConcurrentDictionary<string, ClaimValidationResult>(StringComparer.Ordinal);
-    var timeout = TimeSpan.FromSeconds(options.PendObservationTimeoutSeconds);
-    var interval = TimeSpan.FromMilliseconds(options.PendObservationIntervalMilliseconds);
-    var observationParallelism = Math.Min(
-        expectedPendResults.Count,
-        Math.Max(options.Parallelism, 64));
-
-    await Parallel.ForEachAsync(
-        expectedPendResults,
-        new ParallelOptions { MaxDegreeOfParallelism = observationParallelism },
-        async (result, cancellationToken) =>
-        {
-            var updated = await observer.ObserveExpectedPendAsync(result, timeout, interval, cancellationToken);
-            observed[result.GeneratedClaimId] = updated;
-        });
-
-    var pended = observed.Values.Count(r => r.Outcome is ClaimValidationOutcome.Pended);
-    var timeouts = observed.Values.Count(r => r.Outcome is ClaimValidationOutcome.ObservationTimeout);
-    Console.WriteLine($"  Pend observation:  {pended:N0} pended, {timeouts:N0} timed out");
-    Console.WriteLine();
-
-    return results
-        .Select(result => observed.TryGetValue(result.GeneratedClaimId, out var updated) ? updated : result)
-        .OrderBy(r => r.GeneratedClaimId, StringComparer.Ordinal)
-        .ToList();
-}
-
-static async Task<List<ClaimValidationResult>> DetectUnexpectedPendResultsAsync(
-    HttpClient http,
-    ValidatorOptions options,
-    List<ClaimValidationResult> results)
-{
-    var candidates = results
-        .Where(r => r.ExpectedOutcome is not null && r.ExpectedOutcome != ClaimValidationOutcome.Pended.ToString())
-        .Where(r => r.Outcome is not ClaimValidationOutcome.PlatformFailure)
-        .ToList();
-    if (candidates.Count == 0) return results;
-
-    Console.WriteLine($"Sweeping {candidates.Count:N0} non-pend claims for unexpected persisted pends.");
-    var observer = new MccClaimStatusObserver(new HttpClaimStatusSource(http, options.ClaimsUrl));
-    var observed = new ConcurrentDictionary<string, ClaimValidationResult>(StringComparer.Ordinal);
-    await Parallel.ForEachAsync(candidates,
-        new ParallelOptions { MaxDegreeOfParallelism = Math.Min(candidates.Count, Math.Max(options.Parallelism, 64)) },
-        async (result, cancellationToken) =>
-            observed[result.GeneratedClaimId] = await observer.DetectUnexpectedPendAsync(
-                result,
-                TimeSpan.FromSeconds(options.PendObservationTimeoutSeconds),
-                TimeSpan.FromMilliseconds(options.PendObservationIntervalMilliseconds),
-                cancellationToken));
-
-    var falsePends = observed.Values.Count(r => r.FailureStage == "false-pend-observation" && r.Outcome == ClaimValidationOutcome.Pended);
-    var terminalReconciliations = observed.Values.Count(r => r.FailureStage == "terminal-status-observation");
-    Console.WriteLine($"  False-pend sweep: {falsePends:N0} unexpected pends, {terminalReconciliations:N0} terminal outcomes reconciled");
-    Console.WriteLine();
-    return results.Select(r => observed.TryGetValue(r.GeneratedClaimId, out var updated) ? updated : r)
-        .OrderBy(r => r.GeneratedClaimId, StringComparer.Ordinal).ToList();
-}
-
 static List<object> BuildDiagnosisCodes(SyntheticClaim claim)
 {
     var codes = new List<string>();
@@ -3188,30 +2924,6 @@ static List<object> BuildDiagnosisCodes(SyntheticClaim claim)
         .ToList();
 }
 
-static List<string> DiagnosisCodesForLine(SyntheticClaim claim, ClaimLine line)
-{
-    var allCodes = new List<string>();
-    if (!string.IsNullOrWhiteSpace(claim.PrimaryDiagnosisCode))
-    {
-        allCodes.Add(claim.PrimaryDiagnosisCode);
-    }
-
-    allCodes.AddRange(claim.SecondaryDiagnosisCodes.Where(c => !string.IsNullOrWhiteSpace(c)));
-    if (allCodes.Count == 0)
-    {
-        allCodes.Add("Z00.00");
-    }
-
-    var pointers = line.DiagnosisPointers.Count == 0 ? new List<int> { 1 } : line.DiagnosisPointers;
-    return pointers
-        .Select(pointer => pointer - 1)
-        .Where(index => index >= 0 && index < allCodes.Count)
-        .Select(index => allCodes[index])
-        .DefaultIfEmpty(allCodes[0])
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .ToList();
-}
-
 static string NormalizeClaimType(SyntheticClaim claim)
 {
     if (claim.ClaimType.Equals("EdgeCase", StringComparison.OrdinalIgnoreCase))
@@ -3229,9 +2941,6 @@ static int ClaimTypeValue(SyntheticClaim claim)
         claimType.Equals("Dental", StringComparison.OrdinalIgnoreCase) ? 3 :
         1;
 }
-
-static string NetworkTier(SyntheticClaim claim)
-    => claim.RenderingProvider.IsParticipating ? "InNetwork" : "OutOfNetwork";
 
 static CorpusProfile BuildCorpusProfile(int claimCount, int seed)
 {
@@ -3708,26 +3417,26 @@ static void PrintUsage()
       --no-seed-providers        Skip synthetic provider seeding
       --no-seed-authorizations   Skip prior authorization fixture seeding
       --skip-claim-update        Accepted for compatibility; the validator never writes adjudication back
-      --servicebus-only          Default. Submit claims and score only the outcome the claims-service
-                                 pipeline persisted (the single adjudicator)
-      --synchronous-diagnostic   Diagnostic: also call benefit-plan's dry-run /adjudicate and score its
-                                 answer instead. Never writes to claims; not a benchmark of the pipeline
+      --servicebus-only          Accepted for compatibility; the validator always submits claims and
+                                 scores only the outcome the claims-service pipeline persisted
       --no-servicebus-reconciliation
                                  Do not revisit Service Bus observation timeouts after the timed pass
       --servicebus-reconciliation-timeout <seconds>
                                  Maximum post-window reconciliation wait (default: 300)
-      --no-pend-observation      Do not poll claims-service for expected-pend claim status
+      --no-pend-observation      Accepted for compatibility; no effect (the persisted-outcome poll is the
+                                 scoring path and always runs)
       --pend-observation-timeout <seconds>
-                                 Max wait for expected-pend claims after benchmark timing stops (default: 45)
+                                 Max wait per claim for its persisted terminal outcome (default: 45)
       --pend-observation-interval-ms <ms>
-                                 Poll interval for expected-pend claim status (default: 1000)
+                                 Poll interval for persisted claim status, also used by post-window
+                                 reconciliation (default: 1000)
       --pend-diagnostics <path>  Write a per-claim pend diagnostic report (JSON) for expected-pend
-                                 scenarios and a sample of NCCI/MUE denials; prints an aggregate
+                                 scenarios and a sample of NCCI/MUE pends; prints an aggregate
                                  scenario table to the run summary. Off by default; adds one
                                  claims-service read per diagnosed claim AFTER the timed benchmark
                                  window closes — a diagnostics-on run is not a throughput benchmark.
       --pend-diagnostics-ncci-sample <n>
-                                 Max NCCI/MUE-denied claims (outside expected-pend) to include in
+                                 Max claims with pend code NCCI or MUE (outside expected-pend) in
                                  the diagnostic report (default: 200)
       --timeout <seconds>        Per-request timeout (default: 60)
       --progress-every <count>   Report progress every N claims (default: 10)
@@ -3793,13 +3502,12 @@ internal sealed record ClaimValidationResult(
     TimeSpan SubmitElapsed,
     TimeSpan AdjudicationElapsed,
     TimeSpan UpdateElapsed,
-    IReadOnlyDictionary<string, double> AdjudicationStepTimings,
     string? BusinessDenialCode,
     string? FailureStage,
     string? Error,
-    JsonElement? SyncAdjudicationSnapshot = null,
     bool ServiceBusObservationTimedOut = false,
-    bool ReconciledAfterObservationTimeout = false);
+    bool ReconciledAfterObservationTimeout = false,
+    string? PendCode = null);
 
 internal sealed record MassAdjudicationRunSummary(
     string Id,
@@ -3978,15 +3686,6 @@ internal sealed record MassAdjudicationClaimResult(
     bool ServiceBusObservationTimedOut,
     bool ReconciledAfterObservationTimeout);
 
-internal sealed record AdjudicationResponseDto(
-    string ClaimId,
-    bool Success,
-    string? DenialReasonCode,
-    string? DenialReasonDescription,
-    AdjudicationTotalsDto Totals,
-    string? BusinessDenialCode = null,
-    IReadOnlyDictionary<string, double>? Timings = null);
-
 internal sealed record AuthorizationValidationProbeResponse(
     string AuthorizationNumber,
     bool IsValid,
@@ -3995,20 +3694,3 @@ internal sealed record AuthorizationValidationProbeResponse(
 internal sealed record MemberStatusUpdateDto(
     string Status,
     string EventId);
-
-internal sealed record AdjudicationTotalsDto(
-    decimal BilledAmount,
-    decimal AllowedAmount,
-    decimal ContractualAdjustment,
-    decimal DeductibleAmount,
-    decimal CopayAmount,
-    decimal CoinsuranceAmount,
-    decimal MemberResponsibility,
-    decimal PlanPayment);
-
-internal sealed record AdjudicationErrorDto(
-    string? ClaimId,
-    string? Error,
-    string? Message,
-    string? Carc,
-    IReadOnlyDictionary<string, double>? Timings = null);

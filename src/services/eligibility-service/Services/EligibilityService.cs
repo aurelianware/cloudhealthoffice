@@ -3,6 +3,7 @@ using EligibilityService.Models;
 using EligibilityService.Repositories;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EligibilityService.Services;
 
@@ -49,7 +50,7 @@ public class EligibilityServiceImpl : IEligibilityService
 
             _logger.LogInformation(
                 "Processing eligibility inquiry {InquiryId} using {Platform} adapter for tenant {TenantId}",
-                SanitizeForLog(inquiry.Id), adapter.Platform, SanitizeForLog(inquiry.TenantId));
+                LogSanitizer.Sanitize(inquiry.Id), adapter.Platform, LogSanitizer.Sanitize(inquiry.TenantId));
 
             var adapterRequest = new EligibilityAdapterRequest
             {
@@ -106,13 +107,13 @@ public class EligibilityServiceImpl : IEligibilityService
             // Store response
             await _repository.CreateResponseAsync(response);
 
-            _logger.LogInformation("Eligibility inquiry {InquiryId} completed successfully", SanitizeForLog(inquiry.Id));
+            _logger.LogInformation("Eligibility inquiry {InquiryId} completed successfully", LogSanitizer.Sanitize(inquiry.Id));
 
             return response;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing eligibility inquiry {InquiryId}", SanitizeForLog(inquiry.Id));
+            _logger.LogError(ex, "Error processing eligibility inquiry {InquiryId}", LogSanitizer.Sanitize(inquiry.Id));
 
             inquiry.Status = EligibilityInquiryStatus.Failed;
             inquiry.CompletedDate = DateTime.UtcNow;
@@ -215,7 +216,7 @@ public class EligibilityServiceImpl : IEligibilityService
             
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("No active coverage found for member {SubscriberId}", SanitizeForLog(subscriberId));
+                _logger.LogWarning("No active coverage found for member {SubscriberId}", LogSanitizer.MaskId(subscriberId));
                 return null;
             }
 
@@ -302,7 +303,7 @@ public class EligibilityServiceImpl : IEligibilityService
             
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Member {SubscriberId} not found", subscriberId);
+                _logger.LogWarning("Member {SubscriberId} not found", LogSanitizer.MaskId(subscriberId));
                 return null;
             }
 
@@ -333,7 +334,7 @@ public class EligibilityServiceImpl : IEligibilityService
             
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Benefits not found for plan {BenefitPlanId}", benefitPlanId);
+                _logger.LogWarning("Benefits not found for plan {BenefitPlanId}", LogSanitizer.Sanitize(benefitPlanId));
                 return new List<EligibilityBenefit>();
             }
 
@@ -375,7 +376,7 @@ public class EligibilityServiceImpl : IEligibilityService
             
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Accumulation not found for member {SubscriberId}", SanitizeForLog(subscriberId));
+                _logger.LogWarning("Accumulation not found for member {SubscriberId}", LogSanitizer.MaskId(subscriberId));
                 return (null, null);
             }
 
@@ -439,18 +440,6 @@ public class EligibilityServiceImpl : IEligibilityService
             CoverageLevel = string.Empty,
             CreatedDate = DateTime.UtcNow
         };
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return string.Empty;
-        }
-
-        // Remove newline characters to prevent log forging via user-controlled data.
-        return value.Replace("\r", string.Empty)
-                    .Replace("\n", string.Empty);
     }
 }
 

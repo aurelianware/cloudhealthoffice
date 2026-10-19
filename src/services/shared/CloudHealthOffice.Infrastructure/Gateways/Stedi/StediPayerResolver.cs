@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
 using CloudHealthOffice.Infrastructure.ReferenceData.Payers.Stedi;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 
@@ -58,7 +59,7 @@ internal sealed class StediPayerResolver : IStediPayerResolver
             {
                 _logger.LogWarning(
                     "Deprecated TenantPayerMap override used for tenant {TenantId}",
-                    Sanitize(tenantId));
+                    LogSanitizer.Sanitize(tenantId));
                 return PayerResolution.Found(resolution.Payer, tenantMapped, usedDeprecatedFallback: true);
             }
 
@@ -83,7 +84,7 @@ internal sealed class StediPayerResolver : IStediPayerResolver
         {
             _logger.LogWarning(
                 "Deprecated PayerMap/TenantPayerMap fallback used for tenant {TenantId}",
-                Sanitize(tenantId));
+                LogSanitizer.Sanitize(tenantId));
             return PayerResolution.Found(
                 new PayerReference
                 {
@@ -151,7 +152,4 @@ internal sealed class StediPayerResolver : IStediPayerResolver
 
     private static string? FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

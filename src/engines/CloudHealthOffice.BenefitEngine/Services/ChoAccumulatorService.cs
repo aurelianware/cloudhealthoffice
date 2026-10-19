@@ -2,6 +2,7 @@ using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Persistence;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.BenefitEngine.Services;
 
@@ -46,9 +47,6 @@ internal class ChoAccumulatorService : IAccumulatorService
     private readonly IBenefitEngineTenantContext _tenantContext;
     private readonly ILogger<ChoAccumulatorService> _logger;
 
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
-
     public ChoAccumulatorService(
         IAccumulatorRepository repository,
         IBenefitEngineTenantContext tenantContext,
@@ -78,17 +76,19 @@ internal class ChoAccumulatorService : IAccumulatorService
 
         await Task.WhenAll(individualTask, familyTask);
 
+        var individual = await individualTask;
+        var family = await familyTask;
         var snapshots = new List<AccumulatorSnapshot>();
 
-        if (individualTask.Result is not null)
-            snapshots.AddRange(ToSnapshots(individualTask.Result, AccumulatorScope.Individual));
+        if (individual is not null)
+            snapshots.AddRange(ToSnapshots(individual, AccumulatorScope.Individual));
 
-        if (familyTask.Result is not null)
-            snapshots.AddRange(ToSnapshots(familyTask.Result, AccumulatorScope.Family));
+        if (family is not null)
+            snapshots.AddRange(ToSnapshots(family, AccumulatorScope.Family));
 
         _logger.LogDebug(
             "Loaded {Count} accumulator snapshots for member {MemberId}, plan {PlanId} / {PlanYear}",
-            snapshots.Count, SanitizeForLog(memberId), benefitPlanId, SanitizeForLog(planYear));
+            snapshots.Count, LogSanitizer.MaskId(memberId), benefitPlanId, LogSanitizer.Sanitize(planYear));
 
         return snapshots;
     }
@@ -218,7 +218,7 @@ internal class ChoAccumulatorService : IAccumulatorService
             {
                 _logger.LogInformation(
                     "Reversal of commit {CommitId} for claim {ClaimId} superseded on {DocId}: commit {Applied} is applied",
-                    SanitizeForLog(commitId), SanitizeForLog(claimId), SanitizeForLog(doc.Id), SanitizeForLog(applied));
+                    LogSanitizer.Sanitize(commitId), LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(doc.Id), LogSanitizer.Sanitize(applied));
                 return AccumulatorReversalOutcome.Superseded;
             }
             var fence = !doc.ReversedCommitIds.Contains(commitId);
@@ -283,14 +283,14 @@ internal class ChoAccumulatorService : IAccumulatorService
         {
             _logger.LogInformation(
                 "Commit {CommitId} for claim {ClaimId} refused: that commit was reversed (the claim was denied while it was in flight)",
-                SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId));
+                LogSanitizer.Sanitize(commit.CommitId), LogSanitizer.Sanitize(commit.ClaimId));
             return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedCommitReversed);
         }
         if (outcomes.Any(o => o.Outcome == AccumulatorCommitOutcome.RefusedClaimReversed))
         {
             _logger.LogWarning(
                 "Commit {CommitId} for claim {ClaimId} refused: the claim was reversed terminally (void or denial)",
-                SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId));
+                LogSanitizer.Sanitize(commit.CommitId), LogSanitizer.Sanitize(commit.ClaimId));
             return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedClaimReversed);
         }
         return new AccumulatorCommitResult
@@ -345,7 +345,7 @@ internal class ChoAccumulatorService : IAccumulatorService
             {
                 _logger.LogInformation(
                     "Claim {ClaimId} already applied to {Scope} accumulator {DocId}. Skipping (idempotent).",
-                    SanitizeForLog(claimId), scope, SanitizeForLog(doc.Id));
+                    LogSanitizer.Sanitize(claimId), scope, LogSanitizer.Sanitize(doc.Id));
                 return;
             }
 
@@ -385,7 +385,7 @@ internal class ChoAccumulatorService : IAccumulatorService
                 await _repository.UpsertAsync(doc, ct);
                 _logger.LogDebug(
                     "Applied {EntryCount} accumulator entries for claim {ClaimId} to {DocId}",
-                    transaction.Entries.Count, SanitizeForLog(claimId), SanitizeForLog(doc.Id));
+                    transaction.Entries.Count, LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(doc.Id));
                 return;
             }
             catch (OptimisticConcurrencyException)
@@ -396,13 +396,13 @@ internal class ChoAccumulatorService : IAccumulatorService
                         "Optimistic concurrency failure after {Attempts} retries " +
                         "for claim {ClaimId}, document {DocId}. " +
                         "This may indicate extremely high concurrent adjudication volume.",
-                        MaxConcurrencyRetries, SanitizeForLog(claimId), SanitizeForLog(doc.Id));
+                        MaxConcurrencyRetries, LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(doc.Id));
                     throw;
                 }
 
                 _logger.LogDebug(
                     "Concurrency conflict on attempt {Attempt}/{Max} for claim {ClaimId}, doc {DocId}. Reloading.",
-                    attempt + 1, MaxConcurrencyRetries, SanitizeForLog(claimId), SanitizeForLog(doc.Id));
+                    attempt + 1, MaxConcurrencyRetries, LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(doc.Id));
             }
         }
     }
@@ -427,7 +427,7 @@ internal class ChoAccumulatorService : IAccumulatorService
                 {
                     _logger.LogDebug(
                         "No {Scope} accumulator document found for owner {OwnerId}. Nothing to reverse.",
-                        scope, SanitizeForLog(ownerId));
+                        scope, LogSanitizer.Sanitize(ownerId));
                     return;
                 }
                 // Nothing applied yet, but the fence is still written: a
@@ -444,7 +444,7 @@ internal class ChoAccumulatorService : IAccumulatorService
                 _logger.LogInformation(
                     "Claim {ClaimId} has no active transaction in {Scope} doc {DocId}. " +
                     "Already reversed or never applied.",
-                    SanitizeForLog(claimId), scope, SanitizeForLog(doc.Id));
+                    LogSanitizer.Sanitize(claimId), scope, LogSanitizer.Sanitize(doc.Id));
                 return;
             }
 
@@ -456,7 +456,7 @@ internal class ChoAccumulatorService : IAccumulatorService
                 await _repository.UpsertAsync(doc, ct);
                 _logger.LogInformation(
                     "Reversed claim {ClaimId} on {DocId} (entries reversed: {Reversed}, fenced: {Fenced})",
-                    SanitizeForLog(claimId), SanitizeForLog(doc.Id), tx is not null, fence);
+                    LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(doc.Id), tx is not null, fence);
                 return;
             }
             catch (OptimisticConcurrencyException)
@@ -562,14 +562,14 @@ internal class ChoAccumulatorService : IAccumulatorService
                 await _repository.UpsertAsync(doc, ct);
                 _logger.LogDebug(
                     "Committed {Count} accumulator entries for claim {ClaimId} (commit {CommitId}) to {DocId}",
-                    updates.Count, SanitizeForLog(commit.ClaimId), SanitizeForLog(commit.CommitId), SanitizeForLog(doc.Id));
+                    updates.Count, LogSanitizer.Sanitize(commit.ClaimId), LogSanitizer.Sanitize(commit.CommitId), LogSanitizer.Sanitize(doc.Id));
                 return new AccumulatorCommitResult { Outcome = AccumulatorCommitOutcome.Committed, Clamped = clamped };
             }
             catch (OptimisticConcurrencyException) when (attempt < MaxConcurrencyRetries - 1)
             {
                 _logger.LogDebug(
                     "Concurrency conflict on commit attempt {Attempt}/{Max} for claim {ClaimId}, doc {DocId}. Reloading.",
-                    attempt + 1, MaxConcurrencyRetries, SanitizeForLog(commit.ClaimId), SanitizeForLog(doc.Id));
+                    attempt + 1, MaxConcurrencyRetries, LogSanitizer.Sanitize(commit.ClaimId), LogSanitizer.Sanitize(doc.Id));
             }
         }
     }

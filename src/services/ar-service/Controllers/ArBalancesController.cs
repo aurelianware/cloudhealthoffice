@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using ArService.Models;
 using ArService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ArService.Controllers;
 
@@ -87,7 +88,7 @@ public class ArBalancesController : ControllerBase
         balance.ReconciledBy = reconciledBy;
         balance.ReconciliationNotes = request?.Notes;
         _logger.LogInformation("Reconciled AR balance {BalanceId} by {ReconciledBy}",
-            SanitizeForLog(id), SanitizeForLog(reconciledBy));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(reconciledBy));
 
         var updated = await _balanceRepository.UpdateAsync(balance);
         return Ok(updated);
@@ -118,13 +119,6 @@ public class ArBalancesController : ControllerBase
             + summary.Days91To120 + summary.Over120Days;
 
         return Ok(summary);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

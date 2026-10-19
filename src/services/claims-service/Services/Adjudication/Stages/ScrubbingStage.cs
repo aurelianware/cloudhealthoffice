@@ -3,6 +3,7 @@ using ClaimsService.Models.Adjudication;
 using ClaimsService.Services.Adjudication.Mapping;
 using EngineModels = CloudHealthOffice.ClaimsScrubEngine.Models;
 using EngineServices = CloudHealthOffice.ClaimsScrubEngine.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Adjudication.Stages;
 
@@ -84,7 +85,7 @@ public sealed class ScrubbingStage : IClaimAdjudicationStage
             // Full exception detail goes to ILogger only.
             _logger.LogError(ex,
                 "ClaimToX12837Mapper threw for claim {ClaimVersionId}; treating as Reject",
-                SanitizeForLog(context.ClaimVersionId));
+                LogSanitizer.Sanitize(context.ClaimVersionId));
             context.ScrubbingResult = BuildExceptionOutcome(
                 ex, "MAPPER_EXCEPTION",
                 $"Scrubbing mapper threw: {ex.GetType().Name}");
@@ -111,7 +112,7 @@ public sealed class ScrubbingStage : IClaimAdjudicationStage
             // unscrubbed claim).
             _logger.LogError(ex,
                 "Scrubbing engine threw for claim {ClaimVersionId}; pending {PendCode}",
-                SanitizeForLog(context.ClaimVersionId), ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode);
+                LogSanitizer.Sanitize(context.ClaimVersionId), ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode);
             var reason = $"{ClaimAdjudicationOrchestrator.ServiceUnavailableReason}: scrubbing engine threw " +
                          $"{ex.GetType().Name}; {BenefitCalculationStage.TransientPendClearedByApproval}";
             ClaimAdjudicationOrchestrator.RecordServiceUnavailablePend(context, reason);
@@ -162,7 +163,7 @@ public sealed class ScrubbingStage : IClaimAdjudicationStage
 
             _logger.LogInformation(
                 "ScrubbingStage rejected claim {ClaimVersionId}: {Errors} errors, {Warnings} warnings",
-                SanitizeForLog(context.ClaimVersionId), errors.Count, warnings.Count);
+                LogSanitizer.Sanitize(context.ClaimVersionId), errors.Count, warnings.Count);
 
             return RejectUnprocessable(context, reason);
         }
@@ -171,7 +172,7 @@ public sealed class ScrubbingStage : IClaimAdjudicationStage
         {
             _logger.LogInformation(
                 "ScrubbingStage passed claim {ClaimVersionId} with {Warnings} warnings",
-                SanitizeForLog(context.ClaimVersionId), warnings.Count);
+                LogSanitizer.Sanitize(context.ClaimVersionId), warnings.Count);
         }
 
         return ClaimAdjudicationStageResult.Pass(StageName);
@@ -229,7 +230,4 @@ public sealed class ScrubbingStage : IClaimAdjudicationStage
             AdjudicationDenialCodes.UnprocessableClaimRarc);
         return ClaimAdjudicationStageResult.Reject(StageName, reason);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

@@ -2,6 +2,7 @@ using CloudHealthOffice.ProviderEnrollmentService.Abstractions;
 using CloudHealthOffice.ProviderEnrollmentService.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.ProviderEnrollmentService.Aggregator;
 
@@ -84,7 +85,7 @@ public sealed class MultiStateEnrollmentAggregator
 
         if (source is null)
         {
-            _logger.LogWarning("No enrollment source registered for state {StateCode}", SanitizeForLog(stateCode));
+            _logger.LogWarning("No enrollment source registered for state {StateCode}", LogSanitizer.Sanitize(stateCode));
             return null;
         }
 
@@ -202,11 +203,5 @@ public sealed class MultiStateEnrollmentAggregator
             })
             .OrderBy(r => r.DaysRemaining)
             .ToList();
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

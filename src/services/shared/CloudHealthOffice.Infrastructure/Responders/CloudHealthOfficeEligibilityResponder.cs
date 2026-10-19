@@ -5,6 +5,7 @@ using CloudHealthOffice.Infrastructure.Responders.Directory;
 using CloudHealthOffice.Infrastructure.Responders.Models;
 using CloudHealthOffice.Infrastructure.Responders.Routing;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Responders;
 
@@ -267,7 +268,7 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
 
         _logger.LogInformation(
             "Inbound eligibility completed. Tenant={TenantId} Transaction={TransactionType} ChoTransactionId={ChoTransactionId} Transport={Transport} Business={Business} Coverage={Coverage} LatencyMs={LatencyMs} Adapter={Adapter} ErrorCategory={ErrorCategory}",
-            SanitizeForLog(response.TenantId),
+            LogSanitizer.Sanitize(response.TenantId),
             HealthcareTransactionType.Eligibility270271,
             choTransactionId,
             transport,
@@ -492,9 +493,6 @@ public sealed class CloudHealthOfficeEligibilityResponder : IEligibilityResponde
 
         return AdapterName;
     }
-
-    private static string? SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? value : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
     private static string? FirstNonBlank(params string?[] values)
     {

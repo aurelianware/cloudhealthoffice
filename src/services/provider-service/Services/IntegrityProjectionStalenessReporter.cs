@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Options;
 using ProviderService.Models;
 using ProviderService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Services;
 
@@ -103,11 +104,8 @@ public sealed class IntegrityProjectionStalenessReporter : IIntegrityProjectionS
             // "zero stale providers".
             _logger.LogWarning(ex,
                 "IntegrityProjectionStalenessReporter failed for tenant {Tenant}; gauge snapshot unchanged",
-                Sanitize(tenantId));
+                LogSanitizer.Sanitize(tenantId));
             return -1;
         }
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

@@ -2,6 +2,8 @@ using System.Text.Json;
 using CapitationService.Models;
 using CapitationService.Repositories;
 using CloudHealthOffice.Infrastructure.Data;
+using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Money;
 
 namespace CapitationService.Services;
 
@@ -362,7 +364,7 @@ public class CapitationRunService : ICapitationRunService
         });
 
         _logger.LogInformation("Voided capitation statement {StatementNumber}: {Reason}",
-            statement.StatementNumber, SanitizeForLog(reason));
+            statement.StatementNumber, LogSanitizer.Sanitize(reason));
 
         return await _statementRepository.UpdateAsync(statement);
     }
@@ -386,7 +388,7 @@ public class CapitationRunService : ICapitationRunService
         });
 
         _logger.LogInformation("Held capitation statement {StatementNumber}: {Reason}",
-            statement.StatementNumber, SanitizeForLog(reason));
+            statement.StatementNumber, LogSanitizer.Sanitize(reason));
 
         return await _statementRepository.UpdateAsync(statement);
     }
@@ -522,7 +524,7 @@ public class CapitationRunService : ICapitationRunService
                     _logger.LogError(
                         "Capitation run {RunNumber}: risk score unavailable for member {MemberId} (provider {NPI}, year {Year}): {Failure}. " +
                         "The member is left off the statement and the statement is held",
-                        run.RunNumber, SanitizeForLog(coverage.MemberId), contract.ProviderNPI, periodStart.Year, lookup.Failure);
+                        run.RunNumber, LogSanitizer.MaskId(coverage.MemberId), contract.ProviderNPI, periodStart.Year, lookup.Failure);
                     statement.MemberIssues.Add(new CapitationMemberIssue
                     {
                         MemberId = coverage.MemberId,
@@ -546,7 +548,7 @@ public class CapitationRunService : ICapitationRunService
                     riskScoreSource = RiskScoreSources.NoScoreForYear;
                     _logger.LogInformation(
                         "Capitation run {RunNumber}: no risk score for member {MemberId}, year {Year}; using contract default {Default}",
-                        run.RunNumber, SanitizeForLog(coverage.MemberId), periodStart.Year, contract.DefaultRiskScore);
+                        run.RunNumber, LogSanitizer.MaskId(coverage.MemberId), periodStart.Year, contract.DefaultRiskScore);
                 }
             }
             else
@@ -555,7 +557,7 @@ public class CapitationRunService : ICapitationRunService
                 riskScoreSource = RiskScoreSources.NotRiskAdjusted;
             }
 
-            var adjustedPmpm = Math.Round(basePmpm * riskScore, 2);
+            var adjustedPmpm = MoneyRounding.ToCents(basePmpm * riskScore);
 
             // Calculate proration for mid-month adds/terms
             var coverageStart = coverage.EffectiveDate > periodStart ? coverage.EffectiveDate : periodStart;
@@ -567,8 +569,8 @@ public class CapitationRunService : ICapitationRunService
             var prorationFactor = coveredDays >= daysInMonth ? 1.0m : (decimal)coveredDays / daysInMonth;
             prorationFactor = Math.Round(prorationFactor, 4);
 
-            var grossAmount = Math.Round(adjustedPmpm * prorationFactor, 2);
-            var withholdAmount = Math.Round(grossAmount * contract.WithholdPercentage, 2);
+            var grossAmount = MoneyRounding.ToCents(adjustedPmpm * prorationFactor);
+            var withholdAmount = MoneyRounding.ToCents(grossAmount * contract.WithholdPercentage);
             var netAmount = grossAmount - withholdAmount;
 
             var lineItem = new CapitationLineItem
@@ -771,7 +773,7 @@ public class CapitationRunService : ICapitationRunService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Risk score request failed for member {MemberId}, year {Year}",
-                SanitizeForLog(memberId), year);
+                LogSanitizer.MaskId(memberId), year);
             return RiskScoreLookup.Failed($"risk-adjustment-service unreachable: {ex.GetType().Name}");
         }
 
@@ -791,7 +793,7 @@ public class CapitationRunService : ICapitationRunService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unreadable risk score response for member {MemberId}, year {Year}",
-                    SanitizeForLog(memberId), year);
+                    LogSanitizer.MaskId(memberId), year);
                 return RiskScoreLookup.Failed("risk-adjustment-service returned an unreadable score");
             }
 
@@ -813,13 +815,6 @@ public class CapitationRunService : ICapitationRunService
     {
         statement.LastUpdatedBy = actor;
         statement.LastUpdatedAt = DateTime.UtcNow;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

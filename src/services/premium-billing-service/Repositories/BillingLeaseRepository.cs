@@ -117,6 +117,8 @@ public sealed class BillingLeaseRepositoryMongo : IBillingLeaseRepository
         }
         catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
         {
+            // A lease document already exists for the group: fall through to the
+            // expired-lease takeover below rather than failing.
         }
 
         // Held: take it over only if it expired (one writer wins the conditional update).

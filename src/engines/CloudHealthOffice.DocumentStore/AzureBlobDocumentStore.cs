@@ -19,6 +19,10 @@ public class AzureBlobDocumentStore : IDocumentStore
     private readonly BlobServiceClient _client;
     private readonly ILogger<AzureBlobDocumentStore> _logger;
 
+    // Local copy on purpose: this library pins Microsoft.Extensions.*.Abstractions
+    // to 10.x (VersionOverride) while CloudHealthOffice.Infrastructure builds on
+    // 8.x, so it does not reference Infrastructure. Every other project uses
+    // CloudHealthOffice.Infrastructure.Logging.LogSanitizer.Sanitize.
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
