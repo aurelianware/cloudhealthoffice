@@ -59,12 +59,14 @@ public class ProviderVerificationLoadTests
             .Run();
 
         var scenarioStats = stats.ScenarioStats[0];
+        var totalRequests = scenarioStats.Ok.Request.Count + scenarioStats.Fail.Request.Count;
+        var errorRatePercent = 100d * scenarioStats.Fail.Request.Count / Math.Max(1, totalRequests);
         Assert.True(
             scenarioStats.Ok.Latency.Percent99 < 500,
             $"NPPES lookup p99 latency {scenarioStats.Ok.Latency.Percent99}ms exceeds 500ms target");
         Assert.True(
-            scenarioStats.Fail.Request.Percent < LoadTestConfig.MaxErrorRate * 100,
-            $"Error rate {scenarioStats.Fail.Request.Percent}% exceeds {LoadTestConfig.MaxErrorRate * 100}% threshold");
+            errorRatePercent < LoadTestConfig.MaxErrorRate * 100,
+            $"Error rate {errorRatePercent}% exceeds {LoadTestConfig.MaxErrorRate * 100}% threshold");
     }
 
     [Fact(Skip = "Load test — run manually or via CI with LOAD_TEST_PROVIDER_VERIFICATION_URL set")]
@@ -95,11 +97,13 @@ public class ProviderVerificationLoadTests
             .Run();
 
         var scenarioStats = stats.ScenarioStats[0];
+        var totalRequests = scenarioStats.Ok.Request.Count + scenarioStats.Fail.Request.Count;
+        var errorRatePercent = 100d * scenarioStats.Fail.Request.Count / Math.Max(1, totalRequests);
         Assert.True(
             scenarioStats.Ok.Latency.Percent99 < 2000,
             $"Integrity score p99 latency {scenarioStats.Ok.Latency.Percent99}ms exceeds 2000ms target");
         Assert.True(
-            scenarioStats.Fail.Request.Percent < LoadTestConfig.MaxErrorRate * 100,
-            $"Error rate {scenarioStats.Fail.Request.Percent}% exceeds {LoadTestConfig.MaxErrorRate * 100}% threshold");
+            errorRatePercent < LoadTestConfig.MaxErrorRate * 100,
+            $"Error rate {errorRatePercent}% exceeds {LoadTestConfig.MaxErrorRate * 100}% threshold");
     }
 }

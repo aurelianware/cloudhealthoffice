@@ -1,7 +1,9 @@
 # Marketing Claim-Evidence Ledger
 
 **Maintained:** October 19, 2026 (America/Phoenix)
-**Verified baseline:** main `d5af561d490f1c440c7cd7fb1098fa3e18d8521c`
+**Initial verified baseline:** main `d5af561d490f1c440c7cd7fb1098fa3e18d8521c`
+
+**Refreshed baseline:** merged main `3b5a2035` (October 19, 2026), including lifecycle PR #1409. Prior checks retain their original baseline; CAP-23 has separate refreshed verification.
 **Proposed accountable owner:** Product/engineering; commercial/legal review required for licensing, customer and offer claims. No new licensing terms are proposed.
 
 Use the latest verified implementation. Do not repeat resolved historical gaps. Implementation, standards conformance and production readiness are separate dimensions. This ledger supersedes earlier provisional statements that all DTR storage was durable: creates/read-back are durable, questionnaire update/search remain partial.
@@ -32,6 +34,7 @@ The [capability reconciliation](../CAPABILITY_RECONCILIATION.md) contains the ex
 | CAP-20 | 2026-10-19 | Confirmed Gap | [Reconciliation CAP-20](../CAPABILITY_RECONCILIATION.md) | Service directory still lacks Dockerfile and named workflow entries. Keep as a build gap, distinct from fee engine functionality. |
 | CAP-21 | 2026-10-19 | Implemented | [Reconciliation CAP-21](../CAPABILITY_RECONCILIATION.md) | Authorization Mongo updates are revision-fenced; stale concurrent updates conflict. No cross-service transaction guarantee. |
 | CAP-22 | 2026-10-19 | Confirmed Gap | [Reconciliation CAP-22](../CAPABILITY_RECONCILIATION.md) | Default FHIR data bindings remain mocks; validate resource-specific source integration without generalizing to CHO-owned authorization persistence. |
+| CAP-23 | 2026-10-19 | Implemented | [Reconciliation CAP-23](../CAPABILITY_RECONCILIATION.md) | Ordinary authorization transition guards, audited cancellation and atomic expiry are implemented. Preserve clinical reporting and historical covered service-date semantics; tenant-database sweeps and separate reopening/overturn workflows remain outside this capability. |
 
 ## Maintenance
 
@@ -42,3 +45,4 @@ Licensing remains governed by `LICENSE`: BSL 1.1 source-available, with producti
 | Date | Change |
 | --- | --- |
 | 2026-10-19 | Reconciled current main implementation, executed focused tests, corrected historical underclaims and preserved confirmed/unknown limitations. |
+| 2026-10-19 | Refreshed against merged #1409; retained precise partial DTR wording and credited ordinary lifecycle/expiry (CAP-23). |

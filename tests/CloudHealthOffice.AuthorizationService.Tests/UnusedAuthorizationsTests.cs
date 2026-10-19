@@ -46,6 +46,18 @@ public class UnusedAuthorizationsTests
     }
 
     [Fact]
+    public async Task ExpiryDoesNotRemoveAnUnusedApprovalFromTheReport()
+    {
+        var authorization = Approved("PA-expired", 5);
+        authorization.Status = AuthorizationStatus.Expired;
+        authorization.ReviewDecision = "A1";
+        var usage = new FakeUsage(new ClaimsUsage(new Dictionary<string, int>(), null));
+        var result = await new UnusedAuthorizations(Repo(authorization), usage)
+            .ComputeAsync(Now.AddDays(-30), Now, null, Now);
+        Assert.Equal("PA-expired", Assert.Single(result.Unused!).AuthorizationNumber);
+    }
+
+    [Fact]
     public async Task Unused_are_ended_approvals_no_claim_carries()
     {
         var usage = new FakeUsage(new ClaimsUsage(new Dictionary<string, int> { ["PA-1"] = 3 }, null));

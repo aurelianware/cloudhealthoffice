@@ -1,7 +1,9 @@
 # Capability Reconciliation
 
 **Verified:** October 19, 2026 (America/Phoenix)
-**Implementation baseline:** remote `main` at `d5af561d490f1c440c7cd7fb1098fa3e18d8521c`.
+**Initial implementation baseline:** remote `main` at `d5af561d490f1c440c7cd7fb1098fa3e18d8521c`.
+
+**Conflict-resolution refresh:** merged `main` at `3b5a2035` on October 19, 2026, including PR #1409. Existing test results remain tied to their original baseline; the lifecycle addendum records new checks against the refreshed branch.
 **Working branch:** `docs/capability-reconciliation`, separate checkout; unrelated work preserved.
 
 ## Evidence policy and classification
@@ -43,6 +45,7 @@ All paths are repository-relative. In FHIR rows, shorthand `Controllers/`, `Serv
 | CAP-20 | Confirmed Gap | **FFS build/container coverage** — docs/deployment/KNOWN-GAPS.md | src/services/ffs-service/ directory; .github/workflows/deploy-azure-aks.yml; .github/workflows/docker-build.yml | Read-only inventory; no build/deployment performed | Service directory still lacks Dockerfile and named workflow entries. Keep as a build gap, distinct from fee engine functionality. | Retain assessment with dated verification; no configuration changes. |
 | CAP-21 | Implemented | **Authorization updates are last-write-wins** — docs/architecture/prior-authorization.md Limitations | src/services/authorization-service/Repositories/AuthorizationRepositoryMongo.cs:RevisionIs/UpdateAsync; Exceptions/AuthorizationConcurrencyException.cs | src/services/authorization-service/AuthorizationService.Tests/Persistence/AuthorizationRepositoryMongoConcurrencyTests.cs:TwoConcurrentUpdates_FromTheSameRead_ExactlyOneWins_TheOtherConflicts; AReplaceBasedOnAReadBeforeAnSlaEscalation_Conflicts_InsteadOfUndoingIt (A1) | Real Mongo conditional writes use the read Revision; exactly one concurrent writer succeeds and stale updates cannot undo escalation. Scoped to the current Mongo repository; not a claim of distributed transactions across services. | Replace stale no-concurrency limitation with dated revision-fencing evidence. |
 | CAP-22 | Confirmed Gap | **Default FHIR reads are all live payer-backed** — readiness matrix adapter warnings / ePA G-30 | src/services/fhir-service/Program.cs default IFhirDataAdapter and IPatientAccessDataProvider registrations | Host registration inspected; no live payer integration test executed | Default bindings still use MockFhirDataAdapter and MockPatientAccessDataProvider. This does not imply every FHIR endpoint or CHO-owned authorization record is mocked. | Preserve resource-specific demo/live labels; do not imply that PAS persistence resolves all source-system integration. |
+| CAP-23 | Implemented | **No authorization state machine, audited cancellation or expiry / D-23,G-24** — docs/epa-gap-matrix.md historical defect/register | src/services/authorization-service/Backends/AuthorizationLifecyclePolicy.cs; Backends/ChoAuthorizationBackend.cs; Controllers/AuthorizationsController.cs; Services/AuthorizationExpiryWorker.cs; Repositories/AuthorizationRepositoryMongo.cs | tests/CloudHealthOffice.AuthorizationService.Tests/AuthorizationLifecycleTests.cs; UnusedAuthorizationsTests.cs; src/services/authorization-service/AuthorizationService.Tests/Persistence/AuthorizationRepositoryMongoConcurrencyTests.cs; Services/Cms0057ReportingTests.cs (refresh checks below) | Ordinary transition guards, audited cancellation and atomic tenant/revision-checked expiry are implemented. Expiry preserves clinical reporting and explicitly covered historical service dates. Per-tenant-database sweeps (D-38), appeals/overturn/reopening workflows and deployment readiness remain separate. | Preserve the merged D-23/G-24 resolution and link the current lifecycle runbook. |
 
 ## Repository-wide discovery inventory
 
@@ -140,7 +143,7 @@ The following is an index of historical D/G identifiers, not a new finding list.
 | D-20 | Unverified in this reconciliation; retain historical evidence pending focused review. |
 | D-21 | CAP-03 (uncertainty only) |
 | D-22 | CAP-04 / CAP-16 |
-| D-23 | Unverified in this reconciliation; retain historical evidence pending focused review. |
+| D-23 | CAP-23; ordinary CHO lifecycle/expiry implemented by merged #1409. |
 | D-24 | Unverified in this reconciliation; retain historical evidence pending focused review. |
 | D-25 | Unverified in this reconciliation; retain historical evidence pending focused review. |
 | D-26 | Unverified in this reconciliation; retain historical evidence pending focused review. |
@@ -159,10 +162,11 @@ The following is an index of historical D/G identifiers, not a new finding list.
 | D-39 | CAP-12 |
 | D-40 | Unverified in this reconciliation; retain historical evidence pending focused review. |
 | G-60 | Unverified in this reconciliation; retain historical evidence pending focused review. |
+| G-24 | CAP-23; ordinary lifecycle/expiry only; separate reopening/overturn and D-38 limits retained. |
 
 ## Executed checks — October 19, 2026
 
-All focused test runs below executed against the fresh main-based checkout at the stated baseline, not the earlier authorization-lifecycle branch. Each command used `dotnet test <project> -m:1 --filter '<filter>' --verbosity quiet`. Later FHIR security run also used `--no-restore`. Existing SDK/package caches were used; no source fixes or new tests were introduced. Tests are scoped behavioral evidence, not full regulatory or production validation.
+All focused test runs below executed against the fresh main-based checkout at the initial d5af561d baseline, not the earlier authorization-lifecycle branch. Each command used `dotnet test <project> -m:1 --filter '<filter>' --verbosity quiet`. Later FHIR security run also used `--no-restore`. Existing SDK/package caches were used; no source fixes or new tests were introduced. Tests are scoped behavioral evidence, not full regulatory or production validation.
 
 | Run | Exact project | Filter (FullyQualifiedName contains each name, OR-separated) | Result |
 | --- | --- | --- | --- |
@@ -188,3 +192,28 @@ Current summaries corrected in `docs/epa-gap-matrix.md` and `docs/compliance/CMS
 The discovery inventory preserves other candidate statements as Unverified; it is not an assertion that every repository TODO or every historical claim has been independently settled. Unrechecked standards details and deployment claims require their own evidence before reuse. Public/runtime copy, including hardcoded `src/site/js/assistant.js` answers and existing HTML, is intentionally unchanged in this documentation PR; source-to-runtime alignment is a required subsequent marketing implementation check. Do not publish stronger claims or finalize the marketing implementation until that review is complete.
 
 No application functionality, license, infrastructure, workflow or deployment settings were modified. No merge or deployment is authorized. Proposed production publication and broader marketing implementation remain separate approval steps.
+
+## Main refresh after PR #1409 — October 19, 2026
+
+Merged main `3b5a2035` into this documentation branch. The only textual conflict
+was adjacent D-22/D-23 rows in `docs/epa-gap-matrix.md`: retained the precise DTR
+partial implementation assessment and main's ordinary lifecycle/expiry resolution.
+CAP-23 and the claim ledger now credit the merged lifecycle behavior. No application
+code was edited during resolution; application changes are inherited from main.
+
+Executed sequential focused checks with `dotnet test <project> -m:1 -p:UseAppHost=false --filter '<filter>' --verbosity quiet`:
+
+| Project | FullyQualifiedName contains (OR-separated) | Result |
+| --- | --- | --- |
+| `src/services/authorization-service/AuthorizationService.Tests/AuthorizationService.Tests.csproj` | `AuthorizationRepositoryMongoConcurrencyTests`, `Cms0057ReportingTests` | 25 passed, 0 failed, 0 skipped |
+| `tests/CloudHealthOffice.AuthorizationService.Tests/CloudHealthOffice.AuthorizationService.Tests.csproj` | `AuthorizationLifecycleTests`, `UnusedAuthorizationsTests` | 20 passed, 0 failed, 0 skipped |
+
+These **45 refreshed checks** supplement the initial 315-test record; they are not
+a rerun of all initial suites. Initial simultaneous builds collided on shared macOS
+apphost output; the sequential checks above passed with apphost generation disabled
+for the test invocation only. No project configuration was changed.
+
+The site build completed again with 90 sitemap URLs and the existing shallow-history
+non-strict warning. Markdown lint (MD013 disabled), evidence-table/local-link checks,
+conflict-marker checks and whitespace validation passed. Relative to current main,
+the PR still changes only Markdown. No merge into main or deployment was performed.
