@@ -122,6 +122,7 @@ public class AuthorizationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Authorization>> SubmitAuthorization([FromBody] Authorization authorization)
     {
+        var receivedAt = DateTime.UtcNow;
         _logger.LogInformation(
             "Submitting authorization for member {MemberId}, provider {ProviderNPI}, service date {ServiceDate}",
             LogSanitizer.MaskId(authorization.MemberId), LogSanitizer.Sanitize(authorization.RequestingProviderNPI), authorization.RequestedServiceDateFrom);
@@ -134,7 +135,7 @@ public class AuthorizationsController : ControllerBase
 
         authorization.Id = Guid.NewGuid().ToString();
         authorization.Status = AuthorizationStatus.Submitted;
-        authorization.SubmittedDate = DateTime.UtcNow;
+        authorization.SubmittedDate = receivedAt;
         authorization.CreatedDate = DateTime.UtcNow;
         authorization.LastUpdatedDate = DateTime.UtcNow;
 
@@ -838,7 +839,7 @@ public class AuthorizationsController : ControllerBase
         var effectiveMinLevel = minLevel ?? SlaEscalationLevel.Warning;
 
         var atRisk = auths
-            .Select(SlaWatchdogService.ComputeSlaStatus)
+            .Select(a => SlaWatchdogService.ComputeSlaStatus(a))
             .Where(s => s.EscalationLevel >= effectiveMinLevel)
             .OrderBy(s => s.HoursRemaining)
             .ToList();

@@ -4,16 +4,13 @@ public static class AuthorizationsSummaryCalculator
 {
     /// <summary>
     /// Calculates turnaround days for an authorization.
-    /// When SlaResumedAt is set (RFAI was issued and docs received),
-    /// turnaround is measured from SlaResumedAt instead of SubmittedDate.
+    /// Turnaround is always measured from receipt, including time waiting for documents.
     /// </summary>
     public static double CalculateTurnaroundDays(Authorization auth)
     {
         if (auth.ReviewedDate == null) return 0;
 
-        var startDate = auth.SlaResumedAt.HasValue && auth.SlaResumedAt.Value > auth.SubmittedDate
-            ? auth.SlaResumedAt.Value
-            : auth.SubmittedDate;
+        var startDate = Services.AuthorizationDeadlinePolicy.Receipt(auth);
         return (auth.ReviewedDate.Value - startDate).TotalDays;
     }
 }

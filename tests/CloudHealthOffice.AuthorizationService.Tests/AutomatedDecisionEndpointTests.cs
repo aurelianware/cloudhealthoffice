@@ -183,6 +183,8 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         Assert.Equal(_stored.ApprovedServiceDateTo, _stored.ExpirationDate);
         Assert.Equal(receivedAt, _stored.SubmittedDate, TimeSpan.FromMilliseconds(1));
         Assert.Equal("U", _stored.LevelOfService);
+        Assert.Equal(_stored.SubmittedDate, _stored.DecisionReceivedAt);
+        Assert.Equal(_stored.SubmittedDate.AddHours(72), _stored.DecisionDueAt);
         Assert.Equal("2", _stored.ServiceTypeCode);
         Assert.Equal(AuthorizationType.PreAuthorization, _stored.AuthorizationType);
         Assert.Equal("Patient/pat-001", _stored.PatientReference);
