@@ -5,25 +5,17 @@ using EligibilityService.Models;
 namespace EligibilityService.Services;
 
 /// <summary>
-/// MongoDB-backed <see cref="IBatchJobContainer"/> — the portable counterpart
-/// to <see cref="CosmosContainerAdapter"/>, so <see cref="BatchJobStore"/> can
-/// run against self-hosted MongoDB or Cosmos DB for MongoDB API, not just
-/// Cosmos DB for NoSQL (Core/SQL API). Mirrors this service's existing
-/// Mongo/Cosmos dual-backend pattern (see EligibilityRepositoryMongo).
+/// MongoDB-backed <see cref="IBatchJobContainer"/>: the job-document store
+/// behind <see cref="BatchJobStore"/> (self-hosted MongoDB or Azure Cosmos DB
+/// for MongoDB vCore).
 ///
-/// Cosmos containers partition by <c>/tenantId</c>, letting two jobs share an
-/// id as long as their partition key differs. MongoDB's <c>_id</c> has no
-/// equivalent per-partition scoping — it must be unique across the whole
-/// collection — so this adapter composes <c>_id</c> as
-/// <c>"{tenantId}::{id}"</c> to preserve the same isolation semantics
-/// (a job id collision across tenants stores as two separate documents,
-/// exactly as the Cosmos partition key does).
+/// Two tenants may use the same job id. MongoDB's <c>_id</c> must be unique
+/// across the whole collection, so this adapter composes <c>_id</c> as
+/// <c>"{tenantId}::{id}"</c>: a job id collision across tenants stores as two
+/// separate documents.
 ///
-/// TTL: Cosmos mode relies on container-level <c>defaultTtl</c> (see
-/// scripts/azure/provision-batch-eligibility.sh). Mongo mode needs an
-/// explicit TTL index on <c>expiresAt</c> instead — call
-/// <see cref="EnsureIndexesAsync"/> once at startup when this adapter is
-/// selected.
+/// TTL: completed jobs expire through a TTL index on <c>expiresAt</c> — call
+/// <see cref="EnsureIndexesAsync"/> once at startup.
 /// </summary>
 public class MongoContainerAdapter : IBatchJobContainer
 {

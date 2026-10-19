@@ -9,8 +9,8 @@ namespace PersonalRepresentativeService.Models;
 /// as a symmetric pair: one row with <see cref="Direction"/> =
 /// <see cref="AssociationDirection.RepToMember"/> and a counterpart row with
 /// <see cref="AssociationDirection.MemberToRep"/>, sharing a <see cref="PairId"/>.
-/// Both rows are written atomically (Cosmos <c>TransactionalBatch</c> or
-/// Mongo session transaction) so "list reps for this member" and "list
+/// Both rows are written atomically (a Mongo session transaction) so
+/// "list reps for this member" and "list
 /// members for this rep" queries are always consistent.
 ///
 /// Fields mean the same thing on both rows: <see cref="RepId"/> is always

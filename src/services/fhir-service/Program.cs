@@ -11,7 +11,6 @@ using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.PriorAuthRuleEngine.Configuration;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -69,17 +68,20 @@ builder.Services.AddFhirAccessPolicies();
 // it. See docs/architecture/shared-cache.md.
 builder.Services.AddChoCaching(builder.Configuration, builder.Environment);
 
-// Database wiring is optional here: with neither provider configured the service still starts
-// and the engine wiring below is skipped, so AddChoDatabase is only called once a provider is
-// actually configured (it throws by design rather than guessing).
-ChoDatabaseProvider? databaseProvider = null;
-if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"])
-    || string.Equals(builder.Configuration["Database:Provider"], "CosmosDb", StringComparison.OrdinalIgnoreCase))
+// Database: MongoDB (ADR 017). Required in every environment, Development and
+// Testing included: there is no in-process fallback, so a host without
+// MongoDb:ConnectionString refuses to start.
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+if (databaseProvider is null)
 {
-    databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+    throw new InvalidOperationException(
+        "fhir-service requires a database. Configure MongoDb:ConnectionString.");
 }
-
-var useMongo = databaseProvider == ChoDatabaseProvider.MongoDb;
+if (databaseProvider != ChoDatabaseProvider.MongoDb)
+{
+    throw new InvalidOperationException(
+        "fhir-service supports MongoDB only. Remove Database:Provider or set it to MongoDb.");
+}
 
 // ── Provider Enrollment Service ───────────────────────────────────────────────
 // Supplies IEnrollmentDecisionGate → PasAutoAdjudicator Rule 0.
@@ -91,51 +93,27 @@ var useMongo = databaseProvider == ChoDatabaseProvider.MongoDb;
 //     "Tmhp": { "ApiKey": "...(from AKV)" },
 //     "Caqh": { "Username": "...", "Password": "...(from AKV)" }
 //   }
-var hasDb = databaseProvider is not null;
 // Cache backend presence is decided by AddChoCaching (Redis when a
 // connection string is configured AND env is Production; InMemory
-// otherwise). Either resolves to a working ICacheProvider, so the
-// engine wiring no longer hinges on "hasRedis" — only on "hasDb".
-if (hasDb)
-{
-    if (useMongo)
-        builder.Services.AddProviderEnrollmentService(builder.Configuration)
-            .UseMongoRepositories().WithTenantConfigCache()
-            .WithTexasSource().WithCaqhSource();
-    else
-        builder.Services.AddProviderEnrollmentService(builder.Configuration)
-            .UseCosmosRepositories().WithTenantConfigCache()
-            .WithTexasSource().WithCaqhSource();
+// otherwise). Either resolves to a working ICacheProvider.
+builder.Services.AddProviderEnrollmentService(builder.Configuration)
+    .UseMongoRepositories().WithTenantConfigCache()
+    .WithTexasSource().WithCaqhSource();
 
-    // ── Prior Auth Rule Engine ────────────────────────────────────────────────────
-    // Supplies IPriorAuthRuleEngine → PasAutoAdjudicator Rule 5.
-    // Rule sets cached via ICacheProvider (15 min TTL, invalidated on admin write).
-    // Seeds TX platform rules (STAR / STARPlus / STARKids) on first deployment.
-    //
-    // Required appsettings.json:
-    //   "PriorAuthRuleEngine": {
-    //     "RuleSetCacheTtl": "00:15:00",
-    //     "GoldCardLookbackDays": 180,
-    //     "PendOnRuleError": true
-    //   }
-    if (useMongo)
-        builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-            .UseMongoRepository().WithRuleCache()
-            .WithPlatformRules().SeedOnStartup();
-    else
-        builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-            .UseCosmosRepository().WithRuleCache()
-            .WithPlatformRules().SeedOnStartup();
-}
-else
-{
-    // Local dev / test without Redis+DB: register passthrough implementations
-    // so DI resolution of PasAutoAdjudicator doesn't fail.
-    builder.Services.AddSingleton<CloudHealthOffice.ProviderEnrollmentService.Abstractions.IEnrollmentDecisionGate,
-        CloudHealthOffice.ProviderEnrollmentService.Gates.PassthroughEnrollmentGate>();
-    builder.Services.AddSingleton<CloudHealthOffice.PriorAuthRuleEngine.Abstractions.IPriorAuthRuleEngine,
-        FhirService.Services.NoOpPriorAuthRuleEngine>();
-}
+// ── Prior Auth Rule Engine ────────────────────────────────────────────────────
+// Supplies IPriorAuthRuleEngine → PasAutoAdjudicator Rule 5.
+// Rule sets cached via ICacheProvider (15 min TTL, invalidated on admin write).
+// Seeds TX platform rules (STAR / STARPlus / STARKids) on first deployment.
+//
+// Required appsettings.json:
+//   "PriorAuthRuleEngine": {
+//     "RuleSetCacheTtl": "00:15:00",
+//     "GoldCardLookbackDays": 180,
+//     "PendOnRuleError": true
+//   }
+builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
+    .UseMongoRepository().WithRuleCache()
+    .WithPlatformRules().SeedOnStartup();
 
 // ── FHIR data adapters ────────────────────────────────────────────────────────
 builder.Services.Configure<FhirAdapterOptions>(
@@ -259,24 +237,14 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.Outbound.IPayerToPa
 // Durable ingestion of a validated Payer-to-Payer package into CHO's imported
 // member record. The import store is deliberately separate from CHO's
 // authoritative member/enrollment/claim stores, so a prior payer's data can
-// never become CHO-owned. MongoDB when configured (the same switch the rest of
-// the service uses); in-process otherwise, matching DtrService's Demo-mode
-// fallback.
-if (useMongo)
-{
-    // Singleton: the repository ensures its indexes at construction, so a
-    // per-request instance would re-issue createIndex on every call. It holds
-    // only collection handles and is safe to share.
-    builder.Services.AddSingleton<
-        FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository,
-        FhirService.Services.PayerToPayer.Ingestion.MongoPayerToPayerImportRepository>();
-}
-else
-{
-    builder.Services.AddSingleton<
-        FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository,
-        FhirService.Services.PayerToPayer.Ingestion.InMemoryPayerToPayerImportRepository>();
-}
+// never become CHO-owned.
+//
+// Singleton: the repository ensures its indexes at construction, so a
+// per-request instance would re-issue createIndex on every call. It holds
+// only collection handles and is safe to share.
+builder.Services.AddSingleton<
+    FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository,
+    FhirService.Services.PayerToPayer.Ingestion.MongoPayerToPayerImportRepository>();
 builder.Services.AddScoped<
     FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerPackageIngestionService,
     FhirService.Services.PayerToPayer.Ingestion.PayerToPayerPackageIngestionService>();
@@ -581,8 +549,6 @@ builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
     options.RedisConnectionString   = builder.Configuration["Redis:ConnectionString"];
-    options.CosmosDbEndpoint        = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey             = builder.Configuration["CosmosDb:Key"];
 });
 
 // Identity trust readiness: configuration valid AND every trusted issuer's

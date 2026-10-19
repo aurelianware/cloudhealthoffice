@@ -15,7 +15,7 @@ namespace CloudHealthOffice.ProviderEnrollmentService.Sources.Texas;
 ///
 /// Integration strategy:
 ///   Primary:  TMHP Provider Lookup REST API (real-time, cache-miss path)
-///   Fallback: Cosmos DB cache populated by NightlyBatchSyncWorker
+///   Fallback: MongoDB enrollment cache populated by NightlyBatchSyncWorker
 ///   Batch:    SFTP pull of PEMS nightly export → BulkSyncAsync
 ///
 /// Docs: https://www.tmhp.com/resources/provider-resources/provider-enrollment

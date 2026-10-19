@@ -6,7 +6,7 @@ namespace CloudHealthOffice.ProviderService.Tests.Fakes;
 
 /// <summary>
 /// In-memory <see cref="IProviderBankAccountRepository"/> with the same
-/// revision-conditional save as the Mongo and Cosmos implementations. Records
+/// revision-conditional save as the Mongo implementation. Records
 /// are deep-cloned on the way in and out, as a database round-trip would.
 /// </summary>
 public sealed class InMemoryProviderBankAccountRepository : IProviderBankAccountRepository

@@ -3,7 +3,7 @@ namespace CloudHealthOffice.ProviderEnrollmentService.Models;
 // ─────────────────────────────────────────────────────────────────
 // Tenant enrollment configuration
 //
-// Stored in Cosmos / Mongo as one document per tenant.
+// Stored in MongoDB as one document per tenant.
 // The resolution hierarchy is:
 //   LOB override (non-null fields) → tenant default
 //

@@ -35,9 +35,11 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            // Program requires a Mongo connection string; the repository is
+            // replaced below, so nothing connects to it.
+            builder.UseSetting("MongoDb:ConnectionString", "mongodb://fake-host:27017");
             builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["MongoDb:ConnectionString"] = "",
                 ["BlobStorage:ConnectionString"] = "UseDevelopmentStorage=true",
                 ["MemberDocuments:MaxUploadBytes"] = MaxBytes.ToString(),
             }));

@@ -32,7 +32,7 @@ public class MemberNotesControllerTests
         });
         var notes = new InMemoryMemberNoteRepository();
         var events = new InMemoryMemberEventRepository();
-        var publisher = new CosmosMemberEventPublisher(events, NullLogger<CosmosMemberEventPublisher>.Instance);
+        var publisher = new MemberEventPublisher(events, NullLogger<MemberEventPublisher>.Instance);
 
         var ctl = new MemberNotesController(members, notes, publisher);
         var http = new DefaultHttpContext();

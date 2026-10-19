@@ -583,14 +583,9 @@ variants.
 
 ### 10.1 — Old `Claims` Cosmos container final deletion
 
-**Source:** 5.1b runbook ([claims-cosmos-partition-migration.md](../migrations/claims-cosmos-partition-migration.md))
-
-**Rationale:** 30-day retention window from cutover. Follow-up Bicep
-PR removes the legacy `/memberId`-partitioned container.
-
-**Scope estimate:** Trivial. Bicep PR.
-
-**Sequencing:** ~30 days post 5.1b cutover.
+**Obsolete.** The Cosmos claim store, the 5.1b partition migration and its
+runbook were removed in remediation Phase 5b; claims are stored in MongoDB
+only (ADR 006).
 
 ### 10.2 — `payments` container `/memberId` divergence
 

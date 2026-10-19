@@ -4,13 +4,11 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.FieldProtection\CloudHealthOffice.FieldProtection.csproj" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Swashbuckle.AspNetCore" />

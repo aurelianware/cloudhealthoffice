@@ -7,7 +7,6 @@
     <RootNamespace>CloudHealthOffice.TokenService</RootNamespace>
     <AssemblyName>CloudHealthOffice.TokenService</AssemblyName>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
   <ItemGroup>

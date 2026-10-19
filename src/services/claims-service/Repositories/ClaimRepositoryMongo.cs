@@ -543,9 +543,9 @@ public class ClaimRepositoryMongo : IClaimRepository
             throw new InvalidOperationException("Cross-tenant updates are not allowed.");
         }
 
-        // Reject mutations on terminal versions. Mirrors ClaimRepository
-        // (Cosmos): adjustments must go through the explicit "create new
-        // version with PredecessorVersionId" path (capability 5.12).
+        // Reject mutations on terminal versions: adjustments must go through
+        // the explicit "create new version with PredecessorVersionId" path
+        // (capability 5.12).
         var filter = Builders<Claim>.Filter.And(
             Builders<Claim>.Filter.Eq(c => c.Id, claim.Id),
             Builders<Claim>.Filter.Eq(c => c.TenantId, tenantId)
@@ -683,9 +683,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         var filter = b.And(b.Eq(c => c.TenantId, tenantId), chainFilter);
 
         // Mongo doesn't have first-class continuation tokens; we encode the
-        // skip offset in the token. Callers that started on Cosmos with
-        // server tokens won't pass them to Mongo (the dual-backend is
-        // selected at startup), so this simple offset scheme is sufficient.
+        // skip offset in the token.
         var skip = 0;
         if (!string.IsNullOrEmpty(continuationToken) && int.TryParse(continuationToken, out var parsed))
         {
@@ -764,16 +762,20 @@ public class ClaimRepositoryMongo : IClaimRepository
             .Set(c => c.LastUpdatedDate, DateTime.UtcNow);
 
         // 5.7 — project deterministic pend reason when the adjudication
-        // pipeline populated it. See Cosmos sibling for the
-        // null-leaves-untouched contract.
+        // pipeline (NCCI / MUE / future authorization stages) populated
+        // it. Null leaves the head row's existing PendDetails untouched
+        // so a clean re-adjudication doesn't drop a prior pend reason
+        // unless the new pipeline run replaces it.
         if (pendDetails is not null)
         {
             update = update.Set(c => c.PendDetails, pendDetails);
         }
 
-        // See Cosmos sibling for why this bypass write is the only path
-        // back to the row for the orchestrator's in-memory-resolved
-        // BenefitPlanId. Only patch when the row doesn't already carry one.
+        // The orchestrator resolves BenefitPlanId in-memory from the
+        // member's active coverage for X12 837 claims that arrive without
+        // one (see ClaimAdjudicationOrchestrator), but that in-memory claim
+        // is never otherwise persisted — this bypass write is the only path
+        // back to the row. Only patch when the row doesn't already carry one.
         if (!string.IsNullOrWhiteSpace(resolvedBenefitPlanId) && string.IsNullOrWhiteSpace(head.BenefitPlanId))
         {
             update = update.Set(c => c.BenefitPlanId, resolvedBenefitPlanId);

@@ -6,8 +6,8 @@ namespace ReferenceDataService.Repositories;
 /// <summary>
 /// MongoDB-backed repository for <see cref="TenantComplianceConfig"/> documents.
 /// Collection: <c>compliance-configs</c>.
-/// The document <c>id</c> is set to the tenantId, matching the Cosmos implementation, so one
-/// config is stored per tenant and lookups stay a single indexed read.
+/// The document <c>id</c> is set to the tenantId, so one config is stored per tenant and
+/// lookups stay a single indexed read.
 /// </summary>
 public class MongoComplianceConfigRepository : IComplianceConfigRepository
 {

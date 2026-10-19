@@ -15,13 +15,13 @@ namespace EncounterService.Models;
 public class Encounter
 {
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation).
+    /// Owning tenant; every read and write filters on it.
     /// Always set by the repository from the token tenant; a value in a request body is ignored.
     /// </summary>
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Unique encounter identifier (Cosmos DB document id)
+    /// Unique encounter identifier (Mongo _id)
     /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();

@@ -1,6 +1,4 @@
-using System.Net;
 using System.Text.Json.Serialization;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 
@@ -65,7 +63,7 @@ public sealed class ClaimReservation
     [JsonPropertyName("flaggedAt")]
     public DateTime? FlaggedAt { get; set; }
 
-    /// <summary>Document id: unique per (kind, tenant, claim). Characters Cosmos forbids in ids are escaped.</summary>
+    /// <summary>Document id: unique per (kind, tenant, claim). Tenant and claim ids are URI-escaped.</summary>
     public static string KeyFor(ClaimReservationKind kind, string tenantId, string claimId)
         => $"{kind.ToString().ToLowerInvariant()}:{Uri.EscapeDataString(tenantId)}:{Uri.EscapeDataString(claimId)}";
 }
@@ -74,11 +72,9 @@ public sealed class ClaimReservation
 /// "A claim can be paid once, and reversed once." Before a run creates the
 /// payment (or reversal payment) for a claim it reserves the claim here; only
 /// one run ever holds a given (tenant, kind, claim). Chosen over a unique index
-/// on <c>Payments.ClaimPayments.ClaimId</c> because it works the same on both
-/// stores: a Mongo unique multikey index cannot be scoped to non-reversal
-/// payments for documents written before <c>IsReversal</c> existed, and a Cosmos
-/// unique key policy can only be set when a container is created and cannot
-/// cover array elements. Reservations are never deleted once their payment
+/// on <c>Payments.ClaimPayments.ClaimId</c> because a Mongo unique multikey
+/// index cannot be scoped to non-reversal payments for documents written before
+/// <c>IsReversal</c> existed. Reservations are never deleted once their payment
 /// exists. A reservation left by a run that failed or was cancelled before
 /// paying is released by <c>ReservationReconciliationService</c> (automatically
 /// when payment-service holds no payment and no 835 for the claim; otherwise by
@@ -204,152 +200,4 @@ public sealed class ClaimReservationRepositoryMongo : IClaimReservationRepositor
 
     private static string Sanitize(string? value)
         => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-}
-
-/// <summary>
-/// Cosmos: container <c>PaymentClaimReservations</c>, partition key
-/// <c>/tenantId</c>, created if absent. Item ids are unique within a logical
-/// partition, so <c>CreateItemAsync</c> answering 409 Conflict is the
-/// insert-if-absent; no unique key policy (or container rebuild) is needed.
-/// </summary>
-public sealed class ClaimReservationRepositoryCosmos : IClaimReservationRepository
-{
-    public const string ContainerName = "PaymentClaimReservations";
-
-    private readonly Lazy<Task<Container>> _container;
-    private readonly ILogger<ClaimReservationRepositoryCosmos> _logger;
-
-    public ClaimReservationRepositoryCosmos(
-        CosmosClient client, IConfiguration configuration, ILogger<ClaimReservationRepositoryCosmos> logger)
-    {
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        _container = new Lazy<Task<Container>>(async () =>
-        {
-            var response = await client.GetDatabase(databaseName)
-                .CreateContainerIfNotExistsAsync(new ContainerProperties(ContainerName, "/tenantId"));
-            return response.Container;
-        });
-        _logger = logger;
-    }
-
-    public async Task<bool> TryReserveAsync(ClaimReservation reservation)
-    {
-        reservation.Id = ClaimReservation.KeyFor(reservation.Kind, reservation.TenantId, reservation.ClaimId);
-        reservation.Version ??= Guid.NewGuid().ToString("N");
-        var container = await _container.Value;
-        try
-        {
-            await container.CreateItemAsync(reservation, new PartitionKey(reservation.TenantId));
-            return true;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
-        {
-            _logger.LogWarning("Claim {ClaimId} already reserved for {Kind}; run {RunId} skips it",
-                reservation.ClaimId.Replace("\r", "").Replace("\n", ""), reservation.Kind,
-                reservation.RunId.Replace("\r", "").Replace("\n", ""));
-            return false;
-        }
-    }
-
-    public async Task ReleaseAsync(ClaimReservationKind kind, string tenantId, string claimId, string runId)
-    {
-        var container = await _container.Value;
-        var id = ClaimReservation.KeyFor(kind, tenantId, claimId);
-        try
-        {
-            var current = await container.ReadItemAsync<ClaimReservation>(id, new PartitionKey(tenantId));
-            if (current.Resource.RunId != runId)
-                return;
-            await container.DeleteItemAsync<ClaimReservation>(id, new PartitionKey(tenantId),
-                new ItemRequestOptions { IfMatchEtag = current.ETag });
-        }
-        catch (CosmosException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.PreconditionFailed)
-        {
-            // Gone already, or changed hands: nothing of ours to release.
-        }
-    }
-
-    public async Task<ClaimReservation?> GetAsync(ClaimReservationKind kind, string tenantId, string claimId)
-    {
-        var container = await _container.Value;
-        try
-        {
-            var response = await container.ReadItemAsync<ClaimReservation>(
-                ClaimReservation.KeyFor(kind, tenantId, claimId), new PartitionKey(tenantId));
-            return response.Resource;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-    }
-
-    public async Task<IReadOnlyCollection<string>> ListTenantsAsync()
-    {
-        var container = await _container.Value;
-        var found = new HashSet<string>(StringComparer.Ordinal);
-        var iterator = container.GetItemQueryIterator<string>(new QueryDefinition("SELECT DISTINCT VALUE c.tenantId FROM c"));
-        while (iterator.HasMoreResults)
-            found.UnionWith((await iterator.ReadNextAsync()).Where(t => !string.IsNullOrEmpty(t)));
-        return found;
-    }
-
-    public async Task<IReadOnlyList<ClaimReservation>> ListByTenantAsync(string tenantId, bool needsAttentionOnly = false)
-    {
-        var container = await _container.Value;
-        var query = new QueryDefinition(needsAttentionOnly
-                ? "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.needsAttention = true ORDER BY c.reservedAt"
-                : "SELECT * FROM c WHERE c.tenantId = @tenantId ORDER BY c.reservedAt")
-            .WithParameter("@tenantId", tenantId);
-        var results = new List<ClaimReservation>();
-        var iterator = container.GetItemQueryIterator<ClaimReservation>(query,
-            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
-        while (iterator.HasMoreResults)
-            results.AddRange(await iterator.ReadNextAsync());
-        return results;
-    }
-
-    public async Task<bool> TryDeleteIfUnchangedAsync(ClaimReservation observed)
-    {
-        var container = await _container.Value;
-        try
-        {
-            var current = await container.ReadItemAsync<ClaimReservation>(observed.Id, new PartitionKey(observed.TenantId));
-            if (!IsSame(current.Resource, observed))
-                return false;
-            // If-Match pins the delete to the version just compared.
-            await container.DeleteItemAsync<ClaimReservation>(observed.Id, new PartitionKey(observed.TenantId),
-                new ItemRequestOptions { IfMatchEtag = current.ETag });
-            return true;
-        }
-        catch (CosmosException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.PreconditionFailed)
-        {
-            return false;
-        }
-    }
-
-    public async Task<bool> TrySetAttentionIfUnchangedAsync(ClaimReservation observed, string? reason, DateTime? flaggedAt)
-    {
-        var container = await _container.Value;
-        try
-        {
-            var current = await container.ReadItemAsync<ClaimReservation>(observed.Id, new PartitionKey(observed.TenantId));
-            if (!IsSame(current.Resource, observed))
-                return false;
-            var updated = current.Resource;
-            updated.NeedsAttention = reason != null;
-            updated.AttentionReason = reason;
-            updated.FlaggedAt = reason != null ? flaggedAt : null;
-            await container.ReplaceItemAsync(updated, updated.Id, new PartitionKey(updated.TenantId),
-                new ItemRequestOptions { IfMatchEtag = current.ETag });
-            return true;
-        }
-        catch (CosmosException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.PreconditionFailed)
-        {
-            return false;
-        }
-    }
-
-    private static bool IsSame(ClaimReservation current, ClaimReservation observed)
-        => current.RunId == observed.RunId && current.Version == observed.Version;
 }

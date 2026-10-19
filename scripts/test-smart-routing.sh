@@ -2,12 +2,9 @@
 set -e
 
 # Cloud Health Office - Smart Routing Test Script
-# Tests the intelligent tenant routing and Cosmos DB integration
+# Tests the intelligent tenant routing and its MongoDB-backed tenant lookup
 
 PORTAL_URL="https://portal.cloudhealthoffice.com"
-COSMOS_ACCOUNT="cloudhealthoffice-cosmos"
-COSMOS_RG="prod-cloudhealthoffice-rg"
-COSMOS_DB="CloudHealthOffice"
 
 echo "🧪 Testing Cloud Health Office Smart Routing System"
 echo "=================================================="
@@ -36,49 +33,18 @@ else
 fi
 echo ""
 
-# Test 3: Check Cosmos DB Connection
-echo "✅ Test 3: Cosmos DB Connectivity"
-COSMOS_ENDPOINT=$(az cosmosdb show -n $COSMOS_ACCOUNT -g $COSMOS_RG --query "documentEndpoint" -o tsv 2>/dev/null)
-if [ -n "$COSMOS_ENDPOINT" ]; then
-  echo "   ✓ PASSED - Cosmos DB accessible"
-  echo "   Endpoint: $COSMOS_ENDPOINT"
+# Test 3: Check the MongoDB connection secret
+echo "✅ Test 3: MongoDB (Azure DocumentDB) Kubernetes Secret"
+MONGO_SECRET=$(kubectl get secret database-secret -n cloudhealthoffice -o jsonpath='{.data.connectionString}' 2>/dev/null | base64 -d)
+if [ -n "$MONGO_SECRET" ]; then
+  echo "   ✓ PASSED - database-secret has a connectionString"
 else
-  echo "   ✗ FAILED - Cannot access Cosmos DB"
+  echo "   ✗ FAILED - database-secret/connectionString not found"
 fi
 echo ""
 
-# Test 4: Check Tenants Container
-echo "✅ Test 4: Tenants Container Exists"
-TENANT_CONTAINER=$(az cosmosdb sql container show \
-  --account-name $COSMOS_ACCOUNT \
-  --resource-group $COSMOS_RG \
-  --database-name $COSMOS_DB \
-  --name Tenants \
-  --query "id" -o tsv 2>/dev/null)
-if [ -n "$TENANT_CONTAINER" ]; then
-  echo "   ✓ PASSED - Tenants container exists"
-else
-  echo "   ✗ FAILED - Tenants container not found"
-fi
-echo ""
-
-# Test 5: Check Members Container
-echo "✅ Test 5: Members Container Exists"
-MEMBER_CONTAINER=$(az cosmosdb sql container show \
-  --account-name $COSMOS_ACCOUNT \
-  --resource-group $COSMOS_RG \
-  --database-name $COSMOS_DB \
-  --name Members \
-  --query "id" -o tsv 2>/dev/null)
-if [ -n "$MEMBER_CONTAINER" ]; then
-  echo "   ✓ PASSED - Members container exists"
-else
-  echo "   ✗ FAILED - Members container not found"
-fi
-echo ""
-
-# Test 6: Check Portal Pods
-echo "✅ Test 6: Portal Deployment Status"
+# Test 4: Check Portal Pods
+echo "✅ Test 4: Portal Deployment Status"
 PORTAL_READY=$(kubectl get pods -n cloudhealthoffice -l app=portal --no-headers 2>/dev/null | grep -c "Running" || echo "0")
 if [ "$PORTAL_READY" -gt 0 ]; then
   echo "   ✓ PASSED - $PORTAL_READY portal pod(s) running"
@@ -88,25 +54,14 @@ else
 fi
 echo ""
 
-# Test 7: Check Cosmos Secret
-echo "✅ Test 7: Cosmos DB Kubernetes Secret"
-COSMOS_SECRET=$(kubectl get secret cosmos-secret -n cloudhealthoffice -o jsonpath='{.data.COSMOS_ENDPOINT}' 2>/dev/null | base64 -d)
-if [ -n "$COSMOS_SECRET" ]; then
-  echo "   ✓ PASSED - cosmos-secret exists in Kubernetes"
-  echo "   Endpoint: $COSMOS_SECRET"
+# Test 5: Check Portal Logs for tenant routing
+echo "✅ Test 5: Portal Tenant Routing Logs"
+TENANT_LOGS=$(kubectl logs -n cloudhealthoffice -l app=portal --tail=100 2>/dev/null | grep -i "tenant" | head -5 || echo "")
+if [ -n "$TENANT_LOGS" ]; then
+  echo "   ✓ PASSED - Found tenant logs:"
+  echo "$TENANT_LOGS" | sed 's/^/   /'
 else
-  echo "   ✗ FAILED - cosmos-secret not found"
-fi
-echo ""
-
-# Test 8: Check Portal Logs for Cosmos
-echo "✅ Test 8: Portal Cosmos DB Integration Logs"
-COSMOS_LOGS=$(kubectl logs -n cloudhealthoffice -l app=portal --tail=100 2>/dev/null | grep -i "cosmos\|tenant" | head -5 || echo "")
-if [ -n "$COSMOS_LOGS" ]; then
-  echo "   ✓ PASSED - Found Cosmos/Tenant logs:"
-  echo "$COSMOS_LOGS" | sed 's/^/   /'
-else
-  echo "   ℹ INFO - No Cosmos/Tenant logs found (may be normal if no requests yet)"
+  echo "   ℹ INFO - No tenant logs found (may be normal if no requests yet)"
 fi
 echo ""
 
@@ -130,15 +85,13 @@ echo "   → Should route to /dashboard"
 echo ""
 echo "4️⃣  Request Access (Unauthorized):"
 echo "   → Sign in with account from tenant with subscription"
-echo "   → But user NOT in Members container"
+echo "   → But user NOT a member of that tenant"
 echo "   → Should route to /request-access"
 echo ""
 echo "To create a test tenant:"
 echo "   1. Get your Azure Tenant ID:"
 echo "      az account show --query tenantId -o tsv"
 echo ""
-echo "   2. Use Azure Portal Data Explorer to add to Tenants container:"
-echo "      https://portal.azure.com -> Cosmos DB -> Data Explorer"
-echo ""
-echo "   3. Or use the Azure CLI (when supported)"
+echo "   2. Create the tenant through the portal signup flow ($PORTAL_URL/signup)"
+echo "      or tenant-service"
 echo ""

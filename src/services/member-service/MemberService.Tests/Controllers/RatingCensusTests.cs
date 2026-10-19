@@ -24,7 +24,7 @@ public class RatingCensusTests
         var repo = new InMemoryMemberRepository();
         var events = new InMemoryMemberEventRepository();
         var controller = new MembersController(repo,
-            new CosmosMemberEventPublisher(events, NullLogger<CosmosMemberEventPublisher>.Instance),
+            new MemberEventPublisher(events, NullLogger<MemberEventPublisher>.Instance),
             events, new FhirPatientProjector(), new NoOpIdentifierEncryptor(),
             new Mock<ICoverageServiceClient>().Object, new Mock<IEnrollmentImportServiceClient>().Object,
             new Mock<IAccumulatorServiceClient>().Object);

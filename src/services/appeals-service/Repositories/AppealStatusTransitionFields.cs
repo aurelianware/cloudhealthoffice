@@ -14,8 +14,8 @@ namespace AppealsService.Repositories;
 /// extension, the overdue audit flag) and can change between that read and
 /// the transition write, so a transition never copies them from the
 /// snapshot. Each repository applies just these fields to the persisted
-/// row: Mongo as a <c>$set</c> filtered on the expected status, Cosmos onto
-/// a fresh ETag-pinned read, the in-memory fake onto the stored copy.
+/// row: Mongo as a <c>$set</c> filtered on the expected status, the
+/// in-memory fake onto the stored copy.
 ///
 /// The status filter is what makes writing the closure and decision
 /// fields safe: only a transition writes them, and a concurrent transition

@@ -6,7 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>SponsorService</RootNamespace>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
   <!-- Co-located test project; the Web SDK would otherwise pull its .cs
@@ -22,7 +21,6 @@
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.FieldProtection\CloudHealthOffice.FieldProtection.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>

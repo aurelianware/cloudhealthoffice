@@ -14,19 +14,15 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
-    <PackageReference Include="Xunit.SkippableFact" />
     <PackageReference Include="xunit.runner.visualstudio" VersionOverride="3.1.4" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\engines\CloudHealthOffice.FeeScheduleEngine\CloudHealthOffice.FeeScheduleEngine.csproj" />
-    <!-- CosmosSystemTextJsonSerializer, so the Cosmos tests run on the production serializer. -->
     <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Cosmos DB emulator fixture (Category=Cosmos); see tests/Shared/CosmosEmulator. -->
-    <Compile Include="..\Shared\CosmosEmulator\*.cs" Link="Shared\CosmosEmulator\%(Filename)%(Extension)" />
     <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
     <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>

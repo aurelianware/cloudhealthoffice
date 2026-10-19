@@ -276,10 +276,8 @@ public class NetworkRosterService : INetworkRosterService
 
     /// <summary>
     /// Reorders so providers without an integrity score trail those with
-    /// one. The repository layers can't express this uniformly across
-    /// Cosmos and Mongo (Cosmos: IS_DEFINED prefix; Mongo: nulls-first on
-    /// descending), so we normalize after the fact on the page-sized
-    /// slice.
+    /// one. Mongo sorts nulls first on a descending sort, so we normalize
+    /// after the fact on the page-sized slice.
     /// </summary>
     internal static IReadOnlyList<Provider> ApplyNullsLastForIntegrityScore(IReadOnlyList<Provider> rows)
     {

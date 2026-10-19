@@ -1,3 +1,10 @@
+> **Obsolete (ADR 017).** The native Cosmos DB SDK (SQL API) path this guide
+> describes was removed in remediation Phase 5b. Every service stores its data
+> in MongoDB; in Azure that is Azure DocumentDB (MongoDB vCore), provisioned by
+> `infrastructure/azure/modules/documentdb-mongo-cluster.bicep` via
+> `enableDocumentDb` in `main.bicep`, with `MongoDb--ConnectionString` in Key
+> Vault (include `retrywrites=false`). The text below is kept for history only.
+
 # Cosmos DB Integration - Deployment Guide
 
 ## Overview

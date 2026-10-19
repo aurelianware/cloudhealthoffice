@@ -7,8 +7,6 @@ using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
 using MemberDocumentService.Repositories;
 using MemberDocumentService.Services;
-using Microsoft.Azure.Cosmos;
-using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,40 +51,21 @@ builder.Services.AddSingleton<IRetentionPolicyService, RetentionPolicyService>()
 builder.Services.AddSingleton(sp => MemberDocumentUploadPolicy.FromConfiguration(
     sp.GetRequiredService<IConfiguration>()));
 
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+// Database — MongoDB is the only member-document store (ADR 006); the client
+// is registered by the shared lib.
+if (string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
-    builder.Services.AddScoped<IMemberDocumentRepository, MemberDocumentRepositoryMongo>();
+    throw new InvalidOperationException(
+        "Member Document Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
+
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"]
-            ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-        var key = configuration["CosmosDb:Key"]
-            ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            SerializerOptions = new CosmosSerializationOptions
-            {
-                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-            }
-        });
-    });
-
-    builder.Services.AddScoped<IMemberDocumentRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new MemberDocumentRepository(cosmosClient, databaseName, configuration);
-    });
+    throw new InvalidOperationException(
+        "Member Document Service supports MongoDB only. Remove Database:Provider or set it to MongoDb.");
 }
+
+builder.Services.AddScoped<IMemberDocumentRepository, MemberDocumentRepositoryMongo>();
 
 // No CORS: this service is called server-to-server only (the portal is
 // Blazor Server), so browsers on other origins get no CORS grant.
@@ -94,9 +73,6 @@ else
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);

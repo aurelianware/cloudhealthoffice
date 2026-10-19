@@ -190,9 +190,9 @@ public class WorkItemAttributes
 
 /// <summary>
 /// One unit of work: one per source (a claim), reopened if the source needs
-/// work again. Every write is conditional on <see cref="Version"/> (and on
-/// the Cosmos <c>_etag</c>), which is what makes Get Next safe under
-/// concurrency: of two callers leasing the same item, one write wins.
+/// work again. Every write is conditional on <see cref="Version"/>, which is
+/// what makes Get Next safe under concurrency: of two callers leasing the
+/// same item, one write wins.
 /// </summary>
 public class WorkItem
 {
@@ -252,12 +252,6 @@ public class WorkItem
 
     public string? LastEventId { get; set; }
 
-    /// <summary>The Cosmos document ETag (Cosmos store only; never stored in Mongo).</summary>
-    [BsonIgnore]
-    [JsonPropertyName("_etag")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? StoreETag { get; set; }
-
     public bool IsActive => Status is WorkItemStatus.Open or WorkItemStatus.Leased;
 
     /// <summary>Leased and the lease has not run out at <paramref name="now"/>.</summary>
@@ -282,7 +276,7 @@ public class WorkItem
     public static string SourceRefFor(WorkType type, string sourceId) =>
         $"{type.ToString().ToLowerInvariant()}:{sourceId}";
 
-    /// <summary>Cosmos ids may not contain '/', '\\', '?' or '#'.</summary>
+    /// <summary>Ids never contain '/', '\\', '?' or '#' (they appear in URL paths).</summary>
     private static string Sanitize(string id) =>
         new(id.Select(c => c is '/' or '\\' or '?' or '#' ? '_' : c).ToArray());
 }

@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CoverageService.Repositories;
 using CoverageService.Services;
@@ -34,53 +33,21 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultWritePermission = "coverage:write";
 });
 
-// Database Configuration
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+// Database Configuration — MongoDB is the only coverage store (ADR 006);
+// the database client is registered by the shared lib.
+if (string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
-    // MongoDB Registration
-    
-    builder.Services.AddScoped<ICoverageRepository, CoverageRepositoryMongo>();
-    builder.Services.AddScoped<IPcpAssignmentRepository, PcpAssignmentRepositoryMongo>();
-    Console.WriteLine("Using MongoDB database provider");
+    throw new InvalidOperationException(
+        "Coverage Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"] 
-            ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-        var key = configuration["CosmosDb:Key"] 
-            ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-        
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            SerializerOptions = new CosmosSerializationOptions
-            {
-                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-            }
-        });
-    });
-
-    builder.Services.AddScoped<ICoverageRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new CoverageRepository(cosmosClient, databaseName);
-    });
-
-    builder.Services.AddScoped<IPcpAssignmentRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new PcpAssignmentRepository(cosmosClient, databaseName);
-    });
+    throw new InvalidOperationException(
+        "Coverage Service supports only MongoDB. Remove Database:Provider or set it to MongoDb.");
 }
+
+builder.Services.AddScoped<ICoverageRepository, CoverageRepositoryMongo>();
+builder.Services.AddScoped<IPcpAssignmentRepository, PcpAssignmentRepositoryMongo>();
 
 // PCP assignment + provider client + care team projector
 builder.Services.Configure<ProviderServiceOptions>(opts =>
@@ -121,9 +88,6 @@ builder.Services.AddHostedService<CoverageStatusSweepJob>();
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);

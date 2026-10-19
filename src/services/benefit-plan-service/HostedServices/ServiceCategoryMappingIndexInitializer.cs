@@ -21,7 +21,7 @@ public sealed class ServiceCategoryMappingIndexInitializer : IHostedService
     {
         _database = database;
         _collectionName = configuration["CosmosDb:ServiceCategoryMappingsContainerName"]
-            ?? ChoServiceCategoryMappingRepository.DefaultContainerName;
+            ?? ChoServiceCategoryMappingRepositoryMongo.DefaultContainerName;
         _logger = logger;
     }
 

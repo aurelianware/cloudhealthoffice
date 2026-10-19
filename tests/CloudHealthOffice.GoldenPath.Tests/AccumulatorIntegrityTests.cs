@@ -18,10 +18,8 @@ using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.GoldenPath.Tests.Harness;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Security;
-using CloudHealthOffice.Testing.Cosmos;
 using CloudHealthOffice.Testing.Mongo;
 using CloudHealthOffice.Testing.Redis;
-using Microsoft.Azure.Cosmos;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
@@ -39,9 +37,9 @@ namespace CloudHealthOffice.GoldenPath.Tests;
 /// Accumulator integrity of the claims pipeline, end to end on real stores: claims-service
 /// (its claim repository, the orchestrator, the real <see cref="ClaimsController.ResolvePendedClaim"/>,
 /// the accumulator outbox and its dispatcher) and benefit-plan-service's engine reached over
-/// its HTTP contract, on four backends:
-/// <see cref="AccumulatorIntegrityMongoTests"/> and <see cref="AccumulatorIntegrityCosmosTests"/>
-/// (the engine's Mongo / Cosmos store), and <see cref="AccumulatorIntegrityRedisTests"/> — the
+/// its HTTP contract, on two backends:
+/// <see cref="AccumulatorIntegrityMongoTests"/> (the engine's Mongo store) and
+/// <see cref="AccumulatorIntegrityRedisTests"/> — the
 /// store benefit-plan-service runs, <c>RedisAccumulatorService</c> on a real redis-server,
 /// rebuilding from claims-service's own <c>accumulator-totals</c>.
 /// <list type="bullet">
@@ -128,7 +126,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
 
     /// <summary>
     /// A write made before deferred commits (a direct Production apply) can be undone by a
-    /// later commit. True for the journalled Mongo / Cosmos store; the Redis store kept no
+    /// later commit. True for the journalled Mongo store; the Redis store kept no
     /// journal for those writes (documented: counted twice in the cache until it is rebuilt).
     /// </summary>
     protected virtual bool UndoesLegacyWrites => true;
@@ -1236,7 +1234,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
     }
 }
 
-/// <summary>Assertions on the journalled engine store (<see cref="AccumulatorDocument"/>, Mongo or Cosmos).</summary>
+/// <summary>Assertions on the journalled engine store (<see cref="AccumulatorDocument"/> on Mongo).</summary>
 public abstract class AccumulatorIntegrityChoTests : AccumulatorIntegrityTests
 {
     protected abstract Task<List<AccumulatorDocument>> AccumulatorDocumentsAsync();
@@ -1288,69 +1286,6 @@ public sealed class AccumulatorIntegrityMongoTests(MongoRunnerFixture mongo) : A
         _db.GetCollection<AccumulatorDocument>("Accumulators").Find(FilterDefinition<AccumulatorDocument>.Empty).ToListAsync();
 
     public override Task DisposeAsync() => mongo.DropDatabaseAsync(_db);
-}
-
-/// <summary>
-/// <see cref="AccumulatorIntegrityTests"/> on Cosmos DB (the emulator): claims-service's
-/// <see cref="ClaimRepository"/> (its System.Text.Json serializer, conditional patch and
-/// ETag fences, the outbox patches) and the engine's <see cref="AccumulatorRepositoryCosmos"/>.
-/// </summary>
-[Trait("Category", CosmosEmulator.Category)]
-[Collection(CosmosEmulatorFixture.CollectionName)]
-public sealed class AccumulatorIntegrityCosmosTests(CosmosEmulatorFixture cosmos) : AccumulatorIntegrityChoTests
-{
-    private const string ClaimsContainer = "ClaimsV2";
-    private Container _claimsContainer = null!;
-    private Container _accumulatorContainer = null!;
-
-    protected override async Task<(IClaimRepository Claims, IAccumulatorService Accumulators)> CreateStoresAsync(
-        AdjudicationTenantContext tenantContext)
-    {
-        cosmos.SkipIfUnavailable();
-        // claims-service: the serializer AddChoDatabase registers.
-        var claimsClient = cosmos.CreateClient(new CloudHealthOffice.Infrastructure.Serialization.CosmosSystemTextJsonSerializer());
-        var claimsDb = await cosmos.CreateDatabaseAsync(claimsClient, "integrity_claims");
-        _claimsContainer = await CosmosEmulatorFixture.CreateContainerAsync(claimsDb, ClaimsContainer);
-        var claimsConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["CosmosDb:DatabaseName"] = claimsDb.Id,
-            ["CosmosDb:ContainerName"] = ClaimsContainer,
-        }).Build();
-        // The tenant is read from the request context at call time; a plain
-        // (non-AsyncLocal) accessor carries it into every test method.
-        var claims = new ClaimRepository(claimsClient, claimsConfig, new FixedAccessor(Tenant), NullLogger<ClaimRepository>.Instance);
-
-        // benefit-plan-service: the same AddChoDatabase serializer (D-31 removed
-        // the host's own Newtonsoft client).
-        var accumulatorClient = cosmos.CreateClient(new CloudHealthOffice.Infrastructure.Serialization.CosmosSystemTextJsonSerializer());
-        var accumulatorDb = await cosmos.CreateDatabaseAsync(accumulatorClient, "integrity_accumulators");
-        _accumulatorContainer = await CosmosEmulatorFixture.CreateContainerAsync(accumulatorDb, "Accumulators");
-        var accumulatorConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["CosmosDb:DatabaseName"] = accumulatorDb.Id,
-        }).Build();
-        return (claims, new ChoAccumulatorService(
-            new AccumulatorRepositoryCosmos(accumulatorClient, accumulatorConfig, NullLogger<AccumulatorRepositoryCosmos>.Instance),
-            new FixedTenant(Tenant), NullLogger<ChoAccumulatorService>.Instance));
-    }
-
-    protected override async Task ExpireResolutionLockAsync(string claimId)
-    {
-        var response = await _claimsContainer.PatchItemAsync<System.Text.Json.JsonElement>(
-            claimId, new PartitionKey(Tenant),
-            [PatchOperation.Set("/resolutionLock/expiresAt", DateTime.UtcNow.AddMinutes(-1))]);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    }
-
-    protected override async Task<List<AccumulatorDocument>> AccumulatorDocumentsAsync()
-    {
-        var docs = new List<AccumulatorDocument>();
-        using var feed = _accumulatorContainer.GetItemQueryIterator<AccumulatorDocument>("SELECT * FROM c");
-        while (feed.HasMoreResults) docs.AddRange(await feed.ReadNextAsync());
-        return docs;
-    }
-
-    public override Task DisposeAsync() => Task.CompletedTask;
 }
 
 /// <summary>
@@ -1431,16 +1366,4 @@ public sealed class AccumulatorIntegrityRedisTests(MongoRunnerFixture mongo, Red
         if (_db is not null) await mongo.DropDatabaseAsync(_db);
         _connection?.Dispose();
     }
-}
-
-/// <summary>A request context with a fixed tenant that flows into every test method (not AsyncLocal).</summary>
-internal sealed class FixedAccessor : IHttpContextAccessor
-{
-    public FixedAccessor(string tenant)
-    {
-        HttpContext = new DefaultHttpContext();
-        HttpContext.Items["TenantId"] = tenant;
-    }
-
-    public HttpContext? HttpContext { get; set; }
 }

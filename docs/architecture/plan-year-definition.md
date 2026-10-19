@@ -83,8 +83,7 @@ class AccumulatorTarget {
 ## Event stream
 
 Two event types land in the append-only `PlanYearTransitionEvents`
-collection (Mongo today; Cosmos when cross-store consistency is
-needed — same trajectory as `PlanVersionEvents`):
+collection (Mongo, as `PlanVersionEvents`):
 
 | Type | Fired when | Purpose |
 | ---- | ---------- | ------- |

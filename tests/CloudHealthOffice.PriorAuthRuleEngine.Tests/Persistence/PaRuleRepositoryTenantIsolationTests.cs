@@ -9,7 +9,7 @@ using MongoDB.Driver;
 
 namespace CloudHealthOffice.PriorAuthRuleEngine.Tests.Persistence;
 
-/// <summary>Rule documents shared by the Mongo and Cosmos isolation suites.</summary>
+/// <summary>Rule documents shared by the Mongo isolation and query suites.</summary>
 internal static class IsolationRules
 {
     public const string State = "TX";

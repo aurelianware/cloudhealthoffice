@@ -91,8 +91,6 @@ public sealed class TenantEnrollmentConfigRepositoryMongo : ITenantEnrollmentCon
     }
 
     // ── Mongo document type ───────────────────────────────────────
-    // Mirrors TenantEnrollmentConfigDocument but uses BsonId instead
-    // of Cosmos's JsonPropertyName("id") convention.
 
     private sealed class MongoTenantConfigDocument
     {

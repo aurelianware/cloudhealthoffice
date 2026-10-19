@@ -1,35 +1,24 @@
 #!/usr/bin/env bash
 # Provisions the Azure resources used by BatchEligibility in production:
-#   - Cosmos DB container `batch-jobs`, partition key /tenantId, TTL 7 days
 #   - Service Bus queue `batch-eligibility` with MaxDeliveryCount=10
 #   - Blob container `batch-eligibility` with a 7-day lifecycle rule
 #
+# The job store is the MongoDB collection BatchEligibility:MongoDb:Collection
+# (default `batch-jobs`); eligibility-service creates it and its TTL index at
+# start-up, so there is nothing to provision for it here.
+#
 # Requires az CLI logged in. Reads the following env vars:
-#   COSMOS_ACCOUNT, COSMOS_DB (default: cho)
 #   SERVICEBUS_NAMESPACE
 #   STORAGE_ACCOUNT
 #   RESOURCE_GROUP
 set -euo pipefail
 
-COSMOS_DB="${COSMOS_DB:-cho}"
-COSMOS_CONTAINER="${COSMOS_CONTAINER:-batch-jobs}"
 SB_QUEUE="${SB_QUEUE:-batch-eligibility}"
 BLOB_CONTAINER="${BLOB_CONTAINER:-batch-eligibility}"
-TTL_SECONDS=$((7 * 24 * 3600))  # 7 days
 
-: "${COSMOS_ACCOUNT:?COSMOS_ACCOUNT is required}"
 : "${SERVICEBUS_NAMESPACE:?SERVICEBUS_NAMESPACE is required}"
 : "${STORAGE_ACCOUNT:?STORAGE_ACCOUNT is required}"
 : "${RESOURCE_GROUP:?RESOURCE_GROUP is required}"
-
-echo "==> Cosmos DB: container $COSMOS_CONTAINER in $COSMOS_ACCOUNT/$COSMOS_DB"
-az cosmosdb sql container create \
-  --account-name "$COSMOS_ACCOUNT" \
-  --database-name "$COSMOS_DB" \
-  --name "$COSMOS_CONTAINER" \
-  --partition-key-path "/tenantId" \
-  --ttl "$TTL_SECONDS" \
-  --resource-group "$RESOURCE_GROUP"
 
 echo "==> Service Bus: queue $SB_QUEUE in $SERVICEBUS_NAMESPACE"
 az servicebus queue create \

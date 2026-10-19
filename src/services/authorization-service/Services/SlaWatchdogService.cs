@@ -19,8 +19,7 @@ namespace AuthorizationService.Services;
 ///
 /// <para>
 /// The tenant list is cached for <see cref="TenantListRefreshInterval"/>:
-/// listing tenants is a cross-partition DISTINCT on Cosmos and a collection
-/// scan on Mongo (D-37), and tenants appear rarely. A new tenant's
+/// listing tenants is a collection scan (D-37), and tenants appear rarely. A new tenant's
 /// authorizations are first evaluated within that interval.
 /// </para>
 ///
@@ -66,8 +65,7 @@ public class SlaWatchdogService : BackgroundService
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
 
-        var cosmos = string.Equals(configuration["Database:Provider"], "CosmosDb", StringComparison.OrdinalIgnoreCase);
-        if (!cosmos && configuration.GetValue("MongoDb:UseTenantScoping", false))
+        if (configuration.GetValue("MongoDb:UseTenantScoping", false))
         {
             _unsupportedReason =
                 "MongoDb:UseTenantScoping=true is not supported by the SLA watchdog: with no request it can " +

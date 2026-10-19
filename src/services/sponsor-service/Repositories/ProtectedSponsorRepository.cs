@@ -5,7 +5,7 @@ namespace SponsorService.Repositories;
 
 /// <summary>
 /// Encrypts the sponsor's <see cref="BillingInfo.BillingAccountNumber"/> at
-/// rest around the Mongo or Cosmos repository. Writes store it encrypted and
+/// rest around the Mongo repository. Writes store it encrypted and
 /// bound to the sponsor (<c>enc:v2:...</c>: tenant, sponsor id and field, so
 /// it does not decrypt on another sponsor); reads return it decrypted
 /// (responses mask it, see MaskedBillingInfoJsonConverter). <c>enc:v1:</c>

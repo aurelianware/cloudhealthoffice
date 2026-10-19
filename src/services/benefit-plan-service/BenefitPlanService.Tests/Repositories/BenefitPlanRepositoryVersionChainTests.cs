@@ -6,8 +6,9 @@ namespace BenefitPlanService.Tests.Repositories;
 
 /// <summary>
 /// Contract tests for the version-chain repository semantics. Runs against
-/// the in-memory fake — the Cosmos and Mongo implementations enforce the
-/// same invariants but require live infrastructure to exercise.
+/// the in-memory fake — the Mongo implementation enforces the same
+/// invariants on a real mongod (BenefitPlanRepositoryMongoConcurrencyTests,
+/// BenefitPlanMongoHostRoundTripTests).
 /// </summary>
 public class BenefitPlanRepositoryVersionChainTests
 {

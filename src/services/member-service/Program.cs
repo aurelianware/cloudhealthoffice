@@ -9,7 +9,6 @@ using MemberService.HostedServices;
 using MemberService.Middleware;
 using MemberService.Repositories;
 using MemberService.Services;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -40,106 +39,45 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
 });
 
 // ── Database Configuration ───────────────────────────────────────────
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-var eventsContainerName = builder.Configuration["CosmosDb:EventsContainerName"] ?? "member-events";
+// MongoDB is the only member store (ADR 006); the database client is
+// registered by the shared lib.
+if (string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
+{
+    throw new InvalidOperationException(
+        "Member Service requires a database. Configure MongoDb:ConnectionString.");
+}
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
+{
+    throw new InvalidOperationException(
+        "Member Service supports only MongoDB. Remove Database:Provider or set it to MongoDb.");
+}
 var eventsCollectionName = builder.Configuration["MongoDb:EventsCollectionName"] ?? "member-events";
 
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
-{
-    // Repositories are constructed without I/O side effects; indexes are provisioned
-    // by the hosted services below, which lets us register these as singletons.
-    builder.Services.AddSingleton<IMemberRepository, MemberRepositoryMongo>();
-    builder.Services.AddSingleton<IMemberEventRepository>(sp =>
-        new MemberEventRepositoryMongo(
-            sp.GetRequiredService<MongoDB.Driver.IMongoDatabase>(),
-            eventsCollectionName));
-    builder.Services.AddSingleton<IFamilyRelationshipRepository, FamilyRelationshipRepositoryMongo>();
-    builder.Services.AddSingleton<IMemberAlertRepository, MemberAlertRepositoryMongo>();
-    builder.Services.AddSingleton<IMemberNoteRepository, MemberNoteRepositoryMongo>();
+// Repositories are constructed without I/O side effects; indexes are provisioned
+// by the hosted services below, which lets us register these as singletons.
+builder.Services.AddSingleton<IMemberRepository, MemberRepositoryMongo>();
+builder.Services.AddSingleton<IMemberEventRepository>(sp =>
+    new MemberEventRepositoryMongo(
+        sp.GetRequiredService<MongoDB.Driver.IMongoDatabase>(),
+        eventsCollectionName));
+builder.Services.AddSingleton<IFamilyRelationshipRepository, FamilyRelationshipRepositoryMongo>();
+builder.Services.AddSingleton<IMemberAlertRepository, MemberAlertRepositoryMongo>();
+builder.Services.AddSingleton<IMemberNoteRepository, MemberNoteRepositoryMongo>();
 
-    builder.Services.AddHostedService<MemberIndexInitializer>();
-    builder.Services.AddHostedService<FamilyRelationshipIndexInitializer>();
-    builder.Services.AddSingleton<IHostedService>(sp =>
-        new MemberEventIndexInitializer(
-            sp.GetRequiredService<MongoDB.Driver.IMongoDatabase>(),
-            eventsCollectionName,
-            sp.GetRequiredService<ILogger<MemberEventIndexInitializer>>()));
-
-    Console.WriteLine("Using MongoDB database provider");
-}
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var endpoint = configuration["CosmosDb:Endpoint"]
-            ?? throw new InvalidOperationException("CosmosDb:Endpoint configuration missing");
-        var key = configuration["CosmosDb:Key"]
-            ?? throw new InvalidOperationException("CosmosDb:Key configuration missing");
-
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            SerializerOptions = new CosmosSerializationOptions
-            {
-                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-            }
-        });
-    });
-
-    builder.Services.AddScoped<IMemberRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new MemberRepository(cosmosClient, databaseName);
-    });
-
-    builder.Services.AddScoped<IMemberEventRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new MemberEventRepository(
-            cosmosClient,
-            databaseName,
-            eventsContainerName,
-            sp.GetRequiredService<ILogger<MemberEventRepository>>());
-    });
-
-    builder.Services.AddScoped<IFamilyRelationshipRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new FamilyRelationshipRepository(cosmosClient, databaseName);
-    });
-
-    builder.Services.AddScoped<IMemberAlertRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new MemberAlertRepository(cosmosClient, databaseName);
-    });
-
-    builder.Services.AddScoped<IMemberNoteRepository>(sp =>
-    {
-        var cosmosClient = sp.GetRequiredService<CosmosClient>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new MemberNoteRepository(cosmosClient, databaseName);
-    });
-
-    Console.WriteLine($"Using Cosmos DB database provider (events container: {eventsContainerName})");
-}
+builder.Services.AddHostedService<MemberIndexInitializer>();
+builder.Services.AddHostedService<FamilyRelationshipIndexInitializer>();
+builder.Services.AddSingleton<IHostedService>(sp =>
+    new MemberEventIndexInitializer(
+        sp.GetRequiredService<MongoDB.Driver.IMongoDatabase>(),
+        eventsCollectionName,
+        sp.GetRequiredService<ILogger<MemberEventIndexInitializer>>()));
 
 // Every read of a member is recorded (who, what, outcome) for HIPAA
 // accounting; compliance reads it at /api/v1/members/{id}/access-log.
 builder.Services.AddRecordAccessAudit();
 
 // ── Member Service internals ─────────────────────────────────────────
-builder.Services.AddScoped<IMemberEventPublisher, CosmosMemberEventPublisher>();
+builder.Services.AddScoped<IMemberEventPublisher, MemberEventPublisher>();
 builder.Services.AddSingleton<IFhirPatientProjector, FhirPatientProjector>();
 builder.Services.AddSingleton<IFhirFlagProjector, FhirFlagProjector>();
 builder.Services.AddScoped<IFamilyRelationshipService, FamilyRelationshipService>();
@@ -306,9 +244,6 @@ RegisterDownstream<IAccumulatorServiceClient, HttpAccumulatorServiceClient, Fake
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);

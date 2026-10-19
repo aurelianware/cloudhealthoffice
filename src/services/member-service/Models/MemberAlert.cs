@@ -20,7 +20,7 @@ public class MemberAlert
     [Required]
     public string TenantId { get; set; } = string.Empty;
 
-    /// <summary>Cosmos document id.</summary>
+    /// <summary>MongoDB document id.</summary>
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>External member id (matches <see cref="Member.MemberId"/>).</summary>

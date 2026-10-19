@@ -6,7 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ConsentService</RootNamespace>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,7 +24,6 @@
     <ProjectReference Include="..\shared\CloudHealthOffice.Consent.Contracts\CloudHealthOffice.Consent.Contracts.csproj" />
     <PackageReference Include="Confluent.Kafka" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>

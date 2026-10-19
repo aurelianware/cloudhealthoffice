@@ -97,8 +97,8 @@ rowNumber, subscriberId, serviceDate, isEligible, statusCode,
 planId, groupNumber, coverageLevel, coverageBeginDate, coverageEndDate, error
 ```
 
-It's stored in `IBatchJobStore` (in-memory by default, pluggable to MongoDB
-or Cosmos DB + blob storage) and served via `GET /batch/{jobId}/result` once
+It's stored in `IBatchJobStore` (in-memory in dev, MongoDB + blob storage
+when persistent) and served via `GET /batch/{jobId}/result` once
 `Status = Completed`.
 
 ## 3. Multi-tenancy
@@ -120,8 +120,8 @@ from the `BatchEligibility:StorageMode` config value:
 | Mode       | Job store                                   | Queue                         | Notes                                                                             |
 | ---------- | ------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------- |
 | InMemory   | `InMemoryBatchJobStore`                     | `InMemoryBatchQueue`          | Dev only. Jobs do not survive restarts. No cross-replica visibility. Warn on boot. |
-| Persistent | `BatchJobStore` (+ Blob for payloads)       | `ServiceBusBatchQueue`        | Production. `BatchJobStore` runs against either MongoDB or Cosmos DB for NoSQL via a pluggable `IBatchJobContainer` (`MongoContainerAdapter` / `CosmosContainerAdapter`) — MongoDB is checked first. Required connection strings: MongoDB or Cosmos, Blob Storage, Service Bus. |
-| Auto       | Persistent when a document store (Mongo or Cosmos) + Blob + Service Bus are all set; InMemory in dev when they're not; throws at startup otherwise. |
+| Persistent | `BatchJobStore` (+ Blob for payloads)       | `ServiceBusBatchQueue`        | Production. `BatchJobStore` keeps job documents in MongoDB through `MongoContainerAdapter` (`IBatchJobContainer`). Required connection strings: `BatchEligibility:MongoDb`, Blob Storage, Service Bus. |
+| Auto       | Persistent when MongoDB + Blob + Service Bus are all set; InMemory in dev when they're not; throws at startup otherwise. |
 
 Never registers both in-memory and persistent implementations simultaneously.
 
@@ -130,9 +130,8 @@ Never registers both in-memory and persistent implementations simultaneously.
 - **InMemory** is single-instance only. `GET /batch/{jobId}` on a different
   pod returns 404; queued messages stay on the pod that received them.
 - **Persistent** gives true multi-replica semantics:
-  - Job state lives in MongoDB or Cosmos DB (`batch-jobs`
-    container/collection, partitioned/scoped by `tenantId`) → any pod can
-    read/write any job.
+  - Job state lives in MongoDB (`batch-jobs` collection, scoped by
+    `tenantId`) → any pod can read/write any job.
   - Queue delivery comes from Service Bus with `MaxConcurrentCalls = 4`,
     `AutoCompleteMessages = false`. Messages complete on handler success,
     abandon on failure; Service Bus auto-DLQs after `MaxDeliveryCount = 10`.
@@ -140,9 +139,8 @@ Never registers both in-memory and persistent implementations simultaneously.
     1 MB) are written to Azure Blob Storage at
     `{tenantId}/{jobId}/{kind}.csv`. Reads always go back through the
     service — no SAS URIs are minted.
-- **TTL**: the Cosmos container is provisioned with `defaultTtl = 7 days`
-  (see `scripts/azure/provision-batch-eligibility.sh`); `MongoContainerAdapter`
-  creates an equivalent TTL index on `expiresAt`. The blob container has a
+- **TTL**: `MongoContainerAdapter` creates a TTL index on `expiresAt` at
+  startup. The blob container has a
   matching 7-day lifecycle rule. The in-memory store's 24-hour `Evict()`
   sweep applies only in dev.
 
@@ -166,7 +164,10 @@ The queued path (>100 rows) never materializes the full row set in memory:
 ### 4.3 Provisioning
 
 Run `scripts/azure/provision-batch-eligibility.sh` once per environment
-with the following env vars set:
+for the Service Bus queue and blob container. (The script still also creates
+a Cosmos DB for NoSQL `batch-jobs` container, which the service no longer
+uses; the MongoDB collection and its TTL index are created by the service at
+startup.) Env vars:
 
 ```
 COSMOS_ACCOUNT, COSMOS_DB (default: cho)

@@ -86,7 +86,7 @@ public class FhirPractitionerRoleController : ControllerBase
         var participation = provider.NetworkParticipations.FirstOrDefault(p =>
             p.NetworkId == decoded.NetworkId
             && p.LineOfBusiness == decoded.LineOfBusiness
-            // SpecifyKind, not ToUniversalTime — Cosmos / Mongo
+            // SpecifyKind, not ToUniversalTime — Mongo
             // round-trip dates as Kind=Unspecified and ToUniversalTime
             // would shift them by the host TZ offset.
             && DateTime.SpecifyKind(p.EffectiveDate, DateTimeKind.Utc).Date == decoded.EffectiveDate.Date);
@@ -275,7 +275,7 @@ public class FhirPractitionerRoleController : ControllerBase
         {
             // The InMemory fake reads TenantId from query.TenantId and
             // would otherwise match all rows when it is empty. The real
-            // Cosmos / Mongo repositories require TenantId and would
+            // Mongo repository requires TenantId and would
             // throw, so surface this as an empty result instead.
             return;
         }

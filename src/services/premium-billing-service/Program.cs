@@ -1,9 +1,7 @@
-using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
 using PremiumBillingService.Clients;
-using PremiumBillingService.Middleware;
 using PremiumBillingService.Repositories;
 using PremiumBillingService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
@@ -55,51 +53,25 @@ builder.Services.AddSwaggerGen(c =>
 // HTTP context accessor (repositories read the token tenant from HttpContext.Items)
 builder.Services.AddHttpContextAccessor();
 
-// Database Configuration — MongoDB when MongoDb:ConnectionString is present, Cosmos DB otherwise
+// Database — MongoDB is the only premium billing store (ADR 006); the client
+// is registered by the shared lib.
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+if (databaseProvider != ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddScoped<IPremiumInvoiceRepository, PremiumInvoiceRepositoryMongo>();
-    builder.Services.AddScoped<IBillingRunRepository, BillingRunRepositoryMongo>();
-    builder.Services.AddScoped<IEftDraftRepository, EftDraftRepositoryMongo>();
-    builder.Services.AddScoped<IRemittanceBatchRepository, RemittanceBatchRepositoryMongo>();
-    builder.Services.AddScoped<IRemittanceExceptionRepository, RemittanceExceptionRepositoryMongo>();
-    builder.Services.AddScoped<ISponsorAccountRepository, SponsorAccountRepositoryMongo>();
-    builder.Services.AddScoped<IRateTableRepository, RateTableRepositoryMongo>();
-    builder.Services.AddScoped<IBillingLeaseRepository, BillingLeaseRepositoryMongo>();
-    Console.WriteLine("Using MongoDB repository");
+    throw new InvalidOperationException(
+        "Premium Billing Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var config = sp.GetRequiredService<IConfiguration>();
-        var endpoint = config["CosmosDb:Endpoint"];
-        var key = config["CosmosDb:Key"];
 
-        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
-            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer()
-        });
-    });
-
-    builder.Services.AddScoped<IPremiumInvoiceRepository, PremiumInvoiceRepository>();
-    builder.Services.AddScoped<IBillingRunRepository, BillingRunRepository>();
-    builder.Services.AddScoped<IEftDraftRepository, EftDraftRepository>();
-    // Containers RemittanceBatches, RemittanceExceptions and SponsorAccounts, partition key /tenantId.
-    builder.Services.AddScoped<IRemittanceBatchRepository, RemittanceBatchRepositoryCosmos>();
-    builder.Services.AddScoped<IRemittanceExceptionRepository, RemittanceExceptionRepositoryCosmos>();
-    builder.Services.AddScoped<ISponsorAccountRepository, SponsorAccountRepositoryCosmos>();
-    // Container RateTables, partition key /tenantId: immutable rate table versions.
-    builder.Services.AddScoped<IRateTableRepository, RateTableRepositoryCosmos>();
-    // Rated-billing group leases live in PremiumInvoices (docType billingLease) so invoice writes are fenced in one batch.
-    builder.Services.AddScoped<IBillingLeaseRepository, BillingLeaseRepositoryCosmos>();
-    Console.WriteLine("Using Cosmos DB repository");
-}
+builder.Services.AddScoped<IPremiumInvoiceRepository, PremiumInvoiceRepositoryMongo>();
+builder.Services.AddScoped<IBillingRunRepository, BillingRunRepositoryMongo>();
+builder.Services.AddScoped<IEftDraftRepository, EftDraftRepositoryMongo>();
+builder.Services.AddScoped<IRemittanceBatchRepository, RemittanceBatchRepositoryMongo>();
+builder.Services.AddScoped<IRemittanceExceptionRepository, RemittanceExceptionRepositoryMongo>();
+builder.Services.AddScoped<ISponsorAccountRepository, SponsorAccountRepositoryMongo>();
+// Immutable rate table versions.
+builder.Services.AddScoped<IRateTableRepository, RateTableRepositoryMongo>();
+// Rated-billing group leases live in PremiumInvoices (DocType billingLease) so invoice writes are fenced in one collection.
+builder.Services.AddScoped<IBillingLeaseRepository, BillingLeaseRepositoryMongo>();
 
 // Services
 builder.Services.AddScoped<IPremiumBillingService, PremiumBillingService.Services.PremiumBillingService>();
@@ -177,13 +149,10 @@ builder.Services.AddHttpClient(HttpSponsorBankAccountSource.HttpClientName, clie
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 // No CORS: this service is called server-to-server only (the portal is

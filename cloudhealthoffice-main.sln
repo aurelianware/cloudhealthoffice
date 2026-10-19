@@ -9,8 +9,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "portal", "portal", "{B1292C
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "services", "services", "{5854FF58-B8C5-05C6-5BF2-ACE42193F22B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "migration-wizard", "src\tools\migration-wizard\migration-wizard.csproj", "{913466DA-FF03-31F2-3A31-888566D2FABB}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.Portal.Tests", "src\portal\CloudHealthOffice.Portal.Tests\CloudHealthOffice.Portal.Tests.csproj", "{6CF973D1-08B1-C6EB-A1C0-B7197F97F6CE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.Portal", "src\portal\CloudHealthOffice.Portal\CloudHealthOffice.Portal.csproj", "{D7C4252D-68F4-A045-E1BB-9AA12E1537A9}"
@@ -295,18 +293,6 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Debug|x64.Build.0 = Debug|Any CPU
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Debug|x86.Build.0 = Debug|Any CPU
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Release|Any CPU.Build.0 = Release|Any CPU
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Release|x64.ActiveCfg = Release|Any CPU
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Release|x64.Build.0 = Release|Any CPU
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Release|x86.ActiveCfg = Release|Any CPU
-		{913466DA-FF03-31F2-3A31-888566D2FABB}.Release|x86.Build.0 = Release|Any CPU
 		{6CF973D1-08B1-C6EB-A1C0-B7197F97F6CE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{6CF973D1-08B1-C6EB-A1C0-B7197F97F6CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6CF973D1-08B1-C6EB-A1C0-B7197F97F6CE}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -1680,7 +1666,6 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{913466DA-FF03-31F2-3A31-888566D2FABB} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 		{6CF973D1-08B1-C6EB-A1C0-B7197F97F6CE} = {B1292CBF-CB5E-31CF-04F4-73CB58F131DA}
 		{D7C4252D-68F4-A045-E1BB-9AA12E1537A9} = {B1292CBF-CB5E-31CF-04F4-73CB58F131DA}
 		{1A3B2777-B67E-8D86-1107-02B79E27AA84} = {5854FF58-B8C5-05C6-5BF2-ACE42193F22B}

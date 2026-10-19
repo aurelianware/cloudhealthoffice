@@ -5,8 +5,8 @@ namespace EligibilityService.Services;
 
 /// <summary>
 /// Persistence abstraction for BatchEligibilityJob. Kept behind an interface
-/// so tests can use the in-memory store while production can swap in a
-/// Cosmos/Mongo implementation without touching the service.
+/// so tests can use the in-memory store while production uses the
+/// Mongo + Blob <see cref="BatchJobStore"/> without touching the service.
 ///
 /// The byte[]-based Save/Get methods are the stable contract for small
 /// payloads (inline path, tests). The stream-based SaveResultStream /
@@ -53,7 +53,7 @@ public interface IBatchJobStore
 /// tenantId + jobId).
 ///
 /// Intended for tests and single-instance / dev deployments — production
-/// should bind IBatchJobStore to a Cosmos, Mongo or blob-backed store so
+/// should bind IBatchJobStore to the Mongo + Blob-backed store so
 /// state survives pod restarts and is visible across replicas.
 ///
 /// To avoid unbounded memory growth on long-running hosts, completed jobs and

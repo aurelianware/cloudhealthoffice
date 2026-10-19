@@ -18,7 +18,7 @@ namespace ConsentService.Tests.Integration;
 
 /// <summary>
 /// End-to-end smoke test over the real Program pipeline using in-memory fakes
-/// so the test does not require Cosmos, Mongo, Key Vault, or Kafka.
+/// so the test does not require Mongo, Key Vault, or Kafka.
 /// Mirrors the pattern used by <c>MemberService.Tests.Integration.MemberFhirSmokeTests</c>.
 /// </summary>
 public class ConsentLifecycleSmokeTests : IClassFixture<ConsentLifecycleSmokeTests.Factory>
@@ -30,6 +30,10 @@ public class ConsentLifecycleSmokeTests : IClassFixture<ConsentLifecycleSmokeTes
 
     public sealed class Factory : WebApplicationFactory<Program>
     {
+        /// <summary>A MongoDB address that is never listening; the driver connects lazily.</summary>
+        public const string UnreachableMongo =
+            "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=100&connectTimeoutMS=100";
+
         public InMemoryConsentRepository Repo { get; } = new();
         public RecordingConsentEventPublisher Publisher { get; } = new();
         public ReversibleConsentFieldEncryptor Encryptor { get; } = new();
@@ -37,14 +41,21 @@ public class ConsentLifecycleSmokeTests : IClassFixture<ConsentLifecycleSmokeTes
         protected override IHost CreateHost(IHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            // Program.cs requires MongoDB in every environment and reads the
+            // connection string while registering services, so it goes in as
+            // host configuration. The server is never there and nothing
+            // reaches it: the repositories and the index initializer are
+            // swapped out below.
+            builder.ConfigureHostConfiguration(cfg => cfg.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MongoDb:ConnectionString"] = UnreachableMongo,
+            }));
             builder.ConfigureAppConfiguration((ctx, cfg) =>
             {
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    // Leave MongoDb/CosmosDb connection unset; we swap the repository
-                    // implementations below so the Cosmos branch in Program.cs never
-                    // resolves a CosmosClient. Kafka bootstrap stays empty so the
-                    // ConsentEventPublisher hosted service goes into degraded mode.
+                    // Kafka bootstrap stays empty so the ConsentEventPublisher
+                    // hosted service goes into degraded mode.
                     ["ConsentEncryption:KeySecretPrefix"] = "consent-body-encryption-key",
                     ["ConsentEncryption:CurrentKeyVersion"] = "v1",
                     ["ConsentEncryption:AcceptedKeyVersions:0"] = "v1"

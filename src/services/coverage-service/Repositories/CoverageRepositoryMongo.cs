@@ -8,8 +8,8 @@ using System.Threading.Tasks;
 namespace CoverageService.Repositories;
 
 /// <summary>
-/// MongoDB repository for Coverage entities.
-/// Implements the same interface as the Cosmos DB repository for portability.
+/// MongoDB repository for Coverage entities (the only coverage store).
+/// Every query is scoped by TenantId for multi-tenant isolation.
 /// </summary>
 public class CoverageRepositoryMongo : ICoverageRepository
 {
@@ -51,13 +51,9 @@ public class CoverageRepositoryMongo : ICoverageRepository
         DateTime serviceDate,
         string? insuranceLineCode = null)
     {
-        // Cosmos Query:
-        // WHERE c.tenantId = @tenantId 
-        // AND c.memberId = @memberId
-        // AND ARRAY_CONTAINS(@dosStatuses, c.status)
-        // AND c.effectiveDate <= @serviceDate
-        // AND ((NOT IS_DEFINED(c.terminationDate) AND c.status != @terminatedStatus)
-        //      OR c.terminationDate >= @serviceDate)
+        // Filter: tenant and member; status in Coverage.DateOfServiceStatuses;
+        // effectiveDate <= serviceDate; and either no termination date (only
+        // when not Terminated) or terminationDate >= serviceDate.
 
         var builder = Builders<Coverage>.Filter;
         var date = serviceDate.Date;
@@ -148,9 +144,7 @@ public class CoverageRepositoryMongo : ICoverageRepository
             filter = builder.And(filter, CurrentlyActiveAsOf(DateTime.UtcNow.Date));
         }
 
-        // Pagination in MongoDB usually works with Skip/Limit.
-        // ContinuationToken in Cosmos is different.
-        // For simple migration, we'll assume integer skip if provided as token, or just 0.
+        // Pagination: the continuation token is an integer skip, or 0 when absent.
         // WARNING: This is a simplified implementation. Real production apps might need cursor-based pagination.
         
         int skip = 0;

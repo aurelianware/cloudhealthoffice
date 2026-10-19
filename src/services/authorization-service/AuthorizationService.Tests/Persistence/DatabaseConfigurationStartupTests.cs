@@ -6,9 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AuthorizationService.Tests.Persistence;
 
 /// <summary>
-/// A deployed host with no database configured must refuse to start, not go
-/// Ready and answer every request with a 500. Development hosts (tests, local
-/// runs that substitute the repository) still start.
+/// A host with no database configured must refuse to start, not go Ready and
+/// answer every request with a 500. There is no "no database" mode: this holds
+/// in every environment, Development and Testing included.
 /// </summary>
 public sealed class DatabaseConfigurationStartupTests
 {
@@ -22,23 +22,44 @@ public sealed class DatabaseConfigurationStartupTests
         var act = () => host.Services.GetRequiredService<IServiceProvider>();
 
         act.Should().Throw<InvalidOperationException>()
-            .Where(e => e.ToString().Contains("No database is configured"));
+            .Where(e => e.ToString().Contains(NoDatabaseMessage));
     }
 
-    [Fact]
-    public void DevelopmentHost_WithNoDatabaseConfigured_Starts()
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Development")]
+    public void Host_ToldToUseTheCosmosNativeSdk_FailsAtStartup(string environment)
     {
-        using var host = new NoDatabaseHost("Development");
+        using var host = new NoDatabaseHost(environment, provider: "CosmosDb");
 
-        host.Services.GetRequiredService<IServiceProvider>().Should().NotBeNull();
+        var act = () => host.Services.GetRequiredService<IServiceProvider>();
+
+        act.Should().Throw<InvalidOperationException>()
+            .Where(e => e.ToString().Contains("Database:Provider 'CosmosDb' is not supported"));
     }
 
-    private sealed class NoDatabaseHost(string environment) : WebApplicationFactory<Program>
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Testing")]
+    public void DevelopmentHost_WithNoDatabaseConfigured_FailsAtStartup(string environment)
+    {
+        using var host = new NoDatabaseHost(environment);
+
+        var act = () => host.Services.GetRequiredService<IServiceProvider>();
+
+        act.Should().Throw<InvalidOperationException>()
+            .Where(e => e.ToString().Contains(NoDatabaseMessage));
+    }
+
+    private const string NoDatabaseMessage =
+        "Authorization Service requires a database. Configure MongoDb:ConnectionString.";
+
+    private sealed class NoDatabaseHost(string environment, string provider = "") : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment(environment);
-            if (environment == "Development")
+            if (environment is "Development" or "Testing")
             {
                 foreach (var (key, value) in ChoDevelopmentAuth.Configuration("authorization-service"))
                     builder.UseSetting(key, value);
@@ -51,10 +72,14 @@ public sealed class DatabaseConfigurationStartupTests
                 builder.UseSetting("ChoAuth:Issuers:0:Issuer", "https://issuer.example.test/");
                 builder.UseSetting("ChoAuth:Issuers:0:Authority", "https://issuer.example.test/");
             }
-            builder.UseSetting("Database:Provider", "");
+            builder.UseSetting("Database:Provider", provider);
             builder.UseSetting("MongoDb:ConnectionString", "");
-            builder.UseSetting("CosmosDb:Endpoint", "");
-            builder.UseSetting("CosmosDb:ConnectionString", "");
+            if (provider.Length > 0)
+            {
+                // What AddChoDatabase needs to wire the Cosmos client; never contacted.
+                builder.UseSetting("CosmosDb:Endpoint", "https://localhost:1/");
+                builder.UseSetting("CosmosDb:Key", "a2V5");
+            }
         }
     }
 }

@@ -34,7 +34,7 @@ public class Appeal
     [Required]
     public string TenantId { get; set; } = string.Empty;
 
-    /// <summary>Stable appeal id. Cosmos document id and Mongo `_id`.</summary>
+    /// <summary>Stable appeal id (Mongo `_id`).</summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
@@ -234,10 +234,10 @@ public class Appeal
     /// have not been published yet (plus recently sent / skipped entries
     /// kept for <c>AppealOutbox:SentRetention</c>, and dead-lettered ones).
     /// Every repository mutation appends its event here in the same
-    /// single-document write as the change itself, which is atomic on a
-    /// standalone mongod and in Cosmos alike. Internal bookkeeping: API
-    /// responses never carry it — the response view leaves it null and
-    /// <c>WhenWritingNull</c> omits it, while Cosmos still persists it.
+    /// single-document write as the change itself, which is atomic even on a
+    /// standalone mongod. Internal bookkeeping: API responses never carry
+    /// it — the response view leaves it null and <c>WhenWritingNull</c>
+    /// omits it.
     /// </summary>
     [BsonIgnoreIfNull]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -257,37 +257,6 @@ public class Appeal
     [BsonIgnoreIfNull]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? OutboxSequence { get; set; }
-
-    // ── Cosmos-only sweep fields ─────────────────────────────────────────
-    // Recomputed from Outbox in every Cosmos write (AppealOutboxIndex.Refresh)
-    // so the relay's cross-partition query filters and orders on top-level
-    // numbers instead of scanning arrays. Mongo does not store them (it
-    // uses partial indexes on Outbox.Status).
-
-    /// <summary>Epoch ms when this appeal next needs the relay (earliest due pending entry or dead-letter expiry); null = never.</summary>
-    [BsonIgnore]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public long? OutboxNextDueAt { get; set; }
-
-    /// <summary>Epoch ms mirror of <see cref="OutboxLeaseUntil"/>.</summary>
-    [BsonIgnore]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public long? OutboxLeaseUntilMs { get; set; }
-
-    /// <summary>Pending entries (null when none) — summed for the backlog gauge.</summary>
-    [BsonIgnore]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? OutboxPendingCount { get; set; }
-
-    /// <summary>Epoch ms of the oldest pending entry — min'd for the oldest-pending-age gauge.</summary>
-    [BsonIgnore]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public long? OutboxOldestPendingAt { get; set; }
-
-    /// <summary>Dead-lettered entries (null when none) — lets bulk replay find them without scanning arrays.</summary>
-    [BsonIgnore]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? OutboxDeadLetteredCount { get; set; }
 
     /// <summary>
     /// Projects the persisted status into the status the caller observes —

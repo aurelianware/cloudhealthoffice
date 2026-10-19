@@ -22,8 +22,7 @@ public sealed record QueueCounts(string QueueId, int Open, int Leased);
 ///
 /// <para><b>Concurrency.</b> Work items are written only through
 /// <see cref="TryReplaceItemAsync"/>, a compare-and-swap on
-/// <see cref="WorkItem.Version"/> (and, in Cosmos, the document
-/// <c>_etag</c>): exactly one of several racing writers succeeds, the others
+/// <see cref="WorkItem.Version"/>: exactly one of several racing writers succeeds, the others
 /// get <c>false</c> and must re-read. Get Next, release, renew, assign and
 /// event application all go through it.</para>
 /// </summary>
@@ -62,7 +61,7 @@ public interface IWorkStore
     /// <summary>
     /// Compare-and-swap: writes <paramref name="item"/> only if the stored
     /// item still has <paramref name="expectedVersion"/>. On success the item
-    /// carries <c>expectedVersion + 1</c> (and its new store ETag).
+    /// carries <c>expectedVersion + 1</c>.
     /// </summary>
     Task<bool> TryReplaceItemAsync(WorkItem item, long expectedVersion, CancellationToken ct = default);
 

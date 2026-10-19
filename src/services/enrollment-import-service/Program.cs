@@ -33,8 +33,18 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultWritePermission = "enrollment:process";
 });
 
-// MongoDB
-builder.Services.AddChoDatabase(builder.Configuration);
+// MongoDB is the only enrollment store (ADR 006); the database client is
+// registered by the shared lib.
+if (string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
+{
+    throw new InvalidOperationException(
+        "Enrollment Import Service requires a database. Configure MongoDb:ConnectionString.");
+}
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
+{
+    throw new InvalidOperationException(
+        "Enrollment Import Service supports only MongoDB. Remove Database:Provider or set it to MongoDb.");
+}
 // Repositories and services. Constructed without I/O side effects (index
 // creation happens in EnrollmentIndexInitializer below), so these can be
 // singletons rather than scoped — same pattern as member-service.

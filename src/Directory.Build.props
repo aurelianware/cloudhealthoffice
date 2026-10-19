@@ -1,10 +1,5 @@
 <Project>
-  <PropertyGroup>
-    <!-- Security: Force minimum versions for vulnerable transitive dependencies -->
-    <!-- Suppress Cosmos DB Newtonsoft.Json co-existence check (we use System.Text.Json serializer) -->
-    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
-  </PropertyGroup>
-
+  <!-- Security: Force minimum versions for vulnerable transitive dependencies -->
   <ItemGroup>
     <!-- Fix CVE-2024-43485: System.Formats.Asn1 Remote Code Execution vulnerability -->
     <!-- Severity: High | Advisory: GHSA-447r-wph3-92pm -->

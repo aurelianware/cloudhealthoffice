@@ -4,7 +4,7 @@ namespace ReferenceDataService.Repositories;
 
 /// <summary>
 /// Persistence contract for tenant compliance configuration documents.
-/// Implementations: Cosmos DB (production) and in-memory (fallback/test).
+/// Implementations: MongoDB (production) and in-memory (Development / Testing).
 /// </summary>
 public interface IComplianceConfigRepository
 {

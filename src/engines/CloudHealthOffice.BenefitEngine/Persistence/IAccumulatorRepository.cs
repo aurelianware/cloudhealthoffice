@@ -9,9 +9,8 @@ namespace CloudHealthOffice.BenefitEngine.Persistence;
 /// (individual + family documents, idempotency, retries).
 /// This interface handles the raw document reads and writes.
 ///
-/// Two implementations are provided:
-///   AccumulatorRepositoryMongo  — MongoDB with version-stamp optimistic concurrency
-///   AccumulatorRepositoryCosmos — Cosmos DB with ETag optimistic concurrency
+/// Implementation: AccumulatorRepositoryMongo — MongoDB with version-stamp
+/// optimistic concurrency.
 /// </summary>
 public interface IAccumulatorRepository
 {
@@ -27,10 +26,10 @@ public interface IAccumulatorRepository
     /// <summary>
     /// Insert or replace the document using optimistic concurrency.
     ///
-    /// For new documents (Version == 0): InsertOne / CreateItem.
-    /// For existing documents: ReplaceOne with version filter / ReplaceItem with ETag.
+    /// For new documents (Version == 0): InsertOne.
+    /// For existing documents: ReplaceOne with version filter.
     ///
-    /// Returns the saved document (with updated Version/ETag).
+    /// Returns the saved document (with updated Version).
     /// Throws <see cref="OptimisticConcurrencyException"/> if a concurrent
     /// write has modified the document since it was last read.
     /// </summary>

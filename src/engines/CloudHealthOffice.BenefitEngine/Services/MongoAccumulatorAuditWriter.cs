@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace CloudHealthOffice.BenefitEngine.Services;
 
 /// <summary>
-/// Writes the durable accumulator audit trail to MongoDB or Cosmos DB.
+/// Writes the durable accumulator audit trail to MongoDB.
 ///
 /// Used as the <see cref="IAccumulatorAuditWriter"/> behind the Redis accumulator
 /// service, which awaits every write inside the operation it records (commit,

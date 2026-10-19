@@ -21,12 +21,12 @@ public class BatchEligibilityStorageModeTests
     }
 
     [Fact]
-    public void Persistent_WithFullConfig_RegistersCosmosAndMessageBusQueue()
+    public void Persistent_WithFullConfig_RegistersMongoAndMessageBusQueue()
     {
         var services = new ServiceCollection();
         services.AddBatchEligibilityStorage(Config("Persistent", full: true), ProdEnvironment());
-        // Do NOT BuildServiceProvider: the Cosmos client would attempt real
-        // network lookups. Inspect the registrations instead.
+        // Do NOT BuildServiceProvider: the store factory would connect to Mongo
+        // and create indexes. Inspect the registrations instead.
 
         Assert.Contains(services, d =>
             d.ServiceType == typeof(IBatchJobStore) && d.ImplementationFactory != null);
@@ -55,7 +55,7 @@ public class BatchEligibilityStorageModeTests
     }
 
     [Fact]
-    public void Persistent_MissingCosmosConnectionString_Throws()
+    public void Persistent_MissingMongoConnectionString_Throws()
     {
         var services = new ServiceCollection();
         Assert.Throws<InvalidOperationException>(() =>
@@ -68,15 +68,14 @@ public class BatchEligibilityStorageModeTests
 
     private static IConfiguration Config(
         string mode, bool full = false,
-        bool withCosmos = false, bool withBlob = false)
+        bool withMongo = false, bool withBlob = false)
     {
         var dict = new Dictionary<string, string?>
         {
             ["BatchEligibility:StorageMode"] = mode
         };
-        if (full || withCosmos)
-            dict["BatchEligibility:CosmosDb:ConnectionString"] =
-                "AccountEndpoint=https://fake.documents.azure.com:443/;AccountKey=ZmFrZQ==;";
+        if (full || withMongo)
+            dict["BatchEligibility:MongoDb:ConnectionString"] = "mongodb://fake-batch-host:27017";
         if (full || withBlob)
             dict["BatchEligibility:BlobStorage:ConnectionString"] =
                 "DefaultEndpointsProtocol=https;AccountName=fake;AccountKey=ZmFrZQ==;" +

@@ -35,5 +35,7 @@
   <ItemGroup>
     <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
     <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
+    <!-- fhir-service requires MongoDB; test hosts that never touch it use this. -->
+    <Compile Include="..\Shared\FhirService\*.cs" Link="Shared\FhirService\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

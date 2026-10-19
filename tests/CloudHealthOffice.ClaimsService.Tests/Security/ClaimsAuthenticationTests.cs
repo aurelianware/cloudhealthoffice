@@ -288,30 +288,6 @@ public class ClaimsAuthenticationTests : IClassFixture<ClaimsApiFactory>
             Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task CosmosMigration_RequiresPlatformAdmin()
-    {
-        // The migration copies every tenant's claims; a tenant-scoped claims
-        // permission (even a supervisor's) is not enough.
-        using var factory = _factory.WithWebHostBuilder(b => b.ConfigureTestServices(services =>
-            services.AddSingleton(Substitute.For<IClaimMigrationService>())));
-
-        var supervisor = factory.CreateDefaultClient(
-            new ChoDevelopmentTokenHandler("supervisor-1", ChoRolePermissions.ClaimsSupervisor));
-        supervisor.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await supervisor.PostAsJsonAsync("/api/v1/admin/claims/cosmos-migration/run", new { dryRun = true })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await supervisor.GetAsync("/api/v1/admin/claims/cosmos-migration/status")).StatusCode);
-
-        var platformAdmin = factory.CreateDefaultClient(
-            new ChoDevelopmentTokenHandler("platform-admin", ChoRolePermissions.PlatformAdmin));
-        platformAdmin.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
-        // Authorized; the feature flag is off in tests, so the action answers 503.
-        Assert.Equal(HttpStatusCode.ServiceUnavailable,
-            (await platformAdmin.GetAsync("/api/v1/admin/claims/cosmos-migration/status")).StatusCode);
-    }
-
     // ── Service callers ────────────────────────────────────────────────
 
     [Fact]

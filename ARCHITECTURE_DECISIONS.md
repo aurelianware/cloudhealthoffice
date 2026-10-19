@@ -21,6 +21,7 @@ follow-up work.
 | [011](docs/adr/011-rules-and-evidence-model.md) | Keep adjudication rules, benchmark scoring, and marketing claims separate |
 | [012](docs/adr/012-product-led-professional-services.md) | Product-led professional services and explicitly labelled deployment/operating models |
 | [013](docs/adr/013-cms-0057-f-com-companion-property.md) | cms-0057-f.com as a companion educational property, with a cross-site attribution contract |
+| [017](docs/adr/017-mongodb-api-only-persistence.md) | MongoDB API is the only document persistence path (Azure DocumentDB in Azure) |
 
 ## ADR Backlog
 

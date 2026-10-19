@@ -5,7 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>CloudHealthOffice.Infrastructure</RootNamespace>
-    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,7 +17,6 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.Messaging.ServiceBus" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
     <!-- ChoServiceClientResilience: retries, timeouts and a circuit breaker on every service HttpClient. -->
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />

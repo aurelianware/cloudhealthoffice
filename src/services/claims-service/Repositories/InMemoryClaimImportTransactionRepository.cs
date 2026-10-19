@@ -3,11 +3,8 @@ using ClaimsService.Models;
 namespace ClaimsService.Repositories;
 
 /// <summary>
-/// In-process fallback for Cosmos-configured deployments — mirrors
-/// <c>InMemoryMassAdjudicationRunRepository</c>'s precedent for capabilities
-/// that haven't gotten a Cosmos-backed implementation yet. Per-pod only;
-/// acceptable because this collection backs an admin diagnostic view, not
-/// anything transactionally load-bearing.
+/// In-process store for tests. Production uses
+/// <c>ClaimImportTransactionRepositoryMongo</c>.
 /// </summary>
 public sealed class InMemoryClaimImportTransactionRepository : IClaimImportTransactionRepository
 {

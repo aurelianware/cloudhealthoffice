@@ -7,7 +7,7 @@ namespace CloudHealthOffice.NcciEngine.Tests;
 /// <summary>
 /// In-memory test double for INcciRepository.
 /// Seed pairs via AddEditPair / AddMueEntry before calling ScrubAsync.
-/// Upserts replace by document id, like the Mongo and Cosmos stores.
+/// Upserts replace by document id, like the Mongo store.
 /// </summary>
 internal sealed class FakeNcciRepository : INcciRepository
 {

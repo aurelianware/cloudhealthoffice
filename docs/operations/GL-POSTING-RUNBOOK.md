@@ -381,6 +381,6 @@ voided. They are equal unless something posted to ClaimsPayable outside these en
   - settlement, returns, check cash, capitation and premium cash (see section 1);
   - multi-currency;
   - account dimensions beyond line of business on the entry;
-  - Cosmos stores. ar-service refuses to start without MongoDB, so its GL endpoints never
-    run on Cosmos. On Cosmos, payment-service's `GET /api/gl-events/unpublished` answers
+  - per-tenant databases. payment-service and ar-service require MongoDB; with
+    `MongoDb:UseTenantScoping` payment-service's `GET /api/gl-events/unpublished` answers
     501 and there is no dispatcher. Events still accumulate in the documents' outboxes.

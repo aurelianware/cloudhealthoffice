@@ -45,9 +45,6 @@ spec:
     - name: azure-credentials
       secret:
         secretName: azure-service-principal
-    - name: cosmos-credentials
-      secret:
-        secretName: cosmos-db-credentials
     - name: stripe-credentials
       secret:
         secretName: stripe-api-keys
@@ -75,52 +72,6 @@ spec:
         # Step 1: Validate tenant doesn't already exist
         - - name: validate-tenant
             template: validate-tenant-exists
-        
-        # Step 2: Provision Cosmos DB containers (parallel)
-        - - name: provision-cosmos-members
-            template: provision-cosmos-container
-            arguments:
-              parameters:
-                - name: container-name
-                  value: "Members"
-                - name: partition-key
-                  value: "/tenantId"
-          
-          - name: provision-cosmos-coverage
-            template: provision-cosmos-container
-            arguments:
-              parameters:
-                - name: container-name
-                  value: "Coverage"
-                - name: partition-key
-                  value: "/tenantId"
-          
-          - name: provision-cosmos-claims
-            template: provision-cosmos-container
-            arguments:
-              parameters:
-                - name: container-name
-                  value: "Claims"
-                - name: partition-key
-                  value: "/tenantId"
-          
-          - name: provision-cosmos-benefitplans
-            template: provision-cosmos-container
-            arguments:
-              parameters:
-                - name: container-name
-                  value: "BenefitPlans"
-                - name: partition-key
-                  value: "/tenantId"
-          
-          - name: provision-cosmos-authorizations
-            template: provision-cosmos-container
-            arguments:
-              parameters:
-                - name: container-name
-                  value: "Authorizations"
-                - name: partition-key
-                  value: "/tenantId"
         
         # Step 3: Create SFTP directory structure
         - - name: create-sftp-folders
@@ -248,65 +199,6 @@ spec:
             mountPath: /opt/cho
             readOnly: true
 
-    # Template: Provision Cosmos DB container
-    - name: provision-cosmos-container
-      inputs:
-        parameters:
-          - name: container-name
-          - name: partition-key
-      container:
-        image: mcr.microsoft.com/azure-cli:latest
-        command: [sh, -c]
-        args:
-          - |
-            CONTAINER_NAME="${PARAM_CONTAINER_NAME}"
-            PARTITION_KEY="${PARAM_PARTITION_KEY}"
-            COSMOS_ACCOUNT="${COSMOS_ACCOUNT_NAME}"
-            RESOURCE_GROUP="${COSMOS_RESOURCE_GROUP}"
-            DATABASE="CloudHealthOffice"
-            
-            echo "Checking if container $CONTAINER_NAME exists..."
-            
-            az cosmosdb sql container show \
-              --account-name "$COSMOS_ACCOUNT" \
-              --resource-group "$RESOURCE_GROUP" \
-              --database-name "$DATABASE" \
-              --name "$CONTAINER_NAME" >/dev/null 2>&1
-            
-            if [ $? -eq 0 ]; then
-              echo "Container $CONTAINER_NAME already exists, skipping creation"
-            else
-              echo "Creating container $CONTAINER_NAME with partition key $PARTITION_KEY..."
-              
-              az cosmosdb sql container create \
-                --account-name "$COSMOS_ACCOUNT" \
-                --resource-group "$RESOURCE_GROUP" \
-                --database-name "$DATABASE" \
-                --name "$CONTAINER_NAME" \
-                --partition-key-path "$PARTITION_KEY" \
-                --throughput 400
-              
-              echo "Container $CONTAINER_NAME created successfully"
-            fi
-        env:
-          - name: PARAM_CONTAINER_NAME
-            value: "{{inputs.parameters.container-name}}"
-          - name: PARAM_PARTITION_KEY
-            value: "{{inputs.parameters.partition-key}}"
-          - name: COSMOS_ACCOUNT_NAME
-            valueFrom:
-              secretKeyRef:
-                name: cosmos-db-credentials
-                key: account-name
-          - name: COSMOS_RESOURCE_GROUP
-            valueFrom:
-              secretKeyRef:
-                name: cosmos-db-credentials
-                key: resource-group
-        volumeMounts:
-          - name: azure-credentials
-            mountPath: /secrets
-    
     # Template: Create SFTP folder structure
     - name: create-sftp-structure
       container:
@@ -676,7 +568,6 @@ spec:
               TENANT_ID="${WF_PARAM_TENANT_ID}"
               
               # TODO: Implement cleanup logic
-              # - Delete Cosmos containers
               # - Delete SFTP folders
               # - Cancel Stripe subscription
               # - Delete Azure AD user

@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using System.Text.Json;
 using Microsoft.OpenApi.Models;
 using AttachmentService;
@@ -61,30 +60,13 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Configure Cosmos DB with System.Text.Json serialization
-var cosmosOptions = new CosmosClientOptions
+// Database — MongoDB is the only attachment store (ADR 006, ADR 017);
+// AddChoDatabase registers the client. A host with no database configured
+// refuses to start, in every environment.
+if (builder.Services.AddChoDatabase(builder.Configuration) is null)
 {
-    Serializer = new CosmosSystemTextJsonSerializer(
-        new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        })
-};
-
-// Database provider selection. MongoDB is the default so the service stays cloud-agnostic;
-// Cosmos DB's native SDK is opt-in via Database:Provider=CosmosDb.
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.CosmosDb)
-{
-    builder.Services.AddSingleton(s =>
-    {
-        var config = s.GetRequiredService<IConfiguration>();
-        var endpoint = config["CosmosDb:Endpoint"] ?? throw new InvalidOperationException("CosmosDb:Endpoint not configured");
-        var key = config["CosmosDb:Key"] ?? throw new InvalidOperationException("CosmosDb:Key not configured");
-        return new CosmosClient(endpoint, key, cosmosOptions);
-    });
+    throw new InvalidOperationException(
+        "Attachment Service requires a database. Configure MongoDb:ConnectionString.");
 }
 
 // Configure Azure Blob Storage + IDocumentStore
@@ -96,14 +78,7 @@ builder.Services.AddSingleton(s =>
 });
 builder.Services.AddSingleton<IDocumentStore, AzureBlobDocumentStore>();
 
-if (databaseProvider == ChoDatabaseProvider.CosmosDb)
-{
-    builder.Services.AddScoped<IAttachmentRepository, AttachmentRepository>();
-}
-else
-{
-    builder.Services.AddScoped<IAttachmentRepository, AttachmentRepositoryMongo>();
-}
+builder.Services.AddScoped<IAttachmentRepository, AttachmentRepositoryMongo>();
 
 // Trading partners are trading-partner-service's data: read through its API,
 // never from its TradingPartners collection (see HttpTradingPartnerLookup).
@@ -135,13 +110,10 @@ builder.Services.Configure<AttachmentUploadOptions>(builder.Configuration.GetSec
 builder.Services.AddSingleton<AcknowledgmentGeneratorService>();
 builder.Services.AddScoped<IAcknowledgmentService, AcknowledgmentService>();
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);

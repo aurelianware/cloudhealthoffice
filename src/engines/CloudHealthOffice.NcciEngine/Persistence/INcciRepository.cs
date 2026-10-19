@@ -5,7 +5,7 @@ namespace CloudHealthOffice.NcciEngine.Persistence;
 
 /// <summary>
 /// Persistence abstraction for NCCI edit pairs, MUE entries, and table version metadata.
-/// Implemented for Cosmos DB and MongoDB.
+/// Implemented for MongoDB.
 /// </summary>
 public interface INcciRepository
 {

@@ -17,7 +17,6 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  CosmosDb__DatabaseName: "CloudHealthOffice"
   CoverageService__BaseUrl: "http://coverage-service.cloudhealthoffice"
   SponsorService__BaseUrl: "http://sponsor-service.cloudhealthoffice"
   MemberService__BaseUrl: "http://member-service.cloudhealthoffice"
@@ -68,22 +67,6 @@ spec:
             secretKeyRef:
               name: database-secret
               key: connectionString
-              optional: true
-        - name: CosmosDb__Endpoint
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: endpoint
-        - name: CosmosDb__Key
-          valueFrom:
-            secretKeyRef:
-              name: database-secret
-              key: key
-        - name: CosmosDb__DatabaseName
-          valueFrom:
-            configMapKeyRef:
-              name: premium-billing-service-config
-              key: CosmosDb__DatabaseName
         - name: CoverageService__BaseUrl
           valueFrom:
             configMapKeyRef:

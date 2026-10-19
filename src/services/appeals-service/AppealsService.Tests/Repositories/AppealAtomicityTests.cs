@@ -6,7 +6,7 @@ namespace AppealsService.Tests.Repositories;
 
 /// <summary>
 /// Atomicity / race-safety guarantees of the InMemory repository, which
-/// mirrors the Cosmos + Mongo repositories' conditional-replace pattern.
+/// mirrors the Mongo repository's conditional-write pattern.
 /// The production repositories carry the same invariants; this suite
 /// documents and guards them in a reproducible form.
 /// </summary>
@@ -55,8 +55,8 @@ public class AppealAtomicityTests
         await repo.CreateAsync(appeal, genesis);
 
         // Two writers concurrently try to transition Draft -> Submitted.
-        // The InMemory repo simulates the Cosmos ETag / Mongo conditional-
-        // replace semantics: one wins cleanly, the other surfaces
+        // The InMemory repo simulates the Mongo conditional-write
+        // semantics: one wins cleanly, the other surfaces
         // InvalidAppealTransitionException.
         var entityA = await repo.GetByIdAsync(appeal.TenantId, appeal.Id);
         var entityB = await repo.GetByIdAsync(appeal.TenantId, appeal.Id);

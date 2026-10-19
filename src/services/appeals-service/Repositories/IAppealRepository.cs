@@ -168,9 +168,9 @@ public interface IAppealEventRepository
 }
 
 /// <summary>Repository-local sink for appending <see cref="AppealEvent"/> rows.
-/// Lets the Cosmos and Mongo <see cref="IAppealRepository"/> implementations
-/// share a single transition-and-append shape while keeping their own
-/// storage choice for audit rows.
+/// Lets an <see cref="IAppealRepository"/> implementation share a single
+/// transition-and-append shape while keeping its own storage choice for
+/// audit rows.
 /// </summary>
 public interface IAppealEventSink
 {

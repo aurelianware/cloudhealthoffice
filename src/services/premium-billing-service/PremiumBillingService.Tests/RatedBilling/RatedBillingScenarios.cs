@@ -14,9 +14,9 @@ namespace PremiumBillingService.Tests.RatedBilling;
 
 /// <summary>
 /// Rated invoice generation end to end against a real store and the real
-/// repositories, once per backend (<see cref="RatedBillingMongoTests"/> on a
-/// mongod, <see cref="RatedBillingCosmosEmulatorTests"/> on the Cosmos DB
-/// emulator). coverage-service and member-service are in-memory fakes holding
+/// repositories, on a standalone mongod (<see cref="RatedBillingMongoTests"/>,
+/// renew-then-write fence) and a replica set
+/// (<see cref="RatedBillingMongoReplicaSetTests"/>, transactional fence). coverage-service and member-service are in-memory fakes holding
 /// synthetic members; every assertion re-reads what was saved.
 /// </summary>
 public abstract class RatedBillingScenarios : IAsyncLifetime
@@ -123,7 +123,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
 
     // ── Idempotency and immutability ───────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task Generation_IsIdempotent_AnIssuedInvoiceIsNeverDuplicatedOrChanged()
     {
         var rates = await SaveTierTable();
@@ -148,7 +148,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
             && l.RatingSegments!.Count == 1);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ConcurrentGenerations_CreateOneInvoice()
     {
         await SaveTierTable();
@@ -161,7 +161,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await GroupInvoices()).Should().ContainSingle();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task MissingRate_KeepsTheInvoiceInDraft_ThenRegeneratingInPlaceIssuesIt()
     {
         // Rates end in February: March cannot be rated.
@@ -196,7 +196,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         await again.Should().ThrowAsync<InvalidOperationException>().WithMessage("*never changed*");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task HeldForReview_StaysDraftUntilIssued()
     {
         Options.Tenants[Tenant].HoldForReview = true;
@@ -217,7 +217,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
 
     // ── Retro changes land on the next invoice ─────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task RetroTerm_IsCreditedOnTheNextInvoice_TheIssuedOneIsUnchanged()
     {
         await SaveTierTable();
@@ -241,7 +241,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         storedFebruary.LineItems.Should().HaveCount(2);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RetroAdd_IsChargedOnTheNextInvoice()
     {
         await SaveTierTable();
@@ -261,7 +261,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await Generate(D(2026, 4, 1))).Invoice.Adjustments.Should().BeEmpty();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CompositeGroup_IsBilledPerTier_AndReconciledPerCoverage()
     {
         Options.Tenants[Tenant].Groups[Group] = new RatedBillingGroupOptions { BillFormat = BillFormat.Composite };
@@ -284,7 +284,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
 
     // ── Coexistence with unrated invoices and voids ────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task PeriodWithAnUnratedInvoice_IsLeftAlone()
     {
         await SaveTierTable();
@@ -303,7 +303,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await GroupInvoices()).Should().ContainSingle();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UnratedMonths_AreNotReconciled_ByTheFirstRatedInvoice()
     {
         // February was billed the original way (one line per member coverage, coverage-service premium).
@@ -322,7 +322,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         march.TotalAmount.Should().Be(500m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task VoidedRatedInvoice_IsReissuedUnderANewId()
     {
         await SaveTierTable();
@@ -338,7 +338,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await GroupInvoices()).Should().HaveCount(2);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DuplicateId_IsRefusedByTheStore()
     {
         var invoice = new PremiumInvoice
@@ -356,7 +356,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         await again.Should().ThrowAsync<InvoiceAlreadyExistsException>();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task OverdueQueries_SkipDrafts_AndClosedInvoices()
     {
         async Task<PremiumInvoice> Add(InvoiceStatus status, string number) => await Invoices.CreateAsync(new PremiumInvoice
@@ -375,7 +375,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
 
     // ── Rate table store ───────────────────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task RateTables_AreImmutableVersions()
     {
         var v1 = await SaveTierTable(500m);
@@ -398,7 +398,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await RateTables.ListVersionsAsync(v1.RateTableId)).Select(v => v.Version).Should().Equal(1, 2, 3);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RateTables_ThatWouldOverlap_AreRejected()
     {
         await SaveTierTable();
@@ -417,7 +417,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await GroupInvoices()).Where(i => i.Status != InvoiceStatus.Voided).SelectMany(i => i.Adjustments)
             .Where(a => a.CoverageId == coverageId && a.ServicePeriodStart == month).Sum(a => a.Amount);
 
-    [SkippableFact]
+    [Fact]
     public async Task HeldDraft_BlocksLaterPeriods_SoARetroChangeIsBilledOnce()
     {
         // Review probe: Feb issued; B effective 2/1 arrives; March is held as Draft (+500 for Feb).
@@ -443,7 +443,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await RetroFor("cov-B", D(2026, 2, 1))).Should().Be(500m, "B's February is charged once");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task IssuingAnOutOfDateDraft_RegeneratesIt_AndRefuses()
     {
         Options.Tenants[Tenant].HoldForReview = true;
@@ -466,7 +466,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
             i.Status == InvoiceStatus.Generated && i.TotalAmount == 1000m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DraftIssuedAfterTheBasisChanged_IsRefused()
     {
         // An April Draft computed before March was issued (out-of-order periods) reconciled without March.
@@ -501,7 +501,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ConcurrentPeriodsOfOneGroup_AreSerialized_SoARetroChangeIsBilledOnce()
     {
         // Review probe: March and April generated at the same moment, both after B's retro add for February.
@@ -519,7 +519,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await RetroFor("cov-B", D(2026, 2, 1))).Should().Be(500m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task LeaseDocuments_AreNeverReadOrWrittenAsInvoices()
     {
         // Leases share the invoices' container/collection; their id is computable from tenant and group.
@@ -545,7 +545,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await Leases.RenewAsync(held!, Clock.Now, TimeSpan.FromMinutes(5))).Should().BeTrue();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GroupLease_IsExclusiveUntilReleasedOrExpired()
     {
         var now = D(2026, 3, 1);
@@ -569,7 +569,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await Leases.TryAcquireAsync(Group, "three", now.AddMinutes(10), TimeSpan.FromMinutes(5))).Should().NotBeNull();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task BusyGroup_FailsAfterTheWait_InsteadOfComputingFromAStaleLedger()
     {
         Options.GroupLeaseWaitSeconds = 0;
@@ -583,7 +583,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await GroupInvoices()).Should().BeEmpty();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task FencedWrite_ByAHolderWhoseLeaseWasTakenOver_WritesNothing()
     {
         var now = D(2026, 3, 1);
@@ -623,7 +623,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ExpiredLease_StaleRunWritesNothing_SoARetroChangeIsBilledOnce()
     {
         // Review probe 2: March stalls in coverage-service past its lease; April takes the lease
@@ -701,7 +701,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         return draft;
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task NetCredit_DraftVoidedDuringIssue_CreditIsMovedOnce()
     {
         // Review probe 2: the save of the issued credit invoice fails because the Draft was voided
@@ -735,7 +735,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task NetCredit_CrashAfterTheSave_IsPostedByTheNextRun_Once()
     {
         var draft = await HeldNetCreditDraft();
@@ -754,7 +754,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await MarchCredits()).Should().Be((1000m, 1000m));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task VoidOfARatedInvoice_TakesTheGroupLease()
     {
         Options.Tenants[Tenant].HoldForReview = true;
@@ -780,7 +780,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
 
     // ── Review regressions: credits and corrections ────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task NetCredit_MovesToTheSponsorsUnappliedCredit_Once()
     {
         await SaveTierTable();
@@ -805,7 +805,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await Accounts.GetAsync(Group))!.UnappliedCredit.Should().Be(1000m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CoverageThatVanished_IsAnException_NotACredit()
     {
         await SaveTierTable();
@@ -822,7 +822,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
             e.Code == RatedInvoiceGenerator.CoverageMissing && e.CoverageId == "cov-B");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RateCorrection_OfInvoicedMonths_IsHeldForReview()
     {
         var v1 = await SaveTierTable(500m);
@@ -843,7 +843,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         issued.Should().Match<PremiumInvoice>(i => i.Status == InvoiceStatus.Generated && i.TotalAmount == 540m);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RateCorrection_BelowTheThreshold_IsIssued()
     {
         Options.Tenants[Tenant].RateCorrectionReviewThreshold = 25m;
@@ -855,7 +855,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await Generate(D(2026, 3, 1))).Invoice.Status.Should().Be(InvoiceStatus.Generated);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task MemberPremiumTab_TakesTheLastIssuedInvoices_NotDrafts()
     {
         for (var month = 1; month <= 3; month++)

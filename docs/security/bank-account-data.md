@@ -23,7 +23,7 @@ the approver who releases the payment gets a masked summary and a receipt.
 
 Each record holds the **active** (approved) account, at most one **pending**
 change, and the history. Every write is conditional on the record's revision
-(Mongo filtered replace, Cosmos If-Match), so approving a change and switching
+(a Mongo filtered replace), so approving a change and switching
 the active account is one atomic step.
 
 - A change is only proposed. It does nothing until a different user holding
@@ -210,8 +210,7 @@ Transmission not configured, disabled, or failing: the file is encrypted with
 settings sponsor-service and provider-service use, with purpose
 `premium-billing-service` / `capitation-service`) and held in Mongo
 (`NachaHeldFiles`, TTL index on `expiresAt`, 7 days; reads refuse it after
-expiry). Without a key ring or a store (Cosmos native SDK deployments: TODO),
-nothing is held and the payments stay `Pending`.
+expiry). Without a key ring, nothing is held and the payments stay `Pending`.
 
 | Endpoint (premium-billing `api/v1/eft/...`, capitation `api/v1/capitation/disbursements/...`) | Who |
 |---|---|
@@ -335,7 +334,7 @@ mechanism. A service opts in with a project reference and
 tax number in `Providers` (all version rows) and `ProviderBankAccounts`
 (active, pending and history) as `enc:v2:` (bound to its record): plaintext
 and `enc:v1:` values alike, tenant by tenant. Run it after deploying, with
-provider-service's own configuration (the same `MongoDb` or `CosmosDb` and
+provider-service's own configuration (the same `MongoDb` and
 `FieldProtection` settings and identity as the pods, so it writes with the
 shared key ring):
 
@@ -353,17 +352,13 @@ dotnet run --project src/services/provider-service -- --encrypt-bank-accounts --
 - It prints, per tenant, rows and records scanned, encrypted, already
   encrypted and conflicts. It never prints a number.
 - Idempotent and resumable: bound values are left alone, and each document
-  is updated on its own with a compare-and-set (Mongo: on the values it read
-  and, for records, the revision, which it does not bump; Cosmos: the row's
-  ETag, and for records the service's own revision-checked save). A document the
+  is updated on its own with a compare-and-set on the values it read
+  and, for records, the revision, which it does not bump. A document the
   service changed meanwhile is a conflict, left for the next run. Stop it at
   any time and run it again.
 - Exit code 0: nothing left in plaintext. 2: conflicts or failures, run again.
   1: it did not start (no key ring outside Development/Testing, half a key-ring
-  configuration, or neither Mongo nor Cosmos configured). With
-  `MongoDb:ConnectionString` it uses Mongo; otherwise `CosmosDb:Endpoint` /
-  `CosmosDb:Key` (containers `CosmosDb:ContainerName`, default `Providers`,
-  and `CosmosDb:ProviderBankAccountsContainer`, default `ProviderBankAccounts`).
+  configuration, or no `MongoDb:ConnectionString`).
 - When it exits 0 for every tenant, set `FieldProtection__RejectPlaintext=true`
   and `FieldProtection__RejectUnbound=true` on provider-service.
 
@@ -379,18 +374,16 @@ dotnet sponsor-service.dll --encrypt-bank-accounts [--tenant <id>]... [--dry-run
 dotnet run --project src/services/sponsor-service -- --encrypt-bank-accounts --dry-run
 ```
 
-- Run it with sponsor-service's own configuration (the same `MongoDb`, or
-  `Database:Provider=CosmosDb` with `CosmosDb:Endpoint` / `CosmosDb:Key`, and
-  `FieldProtection` settings and identity as the pods). Mongo collections:
-  `CosmosDb:ContainerName` (default `Sponsors`, as the service) and
-  `MongoDb:SponsorBankAccountsCollection` (default `SponsorBankAccounts`);
-  Cosmos containers `Sponsors` and `CosmosDb:SponsorBankAccountsContainer`.
+- Run it with sponsor-service's own configuration (the same `MongoDb` and
+  `FieldProtection` settings and identity as the pods; sponsor-service is
+  MongoDB-only). Collections: `CosmosDb:ContainerName` (default `Sponsors`,
+  as the service) and `MongoDb:SponsorBankAccountsCollection` (default
+  `SponsorBankAccounts`). Without `MongoDb:ConnectionString` it exits 1.
 - Same options, output, exit codes and `MongoDb:UseTenantScoping` rule as the
   provider command. It never prints a number, and it only encrypts: it never
   approves or activates an account.
 - Idempotent and resumable: a sponsor document is changed only if its billing
-  account number is still the value read (Mongo; Cosmos: a patch of that one
-  field on the document's ETag). A bank-account record is saved through the
+  account number is still the value read. A bank-account record is saved through the
   service's own revision-checked save, which bumps its revision: a decision
   (approve, reject) racing the migration on the same record gets the
   service's usual conflict and is retried.

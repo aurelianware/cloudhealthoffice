@@ -8,6 +8,7 @@ using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using CloudHealthOffice.Testing.FhirService;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -368,6 +369,9 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
     {
+        // fhir-service requires MongoDB; these tests never touch it.
+        builder.UseUnreachableMongoWithInMemoryStores();
+
         builder.ConfigureServices(services =>
         {
             // Override JWT Bearer validation parameters via PostConfigure

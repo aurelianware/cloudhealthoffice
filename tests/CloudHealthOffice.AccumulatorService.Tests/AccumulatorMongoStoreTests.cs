@@ -14,8 +14,7 @@ namespace CloudHealthOffice.AccumulatorService.Tests;
 /// lease / release behaviour of <see cref="ProcessedClaimStoreMongo"/>,
 /// version-conditional snapshot writes, and the startup index initializer
 /// that de-duplicates reversal rows before creating the unique index (M7).
-/// (Cosmos has no local emulator in CI; its store mirrors these paths with
-/// ETag-conditional writes.)
+/// <see cref="AccumulatorMongoStoreGuardTests"/> covers the remaining store guards.
 /// </summary>
 [Collection(MongoRunnerFixture.CollectionName)]
 public sealed class AccumulatorMongoStoreTests(MongoRunnerFixture mongo) : IAsyncLifetime

@@ -34,7 +34,7 @@ namespace CloudHealthOffice.NcciEngine.Domain;
 public class NcciEditPair
 {
     /// <summary>
-    /// Unique document id (Cosmos / Mongo).
+    /// Unique document id.
     /// Stable key: "{TenantId}_{Col1}_{Col2}_{EffectiveDate:yyyyMMdd}"
     /// </summary>
     public string Id { get; set; } = string.Empty;

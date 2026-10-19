@@ -6,8 +6,7 @@ namespace AttachmentService.Services;
 /// Reads trading partner configuration for acknowledgment routing.
 /// <para>
 /// Split out of <see cref="AcknowledgmentService"/> so that acknowledgment generation stays
-/// provider-agnostic: the lookup is the only part that touches a database, and the service runs
-/// against MongoDB or Cosmos DB depending on which provider is configured.
+/// provider-agnostic: the lookup is the only part that touches another service's data.
 /// </para>
 /// </summary>
 public interface ITradingPartnerLookup

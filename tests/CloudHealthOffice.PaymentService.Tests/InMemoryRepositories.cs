@@ -293,7 +293,7 @@ public sealed class InMemoryReversalRunRepository : IReversalRunRepository
     public Task DeleteAsync(string id) { _items.RemoveAll(r => r.Id == id); return Task.CompletedTask; }
 }
 
-/// <summary>Insert-if-absent reservations, as the Mongo / Cosmos stores behave (duplicate key / 409).</summary>
+/// <summary>Insert-if-absent reservations, as the Mongo store behaves (duplicate key).</summary>
 public sealed class InMemoryClaimReservationRepository : IClaimReservationRepository
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ClaimReservation> _items = new();

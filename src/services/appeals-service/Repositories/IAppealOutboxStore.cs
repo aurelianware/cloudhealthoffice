@@ -5,10 +5,9 @@ namespace AppealsService.Repositories;
 /// <summary>
 /// Dispatcher-side access to the transactional outbox embedded in each
 /// appeal document (<see cref="Appeal.Outbox"/>). Implemented by each
-/// <see cref="IAppealRepository"/> over the same collection / container.
-/// Every update here touches only outbox and lease fields, so it never
-/// overwrites an appeal change (Mongo: targeted <c>$set</c>; Cosmos:
-/// ETag-pinned replace with re-read on 412).
+/// <see cref="IAppealRepository"/> over the same collection.
+/// Every update here touches only outbox and lease fields (a targeted
+/// <c>$set</c>), so it never overwrites an appeal change.
 ///
 /// Every per-entry write is conditioned on the caller still holding the
 /// lease, on the entry's server-generated <see cref="AppealOutboxMessage.Id"/>

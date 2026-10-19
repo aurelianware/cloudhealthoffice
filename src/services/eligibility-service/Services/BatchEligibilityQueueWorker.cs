@@ -50,7 +50,7 @@ public class BatchEligibilityQueueWorker : BackgroundService
         }
 
         // Opportunistic eviction: only meaningful for the in-memory store.
-        // No-op for Cosmos (TTL handles expiration).
+        // No-op for the Mongo store (its TTL index handles expiration).
         if (_services.GetService<IBatchJobStore>() is InMemoryBatchJobStore memStore)
         {
             var evicted = memStore.Evict();

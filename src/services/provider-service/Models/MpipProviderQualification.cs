@@ -4,9 +4,9 @@ using System.Text.Json.Serialization;
 namespace ProviderService.Models;
 
 /// <summary>
-/// Cosmos DB document tracking a provider's MPIP (Managed Medical Assistance
-/// Physician Incentive Program) qualification status for a given FL fiscal year.
-/// Partition key: <see cref="TenantId"/>.
+/// MongoDB document (<c>mpip_qualifications</c>) tracking a provider's MPIP
+/// (Managed Medical Assistance Physician Incentive Program) qualification
+/// status for a given FL fiscal year, scoped by <see cref="TenantId"/>.
 ///
 /// <para><b>FL SMMC 3.0 MPIP rules:</b></para>
 /// <list type="bullet">
@@ -19,13 +19,13 @@ namespace ProviderService.Models;
 public class MpipProviderQualification
 {
     /// <summary>
-    /// Unique document identifier (Cosmos DB document id).
+    /// Unique document identifier.
     /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation).
+    /// Owning tenant (every query is scoped by it).
     /// The server sets it from the caller's token on every write, so it is not
     /// required (and is ignored) in a request body.
     /// </summary>

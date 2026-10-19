@@ -4,7 +4,7 @@ namespace AttachmentService.Services;
 
 /// <summary>
 /// Pure EDI generation for 999 and 824 transactions.
-/// No infrastructure dependencies — testable without Cosmos.
+/// No infrastructure dependencies — testable without a database.
 /// </summary>
 public class AcknowledgmentGeneratorService
 {

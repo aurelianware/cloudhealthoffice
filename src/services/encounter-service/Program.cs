@@ -1,7 +1,5 @@
-using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
-using System.Text.Json.Serialization;
 using EncounterService;
 using EncounterService.Repositories;
 using EncounterService.Services;
@@ -40,43 +38,21 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultWritePermission = "encounters:write";
 });
 
-// Database Configuration
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+// Database — MongoDB is the only encounter store (ADR 006); the client is
+// registered by the shared lib.
+if (string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
-    builder.Services.AddScoped<IEncounterRepository, EncounterRepositoryMongo>();
-    Console.WriteLine("Using MongoDB database provider");
+    throw new InvalidOperationException(
+        "Encounter Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
+
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var config = sp.GetRequiredService<IConfiguration>();
-        var endpoint = config["CosmosDb:Endpoint"];
-        var key = config["CosmosDb:Key"];
-
-        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
-        {
-            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-        }
-
-        var serializerOptions = new System.Text.Json.JsonSerializerOptions
-        {
-            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            Converters = { new JsonStringEnumConverter() }
-        };
-        var options = new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer(serializerOptions)
-        };
-        return new CosmosClient(endpoint, key, options);
-    });
-
-    builder.Services.AddScoped<IEncounterRepository, EncounterRepository>();
+    throw new InvalidOperationException(
+        "Encounter Service supports MongoDB only. Remove Database:Provider or set it to MongoDb.");
 }
+
+builder.Services.AddScoped<IEncounterRepository, EncounterRepositoryMongo>();
 
 // 837 EDI generator
 builder.Services.AddScoped<IEncounter837Service, Encounter837Service>();
@@ -84,13 +60,10 @@ builder.Services.AddScoped<IEncounter837Service, Encounter837Service>();
 // HTTP context accessor (repositories read the token tenant from HttpContext.Items)
 builder.Services.AddHttpContextAccessor();
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 // No CORS: this service is called server-to-server only (the portal is

@@ -22,7 +22,7 @@ public sealed class AppealEventRepositoryMongo : IAppealEventRepository, IAppeal
 
     public async Task AppendAsync(AppealEvent evt, CancellationToken ct = default)
     {
-        AppealEventRepository.NormalizeEnvelope(evt);
+        NormalizeEnvelope(evt);
         try
         {
             await _collection.InsertOneAsync(evt, cancellationToken: ct);
@@ -31,6 +31,20 @@ public sealed class AppealEventRepositoryMongo : IAppealEventRepository, IAppeal
         {
             // Duplicate EventId — idempotent replay, drop silently.
         }
+    }
+
+    /// <summary>Validates the client-supplied envelope and fills its id and partition key.</summary>
+    internal static void NormalizeEnvelope(AppealEvent evt)
+    {
+        if (string.IsNullOrEmpty(evt.EventId))
+            throw new ArgumentException("EventId is required (client-supplied idempotency key)");
+        if (string.IsNullOrEmpty(evt.TenantId) || string.IsNullOrEmpty(evt.AppealId))
+            throw new ArgumentException("TenantId and AppealId are required");
+
+        if (string.IsNullOrEmpty(evt.Id))
+            evt.Id = evt.EventId;
+        if (string.IsNullOrEmpty(evt.PartitionKey))
+            evt.PartitionKey = AppealEvent.BuildPartitionKey(evt.TenantId, evt.AppealId);
     }
 
     public async Task<IReadOnlyList<AppealEvent>> ListByAppealAsync(

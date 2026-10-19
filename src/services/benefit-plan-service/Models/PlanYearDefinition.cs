@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace BenefitPlanService.Models;
 
@@ -33,6 +35,7 @@ public class PlanYearDefinition
     /// </summary>
     [Required]
     [JsonPropertyName("planYearStart")]
+    [BsonSerializer(typeof(UtcCalendarDateSerializer))]
     public DateTime PlanYearStart { get; set; }
 
     /// <summary>
@@ -43,6 +46,7 @@ public class PlanYearDefinition
     /// </summary>
     [Required]
     [JsonPropertyName("planYearEnd")]
+    [BsonSerializer(typeof(UtcCalendarDateSerializer))]
     public DateTime PlanYearEnd { get; set; }
 
     [Required]

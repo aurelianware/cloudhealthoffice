@@ -106,8 +106,7 @@ Two layers enforce this:
    under the request's `TenantId` — a foreign tenant's network 404s
    before the provider collection is touched.
 2. `IProviderRepository.ListNetworkRosterAsync` always passes
-   `TenantId = query.TenantId` into every backend query (Cosmos partition
-   key, Mongo filter equality).
+   `TenantId = query.TenantId` into every Mongo query (filter equality).
 
 ## Linkage: how a provider appears in a roster
 
@@ -136,7 +135,7 @@ written before 5.4 carry no link to the `Organization` chain.
 
 ### Nulls-last for `integrityScore`
 
-Cosmos and Mongo disagree on null sort order on descending. The
+Mongo sorts nulls first on a descending sort. The
 repository emits a deterministic backend-native order; the service then
 reorders the page-sized slice to push providers with no
 `IntegrityScore` to the tail. Implemented in
@@ -166,14 +165,10 @@ spurious empty round-trip when the total is exactly a multiple of
 ## Performance
 
 Target: **P95 < 400 ms** for standard pagination (100-row page,
-single-network filter, partition-scoped query).
+single-network filter, tenant-scoped query).
 
 Backing this:
 
-- Cosmos: queries are partition-scoped on `TenantId`. The
-  `EXISTS(... networkParticipations WHERE n.networkId = @networkId)`
-  pattern matches the existing `c.networkParticipations` array shape
-  used by `SearchAsync` and is multikey-covered.
 - Mongo: a new compound index
   `(TenantId, NetworkParticipations.NetworkId)` is provisioned by
   `ProviderRepositoryMongo.CreateIndexes()`. The common
@@ -223,7 +218,7 @@ For roster operators:
 endpoint returns `400 distance_sort_unsupported` when called.
 
 Reason: a meaningful "distance" sort needs a geospatial index on
-provider addresses (`Cosmos geospatial query` / `Mongo 2dsphere`). An
+provider addresses (Mongo `2dsphere`). An
 in-memory implementation that pulls a candidate window and sorts
 client-side has scaling limits (large networks won't fit the window)
 and correctness gaps (the ordering is wrong as soon as the window
@@ -234,7 +229,7 @@ Follow-up plan:
 1. Add `lat`/`lng` (or geocoded `nearZip`) on `NetworkRosterQuery`.
 2. Add a `GeoPoint` projection on `Provider` (lat/lng for the practice
    address), populated by the address-validation pipeline.
-3. Provision Cosmos geospatial index / Mongo 2dsphere on that field.
+3. Provision a Mongo 2dsphere index on that field.
 4. Extend `ListNetworkRosterAsync` to accept a geo predicate and emit a
    distance projection on each row (`DistanceMiles`).
 5. Lift the `400 distance_sort_unsupported` guard.
@@ -250,10 +245,6 @@ Mongo (added in this PR):
 (TenantId, NetworkParticipations.NetworkId, NetworkParticipations.NetworkTier)
 ```
 
-Cosmos: relies on the default container indexing policy (full indexing
-on all properties) plus partition-scoped queries. No new index
-provisioning required.
-
 ## Testing
 
 Coverage in `tests/CloudHealthOffice.ProviderService.Tests/Services`:
@@ -268,8 +259,7 @@ Coverage in `tests/CloudHealthOffice.ProviderService.Tests/Services`:
   `ResolveSort` table, nulls-last reordering helper.
 
 The in-memory `InMemoryProviderRepository` implements the same contract
-(`ListNetworkRosterAsync`) so tests run without spinning Cosmos or
-Mongo.
+(`ListNetworkRosterAsync`) so tests run without spinning up Mongo.
 
 ## Capability hand-off
 
