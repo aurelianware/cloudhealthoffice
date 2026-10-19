@@ -122,7 +122,7 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
 
         if (transmission is not null)
         {
-            await ApplyTransmissionAsync(stored, transmission, ct).ConfigureAwait(false);
+            transmission = await ApplyTransmissionAsync(stored, transmission, ct).ConfigureAwait(false);
         }
 
         var published = await PublishPendingAsync(stored, transmission, ct).ConfigureAwait(false);
@@ -185,10 +185,32 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             _ => null
         };
 
-    private async Task ApplyTransmissionAsync(
+    /// <summary>
+    /// Applies the 277CA to the transmission and saves it. A concurrent write
+    /// (another 277CA, a submit outcome) makes the save conflict; the 277CA is
+    /// then re-applied to a fresh copy through the state machine, so neither
+    /// write is lost and the status never moves backwards.
+    /// </summary>
+    /// <returns>The transmission as it now stands.</returns>
+    private async Task<ClaimTransmissionRecord> ApplyTransmissionAsync(
         ClaimAcknowledgmentRecord record,
         ClaimTransmissionRecord transmission,
         CancellationToken ct)
+    {
+        if (!Apply(record, transmission))
+        {
+            return transmission;
+        }
+
+        return await ClaimLifecycleWrites.SaveWithRetryAsync(
+            transmission,
+            t => _transmissions.SaveAsync(t, ct),
+            () => _transmissions.GetByTenantAndIdAsync(transmission.TenantId, transmission.TransmissionId, ct),
+            fresh => Apply(record, fresh),
+            _logger).ConfigureAwait(false);
+    }
+
+    private static bool Apply(ClaimAcknowledgmentRecord record, ClaimTransmissionRecord transmission)
     {
         var changed = false;
         if (string.IsNullOrWhiteSpace(transmission.PayerClaimControlNumber) &&
@@ -210,10 +232,7 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
             changed = true;
         }
 
-        if (changed)
-        {
-            await _transmissions.SaveAsync(transmission, ct).ConfigureAwait(false);
-        }
+        return changed;
     }
 
     private async Task<ClaimAcknowledgmentProcessResult> ReplayAsync(
@@ -228,7 +247,7 @@ public sealed class ClaimAcknowledgmentProcessor : IClaimAcknowledgmentProcessor
                 : await _transmissions.GetByTenantAndIdAsync(existing.TenantId, existing.TransmissionId, ct).ConfigureAwait(false);
             if (transmission is not null)
             {
-                await ApplyTransmissionAsync(existing, transmission, ct).ConfigureAwait(false);
+                transmission = await ApplyTransmissionAsync(existing, transmission, ct).ConfigureAwait(false);
             }
         }
 

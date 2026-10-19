@@ -52,6 +52,7 @@ public sealed class AttachmentServiceFactory : WebApplicationFactory<Attachments
     {
         Attachments.Items.Clear();
         Attachments.ThrowOnCreate = null;
+        Attachments.ThrowOnUpdate = null;
         Documents.Clear();
         TradingPartners.Reset();
         Parents.Reset();
@@ -112,6 +113,9 @@ public sealed class InMemoryAttachmentRepository : IAttachmentRepository
     /// <summary>When set, <see cref="CreateAsync"/> throws it.</summary>
     public Exception? ThrowOnCreate { get; set; }
 
+    /// <summary>When set, <see cref="UpdateAsync"/> throws it.</summary>
+    public Exception? ThrowOnUpdate { get; set; }
+
     public Attachment Seed(string tenantId, string? claimId = "CLM-1", string? id = null)
     {
         var attachment = new Attachment
@@ -154,6 +158,7 @@ public sealed class InMemoryAttachmentRepository : IAttachmentRepository
 
     public Task<Attachment> UpdateAsync(Attachment attachment)
     {
+        if (ThrowOnUpdate is { } ex) throw ex;
         Items[attachment.Id] = attachment;
         return Task.FromResult(attachment);
     }

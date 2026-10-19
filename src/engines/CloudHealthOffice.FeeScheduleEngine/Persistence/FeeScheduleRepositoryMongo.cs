@@ -2,6 +2,7 @@ using CloudHealthOffice.FeeScheduleEngine.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
+using System.Linq.Expressions;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Persistence;
 
@@ -87,8 +88,9 @@ public class FeeScheduleRepositoryMongo : IFeeScheduleRepository, IProviderContr
             Builders<FeeSchedule>.Filter.Eq(x => x.Id, schedule.Id),
             Builders<FeeSchedule>.Filter.Eq(x => x.TenantId, schedule.TenantId));
 
-        var options = new ReplaceOptions { IsUpsert = true };
-        await _scheduleCollection.ReplaceOneAsync(filter, schedule, options, ct);
+        await ConditionalUpsertAsync(
+            _scheduleCollection, filter, schedule, x => x.Revision, "Fee schedule", schedule.Id,
+            () => schedule.Revision, r => schedule.Revision = r, ct);
 
         _logger.LogDebug("Upserted fee schedule {Id}", schedule.Id);
         return schedule;
@@ -138,8 +140,9 @@ public class FeeScheduleRepositoryMongo : IFeeScheduleRepository, IProviderContr
             Builders<ProviderContract>.Filter.Eq(x => x.Id, contract.Id),
             Builders<ProviderContract>.Filter.Eq(x => x.TenantId, contract.TenantId));
 
-        var options = new ReplaceOptions { IsUpsert = true };
-        await _contractCollection.ReplaceOneAsync(filter, contract, options, ct);
+        await ConditionalUpsertAsync(
+            _contractCollection, filter, contract, x => x.Revision, "Provider contract", contract.Id,
+            () => contract.Revision, r => contract.Revision = r, ct);
 
         _logger.LogDebug("Upserted provider contract {Id}", contract.Id);
         return contract;
@@ -165,6 +168,53 @@ public class FeeScheduleRepositoryMongo : IFeeScheduleRepository, IProviderContr
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Create or replace, conditional on the revision the caller read
+    /// (<paramref name="getRevision"/>; 0 = create, and also matches documents
+    /// written before the field existed). Stores revision + 1. When the
+    /// document exists with another revision the filter does not match, the
+    /// upsert's insert hits the unique <c>_id</c>, and that duplicate key is
+    /// reported as <see cref="FeeScheduleConcurrencyException"/>: a stale
+    /// replace, or a create racing another create, never silently overwrites.
+    /// </summary>
+    private static async Task ConditionalUpsertAsync<T>(
+        IMongoCollection<T> collection,
+        FilterDefinition<T> idAndTenant,
+        T document,
+        Expression<Func<T, long>> revisionField,
+        string entity,
+        string id,
+        Func<long> getRevision,
+        Action<long> setRevision,
+        CancellationToken ct)
+    {
+        var expected = getRevision();
+        var b = Builders<T>.Filter;
+        var revisionIs = expected == 0
+            ? b.Or(b.Eq(revisionField, 0L), b.Exists(new ExpressionFieldDefinition<T>(revisionField), false))
+            : b.Eq(revisionField, expected);
+
+        setRevision(expected + 1);
+        try
+        {
+            await collection.ReplaceOneAsync(
+                idAndTenant & revisionIs, document, new ReplaceOptions { IsUpsert = true }, ct);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            setRevision(expected);
+            if (await collection.Find(idAndTenant).AnyAsync(ct))
+                throw new FeeScheduleConcurrencyException(entity, id, expected, ex);
+            // The id belongs to another tenant: as before, the duplicate key surfaces.
+            throw;
+        }
+        catch
+        {
+            setRevision(expected);
+            throw;
+        }
+    }
 
     private async Task<ProviderContract?> QueryContractAsync(
         string tenantId, string npiOrTin, string planId, DateTime serviceDate,

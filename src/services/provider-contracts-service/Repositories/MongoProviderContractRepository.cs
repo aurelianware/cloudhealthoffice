@@ -116,6 +116,7 @@ public class MongoProviderContractRepository : IProviderContractRepository
         contract.LastUpdatedAt = DateTime.UtcNow;
         contract.CreatedBy = _actor.UserId;
         contract.LastUpdatedBy = _actor.UserId;
+        contract.Revision = 0;
         await _collection.InsertOneAsync(contract);
         _logger.LogInformation("Created provider contract {ContractNumber} for provider {NPI}",
             SanitizeForLog(contract.ContractNumber), SanitizeForLog(contract.ProviderNPI));
@@ -133,9 +134,40 @@ public class MongoProviderContractRepository : IProviderContractRepository
         var filter = Builders<ProviderContract>.Filter.And(
             Builders<ProviderContract>.Filter.Eq(x => x.Id, contract.Id),
             Builders<ProviderContract>.Filter.Eq(x => x.TenantId, tenantId));
-        await _collection.ReplaceOneAsync(filter, contract);
+        // Conditional on the revision the caller read: of two concurrent writes
+        // (two amendments, an edit and a suspend/terminate) only one is
+        // written; the other conflicts instead of silently erasing it.
+        var expected = contract.Revision;
+        contract.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), contract);
+        }
+        catch
+        {
+            contract.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            contract.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new ProviderContractConcurrencyException(contract.Id, expected);
+            // Missing: as before, nothing written and no error.
+        }
         _logger.LogInformation("Updated provider contract {ContractNumber}", SanitizeForLog(contract.ContractNumber));
         return contract;
+    }
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<ProviderContract> RevisionIs(long expected)
+    {
+        var b = Builders<ProviderContract>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
     }
 
     private static string SanitizeForLog(string? value)

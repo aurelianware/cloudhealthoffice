@@ -147,14 +147,9 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
 
         var existing = await _transmissions.GetByIdempotencyKeyAsync(request.TenantId, key, ct)
             .ConfigureAwait(false);
-        if (existing is not null &&
-            GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(existing.Status))
+        if (existing is not null && NotToBeSent(existing, startedAt))
         {
-            var replay = ToResult(existing, replay: true);
-            var meta = ClaimMetadata(request, startedAt, GatewayTransactionStatus.Completed,
-                GatewayErrorCategory.None, Stopwatch.GetElapsedTime(timestamp), existing);
-            Log(meta);
-            return GatewayResponse<GatewayClaimSubmissionResult>.Success(replay, meta);
+            return ClaimReplay(request, existing, startedAt, timestamp);
         }
 
         var record = existing ?? new ClaimTransmissionRecord
@@ -176,26 +171,34 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
         };
         ClaimStatusRules.CaptureSource(record, request);
         record.Status = GatewayClaimTransmissionStatus.Transmitting;
+        record.TransmittingSinceUtc = startedAt;
         if (existing is null)
         {
             var (created, stored) = await _transmissions.TryCreateAsync(record, ct).ConfigureAwait(false);
             if (!created)
             {
-                if (GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(stored.Status))
+                // Lost the create race: the winner is sending it, or already has.
+                if (NotToBeSent(stored, startedAt))
                 {
-                    var replay = ToResult(stored, replay: true);
-                    var replayMeta = ClaimMetadata(request, startedAt, GatewayTransactionStatus.Completed,
-                        GatewayErrorCategory.None, Stopwatch.GetElapsedTime(timestamp), stored);
-                    Log(replayMeta);
-                    return GatewayResponse<GatewayClaimSubmissionResult>.Success(replay, replayMeta);
+                    return ClaimReplay(request, stored, startedAt, timestamp);
                 }
 
                 record = stored;
+                ClaimStatusRules.CaptureSource(record, request);
+                existing = stored;
             }
         }
-        else
+
+        if (existing is not null)
         {
-            await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+            // Retry of a failed or abandoned send: claim it first, so a
+            // concurrent retry of the same key sees it in flight.
+            var current = await ClaimLifecycleWrites.TryClaimSendAsync(_transmissions, record, startedAt, ct)
+                .ConfigureAwait(false);
+            if (current is not null)
+            {
+                return ClaimReplay(request, current, startedAt, timestamp);
+            }
         }
 
         var completed = _timeProvider.GetUtcNow();
@@ -204,7 +207,7 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
         record.SubmissionId = $"mock-{record.TransmissionId}";
         record.ExternalTransactionId = record.SubmissionId;
         record.ErrorCategory = GatewayErrorCategory.None;
-        await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+        await ClaimLifecycleWrites.SaveSubmitOutcomeAsync(_transmissions, record, _logger, ct).ConfigureAwait(false);
 
         var metadata = ClaimMetadata(request, startedAt, GatewayTransactionStatus.Completed,
             GatewayErrorCategory.None, Stopwatch.GetElapsedTime(timestamp), record);
@@ -337,6 +340,22 @@ public sealed class MockHealthcareGateway : IEligibilityGateway, IClaimSubmissio
             Stopwatch.GetElapsedTime(timestamp), record: null);
         Log(metadata);
         return GatewayResponse<GatewayClaimSubmissionResult>.Failure(message, metadata);
+    }
+
+    // Already accepted or answered, or another request is sending it now.
+    private static bool NotToBeSent(ClaimTransmissionRecord record, DateTimeOffset now) =>
+        GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(record.Status)
+        || ClaimLifecycleWrites.IsInFlight(record, now);
+
+    private GatewayResponse<GatewayClaimSubmissionResult> ClaimReplay(
+        GatewayClaimSubmissionRequest request, ClaimTransmissionRecord existing, DateTimeOffset startedAt, long timestamp)
+    {
+        var accepted = GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(existing.Status);
+        var meta = ClaimMetadata(request, startedAt,
+            accepted ? GatewayTransactionStatus.Completed : GatewayTransactionStatus.Submitted,
+            GatewayErrorCategory.None, Stopwatch.GetElapsedTime(timestamp), existing);
+        Log(meta);
+        return GatewayResponse<GatewayClaimSubmissionResult>.Success(ToResult(existing, replay: true), meta);
     }
 
     private static GatewayClaimSubmissionResult ToResult(ClaimTransmissionRecord record, bool replay) =>

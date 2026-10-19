@@ -215,10 +215,61 @@ public class ProviderRepositoryMongo : IProviderRepository
         {
             provider.Id = Guid.NewGuid().ToString();
         }
+        provider.Revision = 0;
 
         await _collection.InsertOneAsync(provider);
         return provider;
     }
+
+    private static FilterDefinition<Provider> RowIs(Provider provider) =>
+        Builders<Provider>.Filter.And(
+            Builders<Provider>.Filter.Eq(p => p.Id, provider.Id),
+            Builders<Provider>.Filter.Eq(p => p.TenantId, provider.TenantId));
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<Provider> RevisionIs(long expected)
+    {
+        var b = Builders<Provider>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(p => p.Revision, 0L), b.Exists(p => p.Revision, false))
+            : b.Eq(p => p.Revision, expected);
+    }
+
+    /// <summary>
+    /// The row has not left Draft: its stored state is still Draft, or it is a
+    /// legacy row with no stored state that <see cref="Hydrate"/> reads as a
+    /// Draft (status Pending). No looser than the callers' read-time guards;
+    /// the revision catches every transition in between, because each one
+    /// bumps it.
+    /// </summary>
+    private static FilterDefinition<Provider> IsDraft()
+    {
+        var b = Builders<Provider>.Filter;
+        return b.Or(
+            b.Eq(p => p.VersionState, ProviderVersionState.Draft),
+            b.And(b.Exists(p => p.VersionState, false), b.Eq(p => p.Status, ProviderStatus.Pending)));
+    }
+
+    /// <summary>
+    /// A conditional replace matched nothing: a conflict when the row still
+    /// exists (another write changed its revision or state), otherwise
+    /// <paramref name="notFound"/>.
+    /// </summary>
+    private async Task<Exception> NoMatchAsync(IClientSessionHandle? session, Provider provider, long expected, Func<Exception> notFound)
+    {
+        var exists = session == null
+            ? await _collection.Find(RowIs(provider)).AnyAsync()
+            : await _collection.Find(session, RowIs(provider)).AnyAsync();
+        return exists ? new ProviderConcurrencyException("Provider", provider.Id, expected) : notFound();
+    }
+
+    private static ProviderVersionStateException VersionNotFound(Provider provider) =>
+        new(provider.ProviderId, provider.VersionId, provider.VersionState, $"Version {provider.VersionId} not found") { IsNotFound = true };
+
+    /// <summary>A MongoDB write conflict: another transaction wrote the same document first.</summary>
+    private static bool IsWriteConflict(Exception ex) =>
+        ex is MongoCommandException { Code: 112 }
+        || ex is MongoWriteException { WriteError.Code: 112 };
 
     public async Task<Provider> UpdateAsync(Provider provider)
     {
@@ -247,15 +298,26 @@ public class ProviderRepositoryMongo : IProviderRepository
             }
         }
 
-        var filter = Builders<Provider>.Filter.And(
-            Builders<Provider>.Filter.Eq(p => p.Id, provider.Id),
-            Builders<Provider>.Filter.Eq(p => p.TenantId, provider.TenantId)
-        );
+        // Conditional on the row still being a Draft at the revision the
+        // caller read: an activation or another edit in between makes this one
+        // fail instead of overwriting the Active version or the other edit.
+        var expected = provider.Revision;
+        provider.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(RowIs(provider) & IsDraft() & RevisionIs(expected), provider);
+        }
+        catch
+        {
+            provider.Revision = expected;
+            throw;
+        }
 
-        var result = await _collection.ReplaceOneAsync(filter, provider);
         if (result.MatchedCount == 0)
         {
-             throw new Exception($"Provider {provider.Id} not found");
+            provider.Revision = expected;
+            throw await NoMatchAsync(null, provider, expected, () => new Exception($"Provider {provider.Id} not found"));
         }
 
         return provider;
@@ -493,6 +555,7 @@ public class ProviderRepositoryMongo : IProviderRepository
         if (string.IsNullOrEmpty(draft.ProviderId)) draft.ProviderId = draft.Id;
         draft.VersionState = ProviderVersionState.Draft;
         draft.LastUpdatedDate = DateTime.UtcNow;
+        draft.Revision = 0;
         await _collection.InsertOneAsync(draft);
         return draft;
     }
@@ -518,7 +581,29 @@ public class ProviderRepositoryMongo : IProviderRepository
         draft.LastUpdatedDate = DateTime.UtcNow;
         draft.VersionState = ProviderVersionState.Draft;
 
-        await _collection.ReplaceOneAsync(filter, draft);
+        // Conditional on the row still being a Draft at the revision the
+        // caller read: an edit that lands after the draft was activated (or
+        // after another edit) fails instead of turning the Active version back
+        // into a Draft or erasing the other edit.
+        var expected = draft.Revision;
+        draft.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & b.Eq(x => x.VersionState, ProviderVersionState.Draft) & RevisionIs(expected), draft);
+        }
+        catch
+        {
+            draft.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            draft.Revision = expected;
+            throw await NoMatchAsync(null, draft, expected, () => new ProviderVersionStateException(
+                draft.ProviderId, draft.VersionId, ProviderVersionState.Draft, $"Draft {draft.VersionId} not found") { IsNotFound = true });
+        }
         return draft;
     }
 
@@ -533,10 +618,37 @@ public class ProviderRepositoryMongo : IProviderRepository
         draftToActivate.LastUpdatedDate = DateTime.UtcNow;
         if (predecessor != null) predecessor.LastUpdatedDate = DateTime.UtcNow;
 
-        var activateFilter = Builders<Provider>.Filter.And(
-            Builders<Provider>.Filter.Eq(x => x.Id, draftToActivate.Id),
-            Builders<Provider>.Filter.Eq(x => x.TenantId, draftToActivate.TenantId));
+        // Each write is conditional on the state the service checked on its
+        // read (the draft is still a Draft, the predecessor not yet
+        // Superseded) and on the revision it read. Of two concurrent
+        // activations of the same draft, or of two drafts amending the same
+        // head, only one can match; the other fails with a conflict instead of
+        // both succeeding.
+        var draftExpected = draftToActivate.Revision;
+        var predExpected = predecessor?.Revision ?? 0;
+        var activateFilter = RowIs(draftToActivate) & IsDraft() & RevisionIs(draftExpected);
+        var predFilter = predecessor == null
+            ? null
+            : RowIs(predecessor) & Builders<Provider>.Filter.Ne(x => x.VersionState, ProviderVersionState.Superseded) & RevisionIs(predExpected);
 
+        draftToActivate.Revision = draftExpected + 1;
+        if (predecessor != null) predecessor.Revision = predExpected + 1;
+        try
+        {
+            return await ActivateAndSupersedeCoreAsync(draftToActivate, draftExpected, activateFilter, predecessor, predExpected, predFilter);
+        }
+        catch
+        {
+            draftToActivate.Revision = draftExpected;
+            if (predecessor != null) predecessor.Revision = predExpected;
+            throw;
+        }
+    }
+
+    private async Task<Provider> ActivateAndSupersedeCoreAsync(
+        Provider draftToActivate, long draftExpected, FilterDefinition<Provider> activateFilter,
+        Provider? predecessor, long predExpected, FilterDefinition<Provider>? predFilter)
+    {
         // Try a session transaction (replica set required); fall back to
         // sequential writes when the deployment is a single-node Mongo
         // instance — log a compensating-action warning so ops can spot it.
@@ -546,18 +658,25 @@ public class ProviderRepositoryMongo : IProviderRepository
             session.StartTransaction();
             try
             {
-                await _collection.ReplaceOneAsync(session, activateFilter, draftToActivate);
+                var activated = await _collection.ReplaceOneAsync(session, activateFilter, draftToActivate);
+                if (activated.MatchedCount == 0)
+                    throw await NoMatchAsync(session, draftToActivate, draftExpected, () => VersionNotFound(draftToActivate));
 
                 if (predecessor != null)
                 {
-                    var predFilter = Builders<Provider>.Filter.And(
-                        Builders<Provider>.Filter.Eq(x => x.Id, predecessor.Id),
-                        Builders<Provider>.Filter.Eq(x => x.TenantId, predecessor.TenantId));
-                    await _collection.ReplaceOneAsync(session, predFilter, predecessor);
+                    var superseded = await _collection.ReplaceOneAsync(session, predFilter!, predecessor);
+                    if (superseded.MatchedCount == 0)
+                        throw await NoMatchAsync(session, predecessor, predExpected, () => VersionNotFound(predecessor));
                 }
 
                 await session.CommitTransactionAsync();
                 return draftToActivate;
+            }
+            catch (Exception ex) when (IsWriteConflict(ex))
+            {
+                // Another transaction wrote one of the two rows first.
+                await session.AbortTransactionAsync();
+                throw new ProviderConcurrencyException("Provider", draftToActivate.Id, draftExpected, ex);
             }
             catch
             {
@@ -567,34 +686,58 @@ public class ProviderRepositoryMongo : IProviderRepository
         }
         catch (NotSupportedException)
         {
-            return await ActivateAndSupersedeWithoutTransactionAsync(draftToActivate, predecessor, activateFilter);
+            return await ActivateAndSupersedeWithoutTransactionAsync(draftToActivate, draftExpected, activateFilter, predecessor, predExpected, predFilter);
         }
         catch (MongoCommandException ex) when (
             ex.CodeName == "IllegalOperation" || ex.Code == 20 || ex.Code == 263)
         {
             // Mongo errors when transactions aren't supported on the deployment.
-            return await ActivateAndSupersedeWithoutTransactionAsync(draftToActivate, predecessor, activateFilter);
+            return await ActivateAndSupersedeWithoutTransactionAsync(draftToActivate, draftExpected, activateFilter, predecessor, predExpected, predFilter);
         }
     }
 
     private async Task<Provider> ActivateAndSupersedeWithoutTransactionAsync(
-        Provider draftToActivate,
-        Provider? predecessor,
-        FilterDefinition<Provider> activateFilter)
+        Provider draftToActivate, long draftExpected, FilterDefinition<Provider> activateFilter,
+        Provider? predecessor, long predExpected, FilterDefinition<Provider>? predFilter)
     {
         _logger.LogWarning(
             "Mongo deployment does not support transactions; activating provider {ProviderId} version {VersionId} non-atomically. " +
             "Operators must verify the predecessor was superseded after the call.",
             draftToActivate.Id, draftToActivate.VersionId);
 
-        await _collection.ReplaceOneAsync(activateFilter, draftToActivate);
-
-        if (predecessor != null)
+        if (predecessor == null)
         {
-            var predFilter = Builders<Provider>.Filter.And(
-                Builders<Provider>.Filter.Eq(x => x.Id, predecessor.Id),
-                Builders<Provider>.Filter.Eq(x => x.TenantId, predecessor.TenantId));
-            await _collection.ReplaceOneAsync(predFilter, predecessor);
+            var genesis = await _collection.ReplaceOneAsync(activateFilter, draftToActivate);
+            if (genesis.MatchedCount == 0)
+                throw await NoMatchAsync(null, draftToActivate, draftExpected, () => VersionNotFound(draftToActivate));
+            return draftToActivate;
+        }
+
+        // Without a transaction the predecessor is superseded first: its
+        // conditional write decides which of two concurrent activations wins,
+        // so the loser stops before writing anything and the chain never has
+        // two Active heads. The stored predecessor is kept so that, if the
+        // draft write then fails, the supersede can be put back.
+        var before = await _collection.Find(predFilter!).FirstOrDefaultAsync();
+        var superseded = before == null
+            ? null
+            : await _collection.ReplaceOneAsync(predFilter!, predecessor);
+        if (superseded == null || superseded.MatchedCount == 0)
+            throw await NoMatchAsync(null, predecessor, predExpected, () => VersionNotFound(predecessor));
+
+        var activated = await _collection.ReplaceOneAsync(activateFilter, draftToActivate);
+        if (activated.MatchedCount == 0)
+        {
+            before!.Revision = predExpected + 2;
+            var restored = await _collection.ReplaceOneAsync(
+                RowIs(predecessor) & RevisionIs(predExpected + 1), before);
+            if (restored.MatchedCount == 0)
+            {
+                _logger.LogError(
+                    "Activating provider {ProviderId} version {VersionId} failed after its predecessor {PredecessorVersionId} was superseded, and the predecessor could not be restored; the chain has no head until it is repaired.",
+                    draftToActivate.ProviderId, draftToActivate.VersionId, predecessor.VersionId);
+            }
+            throw await NoMatchAsync(null, draftToActivate, draftExpected, () => VersionNotFound(draftToActivate));
         }
 
         return draftToActivate;
@@ -603,10 +746,32 @@ public class ProviderRepositoryMongo : IProviderRepository
     public async Task<Provider> ReplaceVersionRowAsync(Provider version)
     {
         version.LastUpdatedDate = DateTime.UtcNow;
-        var filter = Builders<Provider>.Filter.And(
-            Builders<Provider>.Filter.Eq(x => x.Id, version.Id),
-            Builders<Provider>.Filter.Eq(x => x.TenantId, version.TenantId));
-        await _collection.ReplaceOneAsync(filter, version);
+
+        // Conditional on the revision the service read when it checked the
+        // row's state: a suspension or termination racing an activation that
+        // superseded the row (or another transition) fails instead of
+        // overwriting it. The expected state is not passed in, so the
+        // revision is the guard; every write to the row bumps it.
+        var expected = version.Revision;
+        version.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(RowIs(version) & RevisionIs(expected), version);
+        }
+        catch
+        {
+            version.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            version.Revision = expected;
+            // A missing row stays a silent no-op, as before.
+            if (await _collection.Find(RowIs(version)).AnyAsync())
+                throw new ProviderConcurrencyException("Provider", version.Id, expected);
+        }
         return version;
     }
 
@@ -661,7 +826,10 @@ public class ProviderRepositoryMongo : IProviderRepository
             .Set(p => p.IntegrityRating, integrityRating)
             .Set(p => p.LastVerifiedAt, lastVerifiedAt)
             .Set(p => p.NextVerificationDue, nextVerificationDue)
-            .Set(p => p.LastUpdatedDate, DateTime.UtcNow);
+            .Set(p => p.LastUpdatedDate, DateTime.UtcNow)
+            // Bumped: a replace based on an earlier read then conflicts
+            // instead of erasing the projection.
+            .Inc(p => p.Revision, 1L);
 
         // Sort by VersionNumber desc so amendments hit the latest head when
         // there are historical Superseded rows. Mongo's UpdateOneAsync with
@@ -711,7 +879,10 @@ public class ProviderRepositoryMongo : IProviderRepository
             .Set(p => p.CredentialingStatus, status)
             .Set(p => p.CredentialingDate, credentialingDate)
             .Set(p => p.RecredentialingDueDate, recredentialingDueDate)
-            .Set(p => p.LastUpdatedDate, DateTime.UtcNow);
+            .Set(p => p.LastUpdatedDate, DateTime.UtcNow)
+            // Bumped: a replace based on an earlier read then conflicts
+            // instead of erasing the credentialing decision.
+            .Inc(p => p.Revision, 1L);
 
         var options = new FindOneAndUpdateOptions<Provider>
         {
@@ -879,7 +1050,10 @@ public class ProviderRepositoryMongo : IProviderRepository
             .Set($"{prefix}.AcceptedLobs", fields.AcceptedLobs.ToList())
             .Set($"{prefix}.MinAcceptedAgeYears", fields.MinAcceptedAgeYears)
             .Set($"{prefix}.MaxAcceptedAgeYears", fields.MaxAcceptedAgeYears)
-            .Set(p => p.LastUpdatedDate, DateTime.UtcNow);
+            .Set(p => p.LastUpdatedDate, DateTime.UtcNow)
+            // Bumped: a replace based on an earlier read then conflicts
+            // instead of erasing the panel-gating defaults.
+            .Inc(p => p.Revision, 1L);
 
         // Sort by VersionNumber desc so amendments hit the latest head
         // when there are historical Superseded rows. FindOneAndUpdate

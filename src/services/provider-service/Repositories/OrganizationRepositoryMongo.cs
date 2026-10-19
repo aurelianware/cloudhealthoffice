@@ -208,9 +208,59 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
         if (string.IsNullOrEmpty(draft.OrganizationId)) draft.OrganizationId = draft.Id;
         draft.VersionState = OrganizationVersionState.Draft;
         draft.LastUpdatedDate = DateTime.UtcNow;
+        draft.Revision = 0;
         await _collection.InsertOneAsync(draft);
         return draft;
     }
+
+    private static FilterDefinition<Organization> RowIs(Organization org) =>
+        Builders<Organization>.Filter.And(
+            Builders<Organization>.Filter.Eq(o => o.Id, org.Id),
+            Builders<Organization>.Filter.Eq(o => o.TenantId, org.TenantId));
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<Organization> RevisionIs(long expected)
+    {
+        var b = Builders<Organization>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(o => o.Revision, 0L), b.Exists(o => o.Revision, false))
+            : b.Eq(o => o.Revision, expected);
+    }
+
+    /// <summary>
+    /// The row has not left Draft: its stored state is still Draft, or it is a
+    /// legacy row with no stored state that <see cref="Hydrate"/> reads as a
+    /// Draft (status Pending). The revision catches every transition in
+    /// between, because each one bumps it.
+    /// </summary>
+    private static FilterDefinition<Organization> IsDraft()
+    {
+        var b = Builders<Organization>.Filter;
+        return b.Or(
+            b.Eq(o => o.VersionState, OrganizationVersionState.Draft),
+            b.And(b.Exists(o => o.VersionState, false), b.Eq(o => o.Status, OrganizationStatus.Pending)));
+    }
+
+    /// <summary>
+    /// A conditional replace matched nothing: a conflict when the row still
+    /// exists (another write changed its revision or state), otherwise
+    /// <paramref name="notFound"/>.
+    /// </summary>
+    private async Task<Exception> NoMatchAsync(IClientSessionHandle? session, Organization org, long expected, Func<Exception> notFound)
+    {
+        var exists = session == null
+            ? await _collection.Find(RowIs(org)).AnyAsync()
+            : await _collection.Find(session, RowIs(org)).AnyAsync();
+        return exists ? new ProviderConcurrencyException("Organization", org.Id, expected) : notFound();
+    }
+
+    private static OrganizationVersionStateException VersionNotFound(Organization org) =>
+        new(org.OrganizationId, org.VersionId, org.VersionState, $"Version {org.VersionId} not found") { IsNotFound = true };
+
+    /// <summary>A MongoDB write conflict: another transaction wrote the same document first.</summary>
+    private static bool IsWriteConflict(Exception ex) =>
+        ex is MongoCommandException { Code: 112 }
+        || ex is MongoWriteException { WriteError.Code: 112 };
 
     public async Task<Organization> UpdateDraftAsync(Organization draft)
     {
@@ -233,7 +283,29 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
         draft.LastUpdatedDate = DateTime.UtcNow;
         draft.VersionState = OrganizationVersionState.Draft;
 
-        await _collection.ReplaceOneAsync(filter, draft);
+        // Conditional on the row still being a Draft at the revision the
+        // caller read: an edit that lands after the draft was activated (or
+        // after another edit) fails instead of turning the Active version back
+        // into a Draft or erasing the other edit.
+        var expected = draft.Revision;
+        draft.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & b.Eq(o => o.VersionState, OrganizationVersionState.Draft) & RevisionIs(expected), draft);
+        }
+        catch
+        {
+            draft.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            draft.Revision = expected;
+            throw await NoMatchAsync(null, draft, expected, () => new OrganizationVersionStateException(
+                draft.OrganizationId, draft.VersionId, OrganizationVersionState.Draft, $"Draft {draft.VersionId} not found") { IsNotFound = true });
+        }
         return draft;
     }
 
@@ -248,28 +320,62 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
         draftToActivate.LastUpdatedDate = DateTime.UtcNow;
         if (predecessor != null) predecessor.LastUpdatedDate = DateTime.UtcNow;
 
-        var activateFilter = Builders<Organization>.Filter.And(
-            Builders<Organization>.Filter.Eq(o => o.Id, draftToActivate.Id),
-            Builders<Organization>.Filter.Eq(o => o.TenantId, draftToActivate.TenantId));
+        // Each write is conditional on the state the service checked on its
+        // read (the draft is still a Draft, the predecessor not yet
+        // Superseded) and on the revision it read. Of two concurrent updates
+        // of the same organization (each a new draft superseding the same
+        // head) only one can match; the other fails with a conflict instead of
+        // both succeeding.
+        var draftExpected = draftToActivate.Revision;
+        var predExpected = predecessor?.Revision ?? 0;
+        var activateFilter = RowIs(draftToActivate) & IsDraft() & RevisionIs(draftExpected);
+        var predFilter = predecessor == null
+            ? null
+            : RowIs(predecessor) & Builders<Organization>.Filter.Ne(o => o.VersionState, OrganizationVersionState.Superseded) & RevisionIs(predExpected);
 
+        draftToActivate.Revision = draftExpected + 1;
+        if (predecessor != null) predecessor.Revision = predExpected + 1;
+        try
+        {
+            return await ActivateAndSupersedeCoreAsync(draftToActivate, draftExpected, activateFilter, predecessor, predExpected, predFilter);
+        }
+        catch
+        {
+            draftToActivate.Revision = draftExpected;
+            if (predecessor != null) predecessor.Revision = predExpected;
+            throw;
+        }
+    }
+
+    private async Task<Organization> ActivateAndSupersedeCoreAsync(
+        Organization draftToActivate, long draftExpected, FilterDefinition<Organization> activateFilter,
+        Organization? predecessor, long predExpected, FilterDefinition<Organization>? predFilter)
+    {
         try
         {
             using var session = await _database.Client.StartSessionAsync();
             session.StartTransaction();
             try
             {
-                await _collection.ReplaceOneAsync(session, activateFilter, draftToActivate);
+                var activated = await _collection.ReplaceOneAsync(session, activateFilter, draftToActivate);
+                if (activated.MatchedCount == 0)
+                    throw await NoMatchAsync(session, draftToActivate, draftExpected, () => VersionNotFound(draftToActivate));
 
                 if (predecessor != null)
                 {
-                    var predFilter = Builders<Organization>.Filter.And(
-                        Builders<Organization>.Filter.Eq(o => o.Id, predecessor.Id),
-                        Builders<Organization>.Filter.Eq(o => o.TenantId, predecessor.TenantId));
-                    await _collection.ReplaceOneAsync(session, predFilter, predecessor);
+                    var superseded = await _collection.ReplaceOneAsync(session, predFilter!, predecessor);
+                    if (superseded.MatchedCount == 0)
+                        throw await NoMatchAsync(session, predecessor, predExpected, () => VersionNotFound(predecessor));
                 }
 
                 await session.CommitTransactionAsync();
                 return draftToActivate;
+            }
+            catch (Exception ex) when (IsWriteConflict(ex))
+            {
+                // Another transaction wrote one of the two rows first.
+                await session.AbortTransactionAsync();
+                throw new ProviderConcurrencyException("Organization", draftToActivate.Id, draftExpected, ex);
             }
             catch
             {
@@ -279,32 +385,56 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
         }
         catch (NotSupportedException)
         {
-            return await ActivateAndSupersedeWithoutTransactionAsync(draftToActivate, predecessor, activateFilter);
+            return await ActivateAndSupersedeWithoutTransactionAsync(draftToActivate, draftExpected, activateFilter, predecessor, predExpected, predFilter);
         }
         catch (MongoCommandException ex) when (
             ex.CodeName == "IllegalOperation" || ex.Code == 20 || ex.Code == 263)
         {
-            return await ActivateAndSupersedeWithoutTransactionAsync(draftToActivate, predecessor, activateFilter);
+            return await ActivateAndSupersedeWithoutTransactionAsync(draftToActivate, draftExpected, activateFilter, predecessor, predExpected, predFilter);
         }
     }
 
     private async Task<Organization> ActivateAndSupersedeWithoutTransactionAsync(
-        Organization draftToActivate,
-        Organization? predecessor,
-        FilterDefinition<Organization> activateFilter)
+        Organization draftToActivate, long draftExpected, FilterDefinition<Organization> activateFilter,
+        Organization? predecessor, long predExpected, FilterDefinition<Organization>? predFilter)
     {
         _logger.LogWarning(
             "Mongo deployment does not support transactions; activating organization {OrgId} version {VersionId} non-atomically.",
             SanitizeForLog(draftToActivate.OrganizationId), SanitizeForLog(draftToActivate.VersionId));
 
-        await _collection.ReplaceOneAsync(activateFilter, draftToActivate);
-
-        if (predecessor != null)
+        if (predecessor == null)
         {
-            var predFilter = Builders<Organization>.Filter.And(
-                Builders<Organization>.Filter.Eq(o => o.Id, predecessor.Id),
-                Builders<Organization>.Filter.Eq(o => o.TenantId, predecessor.TenantId));
-            await _collection.ReplaceOneAsync(predFilter, predecessor);
+            var genesis = await _collection.ReplaceOneAsync(activateFilter, draftToActivate);
+            if (genesis.MatchedCount == 0)
+                throw await NoMatchAsync(null, draftToActivate, draftExpected, () => VersionNotFound(draftToActivate));
+            return draftToActivate;
+        }
+
+        // Without a transaction the predecessor is superseded first: its
+        // conditional write decides which of two concurrent updates wins, so
+        // the loser stops before activating its draft and the chain never has
+        // two Active heads. The stored predecessor is kept so that, if the
+        // draft write then fails, the supersede can be put back.
+        var before = await _collection.Find(predFilter!).FirstOrDefaultAsync();
+        var superseded = before == null
+            ? null
+            : await _collection.ReplaceOneAsync(predFilter!, predecessor);
+        if (superseded == null || superseded.MatchedCount == 0)
+            throw await NoMatchAsync(null, predecessor, predExpected, () => VersionNotFound(predecessor));
+
+        var activated = await _collection.ReplaceOneAsync(activateFilter, draftToActivate);
+        if (activated.MatchedCount == 0)
+        {
+            before!.Revision = predExpected + 2;
+            var restored = await _collection.ReplaceOneAsync(
+                RowIs(predecessor) & RevisionIs(predExpected + 1), before);
+            if (restored.MatchedCount == 0)
+            {
+                _logger.LogError(
+                    "Activating organization {OrgId} version {VersionId} failed after its predecessor {PredecessorVersionId} was superseded, and the predecessor could not be restored; the chain has no head until it is repaired.",
+                    SanitizeForLog(draftToActivate.OrganizationId), SanitizeForLog(draftToActivate.VersionId), SanitizeForLog(predecessor.VersionId));
+            }
+            throw await NoMatchAsync(null, draftToActivate, draftExpected, () => VersionNotFound(draftToActivate));
         }
 
         return draftToActivate;
@@ -319,10 +449,32 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
     public async Task<Organization> ReplaceVersionRowAsync(Organization version)
     {
         version.LastUpdatedDate = DateTime.UtcNow;
-        var filter = Builders<Organization>.Filter.And(
-            Builders<Organization>.Filter.Eq(o => o.Id, version.Id),
-            Builders<Organization>.Filter.Eq(o => o.TenantId, version.TenantId));
-        await _collection.ReplaceOneAsync(filter, version);
+
+        // Conditional on the revision the service read when it checked the
+        // row's state: a termination racing an update that superseded the row
+        // (or another transition) fails instead of overwriting it. The
+        // expected state is not passed in, so the revision is the guard; every
+        // write to the row bumps it.
+        var expected = version.Revision;
+        version.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(RowIs(version) & RevisionIs(expected), version);
+        }
+        catch
+        {
+            version.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            version.Revision = expected;
+            // A missing row stays a silent no-op, as before.
+            if (await _collection.Find(RowIs(version)).AnyAsync())
+                throw new ProviderConcurrencyException("Organization", version.Id, expected);
+        }
         return version;
     }
 

@@ -221,6 +221,16 @@ public class RemittanceBatch
     [StringLength(200)]
     public string? ProcessedBy { get; set; }
 
+    /// <summary>
+    /// Optimistic concurrency (Mongo): incremented on every write; saving a copy
+    /// read before another write (two uploads of the same payment, one resuming
+    /// it while the other is still applying it) throws
+    /// <see cref="RemittanceBatchConcurrencyException"/> instead of erasing that
+    /// write's applications or turning a Completed batch back to Processing.
+    /// Batches written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
     public static string CrossSourceKeyFor(string? checkNumber, string traceNumber, decimal amount, DateTime paymentDate) =>
         $"{(string.IsNullOrWhiteSpace(checkNumber) ? traceNumber : checkNumber).Trim().ToUpperInvariant()}|{amount:0.00}|{paymentDate:yyyyMMdd}";
 
@@ -231,6 +241,25 @@ public class RemittanceBatch
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(key));
         return $"rmt-{Convert.ToHexString(hash)[..32].ToLowerInvariant()}";
     }
+}
+
+/// <summary>
+/// A remittance batch write based on a stale read: another write changed the
+/// batch (its <see cref="RemittanceBatch.Revision"/>) since it was read. Nothing
+/// was written; 409 Conflict at the API boundary. The batch stays resumable: a
+/// later upload of the same payment continues from what was recorded.
+/// </summary>
+public sealed class RemittanceBatchConcurrencyException : CloudHealthOffice.Infrastructure.Data.ConcurrencyConflictException
+{
+    public RemittanceBatchConcurrencyException(string batchId, long expectedRevision)
+        : base($"Remittance batch {batchId} was changed by another write (expected revision {expectedRevision}); re-read it and retry.")
+    {
+        BatchId = batchId;
+        ExpectedRevision = expectedRevision;
+    }
+
+    public string BatchId { get; }
+    public long ExpectedRevision { get; }
 }
 
 public class BatchExceptionRef

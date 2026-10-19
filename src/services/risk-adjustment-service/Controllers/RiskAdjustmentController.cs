@@ -166,6 +166,10 @@ public class RiskAdjustmentController : ControllerBase
             score.Id = existing.Id;
             score.CreatedDate = existing.CreatedDate;
             score.CreatedBy = existing.CreatedBy;
+            // The body replaces the score as read just now: the write is
+            // conditional on that revision, so a concurrent recalculation or
+            // status change in between answers 409 instead of being erased.
+            score.Revision = existing.Revision;
             score.LastUpdatedBy = actor;
             score.LastUpdatedDate = DateTime.UtcNow;
 

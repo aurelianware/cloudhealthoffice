@@ -24,6 +24,7 @@ public sealed class RemittanceBatchRepositoryMongo : IRemittanceBatchRepository
     public async Task<bool> TryCreateAsync(RemittanceBatch batch)
     {
         batch.TenantId = RepositoryTenant.From(_http);
+        batch.Revision = 0;
         try
         {
             await _collection.InsertOneAsync(batch);
@@ -35,12 +36,44 @@ public sealed class RemittanceBatchRepositoryMongo : IRemittanceBatchRepository
         }
     }
 
+    /// <summary>Matches the revision a write was based on (batches saved before revisions existed count as 0).</summary>
+    private static FilterDefinition<RemittanceBatch> RevisionIs(long expected)
+    {
+        var b = Builders<RemittanceBatch>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
+    }
+
+    /// <summary>
+    /// Replaces the batch only if it is still at the revision it was read at;
+    /// <see cref="RemittanceBatchConcurrencyException"/> when another write came
+    /// first. A batch that does not exist is not written (as before).
+    /// </summary>
     public async Task<RemittanceBatch> UpdateAsync(RemittanceBatch batch)
     {
         var filter = Builders<RemittanceBatch>.Filter.And(
             Builders<RemittanceBatch>.Filter.Eq(x => x.Id, batch.Id),
             Builders<RemittanceBatch>.Filter.Eq(x => x.TenantId, batch.TenantId));
-        await _collection.ReplaceOneAsync(filter, batch);
+        var expected = batch.Revision;
+        batch.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), batch);
+        }
+        catch
+        {
+            batch.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            batch.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new RemittanceBatchConcurrencyException(batch.Id, expected);
+        }
         return batch;
     }
 

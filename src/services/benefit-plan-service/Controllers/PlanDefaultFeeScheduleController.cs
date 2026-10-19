@@ -108,6 +108,10 @@ public sealed class PlanDefaultFeeScheduleController : ControllerBase
             EffectiveDate = DateTime.SpecifyKind(request.EffectiveDate!.Value.Date, DateTimeKind.Utc),
             TermDate = request.TermDate is { } term ? DateTime.SpecifyKind(term.Date, DateTimeKind.Utc) : null,
             CreatedDate = existing?.CreatedDate ?? DateTime.UtcNow,
+            // Replaces the schedule as read just now (0 = create): a concurrent
+            // PUT in between, or a create racing another create, answers 409
+            // instead of being silently overwritten.
+            Revision = existing?.Revision ?? 0,
             Lines = request.Lines!.Select(l => new FeeScheduleLine
             {
                 ProcedureCode = l.ProcedureCode?.Trim() ?? string.Empty,

@@ -15,6 +15,17 @@ public class BenefitPlan
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision of the MongoDB document, bumped by every
+    /// write. A whole-document replace (an edit, a publish, a supersede, a
+    /// termination) succeeds only while the stored revision is still the one it
+    /// read, so of two concurrent transitions only one wins and a stale write
+    /// cannot undo a newer one. Documents written before the field existed read
+    /// as 0.
+    /// </summary>
+    [JsonPropertyName("revision")]
+    public long Revision { get; set; }
+
+    /// <summary>
     /// Tenant ID for multi-tenant isolation (partition key)
     /// </summary>
     [Required]

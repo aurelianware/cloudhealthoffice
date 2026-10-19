@@ -173,6 +173,7 @@ public class EncounterRepositoryMongo : IEncounterRepository
     public async Task<Encounter> CreateAsync(Encounter encounter)
     {
         encounter.TenantId = GetTenantId();
+        encounter.Revision = 0;
         await _collection.InsertOneAsync(encounter);
         return encounter;
     }
@@ -184,8 +185,39 @@ public class EncounterRepositoryMongo : IEncounterRepository
         var filter = Builders<Encounter>.Filter.And(
             Builders<Encounter>.Filter.Eq(e => e.Id, encounter.Id),
             Builders<Encounter>.Filter.Eq(e => e.TenantId, tenantId));
-        await _collection.ReplaceOneAsync(filter, encounter);
+        // Conditional on the revision the caller read: of two concurrent writes
+        // (a status update and a void, two batch dispatches) only one is
+        // written; the other conflicts instead of silently erasing it.
+        var expected = encounter.Revision;
+        encounter.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), encounter);
+        }
+        catch
+        {
+            encounter.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            encounter.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new EncounterConcurrencyException(encounter.Id, expected);
+            // Missing: as before, nothing written and no error.
+        }
         return encounter;
+    }
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<Encounter> RevisionIs(long expected)
+    {
+        var b = Builders<Encounter>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(e => e.Revision, 0L), b.Exists(e => e.Revision, false))
+            : b.Eq(e => e.Revision, expected);
     }
 
     public async Task DeleteAsync(string id)

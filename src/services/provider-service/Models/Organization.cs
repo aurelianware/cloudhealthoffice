@@ -39,6 +39,15 @@ public class Organization
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision of the MongoDB document, bumped by every
+    /// write. A whole-document replace (a draft edit, an activation, a
+    /// supersede, a termination) succeeds only while the stored revision is
+    /// still the one it read, so of two concurrent transitions only one wins.
+    /// Documents written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// Stable chain key — the persistent network identifier preserved
     /// across every version row. For genesis rows <c>OrganizationId == Id</c>;
     /// amend versions share the same <c>OrganizationId</c> with a new per-row

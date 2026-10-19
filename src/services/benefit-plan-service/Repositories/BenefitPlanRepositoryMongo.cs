@@ -156,9 +156,68 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
     public async Task<BenefitPlan> CreateAsync(BenefitPlan plan)
     {
         plan.Id ??= Guid.NewGuid().ToString();
+        plan.Revision = 0;
         await _collection.InsertOneAsync(plan);
         return plan;
     }
+
+    private static FilterDefinition<BenefitPlan> RowIs(BenefitPlan plan) =>
+        Builders<BenefitPlan>.Filter.And(
+            Builders<BenefitPlan>.Filter.Eq(x => x.Id, plan.Id),
+            Builders<BenefitPlan>.Filter.Eq(x => x.TenantId, plan.TenantId));
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<BenefitPlan> RevisionIs(long expected)
+    {
+        var b = Builders<BenefitPlan>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
+    }
+
+    /// <summary>
+    /// The row is still a real Draft (a Draft-valued row without a
+    /// <c>VersionId</c> is a legacy row that <see cref="Hydrate"/> reads as
+    /// Published).
+    /// </summary>
+    private static FilterDefinition<BenefitPlan> IsDraft()
+    {
+        var b = Builders<BenefitPlan>.Filter;
+        return b.And(
+            b.Eq(x => x.VersionState, PlanVersionState.Draft),
+            b.Nin(x => x.VersionId, new string?[] { null, string.Empty }));
+    }
+
+    /// <summary>The row is still Published, including legacy rows that <see cref="Hydrate"/> reads as Published.</summary>
+    private static FilterDefinition<BenefitPlan> IsPublished()
+    {
+        var b = Builders<BenefitPlan>.Filter;
+        return b.Or(
+            b.Eq(x => x.VersionState, PlanVersionState.Published),
+            b.Exists(x => x.VersionState, false),
+            b.In(x => x.VersionId, new string?[] { null, string.Empty }));
+    }
+
+    /// <summary>
+    /// A conditional replace matched nothing: a conflict when the row still
+    /// exists (another write changed its revision or state), otherwise
+    /// <paramref name="notFound"/>.
+    /// </summary>
+    private async Task<Exception> NoMatchAsync(IClientSessionHandle? session, BenefitPlan plan, long expected, Func<Exception> notFound)
+    {
+        var exists = session == null
+            ? await _collection.Find(RowIs(plan)).AnyAsync()
+            : await _collection.Find(session, RowIs(plan)).AnyAsync();
+        return exists ? new BenefitPlanConcurrencyException(plan.Id, expected) : notFound();
+    }
+
+    private static PlanVersionStateException VersionNotFound(BenefitPlan plan) =>
+        new(plan.PlanId, plan.VersionId, plan.VersionState, $"Version {plan.VersionId} not found") { IsNotFound = true };
+
+    /// <summary>A MongoDB write conflict: another transaction wrote the same document first.</summary>
+    private static bool IsWriteConflict(Exception ex) =>
+        ex is MongoCommandException { Code: 112 }
+        || ex is MongoWriteException { WriteError.Code: 112 };
 
     public async Task<BenefitPlan> UpdateAsync(BenefitPlan plan)
     {
@@ -176,11 +235,30 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
                 $"Plan version {existing.VersionId} is Superseded and is read-only.");
         }
 
-        var filter = Builders<BenefitPlan>.Filter.And(
-            Builders<BenefitPlan>.Filter.Eq(x => x.Id, plan.Id),
-            Builders<BenefitPlan>.Filter.Eq(x => x.TenantId, plan.TenantId)
-        );
-        await _collection.ReplaceOneAsync(filter, plan);
+        // Conditional on the state the guard above approved (only a Draft gets
+        // here) and on the revision the caller read: a publish or another edit
+        // in between makes this one fail instead of overwriting a Published
+        // version or the other edit.
+        var expected = plan.Revision;
+        plan.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(RowIs(plan) & IsDraft() & RevisionIs(expected), plan);
+        }
+        catch
+        {
+            plan.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            plan.Revision = expected;
+            // A missing row stays a silent no-op, as before.
+            if (await _collection.Find(RowIs(plan)).AnyAsync())
+                throw new BenefitPlanConcurrencyException(plan.Id, expected);
+        }
         return plan;
     }
 
@@ -199,6 +277,7 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
         draft.VersionState = PlanVersionState.Draft;
         draft.CreatedDate = DateTime.UtcNow;
         draft.ModifiedDate = DateTime.UtcNow;
+        draft.Revision = 0;
         await _collection.InsertOneAsync(draft);
         return draft;
     }
@@ -219,10 +298,29 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
         draft.ModifiedDate = DateTime.UtcNow;
         draft.VersionState = PlanVersionState.Draft;
 
-        var filter = Builders<BenefitPlan>.Filter.And(
-            Builders<BenefitPlan>.Filter.Eq(x => x.Id, draft.Id),
-            Builders<BenefitPlan>.Filter.Eq(x => x.TenantId, draft.TenantId));
-        await _collection.ReplaceOneAsync(filter, draft);
+        // Conditional on the row still being a Draft at the revision the
+        // caller read: an edit that lands after the draft was published (or
+        // after another edit) fails instead of turning the Published version
+        // back into a Draft or erasing the other edit.
+        var expected = draft.Revision;
+        draft.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(RowIs(draft) & IsDraft() & RevisionIs(expected), draft);
+        }
+        catch
+        {
+            draft.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            draft.Revision = expected;
+            throw await NoMatchAsync(null, draft, expected, () => new PlanVersionStateException(
+                draft.PlanId, draft.VersionId, PlanVersionState.Draft, $"Draft {draft.VersionId} not found") { IsNotFound = true });
+        }
         return draft;
     }
 
@@ -237,10 +335,35 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
         draftToPublish.ModifiedDate = DateTime.UtcNow;
         if (predecessor != null) predecessor.ModifiedDate = DateTime.UtcNow;
 
-        var publishFilter = Builders<BenefitPlan>.Filter.And(
-            Builders<BenefitPlan>.Filter.Eq(x => x.Id, draftToPublish.Id),
-            Builders<BenefitPlan>.Filter.Eq(x => x.TenantId, draftToPublish.TenantId));
+        // Each write is conditional on the state the service checked on its
+        // read (the draft is still a Draft, the predecessor still Published)
+        // and on the revision it read. Of two concurrent publishes of the same
+        // draft, or of two drafts amending the same Published version, only one
+        // can match; the other fails with a conflict instead of both
+        // succeeding.
+        var draftExpected = draftToPublish.Revision;
+        var predExpected = predecessor?.Revision ?? 0;
+        var publishFilter = RowIs(draftToPublish) & IsDraft() & RevisionIs(draftExpected);
+        var predFilter = predecessor == null ? null : RowIs(predecessor) & IsPublished() & RevisionIs(predExpected);
 
+        draftToPublish.Revision = draftExpected + 1;
+        if (predecessor != null) predecessor.Revision = predExpected + 1;
+        try
+        {
+            return await PublishAndSupersedeCoreAsync(draftToPublish, draftExpected, publishFilter, predecessor, predExpected, predFilter);
+        }
+        catch
+        {
+            draftToPublish.Revision = draftExpected;
+            if (predecessor != null) predecessor.Revision = predExpected;
+            throw;
+        }
+    }
+
+    private async Task<BenefitPlan> PublishAndSupersedeCoreAsync(
+        BenefitPlan draftToPublish, long draftExpected, FilterDefinition<BenefitPlan> publishFilter,
+        BenefitPlan? predecessor, long predExpected, FilterDefinition<BenefitPlan>? predFilter)
+    {
         // Try a session transaction (replica set required); fall back to
         // sequential writes when the deployment is a single-node Mongo
         // instance — log a compensating-action warning so ops can spot it.
@@ -250,18 +373,25 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
             session.StartTransaction();
             try
             {
-                await _collection.ReplaceOneAsync(session, publishFilter, draftToPublish);
+                var published = await _collection.ReplaceOneAsync(session, publishFilter, draftToPublish);
+                if (published.MatchedCount == 0)
+                    throw await NoMatchAsync(session, draftToPublish, draftExpected, () => VersionNotFound(draftToPublish));
 
                 if (predecessor != null)
                 {
-                    var predFilter = Builders<BenefitPlan>.Filter.And(
-                        Builders<BenefitPlan>.Filter.Eq(x => x.Id, predecessor.Id),
-                        Builders<BenefitPlan>.Filter.Eq(x => x.TenantId, predecessor.TenantId));
-                    await _collection.ReplaceOneAsync(session, predFilter, predecessor);
+                    var superseded = await _collection.ReplaceOneAsync(session, predFilter!, predecessor);
+                    if (superseded.MatchedCount == 0)
+                        throw await NoMatchAsync(session, predecessor, predExpected, () => VersionNotFound(predecessor));
                 }
 
                 await session.CommitTransactionAsync();
                 return draftToPublish;
+            }
+            catch (Exception ex) when (IsWriteConflict(ex))
+            {
+                // Another transaction wrote one of the two rows first.
+                await session.AbortTransactionAsync();
+                throw new BenefitPlanConcurrencyException(draftToPublish.Id, draftExpected, ex);
             }
             catch
             {
@@ -271,34 +401,58 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
         }
         catch (NotSupportedException)
         {
-            return await PublishAndSupersedeWithoutTransactionAsync(draftToPublish, predecessor, publishFilter);
+            return await PublishAndSupersedeWithoutTransactionAsync(draftToPublish, draftExpected, publishFilter, predecessor, predExpected, predFilter);
         }
         catch (MongoCommandException ex) when (
             ex.CodeName == "IllegalOperation" || ex.Code == 20 || ex.Code == 263)
         {
             // Mongo errors when transactions aren't supported on the deployment.
-            return await PublishAndSupersedeWithoutTransactionAsync(draftToPublish, predecessor, publishFilter);
+            return await PublishAndSupersedeWithoutTransactionAsync(draftToPublish, draftExpected, publishFilter, predecessor, predExpected, predFilter);
         }
     }
 
     private async Task<BenefitPlan> PublishAndSupersedeWithoutTransactionAsync(
-        BenefitPlan draftToPublish,
-        BenefitPlan? predecessor,
-        FilterDefinition<BenefitPlan> publishFilter)
+        BenefitPlan draftToPublish, long draftExpected, FilterDefinition<BenefitPlan> publishFilter,
+        BenefitPlan? predecessor, long predExpected, FilterDefinition<BenefitPlan>? predFilter)
     {
         _logger.LogWarning(
             "Mongo deployment does not support transactions; publishing plan {PlanId} version {VersionId} non-atomically. " +
             "Operators must verify the predecessor was superseded after the call.",
             draftToPublish.PlanId, draftToPublish.VersionId);
 
-        await _collection.ReplaceOneAsync(publishFilter, draftToPublish);
-
-        if (predecessor != null)
+        if (predecessor == null)
         {
-            var predFilter = Builders<BenefitPlan>.Filter.And(
-                Builders<BenefitPlan>.Filter.Eq(x => x.Id, predecessor.Id),
-                Builders<BenefitPlan>.Filter.Eq(x => x.TenantId, predecessor.TenantId));
-            await _collection.ReplaceOneAsync(predFilter, predecessor);
+            var genesis = await _collection.ReplaceOneAsync(publishFilter, draftToPublish);
+            if (genesis.MatchedCount == 0)
+                throw await NoMatchAsync(null, draftToPublish, draftExpected, () => VersionNotFound(draftToPublish));
+            return draftToPublish;
+        }
+
+        // Without a transaction the predecessor is superseded first: its
+        // conditional write decides which of two concurrent publishes wins, so
+        // the loser stops before writing anything and the chain never has two
+        // Published heads. The stored predecessor is kept so that, if the
+        // draft write then fails, the supersede can be put back.
+        var before = await _collection.Find(predFilter!).FirstOrDefaultAsync();
+        var superseded = before == null
+            ? null
+            : await _collection.ReplaceOneAsync(predFilter!, predecessor);
+        if (superseded == null || superseded.MatchedCount == 0)
+            throw await NoMatchAsync(null, predecessor, predExpected, () => VersionNotFound(predecessor));
+
+        var published = await _collection.ReplaceOneAsync(publishFilter, draftToPublish);
+        if (published.MatchedCount == 0)
+        {
+            before!.Revision = predExpected + 2;
+            var restored = await _collection.ReplaceOneAsync(
+                RowIs(predecessor) & RevisionIs(predExpected + 1), before);
+            if (restored.MatchedCount == 0)
+            {
+                _logger.LogError(
+                    "Publishing plan {PlanId} version {VersionId} failed after its predecessor {PredecessorVersionId} was superseded, and the predecessor could not be restored; the plan has no Published version until it is repaired.",
+                    draftToPublish.PlanId, draftToPublish.VersionId, predecessor.VersionId);
+            }
+            throw await NoMatchAsync(null, draftToPublish, draftExpected, () => VersionNotFound(draftToPublish));
         }
 
         return draftToPublish;
@@ -335,7 +489,10 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
 
         var update = Builders<BenefitPlan>.Update
             .Set(x => x.NetworkTiers, tiers.ToList())
-            .Set(x => x.ModifiedDate, DateTime.UtcNow);
+            .Set(x => x.ModifiedDate, DateTime.UtcNow)
+            // Bumped: a supersede or termination based on a read from before
+            // the backfill then conflicts instead of erasing the new tiers.
+            .Inc(x => x.Revision, 1L);
 
         var options = new FindOneAndUpdateOptions<BenefitPlan>
         {
@@ -355,11 +512,33 @@ public class BenefitPlanRepositoryMongo : IBenefitPlanRepository
         }
 
         version.ModifiedDate = DateTime.UtcNow;
-        var filter = Builders<BenefitPlan>.Filter.And(
-            Builders<BenefitPlan>.Filter.Eq(x => x.Id, version.Id),
-            Builders<BenefitPlan>.Filter.Eq(x => x.TenantId, version.TenantId));
-        var result = await _collection.ReplaceOneAsync(filter, version);
-        return result.MatchedCount > 0;
+
+        // Conditional on the row still being Published at the revision the
+        // service read: a termination racing a publish that superseded the
+        // same version (or another termination) fails instead of overwriting
+        // the supersede.
+        var expected = version.Revision;
+        version.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(RowIs(version) & IsPublished() & RevisionIs(expected), version);
+        }
+        catch
+        {
+            version.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            version.Revision = expected;
+            // A missing row is still "not found" (false), not a conflict.
+            if (await _collection.Find(RowIs(version)).AnyAsync())
+                throw new BenefitPlanConcurrencyException(version.Id, expected);
+            return false;
+        }
+        return true;
     }
 
     private static BenefitPlan Hydrate(BenefitPlan plan)

@@ -220,16 +220,74 @@ internal sealed class MongoClaimLifecycleStore :
         string tenantId, string claimId, CancellationToken ct = default) =>
         FindTransmissionsAsync(d => d.TenantId == tenantId && d.Payload.ClaimId == claimId, ct);
 
+    /// <summary>
+    /// Conditional on the revision the record was read with: a 277CA, a
+    /// submit outcome or another replica that wrote in between makes this one
+    /// throw <see cref="ClaimLifecycleConcurrencyException"/> instead of
+    /// silently undoing it. A transmission that does not exist yet is created.
+    /// </summary>
     public Task SaveAsync(ClaimTransmissionRecord record, CancellationToken ct = default) =>
-        _transmissions.ReplaceOneAsync(
-            d => d.Id == record.TransmissionId,
-            ClaimTransmissionDocument.FromModel(record),
-            new ReplaceOptions { IsUpsert = true },
-            ct);
+        SaveConditionalAsync(
+            _transmissions, "Claim transmission", record.TransmissionId, record.TenantId, record.Revision,
+            () => ClaimTransmissionDocument.FromModel(record), r => record.Revision = r, ct);
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<TDoc> RevisionIs<TDoc>(long expected)
+    {
+        var b = Builders<TDoc>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq("Revision", 0L), b.Exists("Revision", false))
+            : b.Eq("Revision", expected);
+    }
+
+    /// <summary>
+    /// Replace (or create) <c>{ _id, TenantId, Revision: expected }</c> with
+    /// revision <c>expected + 1</c>. The upsert keeps the old create-if-missing
+    /// behaviour; when the document exists with another revision the upsert's
+    /// insert collides on <c>_id</c>, which is the conflict.
+    /// </summary>
+    private static async Task SaveConditionalAsync<TDoc>(
+        IMongoCollection<TDoc> collection,
+        string kind,
+        string id,
+        string tenantId,
+        long expected,
+        Func<TDoc> build,
+        Action<long> setRevision,
+        CancellationToken ct)
+    {
+        var b = Builders<TDoc>.Filter;
+        var byId = b.Eq("_id", id);
+        setRevision(expected + 1);
+        try
+        {
+            await collection.ReplaceOneAsync(
+                byId & b.Eq("TenantId", tenantId) & RevisionIs<TDoc>(expected),
+                build(),
+                new ReplaceOptions { IsUpsert = true },
+                ct).ConfigureAwait(false);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            setRevision(expected);
+            if (await collection.Find(byId).AnyAsync(ct).ConfigureAwait(false))
+            {
+                throw new ClaimLifecycleConcurrencyException(kind, id, expected, ex);
+            }
+
+            throw;
+        }
+        catch
+        {
+            setRevision(expected);
+            throw;
+        }
+    }
 
     public async Task<(bool Created, ClaimTransmissionRecord Record)> TryCreateAsync(
         ClaimTransmissionRecord record, CancellationToken ct = default)
     {
+        record.Revision = 0;
         try
         {
             await _transmissions
@@ -445,16 +503,16 @@ internal sealed class MongoClaimLifecycleStore :
         return docs.Select(d => d.ToModel()).ToList();
     }
 
+    /// <summary>Conditional on the revision the receipt was read with (see the transmission save).</summary>
     public Task SaveAsync(InboundClaimAttachmentReceipt record, CancellationToken ct = default) =>
-        _inboundAttachments.ReplaceOneAsync(
-            d => d.Id == record.ReceiptId,
-            InboundClaimAttachmentReceiptDocument.FromModel(record),
-            new ReplaceOptions { IsUpsert = true },
-            ct);
+        SaveConditionalAsync(
+            _inboundAttachments, "Inbound claim attachment receipt", record.ReceiptId, record.TenantId, record.Revision,
+            () => InboundClaimAttachmentReceiptDocument.FromModel(record), r => record.Revision = r, ct);
 
     public async Task<(bool Created, InboundClaimAttachmentReceipt Record)> TryCreateAsync(
         InboundClaimAttachmentReceipt record, CancellationToken ct = default)
     {
+        record.Revision = 0;
         try
         {
             await _inboundAttachments
@@ -551,7 +609,7 @@ internal sealed class MongoClaimLifecycleStore :
         var key = $"{gateway}|{remittanceId}";
         var doc = await _remittances.Find(d => d.IdempotencyKey == key)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        return doc?.Payload;
+        return doc?.ToModel();
     }
 
     async Task<RemittanceReceipt?> IRemittanceStore.GetByEventIdAsync(
@@ -565,14 +623,14 @@ internal sealed class MongoClaimLifecycleStore :
         var key = $"{gateway}|{eventId}";
         var doc = await _remittances.Find(d => d.EventKey == key)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        return doc?.Payload;
+        return doc?.ToModel();
     }
 
     async Task<RemittanceReceipt?> IRemittanceStore.GetByIdAsync(string receiptId, CancellationToken ct)
     {
         var doc = await _remittances.Find(d => d.Id == receiptId)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        return doc?.Payload;
+        return doc?.ToModel();
     }
 
     async Task<IReadOnlyList<RemittanceReceipt>> IRemittanceStore.ListByTransmissionIdAsync(
@@ -580,7 +638,7 @@ internal sealed class MongoClaimLifecycleStore :
     {
         var docs = await _remittances.Find(d => d.TransmissionIds.Contains(transmissionId))
             .ToListAsync(ct).ConfigureAwait(false);
-        return docs.Select(d => d.Payload).ToList();
+        return docs.Select(d => d.ToModel()).ToList();
     }
 
     public async Task<IReadOnlyList<RemittanceReceipt>> ListByTenantAsync(
@@ -592,19 +650,23 @@ internal sealed class MongoClaimLifecycleStore :
             .SortByDescending(d => d.Payload.ReceivedAtUtc)
             .Limit(limit)
             .ToListAsync(ct).ConfigureAwait(false);
-        return docs.Select(d => d.Payload).ToList();
+        return docs.Select(d => d.ToModel()).ToList();
     }
 
+    /// <summary>
+    /// Conditional on the revision the receipt was read with (see the
+    /// transmission save): a dispatcher replay from a stale read can no longer
+    /// undo a post, and a post can no longer drop published outbox markers.
+    /// </summary>
     public Task SaveAsync(RemittanceReceipt record, CancellationToken ct = default) =>
-        _remittances.ReplaceOneAsync(
-            d => d.Id == record.ReceiptId,
-            RemittanceReceiptDocument.FromModel(record),
-            new ReplaceOptions { IsUpsert = true },
-            ct);
+        SaveConditionalAsync(
+            _remittances, "Remittance receipt", record.ReceiptId, record.TenantId, record.Revision,
+            () => RemittanceReceiptDocument.FromModel(record), r => record.Revision = r, ct);
 
     public async Task<(bool Created, RemittanceReceipt Record)> TryCreateAsync(
         RemittanceReceipt record, CancellationToken ct = default)
     {
+        record.Revision = 0;
         try
         {
             await _remittances
@@ -633,7 +695,7 @@ internal sealed class MongoClaimLifecycleStore :
             .SortBy(d => d.Payload.ReceivedAtUtc)
             .Limit(limit)
             .ToListAsync(ct).ConfigureAwait(false);
-        return docs.Select(d => d.Payload).ToList();
+        return docs.Select(d => d.ToModel()).ToList();
     }
 
     async Task<IReadOnlyList<RemittanceReceipt>> IRemittanceStore.ListAvailableForPostingAsync(
@@ -647,7 +709,7 @@ internal sealed class MongoClaimLifecycleStore :
             .SortBy(d => d.Payload.ReceivedAtUtc)
             .Limit(limit)
             .ToListAsync(ct).ConfigureAwait(false);
-        return docs.Select(d => d.Payload).ToList();
+        return docs.Select(d => d.ToModel()).ToList();
     }
 
     private async Task<IReadOnlyList<ClaimTransmissionRecord>> FindTransmissionsAsync(
@@ -680,6 +742,9 @@ internal sealed class ClaimTransmissionDocument
 
     public ClaimTransmissionRecord Payload { get; set; } = new();
 
+    /// <summary>Authoritative revision; missing on documents written before it existed (reads as 0).</summary>
+    public long Revision { get; set; }
+
     public static ClaimTransmissionDocument FromModel(ClaimTransmissionRecord r) => new()
     {
         Id = r.TransmissionId,
@@ -690,10 +755,15 @@ internal sealed class ClaimTransmissionDocument
         ExternalTransactionId = r.ExternalTransactionId,
         PatientControlNumber = r.PatientControlNumber,
         CorrelationId = r.CorrelationId,
+        Revision = r.Revision,
         Payload = r
     };
 
-    public ClaimTransmissionRecord ToModel() => Payload;
+    public ClaimTransmissionRecord ToModel()
+    {
+        Payload.Revision = Revision;
+        return Payload;
+    }
 }
 
 internal sealed class ClaimAcknowledgmentDocument
@@ -762,6 +832,9 @@ internal sealed class InboundClaimAttachmentReceiptDocument
 
     public InboundClaimAttachmentReceipt Payload { get; set; } = new();
 
+    /// <summary>Authoritative revision; missing on documents written before it existed (reads as 0).</summary>
+    public long Revision { get; set; }
+
     public static InboundClaimAttachmentReceiptDocument FromModel(InboundClaimAttachmentReceipt r) => new()
     {
         Id = r.ReceiptId,
@@ -769,10 +842,15 @@ internal sealed class InboundClaimAttachmentReceiptDocument
         TenantId = r.TenantId,
         ClaimId = r.ClaimId,
         HasPendingOutbox = r.HasPendingOutbox,
+        Revision = r.Revision,
         Payload = r
     };
 
-    public InboundClaimAttachmentReceipt ToModel() => Payload;
+    public InboundClaimAttachmentReceipt ToModel()
+    {
+        Payload.Revision = Revision;
+        return Payload;
+    }
 }
 
 internal sealed class ClaimStatusInquiryDocument
@@ -828,9 +906,19 @@ internal sealed class RemittanceReceiptDocument
 
     public RemittanceReceipt Payload { get; set; } = new();
 
+    /// <summary>Authoritative revision; missing on documents written before it existed (reads as 0).</summary>
+    public long Revision { get; set; }
+
+    public RemittanceReceipt ToModel()
+    {
+        Payload.Revision = Revision;
+        return Payload;
+    }
+
     public static RemittanceReceiptDocument FromModel(RemittanceReceipt r) => new()
     {
         Id = r.ReceiptId,
+        Revision = r.Revision,
         IdempotencyKey = r.IdempotencyKey,
         EventKey = string.IsNullOrWhiteSpace(r.EventId) ? null : $"{r.Gateway}|{r.EventId}",
         TenantId = r.TenantId,

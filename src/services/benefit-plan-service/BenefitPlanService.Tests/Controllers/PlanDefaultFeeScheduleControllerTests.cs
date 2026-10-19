@@ -63,6 +63,7 @@ public sealed class PlanDefaultFeeScheduleControllerTests
         var stored = schedules.Stored.Should().ContainSingle().Subject;
         stored.Lines.Single(l => l.ProcedureCode == "99213").Rate.Should().Be(90m);
         stored.CreatedDate.Should().Be(created);
+        stored.Revision.Should().Be(2, "the second PUT replaces the revision it read, so it is not a conflict");
     }
 
     [Fact]
@@ -212,8 +213,13 @@ public sealed class PlanDefaultFeeScheduleControllerTests
         public Task<FeeScheduleLine?> GetLineAsync(string feeScheduleId, string procedureCode, string? modifier, CancellationToken ct = default)
             => Task.FromResult<FeeScheduleLine?>(null);
 
+        /// <summary>Like the MongoDB store: conditional on the revision read (0 = create), stores it + 1.</summary>
         public Task<FeeSchedule> UpsertAsync(FeeSchedule schedule, CancellationToken ct = default)
         {
+            var stored = _docs.GetValueOrDefault((schedule.TenantId, schedule.Id))?.Revision ?? 0;
+            if (stored != schedule.Revision)
+                throw new FeeScheduleConcurrencyException("Fee schedule", schedule.Id, schedule.Revision);
+            schedule.Revision++;
             _docs[(schedule.TenantId, schedule.Id)] = schedule;
             return Task.FromResult(schedule);
         }
