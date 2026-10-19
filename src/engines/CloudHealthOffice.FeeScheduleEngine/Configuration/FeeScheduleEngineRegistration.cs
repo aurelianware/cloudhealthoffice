@@ -9,19 +9,10 @@ namespace CloudHealthOffice.FeeScheduleEngine.Configuration;
 /// <summary>
 /// DI registration for the Fee Schedule Engine.
 ///
-/// Usage in the host service's Program.cs:
+/// Usage in the host service's Program.cs (MongoDB is the only store):
 ///
-///   // CHO-native mode (Cosmos DB)
-///   builder.Services.AddFeeScheduleEngine()
-///       .UseCosmosRepositories();
-///
-///   // CHO-native mode (MongoDB)
 ///   builder.Services.AddFeeScheduleEngine()
 ///       .UseMongoRepositories();
-///
-///   // Auto-detect from configuration (MongoDb:ConnectionString present → Mongo, else Cosmos)
-///   builder.Services.AddFeeScheduleEngine()
-///       .UseRepositoriesFromConfiguration(builder.Configuration);
 /// </summary>
 public static class FeeScheduleEngineServiceCollectionExtensions
 {
@@ -47,18 +38,6 @@ public class FeeScheduleEngineBuilder
     }
 
     /// <summary>
-    /// Use Cosmos DB for fee schedule and provider contract storage.
-    /// Requires <c>CosmosClient</c> to be registered by the host.
-    /// </summary>
-    public FeeScheduleEngineBuilder UseCosmosRepositories()
-    {
-        _services.AddScoped<FeeScheduleRepositoryCosmos>();
-        _services.AddScoped<IFeeScheduleRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryCosmos>);
-        _services.AddScoped<IProviderContractRepository>(CreateFeeScheduleCache<FeeScheduleRepositoryCosmos>);
-        return this;
-    }
-
-    /// <summary>
     /// Use MongoDB for fee schedule and provider contract storage.
     /// Requires <c>IMongoDatabase</c> to be registered by the host.
     /// </summary>
@@ -71,16 +50,11 @@ public class FeeScheduleEngineBuilder
     }
 
     /// <summary>
-    /// Auto-detect the database backend from configuration:
-    ///   <c>MongoDb:ConnectionString</c> present → MongoDB
-    ///   Otherwise → Cosmos DB
+    /// Kept for existing callers: binds the MongoDB repositories, the only
+    /// store. <paramref name="configuration"/> no longer selects a backend.
     /// </summary>
     public FeeScheduleEngineBuilder UseRepositoriesFromConfiguration(IConfiguration configuration)
-    {
-        return !string.IsNullOrEmpty(configuration["MongoDb:ConnectionString"])
-            ? UseMongoRepositories()
-            : UseCosmosRepositories();
-    }
+        => UseMongoRepositories();
 
     private static CachingFeeScheduleRepository CreateFeeScheduleCache<TRepository>(IServiceProvider sp)
         where TRepository : class, IFeeScheduleRepository, IProviderContractRepository

@@ -57,7 +57,6 @@ public class ClaimOutcomeWriterRouteGuardTests
             ["POST api/claims/work-queue/{claimId}/assign"] = (Kind.NoStatusChange, "work-queue assignment"),
             ["POST api/claims/work-queue/{claimId}/accumulator-adjustment/resolve"] = (Kind.NoStatusChange, "clears an accumulator clamp review"),
             ["POST api/mass-adjudication/runs"] = (Kind.NoStatusChange, "stores a run summary"),
-            ["POST api/v1/admin/claims/cosmos-migration/run"] = (Kind.NoStatusChange, "store migration (copies documents as-is)"),
         };
 
     [Fact]

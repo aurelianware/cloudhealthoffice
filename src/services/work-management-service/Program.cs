@@ -4,7 +4,6 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
-using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
 using WorkManagementService.HostedServices;
@@ -42,6 +41,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ── Database ─────────────────────────────────────────────────────────────────
+// MongoDB is the only persistent work store (ADR 006).
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
 if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
@@ -49,13 +49,10 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<IWorkspaceStore>(sp => new MongoWorkspaceStore(sp.GetRequiredService<IMongoDatabase>()));
     Console.WriteLine("[work-management-service] Using MongoDB database provider");
 }
-else if (databaseProvider == ChoDatabaseProvider.CosmosDb)
+else if (databaseProvider is not null)
 {
-    var cosmosOptions = CosmosWorkStoreOptions.From(builder.Configuration);
-    builder.Services.AddSingleton(cosmosOptions);
-    builder.Services.AddSingleton<IWorkStore>(sp => new CosmosWorkStore(sp.GetRequiredService<CosmosClient>(), cosmosOptions));
-    builder.Services.AddSingleton<IWorkspaceStore>(sp => new CosmosWorkspaceStore(sp.GetRequiredService<CosmosClient>(), cosmosOptions));
-    Console.WriteLine("[work-management-service] Using Cosmos DB database provider");
+    throw new InvalidOperationException(
+        "work-management-service supports MongoDB only. Remove Database:Provider or set it to MongoDb.");
 }
 else
 {
@@ -63,7 +60,7 @@ else
     // process-local store (state is lost on restart and not shared by replicas).
     if (!ChoTestingEnvironment.AllowsDevelopmentSecrets(builder.Environment))
         throw new InvalidOperationException(
-            "work-management-service needs a database: set MongoDb:ConnectionString, or Database:Provider=Cosmos with CosmosDb settings.");
+            "work-management-service needs a database. Configure MongoDb:ConnectionString.");
     builder.Services.AddSingleton<IWorkStore, InMemoryWorkStore>();
     builder.Services.AddSingleton<IWorkspaceStore, InMemoryWorkspaceStore>();
     Console.WriteLine("[work-management-service] No database configured: using the in-memory store (Development only)");
@@ -99,9 +96,6 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 // No CORS: called server-to-server only (the portal is Blazor Server).
 

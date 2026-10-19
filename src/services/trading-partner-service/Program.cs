@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.TradingPartnerService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
@@ -35,48 +34,31 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultWritePermission = "settings:manage";
 });
 
-// Database provider selection. MongoDB is the default so the service stays cloud-agnostic;
-// Cosmos DB's native SDK is opt-in via Database:Provider=CosmosDb.
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.CosmosDb)
+// Database — MongoDB is the only trading-partner store (ADR 006); the client
+// is registered by the shared lib.
+if (string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
-    // Cosmos DB Client (singleton)
-    builder.Services.AddSingleton(sp =>
-    {
-        var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT")
-            ?? builder.Configuration["CosmosDb:Endpoint"]
-            ?? throw new InvalidOperationException("COSMOS_ENDPOINT not configured");
+    throw new InvalidOperationException(
+        "Trading Partner Service requires a database. Configure MongoDb:ConnectionString.");
+}
 
-        var key = Environment.GetEnvironmentVariable("COSMOS_KEY")
-            ?? builder.Configuration["CosmosDb:Key"]
-            ?? throw new InvalidOperationException("COSMOS_KEY not configured");
-
-        return new CosmosClient(endpoint, key);
-    });
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
+{
+    throw new InvalidOperationException(
+        "Trading Partner Service supports MongoDB only. Remove Database:Provider or set it to MongoDb.");
 }
 
 // Repository and services
-if (databaseProvider == ChoDatabaseProvider.CosmosDb)
-{
-    builder.Services.AddScoped<ITradingPartnerRepository, TradingPartnerRepository>();
-}
-else
-{
-    builder.Services.AddScoped<ITradingPartnerRepository, TradingPartnerRepositoryMongo>();
-}
+builder.Services.AddScoped<ITradingPartnerRepository, TradingPartnerRepositoryMongo>();
 builder.Services.AddScoped<PathResolver>();
 
 // No CORS: this service is called server-to-server only (the portal is
 // Blazor Server), so browsers on other origins get no CORS grant.
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);

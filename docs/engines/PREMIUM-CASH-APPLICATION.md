@@ -129,7 +129,7 @@ amount. Each invoice payment records the batch, the item line, the trace number 
   item. Every step is idempotent: a payment already on the invoice (same batch and line), a credit
   entry already on the account, and an exception already queued (its id is batch + line + reason)
   are not added again.
-- **Invoices** are saved with optimistic concurrency: a version in Mongo, the ETag in Cosmos. A
+- **Invoices** are saved with optimistic concurrency (a version number). A
   save of a stale copy fails, and cash application re-reads the invoice and recomputes the
   exact/partial/overpayment split from the fresh balance.
 - **Other invoice writers re-read and re-apply on a conflict** (`InvoiceWrites.UpdateWithRetryAsync`,
@@ -205,9 +205,8 @@ corrected those balances by hand, so crediting them now could credit a balance t
 
 ## Storage
 
-MongoDB collections `RemittanceBatches`, `RemittanceExceptions` and `SponsorAccounts`. On Cosmos DB,
-these are containers of the same names, partitioned by `/tenantId` like `PremiumInvoices`. They must
-exist before the endpoints are used.
+MongoDB collections `RemittanceBatches`, `RemittanceExceptions` and `SponsorAccounts` (MongoDB is
+the only store, ADR 006).
 
 ## Next steps
 

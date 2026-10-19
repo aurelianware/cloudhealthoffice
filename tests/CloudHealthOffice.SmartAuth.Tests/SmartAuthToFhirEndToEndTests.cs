@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using CloudHealthOffice.Testing.FhirService;
 using FhirService.Services.Identity;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -320,6 +321,8 @@ public class SmartAuthToFhirEndToEndTests
         return new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
             b.UseEnvironment("Development");
+            // fhir-service requires MongoDB; these tests never touch it.
+            b.UseUnreachableMongoWithInMemoryStores();
             b.ConfigureTestServices(services =>
             {
                 services.RemoveAll<SmartTrustOptions>();

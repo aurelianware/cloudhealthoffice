@@ -1,7 +1,6 @@
 using CloudHealthOffice.Infrastructure.Caching;
 using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -45,7 +44,7 @@ public interface IPaRuleRepository
         IEnumerable<PaRuleDocument> rules, CancellationToken ct = default);
 
     /// <summary>
-    /// Delete a rule by ID and state code (partition key) within ONE scope:
+    /// Delete a rule by ID and state code within ONE scope:
     /// <paramref name="tenantId"/> names the tenant whose rule is deleted, and
     /// null means the platform rule. Other tenants' (and, for a tenant delete,
     /// the platform's) rules with the same RuleId are untouched (D-16).
@@ -55,182 +54,6 @@ public interface IPaRuleRepository
     /// <summary>List all rules for a tenant — used by the portal admin grid.</summary>
     Task<IReadOnlyList<PaRuleDocument>> ListAsync(
         string? tenantId = null, string? stateCode = null, CancellationToken ct = default);
-}
-
-// ─────────────────────────────────────────────────────────────────
-// Cosmos DB implementation
-// ─────────────────────────────────────────────────────────────────
-
-/// <summary>
-/// Cosmos DB implementation of IPaRuleRepository.
-///
-/// Container: prior-auth-rules
-/// Partition key: /stateCode
-///   Rules are almost always queried by state — this keeps queries
-///   within a single logical partition at decision time.
-///
-/// Document ID: "{stateCode}:{lob}:{program ?? "any"}:{tenantId ?? "platform"}:{ruleId}"
-/// </summary>
-public sealed class PaRuleRepositoryCosmos : IPaRuleRepository
-{
-    private readonly Container _container;
-    private readonly ILogger<PaRuleRepositoryCosmos> _logger;
-
-    public PaRuleRepositoryCosmos(
-        CosmosClient cosmosClient,
-        IConfiguration configuration,
-        ILogger<PaRuleRepositoryCosmos> logger)
-    {
-        var db        = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        var container = configuration["PriorAuthRuleEngine:RulesContainer"] ?? "prior-auth-rules";
-        _container    = cosmosClient.GetContainer(db, container);
-        _logger       = logger;
-    }
-
-    public async Task<IReadOnlyList<PaRuleDocument>> GetRulesAsync(
-        RuleSetKey key, CancellationToken ct = default)
-    {
-        // Written against the stored shape under the shared
-        // CosmosSystemTextJsonSerializer that AddChoDatabase configures: null
-        // properties are OMITTED (so a platform rule has no tenantId field and an
-        // any-program rule no program field), and enums are camelCase STRINGS.
-        // The previous IS_NULL(...) filters and int-bound LOB matched nothing on
-        // that shape, so GetRulesAsync returned zero rules (review of #1294).
-        // NOT IS_DEFINED OR IS_NULL accepts both an omitted and an explicit null.
-        var tenantFilter = key.TenantId is null
-            ? "(NOT IS_DEFINED(c.tenantId) OR IS_NULL(c.tenantId))"
-            : "c.tenantId = @tenantId";
-
-        var programFilter = key.Program is null
-            ? "(NOT IS_DEFINED(c.program) OR IS_NULL(c.program))"
-            : "c.program = @program";
-
-        // LOB is bound as the enum value itself: the SDK serializes query
-        // parameters with the client's serializer, so the parameter takes the
-        // same shape as the stored field (a camelCase string under the shared
-        // serializer). No ORDER BY: categories are stored as strings, whose
-        // alphabetical order is not the evaluation band order, and a
-        // multi-property ORDER BY also needs a composite index. Sorted below.
-        var query = new QueryDefinition(
-            $"SELECT * FROM c " +
-            $"WHERE c.stateCode = @stateCode " +
-            $"AND c.lob = @lob " +
-            $"AND {programFilter} " +
-            $"AND {tenantFilter} " +
-            $"AND c.isEnabled = true")
-            .WithParameter("@stateCode", key.StateCode)
-            .WithParameter("@lob", key.Lob);
-
-        if (key.Program is not null) query = query.WithParameter("@program", key.Program);
-        if (key.TenantId is not null) query = query.WithParameter("@tenantId", key.TenantId);
-
-        var iterator = _container.GetItemQueryIterator<PaRuleDocument>(
-            query,
-            requestOptions: new QueryRequestOptions
-            {
-                PartitionKey = new PartitionKey(key.StateCode)
-            });
-
-        var results = new List<PaRuleDocument>();
-        while (iterator.HasMoreResults)
-        {
-            var page = await iterator.ReadNextAsync(ct);
-            results.AddRange(page);
-        }
-
-        // Band (numeric enum order), then priority — the order the engine and
-        // the Mongo repository use.
-        return results
-            .OrderBy(r => (int)r.Category)
-            .ThenBy(r => r.Priority)
-            .ToList();
-    }
-
-    public async Task UpsertAsync(PaRuleDocument rule, CancellationToken ct = default)
-    {
-        rule.Id        = MakeId(rule);
-        rule.UpdatedAt = DateTime.UtcNow;
-        await _container.UpsertItemAsync(rule, new PartitionKey(rule.StateCode), cancellationToken: ct);
-    }
-
-    public async Task BulkUpsertAsync(
-        IEnumerable<PaRuleDocument> rules, CancellationToken ct = default)
-    {
-        var tasks = rules.Select(r =>
-        {
-            r.Id = MakeId(r); r.UpdatedAt = DateTime.UtcNow;
-            return _container.UpsertItemAsync(r, new PartitionKey(r.StateCode), cancellationToken: ct);
-        });
-        await Task.WhenAll(tasks);
-    }
-
-    public async Task DeleteAsync(
-        string ruleId, string stateCode, string? tenantId, CancellationToken ct = default)
-    {
-        // Id requires full composite (LOB and program vary) — query first, but
-        // only within the caller's scope: one tenant, or the platform
-        // (tenantId null/absent). Without the tenant filter this deleted every
-        // tenant's copy of the RuleId (D-16).
-        var tenantFilter = tenantId is null
-            ? "(NOT IS_DEFINED(c.tenantId) OR IS_NULL(c.tenantId))"
-            : "c.tenantId = @tenantId";
-        var query = new QueryDefinition(
-            $"SELECT c.id FROM c WHERE c.ruleId = @ruleId AND c.stateCode = @stateCode AND {tenantFilter}")
-            .WithParameter("@ruleId",    ruleId)
-            .WithParameter("@stateCode", stateCode);
-        if (tenantId is not null) query = query.WithParameter("@tenantId", tenantId);
-
-        var iterator = _container.GetItemQueryIterator<IdOnly>(query,
-            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(stateCode) });
-
-        while (iterator.HasMoreResults)
-        {
-            foreach (var item in await iterator.ReadNextAsync(ct))
-            {
-                try
-                {
-                    await _container.DeleteItemAsync<PaRuleDocument>(
-                        item.Id, new PartitionKey(stateCode), cancellationToken: ct);
-                }
-                catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound) { }
-            }
-        }
-    }
-
-    public async Task<IReadOnlyList<PaRuleDocument>> ListAsync(
-        string? tenantId = null, string? stateCode = null, CancellationToken ct = default)
-    {
-        // D-17: the SQL text is built first and the parameters bound to the ONE
-        // QueryDefinition that is executed. Previously each filter rebuilt the
-        // definition (dropping the earlier parameter) and the iterator then ran
-        // a fresh, parameterless definition, so any filter failed.
-        var sql = "SELECT * FROM c WHERE 1=1";
-        if (tenantId  is not null) sql += " AND c.tenantId = @tenantId";
-        if (stateCode is not null) sql += " AND c.stateCode = @stateCode";
-
-        var qd = new QueryDefinition(sql);
-        if (tenantId  is not null) qd = qd.WithParameter("@tenantId",  tenantId);
-        if (stateCode is not null) qd = qd.WithParameter("@stateCode", stateCode);
-
-        var opts = stateCode is not null
-            ? new QueryRequestOptions { PartitionKey = new PartitionKey(stateCode) }
-            : new QueryRequestOptions();
-
-        var iterator = _container.GetItemQueryIterator<PaRuleDocument>(qd, requestOptions: opts);
-
-        var results = new List<PaRuleDocument>();
-        while (iterator.HasMoreResults)
-        {
-            var page = await iterator.ReadNextAsync(ct);
-            results.AddRange(page);
-        }
-        return results;
-    }
-
-    private static string MakeId(PaRuleDocument r) =>
-        $"{r.StateCode}:{(int)r.Lob}:{r.Program ?? "any"}:{r.TenantId ?? "platform"}:{r.RuleId}";
-
-    private sealed record IdOnly { public string Id { get; init; } = string.Empty; }
 }
 
 // ─────────────────────────────────────────────────────────────────

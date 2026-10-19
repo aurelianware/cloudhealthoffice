@@ -5,7 +5,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>WorkManagementService</RootNamespace>
-    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
   <!-- Exclude test project files when built inside Docker (Dockerfile copies entire directory) -->
@@ -24,7 +23,6 @@
     <ProjectReference Include="..\shared\CloudHealthOffice.Events\CloudHealthOffice.Events.csproj" />
     <PackageReference Include="Azure.Core" />
     <PackageReference Include="Confluent.Kafka" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Swashbuckle.AspNetCore" />

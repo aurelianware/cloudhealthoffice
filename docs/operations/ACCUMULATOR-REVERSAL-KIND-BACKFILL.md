@@ -77,8 +77,8 @@ From the environment or `appsettings.json`, never the command line:
 accumulator-service data lives in its base database even with tenant scoping (its Kafka consumer
 has no request tenant). The tool needs read access to claims-service and read/write access to
 `AccumulatorEvents`, `AccumulatorProcessedClaims` and the two audit collections in
-accumulator-service's database. **MongoDB / Cosmos DB for MongoDB only**: an accumulator-service
-running on the Cosmos native SDK is not supported by this tool.
+accumulator-service's database (MongoDB or Cosmos DB for MongoDB, the only store
+accumulator-service runs on).
 
 ```bash
 export MongoDb__ConnectionString='<accumulator-service connection string>'

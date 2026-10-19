@@ -35,7 +35,7 @@ public class EncryptSponsorBankAccountsTests
 
     public EncryptSponsorBankAccountsTests() => _protector = new DataProtectionFieldProtector(_keys, "sponsor-service");
 
-    // ── in-memory stores (what Mongo or Cosmos hold) ─────────────────────
+    // ── in-memory stores (what Mongo holds) ─────────────────────
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -62,7 +62,7 @@ public class EncryptSponsorBankAccountsTests
         public Task<bool> SetBillingAccountIfUnchangedAsync(StoredSponsor row, string stored, CancellationToken ct)
         {
             BeforeWrite?.Invoke(row.Sponsor.Id);
-            if (Rows[row.Sponsor.Id].Version.ToString() != row.ETag) return Task.FromResult(false);
+            if (Rows[row.Sponsor.Id].Version.ToString() != row.VersionToken) return Task.FromResult(false);
             var current = Get(row.Sponsor.Id);
             current.BillingInfo!.BillingAccountNumber = stored;
             Put(current);

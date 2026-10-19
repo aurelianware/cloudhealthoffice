@@ -4,7 +4,7 @@ namespace ReferenceDataService.Models;
 
 /// <summary>
 /// State-specific compliance parameters embedded within a tenant's compliance configuration.
-/// This is a value object — not a standalone Cosmos DB document.
+/// This is a value object — not a standalone document.
 /// Each state defines its own regulatory deadlines for prompt pay, prior authorization,
 /// appeals, and encounter submission windows.
 /// </summary>

@@ -9,7 +9,7 @@ namespace ConsentService.Tests.Fakes;
 /// + <see cref="IConsentEventSink"/> triple. Shared across controller and
 /// integration tests. Not a production substitute — the concurrency
 /// primitives here are sufficient to exercise the Race-safe expiry path
-/// but don't reproduce Cosmos/Mongo operator semantics.
+/// but don't reproduce Mongo operator semantics.
 /// </summary>
 public sealed class InMemoryConsentRepository : IConsentRepository, IConsentEventRepository, IConsentEventSink
 {
@@ -54,7 +54,7 @@ public sealed class InMemoryConsentRepository : IConsentRepository, IConsentEven
 
     public Task<Consent> TransitionStatusAsync(Consent consent, ConsentEvent auditEvent)
     {
-        // Mirror the Cosmos + Mongo contract: only persist when the
+        // Mirror the Mongo contract: only persist when the
         // caller-supplied from-status matches the currently persisted
         // status. A mismatch means a concurrent writer won the race.
         if (!auditEvent.FromStatus.HasValue)

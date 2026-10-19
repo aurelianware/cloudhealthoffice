@@ -18,13 +18,11 @@ namespace ClaimsService.Models;
 ///   which are nullable until a human examiner acts on the claim and then
 ///   are written exactly once. The repository enforces single-write on those
 ///   fields; nothing else can be mutated post-create.
-///
-/// Cosmos partition key: TenantId.
 /// </summary>
 [BsonIgnoreExtraElements]
 public class AiExaminationAudit
 {
-    /// <summary>Cosmos document id (also Mongo _id).</summary>
+    /// <summary>Document id (Mongo _id).</summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 

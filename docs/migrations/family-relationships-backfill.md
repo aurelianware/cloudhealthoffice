@@ -28,8 +28,7 @@ mongosh "$MONGO_URI" --eval '
 Verify the deployment requirement for MongoDB transactions (used by the symmetric-pair
 writer): the Mongo cluster must be a **replica set**. Standalone Mongo will reject
 the transactions with a clear error rather than silently breaking the symmetric
-invariant. On Cosmos DB, symmetric pairs use `TransactionalBatch` within the
-`/tenantId` partition — no additional configuration required.
+invariant. member-service is MongoDB-only; there is no other pair writer.
 
 ## 2. Deploy
 

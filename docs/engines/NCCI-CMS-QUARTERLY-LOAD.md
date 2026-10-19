@@ -95,8 +95,8 @@ The response reports `rowsLoaded`, `rowsRejected`, the first rejections,
   CMS effective date; MUE rows by tenant, setting, code and quarter start.
   Loading the same file again replaces documents rather than duplicating them.
 - **Ledger.** One `NcciLoadRecord` per (tenant, quarter, kind, setting, part)
-  stores the file's SHA-256 and counts (Mongo `ncci_load_ledger`, Cosmos
-  `NcciLoadLedger`). It is written last, after the rows and the version: an
+  stores the file's SHA-256 and counts (Mongo `ncci_load_ledger`). It is
+  written last, after the rows and the version: an
   identical re-run is a no-op, a corrected CMS re-publication (different hash)
   reloads, and a load that failed part-way is retried in full.
 - **PTP snapshots.** Each PTP file is a full snapshot of its slot (setting +
@@ -133,9 +133,5 @@ The response reports `rowsLoaded`, `rowsRejected`, the first rejections,
   at 100 MB (`infrastructure/k8s/nginx-ingress-config.yaml`,
   `infrastructure/helm/nginx-ingress-values.yaml`). CMS ships the large
   practitioner PTP table as several part files; load each with its `part`.
-- On Cosmos, the host creates any missing NCCI container (`NcciPairs`,
-  `MueEntries`, `NcciVersion`, `NcciLoadLedger`, partition key `/tenantId`) at
-  startup. The version record has id `current`.
 - A full practitioner PTP table holds over a million rows. The Mongo backend
-  writes in unordered bulk batches of 1,000; the Cosmos backend upserts one
-  item at a time, which is slow and RU-heavy for a full table.
+  writes in unordered bulk batches of 1,000.

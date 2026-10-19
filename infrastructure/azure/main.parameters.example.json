@@ -55,11 +55,11 @@
     "serviceBusName": {
       "value": "cho-prod-servicebus"
     },
-    "enableCosmosMongoFreeTier": {
+    "enableDocumentDb": {
       "value": false
     },
-    "cosmosMongoDatabaseName": {
-      "value": "cloudhealthoffice"
+    "documentDbComputeTier": {
+      "value": "Free"
     },
     "enableEcs": {
       "value": true

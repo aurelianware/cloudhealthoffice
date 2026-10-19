@@ -13,7 +13,7 @@ namespace CloudHealthOffice.ProviderService.Tests.Fakes;
 /// <remarks>
 /// All store and fetch operations deep-clone via JSON round-trip so that
 /// external mutations of a returned object cannot corrupt the stored
-/// document — matching the behaviour of real Cosmos / Mongo round-trips
+/// document — matching the behaviour of real Mongo round-trips
 /// and preventing tests from becoming order-dependent due to shared
 /// object references.
 /// </remarks>
@@ -65,7 +65,7 @@ public sealed class InMemoryProviderRepository : IProviderRepository
     /// <summary>
     /// Returns hydrated clones of each row so legacy rows (empty
     /// VersionId / unset VersionState) are normalized before any state
-    /// filter is applied — matching the real Mongo / Cosmos behavior
+    /// filter is applied — matching the real Mongo behavior
     /// where missing BSON fields are treated as "not set" rather than
     /// the C# enum default.
     /// </summary>
@@ -406,7 +406,7 @@ public sealed class InMemoryProviderRepository : IProviderRepository
     {
         // Apply the same hydration rule the other read methods use so
         // legacy rows where VersionState is absent are still treated as
-        // Active when Status == Active (matches the Cosmos / Mongo
+        // Active when Status == Active (matches the Mongo
         // hydration rule documented in
         // docs/architecture/provider-versioning.md "Legacy hydration
         // query pattern"). Counting against raw _docs would miss those
@@ -419,7 +419,7 @@ public sealed class InMemoryProviderRepository : IProviderRepository
     }
 
     /// <summary>
-    /// Set true on the next call to simulate a Cosmos PreconditionFailed
+    /// Set true on the next call to simulate a lost conditional write
     /// (etag conflict) so backfill-service tests can exercise the
     /// skip-and-count branch.
     /// </summary>

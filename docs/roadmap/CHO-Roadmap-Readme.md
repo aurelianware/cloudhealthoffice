@@ -184,7 +184,8 @@ Complete X12 transaction support: 270/271, 276/277, 278, 834, 835, 837 (P/I enco
 
 ### 4B. Migration Wizard Completion
 
-- [ ] Complete `TriZettoOpenAccessClient` in migration-wizard
+> The `src/tools/migration-wizard` prototype (TriZetto export straight into Cosmos SQL containers) was removed in remediation Phase 5b. A rewrite should load data through the services' APIs, as enrollment-import-service does through member-service.
+
 - [ ] QNXT → CHO mapping: benefit plans, fee schedules, providers, auth rules
 - [ ] Gap analysis report generator
 - [ ] Support CSV/JSON import for offline evaluation

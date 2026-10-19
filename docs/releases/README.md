@@ -86,7 +86,6 @@ First production release of CloudHealthOffice.
 | **v2.x → v3.0.0** | [Release Notes - Upgrade Instructions](./RELEASE_NOTES_v3.0.0.md#-upgrade-instructions) |
 | **Azure Logic Apps → Argo Workflows** | [Argo Workflows Migration Guide](../ARGO-MIGRATION-GUIDE.md) |
 | **Multi-Cloud Deployment** | [Multi-Cloud Deployment Guide](../MULTI-CLOUD-DEPLOYMENT.md) |
-| **Legacy Systems** | [Migration Wizard](../../tools/migration-wizard/README.md) |
 
 ---
 

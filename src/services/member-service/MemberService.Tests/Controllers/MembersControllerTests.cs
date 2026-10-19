@@ -23,7 +23,7 @@ public class MembersControllerTests
     {
         var repo = new InMemoryMemberRepository();
         var events = new InMemoryMemberEventRepository();
-        var publisher = new CosmosMemberEventPublisher(events, NullLogger<CosmosMemberEventPublisher>.Instance);
+        var publisher = new MemberEventPublisher(events, NullLogger<MemberEventPublisher>.Instance);
         var projector = new FhirPatientProjector();
         var enc = new NoOpIdentifierEncryptor();
         var coverage = new Mock<ICoverageServiceClient>();

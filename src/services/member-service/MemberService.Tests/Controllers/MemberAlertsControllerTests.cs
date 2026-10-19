@@ -33,7 +33,7 @@ public class MemberAlertsControllerTests
         });
         var alerts = new InMemoryMemberAlertRepository();
         var events = new InMemoryMemberEventRepository();
-        var publisher = new CosmosMemberEventPublisher(events, NullLogger<CosmosMemberEventPublisher>.Instance);
+        var publisher = new MemberEventPublisher(events, NullLogger<MemberEventPublisher>.Instance);
         var projector = new FhirFlagProjector();
 
         var ctl = new MemberAlertsController(members, alerts, publisher, projector);

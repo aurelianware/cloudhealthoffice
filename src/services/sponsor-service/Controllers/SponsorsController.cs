@@ -107,7 +107,7 @@ public class SponsorsController : ControllerBase
 
     /// <summary>
     /// Build the compact member view. Public + static so unit tests can
-    /// project without hitting Cosmos/Mongo.
+    /// project without hitting MongoDB.
     /// </summary>
     public static SponsorMemberView ProjectMemberView(Sponsor sponsor, DateTime asOfUtc) => new()
     {

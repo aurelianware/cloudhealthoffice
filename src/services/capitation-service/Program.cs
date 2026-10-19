@@ -1,8 +1,6 @@
-using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
-using CapitationService.Middleware;
 using CapitationService.Repositories;
 using CapitationService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
@@ -61,40 +59,19 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultWritePermission = "payments:run";
 });
 
-// Database Configuration — MongoDB when MongoDb:ConnectionString is present, Cosmos DB otherwise
+// Database — MongoDB is the only capitation store (ADR 006); the client is
+// registered by the shared lib.
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+if (databaseProvider != ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddScoped<ICapitationContractRepository, CapitationContractRepositoryMongo>();
-    builder.Services.AddScoped<ICapitationRunRepository, CapitationRunRepositoryMongo>();
-    builder.Services.AddScoped<ICapitationStatementRepository, CapitationStatementRepositoryMongo>();
-    builder.Services.AddScoped<ICapitationDisbursementRepository, CapitationDisbursementRepositoryMongo>();
-    Console.WriteLine("Using MongoDB repository");
+    throw new InvalidOperationException(
+        "Capitation Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var config = sp.GetRequiredService<IConfiguration>();
-        var endpoint = config["CosmosDb:Endpoint"];
-        var key = config["CosmosDb:Key"];
 
-        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
-            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer()
-        });
-    });
-
-    builder.Services.AddScoped<ICapitationContractRepository, CapitationContractRepository>();
-    builder.Services.AddScoped<ICapitationRunRepository, CapitationRunRepository>();
-    builder.Services.AddScoped<ICapitationStatementRepository, CapitationStatementRepository>();
-    builder.Services.AddScoped<ICapitationDisbursementRepository, CapitationDisbursementRepository>();
-    Console.WriteLine("Using Cosmos DB repository");
-}
+builder.Services.AddScoped<ICapitationContractRepository, CapitationContractRepositoryMongo>();
+builder.Services.AddScoped<ICapitationRunRepository, CapitationRunRepositoryMongo>();
+builder.Services.AddScoped<ICapitationStatementRepository, CapitationStatementRepositoryMongo>();
+builder.Services.AddScoped<ICapitationDisbursementRepository, CapitationDisbursementRepositoryMongo>();
 
 // Services
 // Maker-checker on approving and releasing payments. On for every tenant unless the
@@ -159,13 +136,10 @@ builder.Services.AddHttpClient(TenantPaymentControls.HttpClientName, client =>
     client.Timeout = TimeSpan.FromSeconds(10);
 }).AddChoServiceAuthentication();
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 // No CORS: this service is called server-to-server only (the portal is

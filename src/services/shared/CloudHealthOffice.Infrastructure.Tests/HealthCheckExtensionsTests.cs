@@ -73,40 +73,6 @@ public class HealthCheckExtensionsTests
     }
 
     [Fact]
-    public void AddChoHealthChecks_WithCosmosDbConnectionString_RegistersCosmosCheck()
-    {
-        var services = new ServiceCollection();
-
-        services.AddChoHealthChecks(opts =>
-        {
-            opts.CosmosDbConnectionString = "AccountEndpoint=https://test.documents.azure.com:443/;AccountKey=dGVzdA==;";
-        });
-
-        var provider = services.BuildServiceProvider();
-        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
-        registrations.Should().Contain(r => r.Name == "cosmosdb");
-        var cosmosCheck = registrations.First(r => r.Name == "cosmosdb");
-        cosmosCheck.Tags.Should().Contain("ready");
-        cosmosCheck.Tags.Should().Contain("db");
-    }
-
-    [Fact]
-    public void AddChoHealthChecks_WithCosmosDbEndpointAndKey_RegistersCosmosCheck()
-    {
-        var services = new ServiceCollection();
-
-        services.AddChoHealthChecks(opts =>
-        {
-            opts.CosmosDbEndpoint = "https://test.documents.azure.com:443/";
-            opts.CosmosDbKey = "dGVzdA==";
-        });
-
-        var provider = services.BuildServiceProvider();
-        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
-        registrations.Should().Contain(r => r.Name == "cosmosdb");
-    }
-
-    [Fact]
     public void AddChoHealthChecks_WithRedis_RegistersRedisCheck()
     {
         var services = new ServiceCollection();
@@ -160,26 +126,7 @@ public class HealthCheckExtensionsTests
         var provider = services.BuildServiceProvider();
         var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
         registrations.Should().NotContain(r => r.Name == "mongodb");
-        registrations.Should().NotContain(r => r.Name == "cosmosdb");
         registrations.Should().NotContain(r => r.Name == "redis");
-    }
-
-    [Fact]
-    public void AddChoHealthChecks_CosmosDbConnectionString_TakesPrecedence_OverEndpointKey()
-    {
-        var services = new ServiceCollection();
-
-        services.AddChoHealthChecks(opts =>
-        {
-            opts.CosmosDbConnectionString = "AccountEndpoint=https://test.documents.azure.com:443/;AccountKey=dGVzdA==;";
-            opts.CosmosDbEndpoint = "https://other.documents.azure.com:443/";
-            opts.CosmosDbKey = "b3RoZXI=";
-        });
-
-        var provider = services.BuildServiceProvider();
-        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
-        // Should only register one cosmosdb check, not two
-        registrations.Where(r => r.Name == "cosmosdb").Should().HaveCount(1);
     }
 
     [Fact]
@@ -197,9 +144,6 @@ public class HealthCheckExtensionsTests
         var options = new ChoHealthCheckOptions();
 
         options.MongoDbConnectionString.Should().BeNull();
-        options.CosmosDbConnectionString.Should().BeNull();
-        options.CosmosDbEndpoint.Should().BeNull();
-        options.CosmosDbKey.Should().BeNull();
         options.RedisConnectionString.Should().BeNull();
     }
 }

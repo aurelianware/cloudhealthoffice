@@ -128,7 +128,7 @@ public record PaRuleDecision
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Persisted rule document — stored in Cosmos / Mongo
+// Persisted rule document — stored in MongoDB
 // ─────────────────────────────────────────────────────────────────
 
 /// <summary>

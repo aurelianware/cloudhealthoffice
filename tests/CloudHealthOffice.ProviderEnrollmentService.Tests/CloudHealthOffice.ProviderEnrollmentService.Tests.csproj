@@ -18,11 +18,16 @@
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="EphemeralMongo" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\engines\CloudHealthOffice.ProviderEnrollmentService\CloudHealthOffice.ProviderEnrollmentService.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

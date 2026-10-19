@@ -1,6 +1,6 @@
 // =========================
 // Eligibility Service Infrastructure
-// Azure Container Apps + Dapr + Cosmos DB + Event Grid
+// Azure Container Apps + Dapr + Event Grid (documents live in MongoDB / Azure DocumentDB, ADR 017)
 // =========================
 
 @description('Base name for all resources')
@@ -31,10 +31,9 @@ param maxReplicas int = 10
 @description('Enable Dapr')
 param enableDapr bool = true
 
-@description('Cosmos DB throughput (RU/s)')
-@minValue(400)
-@maxValue(100000)
-param cosmosDbThroughput int = 400
+@description('MongoDB / Azure DocumentDB connection string (must include retrywrites=false for Azure DocumentDB)')
+@secure()
+param mongoConnectionString string
 
 @description('Eligibility cache TTL in seconds (default 24 hours)')
 param cacheTtlSeconds int = 86400
@@ -50,7 +49,6 @@ param corsAllowedOrigins string = 'https://${baseName}-eligibility-svc.azurecont
 // =========================
 var containerAppEnvName = '${baseName}-eligibility-env'
 var containerAppName = '${baseName}-eligibility-svc'
-var cosmosAccountName = '${baseName}-eligibility-cosmos'
 var eventGridTopicName = '${baseName}-eligibility-events'
 var logAnalyticsName = '${baseName}-eligibility-logs'
 
@@ -96,38 +94,6 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 // Dapr Components
 // =========================
 
-// Dapr State Store Component (using Cosmos DB with Azure AD authentication)
-resource daprStateStore 'Microsoft.App/managedEnvironments/daprComponents@2024-03-01' = if (enableDapr) {
-  parent: containerAppEnv
-  name: 'eligibility-state'
-  properties: {
-    componentType: 'state.azure.cosmosdb'
-    version: 'v1'
-    metadata: [
-      {
-        name: 'url'
-        value: cosmosAccount.properties.documentEndpoint
-      }
-      {
-        name: 'database'
-        value: 'eligibility-db'
-      }
-      {
-        name: 'collection'
-        value: 'dapr-state'
-      }
-      // Using Azure AD authentication instead of masterKey
-      {
-        name: 'azureClientId'
-        value: '' // Empty string uses system-assigned managed identity
-      }
-    ]
-    scopes: [
-      containerAppName
-    ]
-  }
-}
-
 // Dapr Pub/Sub Component - Note: Event Grid is accessed directly via SDK with managed identity
 // This component is disabled in favor of direct Event Grid SDK usage for better security
 // If you need Dapr pubsub, uncomment and configure for Service Bus instead
@@ -150,194 +116,6 @@ resource daprPubSub 'Microsoft.App/managedEnvironments/daprComponents@2024-03-01
   }
 }
 */
-
-// =========================
-// Cosmos DB Account
-// =========================
-resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
-  name: cosmosAccountName
-  location: location
-  kind: 'GlobalDocumentDB'
-  properties: {
-    databaseAccountOfferType: 'Standard'
-    locations: [
-      {
-        locationName: location
-        failoverPriority: 0
-        isZoneRedundant: false
-      }
-    ]
-    consistencyPolicy: {
-      defaultConsistencyLevel: 'Session'
-      maxIntervalInSeconds: 5
-      maxStalenessPrefix: 100
-    }
-    capabilities: []
-    enableFreeTier: false
-    enableAutomaticFailover: false
-    enableMultipleWriteLocations: false
-    publicNetworkAccess: 'Enabled'
-    disableLocalAuth: false
-  }
-}
-
-// =========================
-// Cosmos DB Database
-// =========================
-resource cosmosDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-05-15' = {
-  parent: cosmosAccount
-  name: 'eligibility-db'
-  properties: {
-    resource: {
-      id: 'eligibility-db'
-    }
-    options: {
-      throughput: cosmosDbThroughput
-    }
-  }
-}
-
-// =========================
-// Cosmos DB Containers
-// =========================
-
-// Eligibility Cache Container with TTL
-resource eligibilityCacheContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
-  parent: cosmosDatabase
-  name: 'eligibility-cache'
-  properties: {
-    resource: {
-      id: 'eligibility-cache'
-      partitionKey: {
-        paths: ['/memberId']
-        kind: 'Hash'
-      }
-      indexingPolicy: {
-        indexingMode: 'consistent'
-        automatic: true
-        includedPaths: [
-          {
-            path: '/*'
-          }
-        ]
-        excludedPaths: [
-          {
-            path: '/originalRequest/*'
-          }
-          {
-            path: '/response/*'
-          }
-          {
-            path: '/"_etag"/?'
-          }
-        ]
-        compositeIndexes: [
-          [
-            {
-              path: '/payerId'
-              order: 'ascending'
-            }
-            {
-              path: '/createdAt'
-              order: 'descending'
-            }
-          ]
-          [
-            {
-              path: '/cacheKey'
-              order: 'ascending'
-            }
-          ]
-        ]
-      }
-      // Enable TTL for automatic cache expiration
-      defaultTtl: cacheTtlSeconds
-      uniqueKeyPolicy: {
-        uniqueKeys: [
-          {
-            paths: ['/cacheKey']
-          }
-        ]
-      }
-    }
-  }
-}
-
-// Eligibility Rules Container
-resource eligibilityRulesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
-  parent: cosmosDatabase
-  name: 'eligibility-rules'
-  properties: {
-    resource: {
-      id: 'eligibility-rules'
-      partitionKey: {
-        paths: ['/planCode']
-        kind: 'Hash'
-      }
-      indexingPolicy: {
-        indexingMode: 'consistent'
-        automatic: true
-        includedPaths: [
-          {
-            path: '/*'
-          }
-        ]
-        excludedPaths: [
-          {
-            path: '/"_etag"/?'
-          }
-        ]
-        compositeIndexes: [
-          [
-            {
-              path: '/planCode'
-              order: 'ascending'
-            }
-            {
-              path: '/serviceTypeCode'
-              order: 'ascending'
-            }
-            {
-              path: '/priority'
-              order: 'ascending'
-            }
-          ]
-        ]
-      }
-      defaultTtl: -1 // No TTL for rules
-    }
-  }
-}
-
-// Dapr State Container
-resource daprStateContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = if (enableDapr) {
-  parent: cosmosDatabase
-  name: 'dapr-state'
-  properties: {
-    resource: {
-      id: 'dapr-state'
-      partitionKey: {
-        paths: ['/partitionKey']
-        kind: 'Hash'
-      }
-      indexingPolicy: {
-        indexingMode: 'consistent'
-        automatic: true
-        includedPaths: [
-          {
-            path: '/*'
-          }
-        ]
-        excludedPaths: [
-          {
-            path: '/"_etag"/?'
-          }
-        ]
-      }
-      defaultTtl: -1
-    }
-  }
-}
 
 // =========================
 // Event Grid Topic
@@ -384,11 +162,15 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         appProtocol: 'http'
         enableApiLogging: true
       } : null
-      // Using managed identity for authentication - no secrets needed
-      // The Container App's system-assigned managed identity has:
-      // - Cosmos DB Data Contributor role (see cosmosRoleAssignment)
-      // - Event Grid Data Sender role (see eventGridRoleAssignment)
-      secrets: []
+      // The Container App's system-assigned managed identity has the
+      // Event Grid Data Sender role (see eventGridRoleAssignment). The only
+      // secret is the MongoDB connection string.
+      secrets: [
+        {
+          name: 'mongo-connection-string'
+          value: mongoConnectionString
+        }
+      ]
     }
     template: {
       containers: [
@@ -405,17 +187,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: '3000'
             }
             {
-              name: 'COSMOS_ENDPOINT'
-              value: cosmosAccount.properties.documentEndpoint
-            }
-            // COSMOS_KEY is not set - using managed identity authentication
-            {
-              name: 'COSMOS_DATABASE'
-              value: 'eligibility-db'
+              name: 'MongoDb__ConnectionString'
+              secretRef: 'mongo-connection-string'
             }
             {
-              name: 'COSMOS_CONTAINER'
-              value: 'eligibility-cache'
+              name: 'BatchEligibility__MongoDb__ConnectionString'
+              secretRef: 'mongo-connection-string'
             }
             {
               name: 'EVENT_GRID_ENDPOINT'
@@ -445,10 +222,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'DAPR_APP_ID'
               value: 'eligibility-service'
-            }
-            {
-              name: 'DAPR_STATE_STORE'
-              value: 'eligibility-state'
             }
             {
               name: 'DAPR_PUBSUB'
@@ -507,17 +280,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
 // Role Assignments
 // =========================
 
-// Cosmos DB Data Contributor role for Container App
-resource cosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
-  parent: cosmosAccount
-  name: guid(cosmosAccount.id, containerApp.id, '00000000-0000-0000-0000-000000000002')
-  properties: {
-    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002'
-    principalId: containerApp.identity.principalId
-    scope: cosmosAccount.id
-  }
-}
-
 // Event Grid Data Sender role for Container App
 resource eventGridRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(eventGridTopic.id, containerApp.id, 'd5a91429-5739-47e2-a06b-3470a27159e7')
@@ -535,11 +297,6 @@ resource eventGridRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-0
 output containerAppName string = containerApp.name
 output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
-output cosmosAccountName string = cosmosAccount.name
-output cosmosAccountEndpoint string = cosmosAccount.properties.documentEndpoint
-output cosmosDatabaseName string = cosmosDatabase.name
-output eligibilityCacheContainerName string = eligibilityCacheContainer.name
-output eligibilityRulesContainerName string = eligibilityRulesContainer.name
 output eventGridTopicName string = eventGridTopic.name
 output eventGridTopicEndpoint string = eventGridTopic.properties.endpoint
 output containerAppPrincipalId string = containerApp.identity.principalId

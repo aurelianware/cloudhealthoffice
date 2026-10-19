@@ -1,11 +1,9 @@
 using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Edi.Interchange;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
-using PaymentService.Middleware;
 using PaymentService.Repositories;
 using PaymentService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
@@ -50,50 +48,22 @@ builder.Services.AddSwaggerGen(c =>
 // HTTP context accessor (repositories read the token tenant from HttpContext.Items)
 builder.Services.AddHttpContextAccessor();
 
-// Database Configuration — MongoDB when MongoDb:ConnectionString is present, Cosmos DB otherwise
+// Database — MongoDB is the only payment store (ADR 006); the client is
+// registered by the shared lib.
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+if (databaseProvider != ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddScoped<IPaymentRepository, PaymentRepositoryMongo>();
-    builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepositoryMongo>();
-    builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepositoryMongo>();
-    builder.Services.AddScoped<IEraEnvelopeRepository, EraEnvelopeRepositoryMongo>();
-    builder.Services.AddScoped<IClaimReservationRepository, ClaimReservationRepositoryMongo>();
-    builder.Services.AddScoped<IReservationAuditLog, ReservationAuditLogMongo>();
-    builder.Services.AddScoped<IProviderReceivableRepository, ProviderReceivableRepositoryMongo>();
-    Console.WriteLine("Using MongoDB repository");
+    throw new InvalidOperationException(
+        "Payment Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var config = sp.GetRequiredService<IConfiguration>();
-        var endpoint = config["CosmosDb:Endpoint"];
-        var key = config["CosmosDb:Key"];
 
-        if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(key))
-            throw new InvalidOperationException("CosmosDb:Endpoint and CosmosDb:Key must be configured");
-
-        return new CosmosClient(endpoint, key, new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer()
-        });
-    });
-
-    builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
-    builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepository>();
-    builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepository>();
-    builder.Services.AddSingleton<IClaimReservationRepository, ClaimReservationRepositoryCosmos>();
-    builder.Services.AddSingleton<IReservationAuditLog, ReservationAuditLogCosmos>();
-    // EraEnvelope persistence on Cosmos-only deployments uses the
-    // in-memory fallback. payment-service's canonical store is Mongo;
-    // Cosmos paths are dev-only and don't need durable EraEnvelope storage.
-    builder.Services.AddSingleton<IEraEnvelopeRepository, InMemoryEraEnvelopeRepository>();
-    // Same for the provider receivable ledger: durable on Mongo only.
-    builder.Services.AddSingleton<IProviderReceivableRepository, InMemoryProviderReceivableRepository>();
-    Console.WriteLine("Using Cosmos DB repository");
-}
+builder.Services.AddScoped<IPaymentRepository, PaymentRepositoryMongo>();
+builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepositoryMongo>();
+builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepositoryMongo>();
+builder.Services.AddScoped<IEraEnvelopeRepository, EraEnvelopeRepositoryMongo>();
+builder.Services.AddScoped<IClaimReservationRepository, ClaimReservationRepositoryMongo>();
+builder.Services.AddScoped<IReservationAuditLog, ReservationAuditLogMongo>();
+builder.Services.AddScoped<IProviderReceivableRepository, ProviderReceivableRepositoryMongo>();
 
 // X12 interchange control: every persisted 835 envelope is tracked as an
 // outbound interchange so the payee's TA1 can be matched to it.
@@ -144,33 +114,24 @@ else
     builder.Services.AddSingleton<CloudHealthOffice.NachaTransmission.INachaTransmitter, DisabledNachaTransmitter>();
     builder.Services.AddSingleton<CloudHealthOffice.NachaTransmission.INachaRemoteFileProbe, DisabledNachaTransmitter>();
 }
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
-{
-    builder.Services.AddScoped<IPaymentFileTransmissionRepository, PaymentFileTransmissionRepositoryMongo>();
-    builder.Services.AddScoped<INachaFileIdModifierAllocator, NachaFileIdModifierAllocatorMongo>();
-}
-else
-{
-    builder.Services.AddSingleton<IPaymentFileTransmissionRepository, PaymentFileTransmissionRepositoryCosmos>();
-    builder.Services.AddSingleton<INachaFileIdModifierAllocator, NachaFileIdModifierAllocatorCosmos>();
-}
+builder.Services.AddScoped<IPaymentFileTransmissionRepository, PaymentFileTransmissionRepositoryMongo>();
+builder.Services.AddScoped<INachaFileIdModifierAllocator, NachaFileIdModifierAllocatorMongo>();
 builder.Services.AddScoped<IPaymentFileTransmissionService, PaymentFileTransmissionService>();
 
 // GL source events: payment and reversal runs (and transmission records) carry their
 // events in an outbox written with the state change; the dispatcher delivers them to
-// ar-service's GL posting. Off unless GlEvents:DispatchEnabled. Mongo only: the
-// dispatcher reads the outboxes across tenants. See docs/operations/GL-POSTING-RUNBOOK.md.
+// ar-service's GL posting. Off unless GlEvents:DispatchEnabled. The dispatcher
+// reads the outboxes across tenants. See docs/operations/GL-POSTING-RUNBOOK.md.
 builder.Services.Configure<GlEventOptions>(builder.Configuration.GetSection(GlEventOptions.SectionName));
 // The outboxes are read across tenants from one database: not with per-tenant databases.
-var glOutboxReadable = databaseProvider == ChoDatabaseProvider.MongoDb
-                       && !builder.Configuration.GetValue<bool>("MongoDb:UseTenantScoping", false);
+var glOutboxReadable = !builder.Configuration.GetValue<bool>("MongoDb:UseTenantScoping", false);
 if (glOutboxReadable)
     builder.Services.AddSingleton<IGlOutboxStore>(sp => new MongoGlOutboxStore(sp.GetRequiredService<IMongoDatabase>()));
 if (builder.Configuration.GetValue<bool>($"{GlEventOptions.SectionName}:DispatchEnabled"))
 {
     if (!glOutboxReadable)
         throw new InvalidOperationException(
-            "GlEvents:DispatchEnabled needs MongoDB (MongoDb:ConnectionString) without MongoDb:UseTenantScoping: " +
+            "GlEvents:DispatchEnabled needs MongoDB without MongoDb:UseTenantScoping: " +
             "the GL event dispatcher reads the run outboxes of every tenant from one database.");
     builder.Services.AddHttpClient(HttpGlEventSink.HttpClientName, client =>
     {
@@ -243,14 +204,11 @@ builder.Services.AddHttpClient(TradingPartnersClient.HttpClientName, client =>
     client.Timeout = TimeSpan.FromSeconds(10);
 }).AddRunExecutionServiceToken();
 
-// Health checks (MongoDB or Cosmos DB, claims-service HTTP)
+// Health checks (MongoDB, claims-service HTTP)
 var claimsServiceHealthUrl = builder.Configuration["ClaimsService:BaseUrl"] ?? "http://claims-service:8080";
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
     options.HttpDependencies["claims-service"] = $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
 });
 

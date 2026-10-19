@@ -10,7 +10,6 @@ namespace CloudHealthOffice.ProviderEnrollmentService.Cache;
 /// (tenant onboarding, admin config changes).
 ///
 /// Implementations:
-///   TenantEnrollmentConfigRepositoryCosmos — Cosmos DB
 ///   TenantEnrollmentConfigRepositoryMongo  — MongoDB
 ///   RedisTenantEnrollmentConfigRepository  — Redis cache layer
 /// </summary>

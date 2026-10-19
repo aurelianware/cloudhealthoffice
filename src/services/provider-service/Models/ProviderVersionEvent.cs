@@ -24,7 +24,7 @@ public class ProviderVersionEvent
     [Required]
     public string Id { get; set; } = string.Empty;
 
-    /// <summary><c>{TenantId}:{ProviderId}</c> — first-class so Cosmos and Mongo both see it.</summary>
+    /// <summary><c>{TenantId}:{ProviderId}</c>, stored as a first-class field.</summary>
     [Required]
     [StringLength(256)]
     public string PartitionKey { get; set; } = string.Empty;

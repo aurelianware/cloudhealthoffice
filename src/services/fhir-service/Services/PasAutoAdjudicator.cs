@@ -245,7 +245,7 @@ public class PasAutoAdjudicator : IPasAutoAdjudicator
 
             var ruleDecision = await _ruleEngine.EvaluateAsync(ruleContext, cts.Token);
 
-            // The NoOp engine (no database configured) evaluates nothing:
+            // A NoOp engine (a test double; fhir-service never registers one) evaluates nothing:
             // like ConfigDisabled, no basis is claimed for its pend.
             // Recognised by its rule id, the contract (as
             // PaRuleDecisionExtensions.IsPriorAuthRequired does); the name is

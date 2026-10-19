@@ -525,11 +525,9 @@ public class CmsNcciLoaderTests
     }
 
     [Fact]
-    public void TableVersion_SerializesCosmosId()
+    public void TableVersion_SerializesItsId()
     {
         var json = System.Text.Json.JsonSerializer.Serialize(new NcciTableVersion { TenantId = Tenant });
         Assert.Contains("\"id\":\"current\"", json);
-        var newtonsoft = Newtonsoft.Json.JsonConvert.SerializeObject(new NcciTableVersion { TenantId = Tenant });
-        Assert.Contains("\"id\":\"current\"", newtonsoft);
     }
 }

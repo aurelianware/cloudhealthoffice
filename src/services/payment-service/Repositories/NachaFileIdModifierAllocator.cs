@@ -1,6 +1,4 @@
-using System.Net;
 using System.Text.Json.Serialization;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 
@@ -95,37 +93,4 @@ public sealed class NachaFileIdModifierAllocatorMongo : INachaFileIdModifierAllo
                 return holder?.RunId ?? string.Empty;
             }
         });
-}
-
-/// <summary>Cosmos: container <c>NachaFileIdModifiers</c>, partition key <c>/tenantId</c>, created if absent.</summary>
-public sealed class NachaFileIdModifierAllocatorCosmos : INachaFileIdModifierAllocator
-{
-    public const string ContainerName = "NachaFileIdModifiers";
-
-    private readonly Lazy<Task<Container>> _container;
-
-    public NachaFileIdModifierAllocatorCosmos(CosmosClient client, IConfiguration configuration)
-    {
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        _container = new Lazy<Task<Container>>(async () =>
-            (await client.GetDatabase(databaseName).CreateContainerIfNotExistsAsync(new ContainerProperties(ContainerName, "/tenantId"))).Container);
-    }
-
-    public async Task<string> AllocateAsync(string tenantId, string immediateDestination, string immediateOrigin, DateTime fileCreationDate, string runId)
-    {
-        var container = await _container.Value;
-        return await NachaFileIdModifiers.AllocateAsync(tenantId, immediateDestination, immediateOrigin, fileCreationDate, runId, async claim =>
-        {
-            try
-            {
-                await container.CreateItemAsync(claim, new PartitionKey(claim.TenantId));
-                return claim.RunId;
-            }
-            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
-            {
-                var holder = await container.ReadItemAsync<NachaFileIdModifierClaim>(claim.Id, new PartitionKey(claim.TenantId));
-                return holder.Resource.RunId;
-            }
-        });
-    }
 }

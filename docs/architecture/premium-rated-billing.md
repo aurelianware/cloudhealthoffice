@@ -71,12 +71,8 @@ computed from the older ledger, so the lease **fences** the writes:
 - **Heartbeats.** The holder renews the lease (only if it still owns it and it has
   not expired) after the coverage-service call and after the member census; a failed
   renewal stops the run (`BillingLeaseLostException`) before anything is written.
-- **Fenced invoice writes.** Cosmos DB: the lease documents live in the
-  `PremiumInvoices` container (`docType = billingLease`, same `/tenantId` partition),
-  and each invoice create or replace goes in one transactional batch with a replace of
-  the lease document conditioned on the ETag this holder last wrote. A taken-over
-  lease has another ETag, so the batch writes nothing. MongoDB: lease documents also
-  live in the `PremiumInvoices` collection (`DocType = billingLease`), so on a replica
+- **Fenced invoice writes.** Lease documents live in the `PremiumInvoices`
+  collection (`DocType = billingLease`), so on a replica
   set the lease renewal (owner must match) and the invoice write are one
   single-collection transaction, the only kind Azure Cosmos DB for MongoDB (RU)
   supports. A server that reports a replica set but refuses the transaction, and a
@@ -276,16 +272,14 @@ Review reasons (`reviewReasons`; they do not block an explicit issue): `HELD_FOR
 
 ## Storage
 
-| Store | Mongo | Cosmos DB |
-|---|---|---|
-| Rate table versions | collection `RateTables`, `_id` = hash of tenant + table id, plus version | container `RateTables`, partition `/tenantId` |
-| Invoices | `PremiumInvoices` (unchanged; new optional fields) | `PremiumInvoices` (unchanged; new optional fields) |
-| Group billing leases | in collection `PremiumInvoices` (`DocType = billingLease`) | in container `PremiumInvoices` (`docType = billingLease`), partition `/tenantId` |
-| Net credits | `SponsorAccounts` (existing) | `SponsorAccounts` (existing) |
+MongoDB is the only store (ADR 006).
 
-The Cosmos invoice repository's status filters (`GetOverdueAsync`, `GetByStatusAsync`,
-`SearchAsync`) now compare with the camelCase string the service's serializer stores;
-they previously compared with the enum's number and never matched a stored status.
+| Store | MongoDB |
+|---|---|
+| Rate table versions | collection `RateTables`, `_id` = hash of tenant + table id, plus version |
+| Invoices | `PremiumInvoices` (unchanged; new optional fields) |
+| Group billing leases | in collection `PremiumInvoices` (`DocType = billingLease`) |
+| Net credits | `SponsorAccounts` (existing) |
 
 ## Limitations
 
@@ -295,8 +289,7 @@ they previously compared with the enum's number and never matched a stored statu
   terminated are not credited automatically. The runbook gives the manual procedure;
   an automatic final adjustment invoice for terminated groups is a follow-up.
 - On a standalone MongoDB, or a MongoDB API that refuses the transaction, the lease
-  fence is renew-then-write, not atomic; run MongoDB as a replica set (Cosmos DB is
-  always fenced atomically).
+  fence is renew-then-write, not atomic; run MongoDB as a replica set.
 - Released leases are deleted; a lease left behind by a crashed run stays until it is
   taken over after it expires (no TTL index).
 - Heartbeats run between the coverage-service and member-service calls, not between

@@ -4,20 +4,20 @@ using System.Text.Json.Serialization;
 namespace EncounterSubmissionService.Models;
 
 /// <summary>
-/// Cosmos DB document tracking the 60-day AHCA encounter submission window
+/// Document tracking the 60-day AHCA encounter submission window
 /// for a single adjudicated FL Medicaid claim. Partition key: <see cref="TenantId"/>.
 /// Created automatically when the adjudication-completed Kafka event is received.
 /// </summary>
 public class EncounterSubmission
 {
     /// <summary>
-    /// Unique document identifier (Cosmos DB document id).
+    /// Unique document identifier.
     /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation).
+    /// Owning tenant; every read and write filters on it.
     /// </summary>
     [JsonPropertyName("tenantId")]
     [Required]

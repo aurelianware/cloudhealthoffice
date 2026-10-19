@@ -30,9 +30,8 @@ Reads (default read permission of the service):
 - `GET /api/v1/bank-statements/items?status=Suspense|Return|Matched|Applied|Ignored&statementId=`: the decisions. `Suspense` and `Return` are the work queue.
 - payment-service also has `GET /api/v1/bank-statements/settlements/{fileReference}`: whether the bank shows that NACHA file as settled.
 
-MongoDB is required. On a Cosmos-only deployment every call fails with
-"BAI2 bank reconciliation requires MongoDB". The service does not fall back to
-memory, where idempotency would be lost on restart.
+MongoDB is required, like every store since ADR 017. The service does not fall
+back to memory, where idempotency would be lost on restart.
 
 ## What is checked: the whole file or nothing
 
@@ -269,6 +268,5 @@ lists (`Premium:CashCreditTypeCodes`, `Nacha:SettlementDebitTypeCodes`, ...).
 
 - No automatic matching of ACH return entries to individual payments: there is no return detail in BAI2.
 - No premium-side matching of the premium NACHA debit drafts' settlement. premium-billing-service's own drafts can be reconciled the same way later.
-- Cosmos-only deployments are refused (MongoDB required).
 - Group status 2 (deletion) and 3 (correction) lines always go to suspense.
 - An undelivered event is retried only when the same file is ingested again.

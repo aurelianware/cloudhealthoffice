@@ -32,12 +32,11 @@ for the planned pattern-parity follow-up.
 | claims-service | ClaimsV1Controller (canonical V1 submission + member-scoped FHIR-shaped search) | 2 | [ClaimsV1 (canonical V1)](#claimsv1-controller-canonical-v1) |
 | claims-service | ClaimAdjustmentsController | 4 | [Adjustments](#claim-adjustments-controller) |
 | claims-service | FhirExplanationOfBenefitController | 2 | [FHIR EOB](#fhir-explanation-of-benefit-controller) |
-| claims-service | AdminMigrationController | 2 | [Admin migration (operator-only)](#admin-migration-controller-operator-only) |
 | payment-service | PaymentRunsController | 6 | [PaymentRuns](#payment-runs-controller) |
 | payment-service | ReversalRunsController | 6 | [ReversalRuns](#reversal-runs-controller) |
 | payment-service | EraEnvelopesController | 3 | [EraEnvelopes](#era-envelopes-controller) |
 
-**Total: 8 controllers / 47 verbs.**
+**Total: 7 controllers / 45 verbs.**
 
 The `payment-service.PaymentsController` (older payment-domain
 surface, 9 verbs) is **out of scope for the Claims V1 surface** — it
@@ -195,26 +194,6 @@ Capability source: 5.11. See
 > [Phase 2 backlog Section 2 + 3](../roadmap/claims-phase-2-backlog.md#2-fhir-completeness)
 > and [CMS-0057-F readiness](../compliance/claims-cms-0057-f-readiness.md).
 
-### Admin Migration controller (operator-only)
-
-`Route("api/v1/admin/claims/cosmos-migration")` — operator-driven
-Cosmos partition migration.
-Capability source: 5.1b. See
-[claim-versioning.md](../architecture/claim-versioning.md) and
-[claims-cosmos-partition-migration.md](../migrations/claims-cosmos-partition-migration.md)
-(operator runbook).
-
-| Verb | Path | Purpose | Idempotency | Capability |
-|------|------|---------|-------------|------------|
-| POST | `/api/v1/admin/claims/cosmos-migration/run` | Execute migration batch | Idempotent — replay-safe via per-document idempotency keys | 5.1b |
-| GET | `/api/v1/admin/claims/cosmos-migration/status` | Migration progress / status | Read-only | 5.1b |
-
-> **Operator-only.** Not part of the customer-facing V1 surface. Used
-> by SREs during the cutover from `/memberId`-partitioned `Claims`
-> container to `/tenantId`-partitioned `ClaimsV2`. Final deletion of
-> the legacy container is tracked as
-> [Phase 2 backlog item 10.1](../roadmap/claims-phase-2-backlog.md#101--old-claims-cosmos-container-final-deletion).
-
 ---
 
 ## payment-service
@@ -329,7 +308,5 @@ Both surfaces serve the OpenAPI v3 spec at `/swagger/v1/swagger.json`
   — Phase 2 work registry
 - [`docs/compliance/claims-cms-0057-f-readiness.md`](../compliance/claims-cms-0057-f-readiness.md)
   — CMS-0057-F readiness assessment
-- [`docs/migrations/claims-cosmos-partition-migration.md`](../migrations/claims-cosmos-partition-migration.md)
-  — 5.1b operator runbook
 - Per-capability architecture docs at
   [`docs/architecture/claim-*.md`](../architecture/)

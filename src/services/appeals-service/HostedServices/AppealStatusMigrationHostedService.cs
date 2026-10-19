@@ -36,9 +36,6 @@ namespace AppealsService.HostedServices;
 /// the unique-index build. Operators must resolve dupes manually and
 /// re-deploy if the warning fires.
 ///
-/// Cosmos deployments: this service is not registered (Program.cs adds it
-/// only for the Mongo provider). Cosmos-side migration ships as a
-/// separate admin script if that deployment path is used in production.
 /// The status-enum consolidation only affects records written by the
 /// pre-addendum code path.
 /// </summary>

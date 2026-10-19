@@ -5,7 +5,7 @@ namespace AccumulatorService.Repositories;
 /// <summary>
 /// Persistence boundary for accumulator state. Split into two repositories by
 /// aggregate (Snapshot vs Event) so the event stream can grow independently of
-/// the snapshot read model. Both implementations (Mongo, Cosmos) partition by
+/// the snapshot read model. The Mongo implementation scopes every query by
 /// tenantId.
 /// </summary>
 public interface IAccumulatorRepository

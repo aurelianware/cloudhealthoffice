@@ -1,7 +1,6 @@
 using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Extensions;
-using Microsoft.Azure.Cosmos;
 using EligibilityService;
 using EligibilityService.Adapters;
 using EligibilityService.Repositories;
@@ -44,40 +43,20 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultWritePermission = "settings:manage";
 });
 
-// Database Configuration
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+// Database Configuration — MongoDB is the only eligibility store (ADR 006);
+// the database client is registered by the shared lib.
+if (string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
-    // MongoDB Registration
-    
-    builder.Services.AddScoped<IEligibilityRepository, EligibilityRepositoryMongo>();
-    Console.WriteLine("Using MongoDB database provider");
+    throw new InvalidOperationException(
+        "Eligibility Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
 {
-    // Cosmos DB
-    var cosmosConnectionString = builder.Configuration["CosmosDb:ConnectionString"] 
-        ?? throw new InvalidOperationException("Cosmos DB connection string not configured");
-
-    builder.Services.AddSingleton<CosmosClient>(sp =>
-    {
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
-        
-        var options = new CosmosClientOptions
-        {
-            Serializer = new CosmosSystemTextJsonSerializer(jsonOptions)
-        };
-        return new CosmosClient(cosmosConnectionString, options);
-    });
-
-    builder.Services.AddScoped<IEligibilityRepository, EligibilityRepository>();
+    throw new InvalidOperationException(
+        "Eligibility Service supports only MongoDB. Remove Database:Provider or set it to MongoDb.");
 }
+
+builder.Services.AddScoped<IEligibilityRepository, EligibilityRepositoryMongo>();
 
 // HTTP Client for service calls (shared by adapters, factory, and eligibility service)
 builder.Services.AddHttpClient("EligibilityDefault")
@@ -134,7 +113,7 @@ builder.Services.AddScoped<ITemporalEligibilityService, TemporalEligibilityServi
 // from Messaging:* config + environment by AddChoMessaging.
 builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
 
-// Batch eligibility storage (in-memory for dev, Cosmos+Blob+IMessageBus for
+// Batch eligibility storage (in-memory for dev, Mongo+Blob+IMessageBus for
 // production). Resolution logic lives in
 // BatchEligibilityServiceCollectionExtensions.
 builder.Services.AddBatchEligibilityStorage(builder.Configuration, builder.Environment);
@@ -144,13 +123,10 @@ builder.Services.AddHostedService<BatchEligibilityQueueWorker>();
 // No CORS: this service is called server-to-server only (the portal is
 // Blazor Server), so browsers on other origins get no CORS grant.
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 builder.Services.AddChoObservability(builder.Configuration);

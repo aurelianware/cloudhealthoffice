@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted. Narrowed by [ADR 017](017-mongodb-api-only-persistence.md): document
+storage uses the MongoDB API only (Azure DocumentDB in Azure); the native Cosmos
+DB SDK path is removed.
 
 ## Context
 
@@ -30,8 +32,10 @@ Tradeoffs:
 
 - Cross-service reporting requires projections or APIs.
 - Repository tests are important because behavior can differ by backing store.
-- Documentation must be explicit when a guide references MongoDB, Cosmos DB, or
-  PostgreSQL-like stores.
+- Documentation must be explicit when a guide references MongoDB or
+  PostgreSQL-like stores. Since ADR 017, "Cosmos DB" in a service guide means
+  only Azure DocumentDB / Cosmos DB for MongoDB reached through the MongoDB
+  driver.
 
 ## References
 

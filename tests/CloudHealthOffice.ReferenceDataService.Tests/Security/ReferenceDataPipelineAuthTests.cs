@@ -32,6 +32,10 @@ public class ReferenceDataPipelineAuthTests : IClassFixture<ReferenceDataPipelin
 {
     public sealed class Factory : WebApplicationFactory<ComplianceConfigController>
     {
+        /// <summary>A MongoDB address that is never listening; the driver connects lazily.</summary>
+        public const string UnreachableMongo =
+            "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=100&connectTimeoutMS=100";
+
         public InMemoryComplianceConfigRepository Compliance { get; private set; } = new();
         public InMemoryReferenceDataRepository Canonical { get; private set; } = new();
         public Mock<LegacyRepository> Legacy { get; } = new();
@@ -49,7 +53,9 @@ public class ReferenceDataPipelineAuthTests : IClassFixture<ReferenceDataPipelin
             // Program.cs reads these while building, so they go in as host settings.
             builder.UseSetting("ConnectionStrings:PostgreSQL", "Host=unused.invalid;Database=unused;Username=unused;Password=unused");
             builder.UseSetting("ReferenceData:ApplySchemaMigrationsOnStartup", "false");
-            builder.UseSetting("MongoDb:ConnectionString", "");
+            // Program.cs requires MongoDB; this server is never there and the
+            // compliance repository below replaces the one that would use it.
+            builder.UseSetting("MongoDb:ConnectionString", UnreachableMongo);
             builder.UseSetting("Database:Provider", "");
             builder.ConfigureServices(services =>
             {

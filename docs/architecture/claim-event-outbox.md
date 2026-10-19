@@ -20,8 +20,7 @@ accumulator-service never heard about that claim. Nothing repaired it.
    - the examiner resolve / accumulator re-run lock-fenced replace;
    - `PUT /api/claims/{id}/status`, which sets terminal statuses.
 
-   A single-document write is atomic on MongoDB and on Azure Cosmos DB for
-   MongoDB. No multi-document transaction is used.
+   A single-document write is atomic on MongoDB and on Azure DocumentDB. No multi-document transaction is used.
 2. **Publish.** Right after the write the request drains the claim's pending
    events, oldest first, through the shared `ChoKafkaProducer`. Each event
    removed with `$pull` by event id has been acknowledged with `acks=all`.
@@ -66,8 +65,6 @@ accumulator-service never heard about that claim. Nothing repaired it.
   A crash between those two writes loses the event. This applies only to the
   terminal status that endpoint can set (Voided); finalize and void use the
   atomic paths above.
-- **Cosmos SDK backend** (`Database:Provider=CosmosDb`, to be removed). The
-  event list is changed by an ETag-fenced read-modify-patch.
 - **Tenant-scoped databases** (`MongoDb:UseTenantScoping`) are not
   supported. The dispatcher scans only the base claims database, so a tenant
   database's pending events would never be retried. With tenant scoping on,

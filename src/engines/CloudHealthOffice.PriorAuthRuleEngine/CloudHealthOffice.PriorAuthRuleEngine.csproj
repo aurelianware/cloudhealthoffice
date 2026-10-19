@@ -4,7 +4,6 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
     <RootNamespace>CloudHealthOffice.PriorAuthRuleEngine</RootNamespace>
     <AssemblyName>CloudHealthOffice.PriorAuthRuleEngine</AssemblyName>
     <Description>
@@ -31,7 +30,6 @@
          on the class. See docs/architecture/shared-cache.md and Addendum A.7.2. -->
     <ProjectReference Include="..\..\services\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
 
-    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />

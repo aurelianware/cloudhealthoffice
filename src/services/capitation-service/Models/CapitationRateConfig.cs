@@ -18,13 +18,13 @@ public class CapitationRateConfig
     // ── Identity ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation)
+    /// Owning tenant (every query is scoped to it)
     /// </summary>
     [Required]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Unique identifier (Cosmos DB document id)
+    /// Unique identifier (the document id)
     /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();

@@ -1,5 +1,4 @@
 using ClaimsService.Models;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 
 namespace ClaimsService.Repositories;
@@ -61,64 +60,5 @@ public class ClaimAccessAuditRepositoryMongo : IClaimAccessAuditRepository
             .SortByDescending(e => e.OccurredAt)
             .Limit(Math.Clamp(query.Limit, 1, 1000))
             .ToListAsync(ct);
-    }
-}
-
-public class ClaimAccessAuditRepositoryCosmos : IClaimAccessAuditRepository
-{
-    private readonly Container _container;
-
-    public ClaimAccessAuditRepositoryCosmos(CosmosClient cosmosClient, IConfiguration configuration)
-    {
-        var databaseName = configuration["CosmosDb:DatabaseName"] ?? "ClaimsDB";
-        var containerName = configuration["CosmosDb:ClaimAccessAuditContainer"] ?? "ClaimAccessAudit";
-        _container = cosmosClient.GetContainer(databaseName, containerName);
-    }
-
-    public Task AppendAsync(ClaimAccessEvent accessEvent, CancellationToken ct = default) =>
-        _container.CreateItemAsync(accessEvent, new PartitionKey(accessEvent.TenantId), cancellationToken: ct);
-
-    public async Task<IReadOnlyList<ClaimAccessEvent>> QueryAsync(ClaimAccessQuery query, CancellationToken ct = default)
-    {
-        var where = new List<string> { "c.tenantId = @tenantId" };
-        var definition = new Dictionary<string, object> { ["@tenantId"] = query.TenantId };
-        if (!string.IsNullOrWhiteSpace(query.ClaimId))
-        {
-            where.Add("(c.claimId = @claimId OR ARRAY_CONTAINS(c.claimIds, @claimId))");
-            definition["@claimId"] = query.ClaimId;
-        }
-        if (!string.IsNullOrWhiteSpace(query.MemberId))
-        {
-            where.Add("c.memberId = @memberId");
-            definition["@memberId"] = query.MemberId;
-        }
-        if (!string.IsNullOrWhiteSpace(query.ActorId))
-        {
-            where.Add("c.actorId = @actorId");
-            definition["@actorId"] = query.ActorId;
-        }
-        if (query.From is { } from)
-        {
-            where.Add("c.occurredAt >= @from");
-            definition["@from"] = from;
-        }
-        if (query.To is { } to)
-        {
-            where.Add("c.occurredAt <= @to");
-            definition["@to"] = to;
-        }
-
-        var limit = Math.Clamp(query.Limit, 1, 1000);
-        var sql = new QueryDefinition($"SELECT TOP {limit} * FROM c WHERE {string.Join(" AND ", where)} ORDER BY c.occurredAt DESC");
-        foreach (var (name, value) in definition) sql = sql.WithParameter(name, value);
-
-        var iterator = _container.GetItemQueryIterator<ClaimAccessEvent>(
-            sql, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(query.TenantId) });
-        var results = new List<ClaimAccessEvent>();
-        while (iterator.HasMoreResults)
-        {
-            results.AddRange(await iterator.ReadNextAsync(ct));
-        }
-        return results;
     }
 }

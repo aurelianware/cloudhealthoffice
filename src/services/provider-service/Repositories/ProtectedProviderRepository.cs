@@ -7,7 +7,7 @@ namespace ProviderService.Repositories;
 /// <summary>
 /// Encrypts the legacy bank-account copy on provider documents and version
 /// rows (<see cref="Provider.BankAccount"/>: routing, account and tax numbers)
-/// at rest around the Mongo or Cosmos repository.
+/// at rest around the Mongo repository.
 ///
 /// <list type="bullet">
 ///   <item>Every write of a whole row (create, update, drafts, activate and

@@ -78,7 +78,7 @@ public interface IPriorAuthRuleEngine
 /// <summary>
 /// Fetches a provider's PA approval history over a lookback window.
 /// Used by RegulatoryExemption rules (TX gold card).
-/// Host implementation calls authorization-service or its Cosmos store directly.
+/// Host implementation calls authorization-service or its store directly.
 /// </summary>
 public interface IProviderApprovalHistoryService
 {

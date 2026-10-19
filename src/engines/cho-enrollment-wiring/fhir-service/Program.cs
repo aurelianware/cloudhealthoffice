@@ -1,7 +1,6 @@
-// REFERENCE ONLY — not compiled; see D-31 in docs/epa-gap-matrix.md.
-// This snapshot of the fhir-service wiring registers its own CosmosClient
-// (SDK default Newtonsoft serializer). The real src/services/fhir-service/Program.cs
-// uses the shared client from AddChoDatabase. Do not copy that registration.
+// REFERENCE ONLY — not compiled. MongoDB is the only store; the real
+// src/services/fhir-service/Program.cs (shared client from AddChoDatabase)
+// is authoritative.
 
 using CloudHealthOffice.Infrastructure.Security;
 using FhirService.Formatters;
@@ -14,7 +13,6 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.PriorAuthRuleEngine.Configuration;
-using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 using StackExchange.Redis;
 
@@ -51,23 +49,14 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
         builder.Configuration["Redis:ConnectionString"]
         ?? throw new InvalidOperationException("Redis:ConnectionString is required.")));
 
-var useMongo = !string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]);
+var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+if (string.IsNullOrEmpty(mongoConnectionString))
+    throw new InvalidOperationException("FHIR Service requires MongoDb:ConnectionString.");
 
-if (useMongo)
-{
-    builder.Services.AddSingleton<IMongoClient>(_ =>
-        new MongoClient(builder.Configuration["MongoDb:ConnectionString"]));
-    builder.Services.AddScoped<IMongoDatabase>(sp =>
-        sp.GetRequiredService<IMongoClient>()
-          .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]));
-}
-else
-{
-    builder.Services.AddSingleton<CosmosClient>(_ =>
-        new CosmosClient(
-            builder.Configuration["CosmosDb:Endpoint"],
-            builder.Configuration["CosmosDb:Key"]));
-}
+builder.Services.AddSingleton<IMongoClient>(_ => new MongoClient(mongoConnectionString));
+builder.Services.AddScoped<IMongoDatabase>(sp =>
+    sp.GetRequiredService<IMongoClient>()
+      .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]));
 
 // ── Provider Enrollment Service ───────────────────────────────────────────────
 // Supplies IEnrollmentDecisionGate → PasAutoAdjudicator Rule 0.
@@ -79,14 +68,9 @@ else
 //     "Tmhp": { "ApiKey": "...(from AKV)" },
 //     "Caqh": { "Username": "...", "Password": "...(from AKV)" }
 //   }
-if (useMongo)
-    builder.Services.AddProviderEnrollmentService(builder.Configuration)
-        .UseMongoRepositories().WithRedisTenantConfigCache()
-        .WithTexasSource().WithCaqhSource();
-else
-    builder.Services.AddProviderEnrollmentService(builder.Configuration)
-        .UseCosmosRepositories().WithRedisTenantConfigCache()
-        .WithTexasSource().WithCaqhSource();
+builder.Services.AddProviderEnrollmentService(builder.Configuration)
+    .UseMongoRepositories().WithRedisTenantConfigCache()
+    .WithTexasSource().WithCaqhSource();
 
 // ── Prior Auth Rule Engine ────────────────────────────────────────────────────
 // Supplies IPriorAuthRuleEngine → PasAutoAdjudicator Rule 5.
@@ -99,14 +83,9 @@ else
 //     "GoldCardLookbackDays": 180,
 //     "PendOnRuleError": true
 //   }
-if (useMongo)
-    builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-        .UseMongoRepository().WithRedisRuleCache()
-        .WithPlatformRules().SeedOnStartup();
-else
-    builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-        .UseCosmosRepository().WithRedisRuleCache()
-        .WithPlatformRules().SeedOnStartup();
+builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
+    .UseMongoRepository().WithRedisRuleCache()
+    .WithPlatformRules().SeedOnStartup();
 
 // ── FHIR data adapters ────────────────────────────────────────────────────────
 builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
@@ -171,8 +150,6 @@ builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
     options.RedisConnectionString   = builder.Configuration["Redis:ConnectionString"];
-    options.CosmosDbEndpoint        = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey             = builder.Configuration["CosmosDb:Key"];
 });
 builder.Services.AddHttpContextAccessor();
 // CORS: browser SMART apps call this service. Allowlist only

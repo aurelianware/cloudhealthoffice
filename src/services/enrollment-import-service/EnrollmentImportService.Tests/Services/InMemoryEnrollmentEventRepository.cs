@@ -5,7 +5,7 @@ namespace EnrollmentImportService.Tests.Services;
 
 /// <summary>
 /// Test double for <see cref="IEnrollmentEventRepository"/>. Models the same uniqueness
-/// rules as Cosmos (unique on EventId per partition; unique on Version per partition) so
+/// rules as the Mongo indexes (unique on EventId and on Version per member stream) so
 /// publisher tests exercise realistic conflict paths.
 /// </summary>
 internal sealed class InMemoryEnrollmentEventRepository : IEnrollmentEventRepository

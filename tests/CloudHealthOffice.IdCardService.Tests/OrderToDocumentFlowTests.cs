@@ -222,6 +222,7 @@ public class OrderToDocumentFlowTests : IClassFixture<OrderToDocumentFlowTests.F
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            builder.UseInMemoryStorage();
             builder.ConfigureAppConfiguration((ctx, cfg) =>
             {
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
@@ -230,8 +231,6 @@ public class OrderToDocumentFlowTests : IClassFixture<OrderToDocumentFlowTests.F
                     ["IdCard:CurrentKeyVersion"] = "v1",
                     ["IdCard:AcceptedKeyVersions:0"] = "v1",
                     ["IdCard:DevSigningKeys:v1"] = "dev-key-v1-bytes-for-hmac-signing",
-                    ["MongoDb:ConnectionString"] = "",
-                    ["CosmosDb:ConnectionString"] = "",
                     ["ProviderJwt:Authority"] = "",
                     ["IdCard:Qr:PixelsPerModule"] = "4"
                 });

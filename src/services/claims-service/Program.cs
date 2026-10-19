@@ -34,8 +34,8 @@ builder.Services.AddChoInfrastructure(builder.Configuration, options =>
 
 // CHO token authentication: tenant from the token, actor from the token,
 // default deny. Reads need claims:read, writes claims:work; void, adjust,
-// override approval, work-queue assignment and the cross-tenant Cosmos
-// migration are annotated with stricter permissions on their actions.
+// override approval and work-queue assignment are annotated with stricter
+// permissions on their actions.
 builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
 {
     auth.DefaultReadPermission = "claims:read";
@@ -55,79 +55,37 @@ builder.Services.AddScoped<ClaimsService.Audit.ClaimAccessAuditWriter>();
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(o => o.Filters.Add<ClaimsService.Audit.ClaimAccessAuditFilter>());
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, ClaimsService.Audit.ClaimAccessDenialRecorder>();
 
-// Repository — Cosmos or Mongo based on config (database client registered by shared lib)
-var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-
-if (!string.IsNullOrEmpty(mongoConnectionString))
+// Repository — MongoDB is the only claim store (ADR 006); the database client
+// is registered by the shared lib.
+if (string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
 {
-    builder.Services.AddScoped<IClaimRepository, ClaimRepositoryMongo>();
-    builder.Services.AddHostedService<ClaimIndexInitializer>();
-    builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryMongo>();
-    builder.Services.AddScoped<IClaimNoteRepository, ClaimNoteRepositoryMongo>();
-    builder.Services.AddScoped<IClaimAccessAuditRepository, ClaimAccessAuditRepositoryMongo>();
-    builder.Services.AddScoped<IMassAdjudicationRunRepository, MassAdjudicationRunRepositoryMongo>();
-    builder.Services.AddScoped<IClaimImportTransactionRepository, ClaimImportTransactionRepositoryMongo>();
-    builder.Services.AddHostedService<MassAdjudicationRunIndexInitializer>();
-
-    // Claim version event publisher (5.1) — Mongo append-only stream is the
-    // system-of-record for the version chain. Mirrors
-    // MongoProviderVersionEventPublisher / MongoPlanVersionEventPublisher.
-    builder.Services.AddScoped<IClaimVersionEventPublisher, MongoClaimVersionEventPublisher>();
-    builder.Services.AddScoped<IClaimVersionEventReader, MongoClaimVersionEventReader>();
-    builder.Services.AddHostedService<ClaimVersionEventIndexInitializer>();
-
-    // 5.12a — ClaimAdjustment aggregate persistence (Mongo per Gap 4
-    // ratification). Indexes (chain-uniqueness for depth=1, idempotency,
-    // status+createdAt for ReversalRun batch queries) are created once
-    // at startup by ClaimAdjustmentIndexInitializer so scoped repository
-    // resolution stays side-effect free.
-    builder.Services.AddScoped<IClaimAdjustmentRepository, ClaimAdjustmentRepositoryMongo>();
-    builder.Services.AddHostedService<ClaimAdjustmentIndexInitializer>();
+    throw new InvalidOperationException(
+        "Claims Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
-{
-    var cosmosEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    var cosmosKey = builder.Configuration["CosmosDb:Key"];
-    var cosmosConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
 
-    if (string.IsNullOrEmpty(cosmosConnectionString) &&
-        (string.IsNullOrEmpty(cosmosEndpoint) || string.IsNullOrEmpty(cosmosKey)))
-    {
-        throw new InvalidOperationException(
-            "Claims Service requires a database. Configure either MongoDb:ConnectionString " +
-            "or CosmosDb:ConnectionString (or CosmosDb:Endpoint + CosmosDb:Key).");
-    }
+builder.Services.AddScoped<IClaimRepository, ClaimRepositoryMongo>();
+builder.Services.AddHostedService<ClaimIndexInitializer>();
+builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryMongo>();
+builder.Services.AddScoped<IClaimNoteRepository, ClaimNoteRepositoryMongo>();
+builder.Services.AddScoped<IClaimAccessAuditRepository, ClaimAccessAuditRepositoryMongo>();
+builder.Services.AddScoped<IMassAdjudicationRunRepository, MassAdjudicationRunRepositoryMongo>();
+builder.Services.AddScoped<IClaimImportTransactionRepository, ClaimImportTransactionRepositoryMongo>();
+builder.Services.AddHostedService<MassAdjudicationRunIndexInitializer>();
 
-    builder.Services.AddScoped<IClaimRepository, ClaimRepository>();
-    builder.Services.AddScoped<IAiExaminationAuditRepository, AiExaminationAuditRepositoryCosmos>();
-    builder.Services.AddScoped<IClaimNoteRepository, ClaimNoteRepositoryCosmos>();
-    builder.Services.AddScoped<IClaimAccessAuditRepository, ClaimAccessAuditRepositoryCosmos>();
-    builder.Services.AddSingleton<IMassAdjudicationRunRepository, InMemoryMassAdjudicationRunRepository>();
-    builder.Services.AddSingleton<IClaimImportTransactionRepository, InMemoryClaimImportTransactionRepository>();
+// Claim version event publisher (5.1) — Mongo append-only stream is the
+// system-of-record for the version chain. Mirrors
+// MongoProviderVersionEventPublisher / MongoPlanVersionEventPublisher.
+builder.Services.AddScoped<IClaimVersionEventPublisher, MongoClaimVersionEventPublisher>();
+builder.Services.AddScoped<IClaimVersionEventReader, MongoClaimVersionEventReader>();
+builder.Services.AddHostedService<ClaimVersionEventIndexInitializer>();
 
-    // 5.1b — Cosmos partition-key migration tooling. Resolves the source
-    // (legacy /memberId Bicep / /Id runtime) and target (canonical
-    // /tenantId) containers from the configured database; the migration
-    // service is the only consumer that ever sees both containers.
-    // Singleton because it owns the running-flag + last-run state shared
-    // across requests; the underlying Cosmos containers are thread-safe.
-    builder.Services.Configure<ClaimMigrationOptions>(
-        builder.Configuration.GetSection(ClaimMigrationOptions.SectionName));
-    builder.Services.AddSingleton<IClaimMigrationContainerResolver, CosmosClaimMigrationContainerResolver>();
-    builder.Services.AddSingleton<IClaimMigrationService, ClaimMigrationService>();
-
-    // Cosmos-only deployments don't have a provisioned events stream; the
-    // Noop publisher logs a warning so ops can spot the missing wiring
-    // without breaking the lifecycle path.
-    builder.Services.AddScoped<IClaimVersionEventPublisher, NoopClaimVersionEventPublisher>();
-    builder.Services.AddScoped<IClaimVersionEventReader, NoopClaimVersionEventReader>();
-
-    // 5.12a — Cosmos-only deployments throw on adjustment writes per
-    // Gap 4 ratification. Reads return null/empty; the noop is fail-loud
-    // on writes so the missing capability surfaces immediately rather
-    // than silently dropping audit data.
-    builder.Services.AddScoped<IClaimAdjustmentRepository, ClaimAdjustmentRepositoryCosmosNoop>();
-}
+// 5.12a — ClaimAdjustment aggregate persistence (Mongo per Gap 4
+// ratification). Indexes (chain-uniqueness for depth=1, idempotency,
+// status+createdAt for ReversalRun batch queries) are created once
+// at startup by ClaimAdjustmentIndexInitializer so scoped repository
+// resolution stays side-effect free.
+builder.Services.AddScoped<IClaimAdjustmentRepository, ClaimAdjustmentRepositoryMongo>();
+builder.Services.AddHostedService<ClaimAdjustmentIndexInitializer>();
 
 // FHIR R4 ExplanationOfBenefit projector — hand-built JsonObject to avoid
 // the Hl7.Fhir.R4 transitive dep; used by the v1 member-scoped claims endpoint.
@@ -388,8 +346,7 @@ builder.Services.AddSingleton<ClaimsService.EDI.Validation.ISnip837Validator>(sp
         sp.GetService<ClaimsService.EDI.Validation.ISnipCodeSetReference>()));
 
 // 5.7 — NCCI / MUE engine (class library). Auto-detect repository binds
-// to whichever backend AddChoInfrastructure registered (IMongoDatabase
-// when MongoDb:ConnectionString is set; CosmosClient otherwise). Seed
+// to the IMongoDatabase AddChoInfrastructure registered. Seed
 // data is operator-controlled (Phase 1 — engine ScrubAsync is
 // graceful when a tenant's table is empty, surfacing zero failures
 // with telemetry rather than throwing).

@@ -264,8 +264,8 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
                 ct);
         }
 
-        // Per-message DI scope so scoped collaborators (Cosmos repository,
-        // encryptor key handles, etc.) get fresh lifetimes per envelope.
+        // Per-message DI scope so scoped collaborators (encryptor key
+        // handles, etc.) get fresh lifetimes per envelope.
         using var scope = _services!.CreateScope();
         var sp = scope.ServiceProvider;
         return await RouteAsync(

@@ -39,7 +39,7 @@ public class PiiIdentifierDedupeTests
     {
         var repo = new InMemoryMemberRepository();
         var events = new InMemoryMemberEventRepository();
-        var publisher = new CosmosMemberEventPublisher(events, NullLogger<CosmosMemberEventPublisher>.Instance);
+        var publisher = new MemberEventPublisher(events, NullLogger<MemberEventPublisher>.Instance);
         var ctl = new IdentifiersController(repo, encryptor, fingerprinter, publisher);
 
         var http = new DefaultHttpContext();

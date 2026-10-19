@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace CloudHealthOffice.BenefitEngine.Services;
 
 /// <summary>
-/// CHO-native accumulator service backed by MongoDB or Cosmos DB via
+/// CHO-native accumulator service backed by MongoDB via
 /// <see cref="IAccumulatorRepository"/>.
 ///
 /// ── Document layout ──────────────────────────────────────────────

@@ -428,9 +428,8 @@ public sealed class AccumulatorOperationsService
     }
 
     /// <summary>
-    /// What failed, for the operator's item result: the exception type, a
-    /// store's status codes when it is a Cosmos error, and the claims-service
-    /// frame it came from. No claim data.
+    /// What failed, for the operator's item result: the exception type and
+    /// the claims-service frame it came from. No claim data.
     /// </summary>
     internal static string Describe(Exception ex)
     {
@@ -438,17 +437,7 @@ public sealed class AccumulatorOperationsService
             .Split('\n')
             .Select(l => l.Trim())
             .FirstOrDefault(l => l.Contains("ClaimsService.", StringComparison.Ordinal));
-        string what;
-        if (ex is Microsoft.Azure.Cosmos.CosmosException cosmos)
-        {
-            var message = Sanitize(cosmos.Message.Split('\n')[0]);
-            if (message.Length > 300) message = message[..300];
-            what = $"CosmosException {(int)cosmos.StatusCode} {cosmos.StatusCode} (sub-status {cosmos.SubStatusCode}): {message}";
-        }
-        else
-        {
-            what = ex.GetType().Name;
-        }
+        var what = ex.GetType().Name;
         return where is null ? what : $"{what} at {Sanitize(where)}";
     }
 

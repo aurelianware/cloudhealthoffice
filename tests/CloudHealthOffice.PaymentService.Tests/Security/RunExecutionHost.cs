@@ -93,9 +93,7 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
                          || d.ServiceType == typeof(IPaymentRunRepository)
                          || d.ServiceType == typeof(IReversalRunRepository)
                          || d.ServiceType == typeof(IEraEnvelopeRepository)
-                         || d.ServiceType.FullName?.Contains("Cosmos") == true
                          || d.ServiceType.FullName?.Contains("Mongo") == true
-                         || d.ImplementationType?.FullName?.Contains("Cosmos") == true
                          || d.ImplementationType?.FullName?.Contains("Mongo") == true)
                 .ToList();
             foreach (var d in remove)

@@ -43,8 +43,6 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
             builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MongoDb:ConnectionString"] = "",
-                ["CosmosDb:ConnectionString"] = "",
-                ["CosmosDb:Endpoint"] = "",
             }));
             builder.ConfigureServices(services =>
             {

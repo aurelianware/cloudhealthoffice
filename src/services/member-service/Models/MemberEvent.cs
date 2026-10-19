@@ -16,10 +16,7 @@ namespace MemberService.Models;
 ///
 /// Ordering: <see cref="Version"/> is a monotonically increasing per-aggregate sequence.
 /// Concurrent writers to the same <c>(TenantId, MemberId)</c> must retry on conflict
-/// (Cosmos optimistic ETag / Mongo unique index on <c>(tenantId, memberId, version)</c>).
-///
-/// Partition: Cosmos container uses <c>/partitionKey</c> (format <c>{tenantId}:{memberId}</c>)
-/// so per-member Change Feed consumers see in-order events.
+/// (MongoDB unique index on <c>(tenantId, memberId, version)</c>).
 ///
 /// Genesis rule: <see cref="MemberEventType.MemberCreated"/> payloads MUST contain the full
 /// member snapshot so projections can be rebuilt from the stream without special-casing.
@@ -29,14 +26,15 @@ namespace MemberService.Models;
 public class MemberEvent
 {
     /// <summary>
-    /// Cosmos document id. Defaults to <see cref="EventId"/> so duplicate writes collide.
+    /// Document id. The publisher defaults it to <see cref="EventId"/>; the Mongo
+    /// repository replaces it with <see cref="BuildMongoDocumentId"/> on append.
     /// </summary>
     [Required]
     public string Id { get; set; } = string.Empty;
 
     /// <summary>
-    /// Cosmos partition key path = <c>{TenantId}:{MemberId}</c>.
-    /// Stored as a first-class property so Cosmos/Mongo both see it.
+    /// Per-member stream key, <c>{TenantId}:{MemberId}</c>. Stored on every event
+    /// so consumers can group a member's stream without recomputing it.
     /// </summary>
     [Required]
     [StringLength(256)]
@@ -84,7 +82,7 @@ public class MemberEvent
     /// Event-specific payload. For <see cref="MemberEventType.MemberCreated"/>: full
     /// member snapshot. For updates: diff (changed fields only).
     ///
-    /// Cosmos serialization (System.Text.Json) emits this as a nested JSON object.
+    /// System.Text.Json (the API wire format) emits this as a nested JSON object.
     /// Mongo serialization goes through <see cref="PayloadJson"/> as a string because
     /// the BSON driver has no built-in serializer for <see cref="JsonObject"/>.
     /// </summary>
@@ -93,7 +91,7 @@ public class MemberEvent
 
     /// <summary>
     /// Mongo-facing mirror of <see cref="Payload"/>. Not emitted by System.Text.Json
-    /// (Cosmos path) — only used by the BSON driver.
+    /// (API wire format) — only used by the BSON driver.
     /// </summary>
     [JsonIgnore]
     public string? PayloadJson

@@ -8,7 +8,7 @@ namespace AppealsService.Tests.Integration;
 
 /// <summary>
 /// End-to-end integration tests for the X12 275 ingress path. Uses the
-/// in-memory repository as the storage substrate (mirrors Mongo + Cosmos
+/// in-memory repository as the storage substrate (mirrors Mongo
 /// behavior per the
 /// <c>AppealRepositoryClaimLookupTests</c> contract) and drives the
 /// consumer's <c>HandleMessageAsync</c> directly with the JSON shapes

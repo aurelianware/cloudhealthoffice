@@ -1,12 +1,10 @@
 using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Extensions;
-using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using AuthorizationService;
 using AuthorizationService.Consumers;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services;
-using MongoDB.Driver;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
@@ -70,42 +68,16 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Database Configuration (Cosmos DB or MongoDB)
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-
-if (databaseProvider == ChoDatabaseProvider.MongoDb)
+// Database — MongoDB is the only authorization store (ADR 006, ADR 017);
+// AddChoDatabase registers the client. A host with no database configured
+// refuses to start, in every environment, rather than going Ready and failing
+// every request.
+if (builder.Services.AddChoDatabase(builder.Configuration) is null)
 {
-    // Use MongoDB
-    builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepositoryMongo>();
-    Console.WriteLine("Using MongoDB repository");
+    throw new InvalidOperationException(
+        "Authorization Service requires a database. Configure MongoDb:ConnectionString.");
 }
-else
-{
-    // Cosmos DB. The CosmosClient is the one AddChoDatabase registered above,
-    // with the shared CosmosSystemTextJsonSerializer (camelCase, enums as
-    // strings, nulls omitted). Registering another client here would override
-    // it; the service's own copy stored enums as numbers while every query
-    // compared strings, so search, summary, open authorizations and retention
-    // found nothing (D-18).
-    if (databaseProvider is null)
-    {
-        const string noDatabase =
-            "No database is configured. Set MongoDb:ConnectionString, or Database:Provider=CosmosDb " +
-            "with CosmosDb:ConnectionString or CosmosDb:Endpoint and CosmosDb:Key.";
-
-        // A deployed host refuses to start rather than going Ready and failing
-        // every request.
-        if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing"))
-            throw new InvalidOperationException(noDatabase);
-
-        // Development and test hosts (which substitute the repository) still
-        // build; a real call fails on first use with the same message.
-        builder.Services.AddSingleton<CosmosClient>(_ => throw new InvalidOperationException(noDatabase));
-    }
-
-    builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepository>();
-    Console.WriteLine("Using Cosmos DB repository");
-}
+builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepositoryMongo>();
 
 // ── Authorization backend seam (Replace / Augment) ──────────────────────────
 // The controller/PAS workflow resolves an IAuthorizationBackend by operating
@@ -138,13 +110,10 @@ builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackendSe
 // HTTP context accessor (repositories read the token tenant from HttpContext.Items)
 builder.Services.AddHttpContextAccessor();
 
-// Health checks (MongoDB or Cosmos DB)
+// Health checks (MongoDB)
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
 // Kafka consumer for RFAI docs received events
@@ -221,7 +190,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-
 
 // Authentication, tenant from the token, then authorization.
 app.UseChoAuthentication();

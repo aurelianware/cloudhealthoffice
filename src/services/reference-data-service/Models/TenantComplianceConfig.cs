@@ -5,21 +5,21 @@ using System.Text.Json.Serialization;
 namespace ReferenceDataService.Models;
 
 /// <summary>
-/// Cosmos DB document that stores state-specific compliance parameters for a tenant.
-/// Partition key: <see cref="TenantId"/>.
+/// Document that stores state-specific compliance parameters for a tenant
+/// (one per tenant; <see cref="Id"/> is the tenant id).
 /// Read at runtime by claims, authorization, appeals, encounter, and payment services
 /// to enforce regulatory deadlines (prompt pay, PA turnaround, etc.).
 /// </summary>
 public class TenantComplianceConfig
 {
     /// <summary>
-    /// Unique document identifier (Cosmos DB document id).
+    /// Unique document identifier (Mongo _id).
     /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation).
+    /// Owning tenant.
     /// Always set by the service from the CHO token; a value in a request body is ignored.
     /// </summary>
     [JsonPropertyName("tenantId")]

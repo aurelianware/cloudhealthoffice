@@ -16,8 +16,8 @@ public interface IFamilyRelationshipRepository
 {
     /// <summary>
     /// Atomically persist the forward and inverse rows of a symmetric relationship.
-    /// Cosmos uses <c>TransactionalBatch</c> (both rows share <c>tenantId</c>); Mongo
-    /// uses a session with a transaction.
+    /// Both rows share <c>tenantId</c> and are written in one MongoDB session
+    /// transaction.
     /// </summary>
     Task CreatePairAsync(FamilyRelationship forward, FamilyRelationship inverse, CancellationToken ct = default);
 

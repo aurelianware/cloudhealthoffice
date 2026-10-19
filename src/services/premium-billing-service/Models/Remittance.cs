@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
-using MongoDB.Bson.Serialization.Attributes;
 
 namespace PremiumBillingService.Models;
 
@@ -385,11 +384,6 @@ public class RemittanceException
     public string? AppliedInvoiceId { get; set; }
     public string? CreditedGroupNumber { get; set; }
 
-    /// <summary>Optimistic concurrency (Cosmos); set by Cosmos DB.</summary>
-    [JsonPropertyName("_etag")]
-    [BsonIgnore]
-    public string? ETag { get; set; }
-
     /// <summary>One id per batch, item line and reason, so a resumed batch does not queue it twice.</summary>
     public static string IdFor(string batchId, int lineNumber, RemittanceExceptionReason reason) =>
         $"{batchId}-{lineNumber}-{reason}".ToLowerInvariant();
@@ -426,11 +420,6 @@ public class SponsorAccount
 
     /// <summary>Optimistic concurrency (Mongo); incremented on every write.</summary>
     public long Version { get; set; }
-
-    /// <summary>Optimistic concurrency (Cosmos); set by Cosmos DB.</summary>
-    [JsonPropertyName("_etag")]
-    [BsonIgnore]
-    public string? ETag { get; set; }
 
     public static string IdFor(string tenantId, string groupNumber) => $"acct-{tenantId}-{groupNumber.Trim().ToUpperInvariant()}";
 }

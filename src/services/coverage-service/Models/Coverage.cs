@@ -11,13 +11,13 @@ namespace CoverageService.Models;
 public class Coverage
 {
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation)
+    /// Owning tenant; every query is scoped by it for multi-tenant isolation
     /// </summary>
     [Required]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Unique identifier (Cosmos DB document id)
+    /// Unique identifier (MongoDB document id)
     /// </summary>
     public string Id { get; set; } = Guid.NewGuid().ToString();
 

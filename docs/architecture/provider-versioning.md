@@ -25,8 +25,8 @@ creation time) and a 1-based `VersionNumber` monotonic within the
 
 ```
 Provider
-├── Id                       per-version document id (Cosmos / Mongo _id)
-├── TenantId                 partition key — multi-tenant isolation
+├── Id                       per-version document id (Mongo _id)
+├── TenantId                 tenant scope — multi-tenant isolation
 ├── ProviderId               chain key — stable across versions
 ├── VersionId                ULID — stable per-version identifier
 ├── VersionNumber            1-based monotonic
@@ -128,8 +128,8 @@ is preserved as the back-compat signal. Hydration normalizes `Status`
 from `VersionState` (Active↔Active, Suspended→Inactive,
 Terminated→Terminated, Superseded→Inactive, Draft→Pending) so existing
 consumers — `coverage-service` `PcpAssignmentService` (which checks
-`provider.Status == Active`), and the Mongo and Cosmos search filters
-(`status = 'Active'`) — continue to work without changes. Callers do
+`provider.Status == Active`), and the Mongo search filters
+(`Status == Active`) — continue to work without changes. Callers do
 not need to migrate to `VersionState`; they can if they want stronger
 state assertions.
 
@@ -158,10 +158,9 @@ The `Status == Active` guard on branches 2 and 3 is non-negotiable —
 it's what excludes legacy Terminated / Suspended rows that lack
 `VersionState`.
 
-Concretely:
+Concretely (MongoDB is the only provider store):
 
 ```csharp
-// Mongo
 var b = Builders<Provider>.Filter;
 var activeFilter = b.Or(
     b.Eq(p => p.VersionState, ProviderVersionState.Active),
@@ -176,14 +175,6 @@ var activeFilter = b.Or(
         b.Eq(p => p.Status, ProviderStatus.Active)));
 ```
 
-```sql
--- Cosmos
-WHERE c.versionState = @active
-   OR (NOT IS_DEFINED(c.versionState) AND c.status = @statusActive)
-   OR ((NOT IS_DEFINED(c.versionId) OR c.versionId = null OR c.versionId = "")
-       AND c.status = @statusActive)
-```
-
 ### What goes wrong without the `Status` guard
 
 Treating "missing `VersionState`" alone as Active pulls in legacy
@@ -196,30 +187,27 @@ written. Symptoms:
 - Read-only consumers see "Active" providers that the rest of the
   system considers terminated.
 
-The matching read site (`GetLatestActiveAsync` in both repository
-implementations) already applies the rule. Capability 5.4.5 added four
-new query sites — `UpdateIntegrityProjectionAsync` and
-`ListProvidersForIntegrityRefreshAsync`, each in Cosmos and Mongo —
-all four of which must apply the same rule.
+The matching read site (`GetLatestActiveAsync`) already applies the
+rule. Capability 5.4.5 added two new query sites —
+`UpdateIntegrityProjectionAsync` and
+`ListProvidersForIntegrityRefreshAsync` — both of which must apply the
+same rule.
 
 ### When adding a new capability
 
 If you write a new query that touches `Provider` rows, audit it
 against this rule. The fast check: does the filter mention
 `VersionState`? If yes, both branches of the legacy fallback must
-appear together. Don't write `OR NOT IS_DEFINED(c.versionState)` (or
-`b.Exists(p => p.VersionState, false)`) without an immediate
-`AND status = active` guard.
+appear together. Don't write `b.Exists(p => p.VersionState, false)`
+without an immediate `Status == Active` guard.
 
 ## Atomicity
 
 `ActivateAndSupersedeAsync` flips the draft to Active and the
-predecessor (if any) to Superseded in a single transaction:
-
-- **Cosmos** — transactional batch on the `(TenantId)` partition key.
-- **Mongo** — session transaction (requires a replica set). On
-  single-node deployments we fall back to sequential writes and emit a
-  warning log so ops can spot the split-state risk.
+predecessor (if any) to Superseded in a single Mongo session
+transaction (requires a replica set). On single-node deployments we
+fall back to sequential writes and emit a warning log so ops can spot
+the split-state risk.
 
 Repositories perform the writes; the service layer is responsible for
 applying the new states and timestamps before calling.
@@ -251,8 +239,7 @@ partition key `{TenantId}:{ProviderId}`, payload as a JSON object
 Bus fan-out (claims-service, coverage-service notifications) is
 intentionally not wired in this PR — `IProviderVersionEventPublisher`
 is positioned for a decorator that adds bus publishing without
-touching call sites. Cosmos-only deployments without the events stream
-provisioned register a no-op publisher that warns on emit.
+touching call sites.
 
 ## Audit log
 
@@ -322,14 +309,12 @@ projection populated by capability 5.4.5
 The write path is `IProviderRepository.UpdateIntegrityProjectionAsync(
 tenantId, providerId, score, rating, verifiedAt, nextDue, ct)`:
 
-- **Cosmos** — `PatchItemAsync` with four `PatchOperation.Set` ops on
-  `/integrityScore`, `/integrityRating`, `/lastVerifiedAt`,
-  `/nextVerificationDue` (plus `/lastUpdatedDate`).
-- **Mongo** — `FindOneAndUpdateAsync` with `$set` on the same field
-  paths, sorted by `VersionNumber DESC` so amendments hit the latest
-  head.
+- **Mongo** — `FindOneAndUpdateAsync` with `$set` on
+  `IntegrityScore`, `IntegrityRating`, `LastVerifiedAt`,
+  `NextVerificationDue` (plus `LastUpdatedDate`), sorted by
+  `VersionNumber DESC` so amendments hit the latest head.
 
-Both bypass the `UpdateAsync` state guard; neither writes the
+It bypasses the `UpdateAsync` state guard and does not write the
 `VersionState`/`VersionNumber`/`PredecessorVersionId` fields.
 Identity-field writes against the same Active row continue to throw
 (verified by `IntegrityProjectionWritePathTests.UpdateAsync_against_active_still_throws_after_projection_patch`).
@@ -374,12 +359,10 @@ The write path is `IProviderRepository.UpdateCredentialingProjectionAsync(
 tenantId, providerId, status, credentialingDate,
 recredentialingDueDate, ct)`:
 
-- **Cosmos** — `PatchItemAsync` with three `PatchOperation.Set` ops on
-  `/credentialingStatus`, `/credentialingDate`,
-  `/recredentialingDueDate` (plus `/lastUpdatedDate`).
-- **Mongo** — `FindOneAndUpdateAsync` with `$set` on the same field
-  paths, sorted by `VersionNumber DESC` so amendments hit the latest
-  head.
+- **Mongo** — `FindOneAndUpdateAsync` with `$set` on
+  `CredentialingStatus`, `CredentialingDate`,
+  `RecredentialingDueDate` (plus `LastUpdatedDate`), sorted by
+  `VersionNumber DESC` so amendments hit the latest head.
 
 Identical mechanism to the integrity projection. Identity-field writes
 against the same Active row continue to throw (verified by
@@ -416,22 +399,14 @@ The write path is
 `IProviderRepository.UpdatePanelGatingDefaultsAsync(tenantId,
 providerId, participationIndex, fields, ct)`:
 
-- **Cosmos** — `PatchItemAsync` with five `PatchOperation.Set` ops on
-  `/networkParticipations/{idx}/panelLimit`,
-  `/networkParticipations/{idx}/panelAccepted`,
-  `/networkParticipations/{idx}/acceptedLobs`,
-  `/networkParticipations/{idx}/minAcceptedAgeYears`,
-  `/networkParticipations/{idx}/maxAcceptedAgeYears` (plus
-  `/lastUpdatedDate`). The patch is conditional on the row's
-  `_etag` so a concurrent CRUD write moves the row out from under the
-  backfill — counted as `EtagConflicts` in the operation summary,
-  retried on the next operator-triggered run.
 - **Mongo** — `FindOneAndUpdateAsync` with `$set` on the positional
   array slot
   (`NetworkParticipations.{idx}.PanelLimit` etc.), sorted by
-  `VersionNumber DESC` so amendments hit the latest head.
+  `VersionNumber DESC` so amendments hit the latest head. The write
+  bumps `Revision`, so a CRUD replace based on an earlier read
+  conflicts instead of erasing the defaults.
 
-Both bypass the `UpdateAsync` state guard for these five fields on a
+It bypasses the `UpdateAsync` state guard for these five fields on a
 single positional slot only; identity-field writes through
 `UpdateAsync` continue to throw
 (verified by

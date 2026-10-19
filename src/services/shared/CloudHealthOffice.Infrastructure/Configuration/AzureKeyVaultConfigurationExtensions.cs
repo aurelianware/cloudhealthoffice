@@ -13,8 +13,8 @@ public static class AzureKeyVaultConfigurationExtensions
     /// Adds Azure Key Vault as an <see cref="IConfigurationSource"/> when the
     /// <c>SecretProvider:Provider</c> setting is <see cref="SecretProviderType.AzureKeyVault"/>.
     /// Secret names use <c>--</c> as the hierarchy delimiter, which is mapped to <c>:</c>
-    /// for the .NET configuration system (e.g. <c>CosmosDb--ConnectionString</c> becomes
-    /// <c>CosmosDb:ConnectionString</c>).
+    /// for the .NET configuration system (e.g. <c>MongoDb--ConnectionString</c> becomes
+    /// <c>MongoDb:ConnectionString</c>).
     /// </summary>
     /// <param name="builder">The configuration builder.</param>
     /// <param name="configuration">

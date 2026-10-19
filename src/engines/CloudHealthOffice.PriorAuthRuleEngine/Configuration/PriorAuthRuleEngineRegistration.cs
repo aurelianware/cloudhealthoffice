@@ -6,7 +6,6 @@ using CloudHealthOffice.PriorAuthRuleEngine.Rules;
 using CloudHealthOffice.PriorAuthRuleEngine.Rules.Platform;
 using CloudHealthOffice.PriorAuthRuleEngine.SeedRules;
 using CloudHealthOffice.PriorAuthRuleEngine.Services;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,8 +24,8 @@ namespace CloudHealthOffice.PriorAuthRuleEngine.Configuration;
 /// // fhir-service / authorization-service Program.cs:
 /// builder.Services
 ///     .AddPriorAuthRuleEngine(builder.Configuration)
-///     .UseCosmosRepository()
-///     .WithRedisRuleCache()
+///     .UseMongoRepository()
+///     .WithRuleCache()
 ///     .WithPlatformRules()
 ///     .SeedOnStartup();        // seeds TX platform rules if not already present
 ///
@@ -39,8 +38,7 @@ namespace CloudHealthOffice.PriorAuthRuleEngine.Configuration;
 ///   "RuleSetCacheTtl": "00:15:00",
 ///   "GoldCardLookbackDays": 180,
 ///   "PendOnRuleError": true,
-///   "RulesContainer": "prior-auth-rules",       // Cosmos
-///   "RulesCollection": "prior_auth_rules"        // Mongo
+///   "RulesCollection": "prior_auth_rules"
 /// }
 /// </summary>
 public static class PriorAuthRuleEngineServiceCollectionExtensions
@@ -70,19 +68,6 @@ public sealed class PriorAuthRuleEngineBuilder
     // ── Persistence ───────────────────────────────────────────────
 
     /// <summary>
-    /// Use Cosmos DB for rule storage.
-    /// Requires CosmosClient to be registered by the host.
-    /// Container: prior-auth-rules, partition key: /stateCode
-    /// </summary>
-    public PriorAuthRuleEngineBuilder UseCosmosRepository()
-    {
-        _services.AddScoped<PaRuleRepositoryCosmos>();
-        _services.AddScoped<IPaRuleRepository>(sp =>
-            sp.GetRequiredService<PaRuleRepositoryCosmos>());
-        return this;
-    }
-
-    /// <summary>
     /// Use MongoDB for rule storage.
     /// Requires IMongoDatabase to be registered by the host.
     /// Collection: prior_auth_rules — indexes created automatically.
@@ -96,18 +81,15 @@ public sealed class PriorAuthRuleEngineBuilder
     }
 
     /// <summary>
-    /// Auto-detect from configuration (MongoDb:ConnectionString → Mongo, else Cosmos).
+    /// Kept for existing callers: binds the MongoDB repository, the only
+    /// store. <paramref name="configuration"/> no longer selects a backend.
     /// </summary>
     public PriorAuthRuleEngineBuilder UseRepositoryFromConfiguration(IConfiguration configuration)
-    {
-        return !string.IsNullOrEmpty(configuration["MongoDb:ConnectionString"])
-            ? UseMongoRepository()
-            : UseCosmosRepository();
-    }
+        => UseMongoRepository();
 
     /// <summary>
     /// Add a read-through cache in front of the rule repository.
-    /// Call AFTER UseCosmosRepository() or UseMongoRepository().
+    /// Call AFTER UseMongoRepository().
     ///
     /// Requires:
     ///   • <see cref="ICacheProvider"/> + <see cref="CacheKeyGuard"/> —
@@ -132,11 +114,9 @@ public sealed class PriorAuthRuleEngineBuilder
         _services.AddScoped<IPaRuleRepository>(sp =>
         {
             IPaRuleRepository inner =
-                (IPaRuleRepository?)sp.GetService<PaRuleRepositoryCosmos>()
-             ?? sp.GetService<PaRuleRepositoryMongo>()
+                sp.GetService<PaRuleRepositoryMongo>()
              ?? throw new InvalidOperationException(
-                    "WithRuleCache() must be called after UseCosmosRepository() " +
-                    "or UseMongoRepository().");
+                    "WithRuleCache() must be called after UseMongoRepository().");
 
             return new RedisPaRuleRepository(
                 inner,

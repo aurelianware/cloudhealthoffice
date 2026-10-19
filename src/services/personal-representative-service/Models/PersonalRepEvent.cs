@@ -9,17 +9,16 @@ namespace PersonalRepresentativeService.Models;
 /// <summary>
 /// Append-only audit row for <see cref="PersonalRepresentative"/>. One row
 /// per lifecycle action (created, activated, inactivated, expired,
-/// association-added, association-removed). Partition key is
-/// <c>{tenantId}:{personalRepId}</c> so the full audit trail for a rep
-/// lives in a single partition and scans cheaply.
+/// association-added, association-removed). <see cref="PartitionKey"/> is
+/// <c>{tenantId}:{personalRepId}</c>, stored with every row.
 /// </summary>
 [BsonIgnoreExtraElements]
 public class PersonalRepEvent
 {
-    /// <summary>Cosmos document id + Mongo `_id`. Defaults to <see cref="EventId"/>.</summary>
+    /// <summary>Mongo `_id`. Defaults to <see cref="EventId"/>.</summary>
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>Cosmos partition key. Derived via <see cref="BuildPartitionKey"/>.</summary>
+    /// <summary><c>{tenantId}:{personalRepId}</c>. Derived via <see cref="BuildPartitionKey"/>.</summary>
     public string PartitionKey { get; set; } = string.Empty;
 
     [Required]
@@ -65,7 +64,7 @@ public class PersonalRepEvent
 
     /// <summary>
     /// Mongo-facing mirror of <see cref="Payload"/>. Not emitted by
-    /// System.Text.Json (Cosmos path) — used only by the BSON driver.
+    /// System.Text.Json — used only by the BSON driver.
     /// </summary>
     [JsonIgnore]
     public string? PayloadJson

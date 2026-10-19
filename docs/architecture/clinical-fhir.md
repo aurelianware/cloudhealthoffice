@@ -117,10 +117,10 @@ coverage and claim stores **by construction** — a prior payer's Condition
 physically cannot be read as a CHO-owned record, because it does not live where
 CHO-owned records live.
 
-**Durability.** MongoDB when `MongoDb:ConnectionString` is configured
-(`MongoPayerToPayerImportRepository`); the in-process store otherwise — the same
-Demo-mode fallback the rest of fhir-service uses. The in-process one does not
-survive a restart and is not shared across instances.
+**Durability.** MongoDB (`MongoPayerToPayerImportRepository`). fhir-service
+requires `MongoDb:ConnectionString` in every environment, Development and
+Testing included, and refuses to start without it. The in-process store is a test
+double only; fhir-service never registers it.
 
 ---
 
@@ -519,8 +519,8 @@ advertised that no controller route serves.
 4. **No version history read path** and no `_history` interaction (§11).
 5. **No `Provenance` resource** is emitted; provenance is `meta.source` plus
    repository metadata (§6).
-6. **In-process storage is the Demo-mode fallback** — durability requires
-   MongoDB configured, the same posture as the rest of fhir-service.
+6. **MongoDB is required** — fhir-service has no in-process storage mode and
+   refuses to start without `MongoDb:ConnectionString`.
 7. **The backfill sweep is not transactional** (§13).
 8. Clinical data has **no retention policy** of its own; it lives as long as the
    imported record does. (Contrast PAT-03, where prior-authorization retention

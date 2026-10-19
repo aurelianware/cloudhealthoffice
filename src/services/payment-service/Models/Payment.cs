@@ -45,7 +45,7 @@ public class Payment
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Unique payment identifier (Cosmos DB document id)
+    /// Unique payment identifier (the document id)
     /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();

@@ -24,6 +24,8 @@ public class TradingPartnerBaseUrlTests
             // Not Development: appsettings.Development.json (localhost) is not loaded.
             builder.UseEnvironment("Testing");
             builder.UseSetting("PaymentRuns:ReservationReconciliationEnabled", "false");
+            // MongoDB is required at startup; nothing listens here, and nothing in this test reads it.
+            builder.UseSetting("MongoDb:ConnectionString", "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=100&connectTimeoutMS=100");
             // Read while Program builds, so as host settings (not a later configuration source).
             foreach (var (key, value) in ChoDevelopmentAuth.Configuration("payment-service"))
                 builder.UseSetting(key, value);

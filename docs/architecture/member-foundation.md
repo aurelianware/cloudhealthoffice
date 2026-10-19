@@ -6,7 +6,7 @@ and downstream-service fan-out via typed clients.
 
 ## Scope of this PR
 - Extended `Member` model (FHIR-aligned demographics + identifiers + communication).
-- Append-only `member-events` stream (Cosmos container / Mongo collection).
+- Append-only `member-events` stream (MongoDB collection).
 - `IMemberEventPublisher` (decorator-friendly so a future bus publisher can be
   layered in without touching call sites).
 - `IFhirPatientProjector` projecting `Member` → FHIR R4 Patient (hand-built
@@ -28,7 +28,7 @@ flowchart LR
   Portal -->|HTTP| IC[IdentifiersController]
 
   subgraph member-service
-    MC -->|IMemberRepository| MR[(Cosmos/Mongo Members)]
+    MC -->|IMemberRepository| MR[(Mongo Members)]
     MC -->|IMemberEventPublisher| MEP
     MC -->|IFhirPatientProjector| FP
     MC -->|ICoverageServiceClient| Cov[[coverage-service]]
@@ -39,11 +39,11 @@ flowchart LR
     IC -->|IIdentifierEncryptor| KV[(Azure Key Vault)]
     IC -->|IMemberEventPublisher| MEP
 
-    MEP[CosmosMemberEventPublisher] -->|IMemberEventRepository| ME[(Cosmos member-events)]
+    MEP[MemberEventPublisher] -->|IMemberEventRepository| ME[(Mongo member-events)]
     FP[FhirPatientProjector] -->|JsonObject| MC
   end
 
-  ME -.->|Change Feed (future PR)| Bus[(Service Bus fan-out)]
+  ME -.->|change stream (future PR)| Bus[(Service Bus fan-out)]
 ```
 
 ## Data model additions
@@ -80,7 +80,7 @@ flowchart LR
 
 ```jsonc
 {
-  "id": "evt-uuid",                 // Cosmos doc id, defaults to eventId
+  "id": "evt-uuid",                 // document id; Mongo stores a hash of (tenantId, memberId, eventId)
   "partitionKey": "{tenantId}:{memberId}",
   "tenantId": "tenant-1",
   "memberId": "M-001",
@@ -95,7 +95,6 @@ flowchart LR
 }
 ```
 
-- **Cosmos container**: `member-events`, partition key path `/partitionKey`.
 - **Mongo collection**: `member-events` with unique compound indexes on
   `(tenantId, memberId, eventId)` and `(tenantId, memberId, version)`.
 - **Idempotency**: duplicate writes with the same `eventId` are no-ops.
@@ -174,49 +173,21 @@ downstreams fall back to `Fake*Client` stand-ins (not used in production).
   startup** in non-development environments when the key secret name is
   unset.
 
-## Cosmos provisioning
+## MongoDB provisioning
 
-- `Members` container — PK `/tenantId` (unchanged).
-- `member-events` container — PK `/partitionKey`
-  (`{tenantId}:{memberId}`) so per-member streams remain co-located for
-  future Change Feed consumers. **Unique-key policy on `/version`** so
-  concurrent writers to the same `(tenantId, memberId)` collide at the
-  index level; the Cosmos repository converts the resulting HTTP 409 with
-  `SubStatusCode=1009` into a version retry
-  (`CosmosMemberEventPublisher`, backoff 2/5/25/100/250 ms, max 5
-  attempts, then `ConcurrencyException`).
+MongoDB is the only member store (Azure Cosmos DB for MongoDB vCore in
+deployed environments). Program.cs refuses to start without
+`MongoDb:ConnectionString`.
 
-### Provisioning script
-
-See `scripts/cosmos/provision-member-events.sh`. Usage:
-
-```bash
-scripts/cosmos/provision-member-events.sh \
-  --account my-cosmos \
-  --resource-group rg-cho \
-  --database CloudHealthOffice
-```
-
-### Sample `az` command (runbook-inline copy)
-
-```bash
-az cosmosdb sql container create \
-  --account-name my-cosmos \
-  --resource-group rg-cho \
-  --database-name CloudHealthOffice \
-  --name member-events \
-  --partition-key-path "/partitionKey" \
-  --unique-key-policy '{"uniqueKeys":[{"paths":["/version"]}]}' \
-  --throughput 400
-```
-
-### Migration
-
-Unique-key policies are immutable after container creation. For **dev /
-staging**: drop and recreate the container (data loss acceptable). For
-**prod**: create a new container with the policy, copy documents via Data
-Migration Tool or a Change-Feed pump, swap reads/writes, then delete the
-old container.
+- `Members` collection — every query is scoped by `tenantId`.
+- `member-events` collection (override with `MongoDb:EventsCollectionName`)
+  — unique compound indexes on `(tenantId, memberId, eventId)` and
+  `(tenantId, memberId, version)`, created at startup by
+  `MemberEventIndexInitializer`. Concurrent writers to the same
+  `(tenantId, memberId)` collide on the version index; the repository
+  reports the duplicate key as `Appended=false` and the publisher
+  (`MemberEventPublisher`, backoff 2/5/25/100/250 ms, max 5 attempts, then
+  `ConcurrencyException`) retries with the next version.
 
 ### PII dedupe (HMAC fingerprint)
 
@@ -237,10 +208,10 @@ parentheses stripped; uppercased) before encryption, and stores it in
 
 ## Future work (explicitly out of scope for this PR)
 
-- Cosmos Change Feed → Service Bus fan-out (next PR).
+- Change stream → Service Bus fan-out (next PR).
 - `ServiceBusMemberEventPublisher` decorator layered onto
-  `CosmosMemberEventPublisher`.
-- Change Feed subscriber that materializes a `CurrentPcpSnapshot` read-through
+  `MemberEventPublisher`.
+- Change-stream subscriber that materializes a `CurrentPcpSnapshot` read-through
   cache on `Member` from `PcpChanged` events.
 - Full `UpdateMember` surface for the new demographic fields (currently the
   controller accepts the core subset; race/ethnicity/communication are

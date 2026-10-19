@@ -17,16 +17,16 @@
     <!-- Redis store tests skip when no redis-server is reachable (CI provides one). -->
     <PackageReference Include="Xunit.SkippableFact" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <!-- Real mongod for the Mongo accumulator store tests. -->
+    <PackageReference Include="EphemeralMongo" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Cosmos DB emulator fixture; see tests/Shared/CosmosEmulator. -->
-    <Compile Include="..\Shared\CosmosEmulator\*.cs" Link="Shared\CosmosEmulator\%(Filename)%(Extension)" />
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
     <!-- redis-server fixture; see tests/Shared/Redis. -->
     <Compile Include="..\Shared\Redis\*.cs" Link="Shared\Redis\%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\engines\CloudHealthOffice.BenefitEngine\CloudHealthOffice.BenefitEngine.csproj" />
-    <!-- CosmosSystemTextJsonSerializer, so the Cosmos tests run on the production serializer. -->
-    <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

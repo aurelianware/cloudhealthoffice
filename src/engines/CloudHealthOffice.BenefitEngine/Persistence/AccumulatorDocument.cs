@@ -21,7 +21,6 @@ namespace CloudHealthOffice.BenefitEngine.Persistence;
 //
 // Optimistic concurrency:
 //   MongoDB: Version field in the replace filter ensures no silent overwrites
-//   Cosmos:  CosmosETag populated from response, used as IfMatchEtag
 //
 // Idempotency:
 //   Each claim's contribution is recorded in the Transactions list.
@@ -73,7 +72,6 @@ public class AccumulatorDocument
     /// <summary>
     /// Optimistic concurrency stamp. Incremented on every successful write.
     /// MongoDB uses this in the replace filter (Eq Version == expectedVersion).
-    /// Cosmos uses ETag from the response (stored separately in CosmosETag).
     /// </summary>
     public long Version { get; set; }
 
@@ -109,14 +107,6 @@ public class AccumulatorDocument
     /// denied) is refused; a newer commit of the same claim is not.
     /// </summary>
     public List<string> ReversedCommitIds { get; set; } = [];
-
-    /// <summary>
-    /// ETag from the last Cosmos read/write. Not persisted in the document body —
-    /// populated from ItemResponse.ETag after every Cosmos operation.
-    /// Used as IfMatchEtag on subsequent writes for optimistic concurrency.
-    /// </summary>
-    [System.Text.Json.Serialization.JsonIgnore]
-    public string? CosmosETag { get; set; }
 
     public static string MakeId(
         string tenantId, string scope, string ownerId,

@@ -1,4 +1,3 @@
-using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
 using BenefitPlanService.Adapters;
 using BenefitPlanService.HostedServices;
@@ -41,90 +40,56 @@ builder.Services.Configure<EstimateApiOptions>(
 var estimateOnly = estimateApiOptions.IsEstimateOnlyEnabled;
 
 // ── Database backend ──────────────────────────────────────────────────────────
-var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
-var useMongo = databaseProvider == ChoDatabaseProvider.MongoDb;
+// MongoDB is the only benefit-plan store (ADR 006); the client is registered by
+// the shared lib.
+if (builder.Services.AddChoDatabase(builder.Configuration) != ChoDatabaseProvider.MongoDb)
+{
+    throw new InvalidOperationException(
+        "Benefit Plan Service requires a database. Configure MongoDb:ConnectionString.");
+}
 
-if (useMongo)
-{
-    builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepositoryMongo>();
-    builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
-    builder.Services.AddScoped<IPlanVersionTransitionRepository, MongoPlanVersionTransitionRepository>();
-    builder.Services.AddScoped<IPlanVersionEventPublisher, MongoPlanVersionEventPublisher>();
-    builder.Services.AddScoped<IPlanYearTransitionPublisher, MongoPlanYearTransitionPublisher>();
-    builder.Services.AddScoped<IPlanYearScheduleSource, MongoPlanYearScheduleSource>();
-    // Cosmos DB for MongoDB requires explicit indexes for ORDER BY paths.
-    // Local MongoDB can otherwise conceal the missing-index incompatibility.
-    builder.Services.AddSingleton<IHostedService>(sp =>
-        new BenefitPlanIndexInitializer(
-            sp.GetRequiredService<IMongoClient>()
-              .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
-            sp.GetRequiredService<IConfiguration>(),
-            sp.GetRequiredService<ILogger<BenefitPlanIndexInitializer>>()));
-    builder.Services.AddSingleton<IHostedService>(sp =>
-        new ServiceCategoryMappingIndexInitializer(
-            sp.GetRequiredService<IMongoClient>()
-              .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
-            sp.GetRequiredService<IConfiguration>(),
-            sp.GetRequiredService<ILogger<ServiceCategoryMappingIndexInitializer>>()));
-    // Ensures (TenantId, PlanId, EventId) and (TenantId, PlanId, Version)
-    // unique indexes exist on the events collection — the publisher's
-    // retry-on-duplicate loop depends on them.
-    // Use a factory-based singleton (mirrors MemberEventIndexInitializer in
-    // member-service) to avoid injecting the scoped IMongoDatabase into a
-    // singleton hosted service.
-    builder.Services.AddSingleton<IHostedService>(sp =>
-        new BenefitPlanService.HostedServices.PlanVersionEventIndexInitializer(
-            sp.GetRequiredService<IMongoClient>()
-              .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
-            sp.GetRequiredService<IConfiguration>(),
-            sp.GetRequiredService<ILogger<BenefitPlanService.HostedServices.PlanVersionEventIndexInitializer>>()));
-    builder.Services.AddSingleton<IHostedService>(sp =>
-        new BenefitPlanService.HostedServices.PlanYearTransitionEventIndexInitializer(
-            sp.GetRequiredService<IMongoClient>()
-              .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
-            sp.GetRequiredService<IConfiguration>(),
-            sp.GetRequiredService<ILogger<BenefitPlanService.HostedServices.PlanYearTransitionEventIndexInitializer>>()));
-    // PlanYearScheduler periodically scans plans and emits Approaching /
-    // Transition events. Idempotency lives in the publisher (deterministic
-    // EventId), so running on multiple replicas is safe.
-    builder.Services.AddHostedService<PlanYearScheduler>();
-    Console.WriteLine("Using MongoDB repository");
-}
-else
-{
-    // The CosmosClient is the one AddChoDatabase registered above, with the
-    // shared CosmosSystemTextJsonSerializer (camelCase, string enums, nulls
-    // omitted). Registering another client here would override it and store
-    // PascalCase documents with no "id" (D-31).
-    builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepository>();
-    builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryCosmos>();
-    builder.Services.AddScoped<IPlanVersionTransitionRepository, CosmosPlanVersionTransitionRepository>();
-    // Even on Cosmos, plan-version-events stream lands in Mongo today
-    // (consistent with member-events pattern). Migrated to Cosmos when
-    // cross-store consistency is needed — see plan-versioning.md.
-    builder.Services.AddScoped<IPlanVersionEventPublisher>(sp =>
-    {
-        // Only register a Mongo publisher if Mongo is available; otherwise
-        // fall back to a no-op so Cosmos-only deployments don't crash.
-        var mongo = sp.GetService<IMongoDatabase>();
-        return mongo == null
-            ? new NoopPlanVersionEventPublisher(sp.GetRequiredService<ILogger<NoopPlanVersionEventPublisher>>())
-            : new MongoPlanVersionEventPublisher(mongo, sp.GetRequiredService<IConfiguration>(),
-                sp.GetRequiredService<ILogger<MongoPlanVersionEventPublisher>>());
-    });
-    // Cosmos-only deployments get the no-op publisher and no scheduler —
-    // the events stream lives in Mongo today (consistent with
-    // PlanVersionEvent). See docs/architecture/plan-year-definition.md.
-    builder.Services.AddScoped<IPlanYearTransitionPublisher>(sp =>
-    {
-        var mongo = sp.GetService<IMongoDatabase>();
-        return mongo == null
-            ? new NoopPlanYearTransitionPublisher(sp.GetRequiredService<ILogger<NoopPlanYearTransitionPublisher>>())
-            : new MongoPlanYearTransitionPublisher(mongo, sp.GetRequiredService<IConfiguration>(),
-                sp.GetRequiredService<ILogger<MongoPlanYearTransitionPublisher>>());
-    });
-    Console.WriteLine("Using Cosmos DB repository");
-}
+builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepositoryMongo>();
+builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
+builder.Services.AddScoped<IPlanVersionTransitionRepository, MongoPlanVersionTransitionRepository>();
+builder.Services.AddScoped<IPlanVersionEventPublisher, MongoPlanVersionEventPublisher>();
+builder.Services.AddScoped<IPlanYearTransitionPublisher, MongoPlanYearTransitionPublisher>();
+builder.Services.AddScoped<IPlanYearScheduleSource, MongoPlanYearScheduleSource>();
+// Cosmos DB for MongoDB requires explicit indexes for ORDER BY paths.
+// Local MongoDB can otherwise conceal the missing-index incompatibility.
+builder.Services.AddSingleton<IHostedService>(sp =>
+    new BenefitPlanIndexInitializer(
+        sp.GetRequiredService<IMongoClient>()
+          .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<ILogger<BenefitPlanIndexInitializer>>()));
+builder.Services.AddSingleton<IHostedService>(sp =>
+    new ServiceCategoryMappingIndexInitializer(
+        sp.GetRequiredService<IMongoClient>()
+          .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<ILogger<ServiceCategoryMappingIndexInitializer>>()));
+// Ensures (TenantId, PlanId, EventId) and (TenantId, PlanId, Version)
+// unique indexes exist on the events collection — the publisher's
+// retry-on-duplicate loop depends on them.
+// Use a factory-based singleton (mirrors MemberEventIndexInitializer in
+// member-service) to avoid injecting the scoped IMongoDatabase into a
+// singleton hosted service.
+builder.Services.AddSingleton<IHostedService>(sp =>
+    new BenefitPlanService.HostedServices.PlanVersionEventIndexInitializer(
+        sp.GetRequiredService<IMongoClient>()
+          .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<ILogger<BenefitPlanService.HostedServices.PlanVersionEventIndexInitializer>>()));
+builder.Services.AddSingleton<IHostedService>(sp =>
+    new BenefitPlanService.HostedServices.PlanYearTransitionEventIndexInitializer(
+        sp.GetRequiredService<IMongoClient>()
+          .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<ILogger<BenefitPlanService.HostedServices.PlanYearTransitionEventIndexInitializer>>()));
+// PlanYearScheduler periodically scans plans and emits Approaching /
+// Transition events. Idempotency lives in the publisher (deterministic
+// EventId), so running on multiple replicas is safe.
+builder.Services.AddHostedService<PlanYearScheduler>();
 
 // ── Redis — shared across all engines ────────────────────────────────────────
 // Two registrations coexist on the same physical Redis instance:
@@ -192,9 +157,8 @@ builder.Services.AddSingleton<IPlanYearResolver, PlanYearResolver>();
 builder.Services.AddScoped<IPlanLimitValidator, PlanLimitValidator>();
 
 // ── Service-Category Mappings (capability BP 5.6) ────────────────────────────
-// Replaces the prior NullServiceCategoryMappingRepository with a real Cosmos
-// or Mongo backend (selected by the same MongoDb:ConnectionString switch
-// that drives the BenefitPlan repository above). The same class implements
+// Replaces the prior NullServiceCategoryMappingRepository with the Mongo
+// backend. The same class implements
 // the read seam consumed by the resolver, the write seam consumed by the
 // admin controller, and the SystemDefaultsApplied idempotency record
 // consumed by the seeder hosted service. See
@@ -202,16 +166,9 @@ builder.Services.AddScoped<IPlanLimitValidator, PlanLimitValidator>();
 builder.Services.Configure<ServiceCategoryMappingOptions>(
     builder.Configuration.GetSection(ServiceCategoryMappingOptions.SectionName));
 
-// Raw storage backend — Cosmos or Mongo. The same class implements all
-// three seams (read, write, applied-record).
-if (useMongo)
-{
-    builder.Services.AddScoped<ChoServiceCategoryMappingRepositoryMongo>();
-}
-else
-{
-    builder.Services.AddScoped<ChoServiceCategoryMappingRepository>();
-}
+// Raw storage backend. The same class implements all three seams (read,
+// write, applied-record).
+builder.Services.AddScoped<ChoServiceCategoryMappingRepositoryMongo>();
 
 // Cache decorator over the raw backend. Holds the IMemoryCache; invalidates
 // on write. The decorator is what the rest of the service consumes.
@@ -219,16 +176,8 @@ builder.Services.AddScoped<CachingServiceCategoryMappingRepository>(sp =>
 {
     var cache = sp.GetRequiredService<IMemoryCache>();
     var options = sp.GetRequiredService<IOptionsMonitor<ServiceCategoryMappingOptions>>();
-    if (useMongo)
-    {
-        var inner = sp.GetRequiredService<ChoServiceCategoryMappingRepositoryMongo>();
-        return new CachingServiceCategoryMappingRepository(inner, inner, inner, cache, options);
-    }
-    else
-    {
-        var inner = sp.GetRequiredService<ChoServiceCategoryMappingRepository>();
-        return new CachingServiceCategoryMappingRepository(inner, inner, inner, cache, options);
-    }
+    var inner = sp.GetRequiredService<ChoServiceCategoryMappingRepositoryMongo>();
+    return new CachingServiceCategoryMappingRepository(inner, inner, inner, cache, options);
 });
 builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IServiceCategoryMappingRepository>(
     sp => sp.GetRequiredService<CachingServiceCategoryMappingRepository>());
@@ -242,19 +191,11 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemDefaultMappi
 
 // ── 834 Plan-Code Mappings ────────────────────────────────────────────────────
 // Crosswalk from a trading partner's own 834 plan code to this platform's
-// PlanId (see Enrollment834PlanCodeMapping). Mongo-only so far — every
-// recently-added capability in this service has landed Mongo-only.
-if (useMongo)
-{
-    builder.Services.AddScoped<IEnrollment834PlanCodeMappingRepository, Enrollment834PlanCodeMappingRepositoryMongo>();
-}
-else
-{
-    builder.Services.AddScoped<IEnrollment834PlanCodeMappingRepository, NullEnrollment834PlanCodeMappingRepository>();
-}
-builder.Services.AddFeeScheduleEngine().UseRepositoriesFromConfiguration(builder.Configuration);
+// PlanId (see Enrollment834PlanCodeMapping).
+builder.Services.AddScoped<IEnrollment834PlanCodeMappingRepository, Enrollment834PlanCodeMappingRepositoryMongo>();
+builder.Services.AddFeeScheduleEngine().UseMongoRepositories();
 builder.Services.AddClaimsScrubEngine();
-builder.Services.AddNcciEngine().UseRepositoryFromConfiguration(builder.Configuration);
+builder.Services.AddNcciEngine().UseMongoRepository();
 builder.Services.AddScoped<IAccumulatorAuditWriter, MongoAccumulatorAuditWriter>();
 
 // ── Provider Enrollment Service ───────────────────────────────────────────────
@@ -275,14 +216,9 @@ builder.Services.AddScoped<IAccumulatorAuditWriter, MongoAccumulatorAuditWriter>
 //   }
 builder.Services.AddScoped<IEnrollmentDecisionGate, PassthroughEnrollmentGate>();
 
-if (useMongo)
-    builder.Services.AddProviderEnrollmentService(builder.Configuration)
-        .UseMongoRepositories().WithTenantConfigCache()
-        .WithTexasSource().WithCaqhSource();
-else
-    builder.Services.AddProviderEnrollmentService(builder.Configuration)
-        .UseCosmosRepositories().WithTenantConfigCache()
-        .WithTexasSource().WithCaqhSource();
+builder.Services.AddProviderEnrollmentService(builder.Configuration)
+    .UseMongoRepositories().WithTenantConfigCache()
+    .WithTexasSource().WithCaqhSource();
 
 // ── Prior Auth Rule Engine ────────────────────────────────────────────────────
 // Supplies IPriorAuthRuleEngine → AdjudicationController (future: pre-adjudication
@@ -295,14 +231,9 @@ else
 //     "GoldCardLookbackDays": 180,
 //     "PendOnRuleError": true
 //   }
-if (useMongo)
-    builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-        .UseMongoRepository().WithRuleCache()
-        .WithPlatformRules().SeedOnStartup();
-else
-    builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
-        .UseCosmosRepository().WithRuleCache()
-        .WithPlatformRules().SeedOnStartup();
+builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
+    .UseMongoRepository().WithRuleCache()
+    .WithPlatformRules().SeedOnStartup();
 
 // ── Operating Mode Provider ───────────────────────────────────────────────────
 // Fetches per-tenant operating mode configuration from tenant-service.
@@ -433,9 +364,6 @@ var claimsServiceHealthUrl = builder.Configuration["Services:ClaimsServiceUrl"]
 builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString  = builder.Configuration["MongoDb:ConnectionString"];
-    options.CosmosDbConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
-    options.CosmosDbEndpoint         = builder.Configuration["CosmosDb:Endpoint"];
-    options.CosmosDbKey              = builder.Configuration["CosmosDb:Key"];
     options.RedisConnectionString    = builder.Configuration["Redis:ConnectionString"];
     if (!estimateOnly)
         options.HttpDependencies["claims-service"] =

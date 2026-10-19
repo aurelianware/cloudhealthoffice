@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using NSubstitute;
 using EligibilityService.Adapters;
 using EligibilityService.Repositories;
@@ -12,7 +13,7 @@ namespace CloudHealthOffice.EligibilityService.Tests;
 /// <summary>
 /// WebApplicationFactory for eligibility-service smoke tests.
 /// Replaces repository and service dependencies with NSubstitute mocks
-/// so tests run without MongoDB/Cosmos or external eligibility adapters.
+/// so tests run without MongoDB or external eligibility adapters.
 /// </summary>
 public class EligibilityApiFactory : WebApplicationFactory<Program>
 {
@@ -22,6 +23,11 @@ public class EligibilityApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        // Program.cs requires a Mongo connection string and reads it before
+        // ConfigureAppConfiguration applies, so it goes in through UseSetting.
+        // The Mongo registrations are removed below; nothing connects here.
+        builder.UseSetting("MongoDb:ConnectionString", "mongodb://fake-eligibility-host:27017");
 
         builder.ConfigureAppConfiguration((_, config) =>
         {
@@ -48,10 +54,9 @@ public class EligibilityApiFactory : WebApplicationFactory<Program>
             foreach (var descriptor in descriptorsToRemove)
                 services.Remove(descriptor);
 
-            // Remove Cosmos/Mongo registrations that would fail without config
+            // Remove the Mongo registrations that would reach for the fake host
             var infraDescriptors = services
-                .Where(d => d.ServiceType.FullName?.Contains("Cosmos") == true
-                         || d.ServiceType.FullName?.Contains("Mongo") == true)
+                .Where(d => d.ServiceType.FullName?.Contains("Mongo") == true)
                 .ToList();
 
             foreach (var descriptor in infraDescriptors)
@@ -69,6 +74,13 @@ public class EligibilityApiFactory : WebApplicationFactory<Program>
 
             foreach (var descriptor in adapterDescriptors)
                 services.Remove(descriptor);
+
+            // Drop the MongoDB health check: /health would probe the fake host.
+            services.PostConfigure<HealthCheckServiceOptions>(o =>
+            {
+                foreach (var check in o.Registrations.Where(r => r.Name == "mongodb").ToList())
+                    o.Registrations.Remove(check);
+            });
 
             services.AddSingleton(EligibilityRepository);
             services.AddSingleton(EligibilityService);

@@ -59,7 +59,7 @@ Adjudication workflow
                                                │ GET /api/claims/accumulator-totals
                                                ▼
                                        ┌──────────────┐
-                                       │ claims-service│ (Cosmos / MongoDB)
+                                       │ claims-service│ (MongoDB)
                                        └──────────────┘
 
   After adjudication:
@@ -67,7 +67,7 @@ Adjudication workflow
                                                        │
                                                        ▼
                                                MongoAccumulatorAuditWriter
-                                               (MongoDB / Cosmos — durable audit)
+                                               (MongoDB — durable audit)
 ```
 
 ---
@@ -189,7 +189,7 @@ Redis keys expire naturally via TTL at 14 months. No explicit reset operation is
 
 For environments with a regulatory requirement to explicitly purge accumulator data at plan year end, the `ResetForPlanYearAsync` method can be extended to scan for and delete matching keys. At scale, Redis `SCAN` is preferable to `KEYS` — but TTL expiry is the recommended approach.
 
-The audit trail in MongoDB/Cosmos is retained indefinitely per compliance requirements.
+The audit trail in MongoDB is retained indefinitely per compliance requirements.
 
 ---
 
@@ -197,7 +197,7 @@ The audit trail in MongoDB/Cosmos is retained indefinitely per compliance requir
 
 `IAccumulatorAuditWriter` is optional. When it is registered, every audit row is written **before the operation returns**: the commit, the increment and each reversal wait for it. A failed write fails the operation with `AccumulatorAuditException`, and the caller retries it. For commits, that caller is the claims-service accumulator outbox. Every audited operation is safe to repeat, and the writer is idempotent per claim. For non-idempotent increments (`ApplyUpdatesAsync`) the audit row is written first, so a failure adds nothing.
 
-The production implementation `MongoAccumulatorAuditWriter` persists `AccumulatorDocument` records to MongoDB or Cosmos DB for:
+The production implementation `MongoAccumulatorAuditWriter` persists `AccumulatorDocument` records to MongoDB for:
 - Member portal display ("you've met $750 of your $1,500 deductible")
 - Compliance reporting and audit
 - Cache rebuild fallback if `IClaimsAccumulatorSource` is unavailable
@@ -216,7 +216,7 @@ A rebuild of the Redis cache does not touch the audit trail, so a lost audit row
 | `IClaimsAccumulatorSource` | Yes | `ClaimsServiceAccumulatorSource` (typed `HttpClient`) |
 | `IBenefitEngineTenantContext` | Yes | `HttpContextTenantContext` (reads from `TenantMiddleware`) |
 | `IAccumulatorAuditWriter` | No (optional) | `MongoAccumulatorAuditWriter` |
-| `IAccumulatorRepository` | Yes (for audit writer) | `AccumulatorRepositoryMongo` or `AccumulatorRepositoryCosmos` |
+| `IAccumulatorRepository` | Yes (for audit writer) | `AccumulatorRepositoryMongo` |
 
 ---
 
@@ -241,10 +241,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IBenefitEngineTenantContext, HttpContextTenantContext>();
 
 // 4. Accumulator repository (for audit writer)
-//    Register whichever matches your DB choice:
 builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
-// or:
-builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryCosmos>();
 
 // 5. Optional audit writer
 builder.Services.AddScoped<IAccumulatorAuditWriter, MongoAccumulatorAuditWriter>();
@@ -263,12 +260,9 @@ builder.Services.AddBenefitEngine()
 |---|---|---|
 | `Redis:ConnectionString` | Yes | StackExchange.Redis connection string |
 | `Services:ClaimsServiceUrl` | Yes | Base URL of the claims-service (e.g., `http://claims-service`) |
-| `CosmosDb:DatabaseName` | Cosmos only | Database name (default: `CloudHealthOffice`) |
-| `CosmosDb:Endpoint` / `CosmosDb:Key` | Cosmos only | Cosmos DB credentials |
-| `MongoDb:ConnectionString` | Mongo only | MongoDB connection string |
-| `MongoDb:DatabaseName` | Mongo only | MongoDB database name |
-| `BenefitEngine:AccumulatorContainer` | Cosmos only | Container name (default: `Accumulators`) |
-| `BenefitEngine:AccumulatorCollection` | Mongo only | Collection name (default: `Accumulators`) |
+| `MongoDb:ConnectionString` | Yes | MongoDB (or Azure Cosmos DB for MongoDB vCore) connection string |
+| `MongoDb:DatabaseName` | Yes | MongoDB database name |
+| `BenefitEngine:AccumulatorCollection` | No | Collection name (default: `Accumulators`) |
 
 ---
 
