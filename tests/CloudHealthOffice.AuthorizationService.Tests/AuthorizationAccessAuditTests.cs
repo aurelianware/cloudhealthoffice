@@ -75,6 +75,17 @@ public class AuthorizationAccessAuditTests : IClassFixture<AuthorizationApiFacto
     }
 
     [Fact]
+    public async Task Invalid_line_identity_is_rejected_and_access_is_still_logged()
+    {
+        var response = await As("svc-invalid-line", ChoRolePermissions.UMCoordinator)
+            .GetAsync("/api/authorizations/PA-1/validate?procedureCode=72148&lineNumber=0");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var entry = Assert.Single(_log.All, e => e.ActorId == "svc-invalid-line");
+        Assert.Equal("Validate", entry.Action);
+        Assert.Equal("PA-1", entry.RecordId);
+    }
+
+    [Fact]
     public async Task A_validation_lookup_is_logged_against_the_authorization_and_its_member()
     {
         var response = await As("svc-claims", ChoRolePermissions.UMCoordinator).GetAsync("/api/authorizations/PA-1/validate");

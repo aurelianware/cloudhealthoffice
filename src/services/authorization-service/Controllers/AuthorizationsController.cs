@@ -257,7 +257,10 @@ public class AuthorizationsController : ControllerBase
         [FromQuery] int? lineNumber = null)
     {
         if (lineNumber <= 0 || (lineNumber.HasValue && string.IsNullOrWhiteSpace(procedureCode)))
+        {
+            await RecordValidateAsync(accessLog, authNumber, null, StatusCodes.Status400BadRequest);
             return BadRequest(new { error = "A positive line number requires a procedure code." });
+        }
         var checkDate = serviceDate ?? DateTime.UtcNow;
 
         _logger.LogInformation(
