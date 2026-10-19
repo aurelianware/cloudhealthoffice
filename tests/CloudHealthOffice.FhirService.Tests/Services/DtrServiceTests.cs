@@ -115,7 +115,7 @@ public class DtrServiceTests
     }
 
     [Fact]
-    public async Task SubmitResponse_NonexistentQuestionnaire_DetectedByQuestionnaireExists()
+    public void SubmitResponse_NonexistentQuestionnaire_DetectedByQuestionnaireExists()
     {
         _service.QuestionnaireExists("Questionnaire/nonexistent", "test-tenant")
             .Should().BeFalse();
