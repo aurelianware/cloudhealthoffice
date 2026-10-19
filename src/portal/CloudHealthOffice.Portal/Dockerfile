@@ -5,6 +5,8 @@ WORKDIR /repo
 # Central Package Management: every PackageReference resolves its version from
 # Directory.Packages.props, so restore fails without it in the build context.
 COPY Directory.Packages.props ./
+# Required by src/Directory.Build.props: retain the repository-wide warning gate.
+COPY Directory.Build.props ./
 # Carries the CVE-motivated pins applied to every project under src/.
 COPY src/Directory.Build.props src/
 
