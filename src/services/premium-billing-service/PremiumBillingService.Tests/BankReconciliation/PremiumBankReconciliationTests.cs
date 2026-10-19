@@ -221,6 +221,36 @@ public sealed class PremiumBankReconciliationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task LockboxPaymentDateLookup_IncludesLateImports_AndFiltersTenantSourceStatusAndDay()
+    {
+        var batches = _db.GetCollection<RemittanceBatch>("RemittanceBatches");
+        RemittanceBatch Batch(string id, string tenant = Tenant, int dayOffset = 0,
+            RemittanceSource source = RemittanceSource.Lockbox,
+            RemittanceBatchStatus status = RemittanceBatchStatus.Completed) => new()
+        {
+            Id = id, TenantId = tenant, Source = source, Status = status,
+            PaymentDate = AsOf.AddDays(dayOffset), ReceivedAt = AsOf.AddMonths(6),
+            PaymentAmount = 500m, TraceNumber = "LBX-7788-" + id,
+        };
+        await batches.InsertManyAsync([
+            Batch("late"), Batch("foreign", tenant: "another-tenant"),
+            Batch("previous", dayOffset: -1), Batch("next", dayOffset: 1),
+            Batch("820", source: RemittanceSource.X12820),
+            Batch("not-posted", status: RemittanceBatchStatus.NotPosted),
+        ]);
+
+        // An unspecified BAI2 business date must have the same UTC boundaries
+        // on Phoenix and UTC hosts; the receipt date is deliberately far later.
+        var matches = (await _batches.FindLockboxByPaymentDateAsync(
+            DateTime.SpecifyKind(AsOf, DateTimeKind.Unspecified))).ToList();
+        matches.Should().ContainSingle().Which.Id.Should().Be("late");
+        var item = (await Reconcile(Single(
+            new Tx("115", 50000, CustomerReference: "7788", Text: "LOCKBOX DEPOSIT")))).Items.Single();
+        item.Status.Should().Be(ReconciliationStatus.Matched);
+        item.MatchedEntityIds.Should().ContainSingle().Which.Should().Be("late");
+    }
+
+    [Fact]
     public async Task AchReturn_IsFlagged_AndNotApplied()
     {
         var item = (await Reconcile(Single(new Tx("555", 10000, CustomerReference: "INV-2026-6001", Text: "RETURN R01")))).Items.Single();
