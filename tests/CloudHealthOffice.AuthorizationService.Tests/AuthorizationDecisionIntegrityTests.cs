@@ -54,10 +54,17 @@ public class AuthorizationDecisionIntegrityTests
         Assert.Equal(0, auth.RequestedServices[1].ApprovedUnits);
         Assert.Null(auth.ApprovedUnits); // Different units are never summed into an ambiguous header quantity.
         var snapshot = Assert.Single(auth.StatusHistory).LineDecisions;
-        await backend.UpdateStatusAsync(auth, AuthorizationStatus.Approved, "A1", null, details: new());
+        await backend.UpdateStatusAsync(auth, AuthorizationStatus.Modified, "A2", null, details: new()
+        {
+            LineDecisions = new()
+            {
+                new() { LineNumber = 7, ReviewDecision = "A2", ApprovedUnits = 3, DenialReasonCode = "LIMIT", DenialReason = "Three units now meet criteria." },
+                new() { LineNumber = 12, ReviewDecision = "A3", DenialReasonCode = "NOTMEDNEC", DenialReason = "Second service remains denied." },
+            },
+        });
         Assert.Equal("A3", snapshot[1].ReviewDecision);
-        Assert.Equal("A1", auth.RequestedServices[1].ServiceStatus);
-        Assert.Null(auth.RequestedServices[1].DenialReason);
+        Assert.Equal(2, snapshot[0].ApprovedUnits);
+        Assert.Equal(3, auth.RequestedServices[0].ApprovedUnits);
     }
 
     [Theory]

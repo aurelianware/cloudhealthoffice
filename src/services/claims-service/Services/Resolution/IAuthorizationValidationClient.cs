@@ -25,7 +25,7 @@ public enum AuthorizationLookupStatus
     /// <summary>The authorization exists and is valid for this service.</summary>
     Valid,
 
-    /// <summary>The authorization exists but is not valid for this service (not approved, expired, code or provider not covered).</summary>
+    /// <summary>The authorization exists but is not valid for this service (not approved, service date outside the approved period, code or provider not covered).</summary>
     Invalid,
 
     /// <summary>authorization-service answered that the number does not exist for this tenant.</summary>

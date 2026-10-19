@@ -67,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Update MessagePack to 2.5.303 for GHSA-qhrr-8q5h-9q3h, preserving vulnerability warnings as build errors; repair NBomber load-harness compilation.
+
+- Guard authorization lifecycle transitions, audit cancellation through the backend, and expire ended approvals with tenant/revision-fenced history updates.
+
 - Persist receipt-based authorization decision deadlines and prevent RFAI document arrival from restarting SLA or turnaround clocks.
 
 - Persist reviewer and automated authorization outcomes per service line, require coded explanations for denied/reduced units, and project committed decisions through PAS and claims validation.

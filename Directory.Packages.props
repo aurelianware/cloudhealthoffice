@@ -71,7 +71,7 @@
     <PackageVersion Include="EphemeralMongo" Version="3.2.0" />
     <PackageVersion Include="FluentAssertions" Version="6.12.2" />
     <PackageVersion Include="Hl7.Fhir.R4" Version="5.10.2" />
-    <PackageVersion Include="MessagePack" Version="2.5.301" />
+    <PackageVersion Include="MessagePack" Version="2.5.303" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.25" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.25" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.25" />

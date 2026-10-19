@@ -25,7 +25,7 @@ public interface IAuthorizationRepository
     Task<IEnumerable<Authorization>> ListActivityBetweenAsync(DateTime from, DateTime to);
 
     /// <summary>
-    /// The current tenant's approved authorizations (Approved or Modified)
+    /// The current tenant's approvals (Approved, Modified, or expired approvals)
     /// whose approved service period ended in [from, to]: the approved end
     /// date, or the expiration date when no end date was approved.
     /// </summary>
@@ -34,6 +34,11 @@ public interface IAuthorizationRepository
     Task<Authorization> CreateAsync(Authorization authorization);
     Task<Authorization> UpdateAsync(Authorization authorization);
     Task DeleteAsync(string id);
+
+    Task<IReadOnlyList<Authorization>> FindExpiryCandidatesAsync(string tenantId, DateTime cutoffDateUtc, int limit, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<Authorization>>(Array.Empty<Authorization>());
+    Task<bool> ExpireIfStillEligibleAsync(string tenantId, Authorization authorization, DateTime cutoffDateUtc, DateTime changedAtUtc, CancellationToken ct = default)
+        => Task.FromResult(false);
 
     // ── Retention (PAT-03) ───────────────────────────────────────────────────
     // Background-callable: every method takes the tenant EXPLICITLY, so a sweep

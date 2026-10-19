@@ -35,6 +35,10 @@ public sealed class AuthorizationIndexes
                 new CreateIndexOptions { Name = "authorization_tenant_number_unique", Unique = true }),
             new CreateIndexModel<Authorization>(keys.Ascending(a => a.TenantId).Ascending(a => a.Status),
                 new CreateIndexOptions { Name = "authorization_tenant_status" }),
+            new CreateIndexModel<Authorization>(keys.Ascending(a => a.TenantId).Ascending(a => a.Status).Ascending(a => a.ExpirationDate),
+                new CreateIndexOptions { Name = "authorization_tenant_status_expiration" }),
+            new CreateIndexModel<Authorization>(keys.Ascending(a => a.TenantId).Ascending(a => a.Status).Ascending(a => a.ApprovedServiceDateTo),
+                new CreateIndexOptions { Name = "authorization_tenant_status_service_end" }),
         ]);
     }
 }
