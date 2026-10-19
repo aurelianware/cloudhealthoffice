@@ -37,7 +37,7 @@ It runs inside CHO, or standalone beside another core admin system such as QNXT.
 
 ```
 Contact
-  id, tenantId, channel (Phone|Chat|Email|Portal|Walk-in|Mail), direction (Inbound|Outbound)
+  id, tenantId, channel (Phone|IVR|Chat|Email|Portal|Walk-in|Mail), direction (Inbound|Outbound)
   caller        { type: Member|Representative|Provider|Other, name, phone, npi?, relationship?, aorOnFile? }
   member?       memberId (verified: how — DOB + ID, etc.)
   provider?     npi, name
@@ -100,6 +100,42 @@ The export layouts are versioned CMS program audit templates; see [appeals-griev
 4. **Wrap-up:** Claude drafts the summary and a suggested classification and reasons from the transcript or notes. The rep edits and accepts. A person makes the final classification every time.
 5. **Follow-ups:** each one becomes a work item (WorkType `Inquiry`, or the case type) with a due date, routed by queue membership and worked through Get Next.
 
+### 6.1 Letters and notices
+
+How the module works with [correspondence.md](correspondence.md) (details in its §9.1):
+
+- **One-click letter actions are correspondence requests.** Reprint ID card, send EOB copy and resend a letter go through the correspondence service with the contact as their source, so they get the same templates, delivery and proof as any other letter. A lost-card request appears in the member's ID card request history ([correspondence.md](correspondence.md) §10.1).
+- **Cases opened from a call get their letters from the rule pack.** A grievance or appeal classified on the call gets its acknowledgment, extension and resolution notices automatically.
+- **Outbound calls can be notices.** An outbound contact classified as a notice records `OralNoticeGiven` on the case, with the time and whether it was a conversation or a voicemail. That covers MA expedited decisions, Medicaid extension notices and oral responses to oral MA grievances; the written confirmation's clock starts from the call. Failed attempts are recorded, and the written notice goes out on time regardless.
+- **Correspondence panel in the 360 view:** every letter sent to the member or provider, with its letter date, the date it left the plan, USPS events, returns and portal views. The rep answers "I never got my letter" from the panel and can reissue in one action.
+- **Structured capture on the contact screen:** language and accessible-format preferences, address changes, and electronic delivery consent (for Medicare Advantage, consent must name the medium and the letter types), each recorded with the contact as its source.
+- **Letter problems become outbound calls.** Returned mail and failed electronic delivery can create outbound-call work items in the same queues.
+
+### 6.2 Call routing: integrate with the contact-center platform
+
+**CHO doesn't route calls.** Telephony, IVR, queues, routing, recording and workforce management belong to the plan's contact-center platform (Amazon Connect, Genesys Cloud, Five9, NICE CXone, Twilio Flex). Plans already have one, it's a commodity, and building it would break the removable, beside-the-core principle (§2). CHO gives the router the payer knowledge it doesn't have.
+
+| Piece | What CHO provides | How the platform uses it |
+|---|---|---|
+| **Routing context API** | From the caller's number and IVR inputs (member ID, NPI, date of birth): the matched member or provider and routing attributes: line of business, language preference, open expedited appeal or grievance, an open case near its deadline, a recently returned letter, an outbound callback the caller is returning | Picks the queue and priority in its call flow (Amazon Connect Lambda, Genesys data action, Five9 or Twilio webhook). Example: a member with an expedited appeal due in 6 hours goes to the front of the appeals queue in Spanish. |
+| **IVR self-service** | Endpoints for ID card request (lands in the ID card request history, [correspondence.md](correspondence.md) §10.1), claim status, eligibility, PCP lookup | Callers finish simple requests without a rep. Each is logged as a contact with channel `IVR`, so reporting and audit cover self-service. |
+| **Screen pop** | The matched record and open items (§6 step 1) | Opens the CHO contact screen in the agent desktop. |
+| **Outbound calls** | Click-to-dial from a work item (oral notice due, returned-mail address check, callback) | Places the call; reports the outcome (connected, voicemail, no answer, wrong number) back to CHO, which records it on the contact and, for notices, records `OralNoticeGiven` ([correspondence.md](correspondence.md) §9.1). |
+| **Recordings and transcripts** | Intake into the document store, linked to the contact | Sends them by webhook when the call ends (§9, open question 2). |
+
+**Rules for the integration:**
+- **Attributes, not records.** The routing API returns what the router needs to decide (flags, codes, a priority), never clinical detail or claim content. IVR prompts speak only what self-service needs after the caller is authenticated.
+- **IVR authentication** follows the same verification rules as a rep (member ID plus date of birth, or the plan's policy), recorded on the contact.
+- **One adapter per platform** behind a shared interface, the same pattern as CHO's other adapters. Google first (decided 2026-10-17, see below).
+- **Compliance:** a BAA with the platform vendor; call-recording consent where state law requires all parties to consent; outbound calling rules for prerecorded or autodialed calls, which is why notices use rep-initiated click-to-dial; disclosure limits when a call reaches voicemail. *The specific requirements are to confirm before building.*
+
+**Platform order (decided 2026-10-17): Google first.** CHO's demo already runs on GKE in Google Cloud, so the IVR's webhooks call CHO inside the same environment, IAM and BAA. Google's HIPAA covered products include Google Cloud Contact Center as a Service, Agent Assist for CCaaS, Conversational Agents, Speech-to-Text and Customer Experience Insights (no PHI in agent definitions; no Speech-to-Text data logging under a BAA).
+1. **IVR self-service and routing context on Conversational Agents (Dialogflow CX),** calling CHO's self-service and routing-context endpoints through webhooks. A virtual agent built this way can also sit in front of other contact-center platforms.
+2. **Routing, agent desktop, screen pop, recording and outbound on Google Cloud Contact Center as a Service** if procurement is quick (pricing goes through Google sales); otherwise **Amazon Connect** (pay-as-you-go) for this half. The CHO side is identical either way.
+3. **A second platform adapter before a sales push,** matched to what pilot plans run; Genesys, NICE, Five9 and Amazon Connect are likely more common in payer call centers than Google (*share not verified*).
+
+**Who distributes back-office work:** CHO's work management (Get Next) owns follow-ups, deadline work and returned mail, and remains the owner of record and deadlines. For plans that want one agent desktop, an optional adapter pushes CHO work items into the platform's task routing (Amazon Connect Tasks, Genesys work items) and syncs their completion back. See §9, open question 5.
+
 ## 7. Standalone beside QNXT
 
 - **Read adapters:** members/eligibility, claims and status, authorizations, providers and payments, through the core system's APIs or a read replica. Nothing is written back to the core system.
@@ -114,18 +150,22 @@ The export layouts are versioned CMS program audit templates; see [appeals-griev
 3. **Follow-ups through work management:** a new `Inquiry` work type, plus appeals as a work source.
 4. **Reporting:** the grievance, coverage-request and appeal case lists, plus operating metrics.
 5. **AI wrap-up:** summary, suggested classification, complaint-language flag, supervisor sampling.
-6. **Phone integration:** screen pop and recording/transcript intake (Amazon Connect first).
+6. **Phone integration** (§6.2), Google first: IVR self-service and the routing context API on Conversational Agents; then screen pop, recording and transcript intake, and outbound click-to-dial with outcomes on Google CCaaS (or Amazon Connect); then a second platform adapter matched to pilot plans.
 7. **Standalone adapters for QNXT.**
+8. **Correspondence links** (§6.1), as the matching correspondence steps land: letter actions and the correspondence panel with the portal inbox and first mail channel; oral notice from outbound contacts with the appeal notices; consent capture with electronic delivery.
 
 ## 9. Open questions
 
-1. **Which phone platform first?** Amazon Connect is the easiest to demo; Genesys is common in plan call centers.
+1. **Which phone platform first?** *Decided 2026-10-17:* Google (Conversational Agents for IVR, then Google CCaaS or Amazon Connect for routing and the agent desktop); see §6.2. Still open: which platform is second, based on what pilot plans run.
 2. **Recordings:** store full recordings in the document store, or only transcripts plus a link to the phone platform's recording? Recordings are large and sensitive.
 3. **Who adds contacts and notes:** the `claims:note` permission from the workbench decisions covers notes; contacts need their own (`service:contact`).
 4. **Pricing and packaging:** per seat, per member per month, or included in CHO? This decides how the standalone version is positioned.
+5. **Work distribution:** should CHO work items also flow into the contact-center platform's task routing for plans that want one agent desktop, and if so which platforms first? CHO stays the owner of record and deadlines either way.
 
 ## Sources
 
+- [Google Cloud Contact Center as a Service](https://cloud.google.com/solutions/contact-center-as-a-service)
+- [Google Cloud: HIPAA compliance and covered products](https://docs.cloud.google.com/docs/security/compliance/hipaa)
 - [42 CFR 422.564: MA grievance procedures](https://www.law.cornell.edu/cfr/text/42/422.564)
 - [Cognizant: Network Health call center on myQNXT (case study)](https://www.cognizant.com/en_us/case-studies/documents/3879600_network-health-five-star-call-center-member-experience-fueled-by-qnxt_printable.pdf)
 - [Cognizant: QNXT product page](https://www.cognizant.com/us/en/industries/healthcare-technology-solutions/trizetto/core-administration/qnxt)

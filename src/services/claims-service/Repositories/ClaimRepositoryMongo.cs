@@ -1151,6 +1151,54 @@ public class ClaimRepositoryMongo : IClaimRepository
         return result.MatchedCount == 1;
     }
 
+    // ── claim-event outbox ──────────────────────────────────────────────
+
+    private static FilterDefinition<Claim> HasClaimEvent(string tenantId, string claimId, string eventId)
+    {
+        var b = Builders<Claim>.Filter;
+        return b.And(
+            b.Eq(c => c.TenantId, tenantId),
+            b.Eq(c => c.Id, claimId),
+            b.ElemMatch(c => c.PendingClaimEvents, e => e.Id == eventId));
+    }
+
+    public async Task<IReadOnlyList<Claim>> FindDueClaimEventsAsync(long nowMs, int limit, CancellationToken ct = default)
+    {
+        var filter = Builders<Claim>.Filter.ElemMatch(c => c.PendingClaimEvents, e => e.DueAtMs <= nowMs);
+        var claims = await _collection.Find(filter).Limit(limit).ToListAsync(ct);
+        return claims.Select(Hydrate).ToList();
+    }
+
+    public async Task<long?> OldestClaimEventAsync(CancellationToken ct = default)
+    {
+        // $exists on the indexed path, so the sparse claim_event_outbox_created
+        // index answers the filter (only claims with a pending event are read);
+        // a $size / "PendingClaimEvents.0" filter scanned the whole collection.
+        var filter = Builders<Claim>.Filter.Exists("PendingClaimEvents.CreatedAtMs");
+        var claim = await _collection.Find(filter)
+            .Sort(Builders<Claim>.Sort.Ascending("PendingClaimEvents.CreatedAtMs"))
+            .Limit(1).FirstOrDefaultAsync(ct);
+        return claim?.PendingClaimEvents is { Count: > 0 } pending ? pending.Min(e => e.CreatedAtMs) : null;
+    }
+
+    public async Task<bool> CompleteClaimEventAsync(string tenantId, string claimId, string eventId, CancellationToken ct = default)
+    {
+        var update = Builders<Claim>.Update.PullFilter(c => c.PendingClaimEvents, e => e.Id == eventId);
+        var result = await _collection.UpdateOneAsync(HasClaimEvent(tenantId, claimId, eventId), update, cancellationToken: ct);
+        return result.ModifiedCount == 1;
+    }
+
+    public async Task<bool> RescheduleClaimEventAsync(
+        string tenantId, string claimId, string eventId, int attempts, long dueAtMs, string? lastError, CancellationToken ct = default)
+    {
+        var update = Builders<Claim>.Update
+            .Set("PendingClaimEvents.$.Attempts", attempts)
+            .Set("PendingClaimEvents.$.DueAtMs", dueAtMs)
+            .Set("PendingClaimEvents.$.LastError", lastError);
+        var result = await _collection.UpdateOneAsync(HasClaimEvent(tenantId, claimId, eventId), update, cancellationToken: ct);
+        return result.MatchedCount == 1;
+    }
+
     public async Task<IReadOnlyList<Claim>> GetAccumulatorClampReviewsAsync(int limit, CancellationToken ct = default)
     {
         var b = Builders<Claim>.Filter;
