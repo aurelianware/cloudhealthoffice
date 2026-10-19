@@ -77,7 +77,9 @@ if (builder.Services.AddChoDatabase(builder.Configuration) is null)
     throw new InvalidOperationException(
         "Authorization Service requires a database. Configure MongoDb:ConnectionString.");
 }
+builder.Services.AddSingleton<AuthorizationIndexes>();
 builder.Services.AddScoped<IAuthorizationRepository, AuthorizationRepositoryMongo>();
+builder.Services.AddHostedService<AuthorizationIndexStartup>();
 
 // ── Authorization backend seam (Replace / Augment) ──────────────────────────
 // The controller/PAS workflow resolves an IAuthorizationBackend by operating

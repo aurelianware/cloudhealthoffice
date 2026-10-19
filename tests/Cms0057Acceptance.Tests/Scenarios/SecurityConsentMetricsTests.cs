@@ -161,42 +161,35 @@ public class SecurityConsentMetricsTests
 
     [Fact]
     [Trait("Scenario", "METRICS-01")]
-    public void METRICS01_DecisionTimeComputedFromReceivedAndDecisionTimestamps()
+    [Trait("Backend", "Replace")]
+    public void METRICS01_RealReportingSplitsUrgency_ComputesMedianAndTimeliness_AndNamesMissingMeasures()
     {
-        // Average/median decision time is one of the CMS public PA metrics. It is
-        // computed from the received (SubmittedDate) and decision (ReviewedDate)
-        // timestamps on each authorization.
-        var auth = new global::AuthorizationService.Models.Authorization
+        var received = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        global::AuthorizationService.Models.Authorization Row(int hours, bool urgent, bool denied = false) => new()
         {
-            AuthorizationNumber = "PAS-ACC-METRICS",
-            Status = global::AuthorizationService.Models.AuthorizationStatus.Approved,
-            SubmittedDate = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc),
-            ReviewedDate = new DateTime(2026, 3, 4, 9, 0, 0, DateTimeKind.Utc),
+            SubmittedDate = received, ReviewedDate = received.AddHours(hours),
+            LevelOfService = urgent ? "U" : "E",
+            Status = denied ? global::AuthorizationService.Models.AuthorizationStatus.Denied
+                : global::AuthorizationService.Models.AuthorizationStatus.Approved,
         };
+        var metrics = global::AuthorizationService.Services.Cms0057.Cms0057Reporting.ComputeMetrics(
+            [Row(24, false), Row(48, false), Row(192, false, true), Row(24, true), Row(96, true, true),
+             new() { SubmittedDate = received, Status = global::AuthorizationService.Models.AuthorizationStatus.Submitted }],
+            received, received.AddMonths(1), null);
 
-        var turnaround = global::AuthorizationService.Models.AuthorizationsSummaryCalculator
-            .CalculateTurnaroundDays(auth);
-
-        turnaround.Should().Be(3.0);
-    }
-
-    [Fact]
-    [Trait("Scenario", "METRICS-01")]
-    public void METRICS01_DenialCarriesCodedReasonForMetricsBreakdown()
-    {
-        // Denial rate + specific-reason reporting draws on the coded denial
-        // reason retained on the authorization record.
-        var auth = new global::AuthorizationService.Models.Authorization
-        {
-            AuthorizationNumber = "PAS-ACC-DENY",
-            Status = global::AuthorizationService.Models.AuthorizationStatus.Denied,
-            DenialReasonCode = "X12-A3-278",
-            DenialReason = "Does not meet clinical criteria for the requested imaging.",
-        };
-
-        auth.Status.Should().Be(global::AuthorizationService.Models.AuthorizationStatus.Denied);
-        auth.DenialReasonCode.Should().NotBeNullOrWhiteSpace();
-        auth.DenialReason.Should().NotBeNullOrWhiteSpace();
+        metrics.TotalRequests.Should().Be(6);
+        metrics.OpenRequests.Should().Be(1);
+        metrics.DecidedRequests.Should().Be(5);
+        metrics.Standard.Requests.Should().Be(4);
+        metrics.Standard.MedianDecisionHours.Should().Be(48);
+        metrics.Standard.DecidedWithinTimeframe.Should().Be(2);
+        metrics.Standard.Approved.Should().Be(2);
+        metrics.Standard.Denied.Should().Be(1);
+        metrics.Expedited.Requests.Should().Be(2);
+        metrics.Expedited.MedianDecisionHours.Should().Be(60);
+        metrics.Expedited.DecidedWithinTimeframe.Should().Be(1);
+        metrics.NotYetTracked.Should().HaveCount(2,
+            "approved-after-appeal and extended-then-approved remain gaps; this is partial capability");
     }
 
     // ── SEC-01 read/write scope separation ──────────────────────────────────────
