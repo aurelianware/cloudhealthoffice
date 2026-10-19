@@ -200,7 +200,7 @@
     private DateTime? _serviceEndDate;
     private List<IBrowserFile> _uploadedFiles = new();
 
-    private async Task OnFilesChanged(InputFileChangeEventArgs e)
+    private void OnFilesChanged(InputFileChangeEventArgs e)
     {
         foreach (var file in e.GetMultipleFiles(10))
         {
