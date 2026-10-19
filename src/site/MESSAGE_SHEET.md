@@ -82,7 +82,7 @@ Use the executive positioning above. Preserve CMS-0057-F/FHIR metadata intent an
 - Source-available (BSL 1.1) so security teams can read the code
 
 ## Is not
-- A clearinghouse (Availity / Change / Stedi are pipes; Cloud Health Office is the plan's system)
+- A clearinghouse; the platform is intended for payer administration and can integrate with clearinghouses.
 - A hosted black-box SaaS that takes PHI out of the plan's boundary by default
 - An overnight Facets/QNXT replacement
 - Apache-licensed open source
