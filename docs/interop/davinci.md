@@ -713,3 +713,14 @@ step, because they reverse the direction. CHO becomes the system under test
 rather than the client, which means the `interop-cho` profile has to run for the
 first time. That profile has existed since #1159 and has never been exercised;
 expect it to need work.
+
+
+### Bounded payer startup recovery
+
+The pinned br-payer image downloads IG packages from packages2.fhir.org during
+startup and can exit when a package retrieval fails. Its Compose policy permits
+up to two error-exit restarts (`on-failure:2`) inside the existing harness readiness
+window. The pinned image, IG versions, 480-second readiness limit and protocol
+assertions are unchanged. A persistent startup failure still fails the scenario;
+container logs remain in evidence artifacts. Each scenario still tears its stack
+down after execution.
