@@ -247,11 +247,20 @@ public class PasSubmitRecordingTests
     }
 
     [Theory]
+    [InlineData(PriorAuthorizationStatus.Expired, "expired")]
+    [InlineData(PriorAuthorizationStatus.Cancelled, "cancelled")]
+    public async Task RetryAfterLifecycleClosure_ReturnsCommittedState(PriorAuthorizationStatus status, string disposition)
+    {
+        _recorder.StoredOverride = new PasStoredAuthorization { Status = status };
+        var response = ClaimResponseOf(await Controller().ClaimSubmit(PasBundles.Complete()));
+        response.Disposition.Should().Be(disposition);
+        response.PreAuthRef.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Theory]
     [InlineData(PriorAuthorizationStatus.Unknown)]
     [InlineData(PriorAuthorizationStatus.Submitted)]
     [InlineData(PriorAuthorizationStatus.InReview)]
-    [InlineData(PriorAuthorizationStatus.Expired)]
-    [InlineData(PriorAuthorizationStatus.Cancelled)]
     public async Task StoredInAStatusSubmitCannotAnswer_Returns502_WithNoPreAuthRef(PriorAuthorizationStatus status)
     {
         _recorder.StoredOverride = new PasStoredAuthorization { Status = status };
