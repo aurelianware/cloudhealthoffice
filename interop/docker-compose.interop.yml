@@ -47,6 +47,9 @@ services:
   # Upstream: https://github.com/HL7-DaVinci/br-payer (Apache-2.0)
   br-payer:
     image: hlseven/davinci-br-payer@sha256:6074aebc39929a00cf93c1efa28c227eb46aab2418afa208eb293133cb150d8c
+    # IG registry retrieval can fail during boot. Retry error exits at most twice;
+    # the harness still requires ApplicationReady within its original deadline.
+    restart: on-failure:2
     profiles: [interop-br]
     networks: [interop]
     ports:
