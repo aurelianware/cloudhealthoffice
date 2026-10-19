@@ -256,11 +256,6 @@ public class AuthorizationsController : ControllerBase
         [FromServices] RecordAccessWriter? accessLog = null,
         [FromQuery] int? lineNumber = null)
     {
-        if (lineNumber <= 0 || (lineNumber.HasValue && string.IsNullOrWhiteSpace(procedureCode)))
-        {
-            await RecordValidateAsync(accessLog, authNumber, null, StatusCodes.Status400BadRequest);
-            return BadRequest(new { error = "A positive line number requires a procedure code." });
-        }
         var checkDate = serviceDate ?? DateTime.UtcNow;
 
         _logger.LogInformation(
@@ -272,6 +267,13 @@ public class AuthorizationsController : ControllerBase
         {
             await RecordValidateAsync(accessLog, authNumber, null, StatusCodes.Status404NotFound);
             return NotFound($"Authorization {authNumber} not found");
+        }
+
+        var providerApproved = IsProviderApprovedForAuthorization(authorization, providerNpi);
+        if (lineNumber <= 0 || (lineNumber.HasValue && string.IsNullOrWhiteSpace(procedureCode)))
+        {
+            await RecordValidateAsync(accessLog, authorization.Id, authorization.MemberId, StatusCodes.Status400BadRequest);
+            return BadRequest(new { error = "A positive line number requires a procedure code." });
         }
 
         var isValid = authorization.Status == AuthorizationStatus.Approved ||
@@ -306,7 +308,6 @@ public class AuthorizationsController : ControllerBase
             }
         }
 
-        var providerApproved = IsProviderApprovedForAuthorization(authorization, providerNpi);
 
         var response = new AuthorizationValidationResponse
         {
