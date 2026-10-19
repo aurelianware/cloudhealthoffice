@@ -9,6 +9,7 @@ namespace AuthorizationService.Repositories;
 public class AuthorizationRepositoryMongo : IAuthorizationRepository
 {
     private readonly IMongoCollection<Authorization> _collection;
+    private readonly AuthorizationIndexes _indexes;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<AuthorizationRepositoryMongo> _logger;
 
@@ -16,13 +17,17 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         IMongoDatabase database,
         IConfiguration configuration,
         IHttpContextAccessor httpContextAccessor,
-        ILogger<AuthorizationRepositoryMongo> logger)
+        ILogger<AuthorizationRepositoryMongo> logger,
+        AuthorizationIndexes? indexes = null)
     {
         var collectionName = configuration["CosmosDb:ContainerName"] ?? "Authorizations";
         _collection = database.GetCollection<Authorization>(collectionName);
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
+        _indexes = indexes ?? new AuthorizationIndexes();
     }
+
+    public Task EnsureIndexesAsync(CancellationToken ct = default) => _indexes.EnsureAsync(_collection, ct);
 
     private string GetTenantId()
     {
@@ -301,7 +306,17 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         authorization.Id ??= Guid.NewGuid().ToString();
         authorization.Revision = 0;
 
-        await _collection.InsertOneAsync(authorization);
+        await EnsureIndexesAsync(_httpContextAccessor.HttpContext?.RequestAborted ?? default);
+        try
+        {
+            await _collection.InsertOneAsync(authorization);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
+        {
+            if (await GetByAuthorizationNumberAsync(authorization.AuthorizationNumber) is not null)
+                throw new DuplicateAuthorizationNumberException(authorization.AuthorizationNumber, ex);
+            throw;
+        }
         return authorization;
     }
 
@@ -320,6 +335,7 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
 
     public async Task<Authorization> UpdateAsync(Authorization authorization)
     {
+        await EnsureIndexesAsync(_httpContextAccessor.HttpContext?.RequestAborted ?? default);
         var tenantId = GetTenantId();
         authorization.TenantId = tenantId;
 
@@ -337,6 +353,11 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         try
         {
             result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), authorization);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
+        {
+            authorization.Revision = expected;
+            throw new DuplicateAuthorizationNumberException(authorization.AuthorizationNumber, ex);
         }
         catch
         {

@@ -79,6 +79,69 @@ public sealed class AuthorizationRepositoryMongoConcurrencyTests(MongoRunnerFixt
     }
 
     [Fact]
+    public async Task RealHost_RefusesToStartWithLegacyDuplicateNumbers()
+    {
+        var collection = _db.GetCollection<Authorization>(Collection);
+        await collection.InsertManyAsync([
+            new Authorization { Id = "legacy-host-a", TenantId = Tenant, AuthorizationNumber = "AUTH-DUP" },
+            new Authorization { Id = "legacy-host-b", TenantId = Tenant, AuthorizationNumber = "AUTH-DUP" },
+        ]);
+        using var host = AuthorizationServiceHost.Mongo(mongo.ConnectionString, _db.DatabaseNamespace.DatabaseName);
+        var start = () => host.CreateClient();
+        start.Should().Throw<MongoCommandException>();
+        (await collection.CountDocumentsAsync(Builders<Authorization>.Filter.Empty)).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task IndexInitialization_RefusesLegacyDuplicatesWithoutDeletingOrRenumberingThem()
+    {
+        var collection = _db.GetCollection<Authorization>(Collection);
+        await collection.InsertManyAsync([
+            new Authorization { Id = "legacy-a", TenantId = Tenant, AuthorizationNumber = "AUTH-LEGACY" },
+            new Authorization { Id = "legacy-b", TenantId = Tenant, AuthorizationNumber = "AUTH-LEGACY" },
+        ]);
+        var initialize = () => Repo().EnsureIndexesAsync();
+        await initialize.Should().ThrowAsync<MongoCommandException>();
+        (await collection.CountDocumentsAsync(Builders<Authorization>.Filter.Empty)).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task IndexInitialization_CreatesTheUniqueNumberAndTenantStatusIndexes()
+    {
+        await Repo().EnsureIndexesAsync();
+        var indexes = await (await _db.GetCollection<BsonDocument>(Collection).Indexes.ListAsync()).ToListAsync();
+        indexes.Should().Contain(i => i["name"] == "authorization_tenant_number_unique" && i["unique"].AsBoolean);
+        indexes.Should().Contain(i => i["name"] == "authorization_tenant_status");
+    }
+
+    [Fact]
+    public async Task ConcurrentCreates_WithTheSameTenantAndNumber_StoreExactlyOneRecord()
+    {
+        var first = new Authorization { Id = "create-a", AuthorizationNumber = "AUTH-UNIQUE" };
+        var second = new Authorization { Id = "create-b", AuthorizationNumber = "AUTH-UNIQUE" };
+        var results = await Task.WhenAll(
+            Try(() => Repo().CreateAsync(first)), Try(() => Repo().CreateAsync(second)));
+
+        results.Count(e => e is null).Should().Be(1);
+        results.Count(e => e is CloudHealthOffice.Infrastructure.Data.ConcurrencyConflictException).Should().Be(1);
+        (await _db.GetCollection<Authorization>(Collection).CountDocumentsAsync(
+            Builders<Authorization>.Filter.Eq(a => a.AuthorizationNumber, "AUTH-UNIQUE"))).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AuthorizationNumbers_AreUniqueWithinATenant_ButMayBeReusedByAnotherTenant()
+    {
+        await Repo().CreateAsync(new Authorization { Id = "own", AuthorizationNumber = "AUTH-SHARED" });
+        var context = new DefaultHttpContext();
+        context.Items["TenantId"] = "another-tenant";
+        var other = new AuthorizationRepositoryMongo(_db, new ConfigurationBuilder().Build(),
+            new HttpContextAccessor { HttpContext = context }, NullLogger<AuthorizationRepositoryMongo>.Instance);
+        await other.CreateAsync(new Authorization { Id = "other", AuthorizationNumber = "AUTH-SHARED" });
+        (await other.GetByAuthorizationNumberAsync("AUTH-SHARED"))!.Id.Should().Be("other");
+        (await Repo().GetByAuthorizationNumberAsync("AUTH-SHARED"))!.Id.Should().Be("own");
+    }
+
+    [Fact]
     public async Task TwoConcurrentUpdates_FromTheSameRead_ExactlyOneWins_TheOtherConflicts()
     {
         await SeedAsync("A1");
