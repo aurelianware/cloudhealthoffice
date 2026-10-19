@@ -125,9 +125,14 @@ public class BackgroundCallsCarryServiceTokenTests
             NullLogger<EligibilityAdapterFactory>.Instance);
 
         Assert.Same(cho, await factory.GetAdapterAsync(Tenant));
+        var firstCall = host.Outbound.Requests.Count;
         Assert.Same(cho, await factory.GetAdapterAsync(Tenant));
 
-        Assert.Equal(2, host.Outbound.Requests.Count);
+        // Not cached: the second call looks the platform up again. (A 5xx GET
+        // is retried by the shared client resilience, so one call can be
+        // several requests; a 404 is not retried.)
+        Assert.True(firstCall >= 1);
+        Assert.Equal(2 * firstCall, host.Outbound.Requests.Count);
     }
 
     [Fact]

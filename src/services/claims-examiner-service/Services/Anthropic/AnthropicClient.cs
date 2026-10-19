@@ -80,8 +80,10 @@ public class AnthropicClient : IAnthropicClient
         _options = options;
         _logger = logger;
 
+        // HttpClient.Timeout is set at registration (Program.cs), where the shared
+        // resilience reads it as the attempt timeout; setting it here would cap
+        // every retry together.
         _http.BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/') + "/");
-        _http.Timeout = TimeSpan.FromSeconds(_options.TimeoutSeconds);
         _http.DefaultRequestHeaders.Add("anthropic-version", _options.AnthropicVersion);
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }

@@ -324,7 +324,7 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
         Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
         Assert.Equal(BenefitCalculationStage.PlanUnavailablePendCode, ctx.PendDetails!.PendCode);
         Assert.StartsWith(BenefitCalculationStage.PlanUnavailableReason, ctx.PendDetails.PendReason);
-        Assert.True(ClaimAdjudicationOrchestrator.IsTransientFailure(ctx.PendDetails.PendReason));
+        Assert.True(ctx.IsCheckUnavailable(ctx.PendDetails.PendReason));
         Assert.Null(ctx.BenefitResolutionResult);
         Assert.Equal(0, handler.RequestCount);
         await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);

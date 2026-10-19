@@ -9,6 +9,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Service-to-service calls are resilient.** Every factory-built
+  `HttpClient` gets these defaults:
+  - a total timeout and a per-attempt timeout;
+  - retries with jitter, for idempotent requests only (a POST is never
+    retried without an idempotency key or an explicit opt-in);
+  - a circuit breaker per client.
+
+  The settings live in `ChoServiceClientResilience` (Infrastructure). An
+  open circuit surfaces as a 503 `HttpRequestException`, so the claims
+  pipeline's "pend, don't deny" behaviour applies unchanged. See
+  `docs/architecture/service-client-resilience.md`.
+- **Whether a claim pend is an outage is a typed flag, not reason text.**
+  `ClaimAdjudicationStageResult.CheckUnavailable`, set by each stage, replaces
+  substring matching of pend reasons, so rewording a message can no longer
+  make an outage pend overridable by an examiner.
+- **claims-examiner-service no longer drops claims.pended.v1 messages.**
+  - A claims-service transport failure, or a 5xx on the write-back, is
+    retried with backoff.
+  - After the last attempt the message is dead-lettered to
+    `claims.pended.v1.dlq`.
+  - The offset only moves past a message that was processed or
+    dead-lettered.
+  - A crashed consume loop stops the host instead of exiting silently.
+  - The Anthropic client retries 429 and 529.
+  - An Anthropic outage that outlasts those retries no longer escalates the
+    claim to a person for good. That covers 429, 529, an open circuit and
+    a timeout. The orchestrator throws `ExaminerTransientException` and
+    writes nothing, and the consumer retries the message, then
+    dead-letters it. Other Anthropic failures still write `EscalateToHuman`.
+  - Model dispositions outside the known set escalate to a human.
+- **A client's resilience timeouts follow its own `HttpClient.Timeout`.**
+  The shared pipeline had given every client a 10 s attempt and a 30 s total
+  timeout. That cut Stedi (30 s), FHIR Payer-to-Payer (up to 300 s), the
+  Anthropic model call (60 s) and other longer calls at 10 s. A client's own
+  `HttpClient.Timeout` also still capped all of its attempts together.
+  - The client's configured timeout is now its attempt timeout.
+  - The total covers every attempt and its back-off.
+  - `HttpClient.Timeout` is raised just past the total.
+  - The Anthropic clients set their timeout at registration, not in their
+    constructors.
+
+  The inventory is in `docs/architecture/service-client-resilience.md`.
+- **A failing call is retried by one layer, not two.** Clients that retry
+  on their own now opt out of the shared pipeline (`WithoutChoResilience`).
+  Before, a failing Stedi call made up to 9 attempts and NPPES or SAM.gov
+  up to 12. The clients that opt out:
+  - Stedi, which keeps `StediHttpSender`'s loop. The loop reports retry
+    counts and never retries auth or validation errors. The attachment
+    upload, a one-shot stream, is no longer retried at all.
+  - NPPES, which keeps `AddStandardResilienceHandler`.
+  - The SAM.gov exclusions API, which keeps the screener's own loop.
+  - The exclusion dataset download.
+- **eligibility-service uses its configured HttpClient.** A duplicate
+  `AddScoped` registration had replaced the typed client and its 5 s timeout.
+
 - **`claims.finalized.v1` is no longer lost when Kafka is down or the
   process dies.** claims-service published the event right after the
   finalize write and logged and dropped any failure, so accumulator-service

@@ -15,6 +15,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // token-service does not use AddChoAuthentication; apply its Testing guard here.
 ChoTestingEnvironment.EnsureNotDeployed(builder.Environment);
+// The same retries (idempotent requests only), timeouts and circuit breaker
+// every other service's clients get from AddChoAuthentication.
+CloudHealthOffice.Infrastructure.Http.ChoServiceClientResilience.AddChoServiceClientResilience(builder.Services);
 
 var serviceOptions = builder.Configuration.GetSection(TokenServiceOptions.SectionName).Get<TokenServiceOptions>()
                      ?? new TokenServiceOptions();

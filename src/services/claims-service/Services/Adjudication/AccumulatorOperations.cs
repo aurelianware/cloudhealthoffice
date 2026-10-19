@@ -304,12 +304,11 @@ public sealed class AccumulatorOperationsService
             // PA check's definitive answer (CARC 197 after authorization-
             // service's NotFound / Invalid), and only when no check on this
             // run failed (#1299 re-verify B1). The orchestrator decides
-            // "a check failed" from the run's structured state (CheckFailed);
-            // the reason-text markers are a second guard. Any other Deny —
+            // "a check failed" from the run's structured state (CheckFailed:
+            // flags set by the stages, never reason text). Any other Deny —
             // the benefit engine unavailable (999), NCCI in Deny mode, ... —
             // is left pended for an examiner.
-            var transientFailure = rerun.CheckFailed
-                || (rerun.UnresolvedReasons ?? []).Append(rerun.Reason).Any(ClaimAdjudicationOrchestrator.IsTransientFailure);
+            var transientFailure = rerun.CheckFailed;
             var definitivePriorAuthDenial = string.Equals(
                 rerun.DenialReasonCode, Stages.BenefitCalculationStage.PriorAuthorizationRequiredCode, StringComparison.Ordinal);
             var deny = kind.DenyIsFinal && rerun.Outcome == ClaimAdjudicationOutcome.Deny

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Http;
 using ClaimsExaminerService.Services;
 using ClaimsExaminerService.Services.Anthropic;
 using ClaimsExaminerService.Services.Events;
@@ -50,10 +51,28 @@ var anthropicOptions = builder.Configuration.GetSection("Anthropic").Get<Anthrop
     ?? new AnthropicOptions();
 builder.Services.AddSingleton(anthropicOptions);
 builder.Services.AddTransient<AnthropicAuthHandler>();
-builder.Services.AddHttpClient<IAnthropicClient, AnthropicClient>()
+// The model timeout is set here, not in the client's constructor: the shared
+// resilience reads it as the attempt timeout, sizes the total timeout to cover
+// every attempt and its back-off, and raises HttpClient.Timeout past that total.
+// (A constructor-set HttpClient.Timeout would cap all attempts together.)
+builder.Services.AddHttpClient<IAnthropicClient, AnthropicClient>(
+        client => client.Timeout = TimeSpan.FromSeconds(anthropicOptions.TimeoutSeconds))
     .AddHttpMessageHandler<AnthropicAuthHandler>()
-    .SetHandlerLifetime(TimeSpan.FromMinutes(5));
-builder.Services.AddHttpClient<AnthropicConnectivityCheck>()
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    // 429 (rate limited) and 529 (overloaded) are retried with backoff, honouring
+    // Retry-After. The Messages call is a POST but has no side effect, so it may be
+    // repeated. One attempt may take the configured model timeout.
+    .ConfigureChoResilience(o =>
+    {
+        o.RetryNonIdempotent = true;
+        o.AdditionalTransientStatusCodes = [429, 529];
+        o.MaxRetryAttempts = 3;
+        o.RetryBaseDelay = TimeSpan.FromSeconds(2);
+        o.CircuitMinimumThroughput = 5;
+        o.CircuitBreakDuration = TimeSpan.FromSeconds(30);
+    });
+builder.Services.AddHttpClient<AnthropicConnectivityCheck>(
+        client => client.Timeout = TimeSpan.FromSeconds(Math.Max(anthropicOptions.TimeoutSeconds, 5)))
     .AddHttpMessageHandler<AnthropicAuthHandler>();
 
 // Claims-service client (typed HttpClient)
@@ -79,6 +98,21 @@ builder.Services.AddSingleton<IProviderRfaiHistoryClient, NoOpProviderRfaiHistor
 // Kafka consumer (background service). Always registered: when Kafka isn't
 // configured the consumer logs a warning and exits cleanly, so dev environments
 // without Kafka still come up.
+// The shared producer (idempotent, acks=all): dead-letters claims.pended.v1
+// messages that failed every attempt.
+builder.Services.AddSingleton<CloudHealthOffice.Events.Kafka.IChoEventProducer>(sp =>
+{
+    var kafka = sp.GetRequiredService<IConfiguration>().GetSection("Kafka");
+    return new CloudHealthOffice.Events.Kafka.ChoKafkaProducer(new CloudHealthOffice.Events.Kafka.ChoKafkaProducerSettings
+    {
+        BootstrapServers = kafka["BootstrapServers"],
+        ClientId = kafka["ClientId"] ?? "claims-examiner-service",
+        SaslUsername = kafka["SaslUsername"],
+        SaslPassword = kafka["SaslPassword"],
+    });
+});
+builder.Services.Configure<ClaimPendedConsumerOptions>(builder.Configuration.GetSection(ClaimPendedConsumerOptions.SectionName));
+builder.Services.AddSingleton<ClaimPendedMessageProcessor>();
 builder.Services.AddHostedService<ClaimPendedConsumer>();
 
 // Capability 5.9 — Service Bus producer for the AI examination completion

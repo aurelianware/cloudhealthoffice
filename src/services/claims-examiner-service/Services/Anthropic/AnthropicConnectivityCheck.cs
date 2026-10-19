@@ -22,8 +22,8 @@ public sealed class AnthropicConnectivityCheck
     {
         _http = http;
         _options = options;
+        // HttpClient.Timeout is set at registration (Program.cs), where the shared resilience reads it.
         _http.BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/') + "/");
-        _http.Timeout = TimeSpan.FromSeconds(Math.Max(_options.TimeoutSeconds, 5));
         _http.DefaultRequestHeaders.Remove("anthropic-version");
         _http.DefaultRequestHeaders.Add("anthropic-version", _options.AnthropicVersion);
     }

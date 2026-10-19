@@ -232,13 +232,9 @@ public sealed class PremiumBankTransactionMatcher : IBankTransactionMatcher
     private async Task<MatchDecision> LockboxDepositAsync(BankTransaction tx, IReadOnlyList<string> tokens)
     {
         var date = tx.AsOfDate.Date;
-        var batches = new List<RemittanceBatch>();
-        for (var page = 1; page <= 20; page++)
-        {
-            var chunk = (await _batches.SearchAsync(date.AddDays(-3), date.AddDays(10), page, 200)).ToList();
-            batches.AddRange(chunk.Where(b => b.Source == RemittanceSource.Lockbox && b.PaymentDate.Date == date && b.Status != RemittanceBatchStatus.NotPosted));
-            if (chunk.Count < 200) break;
-        }
+        // Receipt time is unrelated to the bank's business date: lockbox files
+        // may be imported or reconciled months later. Query the payment date.
+        var batches = (await _batches.FindLockboxByPaymentDateAsync(date)).ToList();
 
         // A lockbox number among the references narrows to that lockbox's batches.
         var named = batches.Where(b => tokens.Any(t => b.TraceNumber.StartsWith($"LBX-{t}-", StringComparison.OrdinalIgnoreCase))).ToList();

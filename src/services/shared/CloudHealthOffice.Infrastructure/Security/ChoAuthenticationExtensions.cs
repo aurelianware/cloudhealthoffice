@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Http;
 using System.Security.Claims;
 using CloudHealthOffice.Infrastructure.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -75,6 +76,9 @@ public static class ChoAuthenticationExtensions
 
         // Every factory-built client authenticates its calls to other CHO
         // services; the handler itself refuses to attach tokens to external hosts.
+        // Retries (idempotent requests only), timeouts and a circuit breaker on
+        // every client, outermost, so the token handler runs once per attempt.
+        services.AddChoServiceClientResilience();
         services.ConfigureHttpClientDefaults(client => client.AddChoServiceAuthentication());
 
         var issuersByName = options.Issuers.ToDictionary(i => i.Issuer, StringComparer.Ordinal);

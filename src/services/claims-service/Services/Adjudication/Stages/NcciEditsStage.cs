@@ -140,7 +140,8 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
             {
                 activity?.SetTag("ncci.outcome", "pend");
                 return ClaimAdjudicationStageResult.Pend(
-                    StageName, $"NCCI engine threw: {ex.GetType().Name}; pended (an outage is never denied)");
+                    StageName, $"NCCI engine threw: {ex.GetType().Name}; pended (an outage is never denied)")
+                    .AsCheckUnavailable(context, context.PendDetails?.PendReason);
             }
             return BuildModeDrivenResult(context, activity, hasFailures: true);
         }

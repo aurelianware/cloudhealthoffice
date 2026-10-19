@@ -1,5 +1,6 @@
 namespace CloudHealthOffice.ProviderVerificationService;
 
+using CloudHealthOffice.Infrastructure.Http;
 using CloudHealthOffice.ProviderVerificationEngine;
 using CloudHealthOffice.ProviderVerificationEngine.DataSources;
 using CloudHealthOffice.ProviderVerificationEngine.DataSources.Exclusions;
@@ -56,6 +57,7 @@ public static class ExclusionScreeningRegistration
                     client.DefaultRequestHeaders.UserAgent.ParseAdd("CloudHealthOffice-ExclusionSync/1.0");
                 })
                 .WithoutChoTokens()
+                .WithoutChoResilience() // nor the shared service-client pipeline, for the same reasons
                 .RemoveAllLoggers();
 
             services.AddHostedService<ExclusionDatasetSyncHostedService>();
@@ -95,6 +97,7 @@ public static class ExclusionScreeningRegistration
                         client.Timeout = Timeout.InfiniteTimeSpan; // per-request timeout enforced by the screener
                     })
                     .WithoutChoTokens()
+                    .WithoutChoResilience() // one retry layer: the screener's
                     .RemoveAllLoggers();
                 services.AddSingleton<IExclusionSource>(sp => new SamExclusionsApiScreener(
                     sp.GetRequiredService<IHttpClientFactory>(),
