@@ -1,0 +1,29 @@
+{
+  "head": "dec71610ba665ef3ed7df69c0035a7b8ecc76bf0",
+  "baseline": "01164a944c7c7a36bdb46cf0cfbab08d9e87e847",
+  "worktreeStatus": "",
+  "generatedAt": "2026-10-19T22:59:16.570Z",
+  "checks": [
+    "six pages at 1440/390; metadata, no overflow, keyboard skip/menu/disclosure and 13 meaningful fragment destinations",
+    "no-JS, blocked-script and formatter-init-failure: disabled unavailable state; button/Enter emit no native request even if controls are forcibly re-enabled",
+    "valid unique sentinels; successful button and Enter recalculation with six exact numeric results; actual analytics/dataLayer, request URL/body/headers and storage inspected; printable computed results",
+    "both Formspree pathways: mocked failure/retry/accepted response; actual form_error/form_submit queue and focus checked; zero real inquiries"
+  ],
+  "screenshots": {
+    "ai-ready-health-plan-architecture-desktop.png": "6c7a9c33b62fa3cbaa961b52d223120732fe6bbc3fe3efcb33fe40e6a129ef1a",
+    "ai-ready-health-plan-architecture-mobile.png": "0f0561765634bd2776b0748b0c8f08169db12b4c024dfcfe033aa239beacb74e",
+    "calculator-print.png": "4120c3583e6342aee59c2e91d01ec5398a897c56d681e91379e5152fd10fa73e",
+    "economics-of-vendor-lock-in-desktop.png": "9d49156758dcfffb1f0438d5f405548a3ccd8b63eb17ae7349a06b44c370543c",
+    "economics-of-vendor-lock-in-mobile.png": "203214b76f6ab7c560d50daf2bbafb4545d8e14ab74d5bcf133beb164755b107",
+    "founding-transformation-partners-desktop.png": "d9728362b7a67e371c0efa6729a58c6ea78cdb37120bfae0e60e1a36c06566f7",
+    "founding-transformation-partners-mobile.png": "1d7a030c2e688f92e24c0cb45dd6fa72f795293da063ffd58d3a9a40736be0a4",
+    "health-plan-independence-desktop.png": "f2d9d2265e15df04e5027109ec16193affc717e1277b97bc7bc3b128bb8a9055",
+    "health-plan-independence-mobile.png": "fe543b66926f83bb3f82518e85ee5de95a1952e2f2b5421e16716eecade013bb",
+    "incremental-modernization-desktop.png": "056fac1569c95427795c8ccabb7a41c989e7e6b4917df6a187f7c70c8d9fd75b",
+    "incremental-modernization-mobile.png": "0d6345bae8f4a9f900057abb35e21395d6639e1ccd77cfa45d8915c7670c28ca",
+    "index-desktop.png": "5dfc7cd4386a8ab7adaa7f9c105cfed4b302dc246f69b7950a2c302af8708276",
+    "index-mobile.png": "c0c5bb6730f004090efeaec5a9c646e5da3116d0737ee26c897aba3fcce3f584"
+  },
+  "externalAnalytics": "GTM/GA network blocked; actual build-injected gtag queue and unmodified first-party instrumentation inspected",
+  "productionInquiries": 0
+}

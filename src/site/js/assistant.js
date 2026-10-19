@@ -31,13 +31,12 @@
       id: 'what',
       contactKey: 'platform',
       label: 'What is Cloud Health Office?',
-      keywords: ['what is', 'what', 'about', 'product', 'overview', 'clearinghouse'],
-      answer: 'Cloud Health Office is the claims platform you can put beside QNXT, Facets, ' +
-        'or HealthEdge — so you hit the 2027 FHIR mandate without a core replacement. ' +
-        'It is a payer administration platform (claims, benefits, eligibility, prior auth, ' +
-        'payments, FHIR) you deploy in your own cloud. It is not a clearinghouse and not a ' +
-        'black-box SaaS.',
-      link: { href: '/what-is', text: 'Read: What is Cloud Health Office?' }
+      keywords: ['independence', 'manifesto', 'what is', 'what', 'about', 'product', 'overview', 'clearinghouse'],
+      answer: 'CloudHealthOffice is a source-available health plan administration platform designed to help ' +
+        'health plans pursue greater operational and technological independence. Evaluate inspectable source, ' +
+        'customer-controlled infrastructure and incremental modernization alongside your existing core. ' +
+        'Source-available under BSL 1.1. Production use requires a commercial license.',
+      link: { href: '/health-plan-independence', text: 'Read the Independence Manifesto' }
     },
     {
       id: 'cms',
@@ -45,7 +44,7 @@
       label: 'CMS-0057-F',
       keywords: ['cms', '0057', 'mandate', 'deadline', 'fhir', 'rule', 'prior auth', 'compliance'],
       answer: CMS_DEF + ' Cloud Health Office ships the FHIR compliance surface you deploy ' +
-        'beside your core to meet it.',
+        'beside your core for scoped evaluation and integration. Full standards conformance and deployment readiness require validation.',
       link: { href: '/cms-0057f-compliance', text: 'Read the CMS-0057-F summary' }
     },
     {
@@ -55,7 +54,7 @@
       keywords: ['qnxt', 'facets', 'healthedge', 'core', 'sit', 'beside', 'replace', 'alongside', 'amisys', 'foothold', 'cutover'],
       answer: 'It deploys alongside your core admin system. Layer 1 — Foothold — serves the CMS-0057-F ' +
         'APIs in your cloud while the core stays the system of record. Layer 2 is a domain cutover: ' +
-        'one operational domain, reversible. Layer 3 is core — Cloud Health Office as the claims ledger — only when you choose.',
+        'one operational domain after reconciliation, acceptance criteria and rollback planning. Layer 3 is core modernization only when technical and operational evidence supports it.',
       link: { href: '/platform#layers', text: 'See the platform staircase' }
     },
     {
@@ -72,8 +71,7 @@
       contactKey: 'payer-cloud',
       label: 'Deploy in your cloud',
       keywords: ['deploy', 'cloud', 'azure', 'aws', 'gcp', 'install', 'run', 'host', 'phi', 'data'],
-      answer: 'You deploy Cloud Health Office in your own Azure, AWS, or GCP. PHI stays inside ' +
-        'your boundary. You can also evaluate and run it locally for free.',
+      answer: 'Cloud Health Office is designed for customer-controlled infrastructure. Validate deployment-specific security, external data flows and operational responsibilities. Local non-production evaluation is available under the license.',
       link: { href: '/deploy', text: 'How deployment works' }
     },
     {
@@ -120,7 +118,7 @@
       label: 'License & pricing',
       keywords: ['license', 'bsl', 'price', 'pricing', 'cost', 'free', 'commercial'],
       answer: 'Source-available under BSL 1.1. Evaluate and run locally for free. Production ' +
-        'use requires a license. Deploy in your cloud or as a managed tenant. Published ' +
+        'use requires a commercial license. Managed deployment is by engagement. Published ' +
         'pricing is on the pricing page.',
       link: { href: '/pricing', text: 'View pricing' }
     },
@@ -128,9 +126,9 @@
       id: 'stage',
       label: 'Is this beta? Who uses it?',
       keywords: ['beta', 'who uses', 'customers', 'live', 'production', 'tenant', 'reference'],
-      answer: 'Cloud Health Office is ready to deploy in your cloud as a compliance layer ' +
-        'beside QNXT, Facets, or HealthEdge. The first production tenant is under discussion; ' +
-        'the evidence and source are already public.',
+      answer: 'Cloud Health Office provides public source and evidence for evaluation beside your existing core. ' +
+        'Production use requires scoped integration, readiness review and a commercial license. ' +
+        'Customer deployment references must be verified with the commercial owner before disclosure.',
       link: { href: '/deploy', text: 'First production deployment terms' }
     }
   ];
