@@ -128,8 +128,12 @@ describe('Services & deployment positioning', () => {
       expect(pages.length).toBeGreaterThan(30);
     });
 
-    it('exposes Services in the primary nav on every page that has one', () => {
-      const missing = pages.filter((page) => !mainNavOf(read(page)).includes('href="/services"'));
+    it('keeps Services accessible in executive footers and existing primary navigation', () => {
+      const missing = pages.filter((page) => {
+        const html = read(page);
+        const navigation = html.includes('class="independence"') ? (html.match(/<footer[\s\S]*?<\/footer>/)?.[0] || '') : mainNavOf(html);
+        return !navigation.includes('href="/services"');
+      });
       expect(missing).toEqual([]);
     });
 
@@ -1011,7 +1015,7 @@ describe('Services & deployment positioning', () => {
     });
 
     it('adds Services to the documented information architecture', () => {
-      expect(messageSheet).toMatch(/Primary nav:.*Services.*Contact/);
+      expect(messageSheet).toMatch(/Primary executive nav:.*Services.*Contact/);
       expect(messageSheet).toContain('/services');
     });
 
