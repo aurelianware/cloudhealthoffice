@@ -1,5 +1,7 @@
 # CMS-0057-F Readiness — Claims Domain
 
+> **Historical record — superseded October 19, 2026.** The body below preserves the May 2026 claims Phase-1 assessment, including its original regulatory interpretations, recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../CAPABILITY_RECONCILIATION.md) for reconciled status.
+
 **Scope:** Cloud Health Office (CHO) Claims-domain compliance
 posture relative to the CMS Interoperability and Prior
 Authorization Final Rule (CMS-0057-F). Subsequent uses of "CHO" in

@@ -1,5 +1,7 @@
 # Compliance Documentation
 
+Current capability status and dated implementation/test evidence: [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md).
+
 This directory contains regulatory-readiness materials for Cloud Health Office.
 These documents describe technical capability, implementation posture, and
 pilot diligence workflows. They are not legal advice, regulatory certification,
@@ -20,7 +22,7 @@ or payer attestation artifacts.
 
 ## Package Workflow
 
-1. Start with the readiness matrix to set buyer-safe posture.
+1. Start with the canonical capability ledger for verified status, then use the readiness matrix for requirement and deployment context.
 2. Use the buyer brief for executive and procurement conversations.
 3. Use the diligence checklist during discovery and implementation planning.
 4. Use the demo-mode guide before every demo or pilot evidence review.

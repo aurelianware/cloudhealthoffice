@@ -1,5 +1,7 @@
 # CloudHealthOffice
 
+Current capability status and dated implementation/test evidence: [Capability Reconciliation](docs/CAPABILITY_RECONCILIATION.md).
+
 ![CloudHealthOffice](docs/images/logo-cloudhealthoffice-sentinel-primary.svg)
 
 [![License: BSL 1.1](https://img.shields.io/badge/license-BSL%201.1-orange.svg)](LICENSE)
@@ -145,10 +147,11 @@ Start here:
 ## CMS-0057-F
 
 CloudHealthOffice includes documentation and implementation surfaces for the CMS
-Interoperability and Prior Authorization Final Rule. Treat the readiness matrix
-as the source of truth for current status and gaps.
+Interoperability and Prior Authorization Final Rule. Use the canonical capability ledger for reconciled implementation status; the
+readiness matrix adds requirement and deployment context.
 
-- [ePA gap matrix](docs/epa-gap-matrix.md) — source of truth for prior authorization and SMART status; CMS-0057-F conformance is in progress
+- [Capability reconciliation](docs/CAPABILITY_RECONCILIATION.md) — verified behavior, limits and dated tests
+- [ePA gap matrix](docs/epa-gap-matrix.md) — historical findings and detailed requirement/scenario tracking
 - [CMS-0057-F readiness matrix](docs/compliance/CMS-0057-F-READINESS-MATRIX.md)
 - CMS-0057-F Compliance Accelerator offer (maintained in a private repository) — the SKU we sell first
 - [Pilot diligence binder](docs/diligence/README.md)

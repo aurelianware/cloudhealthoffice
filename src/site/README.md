@@ -1,6 +1,8 @@
 # Cloud Health Office - Static Website
 
-**Last Updated:** July 2026
+Current capability status and dated implementation/test evidence: [Capability Reconciliation](../../docs/CAPABILITY_RECONCILIATION.md).
+
+**Last reviewed:** October 19, 2026
 
 This directory contains the Cloud Health Office marketing website with platform assessment, insights, and documentation.
 
@@ -12,22 +14,19 @@ Setting `GOOGLE_ANALYTICS_ID` to an empty string disables analytics injection en
 
 ## Founding Partner Form
 
-The homepage founding partner application posts to Formspree at
+The shared contact/lead forms use a build-configured Formspree endpoint, defaulting to
 `https://formspree.io/f/xgojygon`. To override the endpoint for a preview or
 environment-specific form, set `FORMSPREE_FOUNDING_PARTNER_ENDPOINT` to the full
 Formspree endpoint before running `npm run build`.
 
-Configure the Formspree form recipient/workflow in the Formspree dashboard to send
-submissions to `partners@cloudhealthoffice.com`. The static site includes that
-mailbox in the form payload and fallback messages, but Formspree controls final
-email routing from the form settings.
+Confirm the intended recipient and delivery in the Formspree dashboard; source comments or a mailbox in a form payload do not prove the configured recipient. `build.mjs` also supports `FORMSPREE_LEADS_ENDPOINT` for shared lead capture.
 
 ## Structure
 
 ```
 site/
-├── index.html              # Homepage with hero and Calendly integration
-├── login.html              # Login/registration page with multi-tenant Entra ID
+├── index.html              # Homepage with conversion links
+├── login.html              # Legacy login/auth surface; deployment behavior requires verification
 ├── platform.html           # Platform overview and capabilities
 ├── services.html           # Professional Services landing page (see docs/adr/012)
 ├── deploy.html             # Deployment and operating models, with status labels
@@ -597,7 +596,7 @@ All content must follow the Sentinel brand guidelines:
 - [ ] No legacy branding (PrivaseeAI, PrivacyAI) present
 - [ ] Neon glow effects applied to interactive elements
 
-See [docs/BRANDING-GUIDELINES.md](../docs/BRANDING-GUIDELINES.md) for complete brand identity guide.
+See [docs/BRANDING-GUIDELINES.md](../../docs/features/BRANDING-GUIDELINES.md) for complete brand identity guide.
 
 ## Troubleshooting
 

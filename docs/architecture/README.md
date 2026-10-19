@@ -1,5 +1,7 @@
 # Architecture
 
+Current capability status and dated implementation/test evidence: [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md).
+
 This section maps CloudHealthOffice from system-level shape to service-level
 responsibilities. The architecture is Kubernetes-first, API-first, and oriented
 around auditable healthcare workflows.

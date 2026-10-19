@@ -1,5 +1,7 @@
 # Cloud Health Office — Positioning & Documentation Audit
 
+> **Historical record — superseded October 19, 2026.** The body below preserves the original positioning audit, including its original recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../CAPABILITY_RECONCILIATION.md) for reconciled status.
+
 **Scope:** Every Cloud Health Office (CHO) documentation and marketing artifact, measured against [`docs/POSITIONING.md`](../POSITIONING.md) (created this session).
 
 **Status:** Audit complete. Phase 2 (separate PR) will execute the updates this audit recommends.

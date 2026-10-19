@@ -1,5 +1,7 @@
 # CloudHealthOffice Documentation
 
+Current capability status and dated implementation/test evidence: [Capability Reconciliation](CAPABILITY_RECONCILIATION.md).
+
 This is the documentation home for CloudHealthOffice. It is organized for a
 first-time engineer who needs to understand the platform, run it locally, inspect
 the architecture, and find an area to contribute.

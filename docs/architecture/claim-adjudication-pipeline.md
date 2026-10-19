@@ -1,21 +1,19 @@
 # Claim Adjudication Pipeline (Capability 5.5)
 
-> **Status — Phase 1 foundation, April 2026.** Ships the orchestrator,
-> stage interface, BenefitCalculation + Persistence stages, five stub
-> stages, Service Bus trigger transport, and resolver clients. Capabilities
-> 5.4 / 5.6 / 5.7 / 5.8 / 5.9 each replace one stub stage via DI swap.
-> All five are now live — **6/6 pipeline stages real after 5.9, May
-> 2026**. See
-> [`claim-scrubbing-pipeline.md`](./claim-scrubbing-pipeline.md),
-> [`network-credentialing-enforcement.md`](./network-credentialing-enforcement.md),
-> [`claim-ncci-pipeline.md`](./claim-ncci-pipeline.md),
-> [`claim-cob-pipeline.md`](./claim-cob-pipeline.md), and
-> [`claim-ai-examination.md`](./claim-ai-examination.md) for the
-> stage-specific architecture. The downstream
-> [`claim-remittance-generation.md`](./claim-remittance-generation.md)
-> doc covers capability 5.10's operator-initiated finalization
-> handoff (Adjudicated → Paid via batched 835 emission).
->
+The claims orchestrator runs the adjudication stages through the platform's
+resolver clients and asynchronous transport. Benefit calculation, persistence,
+scrubbing, network credentialing, NCCI, COB and provider-integrity stages have
+implementations; pricing is integrated ahead of benefit calculation as described
+below. The original Phase-1 stub-stage sequence is design history, not the current
+stage inventory. See the [canonical capability ledger](../CAPABILITY_RECONCILIATION.md)
+for independently reconciled behavior and limits.
+
+Stage-specific architecture: [scrubbing](claim-scrubbing-pipeline.md),
+[network credentialing](network-credentialing-enforcement.md),
+[NCCI](claim-ncci-pipeline.md), [COB](claim-cob-pipeline.md),
+[advisory AI examination](claim-ai-examination.md) and
+[remittance generation](claim-remittance-generation.md).
+
 > **Addendum, July 2026 — ProviderIntegrityStage added.** Capability
 > 5.10 (see
 > [`integrity-score-consumption.md`](./integrity-score-consumption.md))
