@@ -1,3 +1,4 @@
+using RfaiService.Exceptions;
 using RfaiService.Models;
 using RfaiService.Repositories;
 
@@ -130,11 +131,26 @@ public sealed class RfaiCaseService : IRfaiCaseService
     public async Task<RfaiCase?> MarkDeliveredAsync(
         string tenantId, string id, CancellationToken ct = default)
     {
-        var rfaiCase = await _repository.GetByIdAsync(tenantId, id);
-        if (rfaiCase is null) return null;
+        RfaiCase updated;
+        for (var attempt = 1; ; attempt++)
+        {
+            var rfaiCase = await _repository.GetByIdAsync(tenantId, id);
+            if (rfaiCase is null) return null;
 
-        RfaiCaseLifecycle.MarkDelivered(rfaiCase, UtcNow);
-        var updated = await _repository.UpdateAsync(rfaiCase);
+            RfaiCaseLifecycle.MarkDelivered(rfaiCase, UtcNow);
+            try
+            {
+                updated = await _repository.UpdateAsync(rfaiCase);
+                break;
+            }
+            catch (RfaiConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                // A response intake (or another callback) wrote in between. The
+                // delivery was not recorded; record it on the fresh copy so the
+                // other write's artifacts are kept.
+                LogConcurrentWrite(id, attempt);
+            }
+        }
 
         _logger.LogInformation(
             "RFAI case {Id} delivered to requester (delivery {Count})",
@@ -148,20 +164,38 @@ public sealed class RfaiCaseService : IRfaiCaseService
         string tenantId, string id, IReadOnlyList<RfaiResponseArtifact> artifacts,
         CancellationToken ct = default)
     {
-        var rfaiCase = await _repository.GetByIdAsync(tenantId, id);
-        if (rfaiCase is null) return null;
-
-        var result = RfaiCaseLifecycle.OfferResponse(rfaiCase, artifacts, UtcNow);
-
-        if (!result.RequiresPersist)
+        RfaiCase rfaiCase;
+        RfaiIntakeResult result;
+        for (var attempt = 1; ; attempt++)
         {
-            _logger.LogInformation(
-                "RFAI case {Id} response not recorded: {Outcome}",
-                Sanitize(id), result.Outcome);
-            return result;
-        }
+            var read = await _repository.GetByIdAsync(tenantId, id);
+            if (read is null) return null;
+            rfaiCase = read;
 
-        await _repository.UpdateAsync(rfaiCase);
+            // Offered afresh on every attempt: idempotency by submission id and
+            // the open/closed and artifact-cap checks are decided against the
+            // case as it now stands, not the stale copy.
+            result = RfaiCaseLifecycle.OfferResponse(rfaiCase, artifacts, UtcNow);
+
+            if (!result.RequiresPersist)
+            {
+                _logger.LogInformation(
+                    "RFAI case {Id} response not recorded: {Outcome}",
+                    Sanitize(id), result.Outcome);
+                return result;
+            }
+
+            try
+            {
+                await _repository.UpdateAsync(rfaiCase);
+                break;
+            }
+            catch (RfaiConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                // A delivery callback or another intake wrote in between.
+                LogConcurrentWrite(id, attempt);
+            }
+        }
 
         _logger.LogInformation(
             "RFAI case {Id} recorded {Count} artifact(s); status={Status}",
@@ -215,6 +249,17 @@ public sealed class RfaiCaseService : IRfaiCaseService
                 Sanitize(rfaiCase.Id));
         }
     }
+
+    /// <summary>
+    /// Attempts at a delivery or intake read-apply-write before the conflict is
+    /// returned to the caller (409).
+    /// </summary>
+    internal const int MaxConcurrencyAttempts = 4;
+
+    private void LogConcurrentWrite(string id, int attempt) =>
+        _logger.LogInformation(
+            "RFAI case {Id} changed concurrently; re-reading (attempt {Attempt} of {Max})",
+            Sanitize(id), attempt, MaxConcurrencyAttempts);
 
     private static string Sanitize(string? value)
         => string.IsNullOrEmpty(value)

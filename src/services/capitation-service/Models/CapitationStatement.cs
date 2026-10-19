@@ -24,6 +24,14 @@ public class CapitationStatement
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision (MongoDB): every write to this statement
+    /// increments it, and a whole-document replace succeeds only if it is still
+    /// the value read, so a stale write fails instead of overwriting a
+    /// concurrent change. Documents written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// User-facing statement number (e.g. "CAPSTMT-1234567890-2026-03")
     /// Format: CAPSTMT-{NPI}-{yyyy-MM}
     /// </summary>

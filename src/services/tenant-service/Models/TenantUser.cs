@@ -97,6 +97,15 @@ public class TenantUser
     /// <summary>Token subject of the caller that last changed the user. Never read from a request body.</summary>
     [JsonPropertyName("updatedBy")]
     public string? UpdatedBy { get; set; }
+
+    /// <summary>
+    /// Optimistic concurrency: incremented on every write, and a profile update
+    /// succeeds only against the revision it read, so a copy read before a role
+    /// change or deactivation cannot write the old roles or status back.
+    /// Documents written before the field existed read as 0. Never serialized.
+    /// </summary>
+    [JsonIgnore]
+    public long Revision { get; set; }
 }
 
 /// <summary>TenantUser.Status values.</summary>

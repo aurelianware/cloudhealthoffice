@@ -78,6 +78,7 @@ public class TenantUserRepository : ITenantUserRepository
         user.CreatedAt = DateTime.UtcNow;
         user.UpdatedAt = DateTime.UtcNow;
         user.EmailNormalized = user.Email.ToLowerInvariant();
+        user.Revision = 0;
 
         await _collection.InsertOneAsync(user);
         _logger.LogInformation("Created tenant user {Email} for tenant {TenantId}",
@@ -95,14 +96,22 @@ public class TenantUserRepository : ITenantUserRepository
         // write back a stale Entra link or invitation state over a concurrent
         // redemption, link or unlink. The status guard refuses a write from a
         // copy read on the other side of the Invited boundary (for example, an
-        // admin edit of an Invited user that has just been redeemed).
+        // admin edit of an Invited user that has just been redeemed). The
+        // revision guard refuses a write from a copy read before any other
+        // write (a role removal or deactivation would otherwise be undone);
+        // 0 also matches users written before the revision existed.
         var f = Builders<TenantUser>.Filter;
+        var expected = user.Revision;
         var filter = f.And(
             f.Eq(u => u.Id, user.Id),
             user.Status == TenantUserStatus.Invited
                 ? f.Eq(u => u.Status, TenantUserStatus.Invited)
-                : f.Ne(u => u.Status, TenantUserStatus.Invited));
+                : f.Ne(u => u.Status, TenantUserStatus.Invited),
+            expected == 0
+                ? f.Or(f.Eq(u => u.Revision, 0L), f.Exists(u => u.Revision, false))
+                : f.Eq(u => u.Revision, expected));
         var update = Builders<TenantUser>.Update
+            .Set(u => u.Revision, expected + 1)
             .Set(u => u.Email, user.Email)
             .Set(u => u.EmailNormalized, user.EmailNormalized)
             .Set(u => u.DisplayName, user.DisplayName)
@@ -119,14 +128,26 @@ public class TenantUserRepository : ITenantUserRepository
         var result = await _collection.UpdateOneAsync(filter, update);
         if (result.MatchedCount == 0)
             throw new UserChangedConcurrentlyException(user.Id);
+        user.Revision = expected + 1;
         _logger.LogInformation("Updated tenant user {UserId}", SanitizeForLog(user.Id));
 
         return user;
     }
 
+    public async Task<bool> RecordLoginAsync(string userId, DateTime at)
+    {
+        // Only LastLoginAt: a login never writes back roles or status it read.
+        var update = Builders<TenantUser>.Update
+            .Set(u => u.LastLoginAt, at)
+            .Inc(u => u.Revision, 1L);
+        var result = await _collection.UpdateOneAsync(u => u.Id == userId, update);
+        return result.MatchedCount > 0;
+    }
+
     public async Task<TenantUser?> UnlinkAsync(string tenantId, string userId, string actor)
     {
         var update = Builders<TenantUser>.Update
+            .Inc(u => u.Revision, 1L)
             .Set(u => u.AzureAdObjectId, string.Empty)
             .Set(u => u.AzureAdTenantId, string.Empty)
             .Set(u => u.UpdatedAt, DateTime.UtcNow)

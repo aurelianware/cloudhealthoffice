@@ -408,6 +408,8 @@ public class AuthorizationsController : ControllerBase
             fixture.Id = existing.Id;
             fixture.CreatedDate = existing.CreatedDate == default ? fixture.CreatedDate : existing.CreatedDate;
             fixture.CreatedBy = existing.CreatedBy ?? Actor;
+            // The fixture replaces the stored document as read just now.
+            fixture.Revision = existing.Revision;
             await _authorizationRepository.UpdateAsync(fixture);
             updated++;
         }

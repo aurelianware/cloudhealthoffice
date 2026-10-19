@@ -521,6 +521,19 @@ public class ClaimRepositoryMongo : IClaimRepository
         return claim;
     }
 
+    /// <summary>Every write to a claim document bumps its <see cref="Claim.Revision"/>.</summary>
+    private static UpdateDefinition<Claim> Bumped(UpdateDefinition<Claim> update) =>
+        update.Inc(c => c.Revision, 1L);
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<Claim> RevisionIs(long expected)
+    {
+        var b = Builders<Claim>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(c => c.Revision, 0L), b.Exists(c => c.Revision, false))
+            : b.Eq(c => c.Revision, expected);
+    }
+
     public async Task<Claim> UpdateAsync(Claim claim)
     {
         var tenantId = GetTenantId();
@@ -550,10 +563,28 @@ public class ClaimRepositoryMongo : IClaimRepository
             }
         }
 
-        var result = await _collection.ReplaceOneAsync(filter, claim);
+        // Conditional on the revision the caller read: a concurrent write in
+        // between (a status patch, an outbox clear, another replace) makes
+        // this one fail instead of being silently overwritten.
+        var expected = claim.Revision;
+        claim.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), claim);
+        }
+        catch
+        {
+            claim.Revision = expected;
+            throw;
+        }
 
         if (result.MatchedCount == 0)
         {
+            claim.Revision = expected;
+            if (existing != null || await _collection.Find(filter).AnyAsync())
+                throw new ClaimConcurrencyException(claim.Id, expected);
+
             // Surface a domain-specific not-found rather than a generic
             // Exception so the controller boundary can map to 404 (via
             // IsNotFound) instead of falling through ExceptionHandlingMiddleware
@@ -757,7 +788,7 @@ public class ClaimRepositoryMongo : IClaimRepository
             // another examiner took over (or finalized).
             rowFilter = b.And(rowFilter, b.Eq(c => c.ResolutionLock!.Token, requiredResolutionLockToken));
         }
-        var result = await _collection.UpdateOneAsync(rowFilter, update, cancellationToken: ct);
+        var result = await _collection.UpdateOneAsync(rowFilter, Bumped(update), cancellationToken: ct);
         if (result.MatchedCount == 0)
         {
             return false;
@@ -786,7 +817,7 @@ public class ClaimRepositoryMongo : IClaimRepository
             if (requiredResolutionLockToken is not null)
                 pendFilter = b.And(pendFilter, b.Eq(c => c.ResolutionLock!.Token, requiredResolutionLockToken));
             var pendUpdate = Builders<Claim>.Update.Set(c => c.Status, ClaimStatus.Pended);
-            await _collection.UpdateOneAsync(pendFilter, pendUpdate, cancellationToken: ct);
+            await _collection.UpdateOneAsync(pendFilter, Bumped(pendUpdate), cancellationToken: ct);
             return true;
         }
 
@@ -861,7 +892,7 @@ public class ClaimRepositoryMongo : IClaimRepository
                 .Set(c => c.PendingAccumulatorCommit, pendingAccumulatorCommit)
                 .Set(c => c.LatestAccumulatorCommitId, pendingAccumulatorCommit.Id);
 
-        var result = await _collection.UpdateOneAsync(statusFilter, statusUpdate, cancellationToken: ct);
+        var result = await _collection.UpdateOneAsync(statusFilter, Bumped(statusUpdate), cancellationToken: ct);
         if (result.MatchedCount > 0)
         {
             return new StatusWriteResult(StatusWriteOutcome.Applied, desiredStatus);
@@ -906,7 +937,7 @@ public class ClaimRepositoryMongo : IClaimRepository
                 repairEvidenceFilter,
                 lockFence);
 
-            var repairResult = await _collection.UpdateOneAsync(repairFilter, statusUpdate, cancellationToken: ct);
+            var repairResult = await _collection.UpdateOneAsync(repairFilter, Bumped(statusUpdate), cancellationToken: ct);
             if (repairResult.MatchedCount > 0)
             {
                 return new StatusWriteResult(StatusWriteOutcome.Applied, desiredStatus);
@@ -1044,7 +1075,7 @@ public class ClaimRepositoryMongo : IClaimRepository
             ? Builders<Claim>.Update.Set(c => c.PendingAccumulatorCommit, null)
             : Builders<Claim>.Update.Set(c => c.PendingAccumulatorReversal, null);
         if (clampReview is not null) update = update.Set(c => c.AccumulatorClampReview, clampReview);
-        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update), cancellationToken: ct);
         return result.MatchedCount == 1;
     }
 
@@ -1066,7 +1097,7 @@ public class ClaimRepositoryMongo : IClaimRepository
                 .Set(c => c.PendingAccumulatorReversal!.NextAttemptAt, nextAttemptAt)
                 .Set(c => c.PendingAccumulatorReversal!.DueAtMs, due)
                 .Set(c => c.PendingAccumulatorReversal!.LastError, lastError);
-        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update), cancellationToken: ct);
         return result.MatchedCount == 1;
     }
 
@@ -1103,7 +1134,7 @@ public class ClaimRepositoryMongo : IClaimRepository
     public async Task<bool> CompleteClaimEventAsync(string tenantId, string claimId, string eventId, CancellationToken ct = default)
     {
         var update = Builders<Claim>.Update.PullFilter(c => c.PendingClaimEvents, e => e.Id == eventId);
-        var result = await _collection.UpdateOneAsync(HasClaimEvent(tenantId, claimId, eventId), update, cancellationToken: ct);
+        var result = await _collection.UpdateOneAsync(HasClaimEvent(tenantId, claimId, eventId), Bumped(update), cancellationToken: ct);
         return result.ModifiedCount == 1;
     }
 
@@ -1114,7 +1145,7 @@ public class ClaimRepositoryMongo : IClaimRepository
             .Set("PendingClaimEvents.$.Attempts", attempts)
             .Set("PendingClaimEvents.$.DueAtMs", dueAtMs)
             .Set("PendingClaimEvents.$.LastError", lastError);
-        var result = await _collection.UpdateOneAsync(HasClaimEvent(tenantId, claimId, eventId), update, cancellationToken: ct);
+        var result = await _collection.UpdateOneAsync(HasClaimEvent(tenantId, claimId, eventId), Bumped(update), cancellationToken: ct);
         return result.MatchedCount == 1;
     }
 
@@ -1171,7 +1202,7 @@ public class ClaimRepositoryMongo : IClaimRepository
             .Set(c => c.Status, ClaimStatus.Deny)
             .Set(c => c.VersionState, ClaimVersionState.Adjudicated)
             .Set(c => c.LastUpdatedDate, DateTime.UtcNow);
-        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update), cancellationToken: ct);
         return result.ModifiedCount == 1;
     }
 
@@ -1197,7 +1228,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         var row = b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, claimId));
         var result = await _collection.UpdateOneAsync(
             b.And(row, b.Or(b.Eq(c => c.AccumulatorClampReview, null), b.Ne(c => c.AccumulatorClampReview!.CommitId, review.CommitId))),
-            Builders<Claim>.Update.Set(c => c.AccumulatorClampReview, review),
+            Bumped(Builders<Claim>.Update.Set(c => c.AccumulatorClampReview, review)),
             cancellationToken: ct);
         if (result.MatchedCount == 1) return true;
         return await _collection.Find(row).AnyAsync(ct); // already holds this commit's review
@@ -1208,10 +1239,10 @@ public class ClaimRepositoryMongo : IClaimRepository
         var b = Builders<Claim>.Filter;
         var result = await _collection.UpdateOneAsync(
             b.And(b.Eq(c => c.TenantId, GetTenantId()), b.Eq(c => c.Id, claimId), b.Ne(c => c.AccumulatorClampReview, null)),
-            Builders<Claim>.Update
+            Bumped(Builders<Claim>.Update
                 .Set(c => c.AccumulatorClampReview!.Resolved, true)
                 .Set(c => c.AccumulatorClampReview!.ResolvedBy, resolvedBy)
-                .Set(c => c.AccumulatorClampReview!.ResolvedAt, DateTime.UtcNow),
+                .Set(c => c.AccumulatorClampReview!.ResolvedAt, DateTime.UtcNow)),
             cancellationToken: ct);
         return result.MatchedCount == 1;
     }
@@ -1236,7 +1267,7 @@ public class ClaimRepositoryMongo : IClaimRepository
             .Set(c => c.LastUpdatedDate, DateTime.UtcNow)
             .Set(c => c.LastUpdatedBy, actorId);
 
-        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update), cancellationToken: ct);
         return result.MatchedCount > 0;
     }
 
@@ -1256,7 +1287,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         {
             Token = token, LockedBy = actorId, ExpiresAt = now + duration,
         });
-        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update), cancellationToken: ct);
         return result.ModifiedCount == 1;
     }
 
@@ -1270,8 +1301,17 @@ public class ClaimRepositoryMongo : IClaimRepository
             b.Eq(c => c.Id, claim.Id),
             b.Eq(c => c.TenantId, tenantId),
             b.Eq(c => c.ResolutionLock!.Token, lockToken));
-        var result = await _collection.ReplaceOneAsync(filter, claim, cancellationToken: ct);
-        return result.MatchedCount == 1 ? claim : null;
+        // The lock fences other resolvers; the revision fences every other
+        // writer (a status patch, an outbox clear) since this claim was read.
+        var expected = claim.Revision;
+        claim.Revision = expected + 1;
+        var result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), claim, cancellationToken: ct);
+        if (result.MatchedCount == 1) return claim;
+        claim.Revision = expected;
+        // Lock still held, revision moved on: a concurrent write, not a lost lock.
+        if (await _collection.Find(filter).AnyAsync(ct))
+            throw new ClaimConcurrencyException(claim.Id, expected);
+        return null;
     }
 
     public async Task<bool> HoldsResolutionLockAsync(
@@ -1292,7 +1332,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         var b = Builders<Claim>.Filter;
         await _collection.UpdateOneAsync(
             b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, claimId), b.Eq(c => c.ResolutionLock!.Token, token)),
-            Builders<Claim>.Update.Set(c => c.ResolutionLock, null),
+            Bumped(Builders<Claim>.Update.Set(c => c.ResolutionLock, null)),
             cancellationToken: ct);
     }
 
@@ -1322,7 +1362,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         if (claimEvent is not null)
             update = update.Push(c => c.PendingClaimEvents, claimEvent);
 
-        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update), cancellationToken: ct);
         return result.MatchedCount > 0;
     }
 

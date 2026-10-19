@@ -51,6 +51,14 @@ public class Payment
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision (MongoDB): every write to the document
+    /// increments it, and a whole-document save succeeds only while it is still
+    /// the revision that was read, so a concurrent change is never silently
+    /// overwritten. Documents written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// Check/EFT number from payer
     /// 835: TRN02 (2000 level)
     /// </summary>

@@ -1,4 +1,5 @@
 using MongoDB.Driver;
+using RfaiService.Exceptions;
 using RfaiService.Models;
 
 namespace RfaiService.Repositories;
@@ -62,6 +63,7 @@ public class RfaiRepositoryMongo : IRfaiRepository
 
     public async Task<RfaiCase> CreateAsync(RfaiCase rfaiCase)
     {
+        rfaiCase.Revision = 0;
         await _collection.InsertOneAsync(rfaiCase);
         return rfaiCase;
     }
@@ -69,6 +71,7 @@ public class RfaiRepositoryMongo : IRfaiRepository
     /// <inheritdoc />
     public async Task<(RfaiCase Case, bool Created)> CreateIfAbsentAsync(RfaiCase rfaiCase)
     {
+        rfaiCase.Revision = 0;
         try
         {
             await _collection.InsertOneAsync(rfaiCase);
@@ -91,6 +94,15 @@ public class RfaiRepositoryMongo : IRfaiRepository
         }
     }
 
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<RfaiCase> RevisionIs(long expected)
+    {
+        var b = Builders<RfaiCase>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(r => r.Revision, 0L), b.Exists(r => r.Revision, false))
+            : b.Eq(r => r.Revision, expected);
+    }
+
     public async Task<RfaiCase> UpdateAsync(RfaiCase rfaiCase)
     {
         rfaiCase.UpdatedAt = DateTime.UtcNow;
@@ -99,7 +111,31 @@ public class RfaiRepositoryMongo : IRfaiRepository
             Builders<RfaiCase>.Filter.Eq(r => r.Id, rfaiCase.Id),
             Builders<RfaiCase>.Filter.Eq(r => r.TenantId, rfaiCase.TenantId));
 
-        await _collection.ReplaceOneAsync(filter, rfaiCase, new ReplaceOptions { IsUpsert = false });
+        // Conditional on the revision the caller read: a concurrent write in
+        // between (a delivery callback, a response intake, a close) makes this
+        // one fail instead of silently dropping the other's change.
+        var expected = rfaiCase.Revision;
+        rfaiCase.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(
+                filter & RevisionIs(expected), rfaiCase, new ReplaceOptions { IsUpsert = false });
+        }
+        catch
+        {
+            rfaiCase.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            rfaiCase.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new RfaiConcurrencyException(rfaiCase.Id, expected);
+            // Missing: unchanged behaviour (nothing written, no error).
+        }
+
         return rfaiCase;
     }
 }

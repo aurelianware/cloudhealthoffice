@@ -22,6 +22,15 @@ public class Coverage
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision of the MongoDB document, bumped by every
+    /// write. A whole-document replace succeeds only while the stored revision
+    /// is still the one it read, so a stale write (e.g. an edit read before the
+    /// status sweep terminated the coverage) fails instead of undoing a
+    /// concurrent change. Documents written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// Member ID from Member Service (834 REF*0F)
     /// </summary>
     [Required]

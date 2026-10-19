@@ -159,10 +159,20 @@ public class PaymentRepositoryMongo : IPaymentRepository
     {
         payment.TenantId = GetTenantId();
         payment.ReceivedAt = DateTime.UtcNow;
+        payment.Revision = 0;
         await _collection.InsertOneAsync(payment);
         _logger.LogInformation("Created payment {PaymentId} for check {CheckNumber}",
             SanitizeForLog(payment.Id), SanitizeForLog(payment.CheckNumber));
         return payment;
+    }
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<Payment> RevisionIs(long expected)
+    {
+        var b = Builders<Payment>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
     }
 
     public async Task<Payment> UpdateAsync(Payment payment)
@@ -170,7 +180,31 @@ public class PaymentRepositoryMongo : IPaymentRepository
         var filter = Builders<Payment>.Filter.And(
             Builders<Payment>.Filter.Eq(x => x.Id, payment.Id),
             Builders<Payment>.Filter.Eq(x => x.TenantId, payment.TenantId));
-        await _collection.ReplaceOneAsync(filter, payment);
+
+        // Conditional on the revision the caller read: a concurrent save in
+        // between (a request and a run finalizing the same payment) makes this
+        // one fail instead of silently overwriting it.
+        var expected = payment.Revision;
+        payment.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), payment);
+        }
+        catch
+        {
+            payment.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            payment.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new PaymentConcurrencyException("Payment", payment.Id, expected);
+            // Missing: as before, nothing is written and the payment is returned.
+        }
+
         _logger.LogInformation("Updated payment {PaymentId}", payment.Id);
         return payment;
     }

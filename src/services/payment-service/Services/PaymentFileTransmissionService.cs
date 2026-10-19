@@ -891,12 +891,22 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 warnings.Add(warning);
                 _logger.LogCritical("AUDIT payment run {RunNumber}: {Warning}", Clean(run.PaymentRunNumber), Clean(warning));
             }
-            if (payment != null && payment.VoidedBeforePaymentAt == null)
+            // Read-modify-write of the payment, which a request or a run may be saving
+            // meanwhile: on a conflict re-read and re-apply (once recorded, it stays).
+            for (var attempt = 1; payment != null && payment.VoidedBeforePaymentAt == null; attempt++)
             {
                 payment.VoidedBeforePaymentAt = Now;
                 payment.VoidedBeforePaymentBy = user;
                 payment.VoidedBeforePaymentFileReference = file.FileReference;
-                await _payments.UpdateAsync(payment);
+                try
+                {
+                    await _payments.UpdateAsync(payment);
+                    break;
+                }
+                catch (PaymentConcurrencyException) when (attempt < ConcurrentSaves.MaxAttempts)
+                {
+                    payment = await _payments.GetByIdAsync(notice.PaymentId);
+                }
             }
             notice.Completed = true;
             notice.CompletedAt = Now;

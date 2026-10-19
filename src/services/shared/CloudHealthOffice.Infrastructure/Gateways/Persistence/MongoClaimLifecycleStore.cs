@@ -37,13 +37,16 @@ internal sealed class MongoClaimLifecycleStore :
         _remittances = database.GetCollection<RemittanceReceiptDocument>(options.RemittancesCollection);
     }
 
+    /// <summary>
+    /// Secondary indexes. <c>_id</c> is unique by definition and never
+    /// declared here: MongoDB rejects a <c>unique</c> option on an <c>_id</c>
+    /// index, and that one rejected model used to fail the whole call (and the
+    /// host's start-up), so none of the other indexes were created.
+    /// </summary>
     public async Task EnsureIndexesAsync(CancellationToken ct)
     {
         await _transmissions.Indexes.CreateManyAsync(new[]
         {
-            new CreateIndexModel<ClaimTransmissionDocument>(
-                Builders<ClaimTransmissionDocument>.IndexKeys.Ascending(d => d.Id),
-                new CreateIndexOptions { Unique = true }),
             new CreateIndexModel<ClaimTransmissionDocument>(
                 Builders<ClaimTransmissionDocument>.IndexKeys
                     .Ascending(d => d.TenantId)
@@ -100,9 +103,6 @@ internal sealed class MongoClaimLifecycleStore :
         await _attachments.Indexes.CreateManyAsync(new[]
         {
             new CreateIndexModel<ClaimAttachmentTransmissionDocument>(
-                Builders<ClaimAttachmentTransmissionDocument>.IndexKeys.Ascending(d => d.Id),
-                new CreateIndexOptions { Unique = true }),
-            new CreateIndexModel<ClaimAttachmentTransmissionDocument>(
                 Builders<ClaimAttachmentTransmissionDocument>.IndexKeys
                     .Ascending(d => d.TenantId)
                     .Ascending(d => d.IdempotencyKey),
@@ -118,9 +118,6 @@ internal sealed class MongoClaimLifecycleStore :
         await _inboundAttachments.Indexes.CreateManyAsync(new[]
         {
             new CreateIndexModel<InboundClaimAttachmentReceiptDocument>(
-                Builders<InboundClaimAttachmentReceiptDocument>.IndexKeys.Ascending(d => d.Id),
-                new CreateIndexOptions { Unique = true }),
-            new CreateIndexModel<InboundClaimAttachmentReceiptDocument>(
                 Builders<InboundClaimAttachmentReceiptDocument>.IndexKeys.Ascending(d => d.IdempotencyKey),
                 new CreateIndexOptions { Unique = true }),
             new CreateIndexModel<InboundClaimAttachmentReceiptDocument>(
@@ -135,9 +132,6 @@ internal sealed class MongoClaimLifecycleStore :
 
         await _statusInquiries.Indexes.CreateManyAsync(new[]
         {
-            new CreateIndexModel<ClaimStatusInquiryDocument>(
-                Builders<ClaimStatusInquiryDocument>.IndexKeys.Ascending(d => d.Id),
-                new CreateIndexOptions { Unique = true }),
             new CreateIndexModel<ClaimStatusInquiryDocument>(
                 Builders<ClaimStatusInquiryDocument>.IndexKeys.Ascending(d => d.IdempotencyKey),
                 new CreateIndexOptions { Unique = true }),
@@ -156,9 +150,6 @@ internal sealed class MongoClaimLifecycleStore :
 
         await _remittances.Indexes.CreateManyAsync(new[]
         {
-            new CreateIndexModel<RemittanceReceiptDocument>(
-                Builders<RemittanceReceiptDocument>.IndexKeys.Ascending(d => d.Id),
-                new CreateIndexOptions { Unique = true }),
             new CreateIndexModel<RemittanceReceiptDocument>(
                 Builders<RemittanceReceiptDocument>.IndexKeys.Ascending(d => d.IdempotencyKey),
                 new CreateIndexOptions { Unique = true }),
