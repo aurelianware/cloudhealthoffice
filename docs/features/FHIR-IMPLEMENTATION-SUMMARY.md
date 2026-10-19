@@ -2,6 +2,9 @@
 
 # FHIR R4 Integration - Implementation Summary
 
+> **Current-status annotation — 2026-10-19:** This historical assessment is not the current capability inventory. PAS persistence/service-line outcomes, CRD uncertainty handling, DTR durable creation/read-back, SMART launch/approval withdrawal, reporting aggregates and receipt-based deadlines have verified implementations. DTR update/search durability remains partial; complete standards conformance and deployment readiness require separate evidence. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
+
+
 **Project**: Cloud Health Office  
 **Feature**: X12 270 Eligibility → FHIR R4 Patient & CoverageEligibilityRequest  
 **Status**: ✅ Complete and Production Ready  

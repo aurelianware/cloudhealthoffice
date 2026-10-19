@@ -2,6 +2,9 @@
 
 # Prior Authorization API - Implementation Summary
 
+> **Current-status annotation — 2026-10-19:** This historical assessment is not the current capability inventory. PAS persistence/service-line outcomes, CRD uncertainty handling, DTR durable creation/read-back, SMART launch/approval withdrawal, reporting aggregates and receipt-based deadlines have verified implementations. DTR update/search durability remains partial; complete standards conformance and deployment readiness require separate evidence. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
+
+
 > **Status (October 2026):** CMS-0057-F conformance is in progress. This November 2024 summary
 > describes a TypeScript library (`src/fhir/prior-auth-api.ts`, not imported by any service) and the
 > removed Logic Apps orchestration. It overstated what was delivered. Da Vinci CRD/DTR/PAS are in

@@ -1,5 +1,8 @@
 # CMS-0057-F Acceptance Scenario Suite — Codebase Inventory & Traceability
 
+> **Current-status annotation — 2026-10-19:** This Phase-0 inventory and the ePA baseline summary contain superseded assessments. Use the reconciliation matrix for current scoped implementation status. The ePA §11 machine-readable evidence statuses remain a separate, partial scenario record, not comprehensive conformance proof. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
+
+
 Phase-0 recon for the CMS-0057-F Acceptance Scenario Suite. This is an honest
 map of what exists in `aurelianware/cloudhealthoffice` today, what each scenario
 binds to, and whether it is **PASSABLE**, **PARTIAL**, or **GAP** against the

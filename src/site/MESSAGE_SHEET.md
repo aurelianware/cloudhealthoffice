@@ -7,9 +7,23 @@ with this sheet.
 
 ---
 
+## Verified capability wording — October 19, 2026
+
+Use the latest verified implementation as the source of truth. Do not repeat historical resolved gaps. See the repository records `docs/CAPABILITY_RECONCILIATION.md` and `docs/marketing/CLAIM_EVIDENCE_LEDGER.md` for the dated baseline, exact evidence and test results.
+
+- PAS submission stores the request and decision before responding; inquiry returns stored outcomes. CHO validates and persists service-line decisions and adverse reasons and projects them into PAS responses.
+- CRD unresolved/uncoded inputs and evaluation failures return uncertainty rather than a no-authorization-needed assertion.
+- DTR creates, response submission and id-based reads use MongoDB; questionnaire updates and search/existence indexes remain in-process. Say “durable creation/read-back,” not “all DTR CRUD is durable.”
+- SMART tenant/client-bound launch and patient/encounter token context are implemented; withdrawing an application approval affects refresh. This is not a claim of every SMART response field or revocation mechanism.
+- CMS reporting computes standard/expedited counts, rates, mean/median and timeliness. Appeal/extension metrics and complete public reporting remain separate.
+- CHO receipt-v1 persists authorization receipt/due timestamps and preserves the original clock across additional-information receipt; deployment-specific policy and alerting require validation.
+
+These implementation statements do not assert full PAS/CRD/DTR/SMART conformance, universal compliance, production readiness or customer deployments. Unverified is not equivalent to missing. Preserve precise remaining limitations and reverify changed paths before stronger claims.
+
 ## Canonical one-liner
 Cloud Health Office is the claims platform you can put beside QNXT, Facets, or
-HealthEdge — so you hit the 2027 FHIR mandate without a core replacement.
+HealthEdge — for staged interoperability and modernization work without requiring an
+immediate core replacement.
 
 ## 15-second hero
 Health plans must expose FHIR APIs by January 1, 2027 and still run yesterday's
@@ -46,11 +60,11 @@ workflow, and Platform Engagement (claims / payments / core replacement) are pai
 ## Homepage copy (locked)
 - **Eyebrow:** Payer platform · Source-available · Runs in your cloud
 - **H1:** Meet the 2027 FHIR deadline without replacing QNXT, Facets, or HealthEdge.
-- **H2:** Cloud Health Office deploys beside your core admin system. It serves the
-  CMS-0057-F APIs now, then takes over claims domains when you are ready.
+- **H2:** Cloud Health Office deploys beside your core admin system. It provides
+  interoperability and administration capabilities that your team can evaluate and integrate by domain.
 
 **Three tiles (business language only):**
-1. Compliance in weeks, not a multi-year replatform
+1. A scoped interoperability workstream beside your existing core
 2. Your cloud, your data, inspectable source
 3. 1,000,000-claim adjudication evidence, published with limits
 

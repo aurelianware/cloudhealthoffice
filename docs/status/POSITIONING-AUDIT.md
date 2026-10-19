@@ -1,5 +1,8 @@
 # Cloud Health Office — Positioning & Documentation Audit
 
+> **Current-status annotation — 2026-10-19:** This historical assessment is not the current capability inventory. PAS persistence/service-line outcomes, CRD uncertainty handling, DTR durable creation/read-back, SMART launch/approval withdrawal, reporting aggregates and receipt-based deadlines have verified implementations. DTR update/search durability remains partial; complete standards conformance and deployment readiness require separate evidence. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
+
+
 **Scope:** Every Cloud Health Office (CHO) documentation and marketing artifact, measured against [`docs/POSITIONING.md`](../POSITIONING.md) (created this session).
 
 **Status:** Audit complete. Phase 2 (separate PR) will execute the updates this audit recommends.

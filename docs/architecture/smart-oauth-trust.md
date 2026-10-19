@@ -4,9 +4,13 @@ How Cloud Health Office validates tokens from an externally managed identity
 provider, what it will and will not believe from one, and how a deployment
 configures that trust.
 
-Scope: CHO's FHIR **resource server**. CHO does not issue production tokens and
-hosts no production authorization flow — the bundled `smart-auth-service` is a
-development and acceptance-suite issuer only.
+Scope: CHO's FHIR **resource server** and its configured issuer trust. The bundled
+`smart-auth-service` also implements tenant/client-bound launch context,
+patient/encounter token context, client registration and approval withdrawal
+affecting refresh. These paths have focused integration evidence; this document
+does not establish a production deployment or full SMART conformance. See
+[Capability Reconciliation, CAP-05](../CAPABILITY_RECONCILIATION.md). Demo-mode
+trust restrictions below remain distinct from those implemented issuer capabilities.
 
 Related: [`provider-access.md`](provider-access.md) ·
 [`fhir-conformance.md`](fhir-conformance.md) ·

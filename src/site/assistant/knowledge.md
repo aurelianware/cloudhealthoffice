@@ -5,6 +5,19 @@ guide, not a general chatbot. If a question falls outside these topics, it refus
 and routes to the lead form or the calendar. Keep this consistent with
 `../MESSAGE_SHEET.md`.
 
+## Verified capability wording — October 19, 2026
+
+Use the latest verified implementation as the source of truth. Do not repeat historical resolved gaps. See the repository records `docs/CAPABILITY_RECONCILIATION.md` and `docs/marketing/CLAIM_EVIDENCE_LEDGER.md` for the dated baseline, exact evidence and test results.
+
+- PAS submission stores the request and decision before responding; inquiry returns stored outcomes. CHO validates and persists service-line decisions and adverse reasons and projects them into PAS responses.
+- CRD unresolved/uncoded inputs and evaluation failures return uncertainty rather than a no-authorization-needed assertion.
+- DTR creates, response submission and id-based reads use MongoDB; questionnaire updates and search/existence indexes remain in-process. Say “durable creation/read-back,” not “all DTR CRUD is durable.”
+- SMART tenant/client-bound launch and patient/encounter token context are implemented; withdrawing an application approval affects refresh. This is not a claim of every SMART response field or revocation mechanism.
+- CMS reporting computes standard/expedited counts, rates, mean/median and timeliness. Appeal/extension metrics and complete public reporting remain separate.
+- CHO receipt-v1 persists authorization receipt/due timestamps and preserves the original clock across additional-information receipt; deployment-specific policy and alerting require validation.
+
+These implementation statements do not assert full PAS/CRD/DTR/SMART conformance, universal compliance, production readiness or customer deployments. Unverified is not equivalent to missing. Preserve precise remaining limitations and reverify changed paths before stronger claims.
+
 ## Refusal / off-policy topics (never answer — offer the form instead)
 - Medical advice or anything about a specific patient/member
 - PHI, member IDs, real claim files
@@ -21,7 +34,8 @@ already exists as published text on /pricing.
 
 ## One-liner
 Cloud Health Office is the claims platform you can put beside QNXT, Facets, or
-HealthEdge — so you hit the 2027 FHIR mandate without a core replacement.
+HealthEdge — for staged interoperability and modernization work without requiring an
+immediate core replacement.
 
 ## What it is
 A payer administration platform — claims, benefits, eligibility, prior auth,
@@ -46,8 +60,8 @@ some exchange plans to offer FHIR APIs for patient access, provider access,
 payer-to-payer exchange, and prior authorization by January 1, 2027.
 
 ## Deploy model
-You deploy Cloud Health Office in your own cloud (Azure, AWS, or GCP). PHI stays inside
-your boundary. You can also evaluate and run it locally for free. Details on /deploy.
+You deploy Cloud Health Office in your own cloud (Azure, AWS, or GCP). Data flows, including integrations and external AI calls, must be validated against
+your approved boundary. You can also evaluate and run it locally for free. Details on /deploy.
 
 ## Operating models (state the status, never imply more)
 - **Payer-controlled cloud deployment — available.** Deployed into the plan's own approved Azure, AWS, or GCP environment.

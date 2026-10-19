@@ -1,5 +1,8 @@
 # CMS-0057-F Readiness — Claims Domain
 
+> **Current-status annotation — 2026-10-19:** This claims-domain phase assessment does not establish that current PAS persistence, service-line decisions, reporting or receipt deadlines are missing. Cross-service capabilities have since been verified; member-access breadth, history and resource parity must be evaluated individually. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
+
+
 **Scope:** Cloud Health Office (CHO) Claims-domain compliance
 posture relative to the CMS Interoperability and Prior
 Authorization Final Rule (CMS-0057-F). Subsequent uses of "CHO" in
