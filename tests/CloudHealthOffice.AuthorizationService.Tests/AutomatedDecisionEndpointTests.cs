@@ -189,8 +189,8 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
         Assert.Equal(RequestHash, _stored.RequestHash);
         var line = Assert.Single(_stored.RequestedServices);
         Assert.Equal("http://www.ama-assn.org/go/cpt", line.ProductOrServiceSystem);
-        Assert.Null(line.ApprovedUnits);
-        Assert.Null(line.ServiceStatus);
+        Assert.Equal(line.RequestedUnits, line.ApprovedUnits);
+        Assert.Equal("A1", line.ServiceStatus);
 
         Assert.Collection(_stored.StatusHistory,
             receipt =>

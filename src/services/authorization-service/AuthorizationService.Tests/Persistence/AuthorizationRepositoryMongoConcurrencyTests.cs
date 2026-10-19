@@ -79,6 +79,32 @@ public sealed class AuthorizationRepositoryMongoConcurrencyTests(MongoRunnerFixt
     }
 
     [Fact]
+    public async Task MixedDecision_SurvivesMongoReloadWithCodedLineReasonsAndHistory()
+    {
+        var authorization = await SeedAsync("mixed-lines", AuthorizationStatus.Submitted);
+        authorization.RequestedServices = new()
+        {
+            new() { LineNumber = 7, ProcedureCode = "72148", RequestedUnits = 4 },
+            new() { LineNumber = 12, ProcedureCode = "72148", RequestedUnits = 2 },
+        };
+        await Repo().UpdateAsync(authorization);
+        var backend = new global::AuthorizationService.Backends.ChoAuthorizationBackend(Repo());
+        await backend.UpdateStatusAsync(authorization, AuthorizationStatus.Modified, "A2", null,
+            details: new() { LineDecisions = new()
+            {
+                new() { LineNumber = 7, ReviewDecision = "A1" },
+                new() { LineNumber = 12, ReviewDecision = "A3", DenialReasonCode = "NOTMEDNEC", DenialReason = "Clinical criteria not met." },
+            }});
+        var stored = await ReadAsync("mixed-lines");
+        Assert.Equal(AuthorizationStatus.Modified, stored.Status);
+        Assert.Equal(4, stored.RequestedServices[0].ApprovedUnits);
+        Assert.Equal(0, stored.RequestedServices[1].ApprovedUnits);
+        Assert.Equal("NOTMEDNEC", stored.RequestedServices[1].DenialReasonCode);
+        Assert.Equal(12, stored.StatusHistory.Last().LineDecisions[1].LineNumber);
+        Assert.Equal("Clinical criteria not met.", stored.StatusHistory.Last().LineDecisions[1].DenialReason);
+    }
+
+    [Fact]
     public async Task RealHost_RefusesToStartWithLegacyDuplicateNumbers()
     {
         var collection = _db.GetCollection<Authorization>(Collection);

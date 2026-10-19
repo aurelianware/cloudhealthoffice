@@ -271,7 +271,19 @@ public class PasController : FhirControllerBase
                 answer.Decision = "approved";
                 answer.EffectiveFrom = kept.ApprovedServiceDateFrom;
                 answer.EffectiveTo = kept.ApprovedServiceDateTo;
-                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer);
+                responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer, kept.RequestedServices);
+                break;
+            case PriorAuthorizationStatus.Modified:
+                responseBundle = _responseBuilder.BuildInquiryResponse(new PriorAuthorizationRecord
+                {
+                    AuthorizationNumber = kept.AuthorizationNumber,
+                    PatientReference = claim.Patient?.Reference,
+                    Status = kept.Status, ReviewDecision = kept.ReviewDecision,
+                    DenialReasonCode = kept.DenialReasonCode, DenialReason = kept.DenialReason,
+                    ApprovedServiceDateFrom = kept.ApprovedServiceDateFrom,
+                    ApprovedServiceDateTo = kept.ApprovedServiceDateTo,
+                    RequestedServices = kept.RequestedServices,
+                });
                 break;
             case PriorAuthorizationStatus.Denied:
                 answer.HasDecision = true;
@@ -280,10 +292,10 @@ public class PasController : FhirControllerBase
                 answer.DenialReason = kept.DenialReason;
                 if (outcome != "Denied")
                     answer.RuleName = "benefit-exclusion";
-                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer);
+                responseBundle = _responseBuilder.BuildDeniedResponse(claim, answer, kept.RequestedServices);
                 break;
             case PriorAuthorizationStatus.Pended:
-                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber);
+                responseBundle = _responseBuilder.BuildPendedResponse(claim, kept.AuthorizationNumber, kept.RequestedServices);
                 break;
             default:
                 RecordMetrics(sw, "error", "unanswerable-stored-status");

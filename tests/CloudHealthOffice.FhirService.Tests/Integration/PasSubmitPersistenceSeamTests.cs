@@ -174,6 +174,11 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
         var service = stored.RequestedServices.Should().ContainSingle().Subject;
         service.ProcedureCode.Should().Be(ApproveCode);
         service.ProductOrServiceSystem.Should().Be(PasBundles.CptSystem);
+        service.LineNumber.Should().Be(1);
+        service.ServiceStatus.Should().Be("A1");
+        service.ApprovedUnits.Should().Be(service.RequestedUnits);
+        claimResponse.Item.Should().ContainSingle().Which.ItemSequence.Should().Be(1);
+        claimResponse.Item[0].Adjudication.Single(a => a.Extension.Count > 0).Value.Should().Be(service.RequestedUnits);
         stored.DiagnosisCodes.Should().ContainSingle().Which.Code.Should().Be("M17.11");
     }
 

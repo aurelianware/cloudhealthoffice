@@ -55,6 +55,7 @@ public sealed class QnxtAuthorizationBackend : IAuthorizationBackend
         AuthorizationStatus status,
         string? reviewDecision,
         string? reason,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        AuthorizationDecisionDetails? details = null)
         => throw new NotImplementedException(Todo);
 }
