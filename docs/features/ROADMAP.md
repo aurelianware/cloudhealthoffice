@@ -1,7 +1,6 @@
 # Cloud Health Office - Product Roadmap
 
-> **Current-status annotation — 2026-10-19:** This historical assessment is not the current capability inventory. PAS persistence/service-line outcomes, CRD uncertainty handling, DTR durable creation/read-back, SMART launch/approval withdrawal, reporting aggregates and receipt-based deadlines have verified implementations. DTR update/search durability remains partial; complete standards conformance and deployment readiness require separate evidence. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
-
+> **Historical record — superseded October 19, 2026.** The body below preserves the original product roadmap, including its original recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../CAPABILITY_RECONCILIATION.md) for reconciled status.
 
 This document outlines the strategic vision and planned enhancements for the Cloud Health Office platform.
 
@@ -391,7 +390,7 @@ We value input from our users and the healthcare IT community:
 1. **Feature Requests**: Submit via [GitHub Discussions](https://github.com/aurelianware/hipaa-attachments/discussions)
 2. **Vote on Features**: Upvote existing feature requests to prioritize
 3. **Beta Testing**: Sign up for early access to new features
-4. **Code Contributions**: See [CONTRIBUTING.md](CONTRIBUTING.md)
+4. **Code Contributions**: See [CONTRIBUTING.md](../../CONTRIBUTING.md)
 
 ### Prioritization Criteria
 

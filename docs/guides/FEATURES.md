@@ -1,26 +1,28 @@
-# Cloud Health Office - Complete Feature Matrix
+# Cloud Health Office Feature Catalogue
 
-> **Current-status annotation — 2026-10-19:** Current verified capabilities include persisted PAS submissions and line outcomes, CRD uncertainty handling, Mongo-backed DTR creation/read-back, SMART launch and approval withdrawal, standard/expedited reporting aggregates, and receipt-based deadlines. DTR update/search durability remains partial. Implementation evidence is distinct from full conformance and deployment-specific production readiness. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
-
-
-This document provides a comprehensive overview of all features available in Cloud Health Office, including those added since the v1.0.0 release.
+This catalogue describes interfaces and configuration examples. Current reconciled
+capabilities, verification dates and limits live in the [canonical capability
+ledger](../CAPABILITY_RECONCILIATION.md). Other catalogue entries are **Unverified**
+in this review; a documented example is not proof of an available commercial
+service, a production deployment or complete standards conformance. Test counts
+and performance samples below are historical records unless tied to a dated run.
 
 ## 📊 Feature Overview
 
 | Category | Features | Status | Documentation |
 |----------|----------|--------|---------------|
-| **Self-Service Portal** | Signup, subscriptions, Contact Sales | ✅ Complete | [FEATURES.md](./FEATURES.md#self-service-portal) |
-| **EDI Transactions** | 8 transaction types | ✅ Complete | [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| **837 Claims Ingestion** | Automated SFTP → Kafka pipeline | ✅ Complete | [docs/837-CLAIMS-PIPELINE.md](./docs/837-CLAIMS-PIPELINE.md) |
-| **Provider Network Management** | Blazor UI with 13 specialties | ✅ Complete | [FEATURES.md](./FEATURES.md#provider-network-management) |
-| **Zero-Code Onboarding** | Config-to-workflow generator | ✅ Complete | [CONFIG-TO-WORKFLOW-GENERATOR.md](./docs/CONFIG-TO-WORKFLOW-GENERATOR.md) |
-| **FHIR Integration** | X12 → FHIR R4 mapping | ✅ Complete | [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md) |
-| **Enhanced Claim Status** | ValueAdds277 (60+ fields) | ✅ Complete | [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md) |
-| **Security Hardening** | 6 deployment controls | ✅ Complete | [SECURITY-HARDENING.md](./SECURITY-HARDENING.md) |
-| **Deployment** | Gated release strategy | ✅ Complete | [DEPLOYMENT-GATES-GUIDE.md](./DEPLOYMENT-GATES-GUIDE.md) |
-| **Testing** | 14,883 automated tests across 66 test projects (both counts injected by CI from `.github/workflows/test-metrics.yml`, which discovers projects with `find src tests -name '*.Tests.csproj'`. The E2E and load suites are not included, because `CloudHealthOffice.E2E.csproj`, `CloudHealthOffice.FlAhca.E2ETests.csproj` and `CloudHealthOffice.LoadTests.csproj` do not match that pattern — it requires a literal `.Tests.csproj` suffix) | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
-| **Multi-Tenant Security** | Cross-tenant isolation | ✅ Complete | [portal/CloudHealthOffice.Portal.Tests/](./portal/CloudHealthOffice.Portal.Tests/) |
-| **Premium Billing** | Monthly premium invoicing, NACHA/ACH EFT drafts, Stripe ACH | ✅ Complete | [src/services/premium-billing-service/](../src/services/premium-billing-service/) |
+| **Self-Service Portal** | Signup, subscriptions, Contact Sales | Documented; verification scope varies | [FEATURES.md](./FEATURES.md#customer-deployed-portal) |
+| **EDI Transactions** | 8 transaction types | Documented; verification scope varies | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| **837 Claims Ingestion** | Automated SFTP → Kafka pipeline | Documented; verification scope varies | [docs/837-CLAIMS-PIPELINE.md](../features/837-CLAIMS-PIPELINE.md) |
+| **Provider Network Management** | Blazor UI with 13 specialties | Documented; verification scope varies | [FEATURES.md](./FEATURES.md#-provider-network-management) |
+| **Zero-Code Onboarding** | Config-to-workflow generator | Documented; verification scope varies | [CONFIG-TO-WORKFLOW-GENERATOR.md](../features/CONFIG-TO-WORKFLOW-GENERATOR.md) |
+| **FHIR Integration** | X12 → FHIR R4 mapping | Documented; verification scope varies | [FHIR-INTEGRATION.md](../features/FHIR-INTEGRATION.md) |
+| **Enhanced Claim Status** | ValueAdds277 (60+ fields) | Documented; verification scope varies | [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](../features/VALUEADDS277-IMPLEMENTATION-COMPLETE.md) |
+| **Security Hardening** | 6 deployment controls | Documented; verification scope varies | [SECURITY-HARDENING.md](../security/SECURITY-HARDENING.md) |
+| **Deployment** | Gated release strategy | Documented; verification scope varies | [DEPLOYMENT-GATES-GUIDE.md](../deployment/DEPLOYMENT-GATES-GUIDE.md) |
+| **Testing** | 14,883 automated tests across 66 test projects (both counts injected by CI from `.github/workflows/test-metrics.yml`, which discovers projects with `find src tests -name '*.Tests.csproj'`. The E2E and load suites are not included, because `CloudHealthOffice.E2E.csproj`, `CloudHealthOffice.FlAhca.E2ETests.csproj` and `CloudHealthOffice.LoadTests.csproj` do not match that pattern — it requires a literal `.Tests.csproj` suffix) | Documented; verification scope varies | [CONTRIBUTING.md](../../CONTRIBUTING.md) |
+| **Multi-Tenant Security** | Cross-tenant isolation | Documented; verification scope varies | [portal/CloudHealthOffice.Portal.Tests/](../../src/portal/CloudHealthOffice.Portal.Tests) |
+| **Premium Billing** | Monthly premium invoicing, NACHA/ACH EFT drafts, Stripe ACH | Documented; verification scope varies | [src/services/premium-billing-service/](../../src/services/premium-billing-service) |
 
 ## 🌐 Portal Module
 
@@ -37,15 +39,15 @@ This document provides a comprehensive overview of all features available in Clo
 
 | Feature | Description | Status | Details |
 |---------|-------------|--------|---------|
-| **Self-Service Signup** | Customer-deployed onboarding flow with Stripe payment | ✅ Complete | Starter, Professional, Enterprise tiers — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing |
-| **Azure AD Authentication** | Multi-tenant OAuth2 with smart routing | ✅ Complete | Tenant-scoped access via claims, automatic user provisioning |
-| **Subscription Management** | Stripe-powered billing and subscriptions | ✅ Complete | Test mode, webhook integration, automatic renewals |
-| **Contact Sales** | Enterprise inquiry tracking | ✅ Complete | Cosmos DB integration, status workflow (New→Contacted→Qualified→Closed) |
-| **Demo Mode** | Try-before-you-buy experience | ✅ Complete | No credit card, explore full features |
-| **Mobile Optimized** | Responsive design with hamburger nav | ✅ Complete | Accessible, slideDown animations, close-on-outside-click |
-| **Tenant Isolation** | Multi-tenant Cosmos DB architecture | ✅ Complete | Separate Tenants, Members, SalesInquiries containers (400 RU/s each) |
+| **Self-Service Signup** | Customer-deployed onboarding flow with Stripe payment | Documented; verification scope varies | Starter, Professional, Enterprise tiers — [Contact sales](mailto:sales@cloudhealthoffice.com) for pricing |
+| **Azure AD Authentication** | Multi-tenant OAuth2 with smart routing | Documented; verification scope varies | Tenant-scoped access via claims, automatic user provisioning |
+| **Subscription Management** | Stripe-powered billing and subscriptions | Documented; verification scope varies | Test mode, webhook integration, automatic renewals |
+| **Contact Sales** | Enterprise inquiry tracking | Documented; verification scope varies | Cosmos DB integration, status workflow (New→Contacted→Qualified→Closed) |
+| **Demo Mode** | Try-before-you-buy experience | Documented; verification scope varies | No credit card, explore full features |
+| **Mobile Optimized** | Responsive design with hamburger nav | Documented; verification scope varies | Accessible, slideDown animations, close-on-outside-click |
+| **Tenant Isolation** | Multi-tenant Cosmos DB architecture | Documented; verification scope varies | Separate Tenants, Members, SalesInquiries containers (400 RU/s each) |
 
-#### Signup Flow
+#### Example signup flow (not a verified commercial onboarding path)
 
 1. **Visit Portal**: Navigate to your deployed portal hostname
 2. **Azure AD Login**: Sign in with Microsoft account (multi-tenant)
@@ -54,7 +56,7 @@ This document provides a comprehensive overview of all features available in Clo
 5. **Choose Modules**: EDI (270/271, 275, 276/277, 278, 837), Claims Adjudication, Provider Network, FHIR
 6. **Start Free Trial**: 14-day trial, cancel anytime
 
-#### Automatic Tenant Provisioning
+#### Documented provisioning example (validate current backend and identity wiring)
 
 When a user completes signup, the system automatically:
 - ✅ Creates Cosmos DB tenant partition (`tenantId`)
@@ -210,7 +212,7 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 - ✅ **CronWorkflow automation** - Runs every 5 minutes to poll SFTP /inbound/claims folder
 - ✅ **Multi-partition topics** - claims-adjudication (6 partitions), claims-work-queue (3 partitions), claims-rejected (3 partitions)
 
-**See [docs/837-CLAIMS-PIPELINE.md](./docs/837-CLAIMS-PIPELINE.md) for complete architecture and deployment guide.**
+**See [docs/837-CLAIMS-PIPELINE.md](../features/837-CLAIMS-PIPELINE.md) for complete architecture and deployment guide.**
 
 #### 270/271 Eligibility
 - ✅ 6 search methods (member ID, SSN, name/DOB, etc.)
@@ -228,7 +230,7 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 
 ### Config-to-Workflow Generator
 
-**Status**: ✅ Production-Ready  
+**Status**: Unverified production readiness; see the canonical ledger for scoped implementation evidence
 **Implementation Date**: November 2024  
 **Lines of Code**: 2,500+ (production + tests + docs)
 
@@ -236,14 +238,14 @@ var tenantId = _tenantService.GetOrCreateTenantAsync(tenantClaim.Value, userEmai
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| **Interactive Wizard** | Guided configuration typically in under 5 minutes, based on testing | ✅ Complete |
-| **Workflow Generation** | Automatic Argo workflow YAML creation | ✅ Complete |
-| **Infrastructure Templates** | Bicep templates with parameters | ✅ Complete |
-| **Documentation** | Auto-generated deployment guides | ✅ Complete |
-| **Schema Generation** | JSON validation schemas | ✅ Complete |
-| **CLI Tool** | Command-line interface | ✅ Complete |
-| **Test Suite** | 23 comprehensive tests | ✅ Complete |
-| **Example Configs** | Medicaid MCO, Regional Blues | ✅ Complete |
+| **Interactive Wizard** | Guided configuration typically in under 5 minutes, based on testing | Documented; verification scope varies |
+| **Workflow Generation** | Automatic Argo workflow YAML creation | Documented; verification scope varies |
+| **Infrastructure Templates** | Bicep templates with parameters | Documented; verification scope varies |
+| **Documentation** | Auto-generated deployment guides | Documented; verification scope varies |
+| **Schema Generation** | JSON validation schemas | Documented; verification scope varies |
+| **CLI Tool** | Command-line interface | Documented; verification scope varies |
+| **Test Suite** | 23 comprehensive tests | Documented; verification scope varies |
+| **Example Configs** | Medicaid MCO, Regional Blues | Documented; verification scope varies |
 
 #### Template System
 
@@ -298,13 +300,13 @@ node dist/scripts/cli/payer-generator-cli.js validate my-config.json
 ```
 
 **Time Savings**: Streamline deployment processes that traditionally take weeks  
-**Documentation**: [CONFIG-TO-WORKFLOW-GENERATOR.md](./docs/CONFIG-TO-WORKFLOW-GENERATOR.md)
+**Documentation**: [CONFIG-TO-WORKFLOW-GENERATOR.md](../features/CONFIG-TO-WORKFLOW-GENERATOR.md)
 
 ## 🏥 FHIR R4 Integration
 
 ### Overview
 
-**Status**: ✅ Production-Ready  
+**Status**: Unverified production readiness; see the canonical ledger for scoped implementation evidence
 **Implementation Date**: November 2024  
 **Roadmap Acceleration**: 14 months (Q1 2026 → November 2024)
 
@@ -312,11 +314,11 @@ node dist/scripts/cli/payer-generator-cli.js validate my-config.json
 
 | Standard | Version | Status | Notes |
 |----------|---------|--------|-------|
-| HIPAA X12 270 | 005010X279A1 | ✅ Compliant | Eligibility inquiry |
-| HL7 FHIR | R4 v4.0.1 | ✅ Compliant | Latest stable release |
-| US Core Patient | 3.1.1 | ✅ Compliant | Required profiles |
-| CMS-9115-F | Patient Access Rule | ✅ Ready | CMS interoperability |
-| Da Vinci PDex | Latest | ✅ Compatible | Payer data exchange |
+| HIPAA X12 270 | 005010X279A1 | Conformance unverified | Eligibility inquiry |
+| HL7 FHIR | R4 v4.0.1 | Conformance unverified | Latest stable release |
+| US Core Patient | 3.1.1 | Conformance unverified | Required profiles |
+| CMS-9115-F | Patient Access Rule | Readiness unverified | CMS interoperability |
+| Da Vinci PDex | Latest | Compatibility unverified | Payer data exchange |
 
 ### Capabilities
 
@@ -346,13 +348,13 @@ const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
 
 | Feature | Details | Status |
 |---------|---------|--------|
-| **Patient Resource** | US Core Patient profile | ✅ Complete |
-| **CoverageEligibilityRequest** | FHIR R4 resource | ✅ Complete |
-| **Gender Mapping** | X12 (M/F/U) → FHIR (male/female/unknown) | ✅ Complete |
-| **Date Handling** | CCYYMMDD → YYYY-MM-DD | ✅ Complete |
-| **Service Types** | 100+ X12 codes supported | ✅ Complete |
-| **Subscriber/Dependent** | Both scenarios supported | ✅ Complete |
-| **Identifiers** | Member ID, NPI, SSN systems | ✅ Complete |
+| **Patient Resource** | US Core Patient profile | Documented; verification scope varies |
+| **CoverageEligibilityRequest** | FHIR R4 resource | Documented; verification scope varies |
+| **Gender Mapping** | X12 (M/F/U) → FHIR (male/female/unknown) | Documented; verification scope varies |
+| **Date Handling** | CCYYMMDD → YYYY-MM-DD | Documented; verification scope varies |
+| **Service Types** | 100+ X12 codes supported | Documented; verification scope varies |
+| **Subscriber/Dependent** | Both scenarios supported | Documented; verification scope varies |
+| **Identifiers** | Member ID, NPI, SSN systems | Documented; verification scope varies |
 
 #### Quality Metrics
 
@@ -364,13 +366,13 @@ const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
 - **Mapping Speed**: ~1ms per transaction
 - **Throughput**: 1000+ transactions/second (single core)
 
-**Documentation**: [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md), [FHIR-SECURITY-NOTES.md](./docs/FHIR-SECURITY-NOTES.md)
+**Documentation**: [FHIR-INTEGRATION.md](../features/FHIR-INTEGRATION.md), [FHIR-SECURITY-NOTES.md](../features/FHIR-SECURITY-NOTES.md)
 
 ## 🏥 Provider Network Management
 
 ### Overview
 
-**Status**: ✅ Production-Ready  
+**Status**: Unverified production readiness; see the canonical ledger for scoped implementation evidence
 **Implementation Date**: February 2026  
 **UI Framework**: Blazor Server (.NET 8) with MudBlazor  
 **Mock Data**: 13 providers across 13 specialties
@@ -489,10 +491,10 @@ const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
 
 ### Overview
 
-**Status**: ✅ Production-Ready  
+**Status**: Unverified production readiness; see the canonical ledger for scoped implementation evidence
 **Implementation Date**: November 2024  
-**Premium Revenue**: Potential value-add of up to $10k/year per payer (varies by implementation)  
-**Provider ROI**: May save providers time on claim lookups
+**Commercial outcome**: No revenue or savings outcome is established by this catalogue.
+**Evaluation**: Measure lookup time and workflow impact in the selected environment.
 
 ### Enhanced Response Fields (60+)
 
@@ -589,15 +591,15 @@ Enable seamless cross-module workflows:
 
 **Conclusion**: Minimal performance impact (25% increase) for 3x data richness.
 
-**Documentation**: [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md), [ECS-INTEGRATION.md](./docs/ECS-INTEGRATION.md)
+**Documentation**: [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](../features/VALUEADDS277-IMPLEMENTATION-COMPLETE.md), [ECS-INTEGRATION.md](../features/ECS-INTEGRATION.md)
 
 ## 🛡️ Security Hardening
 
 ### Overview
 
-**Status**: ✅ Production-Ready  
+**Status**: Unverified production readiness; see the canonical ledger for scoped implementation evidence
 **Implementation Date**: November 2024  
-**Security Score**: High security maturity (self-assessed)  
+**Security posture**: Self-assessed architecture; deployment security readiness is not verified here.
 **HIPAA Compliance**: Addresses key HIPAA technical safeguards (§ 164.312)
 
 ### Security Controls (6)
@@ -619,7 +621,7 @@ Features:
 
 #### 2. Private Endpoints & Network Isolation
 
-**Complete network isolation for PHI resources**
+**Network-isolation configuration examples (deployment validation required)**
 
 Features:
 - Virtual Network (10.0.0.0/16)
@@ -662,7 +664,7 @@ Lifecycle policy:
 - **Hot tier**: 0-30 days (active processing)
 - **Cool tier**: 31-90 days (recent archives)
 - **Archive tier**: 91 days - 7 years (long-term retention)
-- **Delete**: After 7 years (HIPAA compliant)
+- **Delete**: Example retention setting of 7 years; legal and operational policy must be determined for the deployment.
 
 **Cost Impact**: Estimated 94% storage cost reduction based on lifecycle policies; actual savings vary
 
@@ -691,13 +693,13 @@ Features:
 | **§ 164.312(d) Authentication** | Azure AD, managed identities, OAuth 2.0 | ✅ Addressed |
 | **§ 164.312(e)(1) Transmission Security** | TLS 1.2+, private endpoints, network isolation | ✅ Addressed |
 
-**Documentation**: [SECURITY-HARDENING.md](./SECURITY-HARDENING.md), [HIPAA-COMPLIANCE-MATRIX.md](./docs/HIPAA-COMPLIANCE-MATRIX.md)
+**Documentation**: [SECURITY-HARDENING.md](../security/SECURITY-HARDENING.md), [HIPAA-COMPLIANCE-MATRIX.md](../features/HIPAA-COMPLIANCE-MATRIX.md)
 
 ## 🚦 Gated Release Strategy
 
 ### Overview
 
-**Status**: ✅ Production-Ready  
+**Status**: Unverified production readiness; see the canonical ledger for scoped implementation evidence
 **Implementation Date**: November 2024
 
 ### Approval Gates
@@ -752,7 +754,7 @@ Features:
 - [ ] Compliance requirements verified
 - [ ] Rollback plan documented
 
-**Documentation**: [DEPLOYMENT-GATES-GUIDE.md](./DEPLOYMENT-GATES-GUIDE.md)
+**Documentation**: [DEPLOYMENT-GATES-GUIDE.md](../deployment/DEPLOYMENT-GATES-GUIDE.md)
 
 ## 🧪 Testing & Validation
 
@@ -834,42 +836,42 @@ Automatic scanning on every PR:
 ### Complete Documentation Suite (20+ guides)
 
 #### Getting Started
-- [README.md](./README.md) - Project overview and quick links
+- [README.md](../../README.md) - Project overview and quick links
 - [QUICKSTART.md](./QUICKSTART.md) - Deploy in 5 minutes
-- [ONBOARDING.md](./ONBOARDING.md) - Complete setup instructions
+- [ONBOARDING.md](../deployment/ONBOARDING.md) - Complete setup instructions
 
 #### Features & Capabilities
-- [CONFIG-TO-WORKFLOW-GENERATOR.md](./docs/CONFIG-TO-WORKFLOW-GENERATOR.md) - Zero-code payer onboarding (400+ lines)
-- [FHIR-INTEGRATION.md](./docs/FHIR-INTEGRATION.md) - X12 to FHIR transformation (680 lines)
-- [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md) - Enhanced claim status (350+ lines)
-- [ECS-INTEGRATION.md](./docs/ECS-INTEGRATION.md) - ECS API documentation (1,256 lines)
-- [APPEALS-INTEGRATION.md](./docs/APPEALS-INTEGRATION.md) - Appeals module
+- [CONFIG-TO-WORKFLOW-GENERATOR.md](../features/CONFIG-TO-WORKFLOW-GENERATOR.md) - Zero-code payer onboarding (400+ lines)
+- [FHIR-INTEGRATION.md](../features/FHIR-INTEGRATION.md) - X12 to FHIR transformation (680 lines)
+- [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](../features/VALUEADDS277-IMPLEMENTATION-COMPLETE.md) - Enhanced claim status (350+ lines)
+- [ECS-INTEGRATION.md](../features/ECS-INTEGRATION.md) - ECS API documentation (1,256 lines)
+- [APPEALS-INTEGRATION.md](../features/APPEALS-INTEGRATION.md) - Appeals module
 
 #### Security & Compliance
-- [SECURITY-HARDENING.md](./SECURITY-HARDENING.md) - Production security controls (1,229 lines)
-- [HIPAA-COMPLIANCE-MATRIX.md](./docs/HIPAA-COMPLIANCE-MATRIX.md) - Regulatory mapping (702 lines)
-- [SECURITY.md](./SECURITY.md) - General security practices
-- [FHIR-SECURITY-NOTES.md](./docs/FHIR-SECURITY-NOTES.md) - FHIR security advisory (240 lines)
+- [SECURITY-HARDENING.md](../security/SECURITY-HARDENING.md) - Production security controls (1,229 lines)
+- [HIPAA-COMPLIANCE-MATRIX.md](../features/HIPAA-COMPLIANCE-MATRIX.md) - Regulatory mapping (702 lines)
+- [SECURITY.md](../../SECURITY.md) - General security practices
+- [FHIR-SECURITY-NOTES.md](../features/FHIR-SECURITY-NOTES.md) - FHIR security advisory (240 lines)
 
 #### Deployment & Operations
 - [DEPLOYMENT.md](./DEPLOYMENT.md) - Step-by-step deployment (93,438 bytes)
-- [DEPLOYMENT-GATES-GUIDE.md](./DEPLOYMENT-GATES-GUIDE.md) - UAT/PROD approval workflows (25+ pages)
-- [DEPLOYMENT-SECRETS-SETUP.md](./DEPLOYMENT-SECRETS-SETUP.md) - Secret management (1,014 lines)
-- [GITHUB-ACTIONS-SETUP.md](./GITHUB-ACTIONS-SETUP.md) - CI/CD configuration
+- [DEPLOYMENT-GATES-GUIDE.md](../deployment/DEPLOYMENT-GATES-GUIDE.md) - UAT/PROD approval workflows (25+ pages)
+- [DEPLOYMENT-SECRETS-SETUP.md](../deployment/DEPLOYMENT-SECRETS-SETUP.md) - Secret management (1,014 lines)
+- [GITHUB-ACTIONS-SETUP.md](../features/GITHUB-ACTIONS-SETUP.md) - CI/CD configuration
 
 #### Reference
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Technical deep-dive (40,330 bytes)
-- [CHANGELOG.md](./CHANGELOG.md) - Version history
-- [TROUBLESHOOTING-FAQ.md](./TROUBLESHOOTING-FAQ.md) - 60+ solutions
-- [CONTRIBUTING.md](./CONTRIBUTING.md) - Development guidelines
+- [CHANGELOG.md](../../CHANGELOG.md) - Version history
+- [TROUBLESHOOTING-FAQ.md](../../scripts/tests/TROUBLESHOOTING-FAQ.md) - 60+ solutions
+- [CONTRIBUTING.md](../../CONTRIBUTING.md) - Development guidelines
 
 #### Implementation Summaries
-- [IMPLEMENTATION-SUMMARY.md](./IMPLEMENTATION-SUMMARY.md) - Config-to-workflow generator
-- [FHIR-IMPLEMENTATION-SUMMARY.md](./FHIR-IMPLEMENTATION-SUMMARY.md) - FHIR R4 integration
-- [SECURITY-IMPLEMENTATION-SUMMARY.md](./SECURITY-IMPLEMENTATION-SUMMARY.md) - Security hardening
-- [GATED-RELEASE-IMPLEMENTATION-SUMMARY.md](./GATED-RELEASE-IMPLEMENTATION-SUMMARY.md) - Release strategy
-- [ONBOARDING-ENHANCEMENTS.md](./ONBOARDING-ENHANCEMENTS.md) - Onboarding improvements
-- [BRANDING-IMPLEMENTATION-SUMMARY.md](./BRANDING-IMPLEMENTATION-SUMMARY.md) - Sentinel branding
+- [IMPLEMENTATION-SUMMARY.md](../features/IMPLEMENTATION-SUMMARY.md) - Config-to-workflow generator
+- [FHIR-IMPLEMENTATION-SUMMARY.md](../features/FHIR-IMPLEMENTATION-SUMMARY.md) - FHIR R4 integration
+- [SECURITY-IMPLEMENTATION-SUMMARY.md](../security/SECURITY-IMPLEMENTATION-SUMMARY.md) - Security hardening
+- [GATED-RELEASE-IMPLEMENTATION-SUMMARY.md](../features/GATED-RELEASE-IMPLEMENTATION-SUMMARY.md) - Release strategy
+- [ONBOARDING-ENHANCEMENTS.md](../deployment/ONBOARDING-ENHANCEMENTS.md) - Onboarding improvements
+- [BRANDING-IMPLEMENTATION-SUMMARY.md](../architecture/BRANDING-IMPLEMENTATION-SUMMARY.md) - Sentinel branding
 
 **Total Documentation**: 20,000+ lines across 40+ files
 
@@ -963,15 +965,15 @@ See: [DEPLOYMENT.md](./DEPLOYMENT.md)
 - [ ] Provider Directory (X12 ↔ FHIR Practitioner)
 - [ ] Real-time benefit check (RTBC)
 
-See: [ROADMAP.md](./ROADMAP.md)
+See: [ROADMAP.md](../features/ROADMAP.md)
 
 ## 🤝 Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
 
 ## 📄 License
 
-BSL 1.1 - See [LICENSE](./LICENSE) for details.
+BSL 1.1 - See [LICENSE](../../LICENSE) for details.
 
 ## 🤝 Integration Focus
 

@@ -1,7 +1,6 @@
 # Architecture
 
-> **Current-status annotation — 2026-10-19:** Current verified capabilities include persisted PAS submissions and line outcomes, CRD uncertainty handling, Mongo-backed DTR creation/read-back, SMART launch and approval withdrawal, standard/expedited reporting aggregates, and receipt-based deadlines. DTR update/search durability remains partial. Implementation evidence is distinct from full conformance and deployment-specific production readiness. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
-
+Current capability status and dated implementation/test evidence: [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md).
 
 This section maps CloudHealthOffice from system-level shape to service-level
 responsibilities. The architecture is Kubernetes-first, API-first, and oriented

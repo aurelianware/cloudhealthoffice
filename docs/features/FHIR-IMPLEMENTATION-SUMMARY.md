@@ -2,8 +2,7 @@
 
 # FHIR R4 Integration - Implementation Summary
 
-> **Current-status annotation — 2026-10-19:** This historical assessment is not the current capability inventory. PAS persistence/service-line outcomes, CRD uncertainty handling, DTR durable creation/read-back, SMART launch/approval withdrawal, reporting aggregates and receipt-based deadlines have verified implementations. DTR update/search durability remains partial; complete standards conformance and deployment readiness require separate evidence. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
-
+> **Historical record — superseded October 19, 2026.** The body below preserves the November 2024 FHIR mapping implementation report, including its original recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../CAPABILITY_RECONCILIATION.md) for reconciled status.
 
 **Project**: Cloud Health Office  
 **Feature**: X12 270 Eligibility → FHIR R4 Patient & CoverageEligibilityRequest  
@@ -475,14 +474,14 @@ Time:        1.587 s
 ## Support & Resources
 
 ### Documentation
-- **Integration Guide**: [docs/FHIR-INTEGRATION.md](docs/FHIR-INTEGRATION.md)
-- **Security Notes**: [docs/FHIR-SECURITY-NOTES.md](docs/FHIR-SECURITY-NOTES.md)
-- **Quick Start**: [src/fhir/README.md](src/fhir/README.md)
+- **Integration Guide**: [docs/FHIR-INTEGRATION.md](FHIR-INTEGRATION.md)
+- **Security Notes**: [docs/FHIR-SECURITY-NOTES.md](FHIR-SECURITY-NOTES.md)
+- **Quick Start**: [src/fhir/README.md](../../src/fhir/README.md)
 
 ### Code
-- **Mapper**: [src/fhir/fhirEligibilityMapper.ts](src/fhir/fhirEligibilityMapper.ts)
-- **Types**: [src/fhir/x12Types.ts](src/fhir/x12Types.ts)
-- **Tests**: [src/fhir/__tests__/fhirEligibilityMapper.test.ts](src/fhir/__tests__/fhirEligibilityMapper.test.ts)
+- **Mapper**: [src/fhir/fhirEligibilityMapper.ts](../../src/fhir/fhirEligibilityMapper.ts)
+- **Types**: [src/fhir/x12Types.ts](../../src/fhir/x12Types.ts)
+- **Tests**: [src/fhir/__tests__/fhirEligibilityMapper.test.ts](../../src/fhir/__tests__/fhirEligibilityMapper.test.ts)
 
 ### External References
 - [CMS Patient Access Rule](https://www.cms.gov/regulations-and-guidance/legislation/hipaa/interoperability-and-patient-access)

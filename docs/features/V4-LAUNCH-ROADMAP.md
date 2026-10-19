@@ -1,7 +1,6 @@
 # Cloud Health Office v4.0 SaaS Launch - Implementation Roadmap
 
-> **Current-status annotation — 2026-10-19:** This historical assessment is not the current capability inventory. PAS persistence/service-line outcomes, CRD uncertainty handling, DTR durable creation/read-back, SMART launch/approval withdrawal, reporting aggregates and receipt-based deadlines have verified implementations. DTR update/search durability remains partial; complete standards conformance and deployment readiness require separate evidence. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
-
+> **Historical record — superseded October 19, 2026.** The body below preserves the v4.0 launch roadmap, including its original recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../CAPABILITY_RECONCILIATION.md) for reconciled status.
 
 **Status:** Ready for Production Launch  
 **Target Launch Date:** Q1 2026 (8-12 weeks from kickoff)  
@@ -100,7 +99,7 @@ Cloud Health Office v4.0 represents the evolution from source-available infrastr
 - **HIGH:** Key Vault migration may break existing deployments → Mitigation: Blue/green deployment
 - **MEDIUM:** WAF rules may block legitimate traffic → Mitigation: Gradual rule rollout with monitoring
 
-**Issue:** [#TBD - Production Security Hardening](../.github/ISSUE_TEMPLATE/v4-security-hardening.md)
+**Issue:** [#TBD - Production Security Hardening](../../.github/ISSUE_TEMPLATE/v4-security-hardening.md)
 
 ---
 
@@ -127,7 +126,7 @@ Cloud Health Office v4.0 represents the evolution from source-available infrastr
 - **HIGH:** Clearinghouse APIs may change without notice → Mitigation: Version pinning + monitoring
 - **MEDIUM:** SFTP connectivity issues → Mitigation: Retry logic with exponential backoff
 
-**Issue:** [#TBD - Clearinghouse Integration](../.github/ISSUE_TEMPLATE/v4-clearinghouse-integration.md)
+**Issue:** [#TBD - Clearinghouse Integration](../../.github/ISSUE_TEMPLATE/v4-clearinghouse-integration.md)
 
 ---
 
@@ -154,7 +153,7 @@ Cloud Health Office v4.0 represents the evolution from source-available infrastr
 - **MEDIUM:** Azure AD B2C custom attributes may not sync → Mitigation: Webhook fallback
 - **LOW:** SignalR scalability under load → Mitigation: Azure SignalR Service (managed)
 
-**Issue:** [#TBD - Member/Provider Portals](../.github/ISSUE_TEMPLATE/v4-member-provider-portals.md)
+**Issue:** [#TBD - Member/Provider Portals](../../.github/ISSUE_TEMPLATE/v4-member-provider-portals.md)
 
 ---
 
@@ -181,7 +180,7 @@ Cloud Health Office v4.0 represents the evolution from source-available infrastr
 - **MEDIUM:** ML model accuracy may be low with limited data → Mitigation: Start with rule-based, iterate
 - **LOW:** Report generation may time out for large datasets → Mitigation: Async jobs with status polling
 
-**Issue:** [#TBD - Analytics and Reporting](../.github/ISSUE_TEMPLATE/v4-analytics-reporting.md)
+**Issue:** [#TBD - Analytics and Reporting](../../.github/ISSUE_TEMPLATE/v4-analytics-reporting.md)
 
 ---
 
@@ -209,7 +208,7 @@ Cloud Health Office v4.0 represents the evolution from source-available infrastr
 - **HIGH:** App Store approval may be delayed → Mitigation: Submit 2 weeks before launch
 - **MEDIUM:** .NET MAUI stability issues → Mitigation: Thorough device testing, fallback to React Native
 
-**Issue:** [#TBD - Mobile Apps](../.github/ISSUE_TEMPLATE/v4-mobile-apps.md)
+**Issue:** [#TBD - Mobile Apps](../../.github/ISSUE_TEMPLATE/v4-mobile-apps.md)
 
 ---
 
@@ -330,21 +329,21 @@ Week 1-12:  Legal Docs + Marketing (parallel) ────────┘
 - Population health analytics (risk stratification)
 - International expansion (Canada, Mexico pilot)
 
-**See:** [ROADMAP-2026.md](../ROADMAP-2026.md) for full details
+**See:** [ROADMAP-2026.md](ROADMAP-2026.md) for full details
 
 ---
 
 ## Getting Started
 
 ### For Developers
-1. Review issue templates in [.github/ISSUE_TEMPLATE/](../.github/ISSUE_TEMPLATE/)
+1. Review issue templates in [.github/ISSUE_TEMPLATE/](../../.github/ISSUE_TEMPLATE)
 2. Pick your initiative (Security, Clearinghouse, Portals, Analytics, Mobile)
 3. Create GitHub Project board to track progress
 4. Follow implementation steps in issue template
 5. Submit PRs against feature branches
 
 ### For Product Managers
-1. Review [SAAS-LAUNCH-READINESS.md](../SAAS-LAUNCH-READINESS.md) for context
+1. Review [SAAS-LAUNCH-READINESS.md](SAAS-LAUNCH-READINESS.md) for context
 2. Prioritize features with stakeholders
 3. Set up customer interviews for Beta validation
 4. Draft marketing materials (landing page, demo videos)

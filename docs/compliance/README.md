@@ -1,7 +1,6 @@
 # Compliance Documentation
 
-> **Current-status annotation — 2026-10-19:** Current verified capabilities include persisted PAS submissions and line outcomes, CRD uncertainty handling, Mongo-backed DTR creation/read-back, SMART launch and approval withdrawal, standard/expedited reporting aggregates, and receipt-based deadlines. DTR update/search durability remains partial. Implementation evidence is distinct from full conformance and deployment-specific production readiness. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
-
+Current capability status and dated implementation/test evidence: [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md).
 
 This directory contains regulatory-readiness materials for Cloud Health Office.
 These documents describe technical capability, implementation posture, and
@@ -23,7 +22,7 @@ or payer attestation artifacts.
 
 ## Package Workflow
 
-1. Start with the readiness matrix to set buyer-safe posture.
+1. Start with the canonical capability ledger for verified status, then use the readiness matrix for requirement and deployment context.
 2. Use the buyer brief for executive and procurement conversations.
 3. Use the diligence checklist during discovery and implementation planning.
 4. Use the demo-mode guide before every demo or pilot evidence review.

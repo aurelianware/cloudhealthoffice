@@ -1,7 +1,6 @@
 # Cloud Health Office — Positioning
 
-> **Current-status annotation — 2026-10-19:** Current verified capabilities include persisted PAS submissions and line outcomes, CRD uncertainty handling, Mongo-backed DTR creation/read-back, SMART launch and approval withdrawal, standard/expedited reporting aggregates, and receipt-based deadlines. DTR update/search durability remains partial. Implementation evidence is distinct from full conformance and deployment-specific production readiness. See [Capability Reconciliation](CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
-
+Capability status is maintained in the [canonical capability ledger](CAPABILITY_RECONCILIATION.md). This document defines positioning, not an independent readiness verdict.
 
 **Audience:** internal teams, partners, and evaluators deciding how Cloud Health Office fits into their roadmap. Payer-facing pitch materials should derive from this document and not contradict it.
 
@@ -66,7 +65,7 @@ Additional Transactional Services are technically feasible given the existing en
 
 ### Purpose
 
-Transactional Services deliver specific healthcare calculations dramatically cheaper and with substantially better developer experience than incumbent alternatives. They also serve as a production-scale validation surface for the same calculation engines that power Platform Engagement — every transactional customer running claims through the repricing API exercises the FeeScheduleEngine under real-world conditions.
+Transactional Services expose focused healthcare calculation APIs. Cost and developer-experience comparisons require a scoped evaluation; no incumbent price or customer savings evidence is established here. Production workload validation must be documented separately from local engine tests and synthetic benchmarks.
 
 ### What's shipped today
 
@@ -177,7 +176,7 @@ Platform Engagement engages customers at three layers, each a coherent offering 
 
 #### What we claim
 
-An evidence-backed CMS-0057-F readiness surface that deploys alongside any existing core admin system (QNXT, HealthEdge, Facets, or home-grown) without touching the customer's adjudication path, then supports customer validation and attestation work.
+An evidence-backed CMS-0057-F readiness surface that deploys alongside an existing core admin system through scoped integration (QNXT, HealthEdge, Facets, or home-grown) without touching the customer's adjudication path, then supports customer validation and attestation work.
 
 Layer 1 covers the CMS-0057-F interoperability surface end-to-end:
 
@@ -281,7 +280,7 @@ EDI coverage via Argo workflows: 270/271/275/276/277/278/834/837.
 
 - 36 services under `src/services/` and 9 adjudication/rules engines under `src/engines/` (PriorAuthRuleEngine, BenefitEngine, RiskAdjustmentEngine, ProviderVerificationEngine, FeeScheduleEngine, ClaimsScrubEngine, CobEngine, EncounterEngine, NcciEngine). The `src/engines/` directory also contains supporting projects (`OperatingMode`, `DocumentStore`, `ProviderEnrollmentService`, `cho-enrollment-wiring`) that are not adjudication engines and are not counted in the "9 engines" figure.
 - Argo-orchestrated adjudication workflow (`infrastructure/argo-workflows/claims-adjudication-workflow.yaml`) wiring the pipeline end-to-end.
-- Per-tenant multi-tenancy enforced across services, databases (Cosmos DB partitions), secrets (Key Vault namespacing), and Kafka topics.
+- Tenant-aware service and Mongo repository controls, with verified isolation fixes and explicit remaining integration limits in CAP-08–12 and CAP-22. Do not infer universal isolation from architecture alone.
 - Portal under `src/portal/` for operational workflows across tenants, services, and operating modes.
 - `fhir-service` CapabilityStatement advertising Cloud Health Office-authored profiles in addition to US Core.
 - Observability stack (OpenTelemetry with PHI-scrubbing SpanProcessor, merged in PR #666) applied across services.
@@ -289,19 +288,21 @@ EDI coverage via Argo workflows: 270/271/275/276/277/278/834/837.
 
 #### Who enters here
 
-Three concrete personas — all three are real:
+Illustrative buyer profiles, not customer references or completed deployments:
 
-- **(a) MA startup / new entrant**: small, greenfield, no legacy platform, needs claims processing live in 6–9 months. Chose CHO because building a CAPS from scratch costs roughly ten times more than licensing one, and QNXT's seven-figure entry price plus multi-quarter setup is not viable at their stage.
-- **(b) Small regional Medicaid plan**: 50K–500K members, on an aging CAPS or home-grown platform, under state-specific compliance pressure. Chose CHO because their existing platform cannot meet new state requirements and a QNXT replacement would be an 18-month multi-million-dollar project they cannot absorb.
-- **(c) Mid-market commercial plan finishing Layer 2**: has already migrated appeals, capitation, and other domains through Layer 2 over two to three years. Layer 3 is the milestone where QNXT is turned off entirely. Chose this path because they have already proven CHO in production one domain at a time.
+- **MA startup / new entrant:** evaluating a greenfield administration platform.
+- **Regional Medicaid plan:** assessing a bounded modernization workload alongside an existing core.
+- **Established plan progressing by domain:** considering a later claims-ledger cutover only after scoped validation.
+
+These profiles establish no named-vendor price, project duration, savings or customer adoption claim.
 
 #### What Layer 3 honestly is today
 
-Cloud Health Office is a full cloud-native CAPS platform with a working adjudication path, inspectable benchmark evidence, and an explicit hardening backlog. For new entrants and greenfield deployments, it is ready for customer-owned validation. For established payers, we recommend entering through Layer 1 or Layer 2 and progressing to Layer 3 on your timeline.
+Cloud Health Office is a cloud-native payer administration platform with a working adjudication path, inspectable benchmark evidence, and an explicit hardening backlog. For new entrants and greenfield deployments, it is ready for customer-owned validation. For established payers, we recommend entering through Layer 1 or Layer 2 and progressing to Layer 3 on your timeline.
 
 Gaps we are closing deliberately:
 
-- **Reference customer**: we are in pre-sales with our first pilot partner. No production customer is running CHO as their system of record yet.
+- **Reference evidence:** this reconciliation does not verify customer deployments or reference permissions. Use only dated, authorized references; neither their presence nor their absence is inferred from code.
 - **Test coverage on some core services**: `claims-service` at roughly 24% line coverage, `provider-service` at roughly 12%, `sponsor-service` at roughly 13%. These are the lowest-covered services in the repo and the most operationally critical for Layer 3 at scale; they are being hardened on a known backlog before pilot-scale deployment.
 - **IFhirDataAdapter wiring**: the interface exists and the appeal adapter is real, but several domain adapters are still the mock implementations. Replacing them with typed HTTP clients to the live domain services is in-flight.
 - **Portal polish**: functional for operational workflows today, not yet at enterprise-demo-day aesthetic maturity.
@@ -399,7 +400,7 @@ Cloud Health Office is structured to be intelligible to sophisticated acquirers 
 
 The four-product-line portfolio is designed to present multiple value vectors: Public Tools for brand and traffic, Transactional Services for recurring SaaS metrics, Managed Data Services for high-margin recurring subscriptions, Platform Engagement for multi-year payer contracts with PMPM unit economics. Acquirers evaluating Cloud Health Office can independently assess each product line against their thesis; the pieces are architecturally separable but commercially reinforcing.
 
-Intellectual property is cleanly owned by Aurelianware, Inc., under BSL 1.1 licensing. The repository's commit history establishes ownership and timeline. Operational documentation is maintained on an ongoing basis at the standard an acquirer's diligence team would expect to find.
+The repository is published by Aurelianware, Inc. under BSL 1.1. Commit history records development provenance; ownership, contributor grants and dependency rights require their own diligence evidence. Operational documentation is maintained on an ongoing basis at the standard an acquirer's diligence team would expect to find.
 
 We are not in an active acquisition process. We are building the platform with the disposition that, if and when a strategic conversation emerges in the normal course of category consolidation, the foundation is ready.
 
@@ -424,6 +425,6 @@ Verification procedure documented at `scripts/verify-canonical-facts.sh` (to be 
 
 ## Governance
 
-This document is the source of truth for CHO positioning. Every other CHO-facing artifact — site pages, pitch deck, sales materials, compliance docs, technical documentation — should derive from and not contradict this document.
+This document governs positioning language. The [canonical capability ledger](CAPABILITY_RECONCILIATION.md) governs reconciled technical status, verification dates and limits. Commercial offers and reference permissions require their own evidence.
 
-When a claim in another artifact appears stronger than what this document supports, the claim is wrong, not this document. Update this document when CHO's real capabilities change; update derivative artifacts when they drift from this document.
+Resolve differing claims against the latest verified implementation and dated evidence. Update affected copy and links when evidence changes; do not treat either historical positioning or an old gap assessment as proof of current behavior.
