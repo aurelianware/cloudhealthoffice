@@ -115,7 +115,7 @@ public abstract class AuthorizationRepositoryRealStoreTestsBase : IAsyncLifetime
         all.ApprovalRate.Should().Be(50m);
         all.AverageReviewDays.Should().Be(3m);
         if (ComputesTurnaround)
-            all.AverageTurnaroundDays.Should().Be(2.5m);
+            all.AverageTurnaroundDays.Should().Be(3m);
 
         var medicaid = await AsTenant(TenantA, r => r.GetAuthorizationsSummaryAsync(Base.AddDays(-1), Base.AddDays(1), LineOfBusiness.Medicaid));
 

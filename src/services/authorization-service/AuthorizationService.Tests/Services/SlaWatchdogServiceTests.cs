@@ -16,6 +16,9 @@ public class SlaWatchdogServiceTests
     {
         _repositoryMock = new Mock<IAuthorizationRepository>();
         _loggerMock = new Mock<ILogger<SlaWatchdogService>>();
+        _repositoryMock.Setup(r => r.EnsureDecisionDeadlineAsync(It.IsAny<string>(), It.IsAny<Authorization>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, Authorization a, CancellationToken _) => { AuthorizationDeadlinePolicy.InitializeMissing(a); return true; });
+
     }
 
     [Fact]
@@ -96,10 +99,10 @@ public class SlaWatchdogServiceTests
     }
 
     [Fact]
-    public async Task PendedAuth_WithSlaResumedAt_UsesResumedDate()
+    public async Task PendedAuth_WithSlaResumedAt_KeepsOriginalReceiptClock()
     {
         // Auth submitted 200 hours ago but SLA resumed 40 hours ago (urgent)
-        // 40h < 48h warning threshold → should remain None
+        // Documentation arrival does not reset the breached original deadline.
         var auth = CreateAuth(levelOfService: "U", hoursAgo: 200);
         auth.Status = AuthorizationStatus.Pended;
         auth.SlaResumedAt = DateTime.UtcNow.AddHours(-40);
@@ -107,8 +110,7 @@ public class SlaWatchdogServiceTests
 
         await RunWatchdog();
 
-        auth.SlaEscalation.Should().Be(SlaEscalationLevel.None);
-        VerifyNoEscalationWritten();
+        auth.SlaEscalation.Should().Be(SlaEscalationLevel.Breach);
     }
 
     [Fact]
@@ -257,6 +259,7 @@ public class SlaWatchdogServiceTests
 
     private void SetupRepository(Authorization auth)
     {
+
         _repositoryMock
             .Setup(r => r.ListTenantIdsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { "tenant-1" });

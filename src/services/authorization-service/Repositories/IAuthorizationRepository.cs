@@ -66,6 +66,10 @@ public interface IAuthorizationRepository
     Task<bool> PurgeIfStillEligibleAsync(
         string tenantId, string id, AuthorizationStatus expectedStatus, CancellationToken ct = default);
 
+    /// <summary>Revision-fenced, tenant-explicit initialization of a legacy open record's receipt deadline.</summary>
+    Task<bool> EnsureDecisionDeadlineAsync(string tenantId, Authorization authorization, CancellationToken ct = default)
+        => Task.FromResult(false);
+
     // ── SLA watchdog (D-07) ──────────────────────────────────────────────────
     // Background-callable like the retention methods: the tenant is explicit,
     // and GetOpenAuthorizationsAsync(tenantId) lists that tenant's open records.
