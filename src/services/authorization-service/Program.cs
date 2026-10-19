@@ -127,6 +127,7 @@ if (!string.IsNullOrEmpty(kafkaBootstrap))
 
 // SLA deadline watchdog (runs every 15 minutes)
 builder.Services.AddHostedService<SlaWatchdogService>();
+builder.Services.AddHostedService<AuthorizationExpiryWorker>();
 
 // ── CDex additional-information requests (PAS-07) ─────────────────────────────
 // An A4 (pended — additional information required) decision that names what it

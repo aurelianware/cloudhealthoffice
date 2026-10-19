@@ -208,6 +208,7 @@ public class RfaiDocsReceivedConsumer : BackgroundService
             var resumed = auth.Status == AuthorizationStatus.Pended;
 
             auth.Status = AuthorizationStatus.InReview;
+            auth.ReviewDecision = null;
             auth.SlaResumedAt = message.ReceivedAt;
             auth.LastUpdatedDate = DateTime.UtcNow;
 

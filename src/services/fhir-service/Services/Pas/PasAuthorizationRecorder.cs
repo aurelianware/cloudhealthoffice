@@ -71,6 +71,9 @@ public sealed record PasStoredAuthorization
     [JsonPropertyName("approvedServiceDateTo")]
     public DateTime? ApprovedServiceDateTo { get; init; }
 
+    [JsonPropertyName("expirationDate")]
+    public DateTime? ExpirationDate { get; init; }
+
     /// <summary>The hash of the request this record was created from (see <see cref="PasAuthorizationRecordRequest.RequestHash"/>).</summary>
     [JsonPropertyName("requestHash")]
     public string? RequestHash { get; init; }

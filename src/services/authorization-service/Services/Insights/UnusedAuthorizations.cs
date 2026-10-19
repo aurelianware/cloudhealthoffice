@@ -4,7 +4,7 @@ using AuthorizationService.Repositories;
 namespace AuthorizationService.Services.Insights;
 
 /// <summary>
-/// "Approved but unused": approved authorizations (Approved or Modified) whose
+/// "Approved but unused": approvals (Approved, Modified, or expired approvals) whose
 /// approved service period ended in [from, to] (and has ended), that no
 /// current claim carries. The one definition behind the Insights figure and
 /// its drill-down. Providers can still bill within timely filing, so it reads
@@ -26,6 +26,7 @@ public sealed class UnusedAuthorizations
     public async Task<Result> ComputeAsync(DateTime from, DateTime to, LineOfBusiness? lineOfBusiness, DateTime asOf, CancellationToken ct = default)
     {
         var ended = (await _repository.ListApprovedEndingBetweenAsync(from, to))
+            .Where(a => Cms0057.Cms0057Reporting.IsApproved(a))
             .Where(a => lineOfBusiness is null || a.LineOfBusiness == lineOfBusiness)
             .Where(a => (a.ApprovedServiceDateTo ?? a.ExpirationDate) <= asOf)
             .Where(a => !string.IsNullOrWhiteSpace(a.AuthorizationNumber))
