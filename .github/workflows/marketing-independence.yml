@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "src/site/**"
+      - "docs/marketing/independence/**"
       - "scripts/tests/site-services-positioning.test.ts"
       - ".github/workflows/marketing-independence.yml"
   workflow_dispatch:
