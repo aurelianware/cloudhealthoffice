@@ -210,7 +210,7 @@ public class DrugExclusionTests
     [Fact]
     [Trait("Scenario", "PAS-08")]
     [Trait("Backend", "Replace")]
-    public async Task PAS08_Replace_ElevenDigitHyphenatedNdc_IsAcceptedByModelValidation()
+    public void PAS08_Replace_ElevenDigitHyphenatedNdc_IsAcceptedByModelValidation()
     {
         // An 11-digit hyphenated NDC exceeds the legacy 10-char procedure-code
         // limit; the model must accept it so a real drug submission is not
