@@ -37,7 +37,7 @@
   "author": "Aurelianware",
   "license": "BUSL-1.1",
   "dependencies": {
-    "@azure/identity": "^4.13.3",
+    "@azure/identity": "^4.14.0",
     "@azure/openai": "^2.0.0",
     "@azure/service-bus": "^7.10.0",
     "@azure/storage-blob": "^12.34.0",
@@ -60,7 +60,7 @@
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.43",
-    "@typescript-eslint/eslint-plugin": "^8.71.1",
+    "@typescript-eslint/eslint-plugin": "^8.71.2",
     "@typescript-eslint/parser": "^8.57.1",
     "eslint": "^9.39.5",
     "globals": "^17.13.0",

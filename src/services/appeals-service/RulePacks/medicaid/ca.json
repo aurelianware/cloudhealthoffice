@@ -1,0 +1,60 @@
+{
+  // California Medi-Cal managed care (and Knox-Keene plans). Source: docs/architecture/appeals-case-model.md §5.2.
+  "id": "ca-medicaid",
+  "state": "CA",
+  "lineOfBusiness": "medicaid",
+  "program": "Medi-Cal managed care",
+  "version": "2026.10.1",
+  "effectiveFrom": "2026-01-01",
+  "verifiedOn": "2026-10-17",
+  "sources": {
+    "apl-21-011": { "citation": "DHCS APL 21-011 (Rev. 8/31/2022)", "url": "https://www.dhcs.ca.gov/formsandpubs/Documents/MMCDAPLsandPolicyLetters/APL2021/APL21-011.pdf" },
+    "cfr-438-408": { "citation": "42 CFR 438.408", "url": "https://www.ecfr.gov/current/title-42/section-438.408" },
+    "hsc-1374-30": { "citation": "Cal. Health & Safety Code §1374.30", "url": "https://california.public.law/codes/health_and_safety_code_section_1374.30" },
+    "ccr-1300-68": { "citation": "28 CCR 1300.68; H&S Code §1368, §1368.01", "url": "https://www.law.cornell.edu/regulations/california/28-CCR-1300.68" },
+    "ccr-1300-71-38": { "citation": "28 CCR 1300.71.38; DHCS APL 26-017", "url": "https://www.law.cornell.edu/regulations/california/28-CCR-1300.71.38" },
+    "ccr-1300-71": { "citation": "28 CCR 1300.71(b)(5), (d)", "url": "https://www.law.cornell.edu/regulations/california/28-CCR-1300.71" }
+  },
+  "memberAppeal": {
+    "filingWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "apl-21-011" },
+    "acknowledgment": { "amount": 5, "unit": "calendarDays", "source": "apl-21-011" },
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "apl-21-011" },
+    "resolutionExpedited": { "amount": 72, "unit": "hours", "source": "apl-21-011" },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "cfr-438-408" }, "source": "cfr-438-408" },
+    "onMissed": "deemedExhaustion",
+    "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "apl-21-011" },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "apl-21-011", "note": "Or before the action takes effect, whichever is later; to keep services through the State Hearing, request it within 10 days of the resolution." },
+    "chain": [
+      { "name": "State Hearing", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "apl-21-011" } },
+      { "name": "Independent Medical Review (Knox-Keene plans)", "owner": "independentReviewer", "requestWindow": { "amount": 180, "unit": "calendarDays", "from": "decision", "source": "hsc-1374-30" }, "note": "Before or alongside the State Hearing, never after it." }
+    ],
+    "notes": [
+      "A notice not fully translated into a threshold language triggers deemed exhaustion."
+    ]
+  },
+  "memberGrievance": {
+    "acknowledgment": { "amount": 5, "unit": "calendarDays", "source": "ccr-1300-68" },
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "ccr-1300-68", "note": "All internal levels must finish within the 30 days." },
+    "resolutionExpedited": { "amount": 72, "unit": "hours", "source": "apl-21-011", "note": "Medi-Cal: 72 hours. Knox-Keene plans also notify DMHC within 3 days." },
+    "extension": { "maxDays": 0, "source": "apl-21-011" },
+    "notes": [ "File within 180 days of the incident." ]
+  },
+  "providerDispute": {
+    "chain": [
+      { "name": "Plan provider dispute", "owner": "plan", "source": "ccr-1300-71-38" },
+      { "name": "DMHC Provider Complaint Unit (Knox-Keene plans)", "owner": "regulator", "note": "After 45 working days in the plan's process, or after its determination." },
+      { "name": "DHCS", "owner": "state" }
+    ],
+    "clocks": [
+      { "name": "Filing window", "clock": { "amount": 365, "unit": "calendarDays", "from": "decision", "source": "ccr-1300-71-38", "note": "At least 365 days from the plan's last action." } },
+      { "name": "Acknowledgment (electronic)", "clock": { "amount": 2, "unit": "workingDays", "source": "ccr-1300-71-38" } },
+      { "name": "Acknowledgment (paper)", "clock": { "amount": 15, "unit": "workingDays", "source": "ccr-1300-71-38" } },
+      { "name": "Written determination", "clock": { "amount": 45, "unit": "workingDays", "source": "ccr-1300-71-38" } },
+      { "name": "Payment after an overturn", "clock": { "amount": 5, "unit": "workingDays", "from": "decision", "source": "ccr-1300-71-38" } }
+    ]
+  },
+  "recoupment": [
+    { "hold": "required", "summary": "Request within 365 days of payment; a contest within 30 working days is a provider dispute and may not be offset while pending. Offset only when uncontested, unpaid after 30 working days, and allowed by contract.", "source": "ccr-1300-71" }
+  ],
+  "toConfirm": [ "That APL 21-011 remains the current grievance and appeal APL for medical Medi-Cal plans." ]
+}

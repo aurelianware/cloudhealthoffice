@@ -1,0 +1,59 @@
+{
+  // Ohio Medicaid Next Generation managed care. Source: docs/architecture/appeals-case-model.md §5.10.
+  "id": "oh-medicaid",
+  "state": "OH",
+  "lineOfBusiness": "medicaid",
+  "program": "Ohio Medicaid Next Generation managed care",
+  "version": "2026.10.1",
+  "effectiveFrom": "2023-01-01",
+  "verifiedOn": "2026-10-17",
+  "sources": {
+    "oac-5160-26-08-4": { "citation": "Ohio Admin. Code 5160-26-08.4", "url": "https://codes.ohio.gov/ohio-administrative-code/rule-5160-26-08.4" },
+    "odm-pa": { "citation": "ODM MCO Provider Agreement (rev. 7/2024)", "url": "https://dam.assets.ohio.gov/image/upload/medicaid.ohio.gov/Providers/ProviderTypes/Managed%20Care/Provider%20Agreements/2024_07_MCO_Final.pdf" },
+    "odm-emr": { "citation": "ODM External Medical Review FAQ", "url": "https://dam.assets.ohio.gov/image/upload/medicaid.ohio.gov/Providers/ProviderTypes/Managed%20Care/External-Medical-Review-FAQ.pdf" }
+  },
+  "memberAppeal": {
+    "filingWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "oac-5160-26-08-4" },
+    "acknowledgment": { "amount": 3, "unit": "businessDays", "source": "oac-5160-26-08-4", "note": "For written appeals." },
+    "resolution": { "amount": 15, "unit": "calendarDays", "source": "oac-5160-26-08-4" },
+    "resolutionExpedited": { "amount": 72, "unit": "hours", "source": "oac-5160-26-08-4" },
+    "extension": { "maxDays": 14, "requiresStateApproval": true, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "oac-5160-26-08-4" }, "source": "oac-5160-26-08-4" },
+    "onMissed": "deemedExhaustion",
+    "fairHearingRequestWindow": { "amount": 90, "unit": "calendarDays", "from": "decision", "source": "oac-5160-26-08-4" },
+    "continuationRequestWindow": { "amount": 15, "unit": "calendarDays", "from": "notice", "source": "oac-5160-26-08-4", "note": "Benefits are reinstated if the hearing is requested within 15 days of the appeal decision." },
+    "chain": [
+      { "name": "State hearing (Bureau of State Hearings)", "owner": "state", "requestWindow": { "amount": 90, "unit": "calendarDays", "from": "decision", "source": "oac-5160-26-08-4" } }
+    ],
+    "notes": [
+      "Advance notice of a reduction, suspension or termination: 15 calendar days.",
+      "Required forms: ODM 04043, 04066, 04046 (appeal outcomes) and ODM 01959 (appeal summary for the hearing).",
+      "No external review through the Department of Insurance for Medicaid."
+    ]
+  },
+  "memberGrievance": {
+    "acknowledgment": { "amount": 3, "unit": "businessDays", "source": "oac-5160-26-08-4", "note": "For written grievances." },
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "oac-5160-26-08-4" },
+    "variants": [
+      { "name": "access to services", "clock": { "amount": 2, "unit": "businessDays", "source": "oac-5160-26-08-4" } },
+      { "name": "claims", "clock": { "amount": 60, "unit": "calendarDays", "source": "oac-5160-26-08-4" } }
+    ],
+    "extension": { "maxDays": 14, "requiresStateApproval": true, "source": "oac-5160-26-08-4" }
+  },
+  "providerDispute": {
+    "chain": [
+      { "name": "Plan claim dispute", "owner": "plan", "source": "odm-pa" },
+      { "name": "ODM External Medical Review (medical-necessity denials)", "owner": "independentReviewer", "binding": true, "requestWindow": { "amount": 30, "unit": "calendarDays", "from": "decision", "source": "odm-emr" }, "decision": { "amount": 30, "unit": "calendarDays", "source": "odm-emr" }, "note": "Binding on the plan if it reverses; the plan pays; expedited 3 business days." },
+      { "name": "ODM complaint portal (other disputes)", "owner": "regulator", "binding": false, "source": "odm-pa", "note": "Not binding; plans respond within 15 business days." }
+    ],
+    "clocks": [
+      { "name": "Filing window (from date of service)", "clock": { "amount": 12, "unit": "months", "source": "odm-pa", "note": "The later of 12 months from service or 60 days after payment or denial." } },
+      { "name": "Acknowledgment", "clock": { "amount": 5, "unit": "businessDays", "source": "odm-pa" } },
+      { "name": "Resolution (medical necessity)", "clock": { "amount": 30, "unit": "businessDays", "source": "odm-pa" } },
+      { "name": "Resolution (other)", "clock": { "amount": 15, "unit": "businessDays", "source": "odm-pa" } }
+    ]
+  },
+  "recoupment": [
+    { "hold": "required", "summary": "2-year lookback; the provider has 30 days to dispute and the plan 30 days to decide; recovery waits for the written determination, then may run within 3 business days of sending it.", "source": "odm-pa" }
+  ],
+  "toConfirm": [ "Values against the current 2026 MCO and MyCare provider agreements." ]
+}
