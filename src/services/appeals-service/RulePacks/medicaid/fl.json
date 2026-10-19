@@ -1,0 +1,58 @@
+{
+  // Florida Statewide Medicaid Managed Care. Source: docs/architecture/appeals-case-model.md §5.3.
+  "id": "fl-medicaid",
+  "state": "FL",
+  "lineOfBusiness": "medicaid",
+  "program": "Statewide Medicaid Managed Care (SMMC)",
+  "version": "2026.10.1",
+  "effectiveFrom": "2026-07-01",
+  "verifiedOn": "2026-10-17",
+  "sources": {
+    "cfr-438-420": { "citation": "42 CFR 438.420(a)", "url": "https://www.ecfr.gov/current/title-42/section-438.420" },
+    "smmc-vi": { "citation": "SMMC Attachment II §VI (July 2026)", "url": "https://ahca.myflorida.com/file/medicaid/Health_Attachment%20II%20-Core%20Contract%20Provisions_July%202026.pdf" },
+    "smmc-vii": { "citation": "SMMC Attachment II §VII.D.6 (July 2026)", "url": "https://ahca.myflorida.com/file/medicaid/Health_Attachment%20II%20-Core%20Contract%20Provisions_July%202026.pdf" },
+    "rule-59g": { "citation": "Fla. Admin. Code R. 59G-1.100", "url": "https://www.law.cornell.edu/regulations/florida/Fla-Admin-Code-Ann-R-59G-1-100" },
+    "fs-408-7057": { "citation": "Fla. Stat. §408.7057", "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0408/Sections/0408.7057.html" },
+    "fs-641-3155": { "citation": "Fla. Stat. §641.3155(5), (16)", "url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0600-0699/0641/Sections/0641.3155.html" }
+  },
+  "memberAppeal": {
+    "filingWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "smmc-vi" },
+    "acknowledgment": { "amount": 5, "unit": "businessDays", "source": "smmc-vi" },
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "smmc-vi" },
+    "resolutionExpedited": { "amount": 48, "unit": "hours", "source": "smmc-vi", "note": "Stricter than the federal 72 hours." },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "smmc-vi", "note": "Oral notice by close of business the same day." }, "source": "smmc-vi" },
+    "onMissed": "deemedExhaustion",
+    "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "rule-59g" },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "cfr-438-420" },
+    "chain": [
+      { "name": "Medicaid Fair Hearing", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "rule-59g" } },
+      { "name": "Independent review organization (if the plan elects one)", "owner": "independentReviewer", "source": "smmc-vi" }
+    ]
+  },
+  "memberGrievance": {
+    "acknowledgment": { "amount": 5, "unit": "businessDays", "source": "smmc-vi" },
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "smmc-vi" },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "smmc-vi" }, "source": "smmc-vi" },
+    "notes": [ "A complaint not resolved by close of business the next business day becomes a grievance." ]
+  },
+  "providerDispute": {
+    "chain": [
+      { "name": "Plan provider complaint", "owner": "plan", "source": "smmc-vii" },
+      { "name": "Statewide Claim Dispute Resolution program", "owner": "independentReviewer", "requestWindow": { "amount": 12, "unit": "months", "from": "decision", "source": "fs-408-7057" }, "note": "Recommendation within 60 days of the information, at most 90; the losing party pays." },
+      { "name": "AHCA final order", "owner": "state", "decision": { "amount": 30, "unit": "calendarDays", "source": "fs-408-7057" } }
+    ],
+    "clocks": [
+      { "name": "Claim complaint filing window", "clock": { "amount": 90, "unit": "calendarDays", "from": "decision", "source": "smmc-vii", "note": "From the primary payer's final determination." } },
+      { "name": "Claim complaint acknowledgment", "clock": { "amount": 3, "unit": "businessDays", "source": "smmc-vii" } },
+      { "name": "Claim complaint resolution (denied claims)", "clock": { "amount": 60, "unit": "calendarDays", "source": "smmc-vii" } },
+      { "name": "Claim complaint resolution (other)", "clock": { "amount": 90, "unit": "calendarDays", "source": "smmc-vii" } },
+      { "name": "Non-claim complaint filing window", "clock": { "amount": 45, "unit": "calendarDays", "source": "smmc-vii" } },
+      { "name": "Non-claim complaint acknowledgment", "clock": { "amount": 3, "unit": "businessDays", "source": "smmc-vii" } },
+      { "name": "Non-claim complaint resolution", "clock": { "amount": 90, "unit": "calendarDays", "source": "smmc-vii" } }
+    ],
+    "notes": [ "Status notices every 30 days while a complaint is open." ]
+  },
+  "recoupment": [
+    { "hold": "required", "summary": "30-month lookback (12 months for providers licensed under chapters 458–461, 466 and 490); the provider contests within 35 days; no offset without written consent or a missed response.", "source": "fs-641-3155" }
+  ]
+}

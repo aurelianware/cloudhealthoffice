@@ -1,0 +1,62 @@
+{
+  // New York Medicaid managed care. Source: docs/architecture/appeals-case-model.md §5.4.
+  "id": "ny-medicaid",
+  "state": "NY",
+  "lineOfBusiness": "medicaid",
+  "program": "Medicaid managed care",
+  "version": "2026.10.1",
+  "effectiveFrom": "2026-04-01",
+  "verifiedOn": "2026-10-17",
+  "sources": {
+    "cfr-438-420": { "citation": "42 CFR 438.420(a)", "url": "https://www.ecfr.gov/current/title-42/section-438.420" },
+    "doh-timeframes": { "citation": "NY DOH service authorization and appeals timeframe comparison (rev. 6/2026)", "url": "https://healthweb-back.health.ny.gov/health_care/managed_care/plans/appeals/authorize-appeals_timeframe_comparison.htm" },
+    "cfr-438-408": { "citation": "42 CFR 438.408", "url": "https://www.ecfr.gov/current/title-42/section-438.408" },
+    "phl-4904": { "citation": "N.Y. Public Health Law §4904", "url": "https://www.nysenate.gov/legislation/laws/PBH/4904" },
+    "phl-4408-a": { "citation": "N.Y. Public Health Law §4408-a", "url": "https://www.nysenate.gov/legislation/laws/PBH/4408-A*2" },
+    "phl-4910": { "citation": "N.Y. Public Health Law §4910, §4914", "url": "https://www.nysenate.gov/legislation/laws/PBH/4910" },
+    "ins-3224-b": { "citation": "N.Y. Insurance Law §3224-b", "url": "https://www.nysenate.gov/legislation/laws/ISC/3224-B" }
+  },
+  "memberAppeal": {
+    "filingWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "doh-timeframes" },
+    "acknowledgment": { "amount": 15, "unit": "calendarDays", "source": "doh-timeframes" },
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "doh-timeframes" },
+    "resolutionExpedited": { "amount": 72, "unit": "hours", "source": "doh-timeframes", "note": "Oral notice, then written within 24 hours." },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "cfr-438-408" }, "source": "doh-timeframes" },
+    "onMissed": "deemedExhaustion",
+    "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "doh-timeframes" },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "cfr-438-420", "note": "Or by the effective date, whichever is later." },
+    "chain": [
+      { "name": "State Fair Hearing (OTDA)", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "doh-timeframes" } },
+      { "name": "State external appeal (DFS)", "owner": "independentReviewer", "source": "phl-4910", "note": "May run alongside the fair hearing; the fair hearing decision controls." }
+    ],
+    "notes": [
+      "A missed utilization review appeal deadline reverses the adverse determination (PHL §4904)."
+    ]
+  },
+  "memberGrievance": {
+    "acknowledgment": { "amount": 15, "unit": "businessDays", "source": "phl-4408-a" },
+    "resolution": { "amount": 45, "unit": "calendarDays", "source": "phl-4408-a" },
+    "resolutionExpedited": { "amount": 48, "unit": "hours", "source": "phl-4408-a" },
+    "variants": [
+      { "name": "referral or coverage", "clock": { "amount": 30, "unit": "calendarDays", "source": "phl-4408-a" } }
+    ],
+    "notes": [
+      "New York calls grievances complaints. A complaint appeal is a second plan level: filing window of at least 60 business days, resolved in 30 business days (2 business days if urgent)."
+    ]
+  },
+  "providerDispute": {
+    "chain": [
+      { "name": "Plan utilization review appeal (retrospective, on the provider's own behalf)", "owner": "plan", "source": "phl-4904" },
+      { "name": "State external appeal (DFS)", "owner": "independentReviewer", "requestWindow": { "amount": 60, "unit": "calendarDays", "from": "decision", "source": "phl-4910" }, "note": "Concurrent and retrospective denials only; the reviewer fee may shift to the provider when a concurrent denial is upheld." }
+    ],
+    "clocks": [
+      { "name": "UR appeal filing window", "clock": { "amount": 45, "unit": "calendarDays", "from": "decision", "source": "phl-4904", "note": "At least 45 days." } },
+      { "name": "UR appeal acknowledgment", "clock": { "amount": 15, "unit": "calendarDays", "source": "phl-4904" } },
+      { "name": "UR appeal decision", "clock": { "amount": 30, "unit": "calendarDays", "from": "informationReceived", "source": "phl-4904" } }
+    ]
+  },
+  "recoupment": [
+    { "hold": "notStated", "summary": "30 days' written notice; 24-month lookback; the plan must have a challenge procedure. No stated hold while challenged.", "source": "ins-3224-b" }
+  ],
+  "toConfirm": [ "Medicaid Managed Care Model Contract Appendix F and any model-contract provider claim dispute process." ]
+}
