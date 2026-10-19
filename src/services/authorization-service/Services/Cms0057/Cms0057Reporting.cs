@@ -27,21 +27,8 @@ public static class Cms0057Reporting
         status is AuthorizationStatus.Approved or AuthorizationStatus.Modified;
 
     /// <summary>Clinical outcome survives expiry/withdrawal; current lifecycle status is separate.</summary>
-    public static AuthorizationStatus DecisionStatus(Authorization auth)
-    {
-        if (IsDecided(auth.Status) || auth.Status is not (AuthorizationStatus.Expired or AuthorizationStatus.Cancelled))
-            return auth.Status;
-        var recorded = (auth.StatusHistory ?? new()).Where(h => IsDecided(h.Status))
-            .MaxBy(h => h.ChangedAt);
-        if (recorded is not null) return recorded.Status;
-        return auth.ReviewDecision switch
-        {
-            "A1" => AuthorizationStatus.Approved,
-            "A2" => AuthorizationStatus.Modified,
-            "A3" when auth.Status == AuthorizationStatus.Cancelled => AuthorizationStatus.Denied,
-            _ => auth.Status,
-        };
-    }
+    public static AuthorizationStatus DecisionStatus(Authorization auth) =>
+        Backends.AuthorizationLifecyclePolicy.ClinicalDecisionStatus(auth);
 
     public static bool IsDecided(Authorization auth) => IsDecided(DecisionStatus(auth));
     public static bool IsApproved(Authorization auth) => IsApproved(DecisionStatus(auth));

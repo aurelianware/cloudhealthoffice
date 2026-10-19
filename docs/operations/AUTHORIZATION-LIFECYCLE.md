@@ -29,7 +29,11 @@ fields are inclusive UTC calendar dates; the first such date to end makes the
 record eligible on the following UTC day. This date-based worker does not claim
 time-of-day expiration. Records without an approved end/expiration date are not
 assigned an invented expiry date. Claims validation continues to check its
-approved period independently.
+approved period independently. Expired approvals can validate an explicit past
+service date within the recorded covered period, including code and provider
+checks. They cannot validate current/future services or an unspecified service
+date. Cancellation remains invalid; expiry does not retroactively revoke coverage
+for a service already provided within the approved period.
 
 Startup ensures tenant/status indexes for expiration and approved service-end dates before the worker starts. Index build time is part of rollout readiness.
 

@@ -71,8 +71,30 @@ public class AuthorizationLifecycleTests : IClassFixture<AuthorizationApiFactory
         Assert.Single(authorization.StatusHistory);
     }
 
+    [Theory]
+    [InlineData(-2, true)]
+    [InlineData(-1, true)]
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    [InlineData(-11, false)]
+    public async Task ExpiryPreservesOnlyHistoricallyCoveredServiceDates(int daysAgo, bool valid)
+    {
+        var authorization = Seed(AuthorizationStatus.Expired);
+        authorization.ReviewDecision = "A1";
+        var today = DateTime.UtcNow.Date;
+        authorization.ApprovedServiceDateFrom = today.AddDays(-10);
+        authorization.ApprovedServiceDateTo = today.AddDays(-1);
+        authorization.RequestedServices[0].ServiceStatus = "A1";
+        _factory.AuthorizationRepository.GetByAuthorizationNumberAsync(authorization.AuthorizationNumber).Returns(authorization);
+        var serviceDate = today.AddDays(daysAgo).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var result = await _client.GetFromJsonAsync<AuthorizationValidationResponse>(
+            $"/api/authorizations/{authorization.AuthorizationNumber}/validate?procedureCode=72148&serviceDate={serviceDate}", Json);
+        Assert.Equal(valid, result!.IsValid);
+        Assert.Equal(AuthorizationStatus.Expired, result.Status);
+    }
+
     [Fact]
-    public async Task ExpiredApprovalKeepsItsClinicalCodeButCannotValidateAClaim()
+    public async Task ExpiredApprovalKeepsItsClinicalCodeButCannotValidateACurrentClaim()
     {
         var authorization = Seed(AuthorizationStatus.Expired);
         authorization.ReviewDecision = "A1";
