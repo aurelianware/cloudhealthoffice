@@ -191,6 +191,8 @@ public class AuthorizationsController : ControllerBase
             service.ApprovedUnits = null;
             service.ServiceStatus = null;
             service.DenialReason = null;
+            service.DenialReasonCode = null;
+            service.PendReason = null;
         }
     }
 
@@ -251,7 +253,8 @@ public class AuthorizationsController : ControllerBase
         [FromQuery] string? procedureCode = null,
         [FromQuery] DateTime? serviceDate = null,
         [FromQuery] string? providerNpi = null,
-        [FromServices] RecordAccessWriter? accessLog = null)
+        [FromServices] RecordAccessWriter? accessLog = null,
+        [FromQuery] int? lineNumber = null)
     {
         var checkDate = serviceDate ?? DateTime.UtcNow;
 
@@ -266,19 +269,32 @@ public class AuthorizationsController : ControllerBase
             return NotFound($"Authorization {authNumber} not found");
         }
 
+        var providerApproved = IsProviderApprovedForAuthorization(authorization, providerNpi);
+        if (lineNumber <= 0 || (lineNumber.HasValue && string.IsNullOrWhiteSpace(procedureCode)))
+        {
+            await RecordValidateAsync(accessLog, authorization.Id, authorization.MemberId, StatusCodes.Status400BadRequest);
+            return BadRequest(new { error = "A positive line number requires a procedure code." });
+        }
+
         var isValid = authorization.Status == AuthorizationStatus.Approved ||
                      authorization.Status == AuthorizationStatus.Modified;
 
         var isActive = checkDate >= authorization.ApprovedServiceDateFrom &&
-                      (authorization.ExpirationDate == null || checkDate <= authorization.ExpirationDate);
+                      (authorization.ExpirationDate == null || checkDate <= authorization.ExpirationDate) &&
+                      (authorization.ApprovedServiceDateTo == null || checkDate <= authorization.ApprovedServiceDateTo);
 
+        var ambiguousProcedure = false;
         var procedureApproved = true;
         decimal? approvedUnits = null;
 
         if (!string.IsNullOrEmpty(procedureCode))
         {
-            var service = authorization.RequestedServices
-                .FirstOrDefault(s => s.ProcedureCode == procedureCode);
+            var matchingServices = authorization.RequestedServices
+                .Select((s, i) => new { Service = s, Number = s.LineNumber ?? i + 1 })
+                .Where(s => s.Service.ProcedureCode == procedureCode && (!lineNumber.HasValue || s.Number == lineNumber))
+                .Select(s => s.Service).ToList();
+            ambiguousProcedure = matchingServices.Count > 1;
+            var service = matchingServices.Count == 1 ? matchingServices[0] : null;
 
             if (service != null)
             {
@@ -292,7 +308,6 @@ public class AuthorizationsController : ControllerBase
             }
         }
 
-        var providerApproved = IsProviderApprovedForAuthorization(authorization, providerNpi);
 
         var response = new AuthorizationValidationResponse
         {
@@ -305,6 +320,7 @@ public class AuthorizationsController : ControllerBase
             ApprovedUnits = approvedUnits,
             ValidationMessage = !isValid ? "Authorization not approved" :
                                !isActive ? "Authorization expired or not yet active" :
+                               ambiguousProcedure ? "Procedure occurs on multiple lines; specify lineNumber" :
                                !procedureApproved ? $"Procedure {procedureCode} not approved" :
                                !providerApproved ? $"Provider {providerNpi} not approved for authorization" :
                                "Authorization valid"
@@ -469,6 +485,10 @@ public class AuthorizationsController : ControllerBase
             return NotFound($"Authorization {id} not found");
         }
 
+        statusUpdate.ReviewDecision ??= AuthorizationDecisionPolicy.DecisionFor(statusUpdate.Status);
+        try { AuthorizationDecisionPolicy.Prepare(authorization, statusUpdate.Status, statusUpdate.ReviewDecision, statusUpdate); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+
         authorization.Status = statusUpdate.Status;
         authorization.ReviewDecision = statusUpdate.ReviewDecision;
         authorization.LastUpdatedDate = DateTime.UtcNow;
@@ -493,7 +513,7 @@ public class AuthorizationsController : ControllerBase
         // to the CHO repository.
         var updated = await _backends.Resolve().UpdateStatusAsync(
             authorization, authorization.Status, authorization.ReviewDecision,
-            authorization.DenialReason, HttpContext.RequestAborted);
+            authorization.DenialReason, HttpContext.RequestAborted, statusUpdate);
 
         // A status update that lands on pended-for-information raises the request
         // too. This is also the repair path: an authorization left Pended/A4 with
@@ -526,6 +546,16 @@ public class AuthorizationsController : ControllerBase
         {
             return NotFound($"Authorization {id} not found");
         }
+
+        var decisionStatus = response.ReviewDecision switch
+        {
+            "A1" => AuthorizationStatus.Approved, "A2" => AuthorizationStatus.Modified,
+            "A3" => AuthorizationStatus.Denied, "A4" => AuthorizationStatus.Pended,
+            _ => (AuthorizationStatus?)null,
+        };
+        if (!decisionStatus.HasValue) return BadRequest(new { error = "Review decision must be A1, A2, A3 or A4." });
+        try { AuthorizationDecisionPolicy.Prepare(authorization, decisionStatus.Value, response.ReviewDecision, response); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
 
         authorization.EDI278ResponseControlNumber = response.ControlNumber;
         authorization.ReviewDecision = response.ReviewDecision;
@@ -580,7 +610,7 @@ public class AuthorizationsController : ControllerBase
         // no silent CHO write in Augment).
         var updated = await _backends.Resolve().UpdateStatusAsync(
             authorization, authorization.Status, authorization.ReviewDecision,
-            authorization.DenialReason, HttpContext.RequestAborted);
+            authorization.DenialReason, HttpContext.RequestAborted, response);
 
         // An A4 decision that names what it needs raises the provider-facing
         // documentation request. The decision is already durable at this point:

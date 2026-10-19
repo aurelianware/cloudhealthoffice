@@ -376,6 +376,13 @@ public static class PasAuthorizationMapper
             return;
         }
 
+        if (claim.Item.Any(i => !i.Sequence.HasValue || i.Sequence <= 0) ||
+            claim.Item.Select(i => i.Sequence).Distinct().Count() != claim.Item.Count)
+        {
+            errors.Add(new("Claim.item.sequence", "Service sequences must be positive and unique."));
+            return;
+        }
+
         foreach (var item in claim.Item)
         {
             var path = $"Claim.item[{item.Sequence}].productOrService";
@@ -402,6 +409,7 @@ public static class PasAuthorizationMapper
 
             request.RequestedServices.Add(new PasRequestedService
             {
+                LineNumber = item.Sequence,
                 ProcedureCode = code,
                 ProductOrServiceSystem = coding.System,
                 ProcedureDescription = Truncate(coding.Display ?? item.ProductOrService?.Text, 500),
@@ -783,6 +791,8 @@ public sealed class PasDiagnosisCode
 
 public sealed class PasRequestedService
 {
+    public int? LineNumber { get; init; }
+
     public string ProcedureCode { get; set; } = string.Empty;
     public string? ProductOrServiceSystem { get; set; }
     public string? ProcedureDescription { get; set; }

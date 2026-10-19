@@ -45,6 +45,7 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
 
     public async Task<Authorization> CreateAsync(Authorization authorization, CancellationToken ct = default)
     {
+        AuthorizationDecisionPolicy.InitializeLines(authorization);
         // Benefit drug-exclusion enforcement (CMS-0057-F PAS-08): an explicit
         // plan exclusion takes precedence over the ordinary approvable path. The
         // request is recorded — auditably — as received and then denied
@@ -64,6 +65,7 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
             authorization.ReviewedDate ??= DateTime.UtcNow;
             authorization.LastUpdatedDate = DateTime.UtcNow;
 
+            ApplyWholeRequestDecision(authorization);
             AppendHistory(authorization, AuthorizationStatus.Denied, "A3", determination.ReasonText);
             return await _repository.CreateAsync(authorization);
         }
@@ -76,6 +78,7 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
     public async Task<Authorization> RecordAutomatedDecisionAsync(
         Authorization authorization, AutomatedDecision decision, CancellationToken ct = default)
     {
+        AuthorizationDecisionPolicy.InitializeLines(authorization);
         var decidedAt = decision.DecidedAt ?? DateTime.UtcNow;
 
         // Receipt: the request as it arrived, at the time it arrived. The
@@ -101,6 +104,7 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
             authorization.DenialReasonCode = determination.ReasonCode;
             authorization.DenialReason = determination.ReasonText;
             authorization.ReviewedDate = decidedAt;
+            ApplyWholeRequestDecision(authorization);
             authorization.StatusHistory.Add(new AuthorizationStatusChange
             {
                 Status = AuthorizationStatus.Denied,
@@ -109,6 +113,7 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
                 ChangedAt = decidedAt,
                 ChangedBy = authorization.CreatedBy,
                 Source = "benefit-exclusion",
+                LineDecisions = AuthorizationDecisionPolicy.Snapshot(authorization),
             });
             return await _repository.CreateAsync(authorization);
         }
@@ -143,8 +148,10 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
                 throw new ArgumentException("An automated decision needs an outcome.", nameof(decision));
         }
 
+        ApplyWholeRequestDecision(authorization);
         authorization.StatusHistory.Add(new AuthorizationStatusChange
         {
+            LineDecisions = AuthorizationDecisionPolicy.Snapshot(authorization),
             Status = authorization.Status,
             ReviewDecision = authorization.ReviewDecision,
             Reason = reason,
@@ -180,19 +187,37 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
         AuthorizationStatus status,
         string? reviewDecision,
         string? reason,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        AuthorizationDecisionDetails? details = null)
     {
+        reviewDecision ??= AuthorizationDecisionPolicy.DecisionFor(status);
+        details ??= new AuthorizationDecisionDetails
+        {
+            DenialReasonCode = authorization.DenialReasonCode,
+            DenialReason = reason ?? authorization.DenialReason,
+            PendReason = authorization.PendReason,
+        };
+        var lines = AuthorizationDecisionPolicy.Prepare(authorization, status, reviewDecision, details);
+        AuthorizationDecisionPolicy.Apply(authorization, status, reviewDecision, details, lines);
         authorization.Status = status;
-        if (!string.IsNullOrEmpty(reviewDecision))
-            authorization.ReviewDecision = reviewDecision;
-        if (status == AuthorizationStatus.Denied && !string.IsNullOrEmpty(reason))
-            authorization.DenialReason = reason;
+        authorization.ReviewDecision = reviewDecision;
         authorization.LastUpdatedDate = DateTime.UtcNow;
         if (status is AuthorizationStatus.Approved or AuthorizationStatus.Denied or AuthorizationStatus.Modified)
             authorization.ReviewedDate ??= DateTime.UtcNow;
 
-        AppendHistory(authorization, status, reviewDecision, reason);
+        AppendHistory(authorization, status, reviewDecision, authorization.DenialReason ?? authorization.PendReason ?? reason);
         return await _repository.UpdateAsync(authorization);
+    }
+
+    private static void ApplyWholeRequestDecision(Authorization authorization)
+    {
+        var details = new AuthorizationDecisionDetails
+        {
+            DenialReasonCode = authorization.DenialReasonCode, DenialReason = authorization.DenialReason,
+            PendReason = authorization.PendReason,
+        };
+        var lines = AuthorizationDecisionPolicy.Prepare(authorization, authorization.Status, authorization.ReviewDecision, details);
+        AuthorizationDecisionPolicy.Apply(authorization, authorization.Status, authorization.ReviewDecision, details, lines);
     }
 
     private static void AppendHistory(
@@ -204,6 +229,7 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
         authorization.StatusHistory.Add(new AuthorizationStatusChange
         {
             Status = status,
+            LineDecisions = AuthorizationDecisionPolicy.Snapshot(authorization),
             ReviewDecision = reviewDecision,
             Reason = reason,
             ChangedAt = DateTime.UtcNow,

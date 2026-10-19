@@ -125,10 +125,10 @@ public sealed class AutomatedDecisionsController : ControllerBase
             RequestedServiceDateFrom = request.RequestedServiceDateFrom!.Value,
             RequestedServiceDateTo = request.RequestedServiceDateTo,
             DiagnosisCodes = request.DiagnosisCodes ?? new List<DiagnosisCode>(),
-            // Line-level outcomes are not part of an automated decision yet
-            // (G-07): whatever a line carries is dropped.
+            // Ignore caller-supplied outcomes; the backend applies the trusted decision to every line.
             RequestedServices = request.RequestedServices.Select(s => new RequestedService
             {
+                LineNumber = s.LineNumber,
                 ProcedureCode = s.ProcedureCode,
                 ProductOrServiceSystem = s.ProductOrServiceSystem,
                 ProcedureDescription = s.ProcedureDescription,

@@ -17,6 +17,22 @@ public class PasAuthorizationMapperTests
     private static PasMappingResult Map(Bundle bundle) => PasAuthorizationMapper.Map(bundle, PasBundles.ClaimOf(bundle), Received);
 
     [Fact]
+    public void NonOrdinalSequences_ArePreserved_AndDuplicateSequencesAreRejected()
+    {
+        var bundle = PasBundles.Complete();
+        var claim = PasBundles.ClaimOf(bundle);
+        claim.Item[0].Sequence = 7;
+        Map(bundle).Request!.RequestedServices.Single().LineNumber.Should().Be(7);
+        claim.Item.Add(new Claim.ItemComponent
+        {
+            Sequence = 7, ProductOrService = claim.Item[0].ProductOrService.DeepCopy() as CodeableConcept,
+        });
+        var invalid = Map(bundle);
+        invalid.IsValid.Should().BeFalse();
+        invalid.Errors.Should().Contain(e => e.Expression == "Claim.item.sequence");
+    }
+
+    [Fact]
     public void CompleteBundle_MapsEveryFieldFromTheRequest()
     {
         var result = Map(PasBundles.Complete());

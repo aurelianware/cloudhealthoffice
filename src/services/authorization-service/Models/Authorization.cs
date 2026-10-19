@@ -403,6 +403,8 @@ public class Authorization
 [BsonIgnoreExtraElements]
 public class AuthorizationStatusChange
 {
+    public List<AuthorizationLineDecision> LineDecisions { get; set; } = new();
+
     [JsonConverter(typeof(JsonStringEnumConverter))]
     [JsonPropertyName("status")]
     public AuthorizationStatus Status { get; set; }
@@ -464,6 +466,16 @@ public class DiagnosisCode
 [BsonIgnoreExtraElements]
 public class RequestedService
 {
+    /// <summary>Stable request line identity; legacy records use their one-based ordinal.</summary>
+    [Range(1, int.MaxValue)]
+    public int? LineNumber { get; set; }
+
+    [StringLength(10)]
+    public string? DenialReasonCode { get; set; }
+
+    [StringLength(500)]
+    public string? PendReason { get; set; }
+
     /// <summary>
     /// Requested code — a CPT/HCPCS procedure (278 SV101, 2000F) or, when
     /// <see cref="ProductOrServiceSystem"/> is set, a drug identity such as an

@@ -228,11 +228,28 @@ public class PasSubmitRecordingTests
         claimResponse.Error.Should().ContainSingle().Which.Code.Coding.Single().Code.Should().Be("PEMS-001");
     }
 
+    [Fact]
+    public async Task RetryAfterReviewerModification_ReturnsCommittedPartialLineDecision()
+    {
+        _recorder.StoredOverride = new PasStoredAuthorization
+        {
+            Status = PriorAuthorizationStatus.Modified, ReviewDecision = "A2",
+            RequestedServices = new()
+            {
+                new() { LineNumber = 9, ProcedureCode = "72148", RequestedUnits = 4, ApprovedUnits = 2,
+                    ServiceStatus = "A2", DenialReasonCode = "LIMIT", DenialReason = "Two units meet criteria." },
+            },
+        };
+        var response = ClaimResponseOf(await Controller().ClaimSubmit(PasBundles.Complete()));
+        response.Outcome.Should().Be(ClaimProcessingCodes.Partial);
+        response.Item.Should().ContainSingle().Which.ItemSequence.Should().Be(9);
+        response.Item[0].Adjudication.Single(a => a.Extension.Count > 0).Value.Should().Be(2);
+    }
+
     [Theory]
     [InlineData(PriorAuthorizationStatus.Unknown)]
     [InlineData(PriorAuthorizationStatus.Submitted)]
     [InlineData(PriorAuthorizationStatus.InReview)]
-    [InlineData(PriorAuthorizationStatus.Modified)]
     [InlineData(PriorAuthorizationStatus.Expired)]
     [InlineData(PriorAuthorizationStatus.Cancelled)]
     public async Task StoredInAStatusSubmitCannotAnswer_Returns502_WithNoPreAuthRef(PriorAuthorizationStatus status)
