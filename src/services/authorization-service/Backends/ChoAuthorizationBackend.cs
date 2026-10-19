@@ -45,6 +45,7 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
 
     public async Task<Authorization> CreateAsync(Authorization authorization, CancellationToken ct = default)
     {
+        AuthorizationDecisionPolicy.InitializeLines(authorization);
         // Benefit drug-exclusion enforcement (CMS-0057-F PAS-08): an explicit
         // plan exclusion takes precedence over the ordinary approvable path. The
         // request is recorded — auditably — as received and then denied
@@ -77,6 +78,7 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
     public async Task<Authorization> RecordAutomatedDecisionAsync(
         Authorization authorization, AutomatedDecision decision, CancellationToken ct = default)
     {
+        AuthorizationDecisionPolicy.InitializeLines(authorization);
         var decidedAt = decision.DecidedAt ?? DateTime.UtcNow;
 
         // Receipt: the request as it arrived, at the time it arrived. The
@@ -194,7 +196,6 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
             DenialReasonCode = authorization.DenialReasonCode,
             DenialReason = reason ?? authorization.DenialReason,
             PendReason = authorization.PendReason,
-            ApprovedUnits = authorization.ApprovedUnits,
         };
         var lines = AuthorizationDecisionPolicy.Prepare(authorization, status, reviewDecision, details);
         AuthorizationDecisionPolicy.Apply(authorization, status, reviewDecision, details, lines);

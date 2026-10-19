@@ -24,6 +24,19 @@ public class AuthorizationDecisionIntegrityTests
         return repo;
     }
 
+    [Theory]
+    [InlineData(7, 1)]
+    [InlineData(0, 1)]
+    [InlineData(12, 0)]
+    public async Task InvalidRequestLineIdentityOrQuantity_IsRejectedBeforeCreate(int secondNumber, decimal units)
+    {
+        var auth = Request(); var repo = Repository();
+        auth.RequestedServices[1].LineNumber = secondNumber;
+        auth.RequestedServices[1].RequestedUnits = units;
+        await Assert.ThrowsAsync<ArgumentException>(() => new ChoAuthorizationBackend(repo).CreateAsync(auth));
+        await repo.DidNotReceive().CreateAsync(Arg.Any<Authorization>());
+    }
+
     [Fact]
     public async Task MixedDecision_PersistsStableLinesAndIndependentAuditSnapshots()
     {
