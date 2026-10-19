@@ -65,7 +65,7 @@
 </li>
 </ul>
 </nav>
-<main id="main-content">
+<main id="main-content" tabindex="-1">
 <header class="hero">
 <p class="eyebrow">Economics / A scenario, not a quote</p>
 <h1>What Does Technology Dependency Really Cost?</h1>
@@ -76,44 +76,47 @@
 <p class="eyebrow">01 / Define the scenario</p>
 <h2>Count Member Months, Then Costs.</h2>
 <p>All amounts are USD. Recurring PMPM is multiplied by annual member months. Enter annual categories only when they are excluded from PMPM and other rows. Licensing is included once in recurring PMPM or annual fixed costs; support is included once in PMPM or its support row.</p>
-<form id="economics-form" novalidate>
+<p id="calculator-status" role="status">Calculator unavailable until JavaScript initializes. Financial inputs are disabled; no financial values can be submitted.</p>
+<div id="economics-calculator" role="group" aria-label="Administration economics scenario">
+<fieldset id="calculator-controls" disabled>
+<legend>Local scenario calculator</legend>
 <fieldset>
 <legend>Volume and horizon</legend>
-<label for="members">Average covered members<input id="members" name="members" type="number" min="0" step="1" value="100000" required>
+<label for="members">Average covered members<input id="members" data-cost-key="members" type="number" min="0" step="1" value="100000" required>
 </label>
 <label for="derive">
 <input type="checkbox" id="derive" checked>Derive annual member months as average covered members × 12</label>
-<label for="memberMonths">Annual member months<input id="memberMonths" name="memberMonths" type="number" min="0" step="1" value="1200000" required readonly>
+<label for="memberMonths">Annual member months<input id="memberMonths" data-cost-key="memberMonths" type="number" min="0" step="1" value="1200000" required readonly>
 </label>
-<label for="horizon">Analysis horizon (whole years)<input id="horizon" name="horizon" type="number" min="1" step="1" value="5" required max="50">
+<label for="horizon">Analysis horizon (whole years)<input id="horizon" data-cost-key="horizon" type="number" min="1" step="1" value="5" required max="50">
 </label>
 </fieldset>
 <fieldset>
 <legend>Annual recurring costs — enter each expense once</legend>
 <div class="cost-grid">
-<label for="currentPmpm">Current: recurring PMPM, including any PMPM licensing<input id="currentPmpm" name="currentPmpm" type="number" min="0" step="0.01" value="" required>
+<label for="currentPmpm">Current: recurring PMPM, including any PMPM licensing<input id="currentPmpm" data-cost-key="currentPmpm" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="alternativePmpm">Alternative: recurring PMPM, including any PMPM licensing<input id="alternativePmpm" name="alternativePmpm" type="number" min="0" step="0.01" value="" required>
+<label for="alternativePmpm">Alternative: recurring PMPM, including any PMPM licensing<input id="alternativePmpm" data-cost-key="alternativePmpm" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="currentFixed">Current: annual fixed costs, including any fixed licensing<input id="currentFixed" name="currentFixed" type="number" min="0" step="0.01" value="" required>
+<label for="currentFixed">Current: annual fixed costs, including any fixed licensing<input id="currentFixed" data-cost-key="currentFixed" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="alternativeFixed">Alternative: annual fixed costs, including any fixed licensing<input id="alternativeFixed" name="alternativeFixed" type="number" min="0" step="0.01" value="" required>
+<label for="alternativeFixed">Alternative: annual fixed costs, including any fixed licensing<input id="alternativeFixed" data-cost-key="alternativeFixed" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="currentInfrastructure">Current: annual infrastructure<input id="currentInfrastructure" name="currentInfrastructure" type="number" min="0" step="0.01" value="" required>
+<label for="currentInfrastructure">Current: annual infrastructure<input id="currentInfrastructure" data-cost-key="currentInfrastructure" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="alternativeInfrastructure">Alternative: annual infrastructure<input id="alternativeInfrastructure" name="alternativeInfrastructure" type="number" min="0" step="0.01" value="" required>
+<label for="alternativeInfrastructure">Alternative: annual infrastructure<input id="alternativeInfrastructure" data-cost-key="alternativeInfrastructure" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="currentSupport">Current: annual support and maintenance<input id="currentSupport" name="currentSupport" type="number" min="0" step="0.01" value="" required>
+<label for="currentSupport">Current: annual support and maintenance<input id="currentSupport" data-cost-key="currentSupport" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="alternativeSupport">Alternative: annual support and maintenance<input id="alternativeSupport" name="alternativeSupport" type="number" min="0" step="0.01" value="" required>
+<label for="alternativeSupport">Alternative: annual support and maintenance<input id="alternativeSupport" data-cost-key="alternativeSupport" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="currentStaffing">Current: annual staffing and operations<input id="currentStaffing" name="currentStaffing" type="number" min="0" step="0.01" value="" required>
+<label for="currentStaffing">Current: annual staffing and operations<input id="currentStaffing" data-cost-key="currentStaffing" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="alternativeStaffing">Alternative: annual staffing and operations<input id="alternativeStaffing" name="alternativeStaffing" type="number" min="0" step="0.01" value="" required>
+<label for="alternativeStaffing">Alternative: annual staffing and operations<input id="alternativeStaffing" data-cost-key="alternativeStaffing" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="currentIntegration">Current: annual integration and change<input id="currentIntegration" name="currentIntegration" type="number" min="0" step="0.01" value="" required>
+<label for="currentIntegration">Current: annual integration and change<input id="currentIntegration" data-cost-key="currentIntegration" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="alternativeIntegration">Alternative: annual integration and change<input id="alternativeIntegration" name="alternativeIntegration" type="number" min="0" step="0.01" value="" required>
+<label for="alternativeIntegration">Alternative: annual integration and change<input id="alternativeIntegration" data-cost-key="alternativeIntegration" type="number" min="0" step="0.01" value="" required>
 </label>
 </div>
 <label for="licenseKnown">
@@ -124,20 +127,21 @@
 </fieldset>
 <fieldset>
 <legend>One-time costs and parallel operation</legend>
-<label for="transition">One-time transition and migration costs<input id="transition" name="transition" type="number" min="0" step="0.01" value="" required>
+<label for="transition">One-time transition and migration costs<input id="transition" data-cost-key="transition" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="exit">One-time exit costs<input id="exit" name="exit" type="number" min="0" step="0.01" value="" required>
+<label for="exit">One-time exit costs<input id="exit" data-cost-key="exit" type="number" min="0" step="0.01" value="" required>
 </label>
-<label for="parallel">Incremental parallel-run costs across the entire horizon<input id="parallel" name="parallel" type="number" min="0" step="0.01" value="" required>
+<label for="parallel">Incremental parallel-run costs across the entire horizon<input id="parallel" data-cost-key="parallel" type="number" min="0" step="0.01" value="" required>
 </label>
 <p class="fine">Parallel-run is the incremental total across the horizon, entered once. Exclude expenses already counted in either recurring scenario. One-time transition and exit are not annualized before calculation.</p>
 </fieldset>
-<button type="submit">Calculate scenario</button> <button type="button" id="example" class="secondary">Load hypothetical example</button>
+<button type="button" id="calculate">Calculate scenario</button> <button type="button" id="example" class="secondary">Load hypothetical example</button>
 <p id="calculator-error" role="alert" hidden>
 </p>
-</form>
+</fieldset>
+</div>
 <noscript>
-<p>JavaScript is required for interactive results. Formulas and the hypothetical example below remain available.</p>
+<p>The calculator is unavailable without JavaScript. Financial inputs stay disabled and cannot be submitted. Formulas and the hypothetical example below remain available.</p>
 </noscript>
 </section>
 <section>
@@ -146,7 +150,7 @@
 <div id="calculator-results" class="results" aria-live="polite">
 <p>Enter explicit assumptions to calculate a complete scenario.</p>
 </div>
-<button type="button" id="print-results">Print scenario and assumptions</button>
+<button type="button" id="print-results" disabled>Print scenario and assumptions</button>
 </section>
 <section>
 <p class="eyebrow">A hypothetical example</p>

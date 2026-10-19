@@ -1,0 +1,60 @@
+name: Marketing independence validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/site/**"
+      - "scripts/tests/site-services-positioning.test.ts"
+      - ".github/workflows/marketing-independence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independence:
+    name: Strict site build and independence checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CHO_BASELINE_REF: refs/remotes/origin/marketing-baseline
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Fetch explicit comparison baseline and complete history
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: |
+          git fetch --no-tags origin "$BASE_SHA"
+          git update-ref "$CHO_BASELINE_REF" FETCH_HEAD
+          test "$(git rev-parse --is-shallow-repository)" = false
+          git cat-file -e "$CHO_BASELINE_REF:src/site/index.html"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: src/site/package-lock.json
+      - run: npm ci --prefix src/site --ignore-scripts
+      - name: Strict build
+        run: npm --prefix src/site run build
+        env:
+          SITEMAP_STRICT: "1"
+      - name: Unit and built-artifact checks
+        run: npm --prefix src/site run test:independence
+      - name: Install Chromium
+        working-directory: src/site
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Browser privacy, navigation, print and conversion checks
+        run: node src/site/tests/independence-browser.cjs
+        env:
+          CHO_EVIDENCE_DIR: ${{ runner.temp }}/independence-evidence
+      - name: Upload final-head evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: independence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/independence-evidence
+          if-no-files-found: warn
