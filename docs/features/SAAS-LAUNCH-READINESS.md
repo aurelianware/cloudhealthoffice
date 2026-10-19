@@ -1,5 +1,7 @@
 # Cloud Health Office v4 - SaaS Launch Readiness Assessment
 
+> **Historical record — superseded October 19, 2026.** The body below preserves the February 6, 2026 SaaS launch assessment, including its original recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../CAPABILITY_RECONCILIATION.md) for reconciled status.
+
 **Assessment Date**: February 6, 2026  
 **Target**: Launch multi-tenant SaaS platform and onboard first paying payers  
 **Assessor**: GitHub Copilot

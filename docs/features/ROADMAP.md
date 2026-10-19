@@ -1,5 +1,7 @@
 # Cloud Health Office - Product Roadmap
 
+> **Historical record — superseded October 19, 2026.** The body below preserves the original product roadmap, including its original recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../CAPABILITY_RECONCILIATION.md) for reconciled status.
+
 This document outlines the strategic vision and planned enhancements for the Cloud Health Office platform.
 
 **Last Updated**: November 2024  
@@ -388,7 +390,7 @@ We value input from our users and the healthcare IT community:
 1. **Feature Requests**: Submit via [GitHub Discussions](https://github.com/aurelianware/hipaa-attachments/discussions)
 2. **Vote on Features**: Upvote existing feature requests to prioritize
 3. **Beta Testing**: Sign up for early access to new features
-4. **Code Contributions**: See [CONTRIBUTING.md](CONTRIBUTING.md)
+4. **Code Contributions**: See [CONTRIBUTING.md](../../CONTRIBUTING.md)
 
 ### Prioritization Criteria
 

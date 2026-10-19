@@ -2,16 +2,17 @@
 
 # Prior Authorization API - CMS-0057-F Compliance Guide
 
-> **Status (October 2026):** CMS-0057-F conformance is in progress. This guide describes a TypeScript
-> library (`src/fhir/prior-auth-api.ts`, not imported by any service) and the removed Logic Apps
-> orchestration; it is not a description of the running services. Da Vinci CRD/DTR/PAS are in
-> development and not yet conformant, X12 278 bridging is planned, and the `/api/prior-auth/*`
-> endpoints below (including cancel) are not served. See the
-> [ePA gap matrix](../epa-gap-matrix.md), which is the source of truth for current status.
+> **Scope — October 19, 2026:** This guide documents the TypeScript library
+> (`src/fhir/prior-auth-api.ts`, not imported by a service) and legacy Logic Apps
+> examples, not the running .NET endpoint inventory. The examples under
+> `/api/prior-auth/*` are not served. Current PAS persistence/line outcomes,
+> CRD uncertainty, DTR storage and receipt deadlines are described in the
+> [canonical capability ledger](../CAPABILITY_RECONCILIATION.md); full standards
+> conformance is a separate verification scope.
 
-**Cloud Health Office** - HIPAA-compliant Prior Authorization API with Da Vinci Implementation Guides
+**Cloud Health Office** — prior-authorization library and service integration guidance for regulated payer environments; compliance and full Da Vinci conformance require separate validation.
 
-This document provides comprehensive guidance for implementing CMS-0057-F Prior Authorization workflows using FHIR R4, X12 278, and Azure Logic Apps orchestration.
+The library examples explain modeled FHIR/X12 workflows; the Logic Apps material is historical integration context, not current deployment guidance.
 
 ---
 

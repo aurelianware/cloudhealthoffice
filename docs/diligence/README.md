@@ -1,12 +1,14 @@
 # Cloud Health Office — Pilot Diligence Binder
 
+Current capability status and dated implementation/test evidence: [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md).
+
 **Audience:** payer CISO, privacy counsel, interoperability lead, procurement
 **Status as of:** September 2026
 **Offer this binder supports:** CMS-0057-F Compliance Accelerator (maintained in a private repository)
 
 This packet is what we hand a buyer **before** PHI, before a production cluster, and before anyone says “compliant.” It is not a completed SOC 2 report, not a CMS certification, and not a signed BAA.
 
-Cloud Health Office is pre-pilot. There is no production reference customer. Founding-partner terms exist because of that fact.
+Customer deployment status, reference permissions and current commercial terms must be confirmed with the commercial owner before sharing this binder; this code/documentation review does not establish them.
 
 ## Contents
 
@@ -44,5 +46,5 @@ Cloud Health Office is pre-pilot. There is no production reference customer. Fou
 - “Certified CMS-0057-F compliant”
 - “100% compliant out of the box”
 - “Production-ready compliance”
-- “Trusted by [named health plans]” (we have no production reference)
+- “Trusted by [named health plans]” (requires an authorized, verified reference)
 - “Live” for seeded, synthetic, or mock-backed resources

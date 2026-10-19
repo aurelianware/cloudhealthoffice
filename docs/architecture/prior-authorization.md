@@ -177,15 +177,13 @@ outcome category, and the status returned. Never the Claim, the ClaimResponse,
 demographics, clinical content, tokens, or credentials. CR/LF is stripped from
 ids reaching a log line (CWE-117).
 
-## What `$submit` changed for inquiry
+## Persisted submission and inquiry behavior
 
-Making status inquirable required fixing the write side:
+The implemented write/read path preserves these properties:
 
-* **every outcome now carries a tracking handle.** `preAuthRef` was set only on
-  approvals, and a pended submission persisted an authorization number that was
-  never told to the caller — so the one outcome that most needs following up was
-  un-inquirable. Approved, denied and pended responses now all carry the number
-  that was persisted.
+* **Every stored outcome carries a tracking handle.** Approved, denied and
+  pended responses carry the persisted authorization number; persistence failure
+  returns an error without issuing a tracking reference.
 * **denial code and reason are persisted**, so an inquiry answers *why*, not
   just "denied".
 * **the approved period is persisted**, so an inquiry can report `preAuthPeriod`.
@@ -283,8 +281,9 @@ against: one atomic Mongo `DeleteOne` whose filter includes id, tenant and
 expected status.
 
 So a record that reopens between being listed and being purged **survives**: the
-predicate no longer matches. `Authorization` has no version field of its own; the
-status in the delete filter is the concurrency guard.
+predicate no longer matches. The retention delete uses its expected-status
+predicate as its guard. Ordinary Mongo updates separately use the authorization
+`Revision` field to reject stale writes; these are distinct concurrency paths.
 
 Repeated sweeps are safe — an already-purged record returns false, not an error —
 and a failed batch simply retries next interval, because each record is an
@@ -353,27 +352,28 @@ which is the correct anti-enumeration behaviour.
   a scanner seam with no scanner, and no outbox between the two services.
 * **An inquiry is bound to its authorization by the corroborating key, not by
   the caller's own identity.** PAS is system-to-system here: `$submit` does not
-  check that the caller *is* the provider named in the Claim, and there is no
-  mapping in this repository from a token subject to a provider NPI. So a caller
+  check that the caller *is* the provider named in the Claim, although SMART identity handling carries provider context. This PAS inquiry
+  corroboration check is not itself a token-to-provider authorization check. A caller
   who knows both the authorization number and a matching member or provider key
   can read it, within their own tenant. Inventing a subject-to-NPI mapping to
   close that would be security theatre — NPIs are public — so the caller is
   recorded in the audit trail instead, and tightening this waits on a real
   provider identity claim in the token.
-* **No optimistic concurrency on authorization records.** There is no ETag or
-  row version, so updates are last-write-wins and an inquiry reads committed
-  state rather than a versioned snapshot. Partially persisted status changes are
-  not exposed because a status write is a single document replace, but two
-  concurrent updates can still overwrite one another — a pre-existing property of
-  the store, not of the inquiry.
+* **Revision-fenced Mongo updates:** `AuthorizationRepositoryMongo`
+  filters writes by `Revision`, and conflicting writes raise
+  `AuthorizationConcurrencyException`. Real-Mongo tests verify one winner for
+  concurrent updates and protect escalation from stale replacements. See
+  [CAP-12 and executed A1 checks](../CAPABILITY_RECONCILIATION.md).
 * **No X12 278 parser** exists in the .NET services. Authorization status derives
   from the adjudication record and the review-decision DTO, not from a parsed
   278; the 278 vocabulary is modelled but the transaction is not processed.
 * Lookup is by authorization number plus a corroborating key. Searching by
   member or provider alone — enumerating a provider's open authorizations — is
   not offered through `$inquire`.
-* Some fields the submit path persists are still placeholders (patient name,
-  date of birth, line of business). They are deliberately **not** projected into
-  the inquiry response, which carries no demographics at all.
+* **Mapped submit data:** `PasAuthorizationMapper`
+  reads Patient/Coverage/provider/service data from the Bundle; the real-host
+  persistence seam verifies what is stored. Missing or unrecognized LOB follows
+  explicit uncertainty behavior rather than a fabricated default. See CAP-01.
+  Inquiry's limited demographic projection is a separate API choice.
 * Zero GAPs in the acceptance suite is **not** complete CMS-0057-F compliance.
   This is implementation evidence, not certification.

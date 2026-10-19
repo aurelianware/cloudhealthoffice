@@ -5,6 +5,20 @@ guide, not a general chatbot. If a question falls outside these topics, it refus
 and routes to the lead form or the calendar. Keep this consistent with
 `../MESSAGE_SHEET.md`.
 
+## Verified capability wording — October 19, 2026
+
+Use the [canonical capability ledger](../../../docs/CAPABILITY_RECONCILIATION.md) for status, date, evidence and limits; the wording below applies that evidence and does not maintain a separate readiness assessment.
+
+- PAS submission stores the request and decision before responding; inquiry returns stored outcomes. CHO validates and persists service-line decisions and adverse reasons and projects them into PAS responses.
+- CRD unresolved/uncoded inputs and evaluation failures return uncertainty rather than a no-authorization-needed assertion.
+- DTR creates, response submission and id-based reads use MongoDB; questionnaire updates and search/existence indexes remain in-process. Say “durable creation/read-back,” not “all DTR CRUD is durable.”
+- SMART tenant/client-bound launch and patient/encounter token context are implemented; withdrawing an application approval affects refresh. This is not a claim of every SMART response field or revocation mechanism.
+- CMS reporting computes standard/expedited counts, rates, mean/median and timeliness. Appeal/extension metrics and complete public reporting remain separate.
+- Ordinary CHO authorization workflows enforce transition guards, audit cancellation and expire approvals atomically while preserving clinical outcomes. Tenant-database sweeps and separate reopening/overturn workflows remain outside this scope. See CAP-23 and `docs/operations/AUTHORIZATION-LIFECYCLE.md`.
+- CHO receipt-v1 persists authorization receipt/due timestamps and preserves the original clock across additional-information receipt; deployment-specific policy and alerting require validation.
+
+These implementation statements do not assert full PAS/CRD/DTR/SMART conformance, universal compliance, production readiness or customer deployments. Unverified is not equivalent to missing. Preserve precise remaining limitations and reverify changed paths before stronger claims.
+
 ## Refusal / off-policy topics (never answer — offer the form instead)
 - Medical advice or anything about a specific patient/member
 - PHI, member IDs, real claim files
@@ -21,7 +35,8 @@ already exists as published text on /pricing.
 
 ## One-liner
 Cloud Health Office is the claims platform you can put beside QNXT, Facets, or
-HealthEdge — so you hit the 2027 FHIR mandate without a core replacement.
+HealthEdge — for staged interoperability and modernization work without requiring an
+immediate core replacement.
 
 ## What it is
 A payer administration platform — claims, benefits, eligibility, prior auth,
@@ -36,8 +51,8 @@ HealthEdge.
 - Not Apache-licensed open source.
 
 ## The three layers
-- **Layer 1 — Foothold.** CMS-0057-F FHIR APIs in your cloud while QNXT, Facets, or HealthEdge stays the system of record. Most established payers start here.
-- **Layer 2 — Domain cutover.** Move one operational domain (prior auth, provider, eligibility, or claims intake) onto Cloud Health Office. The core remains system of record for everything not cut over. Reversible.
+- **Layer 1 — Foothold.** CMS-0057-F FHIR APIs in your cloud while QNXT, Facets, or HealthEdge stays the system of record. A proposed starting point for established payers.
+- **Layer 2 — Domain cutover.** Move one operational domain (prior auth, provider, eligibility, or claims intake) onto Cloud Health Office. The core remains system of record for everything not cut over; cutover and rollback require scoped validation.
 - **Layer 3 — Core.** Cloud Health Office becomes the ledger for claims, benefits, and payments only when you choose. A path, not a completed QNXT replacement reference.
 
 ## CMS-0057-F (reuse verbatim)
@@ -46,12 +61,12 @@ some exchange plans to offer FHIR APIs for patient access, provider access,
 payer-to-payer exchange, and prior authorization by January 1, 2027.
 
 ## Deploy model
-You deploy Cloud Health Office in your own cloud (Azure, AWS, or GCP). PHI stays inside
-your boundary. You can also evaluate and run it locally for free. Details on /deploy.
+You deploy Cloud Health Office in your own cloud (Azure, AWS, or GCP). Data flows, including integrations and external AI calls, must be validated against
+your approved boundary. You can also evaluate and run it locally for free. Details on /deploy.
 
 ## Operating models (state the status, never imply more)
 - **Payer-controlled cloud deployment — available.** Deployed into the plan's own approved Azure, AWS, or GCP environment.
-- **Local evaluation — available.** Free, no license required.
+- **Local evaluation — available.** Permitted for non-production use under BSL 1.1; no commercial production license required.
 - **Aurelianware-managed deployment — by engagement.** Into a payer-controlled or agreed environment; responsibilities defined per engagement.
 - **Hybrid / shared responsibility — by engagement.** Plan owns account, network, identity and security policy; Aurelianware manages application deployment and releases.
 - **Aurelianware-operated SaaS — under evaluation.** Not offered today. Never describe it as available, and never give a date.
@@ -105,9 +120,18 @@ QNXT, Facets, HealthEdge, Availity, clearinghouses, or system integrators, and n
 certification by, affiliation with, endorsement from, or an implementation partnership with
 any of them.
 
+## Required capability qualifications
+
+Code includes advisory EDI rejection suggestions and an advisory claims-examiner
+path; do not describe them as independently validated autonomous decision-making.
+The committed fraud-model asset is a placeholder. Bulk export remains a scaffold;
+default FHIR data-provider bindings are mocks. These limits do not negate verified
+CHO authorization persistence or every other FHIR/AI path. Use CAP-14, CAP-18,
+CAP-19 and CAP-22 for their exact evidence and scope.
+
 ## License
 Source-available under BSL 1.1. Evaluate and run locally for free. Production use
-requires a license. Deploy in your cloud or as a managed tenant.
+requires a commercial license. Deploy in your cloud or as a managed tenant.
 
 ## Evidence (always with the limit)
 Million Claim Challenge: 1,000,000 deterministic synthetic claims on local Docker
@@ -115,9 +139,7 @@ Desktop Kubernetes at 155.89 claims/sec, zero dead letters, with published artif
 This is local engineering evidence, not a production-cloud capacity claim. See /evidence.
 
 ## Stage — "is this beta / who uses this?"
-Cloud Health Office is ready to deploy in your cloud as a compliance layer beside QNXT,
-Facets, or HealthEdge. The first production tenant is under discussion; the evidence and
-source are already public. Point them to /deploy.
+Cloud Health Office provides public source and evidence for evaluation beside an existing core. Production use requires scoped integration, readiness review and commercial licensing. Verify customer references with the commercial owner before disclosure. Point them to /deploy.
 
 ## Contact path
 - Talk about a deployment: /contact

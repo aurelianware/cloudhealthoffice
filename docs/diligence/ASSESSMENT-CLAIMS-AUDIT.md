@@ -1,5 +1,7 @@
 # assessment.html — Claim-by-Claim Verification
 
+> **Historical record — superseded October 19, 2026.** The body below preserves the September 21, 2026 assessment-page audit, including its original recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../CAPABILITY_RECONCILIATION.md) for reconciled status.
+
 **Date:** 2026-09-21
 **Scope:** `src/site/assessment.html` as it stood before the rewrite in this change.
 **Method:** every capability, performance, compliance and integration claim on the page,
