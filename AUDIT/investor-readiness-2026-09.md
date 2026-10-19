@@ -1,5 +1,8 @@
 # CloudHealthOffice — Investor Readiness Audit (September 2026)
 
+> **Current-status annotation — 2026-10-19:** This historical assessment is not the current capability inventory. PAS persistence/service-line outcomes, CRD uncertainty handling, DTR durable creation/read-back, SMART launch/approval withdrawal, reporting aggregates and receipt-based deadlines have verified implementations. DTR update/search durability remains partial; complete standards conformance and deployment readiness require separate evidence. See [Capability Reconciliation](../docs/CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
+
+
 **Date:** 2026-09-18
 **Scope:** `aurelianware/cloudhealthoffice` @ `main` (HEAD `9dd308d`)
 **Method:** static read of code, manifests, docs and site copy; live GitHub Actions

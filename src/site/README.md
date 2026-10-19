@@ -1,5 +1,8 @@
 # Cloud Health Office - Static Website
 
+> **Current-status annotation — 2026-10-19:** Current verified capabilities include persisted PAS submissions and line outcomes, CRD uncertainty handling, Mongo-backed DTR creation/read-back, SMART launch and approval withdrawal, standard/expedited reporting aggregates, and receipt-based deadlines. DTR update/search durability remains partial. Implementation evidence is distinct from full conformance and deployment-specific production readiness. See [Capability Reconciliation](../../docs/CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
+
+
 **Last Updated:** July 2026
 
 This directory contains the Cloud Health Office marketing website with platform assessment, insights, and documentation.

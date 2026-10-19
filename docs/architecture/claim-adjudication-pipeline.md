@@ -1,5 +1,8 @@
 # Claim Adjudication Pipeline (Capability 5.5)
 
+> **Current-status annotation — 2026-10-19:** This historical assessment is not the current capability inventory. PAS persistence/service-line outcomes, CRD uncertainty handling, DTR durable creation/read-back, SMART launch/approval withdrawal, reporting aggregates and receipt-based deadlines have verified implementations. DTR update/search durability remains partial; complete standards conformance and deployment readiness require separate evidence. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
+
+
 > **Status — Phase 1 foundation, April 2026.** Ships the orchestrator,
 > stage interface, BenefitCalculation + Persistence stages, five stub
 > stages, Service Bus trigger transport, and resolver clients. Capabilities

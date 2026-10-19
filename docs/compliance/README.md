@@ -1,5 +1,8 @@
 # Compliance Documentation
 
+> **Current-status annotation — 2026-10-19:** Current verified capabilities include persisted PAS submissions and line outcomes, CRD uncertainty handling, Mongo-backed DTR creation/read-back, SMART launch and approval withdrawal, standard/expedited reporting aggregates, and receipt-based deadlines. DTR update/search durability remains partial. Implementation evidence is distinct from full conformance and deployment-specific production readiness. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
+
+
 This directory contains regulatory-readiness materials for Cloud Health Office.
 These documents describe technical capability, implementation posture, and
 pilot diligence workflows. They are not legal advice, regulatory certification,

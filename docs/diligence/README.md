@@ -1,5 +1,8 @@
 # Cloud Health Office — Pilot Diligence Binder
 
+> **Current-status annotation — 2026-10-19:** Current verified capabilities include persisted PAS submissions and line outcomes, CRD uncertainty handling, Mongo-backed DTR creation/read-back, SMART launch and approval withdrawal, standard/expedited reporting aggregates, and receipt-based deadlines. DTR update/search durability remains partial. Implementation evidence is distinct from full conformance and deployment-specific production readiness. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
+
+
 **Audience:** payer CISO, privacy counsel, interoperability lead, procurement
 **Status as of:** September 2026
 **Offer this binder supports:** CMS-0057-F Compliance Accelerator (maintained in a private repository)

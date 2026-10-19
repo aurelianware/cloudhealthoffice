@@ -1,5 +1,8 @@
 # CloudHealthOffice Documentation
 
+> **Current-status annotation — 2026-10-19:** Current verified capabilities include persisted PAS submissions and line outcomes, CRD uncertainty handling, Mongo-backed DTR creation/read-back, SMART launch and approval withdrawal, standard/expedited reporting aggregates, and receipt-based deadlines. DTR update/search durability remains partial. Implementation evidence is distinct from full conformance and deployment-specific production readiness. See [Capability Reconciliation](CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
+
+
 This is the documentation home for CloudHealthOffice. It is organized for a
 first-time engineer who needs to understand the platform, run it locally, inspect
 the architecture, and find an area to contribute.

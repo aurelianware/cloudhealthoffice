@@ -360,20 +360,23 @@ which is the correct anti-enumeration behaviour.
   close that would be security theatre — NPIs are public — so the caller is
   recorded in the audit trail instead, and tightening this waits on a real
   provider identity claim in the token.
-* **No optimistic concurrency on authorization records.** There is no ETag or
-  row version, so updates are last-write-wins and an inquiry reads committed
-  state rather than a versioned snapshot. Partially persisted status changes are
-  not exposed because a status write is a single document replace, but two
-  concurrent updates can still overwrite one another — a pre-existing property of
-  the store, not of the inquiry.
+* **Revision-fenced Mongo updates are implemented (2026-10-19).** The earlier
+  last-write-wins assessment is superseded: `AuthorizationRepositoryMongo`
+  filters writes by `Revision`, and conflicting writes raise
+  `AuthorizationConcurrencyException`. Real-Mongo tests verify one winner for
+  concurrent updates and protect escalation from stale replacements. See
+  [CAP-12 and executed A1 checks](../CAPABILITY_RECONCILIATION.md).
 * **No X12 278 parser** exists in the .NET services. Authorization status derives
   from the adjudication record and the review-decision DTO, not from a parsed
   278; the 278 vocabulary is modelled but the transaction is not processed.
 * Lookup is by authorization number plus a corroborating key. Searching by
   member or provider alone — enumerating a provider's open authorizations — is
   not offered through `$inquire`.
-* Some fields the submit path persists are still placeholders (patient name,
-  date of birth, line of business). They are deliberately **not** projected into
-  the inquiry response, which carries no demographics at all.
+* **Mapped submit data is implemented (2026-10-19).** `PasAuthorizationMapper`
+  reads Patient/Coverage/provider/service data from the Bundle; the real-host
+  persistence seam verifies what is stored. The old patient-name/DOB/LOB
+  placeholder assessment is superseded. Missing or unrecognized LOB follows
+  explicit uncertainty behavior rather than a fabricated default. See CAP-01.
+  Inquiry's limited demographic projection is a separate API choice.
 * Zero GAPs in the acceptance suite is **not** complete CMS-0057-F compliance.
   This is implementation evidence, not certification.
