@@ -129,8 +129,12 @@ public static class SmartCertificates
             throw new InvalidOperationException($"{key}: the certificate could not be read ({ex.GetType().Name}).", ex);
         }
 
-        // Keys stay in memory only (no per-user key files on Linux).
-        var flags = OperatingSystem.IsWindows() ? X509KeyStorageFlags.DefaultKeySet : X509KeyStorageFlags.EphemeralKeySet;
+        // Linux keeps keys in memory. macOS does not support EphemeralKeySet;
+        // use the platform default temporary import there, as on Windows.
+        // PersistKeySet is deliberately not requested.
+        var flags = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? X509KeyStorageFlags.DefaultKeySet
+            : X509KeyStorageFlags.EphemeralKeySet;
         try
         {
             return new X509Certificate2(bytes, string.IsNullOrEmpty(options.Password) ? null : options.Password, flags);

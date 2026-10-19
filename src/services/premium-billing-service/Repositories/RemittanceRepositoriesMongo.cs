@@ -48,6 +48,18 @@ public sealed class RemittanceBatchRepositoryMongo : IRemittanceBatchRepository
         await _collection.Find(Builders<RemittanceBatch>.Filter.And(Tenant(),
             Builders<RemittanceBatch>.Filter.Eq(x => x.CrossSourceKey, crossSourceKey))).ToListAsync();
 
+    public async Task<IEnumerable<RemittanceBatch>> FindLockboxByPaymentDateAsync(DateTime paymentDate)
+    {
+        // BAI2 supplies a business date, not a local-time instant. Do not let
+        // the host time zone move the Mongo query's day boundaries.
+        var day = DateTime.SpecifyKind(paymentDate.Date, DateTimeKind.Utc);
+        var f = Builders<RemittanceBatch>.Filter;
+        return await _collection.Find(f.And(Tenant(),
+            f.Eq(x => x.Source, RemittanceSource.Lockbox),
+            f.Gte(x => x.PaymentDate, day), f.Lt(x => x.PaymentDate, day.AddDays(1)),
+            f.Ne(x => x.Status, RemittanceBatchStatus.NotPosted))).ToListAsync();
+    }
+
     public async Task<IEnumerable<RemittanceBatch>> SearchAsync(DateTime? receivedFrom = null, DateTime? receivedTo = null, int page = 1, int pageSize = 50)
     {
         var f = Builders<RemittanceBatch>.Filter;

@@ -15,6 +15,9 @@ public interface IRemittanceBatchRepository
     /// <summary>Batches with this cross-source key (same check/trace number, amount and date).</summary>
     Task<IEnumerable<RemittanceBatch>> FindByCrossSourceKeyAsync(string crossSourceKey);
 
+    /// <summary>Posted lockbox batches for a payment's calendar date, independent of when imported.</summary>
+    Task<IEnumerable<RemittanceBatch>> FindLockboxByPaymentDateAsync(DateTime paymentDate);
+
     Task<IEnumerable<RemittanceBatch>> SearchAsync(DateTime? receivedFrom = null, DateTime? receivedTo = null, int page = 1, int pageSize = 50);
 }
 
