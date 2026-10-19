@@ -1,7 +1,6 @@
 # CMS-0057-F Readiness — Claims Domain
 
-> **Current-status annotation — 2026-10-19:** This claims-domain phase assessment does not establish that current PAS persistence, service-line decisions, reporting or receipt deadlines are missing. Cross-service capabilities have since been verified; member-access breadth, history and resource parity must be evaluated individually. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
-
+> **Historical record — superseded October 19, 2026.** The body below preserves the May 2026 claims Phase-1 assessment, including its original regulatory interpretations, recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../CAPABILITY_RECONCILIATION.md) for reconciled status.
 
 **Scope:** Cloud Health Office (CHO) Claims-domain compliance
 posture relative to the CMS Interoperability and Prior

@@ -1,7 +1,6 @@
 # CloudHealthOffice
 
-> **Current-status annotation — 2026-10-19:** Current verified capabilities include persisted PAS submissions and line outcomes, CRD uncertainty handling, Mongo-backed DTR creation/read-back, SMART launch and approval withdrawal, standard/expedited reporting aggregates, and receipt-based deadlines. DTR update/search durability remains partial. Implementation evidence is distinct from full conformance and deployment-specific production readiness. See [Capability Reconciliation](docs/CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
-
+Current capability status and dated implementation/test evidence: [Capability Reconciliation](docs/CAPABILITY_RECONCILIATION.md).
 
 ![CloudHealthOffice](docs/images/logo-cloudhealthoffice-sentinel-primary.svg)
 
@@ -148,10 +147,11 @@ Start here:
 ## CMS-0057-F
 
 CloudHealthOffice includes documentation and implementation surfaces for the CMS
-Interoperability and Prior Authorization Final Rule. Treat the readiness matrix
-as the source of truth for current status and gaps.
+Interoperability and Prior Authorization Final Rule. Use the canonical capability ledger for reconciled implementation status; the
+readiness matrix adds requirement and deployment context.
 
-- [ePA gap matrix](docs/epa-gap-matrix.md) — source of truth for prior authorization and SMART status; CMS-0057-F conformance is in progress
+- [Capability reconciliation](docs/CAPABILITY_RECONCILIATION.md) — verified behavior, limits and dated tests
+- [ePA gap matrix](docs/epa-gap-matrix.md) — historical findings and detailed requirement/scenario tracking
 - [CMS-0057-F readiness matrix](docs/compliance/CMS-0057-F-READINESS-MATRIX.md)
 - CMS-0057-F Compliance Accelerator offer (maintained in a private repository) — the SKU we sell first
 - [Pilot diligence binder](docs/diligence/README.md)

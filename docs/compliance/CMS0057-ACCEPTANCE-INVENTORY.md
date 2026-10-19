@@ -1,24 +1,16 @@
 # CMS-0057-F Acceptance Scenario Suite — Codebase Inventory & Traceability
 
-> **Current-status annotation — 2026-10-19:** This Phase-0 inventory and the ePA baseline summary contain superseded assessments. Use the reconciliation matrix for current scoped implementation status. The ePA §11 machine-readable evidence statuses remain a separate, partial scenario record, not comprehensive conformance proof. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
-
+> **Historical record — superseded October 19, 2026.** The body below preserves the Phase-0 acceptance inventory, including its original recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../CAPABILITY_RECONCILIATION.md) for reconciled status.
 
 Phase-0 recon for the CMS-0057-F Acceptance Scenario Suite. This is an honest
 map of what exists in `aurelianware/cloudhealthoffice` today, what each scenario
 binds to, and whether it is **PASSABLE**, **PARTIAL**, or **GAP** against the
-current code. It is the source of truth the executable harness
+current code. It was the Phase-0 inventory the executable harness
 (`tests/Cms0057Acceptance.Tests/`) is built against.
 
 > Marketing claims of "complete CMS-0057-F compliance" were treated as
 > untrusted until the controllers and adapters proved them. Where the code does
 > not support a scenario, it is marked GAP with the exact missing file/symbol.
-
-> **Superseded statuses (2026-10-10).** The CHO Replace statuses in this
-> document predate the ePA audit and overstate capability. The authoritative
-> Replace status of every scenario is now the table in
-> [`docs/epa-gap-matrix.md` §11](../epa-gap-matrix.md), which the evidence
-> generator reads (owner decision Q-1). Where this document disagrees, the
-> matrix wins. The per-scenario prose below has not yet been rewritten.
 
 ---
 

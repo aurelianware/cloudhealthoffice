@@ -9,7 +9,7 @@ with this sheet.
 
 ## Verified capability wording — October 19, 2026
 
-Use the latest verified implementation as the source of truth. Do not repeat historical resolved gaps. See the repository records `docs/CAPABILITY_RECONCILIATION.md` and `docs/marketing/CLAIM_EVIDENCE_LEDGER.md` for the dated baseline, exact evidence and test results.
+Use the [canonical capability ledger](../../docs/CAPABILITY_RECONCILIATION.md) for status, date, evidence and limits; the wording below applies that evidence and does not maintain a separate readiness assessment.
 
 - PAS submission stores the request and decision before responding; inquiry returns stored outcomes. CHO validates and persists service-line decisions and adverse reasons and projects them into PAS responses.
 - CRD unresolved/uncoded inputs and evaluation failures return uncertainty rather than a no-authorization-needed assertion.
@@ -40,14 +40,24 @@ CMS-0057-F is the federal rule that requires Medicare Advantage, Medicaid, CHIP,
 and some exchange plans to offer FHIR APIs for patient access, provider access,
 payer-to-payer exchange, and prior authorization by January 1, 2027.
 
+## Required capability qualifications
+
+Code includes advisory EDI rejection suggestions and an advisory claims-examiner
+path; do not describe them as independently validated autonomous decision-making.
+The committed fraud-model asset is a placeholder. Bulk export remains a scaffold;
+default FHIR data-provider bindings are mocks. These limits do not negate verified
+CHO authorization persistence or every other FHIR/AI path. Use CAP-14, CAP-18,
+CAP-19 and CAP-22 for their exact evidence and scope.
+
 ## License sentence
 Source-available under BSL 1.1. Evaluate and run locally for free. Production use
-requires a license. Deploy in your cloud or as a managed tenant.
+requires a commercial license. Deploy in your cloud or as a managed tenant.
 
 ## Stage language (only on /deploy or in the assistant after the visitor asks "who is live?")
-Cloud Health Office is ready to deploy in your cloud as a compliance layer beside
-QNXT, Facets, or HealthEdge. The first production tenant is under discussion; the
-evidence and source are already public.
+Cloud Health Office provides public source and evidence for evaluation beside
+your existing core. Production use requires a scoped integration, readiness
+review and commercial license; customer deployment references must be verified
+with the commercial owner before disclosure.
 > Never put this sentence in the H1.
 
 ## Commercial posture for Layer 1 (do not headline "free CMS-0057-F")
@@ -60,7 +70,7 @@ workflow, and Platform Engagement (claims / payments / core replacement) are pai
 
 ## Homepage copy (locked)
 - **Eyebrow:** Payer platform · Source-available · Runs in your cloud
-- **H1:** Meet the 2027 FHIR deadline without replacing QNXT, Facets, or HealthEdge.
+- **H1:** Plan your 2027 FHIR work alongside QNXT, Facets, or HealthEdge.
 - **H2:** Cloud Health Office deploys beside your core admin system. It provides
   interoperability and administration capabilities that your team can evaluate and integrate by domain.
 

@@ -1,48 +1,43 @@
-# Marketing Claim-Evidence Ledger
+# Marketing Claim-Evidence Index
 
-**Maintained:** October 19, 2026 (America/Phoenix)
-**Initial verified baseline:** main `d5af561d490f1c440c7cd7fb1098fa3e18d8521c`
+**Reviewed:** October 19, 2026 (America/Phoenix).
 
-**Refreshed baseline:** merged main `3b5a2035` (October 19, 2026), including lifecycle PR #1409. Prior checks retain their original baseline; CAP-23 has separate refreshed verification.
-**Proposed accountable owner:** Product/engineering; commercial/legal review required for licensing, customer and offer claims. No new licensing terms are proposed.
+[Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) is the authoritative
+claim-evidence ledger: use its CAP IDs, classifications, verification dates,
+implementation/test paths and remaining limits. This file is a marketing usage
+index, not a second capability-status table.
 
-Use the latest verified implementation. Do not repeat resolved historical gaps. Implementation, standards conformance and production readiness are separate dimensions. This ledger supersedes earlier provisional statements that all DTR storage was durable: creates/read-back are durable, questionnaire update/search remain partial.
+| Marketing topic | Canonical evidence |
+| --- | --- |
+| PAS submission, inquiry, service-line decisions | CAP-01, CAP-02 |
+| CRD uncertainty handling | CAP-03 |
+| DTR durable creation/read-back and incomplete update/search/package paths | CAP-04, CAP-09, CAP-15 |
+| SMART launch context, approval withdrawal and scope handling | CAP-05, CAP-11 |
+| Reporting, receipt deadlines and ordinary authorization lifecycle | CAP-06, CAP-07, CAP-23 |
+| Tenant/payer binding and Mongo concurrency | CAP-08, CAP-10, CAP-12, CAP-21 |
+| Claims PA-lookup failure handling | CAP-13 |
+| Bulk export, default mock data sources, integration and model limits | CAP-14, CAP-16–20, CAP-22 |
 
-The [capability reconciliation](../CAPABILITY_RECONCILIATION.md) contains the exact implementation paths, supporting tests, executed results and remaining limits for each ID. Candidate wording below may be used only within that scope; it is not publication approval.
+## Copy controls
 
-| Claim ID | Verified on | Status | Evidence ID | Accurate wording / limits |
-| --- | --- | --- | --- | --- |
-| CAP-01 | 2026-10-19 | Implemented | [Reconciliation CAP-01](../CAPABILITY_RECONCILIATION.md) | Stores mapped request and decision before answering; persistence failure produces OperationOutcome without preAuthRef; inquire round-trips the stored outcome. Full PAS profile validation and production readiness are separate. |
-| CAP-02 | 2026-10-19 | Implemented | [Reconciliation CAP-02](../CAPABILITY_RECONCILIATION.md) | Stable line numbers, quantities, A1/A2/A3/A4 outcomes and coded/human-readable adverse reasons are validated before mutation and survive Mongo reload. Item projection is implemented; complete STU2 semantics and X12 reason-code conformance are not established. |
-| CAP-03 | 2026-10-19 | Implemented | [Reconciliation CAP-03](../CAPABILITY_RECONCILIATION.md) | Unknown/uncoded input and failed/timed-out evaluation return uncertainty rather than no-PA-needed. An explicit classification can permit no-PA-needed. This is not full CRD conformance; hardcoded context and structured coverage actions are separate limitations. |
-| CAP-04 | 2026-10-19 | Partially Implemented | [Reconciliation CAP-04](../CAPABILITY_RECONCILIATION.md) | Creates, response submission and id-based reads use Mongo; real-store tests prove reload across new service instances. UpdateQuestionnaireAsync does not call the durable store; search/existence/update indexes remain in-process. Do not claim all DTR CRUD is durable. |
-| CAP-05 | 2026-10-19 | Partially Implemented | [Reconciliation CAP-05](../CAPABILITY_RECONCILIATION.md) | Tenant/client-bound launch consumption, token patient/encounter context and withdrawal of approval affecting refresh are exercised. Do not equate this with every SMART response field, revocation/introspection mechanism, v2 scope or asymmetric-auth requirement. Deployment-specific production validation is unverified. |
-| CAP-06 | 2026-10-19 | Partially Implemented | [Reconciliation CAP-06](../CAPABILITY_RECONCILIATION.md) | Computes standard/expedited counts, rates, mean/median and timeliness; NotYetTracked explicitly lists approved-after-appeal and extended-then-approved. Does not establish complete annual public reporting. Legacy repository summaries are not proof that the new calculator is missing. |
-| CAP-07 | 2026-10-19 | Implemented | [Reconciliation CAP-07](../CAPABILITY_RECONCILIATION.md) | CHO receipt-v1 persists UTC receipt/due timestamps and urgent/standard targets; RFAI does not restart the clock; worker uses the persisted deadline. Program-specific extensions, tighter policies, notification and per-tenant-database worker support remain separate. |
-| CAP-08 | 2026-10-19 | Implemented | [Reconciliation CAP-08](../CAPABILITY_RECONCILIATION.md) | Token-derived tenant is used; body tags are not authority. An unbuilt reference copy is not a deployed production path. |
-| CAP-09 | 2026-10-19 | Implemented | [Reconciliation CAP-09](../CAPABILITY_RECONCILIATION.md) | Own tenant plus un-overridden read-only defaults are visible; writes to reserved default library refused. Search completeness across restarts remains CAP-04. |
-| CAP-10 | 2026-10-19 | Partially Implemented | [Reconciliation CAP-10](../CAPABILITY_RECONCILIATION.md) | System-context registered-payer binding and mismatched-body rejection implemented. This does not prove receiving-payer-specific consent or recipient-scoped member-match. |
-| CAP-11 | 2026-10-19 | Implemented | [Reconciliation CAP-11](../CAPABILITY_RECONCILIATION.md) | Exercises scope/scp handling through HTTP; no inference of all issuer integrations. |
-| CAP-12 | 2026-10-19 | Implemented | [Reconciliation CAP-12](../CAPABILITY_RECONCILIATION.md) | Real-Mongo tests cover concurrent insert, cross-tenant number reuse, index creation and legacy duplicate startup failure. No deletion/renumbering implied; current supported Mongo backend only. |
-| CAP-13 | 2026-10-19 | Implemented | [Reconciliation CAP-13](../CAPABILITY_RECONCILIATION.md) | Unavailable lookup pends before benefit engine; definitive invalid/not-found denies; PA lookup carries service identity. Does not prove every claim requires PA or fix unrelated coverage/plan token propagation. |
-| CAP-14 | 2026-10-19 | Confirmed Gap | [Reconciliation CAP-14](../CAPABILITY_RECONCILIATION.md) | Current implementation immediately completes zero-count jobs and manufactures output URLs without performing export. Passing scaffold tests are not a real export. |
-| CAP-15 | 2026-10-19 | Confirmed Gap | [Reconciliation CAP-15](../CAPABILITY_RECONCILIATION.md) | Returns Questionnaire-only collection and does not use patientId for prepopulation. Complete package semantics and clinical logic are not implemented by this method. |
-| CAP-16 | 2026-10-19 | Confirmed Gap | [Reconciliation CAP-16](../CAPABILITY_RECONCILIATION.md) | Tenant classifications use expiring IMemoryCache; durable DTR creation does not resolve CRD classification persistence. |
-| CAP-17 | 2026-10-19 | Confirmed Gap | [Reconciliation CAP-17](../CAPABILITY_RECONCILIATION.md) | Production methods throw NotImplementedException. CHO-native persistence is not evidence of a live external-core adapter. |
-| CAP-18 | 2026-10-19 | Confirmed Gap | [Reconciliation CAP-18](../CAPABILITY_RECONCILIATION.md) | Named asset is a text placeholder. Separate rejection-suggestion/advisory-examiner implementations still exist. |
-| CAP-19 | 2026-10-19 | Unverified | [Reconciliation CAP-19](../CAPABILITY_RECONCILIATION.md) | Neither confirmed absence nor completed certification inferred. Requires specification/version, workflow, environment and dated results. |
-| CAP-20 | 2026-10-19 | Confirmed Gap | [Reconciliation CAP-20](../CAPABILITY_RECONCILIATION.md) | Service directory still lacks Dockerfile and named workflow entries. Keep as a build gap, distinct from fee engine functionality. |
-| CAP-21 | 2026-10-19 | Implemented | [Reconciliation CAP-21](../CAPABILITY_RECONCILIATION.md) | Authorization Mongo updates are revision-fenced; stale concurrent updates conflict. No cross-service transaction guarantee. |
-| CAP-22 | 2026-10-19 | Confirmed Gap | [Reconciliation CAP-22](../CAPABILITY_RECONCILIATION.md) | Default FHIR data bindings remain mocks; validate resource-specific source integration without generalizing to CHO-owned authorization persistence. |
-| CAP-23 | 2026-10-19 | Implemented | [Reconciliation CAP-23](../CAPABILITY_RECONCILIATION.md) | Ordinary authorization transition guards, audited cancellation and atomic expiry are implemented. Preserve clinical reporting and historical covered service-date semantics; tenant-database sweeps and separate reopening/overturn workflows remain outside this capability. |
+Describe verified implemented behavior directly. Do not repeat resolved historical
+gaps or imply full standards conformance, production validation, autonomous AI,
+certification, customer deployments or savings without evidence. BSL 1.1 terms
+remain governed by [LICENSE](../../LICENSE); production use requires a commercial
+license. Code includes advisory AI paths; the named fraud-model asset is a
+placeholder (CAP-18), not proof that all AI capability is missing.
+
+## Source and runtime alignment
+
+Messaging sources are [MESSAGE_SHEET.md](../../src/site/MESSAGE_SHEET.md) and
+[assistant knowledge](../../src/site/assistant/knowledge.md). The runtime assistant
+is hardcoded; it does not automatically ingest those Markdown files. Required
+future JavaScript/HTML copy changes are tracked in the canonical ledger's final
+review. No runtime changes or publication are included in this PR.
 
 ## Maintenance
 
-Reverify affected implementation, host registration, behavioral tests and integration paths whenever they change and before publishing stronger claims. Add the date, commit, checks and limits; mark historical issues resolved only for the behavior actually verified. Keep unresolved or unverified assertions visible. Preserve history in the dated reconciliation and Git; do not turn a class, endpoint, test name or old TODO into a maturity verdict.
-
-Licensing remains governed by `LICENSE`: BSL 1.1 source-available, with production use requiring a commercial license. No pricing, savings, customer deployment, conformance or production-readiness claim is established by this ledger. Existing benchmark evidence retains its episode, synthetic-workload and environment qualifications.
-
-| Date | Change |
-| --- | --- |
-| 2026-10-19 | Reconciled current main implementation, executed focused tests, corrected historical underclaims and preserved confirmed/unknown limitations. |
-| 2026-10-19 | Refreshed against merged #1409; retained precise partial DTR wording and credited ordinary lifecycle/expiry (CAP-23). |
+Before strengthening a claim, update the canonical ledger with current evidence,
+commit, verification date and limits, then review the affected copy. Preserve
+historical assessments with a dated supersession note rather than copying their
+statuses into a new table.

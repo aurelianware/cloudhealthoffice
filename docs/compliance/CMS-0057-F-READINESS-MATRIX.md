@@ -1,8 +1,8 @@
 # CMS-0057-F Readiness Matrix
 
-**Status as of:** October 19, 2026; scoped implementation reconciliation against main `d5af561d`.
+**Reviewed:** October 19, 2026; evidence refreshed through merged main `3b5a2035`. Later main `1b38d780` changes published interoperability evidence only.
 **Owner:** Cloud Health Office product / compliance engineering
-**Purpose:** canonical cross-service readiness record for the CMS
+**Purpose:** requirement and deployment context for the CMS
 Interoperability and Prior Authorization Final Rule (CMS-0057-F).
 
 This matrix describes Cloud Health Office's technical capability posture. It is
@@ -11,23 +11,21 @@ compliance depends on the deploying payer's population, lines of business,
 configuration, source-system data quality, implementation choices, operating
 procedures, and legal / compliance review.
 
-> **Current implementation evidence:** [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) records dated code/test verification. Historical ePA summaries may be stale; resolved gaps must not be repeated. Full standards conformance and deployment-specific production readiness are separate verification dimensions.
+## Evidence reference
 
-## Status Legend
-
-| Status | Meaning | Buyer-facing wording |
-| --- | --- | --- |
-| **Implemented** | Code and tests exist in repo for the named capability, and the capability can be demonstrated without custom development. | "Implemented technical capability." |
-| **Integration required** | Cloud Health Office has the service surface or projection pattern, but production use depends on wiring payer source systems, live adapters, tenant config, and operational controls. | "Available as part of implementation." |
-| **Phase 2 required** | Known work remains before this should be represented as production-ready for payer attestation. | "Roadmapped / implementation gap." |
-| **Out of platform scope** | Requirement typically depends on a payer, PBM, HIE, provider, or state system outside platform ownership. | "Coordinate through payer ecosystem integration." |
+[Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) is the canonical
+ledger for reconciled statuses, dates, implementation paths, tests and limits.
+Its classifications are **Implemented**, **Partially Implemented**,
+**Confirmed Gap** and **Unverified**. Deployment integration is a separate
+requirement, not a substitute status. The requirement table below summarizes
+that evidence; detailed or older ePA assessments do not override it.
 
 ## Executive Summary
 
 Cloud Health Office has meaningful CMS-0057-F accelerator assets already in
 place: `fhir-service`, SMART-on-FHIR scope enforcement, PAS `$submit`, CRD/DTR
 services, Bulk FHIR export scaffolding, consent service, provider-directory
-proxies, claims EOB projection, and a passing FHIR test suite. The current
+proxies, claims EOB projection, and focused behavioral test evidence. The current
 sales-safe framing is **technical readiness for CMS-0057-F implementation**, not
 "certified compliance" or "100% compliant out of the box."
 
@@ -56,41 +54,33 @@ workstream:
 
 | CMS-0057-F area | Cloud Health Office status | Repo evidence | Gap / implementation note | Buyer-facing position |
 | --- | --- | --- | --- | --- |
-| Patient Access API expansion | **Integration required** | `src/services/fhir-service/Controllers/PatientController.cs`, `CoverageController.cs`, `ExplanationOfBenefitController.cs`, `PatientAccessController.cs`; `src/services/fhir-service/Middleware/SmartScopeEnforcementMiddleware.cs`; `tests/CloudHealthOffice.FhirService.Tests/PatientAccessMapperTests.cs`; `docs/compliance/claims-cms-0057-f-readiness.md` | FHIR service has resource surfaces and SMART enforcement. Claims-domain doc still flags broader unauthenticated/member access, `_history`, search-parameter completeness, and cross-service resource parity as Phase 2. | "Cloud Health Office provides the Patient Access API foundation; production readiness depends on payer identity, consent, member, coverage, claims, and source-system integration." |
-| Provider Access API | **Integration required** | `SmartScopeEnforcementMiddleware.cs`; provider-directory controllers/proxies in `src/services/fhir-service/Controllers/ProviderDirectoryController.cs`; provider projections in `src/services/provider-service/Controllers/FhirPractitionerController.cs`, `FhirPractitionerRoleController.cs`, `FhirOrganizationController.cs`; consent service under `src/services/consent-service/` | Provider access requires attributed-provider logic, patient opt-out/authorization policy, and payer-specific data-minimization rules. | "Cloud Health Office has the SMART/FHIR and provider-resource foundation; attributed access and opt-out workflows are implementation work." |
-| Payer-to-Payer API | **Phase 2 required** | Bulk export controller/service in `src/services/fhir-service/Controllers/BulkExportController.cs` and `Services/BulkExportService.cs`; consent lifecycle in `src/services/consent-service/` | Needs end-to-end member opt-in, five-year historical data scoping, outbound/inbound payer exchange workflow, receiving-payer audit, and production export storage/security pattern. | "Cloud Health Office has Bulk FHIR and consent building blocks; payer-to-payer exchange should be sold as an implementation workstream, not a turnkey claim." |
-| Prior Authorization API / Da Vinci PAS | **Implemented core / conformance unverified** | PAS controller/recorder, automated-decision API; real-host Mongo seam and recording tests (CAP-01/02) | Submit stores mapped request/decision before response; failure issues no preAuthRef. Stored service-line outcomes are projected. Full profile/response conformance, notification and payer deployment diligence remain separate. | "Persisted PAS submission, inquiry and service-line decision capabilities; full conformance and production readiness require further validation." |
+| Patient Access API expansion | **Unverified** (complete payer workflow) | CAP-05, CAP-22 | Resource surfaces and SMART controls exist; default data-provider bindings remain mocks. The May 2026 claims assessment is historical, not current proof that member access or resource breadth is missing. Validate the complete payer-specific workflow. | "Patient-access building blocks; end-to-end source, identity and consent integration requires verification." |
+| Provider Access API | **Unverified** (complete payer workflow) | CAP-05; provider/FHIR projections and consent integration records | Validate attributed access, opt-out policy, source data and minimization against the selected deployment. Older inventories are not fresh test results. | "Provider/FHIR building blocks; payer-specific access policy and integration require verification." |
+| Payer-to-Payer API | **Partially Implemented** | CAP-10, CAP-14, CAP-22 | System-client/registered-payer binding is tested. Recipient-specific consent and full source/exchange integration are not established; bulk export remains a scaffold. | "Implemented payer-client binding with remaining consent, export and integration limits." |
+| Prior Authorization API / Da Vinci PAS | **Implemented** (scoped behavior) | PAS controller/recorder, automated-decision API; real-host Mongo seam and recording tests (CAP-01/02) | Submit stores mapped request/decision before response; failure issues no preAuthRef. Stored service-line outcomes are projected. Full profile/response conformance, notification and payer deployment diligence remain separate. | "Persisted PAS submission, inquiry and service-line decision capabilities; full conformance and production readiness require further validation." |
 | CRD requirements discovery | **Partially Implemented** | CrdService, CrdController; CrdFailClosedTests (CAP-03) | Unknown/uncoded input and evaluation failures produce uncertainty; explicit classifications can permit no-PA-needed. Full member context and structured coverage actions are separate. | "CRD discovery/cards with explicit uncertainty handling; broader conformance requires validation." |
 | DTR documentation templates | **Partially Implemented** | DtrService, MongoDtrResourceStore, host binding and real-Mongo tests (CAP-04/15) | Creates/response submission/id reads are durable. Questionnaire updates/search still use the in-process index; package is Questionnaire-only. | "Mongo-backed DTR creation and read-back, with remaining update/search and package limitations." |
-| Prior-authorization decision timelines | **Implemented receipt target / integration required** | AuthorizationDeadlinePolicy, SlaWatchdogService, receipt/real-store tests (CAP-07) | Receipt-v1 persists UTC deadlines and preserves receipt across RFAI. Program-specific extensions, tighter rules, alert delivery and per-tenant-database workers require separate validation/work. | "Receipt-based authorization deadline tracking and tenant-explicit escalation; deployment policy must be validated." |
-| Denial reason and status transparency | **Implemented decision controls / conformance partial** | AuthorizationDecisionPolicy, decision API, PAS response builder; decision-integrity/Mongo reload tests (CAP-02) | Complete line sets, quantities and coded/human-readable adverse reasons enforced before writes. Full PAS/X12 code semantics and notices are not established. | "Persisted line-level decisions and adverse reasons with PAS projection; payer taxonomy and notice workflow remain deployment work." |
+| Prior-authorization decision timelines | **Implemented** (receipt target) | AuthorizationDeadlinePolicy, SlaWatchdogService, receipt/real-store tests (CAP-07) | Receipt-v1 persists UTC deadlines and preserves receipt across RFAI. Program-specific extensions, tighter rules, alert delivery and per-tenant-database workers require separate validation/work. | "Receipt-based authorization deadline tracking and tenant-explicit escalation; deployment policy must be validated." |
+| Denial reason and status transparency | **Implemented** (decision controls) | AuthorizationDecisionPolicy, decision API, PAS response builder; decision-integrity/Mongo reload tests (CAP-02) | Complete line sets, quantities and coded/human-readable adverse reasons enforced before writes. Full PAS/X12 code semantics and notices are not established. | "Persisted line-level decisions and adverse reasons with PAS projection; payer taxonomy and notice workflow remain deployment work." |
 | Public prior-authorization metrics reporting | **Partially Implemented** | Cms0057Reporting.ComputeMetrics/Group and calculator tests (CAP-06) | Standard/expedited counts, rates, mean/median and timeliness implemented. Appeal/extension outcomes explicitly untracked; full annual publication not established. | "Implemented operational reporting aggregates; complete public reporting requires additional evidence and workflow." |
-| Provider Directory API | **Implemented / integration required** | `src/services/fhir-service/Controllers/ProviderDirectoryController.cs`; `src/services/provider-service/Services/FhirPractitionerProjector.cs`, `FhirPractitionerRoleProjector.cs`, `FhirOrganizationProjector.cs`; tests under `tests/CloudHealthOffice.FhirService.Tests/Controllers/ProviderDirectory*` | Resource projections and proxies exist. Production readiness depends on network/source-system freshness, endpoint publication, and directory-update operations. | "Provider Directory FHIR surface is one of Cloud Health Office's stronger readiness areas." |
+| Provider Directory API | **Unverified** (production directory workflow) | provider-service FHIR projectors and directory proxies; existing directory tests | Projector/proxy code is not fresh proof of source freshness, public endpoint behavior or complete network directory conformance. Validate those separately. | "Provider-directory projections and proxies; deployment workflow requires verification." |
 | SMART on FHIR / OAuth scopes | **Partially Implemented** | LaunchContextController, MongoLaunchContextStore, SmartTokenContextResolver, SmartAppApprovals; launch/withdrawal/end-to-end tests (CAP-05) | Launch binding and patient/encounter token context implemented; withdrawing approval ends refresh. Do not infer every response field, SMART v2/asymmetric auth or all revocation semantics. | "SMART launch context and approval withdrawal are implemented; full standards and deployment readiness require separate validation." |
-| Bulk FHIR export | **Phase 2 required** (stub) | `BulkExportController.cs`; `BulkExportService.cs`; `Models/BulkExportModels.cs`; `tests/CloudHealthOffice.FhirService.Tests/Services/BulkExportServiceTests.cs` | The export path is a stub: jobs are marked complete immediately with a count of 0, and output URLs have no route. Production use also requires storage, encryption, lifecycle, manifest retention, and recipient access controls. | "Bulk export is planned; the current path is a stub." |
-| Audit, privacy, and tenant controls | **Integration required** | Tenant middleware across services; `src/services/consent-service/`; HIPAA docs under `docs/features/HIPAA-*`; observability/PHI scrubbing tests | Strong building blocks exist. Payer launch requires deployment-specific BAA, security review, logging retention, incident response, backup/DR, and tenant isolation validation. | "Security architecture is credible; diligence package must be assembled per pilot." |
+| Bulk FHIR export | **Confirmed Gap** | `BulkExportController.cs`; `BulkExportService.cs`; `Models/BulkExportModels.cs`; `tests/CloudHealthOffice.FhirService.Tests/Services/BulkExportServiceTests.cs` | The export path is a stub: jobs are marked complete immediately with a count of 0, and output URLs have no route. Production use also requires storage, encryption, lifecycle, manifest retention, and recipient access controls. | "Bulk export is planned; the current path is a stub." |
+| Audit, privacy, and tenant controls | **Partially Implemented** | CAP-08–12, CAP-21, CAP-22 | Scoped isolation/binding fixes have test evidence; default mock sources and deployment-specific controls remain distinct. BAA, security review, incident/DR and isolation diligence are per deployment. | "Verified scoped controls, with deployment-specific diligence still required." |
 
-## Evidence Snapshot
+## Evidence snapshot
 
-The current repo can demonstrate:
-
-- `dotnet test tests/CloudHealthOffice.FhirService.Tests/CloudHealthOffice.FhirService.Tests.csproj --no-restore`
-  passing (see CI for current count).
-- `npm run build` passing for the TypeScript generator/package.
-- FHIR service support for PAS, CRD, DTR, Bulk Export, metadata,
-  OperationDefinition, StructureDefinition, CodeSystem, ValueSet, Patient,
-  Coverage, ExplanationOfBenefit, Provider Directory, and appeal-related
-  resources.
-- SMART scope enforcement that binds patient-scoped tokens to patient resource
-  access.
-- Consent-service lifecycle, encryption options, repository tests, and event
-  publisher tests.
+The canonical ledger records **315 focused passing tests** at the initial
+`d5af561d` baseline and **45 refreshed passing checks** after lifecycle PR #1409.
+These are scoped runs, not a new execution of the entire FHIR suite, production
+acceptance or complete standards validation. Use the recorded project/filter,
+commit and limits whenever citing them.
 
 ## Known Sales-Readiness Risks
 
 1. **Overclaim drift.** Older docs still use phrases such as "100% compliant"
    or "production-ready" for broad CMS-0057-F posture. Derivative materials
-   should reconcile to this matrix.
+   must use the canonical capability ledger before reuse.
 2. **Mock data adapters in every environment.** `fhir-service` registers the
    mock FHIR data adapter unconditionally (`FS/Program.cs:144-151`), in every
    environment, and it ignores tenant (gap matrix G-30). Buyer-facing demos should label
@@ -105,9 +95,9 @@ The current repo can demonstrate:
    still need BAA, deployment review, source-system integration validation,
    security controls, and compliance counsel sign-off.
 
-## Recommended 90-Day Sequence
+## Suggested diligence workstreams (not a delivery commitment)
 
-### Days 1-15: Make the story diligence-ready
+### Evidence and claim review
 
 - Use the dated reconciliation evidence with this matrix; verify historical findings against current code before reuse.
 - Update public docs and whitepapers that overstate readiness.
@@ -117,26 +107,25 @@ The current repo can demonstrate:
 - **Shipped September 2026:** founding-partner offer sheet, CISO diligence
   binder, labeled `GET /fhir/r4/adapter-status`, synthetic `demo-tenant`.
 
-### Days 16-45: Build proof artifacts
+### Demonstration and reporting evidence
 
 - Publish sample `/fhir/r4/compliance-status` output for a demo tenant.
-- Add a public prior-authorization metrics report template.
+- Review the existing public metrics template against the implemented aggregates and remaining appeal/extension limitations.
 - Add a demo script covering Patient Access, Provider Directory, PAS `$submit`,
   pended/denied status, and Bulk Export job flow.
 - Document demo-mode vs live-adapter behavior.
 
-### Days 46-75: Harden implementation gaps
+### Deployment integration
 
 - Replace default mock adapter ambiguity with explicit `DemoMode` configuration.
 - Wire live service-backed adapters for highest-value FHIR resources first:
   `Patient`, `Coverage`, `ExplanationOfBenefit`, `Practitioner`,
   `PractitionerRole`, `Organization`, `Claim`, and `ClaimResponse`.
-- Add tests for patient-bound access, provider-attributed access, opt-out,
-  consent revocation, and denied cross-patient queries.
+- Review existing patient-bound, launch, approval-withdrawal and isolation tests before identifying any additional deployment-specific test gaps.
 
-### Days 76-90: Package the pilot
+### Pilot scoping
 
-- Create a fixed-scope 6-8 week CMS-0057-F Compliance Accelerator pilot plan.
+- Define pilot scope and schedule from the actual integration and diligence requirements.
 - Define founding-payer commercial terms.
 - Prepare a synthetic-data demo environment.
 - Target Medicaid MCOs, Medicare Advantage plans, QHP issuers, and

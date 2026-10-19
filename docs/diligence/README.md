@@ -1,7 +1,6 @@
 # Cloud Health Office — Pilot Diligence Binder
 
-> **Current-status annotation — 2026-10-19:** Current verified capabilities include persisted PAS submissions and line outcomes, CRD uncertainty handling, Mongo-backed DTR creation/read-back, SMART launch and approval withdrawal, standard/expedited reporting aggregates, and receipt-based deadlines. DTR update/search durability remains partial. Implementation evidence is distinct from full conformance and deployment-specific production readiness. See [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md) for implementation evidence, test scope and remaining limits. Historical statements below describe their original baseline unless explicitly updated.
-
+Current capability status and dated implementation/test evidence: [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md).
 
 **Audience:** payer CISO, privacy counsel, interoperability lead, procurement
 **Status as of:** September 2026
@@ -9,7 +8,7 @@
 
 This packet is what we hand a buyer **before** PHI, before a production cluster, and before anyone says “compliant.” It is not a completed SOC 2 report, not a CMS certification, and not a signed BAA.
 
-Cloud Health Office is pre-pilot. There is no production reference customer. Founding-partner terms exist because of that fact.
+Customer deployment status, reference permissions and current commercial terms must be confirmed with the commercial owner before sharing this binder; this code/documentation review does not establish them.
 
 ## Contents
 
@@ -47,5 +46,5 @@ Cloud Health Office is pre-pilot. There is no production reference customer. Fou
 - “Certified CMS-0057-F compliant”
 - “100% compliant out of the box”
 - “Production-ready compliance”
-- “Trusted by [named health plans]” (we have no production reference)
+- “Trusted by [named health plans]” (requires an authorized, verified reference)
 - “Live” for seeded, synthetic, or mock-backed resources
