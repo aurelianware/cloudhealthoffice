@@ -77,6 +77,7 @@ const ignoredEntries = new Set([
   'dist',
   'nginx.conf',
   'node_modules',
+  'tests',
   'package-lock.json',
   'package.json'
 ]);
