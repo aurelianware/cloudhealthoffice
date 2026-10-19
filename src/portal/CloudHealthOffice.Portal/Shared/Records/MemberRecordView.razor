@@ -1604,11 +1604,6 @@
         await LoadMemberData();
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        // Lazy load tab data when tab is activated
-    }
-
     private async Task LoadMemberData()
     {
         _loading = true;
