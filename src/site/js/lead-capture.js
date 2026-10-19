@@ -204,7 +204,7 @@
           }
         }
       }).catch(function (err) {
-        track('form_error', { form_interest: interest, message: (err && err.message) || 'error' });
+        track('form_error', { form_interest: interest, error_type: 'submission_failed' });
         showError(form, (err && err.message) || 'Something went wrong. Please email sales@cloudhealthoffice.com.');
         for (var b = 0; b < allSubmits.length; b++) allSubmits[b].disabled = false;
         if (submitBtn) submitBtn.textContent = originalLabel;
