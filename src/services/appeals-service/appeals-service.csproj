@@ -16,6 +16,14 @@
     <EmbeddedResource Remove="AppealsService.Tests/**" />
   </ItemGroup>
 
+  <!-- State appeal and grievance rule packs: data, embedded so the catalog
+       loads and validates them at startup (Services/RulePacks). -->
+  <ItemGroup>
+    <Content Remove="RulePacks\**" />
+    <None Remove="RulePacks\**" />
+    <EmbeddedResource Include="RulePacks\**\*.json" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="AppealsService.Tests" />
   </ItemGroup>
