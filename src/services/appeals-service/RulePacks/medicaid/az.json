@@ -1,0 +1,65 @@
+{
+  // Arizona AHCCCS managed care. Source: docs/architecture/appeals-case-model.md §5.6.
+  "id": "az-medicaid",
+  "state": "AZ",
+  "lineOfBusiness": "medicaid",
+  "program": "AHCCCS Complete Care",
+  "version": "2026.10.1",
+  "effectiveFrom": "2023-10-01",
+  "verifiedOn": "2026-10-17",
+  "sources": {
+    "cfr-438-420": { "citation": "42 CFR 438.420(a)", "url": "https://www.ecfr.gov/current/title-42/section-438.420" },
+    "att-f1": { "citation": "AHCCCS contract Attachment F1 (ACC-RBHA amendment, eff. 10/1/2023)", "url": "https://azahcccs.gov/Resources/Downloads/ContractAmendments/ACC-RBHA/ACC-RBHA_T19-21_AZCH-3_CARE1ST-3,MC-3-EFF100123.pdf" },
+    "att-f2": { "citation": "AHCCCS contract Attachment F2 (ACC-RBHA amendment, eff. 10/1/2023)", "url": "https://azahcccs.gov/Resources/Downloads/ContractAmendments/ACC-RBHA/ACC-RBHA_T19-21_AZCH-3_CARE1ST-3,MC-3-EFF100123.pdf" },
+    "r9-34-2": { "citation": "Ariz. Admin. Code R9-34-209, -212, -213, -217", "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R9-34-213" },
+    "r9-34-405": { "citation": "Ariz. Admin. Code R9-34-405", "url": "https://www.law.cornell.edu/regulations/arizona/Ariz-Admin-Code-SS-R9-34-405" },
+    "ars-36-2903-01": { "citation": "A.R.S. §36-2903.01(B)(4)", "url": "https://www.azleg.gov/ars/36/02903-01.htm" },
+    "acom-412": { "citation": "AHCCCS ACOM 412 (eff. 10/01/26)", "url": "https://www.azahcccs.gov/shared/Downloads/ACOM/PolicyFiles/400/412.pdf" }
+  },
+  "memberAppeal": {
+    "filingWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "r9-34-2" },
+    "acknowledgment": { "amount": 5, "unit": "businessDays", "source": "att-f1" },
+    "acknowledgmentExpedited": { "amount": 1, "unit": "calendarDays", "source": "att-f1" },
+    "resolution": { "amount": 30, "unit": "calendarDays", "source": "att-f1" },
+    "resolutionExpedited": { "amount": 72, "unit": "hours", "source": "att-f1" },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "att-f1" }, "source": "r9-34-2" },
+    "onMissed": "deemedDenied",
+    "fairHearingRequestWindow": { "amount": 90, "unit": "calendarDays", "from": "decision", "source": "att-f1" },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "cfr-438-420", "note": "Or by the action's effective date, whichever is later." },
+    "chain": [
+      { "name": "State Fair Hearing (filed with the contractor, heard by an OAH judge)", "owner": "state", "requestWindow": { "amount": 90, "unit": "calendarDays", "from": "decision", "source": "att-f1" } },
+      { "name": "AHCCCS Director's Decision", "owner": "state" }
+    ],
+    "notes": [
+      "A missed deadline means the appeal is deemed denied, so the member may request a State Fair Hearing.",
+      "No external medical review.",
+      "AHCCCS NABD template; 6th-grade reading level and 12-point minimum (ACOM 414, 404)."
+    ]
+  },
+  "memberGrievance": {
+    "resolution": { "amount": 10, "unit": "businessDays", "source": "att-f1", "note": "Absent extraordinary circumstances; never more than 90 days." },
+    "notes": [
+      "A written acknowledgment is needed only if the member asks, within 5 business days of the request.",
+      "Grievance decisions have no fair hearing."
+    ]
+  },
+  "providerDispute": {
+    "chain": [
+      { "name": "Contractor claim dispute", "owner": "plan", "decision": { "amount": 30, "unit": "calendarDays", "source": "r9-34-405" }, "source": "r9-34-405" },
+      { "name": "State Fair Hearing", "owner": "state", "requestWindow": { "amount": 30, "unit": "calendarDays", "from": "decision", "source": "r9-34-405" } },
+      { "name": "AHCCCS Director's Decision", "owner": "state" }
+    ],
+    "clocks": [
+      { "name": "Filing window (from date of service)", "clock": { "amount": 12, "unit": "months", "source": "ars-36-2903-01", "note": "The latest of 12 months from service, 12 months from eligibility posting, or 60 days after denial of a timely claim (the contract extends the 60 days to payment, denial or recoupment)." } },
+      { "name": "Acknowledgment", "clock": { "amount": 5, "unit": "businessDays", "source": "att-f2" } }
+    ]
+  },
+  "recoupment": [
+    { "hold": "unknown", "summary": "AHCCCS approval for recoupments over 12 months after payment or above the dollar threshold; the notice must state the right to file a claim dispute. A hold while disputed is to confirm.", "source": "acom-412" }
+  ],
+  "conflicts": [
+    { "item": "Fair hearing request window", "enforced": "90 days (contract Attachment F1 ¶48; matches the 42 CFR 438.408(f)(2) minimum)", "alternative": "30 days (R9-34-217 text)", "sources": [ "att-f1", "r9-34-2" ] },
+    { "item": "Expedited appeal resolution", "enforced": "72 hours (contract Attachment F1)", "alternative": "3 working days (R9-34-215 text)", "sources": [ "att-f1", "r9-34-2" ] }
+  ],
+  "toConfirm": [ "Values against the current ACC contract (text read is the 2023 amendment).", "Recoupment hold while a claim dispute is open." ]
+}

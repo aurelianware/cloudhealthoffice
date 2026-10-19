@@ -178,6 +178,13 @@ builder.Services.AddSingleton<IAppealHolidayCalendarProvider>(sp =>
         sp.GetRequiredService<IConfiguration>().GetSection(AppealHolidayOptions.SectionName).Get<AppealHolidayOptions>()
         ?? new AppealHolidayOptions()));
 
+// ── State rule packs ─────────────────────────────────────────────────
+// Embedded, versioned State appeal and grievance rules, validated against
+// the federal floor. Resolved right after Build() so a bad pack fails
+// startup. Read-only today: GET api/appeals/rule-packs.
+builder.Services.AddSingleton<AppealsService.Services.RulePacks.IRulePackCatalog>(_ =>
+    AppealsService.Services.RulePacks.RulePackCatalog.FromEmbeddedResources());
+
 // ── Kafka consumer (X12 275 attachment ingress) ──────────────────────
 // Subscribes to the attachments-in topic, routes appeal-context 275s to
 // the existing AppendAttachmentAsync path. Degraded-mode-silent if
@@ -216,6 +223,7 @@ CloudHealthOffice.Infrastructure.Audit.RecordAccessAuditExtensions.AddRecordAcce
 var app = builder.Build();
 
 _ = app.Services.GetRequiredService<IAppealHolidayCalendarProvider>();
+_ = app.Services.GetRequiredService<AppealsService.Services.RulePacks.IRulePackCatalog>();
 
 app.UseChoObservability();
 
