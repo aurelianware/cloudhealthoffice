@@ -116,6 +116,12 @@ public enum PriorAuthorizationStatus
 /// <summary>One requested service line on the authorization.</summary>
 public sealed record PriorAuthorizationService
 {
+    public int? LineNumber { get; init; }
+    public string? ServiceStatus { get; init; }
+    public string? DenialReasonCode { get; init; }
+    public string? DenialReason { get; init; }
+    public string? PendReason { get; init; }
+
     [JsonPropertyName("procedureCode")]
     public string? ProcedureCode { get; init; }
 

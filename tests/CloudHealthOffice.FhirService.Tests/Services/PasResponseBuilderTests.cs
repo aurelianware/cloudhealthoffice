@@ -7,6 +7,38 @@ namespace CloudHealthOffice.FhirService.Tests.Services;
 
 public class PasResponseBuilderTests
 {
+    [Fact]
+    public void InquiryAndSubmit_ProjectCommittedStableLineOutcomesAndReasons()
+    {
+        var lines = new List<PriorAuthorizationService>
+        {
+            new() { LineNumber = 7, ProcedureCode = "72148", RequestedUnits = 4, ApprovedUnits = 2,
+                ServiceStatus = "A2", DenialReasonCode = "LIMIT", DenialReason = "Only two units meet criteria." },
+            new() { LineNumber = 12, ProcedureCode = "72148", RequestedUnits = 2, ApprovedUnits = 0,
+                ServiceStatus = "A3", DenialReasonCode = "NOTMEDNEC", DenialReason = "Second service is not medically necessary." },
+        };
+        var builder = new PasResponseBuilder();
+        var inquiry = builder.BuildInquiryResponse(new PriorAuthorizationRecord
+        {
+            AuthorizationNumber = "AUTH-mixed", Status = PriorAuthorizationStatus.Modified,
+            ReviewDecision = "A2", RequestedServices = lines,
+        });
+        var submitted = builder.BuildApprovedResponse(new Claim(), new PasDecisionResult(), lines);
+        foreach (var bundle in new[] { inquiry, submitted })
+        {
+            var response = bundle.Entry.Select(e => e.Resource).OfType<ClaimResponse>().Single();
+            response.Item.Select(i => i.ItemSequence).Should().Equal(7, 12);
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var outcome = response.Item[i].Adjudication.Single(a => a.Extension.Count > 0);
+                var code = (Coding)outcome.Extension.Single().Extension.Single().Value;
+                code.Code.Should().Be(lines[i].ServiceStatus);
+                outcome.Reason!.Text.Should().Be(lines[i].DenialReason);
+                outcome.Reason!.Coding.Single().Code.Should().Be(lines[i].DenialReasonCode);
+            }
+        }
+    }
+
     private readonly PasResponseBuilder _builder = new();
     private readonly Claim _claim;
 

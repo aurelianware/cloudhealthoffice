@@ -257,7 +257,7 @@ public class AuthorizationAuthenticationTests : IClassFixture<AuthorizationApiFa
         var approved = await client.PostAsJsonAsync($"/api/authorizations/{approve}/response",
             new { controlNumber = "CTL-2", reviewDecision = "A1", approvedUnits = 1 }, Json);
         var denied = await client.PutAsJsonAsync($"/api/authorizations/{deny}/status",
-            new { status = "Denied", reviewDecision = "A3" }, Json);
+            new { status = "Denied", reviewDecision = "A3", denialReasonCode = "NOTMEDNEC", denialReason = "Clinical criteria not met." }, Json);
 
         Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
         Assert.Equal(HttpStatusCode.OK, denied.StatusCode);
@@ -327,6 +327,7 @@ public class AuthorizationAuthenticationTests : IClassFixture<AuthorizationApiFa
             controlNumber = "CTL-3",
             reviewDecision = "A3",
             denialReasonCode = "NOTMEDNEC",
+            denialReason = "Clinical criteria not met.",
             reviewerName = "Dr. Contact",
         }, Json);
 

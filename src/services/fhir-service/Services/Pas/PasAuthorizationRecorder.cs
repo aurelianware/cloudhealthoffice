@@ -45,6 +45,8 @@ public sealed record PasRecordOutcome
 /// <summary>The fields of the stored record that decide the PAS response.</summary>
 public sealed record PasStoredAuthorization
 {
+    public List<PriorAuthorizationService> RequestedServices { get; init; } = new();
+
     [JsonPropertyName("tenantId")]
     public string TenantId { get; init; } = string.Empty;
 
