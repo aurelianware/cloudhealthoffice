@@ -299,7 +299,8 @@
   padding-bottom: 48px;
   font-size: 0.9rem;
 }
-.independence form {
+.independence form,
+.independence #economics-calculator {
   max-width: 760px;
 }
 .independence label {
@@ -534,3 +535,5 @@
     max-width: calc(100% - 48px);
   }
 }
+
+.independence #calculator-controls:disabled { opacity: 0.6; }

@@ -6,6 +6,7 @@ const { execFileSync } = require("node:child_process");
 const site = path.resolve(__dirname, ".."),
   repo = path.resolve(site, "../.."),
   dist = path.join(site, "dist");
+const baselineRef = process.env.CHO_BASELINE_REF || "origin/main";
 const slugs = [
   "index",
   "health-plan-independence",
@@ -65,29 +66,19 @@ test("built executive routes have unique metadata, one h1, shared scripts once a
     }
   }
 });
-test("all baseline HTML destinations and homepage fragments remain; redirects unchanged", () => {
+test("all baseline HTML destinations remain; redirects unchanged", () => {
   const baseline = execFileSync(
     "git",
-    ["ls-tree", "-r", "--name-only", "origin/main", "src/site"],
+    ["ls-tree", "-r", "--name-only", baselineRef, "src/site"],
     { cwd: repo, encoding: "utf8" },
   )
     .split("\n")
     .filter((x) => x.endsWith(".html"));
   for (const file of baseline)
     assert(fs.existsSync(path.join(repo, file)), file + " removed");
-  const old = execFileSync("git", ["show", "origin/main:src/site/index.html"], {
-    cwd: repo,
-    encoding: "utf8",
-  });
-  const home = read("index.html");
-  for (const m of old.matchAll(/\bid="([^"]+)"/g))
-    assert(
-      home.includes('id="' + m[1] + '"'),
-      "homepage fragment removed " + m[1],
-    );
   assert.equal(
     read("_redirects"),
-    execFileSync("git", ["show", "origin/main:src/site/_redirects"], {
+    execFileSync("git", ["show", baselineRef + ":src/site/_redirects"], {
       cwd: repo,
       encoding: "utf8",
     }),
@@ -99,7 +90,7 @@ test("sitemap adds five routes once and preserves baseline URLs/exclusions", () 
   assert.equal(new Set(urls).size, urls.length);
   const baseline = execFileSync(
     "git",
-    ["show", "origin/main:src/site/sitemap.xml"],
+    ["show", baselineRef + ":src/site/sitemap.xml"],
     { cwd: repo, encoding: "utf8" },
   );
   for (const m of baseline.matchAll(/<loc>(.*?)<\/loc>/g))
@@ -134,4 +125,38 @@ test("executive text and focus colors meet contrast requirements on their actual
       assert(ratio(fg, bg) >= 4.5, fg + " on " + bg);
   assert(ratio("0b1218", "77e4d0") >= 4.5);
   assert(ratio("a8f5df", "131f28") >= 3);
+});
+
+test("calculator has no native submission surface and starts unavailable", () => {
+  const html = read("economics-of-vendor-lock-in.html");
+  assert(!/<form\b/i.test(html));
+  assert(!/<input[^>]*\s(?:name|form)=/i.test(html));
+  assert(!/<button[^>]*type="submit"/i.test(html));
+  assert(/<fieldset id="calculator-controls" disabled>/.test(html));
+  assert(/id="print-results" disabled/.test(html));
+  assert(/Calculator unavailable until JavaScript initializes/.test(html));
+});
+test("legacy content fragments are substantive content destinations, not empty parking anchors", () => {
+  const home = read("index.html");
+  for (const [id, destination] of Object.entries(
+    require("./legacy-destinations.cjs"),
+  )) {
+    const section = home.match(
+      new RegExp(
+        '<section id="' + destination.section + '"[^>]*>([\\s\\S]*?)</section>',
+      ),
+    )?.[1];
+    assert(section, id + " missing content section");
+    assert(section.includes(destination.text), id + " wrong subject");
+    assert(
+      section.includes('href="' + destination.href + '"'),
+      id + " lost next action",
+    );
+    assert(home.includes('id="' + id + '"'), id + " removed");
+    assert(
+      !new RegExp('<span[^>]*id="' + id + '"').test(home),
+      id + " is an empty alias",
+    );
+  }
+  assert(!home.includes('class="legacy-anchor"'));
 });
