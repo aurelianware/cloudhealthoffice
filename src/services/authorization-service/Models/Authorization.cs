@@ -312,6 +312,13 @@ public class Authorization
     /// </summary>
     public DateTime SubmittedDate { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Original receipt instant used by the decision clock; RFAI does not change it.</summary>
+    public DateTime? DecisionReceivedAt { get; set; }
+    /// <summary>Persisted decision target in UTC, independent of document-arrival timestamps.</summary>
+    public DateTime? DecisionDueAt { get; set; }
+    public string? DecisionDeadlinePolicy { get; set; }
+
+
     /// <summary>
     /// Review completion date
     /// </summary>
@@ -358,10 +365,8 @@ public class Authorization
     public DateTime LastUpdatedDate { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Timestamp when SLA clock restarted after RFAI docs received.
-    /// Used for turnaround calculation: decision time measured from
-    /// max(SubmittedDate, SlaResumedAt) when RFAI was issued.
-    /// Null if no RFAI was issued for this authorization.
+    /// Legacy timestamp when review resumed after RFAI documents arrived.
+    /// Informational only; it never changes the receipt-based decision deadline.
     /// </summary>
     public DateTime? SlaResumedAt { get; set; }
 

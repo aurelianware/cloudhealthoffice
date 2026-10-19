@@ -305,6 +305,7 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         authorization.TenantId = tenantId;
         authorization.Id ??= Guid.NewGuid().ToString();
         authorization.Revision = 0;
+        AuthorizationService.Services.AuthorizationDeadlinePolicy.Initialize(authorization);
 
         await EnsureIndexesAsync(_httpContextAccessor.HttpContext?.RequestAborted ?? default);
         try
@@ -333,8 +334,33 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
             : b.Eq(x => x.Revision, expected);
     }
 
+    public async Task<bool> EnsureDecisionDeadlineAsync(
+        string tenantId, Authorization authorization, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) || authorization.TenantId != tenantId)
+            throw new ArgumentException("A matching tenant is required for deadline initialization.");
+        var b = Builders<Authorization>.Filter;
+        var filter = b.Eq(x => x.Id, authorization.Id) & b.Eq(x => x.TenantId, tenantId)
+            & RevisionIs(authorization.Revision)
+            & b.In(x => x.Status, new[] { AuthorizationStatus.Submitted, AuthorizationStatus.InReview, AuthorizationStatus.Pended })
+            & b.Or(b.Eq(x => x.DecisionDueAt, null), b.Eq(x => x.DecisionReceivedAt, null));
+        // A legacy record receives the original receipt target, never a new clock from now.
+        var received = authorization.DecisionReceivedAt ?? AuthorizationService.Services.AuthorizationDeadlinePolicy.Utc(authorization.SubmittedDate);
+        var due = authorization.DecisionDueAt ?? AuthorizationService.Services.AuthorizationDeadlinePolicy.DueAt(received, authorization.LevelOfService);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(Builders<Authorization>.Update
+            .Set(x => x.DecisionReceivedAt, received).Set(x => x.DecisionDueAt, due)
+            .Set(x => x.DecisionDeadlinePolicy, AuthorizationService.Services.AuthorizationDeadlinePolicy.Version)), cancellationToken: ct);
+        if (result.ModifiedCount != 1) return false;
+        authorization.DecisionReceivedAt = received;
+        authorization.DecisionDueAt = due;
+        authorization.DecisionDeadlinePolicy = AuthorizationService.Services.AuthorizationDeadlinePolicy.Version;
+        authorization.Revision++;
+        return true;
+    }
+
     public async Task<Authorization> UpdateAsync(Authorization authorization)
     {
+        AuthorizationService.Services.AuthorizationDeadlinePolicy.InitializeMissing(authorization);
         await EnsureIndexesAsync(_httpContextAccessor.HttpContext?.RequestAborted ?? default);
         var tenantId = GetTenantId();
         authorization.TenantId = tenantId;

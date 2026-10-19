@@ -229,7 +229,7 @@ public class RfaiDocsReceivedConsumer : BackgroundService
 
             _logger.LogInformation(
                 "Authorization {AuthNumber} returned to review after RFAI {RfaiCaseId}; "
-                + "SLA clock restarted. The decision remains with a reviewer.",
+                + "Receipt-based decision deadline unchanged. The decision remains with a reviewer.",
                 message.AuthNumber, message.RfaiCaseId);
         }
         else

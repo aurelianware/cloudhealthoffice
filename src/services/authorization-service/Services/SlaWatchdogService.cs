@@ -38,16 +38,6 @@ public class SlaWatchdogService : BackgroundService
     /// <summary>How long a listed set of tenants is reused before it is listed again.</summary>
     public static readonly TimeSpan TenantListRefreshInterval = TimeSpan.FromHours(1);
 
-    // Urgent (LevelOfService == "U") thresholds in hours
-    private const double UrgentWarningHours = 48;
-    private const double UrgentCriticalHours = 64;
-    private const double UrgentBreachHours = 72;
-
-    // Standard (everything else) thresholds in hours
-    private const double StandardWarningHours = 120;
-    private const double StandardCriticalHours = 144;
-    private const double StandardBreachHours = 168;
-
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SlaWatchdogService> _logger;
     private readonly TimeProvider _clock;
@@ -212,13 +202,14 @@ public class SlaWatchdogService : BackgroundService
         SlaWatchdogRunSummary summary, CancellationToken ct)
     {
         var now = _clock.GetUtcNow().UtcDateTime;
-        var slaStart = auth.SlaResumedAt ?? auth.SubmittedDate;
+        if ((!auth.DecisionReceivedAt.HasValue || !auth.DecisionDueAt.HasValue)
+            && !await repository.EnsureDecisionDeadlineAsync(tenantId, auth, ct))
+            return; // A concurrent writer won; re-read on the next tick.
+        var slaStart = AuthorizationDeadlinePolicy.Receipt(auth);
         var elapsed = (now - slaStart).TotalHours;
-        var isUrgent = auth.LevelOfService == "U";
-        var deadline = isUrgent ? UrgentBreachHours : StandardBreachHours;
-        var remaining = deadline - elapsed;
-
-        var newLevel = ComputeEscalationLevel(elapsed, isUrgent);
+        var isUrgent = AuthorizationDeadlinePolicy.IsExpedited(auth.LevelOfService);
+        var remaining = (AuthorizationDeadlinePolicy.Deadline(auth) - now).TotalHours;
+        var newLevel = ComputeEscalationLevel(remaining, isUrgent);
 
         if (newLevel <= auth.SlaEscalation)
             return;
@@ -237,15 +228,17 @@ public class SlaWatchdogService : BackgroundService
     /// <summary>
     /// Computes the SLA status DTO for a single authorization (used by the endpoint).
     /// </summary>
-    public static AuthorizationSlaStatus ComputeSlaStatus(Authorization auth)
+    public static AuthorizationSlaStatus ComputeSlaStatus(Authorization auth, DateTime? nowUtc = null)
     {
-        var slaStart = auth.SlaResumedAt ?? auth.SubmittedDate;
-        var isUrgent = auth.LevelOfService == "U";
-        var deadline = isUrgent ? UrgentBreachHours : StandardBreachHours;
-        var elapsed = (DateTime.UtcNow - slaStart).TotalHours;
-        var remaining = deadline - elapsed;
-        var percentConsumed = deadline > 0 ? (elapsed / deadline) * 100 : 100;
-        var escalation = ComputeEscalationLevel(elapsed, isUrgent);
+        var slaStart = AuthorizationDeadlinePolicy.Receipt(auth);
+        var due = AuthorizationDeadlinePolicy.Deadline(auth);
+        var isUrgent = AuthorizationDeadlinePolicy.IsExpedited(auth.LevelOfService);
+        var now = nowUtc ?? DateTime.UtcNow;
+        var elapsed = (now - slaStart).TotalHours;
+        var window = (due - slaStart).TotalHours;
+        var remaining = (due - now).TotalHours;
+        var percentConsumed = window > 0 ? elapsed / window * 100 : 100;
+        var escalation = ComputeEscalationLevel(remaining, isUrgent);
 
         return new AuthorizationSlaStatus
         {
@@ -256,7 +249,7 @@ public class SlaWatchdogService : BackgroundService
             Status = auth.Status,
             LevelOfService = auth.LevelOfService,
             SlaStartedAt = slaStart,
-            SlaDeadline = slaStart.AddHours(deadline),
+            SlaDeadline = due,
             HoursElapsed = Math.Round(elapsed, 1),
             HoursRemaining = Math.Round(remaining, 1),
             PercentConsumed = Math.Round(percentConsumed, 1),
@@ -264,17 +257,14 @@ public class SlaWatchdogService : BackgroundService
         };
     }
 
-    private static SlaEscalationLevel ComputeEscalationLevel(double hoursElapsed, bool isUrgent)
+    private static SlaEscalationLevel ComputeEscalationLevel(double remaining, bool isUrgent)
     {
-        var (warning, critical, breach) = isUrgent
-            ? (UrgentWarningHours, UrgentCriticalHours, UrgentBreachHours)
-            : (StandardWarningHours, StandardCriticalHours, StandardBreachHours);
-
-        if (hoursElapsed >= breach) return SlaEscalationLevel.Breach;
-        if (hoursElapsed >= critical) return SlaEscalationLevel.Critical;
-        if (hoursElapsed >= warning) return SlaEscalationLevel.Warning;
+        if (remaining <= 0) return SlaEscalationLevel.Breach;
+        if (remaining <= (isUrgent ? 8 : 24)) return SlaEscalationLevel.Critical;
+        if (remaining <= (isUrgent ? 24 : 48)) return SlaEscalationLevel.Warning;
         return SlaEscalationLevel.None;
     }
+
 }
 
 /// <summary>Counts from one watchdog run. Aggregate only; no member identifiers.</summary>
