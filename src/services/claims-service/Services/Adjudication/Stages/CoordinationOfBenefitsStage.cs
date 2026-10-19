@@ -250,7 +250,8 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             // unavailable is not a denial signal. A claim the 837 sends us
             // as a later payer pends in every mode: the payer order cannot be
             // confirmed, so it is neither paid as primary nor as secondary.
-            return BuildDegradedOutcome(context, activity, forcePend: claimSequence >= 2);
+            return BuildDegradedOutcome(context, activity, forcePend: claimSequence >= 2)
+                .AsCheckUnavailable(context, context.PendDetails?.PendReason);
         }
 
         activity?.SetTag("cob.coverage_service", "success");
@@ -278,7 +279,8 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
                 // CobScenario.None can't be reached from Classify (only the
                 // degraded path produces None) — defensive default mirrors
                 // the degraded path so a future enum addition fails safe.
-                return BuildDegradedOutcome(context, activity);
+                return BuildDegradedOutcome(context, activity)
+                    .AsCheckUnavailable(context, context.PendDetails?.PendReason);
         }
     }
 
@@ -455,7 +457,8 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
         if (entries is null)
         {
             return BuildDataPend(context, activity, classification, CoverageServiceUnavailablePendReason,
-                $"Coverage-service unavailable; examiner payer sequence {payerSequence} cannot be corroborated. Retry the approval.");
+                $"Coverage-service unavailable; examiner payer sequence {payerSequence} cannot be corroborated. Retry the approval.")
+                .AsCheckUnavailable(context, context.PendDetails?.PendReason);
         }
 
         var coverageSequence = Classify(entries).Scenario switch

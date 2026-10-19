@@ -1,18 +1,26 @@
+using System.Net;
 using System.Text.Json.Nodes;
 using ClaimsExaminerService.Models;
 using ClaimsExaminerService.Services.Anthropic;
 using ClaimsExaminerService.Services.Events;
 using CloudHealthOffice.Events;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 
 namespace ClaimsExaminerService.Services.Examiner;
 
 public interface IExaminerOrchestrator
 {
     /// <summary>
-    /// Process a single ClaimPendedEvent. Always swallows recoverable errors and
-    /// logs them — the Kafka consumer should commit the offset on return so we
-    /// don't loop forever on a poison message. Caller decides retry policy
-    /// for transient transport errors.
+    /// Process a single ClaimPendedEvent. Out-of-scope and malformed events
+    /// return normally (the consumer commits past them). When claims-service
+    /// cannot be reached, or does not take the write-back,
+    /// <see cref="ExaminerTransientException"/> is thrown, and the consumer
+    /// retries the message and dead-letters it after its last attempt instead
+    /// of advancing past it. So it is when Anthropic stays rate limited (429)
+    /// or overloaded (529) through the client's own retries, its circuit is
+    /// open, or the call timed out. Any other Anthropic failure writes the
+    /// EscalateToHuman fallback.
     /// </summary>
     Task ProcessAsync(ClaimPendedEvent evt, CancellationToken ct);
 }
@@ -53,7 +61,7 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
         // ── v1 scope filter: only NCCI bundling pends with at least one ──
         // modifier-addressable edit failure are eligible for AI examination.
         // Other pend codes (AUTH, COB, MEDREVIEW, etc.) are out of scope.
-        if (!string.Equals(evt.PendDetails?.PendCode, "NCCI", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(evt.PendDetails?.PendCode, ExaminerPendCodes.Ncci, StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogDebug(
                 "Skipping claim {ClaimId}: pend code {PendCode} is out of scope for v1",
@@ -79,12 +87,10 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
         {
             claim = await _claimsClient.GetClaimAsync(evt.ClaimId, evt.TenantId, ct);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested))
         {
-            _logger.LogError(ex,
-                "Transport error fetching claim {ClaimId}; skipping (event will not be retried)",
-                evt.ClaimId);
-            return;
+            _logger.LogError(ex, "Transport error fetching claim {ClaimId}; the event will be retried", evt.ClaimId);
+            throw new ExaminerTransientException($"claims-service unreachable fetching claim {evt.ClaimId}", ex);
         }
 
         if (claim is null) return;
@@ -120,6 +126,19 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
         {
             result = await _anthropic.CallWithToolAsync(systemPrompt, userMessage, tool, ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw; // the host is stopping: neither an outage nor a reason to escalate
+        }
+        catch (Exception ex) when (IsTransientAnthropicFailure(ex))
+        {
+            // Rate limited, overloaded, circuit open or timed out after the client's own
+            // retries. An EscalateToHuman written now would route the claim to a person
+            // for good because of a burst; the consumer retries the message instead and
+            // dead-letters it after its last attempt.
+            _logger.LogWarning(ex, "Anthropic unavailable for claim {ClaimId}; the event will be retried", evt.ClaimId);
+            throw new ExaminerTransientException($"Anthropic unavailable examining claim {evt.ClaimId}", ex);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex,
@@ -140,7 +159,7 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
 
         var examination = ProjectToDto(result, _promptBuilder.PromptVersion);
 
-        var written = await _claimsClient.SetAiExaminationAsync(evt.ClaimId, evt.TenantId, examination, ct);
+        var written = await WriteBackAsync(evt, examination, ct);
         if (written)
         {
             // Capability 5.9 — terminal completion event for downstream
@@ -151,6 +170,23 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
                 evt.ClaimId, evt.TenantId, examination, evt.EventId, ct);
         }
     }
+
+    /// <summary>
+    /// An Anthropic failure that a later attempt may not repeat: 429 (rate limited),
+    /// 529 (overloaded), an open circuit (<see cref="BrokenCircuitException"/>, which
+    /// the shared client resilience surfaces as a 503 <see cref="HttpRequestException"/>
+    /// around it) or a timed-out attempt (<see cref="TimeoutRejectedException"/>, which
+    /// it surfaces as a <see cref="TaskCanceledException"/> around a <see cref="TimeoutException"/>).
+    /// Host shutdown is handled before this is asked.
+    /// </summary>
+    internal static bool IsTransientAnthropicFailure(Exception ex) => ex switch
+    {
+        BrokenCircuitException or TimeoutRejectedException => true,
+        HttpRequestException { InnerException: BrokenCircuitException } => true,
+        HttpRequestException { StatusCode: HttpStatusCode.TooManyRequests or (HttpStatusCode)529 } => true,
+        TaskCanceledException { InnerException: TimeoutException or TimeoutRejectedException } => true,
+        _ => false,
+    };
 
     /// <summary>
     /// Pick the first NCCI pair edit (NE001) from the pend details. V1 only handles
@@ -168,7 +204,8 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
     {
         var args = result.Arguments;
 
-        var disposition = args["recommended_disposition"]?.GetValue<string>() ?? "EscalateToHuman";
+        // A value outside the tool's enum is never passed on: it escalates to a human.
+        var disposition = AiDispositions.Normalize(args["recommended_disposition"]?.GetValue<string>());
         var confidence = args["confidence_score"]?.GetValue<double>() ?? 0.0;
         var rationale = args["rationale"]?.GetValue<string>();
 
@@ -198,11 +235,25 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
         };
     }
 
+    /// <summary>The write-back to claims-service; a transport failure is transient (retried by the consumer).</summary>
+    private async Task<bool> WriteBackAsync(ClaimPendedEvent evt, AiExaminationDto examination, CancellationToken ct)
+    {
+        try
+        {
+            return await _claimsClient.SetAiExaminationAsync(evt.ClaimId, evt.TenantId, examination, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+        {
+            _logger.LogError(ex, "Transport error writing the AI examination for claim {ClaimId}; the event will be retried", evt.ClaimId);
+            throw new ExaminerTransientException($"claims-service unreachable writing the AI examination for claim {evt.ClaimId}", ex);
+        }
+    }
+
     private async Task WriteFallbackAsync(ClaimPendedEvent evt, CancellationToken ct, string reason)
     {
         var fallback = new AiExaminationDto
         {
-            RecommendedDisposition = "EscalateToHuman",
+            RecommendedDisposition = AiDispositions.EscalateToHuman,
             ConfidenceScore = 0,
             Rationale = reason,
             PolicyCitations = new List<string>(),
@@ -211,7 +262,7 @@ public class ExaminerOrchestrator : IExaminerOrchestrator
             GeneratedAt = DateTime.UtcNow
         };
 
-        var written = await _claimsClient.SetAiExaminationAsync(evt.ClaimId, evt.TenantId, fallback, ct);
+        var written = await WriteBackAsync(evt, fallback, ct);
         if (written)
         {
             // EscalateToHuman is still a terminal AI recommendation —

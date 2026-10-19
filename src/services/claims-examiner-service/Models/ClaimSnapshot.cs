@@ -60,7 +60,8 @@ public class ClaimLineSnapshot
 /// </summary>
 public class AiExaminationDto
 {
-    public string RecommendedDisposition { get; set; } = "EscalateToHuman";
+    /// <summary>One of <see cref="ClaimsExaminerService.Services.Examiner.AiDispositions"/>.</summary>
+    public string RecommendedDisposition { get; set; } = ClaimsExaminerService.Services.Examiner.AiDispositions.EscalateToHuman;
     public double ConfidenceScore { get; set; }
     public string? Rationale { get; set; }
     public List<string> PolicyCitations { get; set; } = new();

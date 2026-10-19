@@ -201,7 +201,7 @@ public class ExaminerPromptBuilder : IExaminerPromptBuilder
                 ["recommended_disposition"] = new JsonObject
                 {
                     ["type"] = "string",
-                    ["enum"] = new JsonArray("Approve", "Deny", "RequestInfo", "EscalateToHuman"),
+                    ["enum"] = new JsonArray(AiDispositions.All.Select(d => (JsonNode?)JsonValue.Create(d)).ToArray()),
                     ["description"] = "The disposition the AI examiner recommends for this pended claim."
                 },
                 ["confidence_score"] = new JsonObject

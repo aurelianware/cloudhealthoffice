@@ -110,7 +110,7 @@ public sealed class ProviderIntegrityStage : IClaimAdjudicationStage
                 _logger.LogWarning(
                     "Provider integrity check unreachable for claim {ClaimVersionId}, {Role} NPI {Npi}",
                     SanitizeForLog(context.ClaimVersionId), role, SanitizeForLog(npi));
-                return PendForReview(context, role, UnreachableReason);
+                return PendForReview(context, role, UnreachableReason).AsCheckUnavailable(context);
             }
 
             if (result.IsExcluded)

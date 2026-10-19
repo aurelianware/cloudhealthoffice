@@ -224,6 +224,12 @@ public class ClinicalResourceStoreTests
         await store.CommitAsync(stagedLast);   // commits first
         await store.CommitAsync(stagedFirst);  // commits second — so it is newest
 
+        // The in-memory ledger holds these same entries. Set distinct commit
+        // instants so this ordering test cannot depend on host clock resolution:
+        // two synchronous commits can otherwise receive the same UtcNow value.
+        stagedLast.CompletedAtUtc = late.AddDays(1);
+        stagedFirst.CompletedAtUtc = late.AddDays(2);
+
         var page = await Search(store, "Observation");
 
         page.Items.Select(i => i.SourceResourceId).Should().ContainInOrder(

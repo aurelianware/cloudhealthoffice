@@ -197,7 +197,8 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
                 reason: $"{providerRole}: {MembershipUnavailableReason} ({BenefitCalculationStage.PlanUnavailableReason}).",
                 serviceDate,
                 networkId: null,
-                tier: null);
+                tier: null,
+                checkUnavailable: true);
         }
 
         if (resolvableTiers.Count == 0)
@@ -273,7 +274,8 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
                 reason: $"{providerRole}: {MembershipUnavailableReason}",
                 serviceDate,
                 networkId: null,
-                tier: null);
+                tier: null,
+                checkUnavailable: true);
         }
 
         // Every tier returned a non-null, non-active result — provider
@@ -313,7 +315,8 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
             return ApplyCredentialingMode(
                 EnforcementDecision.Pend,
                 reason: $"{providerRole}: {CredentialingUnavailableReason}",
-                serviceDate);
+                serviceDate,
+                checkUnavailable: true);
         }
 
         if (captureBillingContext)
@@ -347,7 +350,8 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
         string reason,
         DateTime serviceDate,
         string? networkId,
-        ResolvedNetworkTier? tier)
+        ResolvedNetworkTier? tier,
+        bool checkUnavailable = false)
     {
         var decision = _options.NetworkMode switch
         {
@@ -372,13 +376,15 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
             AsOfDate: serviceDate,
             NetworkId: networkId,
             TierName: tier?.TierName,
-            TierLevel: tier?.TierLevel);
+            TierLevel: tier?.TierLevel,
+            CheckUnavailable: checkUnavailable);
     }
 
     private EnforcementOutcome ApplyCredentialingMode(
         EnforcementDecision intended,
         string reason,
-        DateTime serviceDate)
+        DateTime serviceDate,
+        bool checkUnavailable = false)
     {
         var decision = _options.CredentialingMode switch
         {
@@ -393,7 +399,8 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
             Decision: decision,
             Mode: _options.CredentialingMode.ToString(),
             Reason: reason,
-            AsOfDate: serviceDate);
+            AsOfDate: serviceDate,
+            CheckUnavailable: checkUnavailable);
     }
 
     /// <summary>
@@ -431,7 +438,8 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
         var pend = outcomes.FirstOrDefault(o => o.Decision == EnforcementDecision.Pend);
         if (pend is not null)
         {
-            return ClaimAdjudicationStageResult.Pend(StageName, FormatReason(pend));
+            var result = ClaimAdjudicationStageResult.Pend(StageName, FormatReason(pend));
+            return pend.CheckUnavailable ? result.AsCheckUnavailable(context, context.PendDetails?.PendReason) : result;
         }
 
         // All Allow / Observe.

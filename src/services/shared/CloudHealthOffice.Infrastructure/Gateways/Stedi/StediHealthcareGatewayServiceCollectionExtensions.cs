@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Gateways;
+using CloudHealthOffice.Infrastructure.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -32,6 +33,16 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
         // applied per-request inside the client so the API key is never stored
         // on the shared handler. Auth failures are surfaced as gateway errors,
         // never retried.
+        //
+        // One retry layer: StediHttpSender's. Every Stedi client opts out of the
+        // shared service-client resilience (WithoutChoResilience); with both, a
+        // failing call made up to (MaxRetries + 1) x 3 = 9 attempts. The sender's
+        // loop stays because it reports the retry count on the gateway
+        // transaction, classifies Stedi's errors (auth and validation are never
+        // retried), honours Retry-After, retries the 270 eligibility POST, and is
+        // configured by Stedi:MaxRetries. The attachment upload is a PUT of a
+        // one-shot stream, which cannot be re-sent, so it is not retried at all.
+        // HttpClient.Timeout (Stedi:TimeoutSeconds) is the per-attempt timeout.
         services.AddHttpClient(StediEligibilityApiClient.HttpClientName, (sp, client) =>
         {
             var opts = sp.GetRequiredService<IOptions<StediGatewayOptions>>().Value;
@@ -42,7 +53,7 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
             }
             client.Timeout = TimeSpan.FromSeconds(opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 30);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("CloudHealthOffice-HealthcareGateway/1.0");
-        });
+        }).WithoutChoResilience();
 
         services.TryAddSingleton<IStediPayerResolver, StediPayerResolver>();
 
@@ -68,14 +79,14 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
             }
             client.Timeout = TimeSpan.FromSeconds(opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 30);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("CloudHealthOffice-HealthcareGateway/1.0");
-        });
+        }).WithoutChoResilience();
 
         services.AddHttpClient(StediClaimAttachmentApiClient.UploadHttpClientName, (sp, client) =>
         {
             var opts = sp.GetRequiredService<IOptions<StediGatewayOptions>>().Value;
             client.Timeout = TimeSpan.FromSeconds(opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 120);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("CloudHealthOffice-HealthcareGateway/1.0");
-        });
+        }).WithoutChoResilience();
 
         services.TryAddSingleton(sp => new StediClaimAttachmentApiClient(
             sp.GetRequiredService<IHttpClientFactory>(),
@@ -94,7 +105,7 @@ public static class StediHealthcareGatewayServiceCollectionExtensions
             }
             client.Timeout = TimeSpan.FromSeconds(opts.TimeoutSeconds > 0 ? opts.TimeoutSeconds : 30);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("CloudHealthOffice-HealthcareGateway/1.0");
-        });
+        }).WithoutChoResilience();
 
         services.TryAddSingleton(sp => new StediClaimAcknowledgmentApiClient(
             sp.GetRequiredService<IHttpClientFactory>(),

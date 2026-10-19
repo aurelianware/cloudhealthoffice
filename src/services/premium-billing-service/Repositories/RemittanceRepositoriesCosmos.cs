@@ -57,6 +57,19 @@ public sealed class RemittanceBatchRepositoryCosmos : IRemittanceBatchRepository
         return await CosmosQuery.ToListAsync<RemittanceBatch>(_container, query);
     }
 
+    public async Task<IEnumerable<RemittanceBatch>> FindLockboxByPaymentDateAsync(DateTime paymentDate)
+    {
+        var day = DateTime.SpecifyKind(paymentDate.Date, DateTimeKind.Utc);
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.source = @source "
+            + "AND c.paymentDate >= @day AND c.paymentDate < @nextDay AND c.status != @notPosted")
+            .WithParameter("@tenantId", RepositoryTenant.From(_http))
+            .WithParameter("@source", JsonNamingPolicy.CamelCase.ConvertName(RemittanceSource.Lockbox.ToString()))
+            .WithParameter("@notPosted", JsonNamingPolicy.CamelCase.ConvertName(RemittanceBatchStatus.NotPosted.ToString()))
+            .WithParameter("@day", day).WithParameter("@nextDay", day.AddDays(1));
+        return await CosmosQuery.ToListAsync<RemittanceBatch>(_container, query);
+    }
+
     public async Task<IEnumerable<RemittanceBatch>> SearchAsync(DateTime? receivedFrom = null, DateTime? receivedTo = null, int page = 1, int pageSize = 50)
     {
         var text = "SELECT * FROM c WHERE c.tenantId = @tenantId";
