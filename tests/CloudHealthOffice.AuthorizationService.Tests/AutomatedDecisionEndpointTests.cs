@@ -329,6 +329,34 @@ public class AutomatedDecisionEndpointTests : IClassFixture<AuthorizationApiFact
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ConcurrentInsert_UsesTheUniqueWinner_AndOnlyReplaysTheSameHash(bool sameHash)
+    {
+        var winner = new Authorization
+        {
+            Id = "winning-record", TenantId = Tenant, AuthorizationNumber = "PAS-RACE",
+            RequestHash = sameHash ? RequestHash : OtherHash,
+            Status = AuthorizationStatus.Denied, ReviewDecision = "A3",
+        };
+        _repo.GetByAuthorizationNumberAsync("PAS-RACE").Returns((Authorization?)null, winner);
+        _repo.CreateAsync(Arg.Any<Authorization>()).Returns(_ => Task.FromException<Authorization>(
+            new global::AuthorizationService.Exceptions.DuplicateAuthorizationNumberException("PAS-RACE")));
+        using var client = ClientWithToken(ServiceToken("fhir-service"));
+
+        var response = await client.PostAsJsonAsync(Path, Body(number: "PAS-RACE"), Json);
+
+        Assert.Equal(sameHash ? HttpStatusCode.OK : HttpStatusCode.Conflict, response.StatusCode);
+        if (sameHash)
+        {
+            var stored = await response.Content.ReadFromJsonAsync<Authorization>(Json);
+            Assert.Equal("winning-record", stored!.Id);
+            Assert.Equal(AuthorizationStatus.Denied, stored.Status);
+        }
+        await _repo.Received(1).CreateAsync(Arg.Any<Authorization>());
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("not-a-hash")]
