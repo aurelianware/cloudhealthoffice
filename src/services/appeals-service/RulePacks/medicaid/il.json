@@ -1,0 +1,45 @@
+{
+  // Illinois HealthChoice Illinois. Source: docs/architecture/appeals-case-model.md §5.7.
+  "id": "il-medicaid",
+  "state": "IL",
+  "lineOfBusiness": "medicaid",
+  "program": "HealthChoice Illinois",
+  "version": "2026.10.1",
+  "effectiveFrom": "2025-08-01",
+  "verifiedOn": "2026-10-17",
+  "sources": {
+    "cfr-438-420": { "citation": "42 CFR 438.420(a)", "url": "https://www.ecfr.gov/current/title-42/section-438.420" },
+    "hci": { "citation": "HealthChoice Illinois contract model (Aug 2025) §5.30", "url": "https://hfs.illinois.gov/content/dam/soi/en/web/hfs/medicalproviders/cc/managedcarecontracts/hcicontractmodel.docx" },
+    "hci-5-29": { "citation": "HealthChoice Illinois contract model (Aug 2025) §5.29.7", "url": "https://hfs.illinois.gov/content/dam/soi/en/web/hfs/medicalproviders/cc/managedcarecontracts/hcicontractmodel.docx" },
+    "ilcs-5-30-1": { "citation": "305 ILCS 5/5-30.1(g-8); 89 IAC 140.75", "url": "https://www.ilga.gov/Documents/legislation/ilcs/documents/030500050K5-30.1.htm" },
+    "ilcs-368d": { "citation": "215 ILCS 5/368d; HCI contract §5.35.10", "url": "https://www.ilga.gov/Documents/legislation/ilcs/documents/021500050K368d.htm" }
+  },
+  "memberAppeal": {
+    "filingWindow": { "amount": 60, "unit": "calendarDays", "from": "notice", "source": "hci" },
+    "resolution": { "amount": 15, "unit": "businessDays", "source": "hci" },
+    "resolutionExpedited": { "amount": 24, "unit": "hours", "from": "informationReceived", "source": "hci", "note": "24 hours after the required information is received." },
+    "extension": { "maxDays": 14, "writtenNotice": { "amount": 2, "unit": "calendarDays", "source": "hci" }, "source": "hci" },
+    "onMissed": "deemedExhaustion",
+    "fairHearingRequestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "hci" },
+    "continuationRequestWindow": { "amount": 10, "unit": "calendarDays", "from": "notice", "source": "cfr-438-420", "note": "Or by the effective date, whichever is later; not available when a provider is the authorized representative." },
+    "chain": [
+      { "name": "State Fair Hearing", "owner": "state", "requestWindow": { "amount": 120, "unit": "calendarDays", "from": "decision", "source": "hci" } },
+      { "name": "External independent review", "owner": "independentReviewer", "requestWindow": { "amount": 30, "unit": "calendarDays", "from": "decision", "source": "hci" }, "note": "Not for waiver services." }
+    ]
+  },
+  "memberGrievance": {
+    "acknowledgment": { "amount": 48, "unit": "hours", "source": "hci" },
+    "resolution": { "amount": 90, "unit": "calendarDays", "source": "hci" }
+  },
+  "providerDispute": {
+    "chain": [
+      { "name": "MCO internal dispute", "owner": "plan", "decision": { "amount": 30, "unit": "calendarDays", "source": "hci-5-29" }, "source": "hci-5-29" },
+      { "name": "HFS Provider Complaint Portal", "owner": "state", "source": "ilcs-5-30-1", "note": "File no sooner than 30 days after the internal filing, and no later than 30 days after an unsatisfactory resolution or 60 days after the internal filing." },
+      { "name": "HFS review decision", "owner": "state", "binding": true, "source": "ilcs-5-30-1" }
+    ]
+  },
+  "recoupment": [
+    { "hold": "partial", "summary": "The remittance must explain each recoupment; 60 days to appeal; 12-month lookback except fraud and HFS-required recoveries. Fraud recoveries need OIG approval and a provider appeal before recovery.", "source": "ilcs-368d" }
+  ],
+  "toConfirm": [ "Values against the June 2026 HealthChoice Illinois contracts.", "Member appeal acknowledgment deadline (none found in the contract)." ]
+}
