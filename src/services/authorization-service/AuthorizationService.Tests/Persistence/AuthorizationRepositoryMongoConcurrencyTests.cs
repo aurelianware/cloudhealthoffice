@@ -79,6 +79,27 @@ public sealed class AuthorizationRepositoryMongoConcurrencyTests(MongoRunnerFixt
     }
 
     [Fact]
+    public async Task LegacyDeadlineInitialization_IsTenantAndRevisionFenced_AndOneConcurrentWriterWins()
+    {
+        var auth = await SeedAsync("legacy-deadline", AuthorizationStatus.Pended);
+        var collection = _db.GetCollection<Authorization>(Collection);
+        await collection.UpdateOneAsync(a => a.Id == auth.Id, Builders<Authorization>.Update
+            .Unset(a => a.DecisionDueAt).Unset(a => a.DecisionReceivedAt).Unset(a => a.DecisionDeadlinePolicy));
+        var first = await ReadAsync(auth.Id);
+        var second = await ReadAsync(auth.Id);
+        await Assert.ThrowsAsync<ArgumentException>(() => Repo().EnsureDecisionDeadlineAsync("other-tenant", first));
+        var results = await Task.WhenAll(Repo().EnsureDecisionDeadlineAsync(Tenant, first), Repo().EnsureDecisionDeadlineAsync(Tenant, second));
+        Assert.Single(results, r => r);
+        var stored = await ReadAsync(auth.Id);
+        Assert.Equal(stored.SubmittedDate, stored.DecisionReceivedAt);
+        Assert.Equal(stored.SubmittedDate.AddDays(7), stored.DecisionDueAt);
+        stored.SlaResumedAt = stored.SubmittedDate.AddDays(10);
+        await Repo().UpdateAsync(stored);
+        var reloaded = await ReadAsync(auth.Id);
+        Assert.Equal(stored.DecisionDueAt, reloaded.DecisionDueAt);
+    }
+
+    [Fact]
     public async Task MixedDecision_SurvivesMongoReloadWithCodedLineReasonsAndHistory()
     {
         var authorization = await SeedAsync("mixed-lines", AuthorizationStatus.Submitted);

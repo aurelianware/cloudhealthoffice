@@ -47,6 +47,27 @@ public class AuthorizationReplaceModeTests
         },
     };
 
+    [Theory]
+    [InlineData("U", 72)]
+    [InlineData("E", 168)]
+    [Trait("Scenario", "PAS-06")]
+    [Trait("Backend", "Replace")]
+    public async Task PAS06_Replace_StoresReceiptDeadline_AndDocumentsDoNotRestartIt(string urgency, int hours)
+    {
+        var backend = new ChoAuthorizationBackend(new InMemoryAuthorizationRepository());
+        var request = NewRequest("PAS-DEADLINE-" + urgency);
+        request.LevelOfService = urgency;
+        var originalReceipt = request.SubmittedDate;
+        await backend.CreateAsync(request);
+        var persisted = (await backend.GetByNumberAsync(request.AuthorizationNumber))!;
+        persisted.DecisionReceivedAt.Should().Be(originalReceipt);
+        persisted.DecisionDueAt.Should().Be(originalReceipt.AddHours(hours));
+        persisted.SlaResumedAt = originalReceipt.AddDays(10);
+        var sla = global::AuthorizationService.Services.SlaWatchdogService.ComputeSlaStatus(persisted, originalReceipt.AddHours(hours));
+        sla.SlaDeadline.Should().Be(originalReceipt.AddHours(hours));
+        sla.EscalationLevel.Should().Be(SlaEscalationLevel.Breach);
+    }
+
     [Fact]
     [Trait("Scenario", "PAS-03")]
     [Trait("Backend", "Replace")]

@@ -67,6 +67,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Persist receipt-based authorization decision deadlines and prevent RFAI document arrival from restarting SLA or turnaround clocks.
+
 - Persist reviewer and automated authorization outcomes per service line, require coded explanations for denied/reduced units, and project committed decisions through PAS and claims validation.
 
 - **Authorization numbers are unique per tenant (D-39).** MongoDB indexes

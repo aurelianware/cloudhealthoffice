@@ -5,7 +5,7 @@ namespace AuthorizationService.Tests.Calculators;
 public class AuthorizationsSummaryCalculatorTests
 {
     [Fact]
-    public void GetSummary_UsesResumedDate_WhenSlaResumedAtIsSet()
+    public void GetSummary_UsesReceipt_WhenReviewResumesAfterDocuments()
     {
         // Arrange
         var auth = new Authorization
@@ -18,8 +18,8 @@ public class AuthorizationsSummaryCalculatorTests
         // Act
         var turnaround = AuthorizationsSummaryCalculator.CalculateTurnaroundDays(auth);
 
-        // Assert — should be 2 days (Mar 10 → Mar 12), NOT 11 days (Mar 1 → Mar 12)
-        turnaround.Should().Be(2);
+        // Waiting for documents is part of receipt-to-decision turnaround.
+        turnaround.Should().Be(11);
     }
 
     [Fact]
