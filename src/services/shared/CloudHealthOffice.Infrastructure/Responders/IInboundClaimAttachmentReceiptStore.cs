@@ -74,6 +74,13 @@ public sealed class InboundClaimAttachmentReceipt
 
     public List<InboundAttachmentOutboxEntry> Outbox { get; set; } = new();
 
+    /// <summary>
+    /// Optimistic-concurrency revision kept by the durable store: a save is
+    /// conditional on the revision that was read and bumps it. Callers carry
+    /// it from the read; they do not set it.
+    /// </summary>
+    public long Revision { get; set; }
+
     public bool HasPendingOutbox => Outbox.Any(e => e.PublishedAtUtc is null);
 }
 

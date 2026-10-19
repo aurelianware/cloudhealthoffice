@@ -192,8 +192,8 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
             return await ReplayAsync(stored, ct).ConfigureAwait(false);
         }
 
-        var published = await PublishPendingAsync(stored, replay: false, ct).ConfigureAwait(false);
-        await _receipts.SaveAsync(stored, ct).ConfigureAwait(false);
+        var (published, outcomes) = await PublishPendingAsync(stored, replay: false, ct).ConfigureAwait(false);
+        stored = await SaveOutboxAsync(stored, outcomes, countAttempt: false, ct).ConfigureAwait(false);
         Log(stored, replay: false);
         RecordMetric(stored, _timeProvider.GetUtcNow() - started);
         return ToResult(stored, replay: false, events: published);
@@ -203,10 +203,74 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
         RemittanceReceipt existing, CancellationToken ct)
     {
         existing.ProcessingAttempts++;
-        var published = await PublishPendingAsync(existing, replay: true, ct).ConfigureAwait(false);
-        await _receipts.SaveAsync(existing, ct).ConfigureAwait(false);
+        var (published, outcomes) = await PublishPendingAsync(existing, replay: true, ct).ConfigureAwait(false);
+        existing = await SaveOutboxAsync(existing, outcomes, countAttempt: true, ct).ConfigureAwait(false);
         Log(existing, replay: true);
         return ToResult(existing, replay: true, events: published);
+    }
+
+    /// <summary>
+    /// Saves the publish outcomes. A concurrent write (a post, another
+    /// dispatcher) makes the save conflict; the outcomes are then re-applied to
+    /// a fresh copy, so the other write's status and outbox entries are kept
+    /// and published markers are not lost.
+    /// </summary>
+    private Task<RemittanceReceipt> SaveOutboxAsync(
+        RemittanceReceipt record,
+        IReadOnlyList<PublishOutcome> outcomes,
+        bool countAttempt,
+        CancellationToken ct) =>
+        ClaimLifecycleWrites.SaveWithRetryAsync(
+            record,
+            r => _receipts.SaveAsync(r, ct),
+            () => _receipts.GetByIdAsync(record.ReceiptId, ct),
+            fresh =>
+            {
+                if (countAttempt)
+                {
+                    fresh.ProcessingAttempts++;
+                }
+
+                EnsureOutbox(fresh, _timeProvider.GetUtcNow());
+                ApplyOutcomes(fresh, outcomes);
+                return true;
+            },
+            _logger);
+
+    private readonly record struct PublishOutcome(string EventType, DateTimeOffset? PublishedAtUtc, bool Attempted);
+
+    /// <summary>
+    /// Re-applies publish outcomes to a fresh copy, on entries it still has
+    /// unpublished (an entry another dispatcher already published is left as is).
+    /// </summary>
+    private static void ApplyOutcomes(RemittanceReceipt record, IReadOnlyList<PublishOutcome> outcomes)
+    {
+        foreach (var outcome in outcomes)
+        {
+            var entry = record.Outbox.FirstOrDefault(e =>
+                e.EventType == outcome.EventType && e.PublishedAtUtc is null);
+            if (entry is null)
+            {
+                continue;
+            }
+
+            if (outcome.Attempted)
+            {
+                entry.AttemptCount++;
+            }
+
+            if (outcome.PublishedAtUtc is not null)
+            {
+                entry.PublishedAtUtc = outcome.PublishedAtUtc;
+                entry.LastError = null;
+            }
+            else
+            {
+                entry.LastError = "publish-failed";
+                record.LastErrorCategory = GatewayErrorCategory.ServiceUnavailable;
+                record.LastError = "outbox-publish-failed";
+            }
+        }
     }
 
     private static RemittanceReceipt ToRecord(GatewayRemittance remittance) =>
@@ -265,18 +329,24 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
     private static RemittanceOutboxEntry Entry(string type, DateTimeOffset now) =>
         new() { EventType = type, CreatedAtUtc = now };
 
-    private async Task<bool> PublishPendingAsync(
+    /// <summary>
+    /// Publishes pending entries and records the outcome on <paramref name="record"/>.
+    /// The outcomes are also returned so they can be re-applied to a fresh copy.
+    /// </summary>
+    private async Task<(bool AllPublished, IReadOnlyList<PublishOutcome> Outcomes)> PublishPendingAsync(
         RemittanceReceipt record, bool replay, CancellationToken ct)
     {
         EnsureOutbox(record, _timeProvider.GetUtcNow());
+        var outcomes = new List<PublishOutcome>();
         if (_messageBus is null)
         {
             foreach (var entry in record.Outbox.Where(e => e.PublishedAtUtc is null))
             {
                 entry.PublishedAtUtc = _timeProvider.GetUtcNow();
+                outcomes.Add(new PublishOutcome(entry.EventType, entry.PublishedAtUtc, Attempted: false));
             }
 
-            return true;
+            return (true, outcomes);
         }
 
         var message = new RemittanceReceivedMessage
@@ -311,9 +381,11 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
                     ct).ConfigureAwait(false);
                 entry.PublishedAtUtc = _timeProvider.GetUtcNow();
                 entry.LastError = null;
+                outcomes.Add(new PublishOutcome(entry.EventType, entry.PublishedAtUtc, Attempted: true));
             }
             catch (Exception)
             {
+                outcomes.Add(new PublishOutcome(entry.EventType, PublishedAtUtc: null, Attempted: true));
                 allPublished = false;
                 entry.LastError = "publish-failed";
                 record.LastErrorCategory = GatewayErrorCategory.ServiceUnavailable;
@@ -324,7 +396,7 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
             }
         }
 
-        return allPublished;
+        return (allPublished, outcomes);
     }
 
     private void Log(RemittanceReceipt record, bool replay) =>

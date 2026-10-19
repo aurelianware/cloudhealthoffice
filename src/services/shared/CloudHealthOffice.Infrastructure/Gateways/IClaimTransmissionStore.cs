@@ -118,6 +118,13 @@ public sealed class ClaimTransmissionRecord
 
     public DateTimeOffset? CompletedAtUtc { get; set; }
 
+    /// <summary>
+    /// When the current send started (status set to <c>Transmitting</c>).
+    /// Another submit of the same idempotency key does not send while this is
+    /// within <see cref="ClaimLifecycleWrites.InFlightLease"/>.
+    /// </summary>
+    public DateTimeOffset? TransmittingSinceUtc { get; set; }
+
     /// <summary>When a 277CA was last applied to this transmission. Does not replace <see cref="SubmittedAtUtc"/>.</summary>
     public DateTimeOffset? AcknowledgedAtUtc { get; set; }
 
@@ -126,4 +133,11 @@ public sealed class ClaimTransmissionRecord
     public GatewayErrorCategory ErrorCategory { get; set; } = GatewayErrorCategory.None;
 
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Optimistic-concurrency revision kept by the durable store: a save is
+    /// conditional on the revision that was read and bumps it. Callers carry
+    /// it from the read; they do not set it.
+    /// </summary>
+    public long Revision { get; set; }
 }

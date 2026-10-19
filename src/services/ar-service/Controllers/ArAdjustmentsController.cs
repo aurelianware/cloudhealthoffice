@@ -163,6 +163,7 @@ public class ArAdjustmentsController : ControllerBase
 
         var entry = new ArPostingEntry
         {
+            EntryId = PostEntryId(adjustment.Id),
             Source = ArPostingSource.ManualAdjustment,
             SourceReferenceId = adjustment.Id,
             SourceReferenceNumber = adjustment.AdjustmentNumber,
@@ -173,12 +174,10 @@ public class ArAdjustmentsController : ControllerBase
             Memo = adjustment.Narrative
         };
 
-        balance.PostingEntries.Add(entry);
-        balance.TotalDebits += entry.DebitAmount;
-        balance.TotalCredits += entry.CreditAmount;
-        balance.ClosingBalance = balance.OpeningBalance + balance.TotalDebits - balance.TotalCredits;
-        balance.LastUpdatedAt = DateTime.UtcNow;
-        await _balanceRepository.UpdateAsync(balance);
+        // Retry after a crash between the two saves: the balance already carries
+        // this adjustment's entry, so only the adjustment status is left to save.
+        if (TryAddEntry(balance, entry))
+            await _balanceRepository.UpdateAsync(balance);
 
         adjustment.Status = ArAdjustmentStatus.Posted;
         adjustment.LastUpdatedAt = DateTime.UtcNow;
@@ -212,6 +211,7 @@ public class ArAdjustmentsController : ControllerBase
         {
             var reversalEntry = new ArPostingEntry
             {
+                EntryId = ReverseEntryId(adjustment.Id),
                 Source = ArPostingSource.ManualAdjustment,
                 SourceReferenceId = adjustment.Id,
                 SourceReferenceNumber = $"REV-{adjustment.AdjustmentNumber}",
@@ -223,12 +223,8 @@ public class ArAdjustmentsController : ControllerBase
                 Memo = $"Reversal of {adjustment.AdjustmentNumber}"
             };
 
-            balance.PostingEntries.Add(reversalEntry);
-            balance.TotalDebits += reversalEntry.DebitAmount;
-            balance.TotalCredits += reversalEntry.CreditAmount;
-            balance.ClosingBalance = balance.OpeningBalance + balance.TotalDebits - balance.TotalCredits;
-            balance.LastUpdatedAt = DateTime.UtcNow;
-            await _balanceRepository.UpdateAsync(balance);
+            if (TryAddEntry(balance, reversalEntry))
+                await _balanceRepository.UpdateAsync(balance);
         }
 
         adjustment.Status = ArAdjustmentStatus.Reversed;
@@ -239,6 +235,24 @@ public class ArAdjustmentsController : ControllerBase
 
         var updated = await _adjustmentRepository.UpdateAsync(adjustment);
         return Ok(updated);
+    }
+
+    // One fixed entry id per adjustment and direction, so a balance can never
+    // carry the same adjustment's posting (or reversal) twice.
+    private static string PostEntryId(string adjustmentId) => $"adj-post:{adjustmentId}";
+    private static string ReverseEntryId(string adjustmentId) => $"adj-reverse:{adjustmentId}";
+
+    private static bool TryAddEntry(ArBalance balance, ArPostingEntry entry)
+    {
+        if (balance.PostingEntries.Any(e => e.EntryId == entry.EntryId))
+            return false;
+
+        balance.PostingEntries.Add(entry);
+        balance.TotalDebits += entry.DebitAmount;
+        balance.TotalCredits += entry.CreditAmount;
+        balance.ClosingBalance = balance.OpeningBalance + balance.TotalDebits - balance.TotalCredits;
+        balance.LastUpdatedAt = DateTime.UtcNow;
+        return true;
     }
 
     private static string SanitizeForLog(string? value)

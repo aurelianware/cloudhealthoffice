@@ -121,6 +121,10 @@ public class CapitationContractsController : ControllerBase
         contract.CreatedBy = existing.CreatedBy;
         // Status changes only through activate/terminate.
         contract.Status = existing.Status;
+        // The body replaces the contract as read just now: the write is
+        // conditional on that revision, so a concurrent edit or
+        // activate/terminate in between answers 409 instead of being undone.
+        contract.Revision = existing.Revision;
         contract.LastUpdatedBy = _actor.UserId;
         contract.LastUpdatedAt = DateTime.UtcNow;
 

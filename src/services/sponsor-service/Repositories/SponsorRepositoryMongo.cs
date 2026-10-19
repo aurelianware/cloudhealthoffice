@@ -1,4 +1,5 @@
 using SponsorService.Models;
+using SponsorService.Services;
 using MongoDB.Driver;
 
 namespace SponsorService.Repositories;
@@ -88,9 +89,19 @@ public class SponsorRepositoryMongo : ISponsorRepository
         sponsor.Id ??= Guid.NewGuid().ToString();
         sponsor.CreatedDate = DateTime.UtcNow;
         sponsor.LastUpdatedDate = DateTime.UtcNow;
-        
+        sponsor.Revision = 0;
+
         await _collection.InsertOneAsync(sponsor);
         return sponsor;
+    }
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<Sponsor> RevisionIs(long expected)
+    {
+        var b = Builders<Sponsor>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
     }
 
     public async Task<Sponsor> UpdateAsync(Sponsor sponsor)
@@ -101,15 +112,40 @@ public class SponsorRepositoryMongo : ISponsorRepository
             Builders<Sponsor>.Filter.Eq(x => x.Id, sponsor.Id),
             Builders<Sponsor>.Filter.Eq(x => x.TenantId, sponsor.TenantId)
         );
-        
-        await _collection.ReplaceOneAsync(filter, sponsor);
+
+        // Conditional on the revision the caller read: a concurrent edit or
+        // status change in between makes this one fail instead of being
+        // silently undone.
+        var expected = sponsor.Revision;
+        sponsor.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), sponsor);
+        }
+        catch
+        {
+            sponsor.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            sponsor.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new SponsorConcurrencyException(sponsor.Id, expected);
+            // Missing: unchanged behaviour (nothing written, no error).
+        }
+
         return sponsor;
     }
 
     public async Task<bool> UpdateStatusAsync(string tenantId, string id, SponsorStatusChange change)
     {
         // A targeted $set/$push, conditional on the status the caller saw:
-        // no other field of the document is written.
+        // no other field of the document is written. It bumps the revision, so
+        // a full update based on a read from before it conflicts instead of
+        // putting the old status back.
         var filter = Builders<Sponsor>.Filter.And(
             Builders<Sponsor>.Filter.Eq(x => x.Id, id),
             Builders<Sponsor>.Filter.Eq(x => x.TenantId, tenantId),
@@ -121,7 +157,8 @@ public class SponsorRepositoryMongo : ISponsorRepository
             .Set(x => x.StatusChangedDate, change.ChangedAt)
             .Set(x => x.LastUpdatedBy, change.ChangedBy)
             .Set(x => x.LastUpdatedDate, change.ChangedAt)
-            .Push(x => x.StatusHistory, change);
+            .Push(x => x.StatusHistory, change)
+            .Inc(x => x.Revision, 1L);
 
         var result = await _collection.UpdateOneAsync(filter, update);
         return result.MatchedCount == 1;

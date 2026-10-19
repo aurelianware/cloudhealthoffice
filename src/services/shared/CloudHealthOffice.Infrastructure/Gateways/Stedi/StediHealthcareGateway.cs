@@ -217,29 +217,9 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
 
         var existing = await _transmissions.GetByIdempotencyKeyAsync(request.TenantId, key, ct)
             .ConfigureAwait(false);
-        if (existing is not null &&
-            GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(existing.Status))
+        if (existing is not null && NotToBeSent(existing, startedAt))
         {
-            RecordClaimMetric(request, existing.Status, GatewayErrorCategory.None, GetElapsed(stopwatch));
-            var replayMeta = ClaimMetadata(request, startedAt, GetElapsed(stopwatch),
-                GatewayTransactionStatus.Completed, GatewayErrorCategory.None, existing.RetryCount,
-                existing.ExternalTransactionId);
-            Log(replayMeta);
-            return GatewayResponse<GatewayClaimSubmissionResult>.Success(
-                new GatewayClaimSubmissionResult
-                {
-                    ClaimId = existing.ClaimId,
-                    ClaimVersion = existing.ClaimVersion,
-                    ClaimType = existing.ClaimType,
-                    TransmissionStatus = existing.Status,
-                    TransmissionId = existing.TransmissionId,
-                    SubmissionId = existing.SubmissionId,
-                    ExternalTransactionId = existing.ExternalTransactionId,
-                    IdempotencyKey = existing.IdempotencyKey,
-                    AcceptedForProcessing = true,
-                    ReplayOfExistingTransmission = true
-                },
-                replayMeta);
+            return ClaimReplay(request, existing, startedAt, stopwatch);
         }
 
         var resolution = await _payerResolver
@@ -270,41 +250,34 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         };
         ClaimStatusRules.CaptureSource(record, request);
         record.Status = GatewayClaimTransmissionStatus.Transmitting;
+        record.TransmittingSinceUtc = startedAt;
         if (existing is null)
         {
             var (created, stored) = await _transmissions.TryCreateAsync(record, ct).ConfigureAwait(false);
             if (!created)
             {
-                if (GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(stored.Status))
+                // Lost the create race: the winner is sending it, or already has.
+                if (NotToBeSent(stored, startedAt))
                 {
-                    RecordClaimMetric(request, stored.Status, GatewayErrorCategory.None, GetElapsed(stopwatch));
-                    var replayMeta = ClaimMetadata(request, startedAt, GetElapsed(stopwatch),
-                        GatewayTransactionStatus.Completed, GatewayErrorCategory.None, stored.RetryCount,
-                        stored.ExternalTransactionId);
-                    Log(replayMeta);
-                    return GatewayResponse<GatewayClaimSubmissionResult>.Success(
-                        new GatewayClaimSubmissionResult
-                        {
-                            ClaimId = stored.ClaimId,
-                            ClaimVersion = stored.ClaimVersion,
-                            ClaimType = stored.ClaimType,
-                            TransmissionStatus = stored.Status,
-                            TransmissionId = stored.TransmissionId,
-                            SubmissionId = stored.SubmissionId,
-                            ExternalTransactionId = stored.ExternalTransactionId,
-                            IdempotencyKey = stored.IdempotencyKey,
-                            AcceptedForProcessing = true,
-                            ReplayOfExistingTransmission = true
-                        },
-                        replayMeta);
+                    return ClaimReplay(request, stored, startedAt, stopwatch);
                 }
 
                 record = stored;
+                ClaimStatusRules.CaptureSource(record, request);
+                existing = stored;
             }
         }
-        else
+
+        if (existing is not null)
         {
-            await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+            // Retry of a failed or abandoned send: claim it first, so a
+            // concurrent retry of the same key sees it in flight.
+            var current = await ClaimLifecycleWrites.TryClaimSendAsync(_transmissions, record, startedAt, ct)
+                .ConfigureAwait(false);
+            if (current is not null)
+            {
+                return ClaimReplay(request, current, startedAt, stopwatch);
+            }
         }
 
         var usage = _options.Value.IsProduction ? "P" : "T";
@@ -323,7 +296,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
             record.RetryCount = ex.RetryCount;
             record.ErrorCategory = ex.Category;
             record.ErrorMessage = ex.Message;
-            await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+            await ClaimLifecycleWrites.SaveSubmitOutcomeAsync(_transmissions, record, _logger, ct).ConfigureAwait(false);
             return ClaimFail(request, startedAt, stopwatch, ex.RetryCount, ex.Category, ex.Message);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -336,7 +309,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
                 SanitizeForLog(request.TenantId), request.ClaimType);
             record.Status = GatewayClaimTransmissionStatus.Failed;
             record.ErrorCategory = GatewayErrorCategory.Internal;
-            await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+            await ClaimLifecycleWrites.SaveSubmitOutcomeAsync(_transmissions, record, _logger, ct).ConfigureAwait(false);
             return ClaimFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Internal,
                 "Unexpected error executing the Stedi claim submission.");
         }
@@ -356,7 +329,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
             record.ErrorMessage = result.Errors.FirstOrDefault();
         }
 
-        await _transmissions.SaveAsync(record, ct).ConfigureAwait(false);
+        await ClaimLifecycleWrites.SaveSubmitOutcomeAsync(_transmissions, record, _logger, ct).ConfigureAwait(false);
 
         var txStatus = result.AcceptedForProcessing
             ? GatewayTransactionStatus.Completed
@@ -765,6 +738,40 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
 
     private static string Truncate(string value, int max) =>
         string.IsNullOrEmpty(value) ? value : value.Length <= max ? value : value[..max];
+
+    // Already accepted or answered, or another request is sending it now.
+    private static bool NotToBeSent(ClaimTransmissionRecord record, DateTimeOffset now) =>
+        GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(record.Status)
+        || ClaimLifecycleWrites.IsInFlight(record, now);
+
+    private GatewayResponse<GatewayClaimSubmissionResult> ClaimReplay(
+        GatewayClaimSubmissionRequest request,
+        ClaimTransmissionRecord existing,
+        DateTimeOffset startedAt,
+        long stopwatch)
+    {
+        var accepted = GatewayClaimTransmissionStatuses.PreventsDuplicateSubmit(existing.Status);
+        RecordClaimMetric(request, existing.Status, GatewayErrorCategory.None, GetElapsed(stopwatch));
+        var replayMeta = ClaimMetadata(request, startedAt, GetElapsed(stopwatch),
+            accepted ? GatewayTransactionStatus.Completed : GatewayTransactionStatus.Submitted,
+            GatewayErrorCategory.None, existing.RetryCount, existing.ExternalTransactionId);
+        Log(replayMeta);
+        return GatewayResponse<GatewayClaimSubmissionResult>.Success(
+            new GatewayClaimSubmissionResult
+            {
+                ClaimId = existing.ClaimId,
+                ClaimVersion = existing.ClaimVersion,
+                ClaimType = existing.ClaimType,
+                TransmissionStatus = existing.Status,
+                TransmissionId = existing.TransmissionId,
+                SubmissionId = existing.SubmissionId,
+                ExternalTransactionId = existing.ExternalTransactionId,
+                IdempotencyKey = existing.IdempotencyKey,
+                AcceptedForProcessing = accepted,
+                ReplayOfExistingTransmission = true
+            },
+            replayMeta);
+    }
 
     private GatewayResponse<GatewayClaimSubmissionResult> ClaimFail(
         GatewayClaimSubmissionRequest request,

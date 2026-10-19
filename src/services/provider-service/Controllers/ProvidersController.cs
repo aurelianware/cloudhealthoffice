@@ -654,6 +654,8 @@ public class ProvidersController : ControllerBase
             provider.VersionNumber = target.VersionNumber;
             provider.VersionState = target.VersionState;
             provider.PredecessorVersionId = target.PredecessorVersionId;
+            // The write is conditional on the revision of the row read here.
+            provider.Revision = target.Revision;
             provider.CreatedDate = target.CreatedDate;
             provider.LastUpdatedDate = DateTime.UtcNow;
             StampFromToken(provider, actor, existing: target);

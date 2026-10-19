@@ -351,14 +351,16 @@ public sealed class CloudHealthOfficeClaimAttachmentReceiver : IClaimAttachmentR
     private async Task PublishOutboxAsync(
         InboundClaimAttachmentReceipt record, bool replay, CancellationToken ct)
     {
+        var outcomes = new List<(string EventType, DateTimeOffset? PublishedAtUtc, bool Failed)>();
         if (_bus is null)
         {
             foreach (var entry in record.Outbox.Where(e => e.PublishedAtUtc is null))
             {
                 entry.PublishedAtUtc = _clock.GetUtcNow();
+                outcomes.Add((entry.EventType, entry.PublishedAtUtc, false));
             }
 
-            await _receipts.SaveAsync(record, ct).ConfigureAwait(false);
+            await SaveOutboxAsync(record, outcomes, ct).ConfigureAwait(false);
             return;
         }
 
@@ -391,18 +393,62 @@ public sealed class CloudHealthOfficeClaimAttachmentReceiver : IClaimAttachmentR
                         }),
                     ct).ConfigureAwait(false);
                 entry.PublishedAtUtc = now;
+                outcomes.Add((entry.EventType, now, false));
             }
             catch (Exception ex)
             {
                 entry.AttemptCount++;
                 entry.LastError = "outbox-publish-failed";
+                outcomes.Add((entry.EventType, null, true));
                 _logger.LogWarning(ex, "Inbound attachment outbox publish failed receipt={ReceiptId}",
                     ClaimAttachmentRules.SanitizeForLog(record.ReceiptId));
             }
         }
 
-        await _receipts.SaveAsync(record, ct).ConfigureAwait(false);
+        await SaveOutboxAsync(record, outcomes, ct).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Saves the publish outcomes. When another publisher (the create path, a
+    /// dispatcher on another replica) wrote in between, the save conflicts and
+    /// the outcomes are re-applied to a fresh copy, on entries it still has
+    /// unpublished, so a published marker is never lost.
+    /// </summary>
+    private Task<InboundClaimAttachmentReceipt> SaveOutboxAsync(
+        InboundClaimAttachmentReceipt record,
+        IReadOnlyList<(string EventType, DateTimeOffset? PublishedAtUtc, bool Failed)> outcomes,
+        CancellationToken ct) =>
+        ClaimLifecycleWrites.SaveWithRetryAsync(
+            record,
+            r => _receipts.SaveAsync(r, ct),
+            () => _receipts.GetByIdAsync(record.ReceiptId, ct),
+            fresh =>
+            {
+                var changed = false;
+                foreach (var (eventType, publishedAt, failed) in outcomes)
+                {
+                    var entry = fresh.Outbox.FirstOrDefault(e => e.EventType == eventType && e.PublishedAtUtc is null);
+                    if (entry is null)
+                    {
+                        continue;
+                    }
+
+                    if (failed)
+                    {
+                        entry.AttemptCount++;
+                        entry.LastError = "outbox-publish-failed";
+                    }
+                    else
+                    {
+                        entry.PublishedAtUtc = publishedAt;
+                    }
+
+                    changed = true;
+                }
+
+                return changed;
+            },
+            _logger);
 
     private static string IdempotencyKey(
         string tenantId,

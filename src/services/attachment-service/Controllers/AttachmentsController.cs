@@ -390,6 +390,11 @@ public class AttachmentsController : ControllerBase
             return StatusCode(StatusCodes.Status502BadGateway,
                 new { error = "Trading partner configuration is unavailable; no acknowledgment was generated. Retry later." });
         }
+        catch (AttachmentConcurrencyException)
+        {
+            // Changed since it was read: 409 (ConcurrencyConflictMiddleware), not 500.
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error generating acknowledgment for attachment {AttachmentId} (trace id {TraceId})",

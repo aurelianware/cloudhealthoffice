@@ -174,6 +174,7 @@ public sealed class InMemoryClaimTransmissionStore : IClaimTransmissionStore
             InquirySource = source.InquirySource?.Clone(),
             ServiceLineNumbers = source.ServiceLineNumbers.ToList(),
             SubmittedAtUtc = source.SubmittedAtUtc,
+            TransmittingSinceUtc = source.TransmittingSinceUtc,
             CompletedAtUtc = source.CompletedAtUtc,
             AcknowledgedAtUtc = source.AcknowledgedAtUtc,
             RetryCount = source.RetryCount,

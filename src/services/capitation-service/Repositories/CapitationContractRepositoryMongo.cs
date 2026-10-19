@@ -126,6 +126,7 @@ public class CapitationContractRepositoryMongo : ICapitationContractRepository
         contract.TenantId = GetTenantId();
         contract.CreatedAt = DateTime.UtcNow;
         contract.LastUpdatedAt = DateTime.UtcNow;
+        contract.Revision = 0;
         await _collection.InsertOneAsync(contract);
         _logger.LogInformation("Created capitation contract {ContractNumber} for provider {NPI}",
             SanitizeForLog(contract.ContractNumber), SanitizeForLog(contract.ProviderNPI));
@@ -138,9 +139,39 @@ public class CapitationContractRepositoryMongo : ICapitationContractRepository
         var filter = Builders<CapitationContract>.Filter.And(
             Builders<CapitationContract>.Filter.Eq(x => x.Id, contract.Id),
             Builders<CapitationContract>.Filter.Eq(x => x.TenantId, contract.TenantId));
-        await _collection.ReplaceOneAsync(filter, contract);
+        // Conditional on the revision the caller read: of two concurrent rate
+        // edits (or an edit and an activate/terminate) only one is written.
+        var expected = contract.Revision;
+        contract.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), contract);
+        }
+        catch
+        {
+            contract.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            contract.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new CapitationConcurrencyException("Capitation contract", contract.Id, expected);
+            // Missing: as before, nothing written and no error.
+        }
         _logger.LogInformation("Updated capitation contract {ContractNumber}", SanitizeForLog(contract.ContractNumber));
         return contract;
+    }
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<CapitationContract> RevisionIs(long expected)
+    {
+        var b = Builders<CapitationContract>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
     }
 
     private static string SanitizeForLog(string? value)

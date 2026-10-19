@@ -1,4 +1,5 @@
 using AttachmentService.Models;
+using AttachmentService.Services;
 using MongoDB.Driver;
 
 namespace AttachmentService.Repositories;
@@ -23,6 +24,7 @@ public class AttachmentRepositoryMongo : IAttachmentRepository
     public async Task<Attachment> CreateAsync(Attachment attachment)
     {
         attachment.CreatedDate = DateTime.UtcNow;
+        attachment.Revision = 0;
         await _collection.InsertOneAsync(attachment);
         return attachment;
     }
@@ -72,6 +74,15 @@ public class AttachmentRepositoryMongo : IAttachmentRepository
         return await _collection.Find(filter).FirstOrDefaultAsync();
     }
 
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<Attachment> RevisionIs(long expected)
+    {
+        var b = Builders<Attachment>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
+    }
+
     public async Task<Attachment> UpdateAsync(Attachment attachment)
     {
         var filter = Builders<Attachment>.Filter.And(
@@ -79,10 +90,27 @@ public class AttachmentRepositoryMongo : IAttachmentRepository
             Builders<Attachment>.Filter.Eq(x => x.TenantId, attachment.TenantId)
         );
 
-        var result = await _collection.ReplaceOneAsync(filter, attachment);
+        // Conditional on the revision the caller read: a concurrent write in
+        // between makes this one fail instead of being silently overwritten.
+        var expected = attachment.Revision;
+        attachment.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), attachment);
+        }
+        catch
+        {
+            attachment.Revision = expected;
+            throw;
+        }
 
         if (result.MatchedCount == 0)
         {
+            attachment.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new AttachmentConcurrencyException(attachment.Id, expected);
+
             throw new InvalidOperationException(
                 $"Attachment '{attachment.Id}' was not found for tenant '{attachment.TenantId}'.");
         }

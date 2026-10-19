@@ -31,6 +31,17 @@ public class ProviderContract
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
+    /// Optimistic-concurrency revision (MongoDB): every write to this contract
+    /// increments it, and a whole-document replace succeeds only if it is still
+    /// the value read, so a stale write (two amendments, or an edit and a
+    /// suspend/terminate) fails instead of overwriting a concurrent change.
+    /// Documents written before the field existed read as 0. Server-set: the
+    /// PUT endpoint replaces the contract as it read it just now.
+    /// </summary>
+    [ValidateNever]
+    public long Revision { get; set; }
+
+    /// <summary>
     /// User-facing contract number. Format: CTR-{NPI}-{Year}. Generated on
     /// create when empty (the portal sends it empty), so it is not required.
     /// </summary>

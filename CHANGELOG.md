@@ -21,18 +21,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - capitation: run, disbursement, statement;
   - authorization, RFAI case, coverage, member;
   - AR: cash posting, adjustment;
-  - ID card, tenant user.
+  - ID card, tenant user;
+  - benefit plan, provider, organization (publish/activate needs a Draft, and
+    two publishes of one version cannot both succeed);
+  - capitation contract, provider contract, fee schedule, encounter, risk
+    score, attachment, sponsor, family relationship, tenant, remittance batch;
+  - the shared claim lifecycle store (transmissions, remittance and inbound
+    attachment receipts).
+
+  Eligibility batch jobs and the FHIR clinical backfill ledger now use
+  targeted updates of the fields each writer owns instead of a revision.
 
   Some lost updates this prevents:
   - two executes of one billing or capitation run both running;
   - a stale write undoing a coverage termination;
   - a card scan undoing a revocation;
   - a login restoring a revoked role;
-  - a Stripe or NACHA outcome undoing a cancel.
+  - a Stripe or NACHA outcome undoing a cancel;
+  - a stale 277CA or gateway outcome moving a transmission status backwards,
+    or a stale outbox dispatch reverting a posted 835 so it could post twice;
+  - two dispatches putting one encounter into two 837 batches;
+  - a Stripe webhook and an admin edit of a tenant overwriting each other.
 
-  Every service now answers `ConcurrencyConflictException` with 409. The
-  medium and low sites still open are listed in
+  Every service now answers `ConcurrencyConflictException` with 409. Stripe
+  webhooks and the claim lifecycle background writers re-read and re-apply on
+  a conflict. The low-risk sites still open, and the known residual gaps, are
+  listed in
   `docs/architecture/mongo-write-concurrency.md`.
+- **A claim is no longer sent twice while its first send is in flight.**
+  The Stedi and Mock gateways treated a `Transmitting` transmission like a
+  failed one, so a second submit of the same idempotency key (or the loser of
+  the create race) sent the 837 again. A transmission now records
+  `TransmittingSinceUtc`; while that is under 10 minutes old, a second submit
+  is answered as a replay with `AcceptedForProcessing: false`. After that the
+  sender is taken to have crashed and the claim may be resent. A retry of a
+  failed send claims it with a conditional save first, so of two concurrent
+  retries only one sends; the other gets the replay instead of a 409.
+- **An AR adjustment can no longer be counted twice on its balance.** Posting
+  and reversing saved the balance entry, then the adjustment, and the entry
+  had a fresh GUID. A retry after a failed adjustment save added a second
+  entry. Entries now carry a fixed id per adjustment (`adj-post:{id}`,
+  `adj-reverse:{id}`), and a retry that finds it only saves the adjustment.
 - **The claim lifecycle store's MongoDB indexes are created.** Its
   `EnsureIndexesAsync` declared a unique index on `_id`, which MongoDB
   rejects. That failed host start-up and left the unique tenant +
