@@ -62,6 +62,7 @@ const base = process.env.CHO_PREVIEW_URL || "http://127.0.0.1:8766";
     }
   }
   await p.goto(base + "/");
+  assert.equal(await p.locator("#cho-asst-toggle").evaluate(el => getComputedStyle(el).position), "static");
   await p.keyboard.press("Tab");
   assert.equal(
     await p.evaluate(() => document.activeElement.className),
@@ -107,6 +108,10 @@ const base = process.env.CHO_PREVIEW_URL || "http://127.0.0.1:8766";
     JSON.stringify(await p.evaluate(() => window.captured)),
     /1\.1234567|1200000|300000/,
   );
+  await p.emulateMedia({media:"print"});
+  assert.equal(await p.locator("#cho-asst-toggle").isVisible(), false);
+  assert.equal(await p.locator("#calculator-results").isVisible(), true);
+  await p.emulateMedia({media:"screen", reducedMotion:"reduce"});
   for (const kind of ["strategy", "partnership"]) {
     await p.goto(base + "/founding-transformation-partners");
     await p.evaluate(() => {
