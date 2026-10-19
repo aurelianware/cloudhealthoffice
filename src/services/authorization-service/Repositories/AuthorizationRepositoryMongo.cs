@@ -145,7 +145,7 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
 
         if (summary.TotalAuthorizations > 0)
         {
-            summary.ApprovalRate = (decimal)(summary.ApprovedAuthorizations + summary.ModifiedAuthorizations) / summary.TotalAuthorizations * 100;
+            summary.ApprovalRate = (decimal)results.Count(a => AuthorizationService.Services.Cms0057.Cms0057Reporting.IsApproved(a)) / summary.TotalAuthorizations * 100;
         }
 
         var reviewedAuths = results.Where(x => x.ReviewedDate.HasValue).ToList();
@@ -247,7 +247,11 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
     {
         var b = Builders<Authorization>.Filter;
         var filter = b.Eq(x => x.TenantId, GetTenantId())
-                     & b.In(x => x.Status, new[] { AuthorizationStatus.Approved, AuthorizationStatus.Modified })
+                     & b.Or(
+                         b.In(x => x.Status, new[] { AuthorizationStatus.Approved, AuthorizationStatus.Modified }),
+                         b.Eq(x => x.Status, AuthorizationStatus.Expired) & b.Or(
+                             b.In(x => x.ReviewDecision, new[] { "A1", "A2" }),
+                             b.ElemMatch(x => x.StatusHistory, h => h.Status == AuthorizationStatus.Approved || h.Status == AuthorizationStatus.Modified)))
                      & b.Or(
                          b.And(b.Gte(x => x.ApprovedServiceDateTo, from), b.Lte(x => x.ApprovedServiceDateTo, to)),
                          b.And(b.Eq(x => x.ApprovedServiceDateTo, null), b.Gte(x => x.ExpirationDate, from), b.Lte(x => x.ExpirationDate, to)));
@@ -431,7 +435,8 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
             LineDecisions = AuthorizationService.Backends.AuthorizationDecisionPolicy.Snapshot(authorization),
         };
         var update = Builders<Authorization>.Update.Set(a => a.Status, AuthorizationStatus.Expired)
-            .Set(a => a.ReviewDecision, null).Set(a => a.LastUpdatedDate, changedAtUtc)
+            .Set(a => a.ReviewDecision, AuthorizationService.Backends.AuthorizationDecisionPolicy.DecisionFor(authorization.Status))
+            .Set(a => a.LastUpdatedDate, changedAtUtc)
             .Set(a => a.LastUpdatedBy, "authorization-expiry");
         update = authorization.StatusHistory is null
             ? update.Set(a => a.StatusHistory, new List<AuthorizationStatusChange> { history })

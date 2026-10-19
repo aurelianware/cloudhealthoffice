@@ -119,6 +119,12 @@ public sealed class AuthorizationRepositoryMongoConcurrencyTests(MongoRunnerFixt
         Assert.Single(results, r => r);
         var stored = await ReadAsync(auth.Id);
         Assert.Equal(AuthorizationStatus.Expired, stored.Status);
+        Assert.Equal("A1", stored.ReviewDecision);
+        var ended = await Repo().ListApprovedEndingBetweenAsync(today.AddDays(-30), today);
+        Assert.Contains(ended, a => a.Id == stored.Id);
+        var summary = await Repo().GetAuthorizationsSummaryAsync(stored.SubmittedDate.AddDays(-1), stored.SubmittedDate.AddDays(1), null);
+        Assert.Equal(100m, summary.ApprovalRate);
+        Assert.Equal(1, summary.ExpiredAuthorizations);
         Assert.Equal("authorization-expiry", Assert.Single(stored.StatusHistory).Source);
         Assert.Equal("preserved", (await raw.Find(Builders<BsonDocument>.Filter.Eq("_id", auth.Id)).SingleAsync())["futureData"].AsString);
     }

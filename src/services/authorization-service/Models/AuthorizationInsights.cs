@@ -105,7 +105,7 @@ public static class AuthorizationInsightSets
         var activityList = activity.ToList();
         var queue = open.Where(a => lineOfBusiness is null || a.LineOfBusiness == lineOfBusiness).ToList();
         var denied = Cms0057Reporting.InPeriod(activityList, from, to, lineOfBusiness)
-            .Where(a => a.Status == AuthorizationStatus.Denied);
+            .Where(a => Cms0057Reporting.DecisionStatus(a) == AuthorizationStatus.Denied);
 
         return new AuthorizationInsights
         {
@@ -156,21 +156,21 @@ public static class AuthorizationInsightSets
         {
             var ok = outcome.ToLowerInvariant() switch
             {
-                "decided" => Cms0057Reporting.IsDecided(a.Status),
-                "approved" => Cms0057Reporting.IsApproved(a.Status),
-                "denied" => a.Status == AuthorizationStatus.Denied,
+                "decided" => Cms0057Reporting.IsDecided(a),
+                "approved" => Cms0057Reporting.IsApproved(a),
+                "denied" => Cms0057Reporting.DecisionStatus(a) == AuthorizationStatus.Denied,
                 "open" => a.Status.IsOpen(),
                 _ => false,
             };
             if (!ok) return false;
         }
-        if (c.WithinTimeframe is { } within && (!Cms0057Reporting.IsDecided(a.Status) || Cms0057Reporting.DecidedWithinTimeframe(a) != within))
+        if (c.WithinTimeframe is { } within && (!Cms0057Reporting.IsDecided(a) || Cms0057Reporting.DecidedWithinTimeframe(a) != within))
             return false;
-        if (c.Automated is { } automated && (!Cms0057Reporting.IsDecided(a.Status) || Cms0057Reporting.IsAutomated(a) != automated))
+        if (c.Automated is { } automated && (!Cms0057Reporting.IsDecided(a) || Cms0057Reporting.IsAutomated(a) != automated))
             return false;
         if (!string.IsNullOrWhiteSpace(c.DenialReasonCode))
         {
-            if (a.Status != AuthorizationStatus.Denied) return false;
+            if (Cms0057Reporting.DecisionStatus(a) != AuthorizationStatus.Denied) return false;
             var code = string.IsNullOrWhiteSpace(a.DenialReasonCode) ? UnspecifiedDenialCode : a.DenialReasonCode.Trim();
             if (code != c.DenialReasonCode) return false;
         }

@@ -193,6 +193,7 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
         CancellationToken ct = default,
         AuthorizationDecisionDetails? details = null)
     {
+        var previousStatus = authorization.Status;
         AuthorizationLifecyclePolicy.Validate(authorization, status);
         if (authorization.Status == status && status is AuthorizationStatus.Cancelled or AuthorizationStatus.Expired)
             return authorization;
@@ -206,7 +207,10 @@ public sealed class ChoAuthorizationBackend : IAuthorizationBackend
         var lines = AuthorizationDecisionPolicy.Prepare(authorization, status, reviewDecision, details);
         AuthorizationDecisionPolicy.Apply(authorization, status, reviewDecision, details, lines);
         authorization.Status = status;
-        authorization.ReviewDecision = reviewDecision;
+        authorization.ReviewDecision = status is AuthorizationStatus.Expired or AuthorizationStatus.Cancelled
+            ? AuthorizationDecisionPolicy.DecisionFor(previousStatus) is "A1" or "A2" or "A3"
+                ? AuthorizationDecisionPolicy.DecisionFor(previousStatus) : null
+            : reviewDecision;
         authorization.LastUpdatedDate = DateTime.UtcNow;
         if (status is AuthorizationStatus.Approved or AuthorizationStatus.Denied or AuthorizationStatus.Modified)
             authorization.ReviewedDate ??= DateTime.UtcNow;

@@ -72,6 +72,21 @@ public class AuthorizationLifecycleTests : IClassFixture<AuthorizationApiFactory
     }
 
     [Fact]
+    public async Task ExpiredApprovalKeepsItsClinicalCodeButCannotValidateAClaim()
+    {
+        var authorization = Seed(AuthorizationStatus.Expired);
+        authorization.ReviewDecision = "A1";
+        authorization.ApprovedServiceDateFrom = DateTime.UtcNow.AddDays(-1);
+        authorization.ApprovedServiceDateTo = DateTime.UtcNow.AddDays(1);
+        authorization.RequestedServices[0].ServiceStatus = "A1";
+        _factory.AuthorizationRepository.GetByAuthorizationNumberAsync(authorization.AuthorizationNumber).Returns(authorization);
+        var result = await _client.GetFromJsonAsync<AuthorizationValidationResponse>(
+            $"/api/authorizations/{authorization.AuthorizationNumber}/validate?procedureCode=72148", Json);
+        Assert.False(result!.IsValid);
+        Assert.Equal(AuthorizationStatus.Expired, result.Status);
+    }
+
+    [Fact]
     public async Task ApprovalCannotBeMarkedExpiredBeforeItsInclusiveEndDate()
     {
         var authorization = Seed(AuthorizationStatus.Approved);

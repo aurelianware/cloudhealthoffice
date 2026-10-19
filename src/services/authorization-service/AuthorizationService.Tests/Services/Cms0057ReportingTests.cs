@@ -53,6 +53,26 @@ public class Cms0057ReportingTests
         return auth;
     }
 
+    [Theory]
+    [InlineData(AuthorizationStatus.Expired)]
+    [InlineData(AuthorizationStatus.Cancelled)]
+    public void ClosingAnApprovalPreservesClinicalMetricsAndDecisionProvenance(AuthorizationStatus closed)
+    {
+        var authorization = Auth("retained-decision", AuthorizationStatus.Approved, decidedAfterHours: 24, source: "automated:ClinicalRule");
+        var before = Cms0057Reporting.ComputeMetrics(new[] { authorization }, Jan1, Dec31, null);
+        authorization.Status = closed;
+        authorization.StatusHistory.Add(new AuthorizationStatusChange { Status = closed, ChangedAt = Dec31, Source = "authorization-expiry" });
+        var after = Cms0057Reporting.ComputeMetrics(new[] { authorization }, Jan1, Dec31, null);
+        after.DecidedRequests.Should().Be(before.DecidedRequests);
+        after.Standard.Approved.Should().Be(1);
+        after.Standard.MedianDecisionHours.Should().Be(24);
+        after.AutomatedDecisions.Should().Be(1);
+        var decision = Cms0057Reporting.RecentDecisions(new[] { authorization }, Jan1, 10).Should().ContainSingle().Subject;
+        decision.Status.Should().Be(AuthorizationStatus.Approved);
+        decision.LifecycleStatus.Should().Be(closed);
+        decision.DecidedBy.Should().Be("automated:ClinicalRule");
+    }
+
     [Fact]
     public void Metrics_SplitStandardAndExpedited_WithPercentagesOfDecidedRequests()
     {
