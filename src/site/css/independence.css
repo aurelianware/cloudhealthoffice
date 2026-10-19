@@ -525,3 +525,12 @@
     display: none !important;
   }
 }
+
+/* Keep the shared assistant available without covering narrow-screen content. */
+@media screen and (max-width: 640px) {
+  .independence .cho-asst__toggle {
+    position: static;
+    margin: 0 24px 24px;
+    max-width: calc(100% - 48px);
+  }
+}
