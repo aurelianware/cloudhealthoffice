@@ -1,3 +1,4 @@
+using AuthorizationService.Exceptions;
 using AuthorizationService.Backends;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
@@ -145,8 +146,22 @@ public sealed class AutomatedDecisionsController : ControllerBase
             LastUpdatedBy = _actor.UserId,
         };
 
-        var stored = await backend.RecordAutomatedDecisionAsync(
-            authorization, request.Decision!, HttpContext.RequestAborted);
+        Authorization stored;
+        try
+        {
+            stored = await backend.RecordAutomatedDecisionAsync(
+                authorization, request.Decision!, HttpContext.RequestAborted);
+        }
+        catch (DuplicateAuthorizationNumberException)
+        {
+            // Another writer passed the pre-check before this insert. The unique
+            // tenant/number index selects the winner; a matching hash is a retry.
+            var winner = await backend.GetByNumberAsync(number, HttpContext.RequestAborted);
+            if (winner?.RequestHash is not null
+                && string.Equals(winner.RequestHash, request.RequestHash, StringComparison.Ordinal))
+                return Ok(winner);
+            return Conflict($"Authorization {number} already exists.");
+        }
 
         _logger.LogInformation(
             "Automated decision recorded: authorization {AuthNumber} tenant {Tenant} status {Status} by {Actor}",

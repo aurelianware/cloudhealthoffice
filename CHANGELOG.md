@@ -67,6 +67,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Authorization numbers are unique per tenant (D-39).** MongoDB indexes
+  prevent concurrent PAS inserts from creating ambiguous records. A losing
+  insert returns the existing decision only for an identical request hash;
+  another payload gets 409. Startup refuses legacy duplicates without changing
+  them; see `docs/operations/AUTHORIZATION-NUMBER-UNIQUENESS.md`. The tenant/status
+  index also closes D-37. The ePA matrix now records real metrics as PARTIAL,
+  backed by an acceptance test of the production reporting calculator.
+
 - **837 amounts parse with the invariant culture.** CLM02 and the SV1/SV2
   charge and units used the thread culture, so on a host with ',' as the
   decimal mark 180.50 parsed as 18050 (de-DE) or 0 (fr-FR).
