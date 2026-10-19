@@ -191,12 +191,10 @@ public class TenantUserManagementService : ITenantUserService
 
     public async Task RecordLoginAsync(string userId)
     {
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user == null)
+        // A targeted write of LastLoginAt alone: saving the whole profile from a
+        // copy read here would restore roles or status an admin changed meanwhile.
+        if (!await _userRepository.RecordLoginAsync(userId, DateTime.UtcNow))
             throw new KeyNotFoundException($"User {userId} not found");
-
-        user.LastLoginAt = DateTime.UtcNow;
-        await _userRepository.UpdateAsync(user);
     }
 
     private async Task ValidateRolesAsync(List<string> roleNames)

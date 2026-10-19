@@ -232,7 +232,7 @@ public class EftDraftService : IEftDraftService
                 draft.ErrorMessage = $"The Stripe debit may have been made ({ex.GetType().Name}). Do not draft this invoice again: check Stripe, " +
                                      "then another user with payments:approve records the answer.";
                 draft.LastUpdatedBy = ActorId;
-                return await _draftRepository.UpdateAsync(draft);
+                return await SaveStripeOutcomeAsync(draft);
             }
 
             if (result.Status == "failed")
@@ -248,7 +248,7 @@ public class EftDraftService : IEftDraftService
                 draft.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(4); // ACH typically 3-5 business days via Stripe
             }
             draft.LastUpdatedBy = ActorId;
-            draft = await _draftRepository.UpdateAsync(draft);
+            draft = await SaveStripeOutcomeAsync(draft);
         }
 
         _logger.LogInformation(
@@ -256,6 +256,28 @@ public class EftDraftService : IEftDraftService
             method, draft.Id, invoice.InvoiceNumber, amount);
 
         return draft;
+    }
+
+    /// <summary>
+    /// Records what Stripe said about the debit of a draft this call created. The
+    /// write is conditional on the draft's revision, so a cancel or claim made
+    /// while Stripe was called is not undone: the conflict (409) reaches the
+    /// caller, logged critical with the PaymentIntent for reconciling by hand.
+    /// </summary>
+    private async Task<EftDraft> SaveStripeOutcomeAsync(EftDraft draft)
+    {
+        try
+        {
+            return await _draftRepository.UpdateAsync(draft);
+        }
+        catch (EftDraftConcurrencyException)
+        {
+            _logger.LogCritical(
+                "Stripe ACH draft {DraftId} for invoice {InvoiceNumber} was changed by another write while Stripe was called; " +
+                "the Stripe outcome ({Status}, PaymentIntent {PaymentIntentId}) was not recorded on it. Reconcile with Stripe by hand",
+                draft.Id, draft.InvoiceNumber, draft.Status, draft.StripePaymentIntentId);
+            throw;
+        }
     }
 
     public async Task<BatchEftResult> InitiateBatchDraftAsync(InitiateBatchEftRequest request)
@@ -410,12 +432,23 @@ public class EftDraftService : IEftDraftService
         // Mark the billing run so the items needing attention are visible on it.
         if (result.NeedsAttention.Count > 0 && !string.IsNullOrEmpty(request.BillingRunId))
         {
-            var run = await _billingRunRepository.GetByIdAsync(request.BillingRunId);
-            if (run != null)
+            // The drafts are already made: on a concurrent write to the run it is
+            // re-read and the warnings added to the fresh copy, never lost.
+            for (var attempt = 1; ; attempt++)
             {
+                var run = await _billingRunRepository.GetByIdAsync(request.BillingRunId);
+                if (run == null)
+                    break;
                 foreach (var item in result.NeedsAttention)
                     run.Warnings.Add($"EFT needs attention for invoice {item.InvoiceId} (group {item.GroupNumber}): {item.Reason}");
-                await _billingRunRepository.UpdateAsync(run);
+                try
+                {
+                    await _billingRunRepository.UpdateAsync(run);
+                    break;
+                }
+                catch (BillingRunConcurrencyException) when (attempt < MaxConcurrentWriteAttempts)
+                {
+                }
             }
         }
 
@@ -449,6 +482,9 @@ public class EftDraftService : IEftDraftService
         {
             if (!await _draftRepository.TryClaimForReleaseAsync(draft.Id, claimId, claimedAt, ActorId))
                 continue;
+            // The claim is one write (one revision) on the copy read: the outcome
+            // written later replaces it only if nothing else wrote since.
+            draft.Revision++;
             draft.Status = EftDraftStatus.Releasing;
             draft.ReleaseClaimId = claimId;
             draft.ReleaseClaimedAt = claimedAt;
@@ -618,46 +654,49 @@ public class EftDraftService : IEftDraftService
 
         for (int i = 0; i < drafts.Count; i++)
         {
-            var draft = drafts[i];
-            draft.LastUpdatedBy = ActorId;
-            // Who released the file, kept with each draft: the releaser check
-            // still holds once the held file has expired.
-            draft.ReleasedBy = ActorId;
-            switch (outcome.Status)
+            var traceNumber = entries[i].TraceNumber;
+            void ApplyOutcome(EftDraft draft)
             {
-                case NachaTransmissionStatus.Transmitted:
-                    draft.NachaFileReference = file.FileReference;
-                    draft.TraceNumber = entries[i].TraceNumber;
-                    draft.Status = EftDraftStatus.Submitted;
-                    draft.SubmittedAt = now;
-                    draft.ExpectedSettlementDate = now.AddBusinessDays(2);
-                    draft.ErrorMessage = null;
-                    break;
-                case NachaTransmissionStatus.AwaitingRetrieval:
-                    draft.NachaFileReference = file.FileReference;
-                    draft.TraceNumber = entries[i].TraceNumber;
-                    draft.Status = EftDraftStatus.AwaitingRetrieval;
-                    draft.ErrorMessage = AwaitingRetrievalMessage(file.FileReference, outcome.Reason);
-                    break;
-                case NachaTransmissionStatus.DeliveryUnknown:
-                    // It may be at the bank: never back to Pending (that would send it again).
-                    draft.NachaFileReference = file.FileReference;
-                    draft.TraceNumber = entries[i].TraceNumber;
-                    draft.Status = EftDraftStatus.DeliveryUnknown;
-                    draft.ErrorMessage = DeliveryUnknownMessage(file.FileReference, outcome.Reason);
-                    break;
-                default:
-                    // Nothing was sent or held: the draft goes back to Pending for the next file.
-                    draft.NachaFileReference = null;
-                    draft.TraceNumber = null;
-                    draft.Status = EftDraftStatus.Pending;
-                    draft.ReleaseClaimId = null;
-                    draft.ReleaseClaimedAt = null;
-                    draft.ReleasedBy = null;
-                    draft.ErrorMessage = outcome.Reason;
-                    break;
+                draft.LastUpdatedBy = ActorId;
+                // Who released the file, kept with each draft: the releaser check
+                // still holds once the held file has expired.
+                draft.ReleasedBy = ActorId;
+                switch (outcome.Status)
+                {
+                    case NachaTransmissionStatus.Transmitted:
+                        draft.NachaFileReference = file.FileReference;
+                        draft.TraceNumber = traceNumber;
+                        draft.Status = EftDraftStatus.Submitted;
+                        draft.SubmittedAt = now;
+                        draft.ExpectedSettlementDate = now.AddBusinessDays(2);
+                        draft.ErrorMessage = null;
+                        break;
+                    case NachaTransmissionStatus.AwaitingRetrieval:
+                        draft.NachaFileReference = file.FileReference;
+                        draft.TraceNumber = traceNumber;
+                        draft.Status = EftDraftStatus.AwaitingRetrieval;
+                        draft.ErrorMessage = AwaitingRetrievalMessage(file.FileReference, outcome.Reason);
+                        break;
+                    case NachaTransmissionStatus.DeliveryUnknown:
+                        // It may be at the bank: never back to Pending (that would send it again).
+                        draft.NachaFileReference = file.FileReference;
+                        draft.TraceNumber = traceNumber;
+                        draft.Status = EftDraftStatus.DeliveryUnknown;
+                        draft.ErrorMessage = DeliveryUnknownMessage(file.FileReference, outcome.Reason);
+                        break;
+                    default:
+                        // Nothing was sent or held: the draft goes back to Pending for the next file.
+                        draft.NachaFileReference = null;
+                        draft.TraceNumber = null;
+                        draft.Status = EftDraftStatus.Pending;
+                        draft.ReleaseClaimId = null;
+                        draft.ReleaseClaimedAt = null;
+                        draft.ReleasedBy = null;
+                        draft.ErrorMessage = outcome.Reason;
+                        break;
+                }
             }
-            await _draftRepository.UpdateAsync(draft);
+            var draft = await SaveReleaseOutcomeAsync(drafts[i], claimId, ApplyOutcome);
 
             var summary = Summary(draft);
             summary.AccountHolderName = entries[i].IndividualName;
@@ -665,6 +704,42 @@ public class EftDraftService : IEftDraftService
         }
 
         return result;
+    }
+
+    /// <summary>Tries a draft write this many times against concurrent writers.</summary>
+    private const int MaxConcurrentWriteAttempts = 5;
+
+    /// <summary>
+    /// Records a release's transmission outcome on a draft it holds. On a
+    /// concurrent write the draft is re-read and the outcome applied to the fresh
+    /// copy, but only while it is still Releasing under <paramref name="claimId"/>
+    /// (nobody else has decided it); otherwise the conflict (409) reaches the
+    /// caller and the other write stands.
+    /// </summary>
+    private async Task<EftDraft> SaveReleaseOutcomeAsync(EftDraft draft, string claimId, Action<EftDraft> applyOutcome)
+    {
+        var routingLast4 = draft.RoutingNumberLast4;
+        var accountLast4 = draft.AccountNumberLast4;
+        applyOutcome(draft);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await _draftRepository.UpdateAsync(draft);
+                return draft;
+            }
+            catch (EftDraftConcurrencyException) when (attempt < MaxConcurrentWriteAttempts)
+            {
+                var fresh = await _draftRepository.GetByIdAsync(draft.Id);
+                if (fresh == null || fresh.Status != EftDraftStatus.Releasing || fresh.ReleaseClaimId != claimId)
+                    throw;
+                // The masked account actually debited, as on the copy the file was built from.
+                fresh.RoutingNumberLast4 = routingLast4;
+                fresh.AccountNumberLast4 = accountLast4;
+                applyOutcome(fresh);
+                draft = fresh;
+            }
+        }
     }
 
     private static string DeliveryUnknownMessage(string fileReference, string? reason)

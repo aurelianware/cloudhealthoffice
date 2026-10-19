@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AuthorizationService.Exceptions;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using Confluent.Kafka;
@@ -138,7 +139,36 @@ public class RfaiDocsReceivedConsumer : BackgroundService
         await ProcessMessageAsync(message, _testRepository);
     }
 
+    /// <summary>
+    /// Attempts at the read-apply-write before the conflict is left to
+    /// redelivery (the offset is not committed).
+    /// </summary>
+    internal const int MaxConcurrencyAttempts = 4;
+
     internal async Task ProcessMessageAsync(RfaiDocsReceivedMessage message, IAuthorizationRepository repository)
+    {
+        // The write is conditional on the revision read. If a reviewer (or the
+        // SLA watchdog) wrote in between, re-read and apply the message to the
+        // fresh copy: it re-checks the terminal state, so a decision recorded
+        // meanwhile is honoured rather than overwritten.
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await ApplyAsync(message, repository);
+                return;
+            }
+            catch (AuthorizationConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                _logger.LogInformation(
+                    "Authorization {AuthNumber} changed concurrently while recording RFAI {RfaiCaseId}; "
+                    + "re-reading (attempt {Attempt} of {Max})",
+                    message.AuthNumber, message.RfaiCaseId, attempt, MaxConcurrencyAttempts);
+            }
+        }
+    }
+
+    private async Task ApplyAsync(RfaiDocsReceivedMessage message, IAuthorizationRepository repository)
     {
         var auth = await repository.GetByAuthorizationNumberAsync(message.AuthNumber);
 

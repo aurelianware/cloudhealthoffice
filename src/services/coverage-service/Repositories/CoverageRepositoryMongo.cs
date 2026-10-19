@@ -1,3 +1,4 @@
+using CoverageService.Exceptions;
 using CoverageService.Models;
 using MongoDB.Driver;
 using System;
@@ -264,10 +265,22 @@ public class CoverageRepositoryMongo : ICoverageRepository
         var update = Builders<Coverage>.Update
             .Set(c => c.Status, newStatus)
             .Set(c => c.LastUpdatedDate, DateTime.UtcNow)
-            .Set(c => c.LastUpdatedBy, updatedBy);
+            .Set(c => c.LastUpdatedBy, updatedBy)
+            // Bumped: a replace based on a read from before the sweep then
+            // conflicts instead of turning the coverage back.
+            .Inc(c => c.Revision, 1L);
 
         var result = await _collection.UpdateOneAsync(filter, update);
         return result.ModifiedCount > 0;
+    }
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<Coverage> RevisionIs(long expected)
+    {
+        var b = Builders<Coverage>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(c => c.Revision, 0L), b.Exists(c => c.Revision, false))
+            : b.Eq(c => c.Revision, expected);
     }
 
     public async Task<Coverage> CreateAsync(Coverage coverage)
@@ -279,6 +292,7 @@ public class CoverageRepositoryMongo : ICoverageRepository
         {
             coverage.Id = Guid.NewGuid().ToString();
         }
+        coverage.Revision = 0;
 
         await _collection.InsertOneAsync(coverage);
         return coverage;
@@ -293,10 +307,28 @@ public class CoverageRepositoryMongo : ICoverageRepository
             Builders<Coverage>.Filter.Eq(c => c.Id, coverage.Id)
         );
 
-        var result = await _collection.ReplaceOneAsync(filter, coverage);
-        
+        // Conditional on the revision the caller read: a concurrent write in
+        // between (the status sweep, a PCP assignment, another edit) makes this
+        // one fail instead of being silently overwritten or undone.
+        var expected = coverage.Revision;
+        coverage.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), coverage);
+        }
+        catch
+        {
+            coverage.Revision = expected;
+            throw;
+        }
+
         if (result.MatchedCount == 0)
         {
+            coverage.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new CoverageConcurrencyException(coverage.Id, expected);
+
             throw new Exception($"Coverage with ID {coverage.Id} not found for update.");
         }
 

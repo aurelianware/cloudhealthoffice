@@ -354,6 +354,7 @@ public class MongoCashPostingRepository : ICashPostingRepository
     {
         posting.TenantId = GetTenantId();
         posting.CreatedAt = DateTime.UtcNow;
+        posting.Revision = 0;
         posting.LastUpdatedAt = DateTime.UtcNow;
         await _collection.InsertOneAsync(posting);
         _logger.LogInformation("Created cash posting {PostingNumber}", SanitizeForLog(posting.PostingNumber));
@@ -362,11 +363,34 @@ public class MongoCashPostingRepository : ICashPostingRepository
 
     public async Task<CashPosting> UpdateAsync(CashPosting posting)
     {
+        var f = Builders<CashPosting>.Filter;
+        var idFilter = f.And(f.Eq(x => x.Id, posting.Id), f.Eq(x => x.TenantId, posting.TenantId));
+        var expected = posting.Revision;
+        // Documents saved before the revision existed have no Revision field: revision 0 matches them too.
+        var revisionFilter = expected == 0
+            ? f.Or(f.Eq(x => x.Revision, 0L), f.Exists(x => x.Revision, false))
+            : f.Eq(x => x.Revision, expected);
+
         posting.LastUpdatedAt = DateTime.UtcNow;
-        var filter = Builders<CashPosting>.Filter.And(
-            Builders<CashPosting>.Filter.Eq(x => x.Id, posting.Id),
-            Builders<CashPosting>.Filter.Eq(x => x.TenantId, posting.TenantId));
-        await _collection.ReplaceOneAsync(filter, posting);
+        posting.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(idFilter & revisionFilter, posting);
+        }
+        catch
+        {
+            posting.Revision = expected;
+            throw;
+        }
+        if (result.MatchedCount == 0)
+        {
+            posting.Revision = expected;
+            // Missing: unchanged behaviour (nothing written, no error). Present: a stale copy.
+            if (await _collection.Find(idFilter).AnyAsync())
+                throw new ArConcurrencyException($"Cash posting {posting.Id} was changed by someone else; re-read it and retry");
+            return posting;
+        }
         _logger.LogInformation("Updated cash posting {PostingNumber}", SanitizeForLog(posting.PostingNumber));
         return posting;
     }
@@ -462,6 +486,7 @@ public class MongoArAdjustmentRepository : IArAdjustmentRepository
     {
         adjustment.TenantId = GetTenantId();
         adjustment.CreatedAt = DateTime.UtcNow;
+        adjustment.Revision = 0;
         adjustment.LastUpdatedAt = DateTime.UtcNow;
         await _collection.InsertOneAsync(adjustment);
         _logger.LogInformation("Created AR adjustment {AdjustmentNumber}", SanitizeForLog(adjustment.AdjustmentNumber));
@@ -470,11 +495,34 @@ public class MongoArAdjustmentRepository : IArAdjustmentRepository
 
     public async Task<ArAdjustment> UpdateAsync(ArAdjustment adjustment)
     {
+        var f = Builders<ArAdjustment>.Filter;
+        var idFilter = f.And(f.Eq(x => x.Id, adjustment.Id), f.Eq(x => x.TenantId, adjustment.TenantId));
+        var expected = adjustment.Revision;
+        // Documents saved before the revision existed have no Revision field: revision 0 matches them too.
+        var revisionFilter = expected == 0
+            ? f.Or(f.Eq(x => x.Revision, 0L), f.Exists(x => x.Revision, false))
+            : f.Eq(x => x.Revision, expected);
+
         adjustment.LastUpdatedAt = DateTime.UtcNow;
-        var filter = Builders<ArAdjustment>.Filter.And(
-            Builders<ArAdjustment>.Filter.Eq(x => x.Id, adjustment.Id),
-            Builders<ArAdjustment>.Filter.Eq(x => x.TenantId, adjustment.TenantId));
-        await _collection.ReplaceOneAsync(filter, adjustment);
+        adjustment.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(idFilter & revisionFilter, adjustment);
+        }
+        catch
+        {
+            adjustment.Revision = expected;
+            throw;
+        }
+        if (result.MatchedCount == 0)
+        {
+            adjustment.Revision = expected;
+            // Missing: unchanged behaviour (nothing written, no error). Present: a stale copy.
+            if (await _collection.Find(idFilter).AnyAsync())
+                throw new ArConcurrencyException($"AR adjustment {adjustment.Id} was changed by someone else; re-read it and retry");
+            return adjustment;
+        }
         _logger.LogInformation("Updated AR adjustment {AdjustmentNumber}", SanitizeForLog(adjustment.AdjustmentNumber));
         return adjustment;
     }

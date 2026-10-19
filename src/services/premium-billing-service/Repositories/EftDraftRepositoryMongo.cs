@@ -50,7 +50,12 @@ public class EftDraftRepositoryMongo : IEftDraftRepository
             f.And(f.In(d => d.Status, EftDraft.ActiveStatuses), f.Not(f.Type(d => d.ActiveInvoiceKey, BsonType.String))),
             Builders<EftDraft>.Update.Pipeline(new[]
             {
-                new BsonDocument("$set", new BsonDocument(nameof(EftDraft.ActiveInvoiceKey), "$" + nameof(EftDraft.InvoiceId)))
+                new BsonDocument("$set", new BsonDocument
+                {
+                    { nameof(EftDraft.ActiveInvoiceKey), "$" + nameof(EftDraft.InvoiceId) },
+                    // A write like any other: a copy read before it no longer replaces the draft.
+                    { nameof(EftDraft.Revision), new BsonDocument("$add", new BsonArray { new BsonDocument("$ifNull", new BsonArray { "$" + nameof(EftDraft.Revision), 0L }), 1L }) },
+                })
             }));
         try
         {
@@ -73,6 +78,19 @@ public class EftDraftRepositoryMongo : IEftDraftRepository
     }
 
     private static bool IsDuplicateKey(MongoWriteException ex) => ex.WriteError?.Category == ServerErrorCategory.DuplicateKey;
+
+    /// <summary>Every targeted write to a draft bumps its <see cref="EftDraft.Revision"/>.</summary>
+    private static UpdateDefinition<EftDraft> Bumped(UpdateDefinition<EftDraft> update) =>
+        update.Inc(d => d.Revision, 1L);
+
+    /// <summary>Matches the revision a replace was based on (drafts saved before revisions existed count as 0).</summary>
+    private static FilterDefinition<EftDraft> RevisionIs(long expected)
+    {
+        var b = Builders<EftDraft>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(d => d.Revision, 0L), b.Exists(d => d.Revision, false))
+            : b.Eq(d => d.Revision, expected);
+    }
 
     private string GetTenantId() =>
         _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString() is { Length: > 0 } tenantId
@@ -101,24 +119,47 @@ public class EftDraftRepositoryMongo : IEftDraftRepository
         return await _collection.Find(d => d.TenantId == tenantId && d.Id == id).FirstOrDefaultAsync();
     }
 
+    /// <summary>
+    /// Replaces the draft only if it is still at the revision it was read at, so
+    /// a stale copy never undoes a cancel, a claim for release or a recorded
+    /// outcome: <see cref="EftDraftConcurrencyException"/> instead. A draft that
+    /// does not exist is not written (as before).
+    /// </summary>
     public async Task<EftDraft> UpdateAsync(EftDraft draft)
     {
         draft.LastUpdatedAt = DateTime.UtcNow;
         draft.RefreshActiveInvoiceKey();
+        var f = Builders<EftDraft>.Filter;
+        var expected = draft.Revision;
+        var filter = f.Eq(d => d.TenantId, draft.TenantId) & f.Eq(d => d.Id, draft.Id) & RevisionIs(expected);
+        draft.Revision = expected + 1;
+        ReplaceOneResult result;
         try
         {
-            await _collection.ReplaceOneAsync(
-                d => d.TenantId == draft.TenantId && d.Id == draft.Id, draft);
+            try
+            {
+                result = await _collection.ReplaceOneAsync(filter, draft);
+            }
+            catch (MongoWriteException ex) when (IsDuplicateKey(ex) && draft.ActiveInvoiceKey != null)
+            {
+                // Only an existing draft of an invoice that already had two active
+                // drafts (from before the guard): its state is recorded, never lost.
+                _logger?.LogCritical("Draft {DraftId}: invoice {InvoiceId} has another active draft; recorded without the invoice guard. Reconcile by hand",
+                    draft.Id, draft.InvoiceId);
+                draft.ActiveInvoiceKey = null;
+                result = await _collection.ReplaceOneAsync(filter, draft);
+            }
         }
-        catch (MongoWriteException ex) when (IsDuplicateKey(ex) && draft.ActiveInvoiceKey != null)
+        catch
         {
-            // Only an existing draft of an invoice that already had two active
-            // drafts (from before the guard): its state is recorded, never lost.
-            _logger?.LogCritical("Draft {DraftId}: invoice {InvoiceId} has another active draft; recorded without the invoice guard. Reconcile by hand",
-                draft.Id, draft.InvoiceId);
-            draft.ActiveInvoiceKey = null;
-            await _collection.ReplaceOneAsync(
-                d => d.TenantId == draft.TenantId && d.Id == draft.Id, draft);
+            draft.Revision = expected;
+            throw;
+        }
+        if (result.MatchedCount == 0)
+        {
+            draft.Revision = expected;
+            if (await _collection.Find(f.Eq(d => d.TenantId, draft.TenantId) & f.Eq(d => d.Id, draft.Id)).AnyAsync())
+                throw new EftDraftConcurrencyException(draft.Id, expected);
         }
         return draft;
     }
@@ -160,7 +201,7 @@ public class EftDraftRepositoryMongo : IEftDraftRepository
             .Set(d => d.ReleaseClaimedAt, claimedAt)
             .Set(d => d.ReleasedBy, releasedBy)
             .Set(d => d.LastUpdatedAt, DateTime.UtcNow);
-        var result = await _collection.UpdateOneAsync(filter, update);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update));
         return result.ModifiedCount == 1;
     }
 
@@ -173,13 +214,13 @@ public class EftDraftRepositoryMongo : IEftDraftRepository
             f.Eq(d => d.Id, id),
             f.Eq(d => d.Status, EftDraftStatus.Releasing),
             f.Eq(d => d.ReleaseClaimId, claimId));
-        await _collection.UpdateOneAsync(filter, Builders<EftDraft>.Update
+        await _collection.UpdateOneAsync(filter, Bumped(Builders<EftDraft>.Update
             .Set(d => d.Status, EftDraftStatus.Pending)
             .Set(d => d.ReleaseClaimId, null)
             .Set(d => d.ReleaseClaimedAt, null)
             .Set(d => d.ReleasedBy, null)
             .Set(d => d.ErrorMessage, reason)
-            .Set(d => d.LastUpdatedAt, DateTime.UtcNow));
+            .Set(d => d.LastUpdatedAt, DateTime.UtcNow)));
     }
 
     public async Task<bool> TryCancelPendingAsync(string id, string cancelledBy)
@@ -190,11 +231,11 @@ public class EftDraftRepositoryMongo : IEftDraftRepository
             f.Eq(d => d.TenantId, tenantId),
             f.Eq(d => d.Id, id),
             f.Eq(d => d.Status, EftDraftStatus.Pending));
-        var result = await _collection.UpdateOneAsync(filter, Builders<EftDraft>.Update
+        var result = await _collection.UpdateOneAsync(filter, Bumped(Builders<EftDraft>.Update
             .Set(d => d.Status, EftDraftStatus.Cancelled)
             .Set(d => d.ActiveInvoiceKey, null)
             .Set(d => d.LastUpdatedBy, cancelledBy)
-            .Set(d => d.LastUpdatedAt, DateTime.UtcNow));
+            .Set(d => d.LastUpdatedAt, DateTime.UtcNow)));
         return result.ModifiedCount == 1;
     }
 

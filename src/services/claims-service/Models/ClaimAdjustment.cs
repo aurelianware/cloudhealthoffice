@@ -131,6 +131,14 @@ public class ClaimAdjustment
     /// <summary>Free-text failure reason captured when the adjustment lands in <see cref="ClaimAdjustmentStatus.Failed"/>.</summary>
     [StringLength(2000)]
     public string? FailureReason { get; set; }
+
+    /// <summary>
+    /// Optimistic concurrency: incremented on every write, and an update
+    /// succeeds only against the revision it read, so a stale copy cannot
+    /// undo a concurrent status transition. Rows written before the field
+    /// existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
 }
 
 /// <summary>

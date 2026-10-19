@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Concurrent writes no longer silently overwrite each other (MongoDB).**
+  Repositories that read a document and replaced it whole now condition the
+  replace on a `Revision` that every write increments. A write based on a
+  stale read gets **409** instead of erasing a concurrent change.
+
+  This covers:
+  - claims: claim, claim adjustment;
+  - payment: payment, payment run, reversal run;
+  - premium-billing: billing run, EFT draft;
+  - capitation: run, disbursement, statement;
+  - authorization, RFAI case, coverage, member;
+  - AR: cash posting, adjustment;
+  - ID card, tenant user.
+
+  Some lost updates this prevents:
+  - two executes of one billing or capitation run both running;
+  - a stale write undoing a coverage termination;
+  - a card scan undoing a revocation;
+  - a login restoring a revoked role;
+  - a Stripe or NACHA outcome undoing a cancel.
+
+  Every service now answers `ConcurrencyConflictException` with 409. The
+  medium and low sites still open are listed in
+  `docs/architecture/mongo-write-concurrency.md`.
+- **The claim lifecycle store's MongoDB indexes are created.** Its
+  `EnsureIndexesAsync` declared a unique index on `_id`, which MongoDB
+  rejects. That failed host start-up and left the unique tenant +
+  idempotency-key index uncreated.
+
 - **Service-to-service calls are resilient.** Every factory-built
   `HttpClient` gets these defaults:
   - a total timeout and a per-attempt timeout;

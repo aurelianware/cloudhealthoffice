@@ -54,6 +54,15 @@ public class RfaiCase
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optimistic-concurrency revision of the MongoDB document, bumped by every
+    /// write. A whole-document replace succeeds only while the stored revision
+    /// is still the one it read, so a stale write (a delivery callback racing a
+    /// response intake) fails instead of silently dropping the other's change.
+    /// Documents written before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
+
     /// <summary>Multi-tenant partition key. Always from authenticated context, never from a payload.</summary>
     public string TenantId { get; set; } = string.Empty;
 

@@ -14,6 +14,8 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="coverlet.collector" />
+    <!-- Card revision concurrency against a real mongod. -->
+    <PackageReference Include="EphemeralMongo" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\idcard-service\idcard-service.csproj" />
@@ -21,5 +23,9 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

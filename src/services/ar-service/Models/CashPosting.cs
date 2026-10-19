@@ -69,6 +69,13 @@ public class CashPosting
     /// since; set only by the reconciliation tool.
     /// </summary>
     public LegacyPostingReconciliation? LegacyReconciliation { get; set; }
+
+    /// <summary>
+    /// Optimistic concurrency: incremented on every save; a save of a stale
+    /// copy fails with <see cref="Repositories.ArConcurrencyException"/>.
+    /// Documents saved before the field existed read as 0.
+    /// </summary>
+    public long Revision { get; set; }
 }
 
 [BsonIgnoreExtraElements]

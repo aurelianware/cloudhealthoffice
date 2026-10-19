@@ -137,6 +137,7 @@ public class PaymentRunService : IPaymentRunService
         paymentRun.Status = PaymentRunStatus.Running;
         paymentRun.ExecutedBy = approver;
         paymentRun.ExecutionStartedAt = startedAt;
+        paymentRun.Revision++; // the start was a write to the run, too
 
         // The payment date is fixed now, before any payment or 835 is built: the
         // 835s' BPR16 and the NACHA file's effective entry date are both this date
@@ -158,7 +159,7 @@ public class PaymentRunService : IPaymentRunService
         {
             // Persist the fixed date before anything is issued. Inside the try: if this
             // write fails the run is marked Failed (nothing was issued), not left Running.
-            await _paymentRunRepository.UpdateAsync(paymentRun);
+            await SaveExecutingRunAsync(paymentRun);
 
             // Step 0: The 835 BPR's bank and originating-company details are
             //         payment-service configuration, the same for every
@@ -231,7 +232,7 @@ public class PaymentRunService : IPaymentRunService
                 paymentRun.Status = PaymentRunStatus.Completed;
                 paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
                 paymentRun.ExecutionDurationSeconds = (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds;
-                return await _paymentRunRepository.UpdateAsync(paymentRun);
+                return await SaveExecutingRunAsync(paymentRun);
             }
 
             // Group claims by provider (existing semantics). A run that only
@@ -433,7 +434,7 @@ public class PaymentRunService : IPaymentRunService
 
             // GL accrual (claims expense / claims payable), in the same write as Completed.
             GlEventOutbox.AttachPaymentRunExecuted(paymentRun, issuedForGl, DateTime.UtcNow);
-            return await _paymentRunRepository.UpdateAsync(paymentRun);
+            return await SaveExecutingRunAsync(paymentRun);
         }
         catch (Exception ex)
         {
@@ -461,8 +462,36 @@ public class PaymentRunService : IPaymentRunService
 
             // Payments issued before the failure still accrue.
             GlEventOutbox.AttachPaymentRunExecuted(paymentRun, issuedForGl, DateTime.UtcNow, replaceUnpublished: true);
-            await _paymentRunRepository.UpdateAsync(paymentRun);
+            await SaveExecutingRunAsync(paymentRun);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Saves the run this execution holds (Running, or leaving Running). The save is
+    /// conditional on the run's revision; on a conflict the fresh copy's reservation
+    /// outcomes are kept (<see cref="ConcurrentSaves.KeepReservationOutcomes(PaymentRun, PaymentRun)"/>)
+    /// and the save retried, a bounded number of times. Anything else having moved the
+    /// run out of Running is not merged: the conflict propagates.
+    /// </summary>
+    private async Task<PaymentRun> SaveExecutingRunAsync(PaymentRun paymentRun)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await _paymentRunRepository.UpdateAsync(paymentRun);
+            }
+            catch (PaymentConcurrencyException) when (attempt < ConcurrentSaves.MaxAttempts)
+            {
+                var fresh = await _paymentRunRepository.GetByIdAsync(paymentRun.Id);
+                if (fresh == null || fresh.Status != PaymentRunStatus.Running)
+                    throw;
+                _logger.LogWarning(
+                    "Payment run {PaymentRunNumber} changed while executing (reservation outcomes); keeping them and saving again",
+                    paymentRun.PaymentRunNumber);
+                ConcurrentSaves.KeepReservationOutcomes(paymentRun, fresh);
+            }
         }
     }
 
@@ -681,11 +710,22 @@ public class PaymentRunService : IPaymentRunService
 
             if (ok && !string.IsNullOrEmpty(payment.RunId) && payment.RunId != paymentRun.Id)
             {
-                var original = await _paymentRunRepository.GetByIdAsync(payment.RunId);
-                if (original != null && original.PendingFinalizeClaimIds.Remove(claimId))
+                // Read-modify-write of the earlier run, which others may be writing
+                // (EFT file, reservation outcomes): re-read and re-apply on a conflict.
+                for (var attempt = 1; ; attempt++)
                 {
+                    var original = await _paymentRunRepository.GetByIdAsync(payment.RunId);
+                    if (original == null || !original.PendingFinalizeClaimIds.Remove(claimId))
+                        break;
                     original.Warnings.Add($"Claim {claimId} finalized by payment run {paymentRun.PaymentRunNumber} at {DateTime.UtcNow:O}");
-                    await _paymentRunRepository.UpdateAsync(original);
+                    try
+                    {
+                        await _paymentRunRepository.UpdateAsync(original);
+                        break;
+                    }
+                    catch (PaymentConcurrencyException) when (attempt < ConcurrentSaves.MaxAttempts)
+                    {
+                    }
                 }
             }
         }
@@ -1496,13 +1536,8 @@ public class PaymentRunService : IPaymentRunService
         }
     }
 
-    private async Task SavePaymentStatusAsync(Payment payment)
-    {
-        payment.Status = payment.ClaimPayments.All(cp => cp.FinalizedAt != null)
-            ? PaymentStatus.Posted
-            : PaymentStatus.PaidPendingFinalize;
-        await _paymentRepository.UpdateAsync(payment);
-    }
+    private Task SavePaymentStatusAsync(Payment payment)
+        => ConcurrentSaves.SaveFinalizeOutcomeAsync(_paymentRepository, payment);
 
     private async Task<int> GetNextCheckNumberAsync()
     {

@@ -75,12 +75,43 @@ public class BillingRunRepositoryMongo : IBillingRunRepository
         return billingRun;
     }
 
+    /// <summary>Matches the revision a write was based on (runs saved before revisions existed count as 0).</summary>
+    private static FilterDefinition<BillingRun> RevisionIs(long expected)
+    {
+        var b = Builders<BillingRun>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
+    }
+
+    /// <summary>
+    /// Replaces the run only if it is still at the revision it was read at;
+    /// <see cref="BillingRunConcurrencyException"/> when another write came first.
+    /// A run that does not exist is not written (as before).
+    /// </summary>
     public async Task<BillingRun> UpdateAsync(BillingRun billingRun)
     {
         var filter = Builders<BillingRun>.Filter.And(
             Builders<BillingRun>.Filter.Eq(x => x.Id, billingRun.Id),
             Builders<BillingRun>.Filter.Eq(x => x.TenantId, billingRun.TenantId));
-        await _collection.ReplaceOneAsync(filter, billingRun);
+        var expected = billingRun.Revision;
+        billingRun.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), billingRun);
+        }
+        catch
+        {
+            billingRun.Revision = expected;
+            throw;
+        }
+        if (result.MatchedCount == 0)
+        {
+            billingRun.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new BillingRunConcurrencyException(billingRun.Id, expected);
+        }
         _logger.LogInformation("Updated billing run {BillingRunNumber}", billingRun.BillingRunNumber);
         return billingRun;
     }

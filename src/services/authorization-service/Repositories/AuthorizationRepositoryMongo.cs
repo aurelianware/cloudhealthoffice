@@ -1,3 +1,4 @@
+using AuthorizationService.Exceptions;
 using AuthorizationService.Models;
 using AuthorizationService.Services.Retention;
 using MongoDB.Driver;
@@ -287,7 +288,9 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
             .Set(x => x.SlaEscalation, level)
             .Set(x => x.SlaEscalatedAt, escalatedAtUtc);
 
-        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        // Bumped: a replace based on a read from before the escalation then
+        // conflicts instead of erasing it.
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update), cancellationToken: ct);
         return result.ModifiedCount == 1;
     }
 
@@ -296,9 +299,23 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         var tenantId = GetTenantId();
         authorization.TenantId = tenantId;
         authorization.Id ??= Guid.NewGuid().ToString();
+        authorization.Revision = 0;
 
         await _collection.InsertOneAsync(authorization);
         return authorization;
+    }
+
+    /// <summary>Every write to an authorization document bumps its <see cref="Authorization.Revision"/>.</summary>
+    private static UpdateDefinition<Authorization> Bumped(UpdateDefinition<Authorization> update) =>
+        update.Inc(x => x.Revision, 1L);
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<Authorization> RevisionIs(long expected)
+    {
+        var b = Builders<Authorization>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
     }
 
     public async Task<Authorization> UpdateAsync(Authorization authorization)
@@ -311,7 +328,30 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
             Builders<Authorization>.Filter.Eq(x => x.TenantId, tenantId)
         );
 
-        await _collection.ReplaceOneAsync(filter, authorization);
+        // Conditional on the revision the caller read: a concurrent write in
+        // between (a reviewer decision, an SLA escalation, the RFAI consumer)
+        // makes this one fail instead of being silently overwritten.
+        var expected = authorization.Revision;
+        authorization.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), authorization);
+        }
+        catch
+        {
+            authorization.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            authorization.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new AuthorizationConcurrencyException(authorization.Id, expected);
+            // Missing: unchanged behaviour (nothing written, no error).
+        }
+
         return authorization;
     }
 

@@ -469,6 +469,16 @@ public class Claim
     public string ClaimVersionId { get; set; } = string.Empty;
 
     /// <summary>
+    /// Optimistic-concurrency revision of this document, incremented by every
+    /// write to it (MongoDB path). A full replace is conditional on the
+    /// revision it read: a write based on a stale read fails with
+    /// <c>ClaimConcurrencyException</c> instead of silently overwriting a
+    /// concurrent change. Documents written before the field existed read as 0.
+    /// Not the claim-version chain (<see cref="VersionNumber"/>).
+    /// </summary>
+    public long Revision { get; set; }
+
+    /// <summary>
     /// 1-based monotonic sequence within <c>(TenantId, ClaimVersionId)</c>.
     /// Populated by the service when creating new versions; left at the
     /// default for legacy documents so hydration can fix it up on read.

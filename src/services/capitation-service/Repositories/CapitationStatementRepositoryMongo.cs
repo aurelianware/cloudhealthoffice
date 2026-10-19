@@ -105,6 +105,7 @@ public class CapitationStatementRepositoryMongo : ICapitationStatementRepository
         statement.TenantId = GetTenantId();
         statement.CreatedAt = DateTime.UtcNow;
         statement.LastUpdatedAt = DateTime.UtcNow;
+        statement.Revision = 0;
         await _collection.InsertOneAsync(statement);
         _logger.LogInformation("Created capitation statement {StatementNumber} for provider {NPI}",
             statement.StatementNumber, statement.ProviderNPI);
@@ -119,10 +120,10 @@ public class CapitationStatementRepositoryMongo : ICapitationStatementRepository
             f.Eq(x => x.Id, statementId),
             f.Eq(x => x.TenantId, tenantId),
             f.Eq(x => x.Status, CapitationStatementStatus.Approved));
-        var result = await _collection.UpdateOneAsync(filter, Builders<CapitationStatement>.Update
+        var result = await _collection.UpdateOneAsync(filter, Bumped(Builders<CapitationStatement>.Update
             .Set(x => x.Status, CapitationStatementStatus.PaymentInitiated)
             .Set(x => x.EftDisbursementId, disbursementId)
-            .Set(x => x.LastUpdatedAt, DateTime.UtcNow));
+            .Set(x => x.LastUpdatedAt, DateTime.UtcNow)));
         return result.ModifiedCount == 1;
     }
 
@@ -135,10 +136,10 @@ public class CapitationStatementRepositoryMongo : ICapitationStatementRepository
             f.Eq(x => x.TenantId, tenantId),
             f.Eq(x => x.Status, CapitationStatementStatus.PaymentInitiated),
             f.Eq(x => x.EftDisbursementId, disbursementId));
-        await _collection.UpdateOneAsync(filter, Builders<CapitationStatement>.Update
+        await _collection.UpdateOneAsync(filter, Bumped(Builders<CapitationStatement>.Update
             .Set(x => x.Status, CapitationStatementStatus.Approved)
             .Set(x => x.EftDisbursementId, null)
-            .Set(x => x.LastUpdatedAt, DateTime.UtcNow));
+            .Set(x => x.LastUpdatedAt, DateTime.UtcNow)));
     }
 
     public async Task<bool> MarkPaymentUnknownAsync(string statementId, string disbursementId)
@@ -150,9 +151,9 @@ public class CapitationStatementRepositoryMongo : ICapitationStatementRepository
             f.Eq(x => x.TenantId, tenantId),
             f.Eq(x => x.Status, CapitationStatementStatus.PaymentInitiated),
             f.Eq(x => x.EftDisbursementId, disbursementId));
-        var result = await _collection.UpdateOneAsync(filter, Builders<CapitationStatement>.Update
+        var result = await _collection.UpdateOneAsync(filter, Bumped(Builders<CapitationStatement>.Update
             .Set(x => x.Status, CapitationStatementStatus.PaymentUnknown)
-            .Set(x => x.LastUpdatedAt, DateTime.UtcNow));
+            .Set(x => x.LastUpdatedAt, DateTime.UtcNow)));
         return result.ModifiedCount == 1;
     }
 
@@ -169,8 +170,21 @@ public class CapitationStatementRepositoryMongo : ICapitationStatementRepository
             .Set(x => x.Status, paid ? CapitationStatementStatus.PaymentInitiated : CapitationStatementStatus.Approved)
             .Set(x => x.LastUpdatedAt, DateTime.UtcNow);
         if (!paid) update = update.Set(x => x.EftDisbursementId, null);
-        var result = await _collection.UpdateOneAsync(filter, update);
+        var result = await _collection.UpdateOneAsync(filter, Bumped(update));
         return result.ModifiedCount == 1;
+    }
+
+    /// <summary>Every targeted write to a statement bumps its <see cref="CapitationStatement.Revision"/>.</summary>
+    private static UpdateDefinition<CapitationStatement> Bumped(UpdateDefinition<CapitationStatement> update) =>
+        update.Inc(x => x.Revision, 1L);
+
+    /// <summary>The document still has the revision the write was based on (0 matches documents written before the field existed).</summary>
+    private static FilterDefinition<CapitationStatement> RevisionIs(long expected)
+    {
+        var b = Builders<CapitationStatement>.Filter;
+        return expected == 0
+            ? b.Or(b.Eq(x => x.Revision, 0L), b.Exists(x => x.Revision, false))
+            : b.Eq(x => x.Revision, expected);
     }
 
     public async Task<CapitationStatement> UpdateAsync(CapitationStatement statement)
@@ -179,7 +193,29 @@ public class CapitationStatementRepositoryMongo : ICapitationStatementRepository
         var filter = Builders<CapitationStatement>.Filter.And(
             Builders<CapitationStatement>.Filter.Eq(x => x.Id, statement.Id),
             Builders<CapitationStatement>.Filter.Eq(x => x.TenantId, statement.TenantId));
-        await _collection.ReplaceOneAsync(filter, statement);
+        // Conditional on the revision the caller read: a replace from a stale
+        // read can never undo a payment transition made since (TryStartPayment,
+        // MarkPaymentUnknown, ResolvePaymentUnknown, UndoStartPayment).
+        var expected = statement.Revision;
+        statement.Revision = expected + 1;
+        ReplaceOneResult result;
+        try
+        {
+            result = await _collection.ReplaceOneAsync(filter & RevisionIs(expected), statement);
+        }
+        catch
+        {
+            statement.Revision = expected;
+            throw;
+        }
+
+        if (result.MatchedCount == 0)
+        {
+            statement.Revision = expected;
+            if (await _collection.Find(filter).AnyAsync())
+                throw new CapitationConcurrencyException("Capitation statement", statement.Id, expected);
+            // Missing: as before, nothing written and no error.
+        }
         _logger.LogInformation("Updated capitation statement {StatementNumber}", statement.StatementNumber);
         return statement;
     }
