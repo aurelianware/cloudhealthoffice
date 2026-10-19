@@ -380,10 +380,9 @@ public class PasSubmitTests
 
     [Fact]
     [Trait("Scenario", "PAS-05")]
-    public async Task PAS05_DenialWithoutExplicitCode_StillCarriesACodedError()
+    public async Task PAS05_DenialWithoutExplicitCode_IsNotRecordedOrReturnedAsADecision()
     {
-        // Defensive: even if a rule forgets a code, the response never emits a
-        // reason-less denial — the builder attaches a coded fallback.
+        // A malformed rule decision cannot become a durable, reasonless denial.
         var controller = BuildController(Adjudicator(new PasDecisionResult
         {
             HasDecision = true, Decision = "denied", RuleName = "Fallback",
@@ -391,10 +390,8 @@ public class PasSubmitTests
 
         var result = await controller.ClaimSubmit(RequestBundle());
 
-        var claimResponse = result.Should().BeOfType<OkObjectResult>().Subject
-            .Value.Should().BeOfType<Bundle>().Subject
-            .Entry[0].Resource.Should().BeOfType<ClaimResponse>().Subject;
-        claimResponse.Error.Should().NotBeEmpty();
-        claimResponse.Error[0].Code!.Coding[0].Code.Should().NotBeNullOrWhiteSpace();
+        var failure = result.Should().BeOfType<ObjectResult>().Subject;
+        failure.StatusCode.Should().Be(422);
+        failure.Value.Should().BeOfType<OperationOutcome>();
     }
 }

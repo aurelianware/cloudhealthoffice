@@ -31,6 +31,56 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
             new AuthenticationHeaderValue("Bearer", factory.IssueToken());
     }
 
+    [Fact]
+    public async Task MixedReviewerDecision_ClaimsValidationUsesTheIdentifiedLine()
+    {
+        var id = SetupAuth(AuthorizationStatus.Submitted);
+        var auth = (await _factory.AuthorizationRepository.GetByIdAsync(id))!;
+        auth.RequestedServices = new()
+        {
+            new() { LineNumber = 7, ProcedureCode = "72148", RequestedUnits = 4 },
+            new() { LineNumber = 12, ProcedureCode = "72148", RequestedUnits = 2 },
+        };
+        auth.ApprovedServiceDateFrom = new DateTime(2026, 5, 1);
+        auth.ApprovedServiceDateTo = new DateTime(2026, 5, 31);
+        _factory.AuthorizationRepository.GetByAuthorizationNumberAsync(auth.AuthorizationNumber).Returns(auth);
+        var decision = await _client.PostAsJsonAsync($"/api/authorizations/{id}/response", new
+        {
+            controlNumber = "CTL-mixed", reviewDecision = "A2", lineDecisions = new object[]
+            {
+                new { lineNumber = 7, reviewDecision = "A1" },
+                new { lineNumber = 12, reviewDecision = "A3", denialReasonCode = "NOTMEDNEC", denialReason = "Clinical criteria not met." },
+            },
+        }, Json);
+        Assert.Equal(HttpStatusCode.OK, decision.StatusCode);
+        var path = $"/api/authorizations/{auth.AuthorizationNumber}/validate?procedureCode=72148&serviceDate=2026-05-15";
+        var ambiguous = await _client.GetFromJsonAsync<JsonElement>(path, Json);
+        Assert.False(ambiguous.GetProperty("isValid").GetBoolean());
+        var approved = await _client.GetFromJsonAsync<JsonElement>(path + "&lineNumber=7", Json);
+        Assert.True(approved.GetProperty("isValid").GetBoolean());
+        Assert.Equal(4, approved.GetProperty("approvedUnits").GetDecimal());
+        var denied = await _client.GetFromJsonAsync<JsonElement>(path + "&lineNumber=12", Json);
+        Assert.False(denied.GetProperty("isValid").GetBoolean());
+        var afterEnd = await _client.GetFromJsonAsync<JsonElement>(path.Replace("2026-05-15", "2026-06-01") + "&lineNumber=7", Json);
+        Assert.False(afterEnd.GetProperty("isValid").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("status")]
+    [InlineData("response")]
+    public async Task ReviewerDenialWithoutReason_Returns400WithoutChangingRecord(string route)
+    {
+        var id = SetupAuth(AuthorizationStatus.Submitted);
+        var auth = (await _factory.AuthorizationRepository.GetByIdAsync(id))!;
+        var body = new { status = "Denied", reviewDecision = "A3", controlNumber = "invalid" };
+        var result = route == "status"
+            ? await _client.PutAsJsonAsync($"/api/authorizations/{id}/{route}", body, Json)
+            : await _client.PostAsJsonAsync($"/api/authorizations/{id}/{route}", body, Json);
+        Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
+        Assert.Equal(AuthorizationStatus.Submitted, auth.Status);
+        Assert.Empty(auth.StatusHistory);
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // POST /api/authorizations/{id}/response — 278 Response Processing
     // ═══════════════════════════════════════════════════════════════════
@@ -70,6 +120,8 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
             controlNumber = "CTL-002",
             reviewDecision = "A2",
             approvedUnits = 1,
+            denialReasonCode = "NOTMEDNEC",
+            denialReason = "Only one unit meets clinical criteria.",
             approvedServiceDateFrom = "2026-05-10",
             approvedServiceDateTo = "2026-05-10"
         }, Json);
@@ -121,7 +173,7 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
     }
 
     [Fact]
-    public async Task ProcessResponse_UnknownDecision_SetsStatusInReview()
+    public async Task ProcessResponse_UnknownDecision_Returns400()
     {
         var authId = SetupAuth(AuthorizationStatus.Submitted);
 
@@ -131,10 +183,7 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
             reviewDecision = "XX"
         }, Json);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.Equal(AuthorizationStatus.InReview.ToString(), result.GetProperty("status").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -577,7 +626,7 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
             CreatedDate = DateTime.UtcNow.AddDays(-1),
             RequestedServices = new List<RequestedService>
             {
-                new() { ProcedureCode = "72148", RequestedUnits = 1 }
+                new() { ProcedureCode = "72148", RequestedUnits = 3 }
             }
         };
 

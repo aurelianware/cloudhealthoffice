@@ -126,7 +126,8 @@ public class AuthorizationReplaceModeTests
         var created = await backend.CreateAsync(NewRequest("PAS-REPLACE-05"));
         await backend.UpdateStatusAsync(
             created, AuthorizationStatus.Denied, reviewDecision: "A3",
-            reason: "Does not meet clinical criteria for the requested imaging.");
+            reason: "Does not meet clinical criteria for the requested imaging.",
+            details: new AuthorizationDecisionDetails { DenialReasonCode = "NOTMEDNEC", DenialReason = "Does not meet clinical criteria for the requested imaging." });
 
         var fetched = await backend.GetByNumberAsync("PAS-REPLACE-05");
         fetched!.Status.Should().Be(AuthorizationStatus.Denied);

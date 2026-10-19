@@ -20,7 +20,7 @@ public class PasResponseBuilder
     /// <summary>
     /// Builds an approved ClaimResponse bundle.
     /// </summary>
-    public Bundle BuildApprovedResponse(Claim claim, PasDecisionResult decision)
+    public Bundle BuildApprovedResponse(Claim claim, PasDecisionResult decision, List<PriorAuthorizationService>? services = null)
     {
         var claimResponse = BuildBase(claim);
         claimResponse.Outcome = ClaimProcessingCodes.Complete;
@@ -36,13 +36,14 @@ public class PasResponseBuilder
             };
         }
 
+        AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() });
         return WrapInBundle(claimResponse);
     }
 
     /// <summary>
     /// Builds a denied ClaimResponse bundle.
     /// </summary>
-    public Bundle BuildDeniedResponse(Claim claim, PasDecisionResult decision)
+    public Bundle BuildDeniedResponse(Claim claim, PasDecisionResult decision, List<PriorAuthorizationService>? services = null)
     {
         var claimResponse = BuildBase(claim);
         claimResponse.Outcome = ClaimProcessingCodes.Complete;
@@ -61,13 +62,14 @@ public class PasResponseBuilder
             }
         };
 
+        AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() });
         return WrapInBundle(claimResponse);
     }
 
     /// <summary>
     /// Builds a pended ClaimResponse bundle with X12 review action code A4.
     /// </summary>
-    public Bundle BuildPendedResponse(Claim claim, string? authorizationNumber = null)
+    public Bundle BuildPendedResponse(Claim claim, string? authorizationNumber = null, List<PriorAuthorizationService>? services = null)
     {
         var claimResponse = BuildBase(claim);
         claimResponse.Outcome = ClaimProcessingCodes.Queued;
@@ -94,6 +96,7 @@ public class PasResponseBuilder
             }
         });
 
+        AddRequestedServices(claimResponse, new PriorAuthorizationRecord { RequestedServices = services ?? new() });
         return WrapInBundle(claimResponse);
     }
 
@@ -233,7 +236,27 @@ public class PasResponseBuilder
             if (string.IsNullOrWhiteSpace(service.ProcedureCode))
                 continue;
 
-            var item = new ClaimResponse.ItemComponent { ItemSequence = sequence++ };
+            var item = new ClaimResponse.ItemComponent { ItemSequence = service.LineNumber ?? sequence };
+            sequence++;
+            if (service.ServiceStatus is "A1" or "A2" or "A3" or "A4")
+            {
+                item.Adjudication.Add(new ClaimResponse.AdjudicationComponent
+                {
+                    Category = new CodeableConcept("http://terminology.hl7.org/CodeSystem/adjudication", "benefit"),
+                    Value = service.ApprovedUnits,
+                    Reason = service.ServiceStatus is "A2" or "A3"
+                        ? new CodeableConcept { Coding = new List<Coding> { new() { Code = service.DenialReasonCode } }, Text = service.DenialReason }
+                        : service.ServiceStatus == "A4" && !string.IsNullOrWhiteSpace(service.PendReason)
+                            ? new CodeableConcept { Text = service.PendReason } : null,
+                    Extension = new List<Extension>
+                    {
+                        new() { Url = ReviewActionExtensionUrl, Extension = new List<Extension>
+                        {
+                            new(ReviewActionCodeUrl, new Coding("https://codesystem.x12.org/005010/306", service.ServiceStatus)),
+                        } },
+                    },
+                });
+            }
 
             item.Adjudication.Add(new ClaimResponse.AdjudicationComponent
             {
@@ -244,7 +267,7 @@ public class PasResponseBuilder
                 Value = service.RequestedUnits,
             });
 
-            if (service.ApprovedUnits.HasValue)
+            if (service.ApprovedUnits.HasValue && service.ServiceStatus is not ("A1" or "A2" or "A3" or "A4"))
             {
                 item.Adjudication.Add(new ClaimResponse.AdjudicationComponent
                 {

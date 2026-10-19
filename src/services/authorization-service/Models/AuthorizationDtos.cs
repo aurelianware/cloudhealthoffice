@@ -21,7 +21,7 @@ public class AuthorizationValidationResponse
 /// <summary>
 /// Authorization status update request
 /// </summary>
-public class AuthorizationStatusUpdate
+public class AuthorizationStatusUpdate : AuthorizationDecisionDetails
 {
     [Required]
     public AuthorizationStatus Status { get; set; }
@@ -48,7 +48,7 @@ public class AuthorizationStatusUpdate
 /// <summary>
 /// Authorization response (278 response transaction)
 /// </summary>
-public class AuthorizationResponse
+public class AuthorizationResponse : AuthorizationDecisionDetails
 {
     [Required]
     [StringLength(50)]
@@ -58,19 +58,9 @@ public class AuthorizationResponse
     [StringLength(2)]
     public string ReviewDecision { get; set; } = string.Empty; // A1/A2/A3/A4
 
-    public decimal? ApprovedUnits { get; set; }
     public DateTime? ApprovedServiceDateFrom { get; set; }
     public DateTime? ApprovedServiceDateTo { get; set; }
     public DateTime? ExpirationDate { get; set; }
-
-    [StringLength(10)]
-    public string? DenialReasonCode { get; set; }
-
-    [StringLength(500)]
-    public string? DenialReason { get; set; }
-
-    [StringLength(500)]
-    public string? PendReason { get; set; }
 
     [StringLength(1000)]
     public string? FollowUpAction { get; set; }
@@ -129,4 +119,24 @@ public class AuthorizationsSummary
     public decimal AverageReviewDays { get; set; }
     public decimal AverageTurnaroundDays { get; set; }
     public decimal ApprovalRate { get; set; }
+}
+
+/// <summary>Structured outcome supplied by a reviewer, independent of transport.</summary>
+public class AuthorizationDecisionDetails
+{
+    public decimal? ApprovedUnits { get; set; }
+    [StringLength(10)] public string? DenialReasonCode { get; set; }
+    [StringLength(500)] public string? DenialReason { get; set; }
+    [StringLength(500)] public string? PendReason { get; set; }
+    public List<AuthorizationLineDecision> LineDecisions { get; set; } = new();
+}
+
+public class AuthorizationLineDecision
+{
+    [Range(1, int.MaxValue)] public int LineNumber { get; set; }
+    [Required, RegularExpression("A[1-4]")] public string ReviewDecision { get; set; } = string.Empty;
+    public decimal? ApprovedUnits { get; set; }
+    [StringLength(10)] public string? DenialReasonCode { get; set; }
+    [StringLength(500)] public string? DenialReason { get; set; }
+    [StringLength(500)] public string? PendReason { get; set; }
 }

@@ -62,5 +62,6 @@ public interface IAuthorizationBackend
         AuthorizationStatus status,
         string? reviewDecision,
         string? reason,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        AuthorizationDecisionDetails? details = null);
 }
