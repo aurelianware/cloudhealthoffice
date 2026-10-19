@@ -82,7 +82,7 @@ public class AuthorizationAccessAuditTests : IClassFixture<AuthorizationApiFacto
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var entry = Assert.Single(_log.All, e => e.ActorId == "svc-invalid-line");
         Assert.Equal("Validate", entry.Action);
-        Assert.Equal("PA-1", entry.RecordId);
+        Assert.Equal("auth-1", entry.RecordId);
     }
 
     [Fact]
