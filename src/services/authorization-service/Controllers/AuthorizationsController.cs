@@ -486,12 +486,13 @@ public class AuthorizationsController : ControllerBase
             return NotFound($"Authorization {id} not found");
         }
 
+        try { AuthorizationLifecyclePolicy.Validate(authorization, statusUpdate.Status); }
+        catch (AuthorizationTransitionException ex) { return Conflict(new { error = ex.Message }); }
+
         statusUpdate.ReviewDecision ??= AuthorizationDecisionPolicy.DecisionFor(statusUpdate.Status);
         try { AuthorizationDecisionPolicy.Prepare(authorization, statusUpdate.Status, statusUpdate.ReviewDecision, statusUpdate); }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
 
-        authorization.Status = statusUpdate.Status;
-        authorization.ReviewDecision = statusUpdate.ReviewDecision;
         authorization.LastUpdatedDate = DateTime.UtcNow;
         authorization.LastUpdatedBy = Actor;
 
@@ -513,7 +514,7 @@ public class AuthorizationsController : ControllerBase
         // history is appended and an Augment deployment does not silently write
         // to the CHO repository.
         var updated = await _backends.Resolve().UpdateStatusAsync(
-            authorization, authorization.Status, authorization.ReviewDecision,
+            authorization, statusUpdate.Status, statusUpdate.ReviewDecision,
             authorization.DenialReason, HttpContext.RequestAborted, statusUpdate);
 
         // A status update that lands on pended-for-information raises the request
@@ -555,24 +556,15 @@ public class AuthorizationsController : ControllerBase
             _ => (AuthorizationStatus?)null,
         };
         if (!decisionStatus.HasValue) return BadRequest(new { error = "Review decision must be A1, A2, A3 or A4." });
+        try { AuthorizationLifecyclePolicy.Validate(authorization, decisionStatus.Value); }
+        catch (AuthorizationTransitionException ex) { return Conflict(new { error = ex.Message }); }
         try { AuthorizationDecisionPolicy.Prepare(authorization, decisionStatus.Value, response.ReviewDecision, response); }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
 
         authorization.EDI278ResponseControlNumber = response.ControlNumber;
-        authorization.ReviewDecision = response.ReviewDecision;
         authorization.ReviewedDate = DateTime.UtcNow;
         authorization.LastUpdatedDate = DateTime.UtcNow;
         authorization.LastUpdatedBy = Actor;
-
-        // Map review decision to status
-        authorization.Status = response.ReviewDecision switch
-        {
-            "A1" => AuthorizationStatus.Approved,
-            "A2" => AuthorizationStatus.Modified,
-            "A3" => AuthorizationStatus.Denied,
-            "A4" => AuthorizationStatus.Pended,
-            _ => AuthorizationStatus.InReview
-        };
 
         if (response.ApprovedUnits.HasValue)
         {
@@ -610,7 +602,7 @@ public class AuthorizationsController : ControllerBase
         // Persist the decision through the selected backend (history append +
         // no silent CHO write in Augment).
         var updated = await _backends.Resolve().UpdateStatusAsync(
-            authorization, authorization.Status, authorization.ReviewDecision,
+            authorization, decisionStatus.Value, response.ReviewDecision,
             authorization.DenialReason, HttpContext.RequestAborted, response);
 
         // An A4 decision that names what it needs raises the provider-facing
@@ -863,11 +855,11 @@ public class AuthorizationsController : ControllerBase
             return NotFound($"Authorization {id} not found");
         }
 
-        authorization.Status = AuthorizationStatus.Cancelled;
-        authorization.LastUpdatedDate = DateTime.UtcNow;
+        try { AuthorizationLifecyclePolicy.Validate(authorization, AuthorizationStatus.Cancelled); }
+        catch (AuthorizationTransitionException ex) { return Conflict(new { error = ex.Message }); }
         authorization.LastUpdatedBy = Actor;
-
-        await _authorizationRepository.UpdateAsync(authorization);
+        await _backends.Resolve().UpdateStatusAsync(authorization, AuthorizationStatus.Cancelled, null,
+            "Authorization cancelled.", HttpContext.RequestAborted);
 
         return NoContent();
     }

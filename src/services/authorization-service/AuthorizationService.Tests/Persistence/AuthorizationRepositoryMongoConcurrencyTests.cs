@@ -8,6 +8,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using AuthorizationService.Services;
 
 namespace AuthorizationService.Tests.Persistence;
 
@@ -76,6 +79,66 @@ public sealed class AuthorizationRepositoryMongoConcurrencyTests(MongoRunnerFixt
         {
             return ex;
         }
+    }
+
+    [Fact]
+    public async Task RegisteredExpiryWorker_ExpiresTwoTenantsWithoutARequest_AndIsIdempotent()
+    {
+        var first = await SeedAsync("expiry-worker-a", AuthorizationStatus.Approved);
+        first.ExpirationDate = DateTime.UtcNow.AddDays(-10); await Repo().UpdateAsync(first);
+        await _db.GetCollection<Authorization>(Collection).InsertOneAsync(new Authorization
+        {
+            Id = "expiry-worker-b", TenantId = "tenant-b", AuthorizationNumber = "AUTH-worker-b",
+            Status = AuthorizationStatus.Modified, ApprovedServiceDateTo = DateTime.UtcNow.AddDays(-10),
+        });
+        using var host = AuthorizationServiceHost.Mongo(mongo.ConnectionString, _db.DatabaseNamespace.DatabaseName);
+        host.ClearRequestContext();
+        var worker = host.Services.GetServices<IHostedService>().OfType<AuthorizationExpiryWorker>().Single();
+        Assert.Equal(2, await worker.SweepAsync());
+        Assert.Equal(0, await worker.SweepAsync());
+        var stored = await _db.GetCollection<Authorization>(Collection).Find(a => a.Status == AuthorizationStatus.Expired).ToListAsync();
+        Assert.Equal(2, stored.Count);
+        Assert.All(stored, a => Assert.Equal("authorization-expiry", Assert.Single(a.StatusHistory).ChangedBy));
+    }
+
+    [Fact]
+    public async Task Expiry_IsAtomicAuditedTenantScoped_AndPreservesUnknownFields()
+    {
+        var today = new DateTime(2026, 10, 19, 0, 0, 0, DateTimeKind.Utc);
+        var auth = await SeedAsync("expiry", AuthorizationStatus.Approved);
+        auth.ApprovedServiceDateTo = today.AddDays(-1);
+        await Repo().UpdateAsync(auth);
+        var raw = _db.GetCollection<BsonDocument>(Collection);
+        await raw.UpdateOneAsync(Builders<BsonDocument>.Filter.Eq("_id", auth.Id),
+            Builders<BsonDocument>.Update.Set("futureData", "preserved").Set("StatusHistory", BsonNull.Value));
+        var first = await ReadAsync(auth.Id); var second = await ReadAsync(auth.Id);
+        Assert.Empty(await Repo().FindExpiryCandidatesAsync("other-tenant", today, 200));
+        Assert.Single(await Repo().FindExpiryCandidatesAsync(Tenant, today, 200));
+        var results = await Task.WhenAll(Repo().ExpireIfStillEligibleAsync(Tenant, first, today, today),
+            Repo().ExpireIfStillEligibleAsync(Tenant, second, today, today));
+        Assert.Single(results, r => r);
+        var stored = await ReadAsync(auth.Id);
+        Assert.Equal(AuthorizationStatus.Expired, stored.Status);
+        Assert.Equal("authorization-expiry", Assert.Single(stored.StatusHistory).Source);
+        Assert.Equal("preserved", (await raw.Find(Builders<BsonDocument>.Filter.Eq("_id", auth.Id)).SingleAsync())["futureData"].AsString);
+    }
+
+    [Fact]
+    public async Task ExpiryCannotOverwriteAConcurrentPeriodChangeOrCancellation_AndKeepsLastDayValid()
+    {
+        var today = new DateTime(2026, 10, 19, 0, 0, 0, DateTimeKind.Utc);
+        var auth = await SeedAsync("expiry-race", AuthorizationStatus.Modified);
+        auth.ExpirationDate = today.AddDays(-1); await Repo().UpdateAsync(auth);
+        var stale = await ReadAsync(auth.Id);
+        auth.ExpirationDate = today; await Repo().UpdateAsync(auth);
+        Assert.False(await Repo().ExpireIfStillEligibleAsync(Tenant, stale, today, today));
+        Assert.Empty(await Repo().FindExpiryCandidatesAsync(Tenant, today, 200));
+        var current = await ReadAsync(auth.Id);
+        current.ExpirationDate = today.AddDays(-2); await Repo().UpdateAsync(current);
+        stale = await ReadAsync(auth.Id);
+        current.Status = AuthorizationStatus.Cancelled; await Repo().UpdateAsync(current);
+        Assert.False(await Repo().ExpireIfStillEligibleAsync(Tenant, stale, today, today));
+        Assert.Equal(AuthorizationStatus.Cancelled, (await ReadAsync(auth.Id)).Status);
     }
 
     [Fact]
@@ -159,6 +222,8 @@ public sealed class AuthorizationRepositoryMongoConcurrencyTests(MongoRunnerFixt
         var indexes = await (await _db.GetCollection<BsonDocument>(Collection).Indexes.ListAsync()).ToListAsync();
         indexes.Should().Contain(i => i["name"] == "authorization_tenant_number_unique" && i["unique"].AsBoolean);
         indexes.Should().Contain(i => i["name"] == "authorization_tenant_status");
+        indexes.Should().Contain(i => i["name"] == "authorization_tenant_status_expiration");
+        indexes.Should().Contain(i => i["name"] == "authorization_tenant_status_service_end");
     }
 
     [Fact]

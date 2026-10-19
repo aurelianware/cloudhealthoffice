@@ -35,6 +35,11 @@ public interface IAuthorizationRepository
     Task<Authorization> UpdateAsync(Authorization authorization);
     Task DeleteAsync(string id);
 
+    Task<IReadOnlyList<Authorization>> FindExpiryCandidatesAsync(string tenantId, DateTime cutoffDateUtc, int limit, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<Authorization>>(Array.Empty<Authorization>());
+    Task<bool> ExpireIfStillEligibleAsync(string tenantId, Authorization authorization, DateTime cutoffDateUtc, DateTime changedAtUtc, CancellationToken ct = default)
+        => Task.FromResult(false);
+
     // ── Retention (PAT-03) ───────────────────────────────────────────────────
     // Background-callable: every method takes the tenant EXPLICITLY, so a sweep
     // never depends on an ambient HttpContext, and a CancellationToken so a

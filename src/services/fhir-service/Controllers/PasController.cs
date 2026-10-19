@@ -274,6 +274,8 @@ public class PasController : FhirControllerBase
                 responseBundle = _responseBuilder.BuildApprovedResponse(claim, answer, kept.RequestedServices);
                 break;
             case PriorAuthorizationStatus.Modified:
+            case PriorAuthorizationStatus.Expired:
+            case PriorAuthorizationStatus.Cancelled:
                 responseBundle = _responseBuilder.BuildInquiryResponse(new PriorAuthorizationRecord
                 {
                     AuthorizationNumber = kept.AuthorizationNumber,
@@ -282,6 +284,7 @@ public class PasController : FhirControllerBase
                     DenialReasonCode = kept.DenialReasonCode, DenialReason = kept.DenialReason,
                     ApprovedServiceDateFrom = kept.ApprovedServiceDateFrom,
                     ApprovedServiceDateTo = kept.ApprovedServiceDateTo,
+                    ExpirationDate = kept.ExpirationDate,
                     RequestedServices = kept.RequestedServices,
                 });
                 break;

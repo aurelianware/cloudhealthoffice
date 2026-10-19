@@ -134,6 +134,12 @@ public class AuthorizationReplaceModeTests
         fetched.ReviewedDate.Should().NotBeNull();                        // decision timestamp recorded
         fetched.StatusHistory.Should().HaveCount(2);                      // append-only history preserved
         fetched.StatusHistory.Last().Status.Should().Be(AuthorizationStatus.Approved);
+
+        await backend.UpdateStatusAsync(fetched, AuthorizationStatus.Cancelled, null, "Withdrawn.");
+        fetched.StatusHistory.Last().Status.Should().Be(AuthorizationStatus.Cancelled);
+        Func<Task> reopen = () => backend.UpdateStatusAsync(fetched, AuthorizationStatus.Approved, "A1", null);
+        await reopen.Should().ThrowAsync<AuthorizationTransitionException>();
+        fetched.Status.Should().Be(AuthorizationStatus.Cancelled);
     }
 
     [Fact]
