@@ -537,3 +537,15 @@
 }
 
 .independence #calculator-controls:disabled { opacity: 0.6; }
+
+/* System fonts differ across platforms; keep long executive headings readable. */
+@media (max-width: 640px) {
+  .independence h1 {
+    font-size: clamp(2.1rem, 10.25vw, 2.8rem);
+    overflow-wrap: break-word;
+  }
+  .independence button {
+    max-width: 100%;
+    white-space: normal;
+  }
+}

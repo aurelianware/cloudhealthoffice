@@ -176,13 +176,13 @@ const dist = path.resolve(__dirname, "../dist");
         200,
       );
       assert.equal(await p.locator("h1").count(), 1);
-      assert.equal(
-        await p.evaluate(
-          () => document.documentElement.scrollWidth <= innerWidth,
-        ),
-        true,
-        slug + " overflow at " + width,
-      );
+      const overflow = await p.evaluate(() => ({
+        width: innerWidth, documentWidth: document.documentElement.scrollWidth,
+        elements: Array.from(document.querySelectorAll("main *, nav *"))
+          .map(el => ({tag: el.tagName, id: el.id, text: el.textContent.trim().slice(0,80), right: el.getBoundingClientRect().right}))
+          .filter(el => el.right > innerWidth + 1).slice(0,12)
+      }));
+      assert(overflow.documentWidth <= width, slug + " overflow: " + JSON.stringify(overflow));
       assert.equal(
         await p.locator('link[rel="canonical"]').getAttribute("href"),
         "https://cloudhealthoffice.com" + (slug === "index" ? "/" : "/" + slug),
