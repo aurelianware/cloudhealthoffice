@@ -3,8 +3,28 @@ const { chromium } = require("playwright");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const base = process.env.CHO_PREVIEW_URL || "http://127.0.0.1:8766";
+const http = require("node:http");
+let base = process.env.CHO_PREVIEW_URL;
+const dist = path.resolve(__dirname, "../dist");
 (async () => {
+  // Serve the built artifact with clean-file routes when no preview was supplied.
+  // This is a test fixture, not a production routing configuration.
+  let server;
+  if (!base) {
+    server = http.createServer((request, response) => {
+      const pathname = new URL(request.url, "http://localhost").pathname;
+      const relative = decodeURIComponent(pathname).replace(/^\/+/, "");
+      const target = path.resolve(dist, relative || "index.html");
+      if (!target.startsWith(dist + path.sep)) { response.writeHead(403).end(); return; }
+      const file = [target, target + ".html", path.join(target, "index.html")]
+        .find(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+      if (!file) { response.writeHead(404).end(); return; }
+      const type = {".html":"text/html", ".css":"text/css", ".js":"text/javascript", ".svg":"image/svg+xml", ".png":"image/png"}[path.extname(file)] || "application/octet-stream";
+      response.writeHead(200, {"Content-Type":type}); fs.createReadStream(file).pipe(response);
+    });
+    await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+    base = "http://127.0.0.1:" + server.address().port;
+  }
   const browser = await chromium.launch({
     headless: true,
     ...(process.env.CHO_CHROME_PATH
@@ -173,6 +193,7 @@ const base = process.env.CHO_PREVIEW_URL || "http://127.0.0.1:8766";
     "PASS: 12 responsive screenshots, six routes/canonicals, no overflow, keyboard navigation, calculator privacy, two forms failure/retry/acceptance; zero production submissions.",
   );
   await browser.close();
+  if (server) await new Promise(resolve => server.close(resolve));
 })().catch((e) => {
   console.error(e);
   process.exit(1);
