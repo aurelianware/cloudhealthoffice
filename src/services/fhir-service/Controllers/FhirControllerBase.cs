@@ -2,6 +2,7 @@ using Hl7.Fhir.Model;
 using FhirService.Middleware;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Controllers;
 
@@ -157,7 +158,7 @@ public abstract class FhirControllerBase : ControllerBase
     {
         receivingPayerId = string.Empty;
         var registered = RegisteredPayerId;
-        var client = SanitizeForLog(AuthenticatedActorId ?? "unknown");
+        var client = LogSanitizer.Sanitize(AuthenticatedActorId ?? "unknown");
         if (registered is null)
         {
             logger.LogWarning(
@@ -171,7 +172,7 @@ public abstract class FhirControllerBase : ControllerBase
         {
             logger.LogWarning(
                 "P2P {Operation} refused: client={Client} registeredPayer={Payer} named a different receiving payer",
-                operation, client, SanitizeForLog(registered));
+                operation, client, LogSanitizer.Sanitize(registered));
             return false;
         }
 
@@ -251,15 +252,6 @@ public abstract class FhirControllerBase : ControllerBase
 
     // ── Logging helpers ───────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Removes CR/LF characters from a user-supplied value before it is written
-    /// to a log entry, preventing log-injection attacks.
-    /// </summary>
-    protected static string SanitizeForLog(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty
-           : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                  .Replace("\n", string.Empty, StringComparison.Ordinal);
-
     // ── Generic upstream proxy helper ────────────────────────────────────────
 
     /// <summary>
@@ -301,7 +293,7 @@ public abstract class FhirControllerBase : ControllerBase
         // flows into structured-log fields below. Sanitize once up front
         // so all log sites share the same scrubbed value (CodeQL: log
         // entries created from user input).
-        var loggablePath = SanitizeForLog(path);
+        var loggablePath = LogSanitizer.Sanitize(path);
         try
         {
             using var response = await upstream.GetAsync(path, ct);

@@ -83,7 +83,8 @@ public static class InvitationRedemptionEndpoint
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
-            // handled below
+            // Malformed or non-JSON body: code stays null, and the check below audits the
+            // refusal and answers 400 invalid_request. Nothing else to record.
         }
         if (string.IsNullOrEmpty(code) || code.Length > 256)
         {

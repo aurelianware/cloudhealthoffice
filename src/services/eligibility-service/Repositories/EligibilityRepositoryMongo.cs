@@ -4,6 +4,7 @@ using MongoDB.Driver;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EligibilityService.Repositories;
 
@@ -97,7 +98,7 @@ public class EligibilityRepositoryMongo : IEligibilityRepository
         }
         
         await _inquiryCollection.InsertOneAsync(inquiry);
-        _logger.LogInformation("Created eligibility inquiry {InquiryId} (Mongo)", SanitizeForLog(inquiry.Id));
+        _logger.LogInformation("Created eligibility inquiry {InquiryId} (Mongo)", LogSanitizer.Sanitize(inquiry.Id));
     }
 
     public async Task UpdateInquiryAsync(EligibilityInquiry inquiry)
@@ -118,7 +119,7 @@ public class EligibilityRepositoryMongo : IEligibilityRepository
             await _inquiryCollection.InsertOneAsync(inquiry);
         }
         
-        _logger.LogInformation("Updated eligibility inquiry {InquiryId} (Mongo)", SanitizeForLog(inquiry.Id));
+        _logger.LogInformation("Updated eligibility inquiry {InquiryId} (Mongo)", LogSanitizer.Sanitize(inquiry.Id));
     }
 
     // Response Methods
@@ -153,18 +154,6 @@ public class EligibilityRepositoryMongo : IEligibilityRepository
         await _responseCollection.InsertOneAsync(response);
         
         _logger.LogInformation("Created eligibility response {ResponseId} for inquiry {InquiryId} (Mongo)", 
-            SanitizeForLog(response.Id), SanitizeForLog(response.InquiryId));
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return string.Empty;
-        }
-
-        // Remove newline characters to prevent log forging via user-controlled data.
-        return value.Replace("\r", string.Empty)
-                    .Replace("\n", string.Empty);
+            LogSanitizer.Sanitize(response.Id), LogSanitizer.Sanitize(response.InquiryId));
     }
 }

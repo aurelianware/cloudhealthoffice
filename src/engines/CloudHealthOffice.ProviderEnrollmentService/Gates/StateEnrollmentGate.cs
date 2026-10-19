@@ -4,6 +4,7 @@ using CloudHealthOffice.ProviderEnrollmentService.Cache;
 using CloudHealthOffice.ProviderEnrollmentService.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.ProviderEnrollmentService.Gates;
 
@@ -72,16 +73,16 @@ public sealed partial class StateEnrollmentGate : IEnrollmentDecisionGate
     {
         // Sanitize all user-provided strings up front so every downstream
         // usage (log messages *and* denial-reason strings) is clean.
-        // string.Concat breaks the CodeQL taint chain while SanitizeForLog
+        // string.Concat breaks the CodeQL taint chain while StripLineBreaks
         // strips CR/LF to prevent log-forging.
-        npi       = string.Concat(SanitizeForLog(npi));
-        taxonomy  = string.Concat(SanitizeForLog(taxonomy));
-        stateCode = string.Concat(SanitizeForLog(stateCode));
+        npi       = string.Concat(StripLineBreaks(npi));
+        taxonomy  = string.Concat(StripLineBreaks(taxonomy));
+        stateCode = string.Concat(StripLineBreaks(stateCode));
 
         LogEnrollmentGateEntry(_logger, npi, stateCode, taxonomy, lob, serviceDate);
 
         // ── Step 0: Resolve tenant context ───────────────────────────
-        var tenantId = string.Concat(SanitizeForLog(
+        var tenantId = string.Concat(StripLineBreaks(
             _httpContextAccessor.HttpContext?.Items["TenantId"] as string
             ?? _httpContextAccessor.HttpContext?.Request.Headers["X-Tenant-Id"].FirstOrDefault()));
 
@@ -132,7 +133,7 @@ public sealed partial class StateEnrollmentGate : IEnrollmentDecisionGate
                 _logger.LogWarning(
                     "Enrollment gate warn-only: would deny NPI {Npi} in {State} — " +
                     "Code={Code} Reason={Reason}",
-                    npi, stateCode, enrollmentResult.DenialCode, SanitizeForLog(enrollmentResult.DenialReason));
+                    npi, stateCode, enrollmentResult.DenialCode, LogSanitizer.Sanitize(enrollmentResult.DenialReason));
             }
 
             return GateResult.Pass();
@@ -223,14 +224,15 @@ public sealed partial class StateEnrollmentGate : IEnrollmentDecisionGate
         return GateResult.Pass();
     }
 
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
-
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "Enrollment gate: NPI={Npi} State={State} Taxonomy={Taxonomy} LOB={Lob} Date={Date}")]
     private static partial void LogEnrollmentGateEntry(
         ILogger logger, string npi, string state, string taxonomy, LineOfBusiness lob, DateOnly date);
+
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

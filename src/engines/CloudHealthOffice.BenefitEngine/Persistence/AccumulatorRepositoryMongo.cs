@@ -2,6 +2,7 @@ using CloudHealthOffice.BenefitEngine.Domain;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.BenefitEngine.Persistence;
 
@@ -37,9 +38,6 @@ public class AccumulatorRepositoryMongo : IAccumulatorRepository
         _logger = logger;
     }
 
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
-
     public async Task<AccumulatorDocument?> GetAsync(
         string tenantId, string ownerId, AccumulatorScope scope,
         Guid benefitPlanId, string planYear,
@@ -68,7 +66,7 @@ public class AccumulatorRepositoryMongo : IAccumulatorRepository
             try
             {
                 await _collection.InsertOneAsync(document, cancellationToken: ct);
-                _logger.LogDebug("Inserted new accumulator document {DocId}", SanitizeForLog(document.Id));
+                _logger.LogDebug("Inserted new accumulator document {DocId}", LogSanitizer.Sanitize(document.Id));
                 return document;
             }
             catch (MongoWriteException ex)
@@ -91,7 +89,7 @@ public class AccumulatorRepositoryMongo : IAccumulatorRepository
         {
             _logger.LogDebug(
                 "Optimistic concurrency conflict on {DocId} (expected version {Version})",
-                SanitizeForLog(document.Id), expectedVersion);
+                LogSanitizer.Sanitize(document.Id), expectedVersion);
             throw new OptimisticConcurrencyException(document.Id);
         }
 

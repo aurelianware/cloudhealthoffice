@@ -160,8 +160,8 @@ public class DentalClaimGenerator : IClaimGenerator
 
         var lineOutcomes = claim.Lines.Select(l =>
         {
-            var lineAllowed = isDenied ? 0m : Math.Round(l.ChargeAmount * l.Units * allowedRatio, 2);
-            var lineCoins = Math.Round(lineAllowed * coinsuranceRate, 2);
+            var lineAllowed = isDenied ? 0m : ExpectedMoney.ToCents(l.ChargeAmount * l.Units * allowedRatio);
+            var lineCoins = ExpectedMoney.ToCents(lineAllowed * coinsuranceRate);
             var linePaid = Math.Max(0, lineAllowed - lineCoins);
             return new LineOutcome
             {
@@ -174,7 +174,7 @@ public class DentalClaimGenerator : IClaimGenerator
         }).ToList();
 
         var totalAllowed = lineOutcomes.Sum(l => l.AllowedAmount);
-        var totalCoinsurance = Math.Round(totalAllowed * coinsuranceRate, 2);
+        var totalCoinsurance = ExpectedMoney.ToCents(totalAllowed * coinsuranceRate);
         var totalPaid = Math.Max(0, lineOutcomes.Sum(l => l.PaidAmount) - deductible);
         var memberLiability = deductible + totalCoinsurance;
 
@@ -183,8 +183,8 @@ public class DentalClaimGenerator : IClaimGenerator
             Disposition = isDenied ? "Denied" : "Paid",
             DenialReasonCode = isDenied ? "50" : null,
             ExpectedAllowedAmount = totalAllowed,
-            ExpectedPaidAmount = Math.Round(totalPaid, 2),
-            ExpectedMemberLiability = Math.Round(memberLiability, 2),
+            ExpectedPaidAmount = ExpectedMoney.ToCents(totalPaid),
+            ExpectedMemberLiability = ExpectedMoney.ToCents(memberLiability),
             ExpectedCopay = copay,
             ExpectedCoinsurance = totalCoinsurance,
             ExpectedDeductible = deductible,

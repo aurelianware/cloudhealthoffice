@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using ReferenceDataService.Models;
 using ReferenceDataService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ReferenceDataService.Controllers;
 
@@ -39,7 +40,7 @@ public class ReferenceDataController : ControllerBase
     [ProducesResponseType(typeof(CodeValidationResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CodeValidationResponse>> ValidateCptCode(string code)
     {
-        _logger.LogInformation("Validating CPT code: {Code}", SanitizeForLog(code));
+        _logger.LogInformation("Validating CPT code: {Code}", LogSanitizer.Sanitize(code));
 
         var response = await _cache.GetOrCreateAsync($"cpt:{code}", async entry =>
         {
@@ -72,7 +73,7 @@ public class ReferenceDataController : ControllerBase
     [ProducesResponseType(typeof(CodeValidationResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CodeValidationResponse>> ValidateIcd10Code(string code)
     {
-        _logger.LogInformation("Validating ICD-10 code: {Code}", SanitizeForLog(code));
+        _logger.LogInformation("Validating ICD-10 code: {Code}", LogSanitizer.Sanitize(code));
 
         var response = await _cache.GetOrCreateAsync($"icd10:{code}", async entry =>
         {
@@ -105,7 +106,7 @@ public class ReferenceDataController : ControllerBase
     [ProducesResponseType(typeof(CodeValidationResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CodeValidationResponse>> ValidateHcpcsCode(string code)
     {
-        _logger.LogInformation("Validating HCPCS code: {Code}", SanitizeForLog(code));
+        _logger.LogInformation("Validating HCPCS code: {Code}", LogSanitizer.Sanitize(code));
 
         var response = await _cache.GetOrCreateAsync($"hcpcs:{code}", async entry =>
         {
@@ -140,7 +141,7 @@ public class ReferenceDataController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
-        _logger.LogInformation("Searching CPT codes: term={Term}, section={Section}", SanitizeForLog(searchTerm), SanitizeForLog(section));
+        _logger.LogInformation("Searching CPT codes: term={Term}, section={Section}", LogSanitizer.Sanitize(searchTerm), LogSanitizer.Sanitize(section));
 
         var codes = await _referenceDataRepository.SearchCptCodesAsync(searchTerm, section, page, pageSize);
         return Ok(codes);
@@ -159,7 +160,7 @@ public class ReferenceDataController : ControllerBase
         [FromQuery] int pageSize = 50)
     {
         _logger.LogInformation("Searching ICD-10 codes: term={Term}, category={Category}, billable={Billable}",
-            SanitizeForLog(searchTerm), SanitizeForLog(category), billableOnly);
+            LogSanitizer.Sanitize(searchTerm), LogSanitizer.Sanitize(category), billableOnly);
 
         var codes = await _referenceDataRepository.SearchIcd10CodesAsync(searchTerm, category, billableOnly, page, pageSize);
         return Ok(codes);
@@ -176,7 +177,7 @@ public class ReferenceDataController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
-        _logger.LogInformation("Searching HCPCS codes: term={Term}, category={Category}", SanitizeForLog(searchTerm), SanitizeForLog(category));
+        _logger.LogInformation("Searching HCPCS codes: term={Term}, category={Category}", LogSanitizer.Sanitize(searchTerm), LogSanitizer.Sanitize(category));
 
         var codes = await _referenceDataRepository.SearchHcpcsCodesAsync(searchTerm, category, page, pageSize);
         return Ok(codes);
@@ -190,7 +191,7 @@ public class ReferenceDataController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Modifier>> GetModifier(string code)
     {
-        _logger.LogInformation("Fetching modifier: {Code}", SanitizeForLog(code));
+        _logger.LogInformation("Fetching modifier: {Code}", LogSanitizer.Sanitize(code));
 
         var modifier = await _referenceDataRepository.GetModifierAsync(code);
         if (modifier == null)
@@ -222,7 +223,7 @@ public class ReferenceDataController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DrgCode>> GetDrg(string code)
     {
-        _logger.LogInformation("Fetching DRG: {Code}", SanitizeForLog(code));
+        _logger.LogInformation("Fetching DRG: {Code}", LogSanitizer.Sanitize(code));
 
         var drg = await _referenceDataRepository.GetDrgCodeAsync(code);
         if (drg == null)
@@ -246,7 +247,7 @@ public class ReferenceDataController : ControllerBase
         [FromQuery] int pageSize = 50)
     {
         _logger.LogInformation("Searching DRG codes: term={Term}, mdc={MDC}, year={Year}",
-            SanitizeForLog(searchTerm), SanitizeForLog(mdc), fiscalYear);
+            LogSanitizer.Sanitize(searchTerm), LogSanitizer.Sanitize(mdc), fiscalYear);
 
         var codes = await _referenceDataRepository.SearchDrgCodesAsync(searchTerm, mdc, fiscalYear, page, pageSize);
         return Ok(codes);
@@ -260,7 +261,7 @@ public class ReferenceDataController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PlaceOfService>> GetPlaceOfService(string code)
     {
-        _logger.LogInformation("Fetching place of service: {Code}", SanitizeForLog(code));
+        _logger.LogInformation("Fetching place of service: {Code}", LogSanitizer.Sanitize(code));
 
         var pos = await _referenceDataRepository.GetPlaceOfServiceAsync(code);
         if (pos == null)
@@ -292,7 +293,7 @@ public class ReferenceDataController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<RevenueCode>> GetRevenueCode(string code)
     {
-        _logger.LogInformation("Fetching revenue code: {Code}", SanitizeForLog(code));
+        _logger.LogInformation("Fetching revenue code: {Code}", LogSanitizer.Sanitize(code));
 
         var revenueCode = await _referenceDataRepository.GetRevenueCodeAsync(code);
         if (revenueCode == null)
@@ -314,7 +315,7 @@ public class ReferenceDataController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
-        _logger.LogInformation("Searching revenue codes: term={Term}, category={Category}", SanitizeForLog(searchTerm), SanitizeForLog(category));
+        _logger.LogInformation("Searching revenue codes: term={Term}, category={Category}", LogSanitizer.Sanitize(searchTerm), LogSanitizer.Sanitize(category));
 
         var codes = await _referenceDataRepository.SearchRevenueCodesAsync(searchTerm, category, page, pageSize);
         return Ok(codes);
@@ -331,12 +332,5 @@ public class ReferenceDataController : ControllerBase
 
         var stats = await _referenceDataRepository.GetStatsAsync();
         return Ok(stats);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

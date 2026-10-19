@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using AuthorizationService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AuthorizationService.Services.Rfai;
 
@@ -185,8 +186,8 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
                     _logger.LogInformation(
                         "Authorization {AuthNumber} pended with decision {Decision} but named no "
                         + "requested documentation — no additional-information request raised.",
-                        Sanitize(authorization.AuthorizationNumber),
-                        Sanitize(authorization.ReviewDecision));
+                        LogSanitizer.Sanitize(authorization.AuthorizationNumber),
+                        LogSanitizer.Sanitize(authorization.ReviewDecision));
                 }
                 else if (requestedItems.Any(i => string.IsNullOrWhiteSpace(i.Description)))
                 {
@@ -197,8 +198,8 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
                         "Authorization {AuthNumber} pended with decision {Decision} naming "
                         + "{Count} item(s), at least one without a description — no "
                         + "additional-information request raised.",
-                        Sanitize(authorization.AuthorizationNumber),
-                        Sanitize(authorization.ReviewDecision),
+                        LogSanitizer.Sanitize(authorization.AuthorizationNumber),
+                        LogSanitizer.Sanitize(authorization.ReviewDecision),
                         requestedItems.Count);
                 }
             }
@@ -244,7 +245,7 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
                 "Raising the additional-information request for authorization {AuthNumber} "
                 + "failed ({Fault}). The decision stands; the request is retried on the next "
                 + "delivery of this decision and cannot be duplicated by the retry.",
-                Sanitize(authorization.AuthorizationNumber), ex.GetType().Name);
+                LogSanitizer.Sanitize(authorization.AuthorizationNumber), ex.GetType().Name);
             return false;
         }
 
@@ -253,7 +254,7 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
             _logger.LogWarning(
                 "The additional-information request for authorization {AuthNumber} was not "
                 + "recorded. The decision stands and the retry is idempotent.",
-                Sanitize(authorization.AuthorizationNumber));
+                LogSanitizer.Sanitize(authorization.AuthorizationNumber));
             return false;
         }
 
@@ -273,8 +274,8 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
         _logger.LogInformation(
             "Authorization {AuthNumber}: additional-information request {Request} "
             + "{Verb} (tracking {Tracking})",
-            Sanitize(authorization.AuthorizationNumber), Sanitize(handle.Id),
-            handle.Created ? "raised" : "already existed", Sanitize(handle.TrackingId));
+            LogSanitizer.Sanitize(authorization.AuthorizationNumber), LogSanitizer.Sanitize(handle.Id),
+            handle.Created ? "raised" : "already existed", LogSanitizer.Sanitize(handle.TrackingId));
 
         return changed;
     }
@@ -312,10 +313,4 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
 
     private static string Sha256Hex(string value)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

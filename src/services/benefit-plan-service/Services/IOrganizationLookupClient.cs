@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -97,7 +98,7 @@ public class HttpOrganizationLookupClient : IOrganizationLookupClient
             // token, and provider-service would reject the call.
             _logger.LogWarning(
                 "Network {NetworkId} lookup has no tenant; treating as unresolved",
-                SanitizeForLog(networkId));
+                LogSanitizer.Sanitize(networkId));
             return null;
         }
 
@@ -120,7 +121,7 @@ public class HttpOrganizationLookupClient : IOrganizationLookupClient
             {
                 _logger.LogWarning(
                     "Provider service returned {StatusCode} for network {NetworkId}",
-                    response.StatusCode, SanitizeForLog(networkId));
+                    response.StatusCode, LogSanitizer.Sanitize(networkId));
                 return null;
             }
 
@@ -143,14 +144,8 @@ public class HttpOrganizationLookupClient : IOrganizationLookupClient
             // write time today) applies.
             _logger.LogWarning(ex,
                 "Provider service unreachable for network {NetworkId}; treating as unresolved",
-                SanitizeForLog(networkId));
+                LogSanitizer.Sanitize(networkId));
             return null;
         }
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

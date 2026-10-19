@@ -1,4 +1,5 @@
 using System.Globalization;
+using CloudHealthOffice.Infrastructure.Money;
 using PremiumBillingService.Models;
 
 namespace PremiumBillingService.Edi;
@@ -235,7 +236,7 @@ public static class Edi820Parser
             if (!decimal.TryParse(value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
                     CultureInfo.InvariantCulture, out var amount))
                 throw new FormatException($"Segment {position}: {element} '{value}' is not an amount");
-            return Math.Round(amount, 2, MidpointRounding.AwayFromZero);
+            return MoneyRounding.ToCents(amount);
         }
 
         private static DateTime Date(string value, string element, int position)

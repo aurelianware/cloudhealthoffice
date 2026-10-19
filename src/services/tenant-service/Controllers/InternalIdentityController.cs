@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using TenantService.Models;
 using TenantService.Security;
 using TenantService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace TenantService.Controllers;
 
@@ -117,7 +118,7 @@ public class InternalIdentityController : ControllerBase
 
         _logger.LogWarning(
             "AUDIT tenant signup: subscription {TenantId} (Trial, tier {Tier}) for directory {Directory} by Entra object {Oid}",
-            created.TenantId, created.Tier, TenantAuditLog.Sanitize(created.AzureTenantId), TenantAuditLog.Sanitize(request.Oid));
+            created.TenantId, created.Tier, LogSanitizer.Sanitize(created.AzureTenantId), LogSanitizer.Sanitize(request.Oid));
         return StatusCode(StatusCodes.Status201Created, new { tenantId = created.TenantId });
     }
 

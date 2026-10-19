@@ -3,6 +3,7 @@ using AccumulatorService.Services;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AccumulatorService.Controllers;
 
@@ -64,10 +65,10 @@ public class AccumulatorsController : ControllerBase
         var result = await _svc.AdjustAsync(TenantId, memberId, actorId, request, ct);
         _logger.LogInformation(
             "Accumulator adjusted: tenant={TenantId} member={MemberId} adjustmentId={AdjustmentId} actor={ActorId}",
-            SanitizeForLog(TenantId),
-            SanitizeForLog(memberId),
-            SanitizeForLog(result.AdjustmentId),
-            SanitizeForLog(actorId));
+            LogSanitizer.Sanitize(TenantId),
+            LogSanitizer.MaskId(memberId),
+            LogSanitizer.Sanitize(result.AdjustmentId),
+            LogSanitizer.Sanitize(actorId));
         return Ok(result);
     }
 
@@ -95,11 +96,5 @@ public class AccumulatorsController : ControllerBase
             });
         }
         return Ok(result);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

@@ -10,6 +10,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CoverageService.Controllers;
 
@@ -67,7 +68,7 @@ public class CoverageController : ControllerBase
     {
         _logger.LogInformation(
             "Searching coverage: member={Member}, group={Group}, plan={Plan}, activeOnly={ActiveOnly}",
-            SanitizeForLog(memberId), SanitizeForLog(groupNumber), SanitizeForLog(planId), activeOnly);
+            LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(groupNumber), LogSanitizer.Sanitize(planId), activeOnly);
 
         var (items, token) = await _coverageRepository.SearchAsync(
             TenantId, memberId, groupNumber, planId, activeOnly, pageSize, continuationToken);
@@ -90,7 +91,7 @@ public class CoverageController : ControllerBase
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetCoverage([FromRoute] string id)
     {
-        _logger.LogInformation("Fetching coverage by ID: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Fetching coverage by ID: {Id}", LogSanitizer.Sanitize(id));
 
         var coverage = await _coverageRepository.GetByIdAsync(TenantId, id);
         if (coverage == null)
@@ -116,7 +117,7 @@ public class CoverageController : ControllerBase
 
         _logger.LogInformation(
             "Fetching active coverage for member {MemberId} on {ServiceDate}",
-            SanitizeForLog(memberId), checkDate);
+            LogSanitizer.MaskId(memberId), checkDate);
 
         var activeCoverage = await _coverageRepository.GetActiveCoverageByMemberIdAsync(
             TenantId, memberId, checkDate, insuranceLineCode);
@@ -143,7 +144,7 @@ public class CoverageController : ControllerBase
         [FromRoute] string memberId,
         [FromQuery] bool includeTerminated = true)
     {
-        _logger.LogInformation("Fetching coverage history for member {MemberId}", SanitizeForLog(memberId));
+        _logger.LogInformation("Fetching coverage history for member {MemberId}", LogSanitizer.MaskId(memberId));
 
         var history = await _coverageRepository.GetCoverageHistoryAsync(
             TenantId, memberId, includeTerminated);
@@ -169,7 +170,7 @@ public class CoverageController : ControllerBase
     {
         var checkDate = asOfDate ?? DateTime.UtcNow;
 
-        _logger.LogInformation("Fetching COB entries for member {MemberId}", SanitizeForLog(memberId));
+        _logger.LogInformation("Fetching COB entries for member {MemberId}", LogSanitizer.MaskId(memberId));
 
         // Get all active coverage for the member, then extract COB info
         var coverages = await _coverageRepository.GetActiveCoverageByMemberIdAsync(
@@ -386,7 +387,7 @@ public class CoverageController : ControllerBase
     [ProducesResponseType(typeof(GroupCoverageSummary), 200)]
     public async Task<IActionResult> GetGroupCoverageSummary([FromRoute] string groupNumber)
     {
-        _logger.LogInformation("Fetching coverage summary for group {GroupNumber}", SanitizeForLog(groupNumber));
+        _logger.LogInformation("Fetching coverage summary for group {GroupNumber}", LogSanitizer.Sanitize(groupNumber));
 
         var coverages = await _coverageRepository.GetByGroupNumberAsync(TenantId, groupNumber);
 
@@ -427,7 +428,7 @@ public class CoverageController : ControllerBase
 
         _logger.LogInformation(
             "Fetching coverage by PCP NPI {Npi} with status {Status} and LOB {Lob}",
-            SanitizeForLog(npi), status, lineOfBusiness);
+            LogSanitizer.Sanitize(npi), status, lineOfBusiness);
 
         var coverages = await _coverageRepository.GetByPcpNpiAsync(
             TenantId, npi, status, lineOfBusiness);
@@ -450,7 +451,7 @@ public class CoverageController : ControllerBase
         [FromRoute] string memberId,
         [FromQuery] DateTime? serviceDate = null)
     {
-        _logger.LogInformation("Fetching PCP for member {MemberId}", SanitizeForLog(memberId));
+        _logger.LogInformation("Fetching PCP for member {MemberId}", LogSanitizer.MaskId(memberId));
 
         var checkDate = serviceDate ?? DateTime.UtcNow.Date;
         var active = await _coverageRepository.GetActiveCoverageByMemberIdAsync(
@@ -679,13 +680,6 @@ public class CoverageController : ControllerBase
 
     // Status as of today, whether or not the daily sweep has stored it yet.
     private static CoverageStatus CurrentStatus(Coverage c) => c.CurrentStatus(DateTime.UtcNow.Date);
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }
 
 public class AssignPcpBody

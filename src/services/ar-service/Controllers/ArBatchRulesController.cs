@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using ArService.Models;
 using ArService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ArService.Controllers;
 
@@ -64,7 +65,7 @@ public class ArBatchRulesController : ControllerBase
         rule.CreatedBy = _actor.UserId;
 
         _logger.LogInformation("Creating batch rule {RuleCode} ({RuleName}), trigger={Trigger}",
-            SanitizeForLog(rule.RuleCode), SanitizeForLog(rule.RuleName), rule.Trigger);
+            LogSanitizer.Sanitize(rule.RuleCode), LogSanitizer.Sanitize(rule.RuleName), rule.Trigger);
 
         var created = await _batchRuleRepository.CreateAsync(rule);
         return CreatedAtAction(nameof(GetBatchRuleById), new { id = created.Id }, created);
@@ -133,13 +134,6 @@ public class ArBatchRulesController : ControllerBase
             rule.RuleCode, request.SampleAmount);
 
         return Ok(result);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

@@ -5,6 +5,7 @@ using CloudHealthOffice.NachaTransmission;
 using Microsoft.Extensions.Options;
 using PaymentService.Models;
 using PaymentService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Services;
 
@@ -236,7 +237,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 case PaymentFileTransmissionStatus.Transmitted:
                     _logger.LogInformation(
                         "AUDIT NACHA file {FileReference} of payment run {RunNumber}: transmit requested by {User}, already transmitted at {At:o}; not sent again",
-                        Clean(record.FileReference), Clean(run.PaymentRunNumber), Clean(user), record.TransmittedAt);
+                        LogSanitizer.Sanitize(record.FileReference), LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(user), record.TransmittedAt);
                     await ReleaseHeldReceivablesAsync(record, user);
                     return record;
                 case PaymentFileTransmissionStatus.NeedsReview:
@@ -266,7 +267,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             else
                 _logger.LogWarning(RefusedEvent,
                     "AUDIT NACHA file {FileReference} of payment run {RunNumber}: approval by {User} refused ({Why})",
-                    Clean(pinned.FileReference), Clean(run.PaymentRunNumber), Clean(user), Clean(stale));
+                    LogSanitizer.Sanitize(pinned.FileReference), LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(user), LogSanitizer.Sanitize(stale));
             throw new PaymentFileApprovalStaleException(
                 $"NACHA file {pinned.FileReference} of payment run {run.PaymentRunNumber} cannot be sent: {stale}. Nothing was sent. " +
                 "Sending it now would not pay what was approved; a new file needs a new approval.");
@@ -285,7 +286,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 await RefuseAsync(record, user, string.Empty, "the regenerated EFT file differs from the approved file");
             _logger.LogWarning(RefusedEvent,
                 "AUDIT NACHA file {FileReference} of payment run {RunNumber}: transmit by {User} refused, the regenerated file differs from the approved sha256 {Sha256}",
-                Clean(pinned.FileReference), Clean(run.PaymentRunNumber), Clean(user), pinned.Sha256);
+                LogSanitizer.Sanitize(pinned.FileReference), LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(user), pinned.Sha256);
             throw new PaymentFileHashMismatchException(ex.Message);
         }
 
@@ -299,7 +300,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 await RefuseAsync(record, user, facts.Sha256, "the bytes to send do not hash to the approved SHA-256");
             _logger.LogWarning(RefusedEvent,
                 "AUDIT NACHA file {FileReference} of payment run {RunNumber}: transmit by {User} refused, bytes hash {Actual} but {Approved} was approved",
-                Clean(pinned.FileReference), Clean(run.PaymentRunNumber), Clean(user), facts.Sha256, approved);
+                LogSanitizer.Sanitize(pinned.FileReference), LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(user), facts.Sha256, approved);
             throw new PaymentFileHashMismatchException(
                 $"The NACHA file of payment run {run.PaymentRunNumber} hashes to {facts.Sha256}, not the approved {approved}. Nothing was sent.");
         }
@@ -337,7 +338,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             _logger.LogInformation(ApprovedEvent,
                 "AUDIT NACHA file {FileReference} of payment run {RunNumber} (created by {Maker}) approved for bank transmission by {User}: " +
                 "{Entries} credits, {Total:F2}, sha256 {Sha256}",
-                Clean(record.FileReference), Clean(run.PaymentRunNumber), Clean(run.CreatedBy), Clean(user),
+                LogSanitizer.Sanitize(record.FileReference), LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(run.CreatedBy), LogSanitizer.Sanitize(user),
                 record.EntryCount, record.TotalCreditAmount, record.ApprovedSha256);
         }
 
@@ -410,7 +411,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         record.Status = result;
         record.LeaseUntil = null;
         record.UpdatedAt = finished;
-        record.Reason = result == PaymentFileTransmissionStatus.Transmitted ? null : Clean(detail);
+        record.Reason = result == PaymentFileTransmissionStatus.Transmitted ? null : FlattenLineBreaks(detail);
         if (result == PaymentFileTransmissionStatus.Transmitted)
             MarkTransmitted(record, receipt!.RemoteFileName, receipt.Destination, receipt.TransmittedAt, user, PaymentFileDeliveryEvidence.Upload);
         Append(record, PaymentFileTransmissionAction.Transmit, user, facts.Sha256, result, detail);
@@ -471,7 +472,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
 
         _logger.Log(result == PaymentFileTransmissionStatus.Transmitted ? LogLevel.Information : LogLevel.Warning, ReconciledEvent,
             "AUDIT NACHA file {FileReference} of payment run {RunNumber} reconciled by {User}: {Status} ({Detail}); sha256 {Sha256}",
-            Clean(record.FileReference), Clean(record.PaymentRunNumber), Clean(user), record.Status, Clean(detail), record.ApprovedSha256);
+            LogSanitizer.Sanitize(record.FileReference), LogSanitizer.Sanitize(record.PaymentRunNumber), LogSanitizer.Sanitize(user), record.Status, LogSanitizer.Sanitize(detail), record.ApprovedSha256);
         await ReleaseHeldReceivablesAsync(record, user);
         return record;
     }
@@ -480,7 +481,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
     {
         if (string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("A reason (what the bank said, who, their reference) is required.");
-        reason = Clean(reason.Trim());
+        reason = FlattenLineBreaks(reason.Trim());
         if (reason.Length > 500) reason = reason[..500];
 
         // Deliberately NOT gated by BankTransmission:Enabled: after an emergency stop
@@ -500,7 +501,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         {
             _logger.LogWarning(RefusedEvent,
                 "AUDIT NACHA file {FileReference} of payment run {RunNumber}: {User} may not record the bank's answer (approved, attempted or reconciled it)",
-                Clean(record.FileReference), Clean(record.PaymentRunNumber), Clean(user));
+                LogSanitizer.Sanitize(record.FileReference), LogSanitizer.Sanitize(record.PaymentRunNumber), LogSanitizer.Sanitize(user));
             throw new SeparationOfDutiesException(
                 "Separation of duties: you approved, attempted or reconciled this NACHA file's transmission, so you cannot record whether " +
                 "the bank received it. Another user with payments:approve must.");
@@ -526,8 +527,8 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
 
         _logger.LogWarning(ResolvedEvent,
             "AUDIT NACHA file {FileReference} of payment run {RunNumber}: {User} recorded that the bank {Answer} it ({Reason}); now {Status}; sha256 {Sha256}",
-            Clean(record.FileReference), Clean(record.PaymentRunNumber), Clean(user), bankReceived ? "received" : "did not receive",
-            Clean(reason), record.Status, record.ApprovedSha256);
+            LogSanitizer.Sanitize(record.FileReference), LogSanitizer.Sanitize(record.PaymentRunNumber), LogSanitizer.Sanitize(user), bankReceived ? "received" : "did not receive",
+            LogSanitizer.Sanitize(reason), record.Status, record.ApprovedSha256);
         await ReleaseHeldReceivablesAsync(record, user);
         return record;
     }
@@ -565,11 +566,11 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         var at = Now;
         notice.RemainderReissuedAt = at;
         notice.RemainderReissuedBy = user;
-        notice.RemainderReissueMethod = Clean(method.Trim());
-        notice.RemainderReissueReference = Clean(reference.Trim());
-        var message = GlEventOutbox.VoidRemainderReissued(run, notice, Clean(reason.Trim()), user, at);
+        notice.RemainderReissueMethod = FlattenLineBreaks(method.Trim());
+        notice.RemainderReissueReference = FlattenLineBreaks(reference.Trim());
+        var message = GlEventOutbox.VoidRemainderReissued(run, notice, FlattenLineBreaks(reason.Trim()), user, at);
         var warning = $"Remainder {notice.UnpaidRemainder:F2} of payment {notice.CheckNumber} (NPI {notice.PayeeNpi}) reissued by {user}: " +
-                      $"{notice.RemainderReissueMethod} {notice.RemainderReissueReference} ({Clean(reason)})";
+                      $"{notice.RemainderReissueMethod} {notice.RemainderReissueReference} ({FlattenLineBreaks(reason)})";
         // Conditional on that notice having no reissue yet: of two concurrent requests one wins, the other is 409.
         if (!await _runs.TryRecordRemainderReissueAsync(run.Id, paymentId, at, user, notice.RemainderReissueMethod, notice.RemainderReissueReference,
                 message, warning))
@@ -579,7 +580,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 ? $"The remainder of payment {notice.CheckNumber} was just reissued by {latest.RemainderReissuedBy} ({latest.RemainderReissueReference})."
                 : $"Payment run {run.PaymentRunNumber} changed meanwhile; check it and try again.");
         }
-        _logger.LogWarning("AUDIT payment run {RunNumber}: {Warning}", Clean(run.PaymentRunNumber), Clean(warning));
+        _logger.LogWarning("AUDIT payment run {RunNumber}: {Warning}", LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(warning));
         return notice;
     }
 
@@ -588,7 +589,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
     {
         if (string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("A reason is required to re-date a NACHA file.");
-        reason = Clean(reason.Trim());
+        reason = FlattenLineBreaks(reason.Trim());
         if (reason.Length > 500) reason = reason[..500];
 
         // Not gated by BankTransmission:Enabled: re-dating builds a file and sends nothing.
@@ -609,7 +610,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         {
             _logger.LogWarning(RefusedEvent,
                 "AUDIT NACHA file {FileReference} of payment run {RunNumber}: re-pin by {User} refused ({Why})",
-                Clean(pinned.FileReference), Clean(run.PaymentRunNumber), Clean(user), Clean(voidProblem));
+                LogSanitizer.Sanitize(pinned.FileReference), LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(user), LogSanitizer.Sanitize(voidProblem));
             throw new PaymentFileTransmissionStateException(
                 $"NACHA file {pinned.FileReference} cannot be re-pinned without its reversed payments: {voidProblem}. Nothing was changed; it needs a person.");
         }
@@ -695,7 +696,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 {
                     _logger.LogWarning(RefusedEvent,
                         "AUDIT NACHA file {FileReference} of payment run {RunNumber}: re-date by {User} refused ({Detail})",
-                        Clean(record.FileReference), Clean(run.PaymentRunNumber), Clean(user), Clean(present));
+                        LogSanitizer.Sanitize(record.FileReference), LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(user), LogSanitizer.Sanitize(present));
                     throw new PaymentFileTransmissionStateException(
                         $"NACHA file {record.FileReference} cannot be re-dated: {present}. It may be at the bank; confirm with the bank " +
                         "before anything else (re-dating would send a second file).");
@@ -730,14 +731,14 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             _logger.LogWarning(SupersededEvent,
                 "AUDIT payment {PaymentId} ({Amount:F2}) of payment run {RunNumber} voided before transmission by {User}: left out of {New}; " +
                 "its 835 ({Partner} ISA13 {Control}) said it would be paid, the provider must be told",
-                Clean(v.PaymentId), v.Amount, Clean(run.PaymentRunNumber), Clean(user), Clean(file.FileReference),
-                Clean(v.TradingPartnerId), Clean(v.ControlNumber));
+                LogSanitizer.Sanitize(v.PaymentId), v.Amount, LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(user), LogSanitizer.Sanitize(file.FileReference),
+                LogSanitizer.Sanitize(v.TradingPartnerId), LogSanitizer.Sanitize(v.ControlNumber));
         await TryCompleteVoidsAsync(outcome.Run, user, cancellationToken);
         _logger.LogWarning(SupersededEvent,
             "AUDIT NACHA file {Old} of payment run {RunNumber} superseded by {User}: re-dated as {New} effective {Effective:yyyy-MM-dd}, " +
             "sha256 {Sha256}; it needs a fresh approval ({Reason})",
-            Clean(pinned.FileReference), Clean(run.PaymentRunNumber), Clean(user), Clean(file.FileReference), file.EffectiveEntryDate,
-            file.Sha256, Clean(reason));
+            LogSanitizer.Sanitize(pinned.FileReference), LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(user), LogSanitizer.Sanitize(file.FileReference), file.EffectiveEntryDate,
+            file.Sha256, LogSanitizer.Sanitize(reason));
         return file;
     }
 
@@ -845,7 +846,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         {
             _logger.LogError(
                 "AUDIT payment run {RunNumber}: payments voided before transmission could not be finished now ({Error}); retried on the next transmit",
-                Clean(run.PaymentRunNumber), ex.GetType().Name);
+                LogSanitizer.Sanitize(run.PaymentRunNumber), ex.GetType().Name);
             return await LoadRunAsync(run.Id);
         }
     }
@@ -885,11 +886,11 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             catch (InvalidOperationException ex)
             {
                 notice.NeedsAttention = true;
-                notice.Problem = Clean(ex.Message);
+                notice.Problem = FlattenLineBreaks(ex.Message);
                 var warning = $"Voided payment {notice.CheckNumber} ({notice.Amount:F2}, NPI {notice.PayeeNpi}): its receivable could not be settled " +
                               $"({notice.Problem}); it needs a person. The payment stays out of the file.";
                 warnings.Add(warning);
-                _logger.LogCritical("AUDIT payment run {RunNumber}: {Warning}", Clean(run.PaymentRunNumber), Clean(warning));
+                _logger.LogCritical("AUDIT payment run {RunNumber}: {Warning}", LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(warning));
             }
             // Read-modify-write of the payment, which a request or a run may be saving
             // meanwhile: on a conflict re-read and re-apply (once recorded, it stays).
@@ -922,7 +923,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             if (attempt >= 4)
             {
                 _logger.LogCritical("AUDIT payment run {RunNumber}: the completed voids could not be recorded ({Warnings}); they need a person",
-                    Clean(run.PaymentRunNumber), Clean(string.Join(" | ", warnings)));
+                    LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(string.Join(" | ", warnings)));
                 return await LoadRunAsync(run.Id);
             }
             run = await LoadRunAsync(run.Id);
@@ -935,7 +936,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         run.GlOutbox.AddRange(glEvents);
         _logger.LogInformation(
             "AUDIT payment run {RunNumber}: payments voided before transmission finished by {User} (receivables cancelled, payments marked)",
-            Clean(run.PaymentRunNumber), Clean(user));
+            LogSanitizer.Sanitize(run.PaymentRunNumber), LogSanitizer.Sanitize(user));
         return run;
     }
 
@@ -997,7 +998,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                          $"and the provider is owed that amount back (refund it and post it in the GL by hand). [{key}]";
             notice.RefundsOwed.Add(refund);
             warnings.Add(refund);
-            _logger.LogCritical("AUDIT {Refund}", Clean(refund));
+            _logger.LogCritical("AUDIT {Refund}", LogSanitizer.Sanitize(refund));
         }
     }
 
@@ -1011,12 +1012,12 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             foreach (var released in await _receivables.ActivatePendingAsync(record.TenantId, record.ApprovedPaymentIds, user,
                          $"NACHA file {record.FileReference} reached the bank: the reversed payment was paid"))
                 _logger.LogWarning("AUDIT provider receivable {ReceivableId} released by transmission of {FileReference}: now {Status}",
-                    Clean(released.Id), Clean(record.FileReference), released.Status);
+                    LogSanitizer.Sanitize(released.Id), LogSanitizer.Sanitize(record.FileReference), released.Status);
         }
         catch (Exception ex)
         {
             _logger.LogError("Receivables held for payments of NACHA file {FileReference} could not be released ({Error}); release them by hand",
-                Clean(record.FileReference), ex.GetType().Name);
+                LogSanitizer.Sanitize(record.FileReference), ex.GetType().Name);
         }
     }
 
@@ -1025,7 +1026,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         if (_options.Enabled)
             return;
         _logger.LogInformation(DisabledEvent,
-            "NACHA bank transmission requested for payment run {RunId} but BankTransmission:Enabled is false; nothing done", Clean(paymentRunId));
+            "NACHA bank transmission requested for payment run {RunId} but BankTransmission:Enabled is false; nothing done", LogSanitizer.Sanitize(paymentRunId));
         throw new BankTransmissionDisabledException();
     }
 
@@ -1131,7 +1132,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             throw new PaymentFileTransmissionStateException($"NACHA file {record.FileReference} changed meanwhile. Check its status.");
         _logger.LogError(NeedsReviewEvent,
             "AUDIT NACHA file {FileReference} of payment run {RunNumber}: attempt {Attempt} outlived its lease; NeedsReview (noticed by {User}); sha256 {Sha256}",
-            Clean(record.FileReference), Clean(record.PaymentRunNumber), record.AttemptCount, Clean(observedBy), record.ApprovedSha256);
+            LogSanitizer.Sanitize(record.FileReference), LogSanitizer.Sanitize(record.PaymentRunNumber), record.AttemptCount, LogSanitizer.Sanitize(observedBy), record.ApprovedSha256);
         return record;
     }
 
@@ -1148,11 +1149,11 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         catch (Exception ex)
         {
             _logger.LogWarning("The refusal of NACHA file {FileReference} could not be added to its record: {Error}",
-                Clean(record.FileReference), ex.GetType().Name);
+                LogSanitizer.Sanitize(record.FileReference), ex.GetType().Name);
         }
         _logger.LogWarning(RefusedEvent,
             "AUDIT NACHA file {FileReference} of payment run {RunNumber}: transmit by {User} refused ({Why}); approved sha256 {Approved}, seen {Seen}",
-            Clean(record.FileReference), Clean(record.PaymentRunNumber), Clean(user), why, record.ApprovedSha256, sha256);
+            LogSanitizer.Sanitize(record.FileReference), LogSanitizer.Sanitize(record.PaymentRunNumber), LogSanitizer.Sanitize(user), why, record.ApprovedSha256, sha256);
     }
 
     /// <summary>True when the outcome was recorded; false when the record changed meanwhile (a late outcome).</summary>
@@ -1168,7 +1169,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             _logger.LogCritical(UnrecordedEvent,
                 "AUDIT NACHA file {FileReference} of payment run {RunNumber}: attempt {Attempt} ended {Result} but could not be recorded ({Error}). " +
                 "The record stays Transmitting and becomes NeedsReview when its lease expires; it will not be re-sent",
-                Clean(record.FileReference), Clean(record.PaymentRunNumber), record.AttemptCount, result, ex.GetType().Name);
+                LogSanitizer.Sanitize(record.FileReference), LogSanitizer.Sanitize(record.PaymentRunNumber), record.AttemptCount, result, ex.GetType().Name);
             throw;
         }
 
@@ -1189,7 +1190,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         _logger.LogCritical(UnrecordedEvent,
             "AUDIT NACHA file {FileReference} of payment run {RunNumber}: attempt {Attempt} by {User} ended {Result} after its record changed " +
             "(its lease was expired); recording it as late delivery evidence",
-            Clean(attempted.FileReference), Clean(attempted.PaymentRunNumber), attempt, Clean(user), result);
+            LogSanitizer.Sanitize(attempted.FileReference), LogSanitizer.Sanitize(attempted.PaymentRunNumber), attempt, LogSanitizer.Sanitize(user), result);
 
         for (var tries = 0; tries < 10; tries++)
         {
@@ -1205,7 +1206,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             {
                 current.Status = PaymentFileTransmissionStatus.NeedsReview;
                 current.LeaseUntil = null;
-                current.Reason = $"late delivery evidence: attempt {attempt} ended {result} ({Clean(detail)}) after the record had moved on " +
+                current.Reason = $"late delivery evidence: attempt {attempt} ended {result} ({FlattenLineBreaks(detail)}) after the record had moved on " +
                                  $"(it was {previous}); the file may be at the bank";
             }
             current.UpdatedAt = Now;
@@ -1216,7 +1217,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                 if (current.Status == PaymentFileTransmissionStatus.NeedsReview)
                     _logger.LogError(NeedsReviewEvent,
                         "AUDIT NACHA file {FileReference} of payment run {RunNumber}: forced to NeedsReview by the late outcome of attempt {Attempt} (was {Previous})",
-                        Clean(current.FileReference), Clean(current.PaymentRunNumber), attempt, previous);
+                        LogSanitizer.Sanitize(current.FileReference), LogSanitizer.Sanitize(current.PaymentRunNumber), attempt, previous);
                 return current;
             }
         }
@@ -1235,7 +1236,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         _logger.Log(level, eventId,
             "AUDIT NACHA file {FileReference} of payment run {RunNumber}, attempt {Attempt} by {User}: {Result} ({Detail}); " +
             "{Entries} credits, {Total:F2}, sha256 {Sha256}",
-            Clean(record.FileReference), Clean(record.PaymentRunNumber), record.AttemptCount, Clean(user), result, Clean(detail),
+            LogSanitizer.Sanitize(record.FileReference), LogSanitizer.Sanitize(record.PaymentRunNumber), record.AttemptCount, LogSanitizer.Sanitize(user), result, LogSanitizer.Sanitize(detail),
             record.EntryCount, record.TotalCreditAmount, record.ApprovedSha256);
     }
 
@@ -1300,7 +1301,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             At = Now,
             Sha256 = sha256,
             Result = result,
-            Detail = detail == null ? null : Clean(detail),
+            Detail = detail == null ? null : FlattenLineBreaks(detail),
         });
 
     private static string NeedsReviewMessage(PaymentFileTransmission record)
@@ -1310,8 +1311,12 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
     private static bool HashEquals(string? a, string? b)
         => !string.IsNullOrEmpty(a) && !string.IsNullOrEmpty(b) && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", " ");
+    /// <summary>
+    /// Keeps a stored free-text value on one line: CR removed, LF becomes a
+    /// space. For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string FlattenLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", " ");
 }
 
 /// <summary>

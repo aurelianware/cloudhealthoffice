@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Logging;
 using CloudHealthOffice.TokenService.Entra;
 
 namespace CloudHealthOffice.TokenService.Exchange;
@@ -79,8 +80,9 @@ public sealed class TokenAudit
             "CHO service token {Outcome}: oid={Oid} tenant={Tenant} reason={Reason}",
             "refused", identity?.ObjectId.ToString() ?? "-", Clean(tenantId), Clean(reason));
 
+    // "-" marks an absent field and "…" a cut one, so the audit line keeps its shape.
     private static string Clean(string? value)
         => string.IsNullOrEmpty(value) ? "-"
-            : value.Length > 200 ? value[..200].Replace("\r", string.Empty).Replace("\n", string.Empty) + "…"
-            : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+            : value.Length > 200 ? LogSanitizer.Sanitize(value, 200) + "…"
+            : LogSanitizer.Sanitize(value);
 }

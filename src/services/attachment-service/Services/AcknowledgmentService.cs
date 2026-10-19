@@ -1,4 +1,5 @@
 using AttachmentService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AttachmentService.Services;
 
@@ -31,12 +32,5 @@ public class AcknowledgmentService : IAcknowledgmentService
     {
         // Default to 999 if no trading partner config found
         return tradingPartner?.AttachmentAckType ?? "999";
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

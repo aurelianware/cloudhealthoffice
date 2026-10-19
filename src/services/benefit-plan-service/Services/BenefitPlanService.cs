@@ -2,6 +2,7 @@ using System.Text.Json;
 using BenefitPlanService.Models;
 using BenefitPlanService.Models.Benefits;
 using BenefitPlanService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -313,7 +314,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
 
         if (benefit == null)
         {
-            _logger.LogWarning("No benefit found for plan {PlanId}, category {Category}", SanitizeForLog(planId), SanitizeForLog(serviceCategory));
+            _logger.LogWarning("No benefit found for plan {PlanId}, category {Category}", LogSanitizer.Sanitize(planId), LogSanitizer.Sanitize(serviceCategory));
             return null;
         }
 
@@ -332,7 +333,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         {
             if (!benefit.CptCodes.Contains(cptCode))
             {
-                _logger.LogWarning("CPT code {CptCode} not covered in benefit", SanitizeForLog(cptCode));
+                _logger.LogWarning("CPT code {CptCode} not covered in benefit", LogSanitizer.Sanitize(cptCode));
                 return new BenefitAppliedResult
                 {
                     IsCovered = false,
@@ -745,13 +746,6 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         EffectiveDate = d.EffectiveDate,
         DisplayName = d.DisplayName
     };
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }
 
 /// <summary>

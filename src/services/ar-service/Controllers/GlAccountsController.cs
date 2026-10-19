@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using ArService.Models;
 using ArService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ArService.Controllers;
 
@@ -66,7 +67,7 @@ public class GlAccountsController : ControllerBase
         account.LastUpdatedBy = null;
 
         _logger.LogInformation("Creating GL account {AccountNumber} ({AccountName})",
-            SanitizeForLog(account.AccountNumber), SanitizeForLog(account.AccountName));
+            LogSanitizer.Sanitize(account.AccountNumber), LogSanitizer.Sanitize(account.AccountName));
 
         var created = await _accountRepository.CreateAsync(account);
         return CreatedAtAction(nameof(GetAccountById), new { id = created.Id }, created);
@@ -132,12 +133,5 @@ public class GlAccountsController : ControllerBase
 
         var updated = await _accountRepository.UpdateAsync(account);
         return Ok(updated);
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

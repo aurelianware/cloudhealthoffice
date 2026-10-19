@@ -5,6 +5,12 @@ internal static class MccRunSummaryBuilder
     internal const decimal PaymentTolerance = 0.01m;
     internal const string ProcessingClaimsPhase = "Processing claims";
 
+    // Per-step adjudication timings were only reported by benefit-plan's removed
+    // dry-run /adjudicate endpoint. The published summary contract keeps the
+    // fields (claims-service, portal); the pipeline path leaves them empty.
+    private static readonly IReadOnlyDictionary<string, double> NoAdjudicationStepTimings =
+        new Dictionary<string, double>();
+
     public static MassAdjudicationRunSummary Build(
         List<ClaimValidationResult> results,
         TimeSpan elapsed,
@@ -102,7 +108,7 @@ internal static class MccRunSummaryBuilder
                 r.SubmitElapsed.TotalMilliseconds,
                 r.AdjudicationElapsed.TotalMilliseconds,
                 r.UpdateElapsed.TotalMilliseconds,
-                r.AdjudicationStepTimings,
+                NoAdjudicationStepTimings,
                 r.ServiceBusObservationTimedOut,
                 r.ReconciledAfterObservationTimeout))
             .ToList()
@@ -149,7 +155,7 @@ internal static class MccRunSummaryBuilder
             BuildStageTiming("Submit", results.Select(r => r.SubmitElapsed)),
             BuildStageTiming("Adjudicate", results.Select(r => r.AdjudicationElapsed)),
             BuildStageTiming("Writeback", results.Select(r => r.UpdateElapsed)),
-            BuildAdjudicationStepTimings(results),
+            Array.Empty<MassAdjudicationStageTiming>(),
             lifecycleTimings ?? Array.Empty<MassAdjudicationLifecycleTiming>(),
             fixturePreparation,
             avgDelta,
@@ -179,33 +185,6 @@ internal static class MccRunSummaryBuilder
         return values.Length == 0
             ? null
             : new MassAdjudicationStageTiming(label, values.Average(), Percentile(values, 0.95));
-    }
-
-    private static IReadOnlyList<MassAdjudicationStageTiming> BuildAdjudicationStepTimings(
-        IReadOnlyCollection<ClaimValidationResult> results)
-    {
-        return results
-            .SelectMany(r => r.AdjudicationStepTimings)
-            .GroupBy(kvp => kvp.Key, StringComparer.Ordinal)
-            .Select(group =>
-            {
-                var values = group
-                    .Select(kvp => kvp.Value)
-                    .Where(ms => ms > 0)
-                    .Order()
-                    .ToArray();
-
-                return values.Length == 0
-                    ? null
-                    : new MassAdjudicationStageTiming(
-                        $"Adjudicate.{group.Key}",
-                        values.Average(),
-                        Percentile(values, 0.95));
-            })
-            .Where(timing => timing is not null)
-            .Cast<MassAdjudicationStageTiming>()
-            .OrderByDescending(timing => timing.AverageMilliseconds)
-            .ToList();
     }
 
     private static IReadOnlyList<MassAdjudicationPaymentDeltaBucket> BuildPaymentDeltaDistribution(

@@ -194,8 +194,8 @@ public class InstitutionalClaimGenerator : IClaimGenerator
     {
         var rate = SyntheticFeeScheduleGenerator.RevenueCodeRate(line.RevenueCode);
         return rate is { } perUnit
-            ? Math.Round(perUnit * line.Units, 2)
-            : Math.Round(line.ChargeAmount * line.Units * 0.60m, 2);
+            ? ExpectedMoney.ToCents(perUnit * line.Units)
+            : ExpectedMoney.ToCents(line.ChargeAmount * line.Units * 0.60m);
     }
 
     private static ExpectedOutcome ComputeExpectedOutcome(SyntheticClaim claim, string subType, Random random)
@@ -226,7 +226,7 @@ public class InstitutionalClaimGenerator : IClaimGenerator
 
         var lineAllowedAmounts = claim.Lines.ToDictionary(l => l.LineNumber, ExpectedLineAllowed);
         var totalAllowed = lineAllowedAmounts.Values.Sum();
-        var coinsurance = Math.Round(totalAllowed * coinsuranceRate, 2);
+        var coinsurance = ExpectedMoney.ToCents(totalAllowed * coinsuranceRate);
         var paid = Math.Max(0, totalAllowed - copay - deductible - coinsurance);
         var memberLiability = copay + deductible + coinsurance;
 
@@ -238,7 +238,7 @@ public class InstitutionalClaimGenerator : IClaimGenerator
                 LineNumber = l.LineNumber,
                 Disposition = "Paid",
                 AllowedAmount = lineAllowed,
-                PaidAmount = Math.Round(lineAllowed * (1m - coinsuranceRate), 2),
+                PaidAmount = ExpectedMoney.ToCents(lineAllowed * (1m - coinsuranceRate)),
                 ReasonCode = null
             };
         }).ToList();
@@ -247,8 +247,8 @@ public class InstitutionalClaimGenerator : IClaimGenerator
         {
             Disposition = "Paid",
             ExpectedAllowedAmount = totalAllowed,
-            ExpectedPaidAmount = Math.Round(paid, 2),
-            ExpectedMemberLiability = Math.Round(memberLiability, 2),
+            ExpectedPaidAmount = ExpectedMoney.ToCents(paid),
+            ExpectedMemberLiability = ExpectedMoney.ToCents(memberLiability),
             ExpectedCopay = copay,
             ExpectedCoinsurance = coinsurance,
             ExpectedDeductible = deductible,

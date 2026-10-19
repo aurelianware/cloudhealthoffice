@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using AttachmentService.Models;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AttachmentService.Services;
 
@@ -65,7 +66,7 @@ public sealed class HttpTradingPartnerLookup : ITradingPartnerLookup
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            _logger.LogError(ex, "trading-partner-service unreachable for tenant {TenantId}", Sanitize(tenantId));
+            _logger.LogError(ex, "trading-partner-service unreachable for tenant {TenantId}", LogSanitizer.Sanitize(tenantId));
             throw new TradingPartnerLookupException("trading-partner-service unreachable", ex);
         }
 
@@ -74,7 +75,7 @@ public sealed class HttpTradingPartnerLookup : ITradingPartnerLookup
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError("trading-partner-service answered {Status} for tenant {TenantId}",
-                    (int)response.StatusCode, Sanitize(tenantId));
+                    (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
                 throw new TradingPartnerLookupException($"trading-partner-service answered {(int)response.StatusCode}");
             }
 
@@ -118,9 +119,6 @@ public sealed class HttpTradingPartnerLookup : ITradingPartnerLookup
 
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokens.GetTokenAsync(tenantId));
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
     private sealed class PartnerDto
     {

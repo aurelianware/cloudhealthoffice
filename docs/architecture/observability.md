@@ -155,9 +155,8 @@ Available instruments (all under the `CloudHealthOffice` meter):
 | Instrument | Unit | Purpose |
 |---|---|---|
 | `cho.http.request.duration` | s (histogram) | End-to-end HTTP request latency |
-| `cho.claims.processing.duration` | s (histogram) | Claim adjudication latency |
 | `cho.edi.transactions.total` | count | EDI transactions processed (837, 835, 270, 271, …) |
-| `cho.claims.adjudication.outcome.total` | count | Adjudication outcomes (approved, denied, pended) |
+| `cho.claims.adjudication.outcome.total` | count | Adjudication outcomes (approved, denied, pended). Not recorded at present: its only caller was the removed `/adjudicate` dry run |
 | `cho.pas.submit.duration` | s (histogram) | Da Vinci PAS $submit time (target < 15s) |
 | `cho.pas.submit.decisions.total` | count | PAS decisions by type and rule |
 | `cho.telemetry.scrub.total` | count | PHI SpanProcessor drops — should stay at 0 in prod |

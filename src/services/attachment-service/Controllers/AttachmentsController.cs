@@ -8,6 +8,7 @@ using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AttachmentService.Controllers;
 
@@ -208,7 +209,7 @@ public class AttachmentsController : ControllerBase
                 created.Id,
                 !string.IsNullOrWhiteSpace(created.ClaimId) ? "Claim" :
                 !string.IsNullOrWhiteSpace(created.AuthorizationId) ? "Authorization" : "Appeal",
-                SanitizeForLog(created.ClaimId ?? created.AuthorizationId ?? created.AppealId));
+                LogSanitizer.Sanitize(created.ClaimId ?? created.AuthorizationId ?? created.AppealId));
 
             return CreatedAtAction(nameof(GetAttachment), new { id = created.Id }, created);
         }
@@ -370,7 +371,7 @@ public class AttachmentsController : ControllerBase
             _logger.LogInformation(
                 "Generated {AckType} acknowledgment for attachment {AttachmentId}",
                 ackType,
-                SanitizeForLog(id));
+                LogSanitizer.Sanitize(id));
 
             return Ok(new AcknowledgmentResponse
             {
@@ -386,7 +387,7 @@ public class AttachmentsController : ControllerBase
         catch (TradingPartnerLookupException ex)
         {
             // Never an acknowledgment built from default interchange ids because the lookup failed.
-            _logger.LogError(ex, "Trading partner configuration unavailable for attachment {AttachmentId}", SanitizeForLog(id));
+            _logger.LogError(ex, "Trading partner configuration unavailable for attachment {AttachmentId}", LogSanitizer.Sanitize(id));
             return StatusCode(StatusCodes.Status502BadGateway,
                 new { error = "Trading partner configuration is unavailable; no acknowledgment was generated. Retry later." });
         }
@@ -398,7 +399,7 @@ public class AttachmentsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error generating acknowledgment for attachment {AttachmentId} (trace id {TraceId})",
-                SanitizeForLog(id), HttpContext.TraceIdentifier);
+                LogSanitizer.Sanitize(id), HttpContext.TraceIdentifier);
             return StatusCode(500, new { error = "Failed to generate acknowledgment", traceId = HttpContext.TraceIdentifier });
         }
     }
@@ -416,13 +417,6 @@ public class AttachmentsController : ControllerBase
             ApplicationSenderId = "SENDER",
             ApplicationReceiverId = attachment.ProviderId
         };
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using SmartAuthService.Models;
 using SmartAuthService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace SmartAuthService.Controllers;
 
@@ -92,7 +93,7 @@ public class LaunchContextController : ControllerBase
         _logger.LogInformation(
             "EHR launch registered — tenant: {Tenant}, actor: {Actor}, client: {ClientId}, patient: {PatientId}, encounter: {EncounterId}, practitioner: {PractitionerId}",
             SmartAuthAudit.Clean(tenantId), SmartAuthAudit.Clean(_actor.UserId), SmartAuthAudit.Clean(request.ClientId),
-            SmartAuthAudit.Clean(request.PatientId), SmartAuthAudit.Clean(request.EncounterId),
+            SmartAuthAudit.Clean(LogSanitizer.MaskId(request.PatientId)), SmartAuthAudit.Clean(request.EncounterId),
             SmartAuthAudit.Clean(request.PractitionerId));
 
         // Return the launch token and the ISS (FHIR base URL) the EHR needs

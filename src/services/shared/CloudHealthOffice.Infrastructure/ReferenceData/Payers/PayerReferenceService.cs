@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.ReferenceData.Payers;
 
@@ -87,7 +88,7 @@ internal sealed class PayerReferenceService : IPayerReferenceService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Payer reference store failed for tenant {TenantId}",
-                Sanitize(tenantId));
+                LogSanitizer.Sanitize(tenantId));
             RecordResolution("unavailable");
             return PayerResolution.Fail(
                 PayerResolutionStatus.ReferenceDataUnavailable,
@@ -271,7 +272,4 @@ internal sealed class PayerReferenceService : IPayerReferenceService
 
     private static void RecordResolution(string result) =>
         ChoMetrics.PayerResolutionTotal.Add(1, new KeyValuePair<string, object?>("cho.result", result));
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

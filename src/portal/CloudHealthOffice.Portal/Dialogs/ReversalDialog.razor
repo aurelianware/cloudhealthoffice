@@ -24,7 +24,7 @@
         @if (_reversalType == "Partial Reversal")
         {
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">Select Lines to Reverse</MudText>
-            <MudCheckBox T="bool" @bind-Checked="_reversalAllLines" Label="Select All Lines" Class="mb-2" />
+            <MudCheckBox T="bool" @bind-Value="_reversalAllLines" Label="Select All Lines" Class="mb-2" />
             <!-- Lines would be populated from the claim -->
         }
 
@@ -46,7 +46,7 @@
             <MudSelectItem Value="@("Negative Adjustment")">Negative Adjustment (issue credit)</MudSelectItem>
         </MudSelect>
 
-        <MudCheckBox T="bool" @bind-Checked="_notifyProvider" Label="Notify Provider of Reversal" Class="mb-4" />
+        <MudCheckBox T="bool" @bind-Value="_notifyProvider" Label="Notify Provider of Reversal" Class="mb-4" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>

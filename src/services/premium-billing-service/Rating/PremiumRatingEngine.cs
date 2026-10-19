@@ -1,3 +1,5 @@
+using CloudHealthOffice.Infrastructure.Money;
+
 namespace PremiumBillingService.Rating;
 
 /// <summary>A covered person as the rating engine needs them.</summary>
@@ -111,7 +113,7 @@ public class RatingResult
 /// </summary>
 public static class PremiumRatingEngine
 {
-    public static decimal RoundMoney(decimal amount) => Math.Round(amount, 2, MidpointRounding.AwayFromZero);
+    public static decimal RoundMoney(decimal amount) => MoneyRounding.ToCents(amount);
 
     /// <summary>EE / EE+Spouse / EE+Child(ren) / Family from who is covered.</summary>
     public static CoverageTier DeriveTier(IEnumerable<RatedMember> members)

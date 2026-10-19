@@ -9,6 +9,7 @@ using AuthorizationService.Services;
 using AuthorizationService.Services.Rfai;
 using AuthorizationService.Services.Cms0057;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace AuthorizationService.Controllers;
 
@@ -123,7 +124,7 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation(
             "Submitting authorization for member {MemberId}, provider {ProviderNPI}, service date {ServiceDate}",
-            SanitizeForLog(authorization.MemberId), SanitizeForLog(authorization.RequestingProviderNPI), authorization.RequestedServiceDateFrom);
+            LogSanitizer.MaskId(authorization.MemberId), LogSanitizer.Sanitize(authorization.RequestingProviderNPI), authorization.RequestedServiceDateFrom);
 
         // Validate authorization
         if (authorization.RequestedServices.Count == 0)
@@ -152,7 +153,7 @@ public class AuthorizationsController : ControllerBase
 
         _logger.LogInformation(
             "Authorization {AuthNumber} submitted successfully via {Backend} backend ({Mode} mode)",
-            SanitizeForLog(authorization.AuthorizationNumber), _backends.ActiveBackendKey, _backends.Mode);
+            LogSanitizer.Sanitize(authorization.AuthorizationNumber), _backends.ActiveBackendKey, _backends.Mode);
 
         return CreatedAtAction(nameof(GetAuthorizationById), new { id = created.Id }, created);
     }
@@ -202,7 +203,7 @@ public class AuthorizationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Authorization>> GetAuthorizationById(string id)
     {
-        _logger.LogInformation("Fetching authorization by ID: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Fetching authorization by ID: {Id}", LogSanitizer.Sanitize(id));
 
         var authorization = await _authorizationRepository.GetByIdAsync(id);
         if (authorization == null)
@@ -222,7 +223,7 @@ public class AuthorizationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Authorization>> GetAuthorizationByNumber(string authNumber)
     {
-        _logger.LogInformation("Fetching authorization by number: {AuthNumber}", SanitizeForLog(authNumber));
+        _logger.LogInformation("Fetching authorization by number: {AuthNumber}", LogSanitizer.Sanitize(authNumber));
 
         // Route through the operating-mode-selected backend so an Augment
         // deployment does not silently read from the CHO repository.
@@ -256,7 +257,7 @@ public class AuthorizationsController : ControllerBase
 
         _logger.LogInformation(
             "Validating authorization {AuthNumber} for procedure {Procedure} on {Date}",
-            SanitizeForLog(authNumber), SanitizeForLog(procedureCode), checkDate);
+            LogSanitizer.Sanitize(authNumber), LogSanitizer.Sanitize(procedureCode), checkDate);
 
         var authorization = await _backends.Resolve().GetByNumberAsync(authNumber, HttpContext.RequestAborted);
         if (authorization == null)
@@ -439,7 +440,7 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation(
             "Searching authorizations: member={Member}, provider={Provider}, dateFrom={From}, dateTo={To}, status={Status}, lob={LOB}",
-            SanitizeForLog(memberId), SanitizeForLog(providerNPI), serviceDateFrom, serviceDateTo, status, lineOfBusiness);
+            LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(providerNPI), serviceDateFrom, serviceDateTo, status, lineOfBusiness);
 
         var authorizations = await _authorizationRepository.SearchAsync(
             memberId, providerNPI, serviceDateFrom, serviceDateTo, status, lineOfBusiness, page, pageSize);
@@ -460,7 +461,7 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation(
             "Updating authorization {Id} status to {Status}",
-            SanitizeForLog(id), statusUpdate.Status);
+            LogSanitizer.Sanitize(id), statusUpdate.Status);
 
         var authorization = await _authorizationRepository.GetByIdAsync(id);
         if (authorization == null)
@@ -518,7 +519,7 @@ public class AuthorizationsController : ControllerBase
     {
         _logger.LogInformation(
             "Processing 278 response for authorization {Id}, decision={Decision}",
-            SanitizeForLog(id), SanitizeForLog(response.ReviewDecision));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(response.ReviewDecision));
 
         var authorization = await _authorizationRepository.GetByIdAsync(id);
         if (authorization == null)
@@ -629,7 +630,7 @@ public class AuthorizationsController : ControllerBase
             _logger.LogError(ex,
                 "Authorization {AuthNumber}: the additional-information request was raised "
                 + "but its handle could not be persisted.",
-                SanitizeForLog(authorization.AuthorizationNumber));
+                LogSanitizer.Sanitize(authorization.AuthorizationNumber));
         }
     }
 
@@ -823,7 +824,7 @@ public class AuthorizationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CancelAuthorization(string id)
     {
-        _logger.LogInformation("Cancelling authorization: {Id}", SanitizeForLog(id));
+        _logger.LogInformation("Cancelling authorization: {Id}", LogSanitizer.Sanitize(id));
 
         var authorization = await _authorizationRepository.GetByIdAsync(id);
         if (authorization == null)
@@ -838,13 +839,6 @@ public class AuthorizationsController : ControllerBase
         await _authorizationRepository.UpdateAsync(authorization);
 
         return NoContent();
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using RfaiService.Models;
 using RfaiService.Repositories;
 using RfaiService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace RfaiService.Controllers;
 
@@ -341,7 +342,7 @@ public class RfaiController : ControllerBase
 
         var updated = await _repository.UpdateAsync(rfaiCase);
 
-        _logger.LogInformation("RFAI case {Id} {Verb}", SanitizeForLog(id), verb);
+        _logger.LogInformation("RFAI case {Id} {Verb}", LogSanitizer.Sanitize(id), verb);
 
         return Ok(ForResponse(updated));
     }
@@ -360,12 +361,6 @@ public class RfaiController : ControllerBase
         }
 
         return copy;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

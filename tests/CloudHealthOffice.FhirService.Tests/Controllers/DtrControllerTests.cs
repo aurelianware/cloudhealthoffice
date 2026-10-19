@@ -1,3 +1,4 @@
+using CloudHealthOffice.Testing.FhirService;
 using FhirService.Controllers;
 using FhirService.Models;
 using FhirService.Services;
@@ -25,10 +26,7 @@ public class DtrControllerTests
         var fhirConfig = new Mock<IConfiguration>();
         fhirConfig.Setup(c => c["Fhir:ServerBaseUrl"]).Returns("https://test.example.com/fhir/r4");
 
-        var appConfig = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["MongoDb:ConnectionString"] = "" })
-            .Build();
-        _dtrService = new DtrService(config, loggerService.Object, appConfig);
+        _dtrService = new DtrService(config, new InMemoryDtrResourceStore(), loggerService.Object);
         _bundleBuilder = new FhirBundleBuilder(fhirConfig.Object);
 
         _controller = new DtrController(

@@ -1,5 +1,6 @@
 using CloudHealthOffice.Consent.Contracts;
 using FhirService.Services.Consent;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.ProviderAccess;
 
@@ -167,7 +168,7 @@ public sealed class ProviderAccessAuthorizationService : IProviderAccessAuthoriz
             // An unreadable attribution source is not a relationship.
             _logger.LogWarning(
                 "Provider Access attribution lookup failed for tenant={Tenant}; denying ({Fault}).",
-                Clean(request.TenantId), ex.GetType().Name);
+                LogSanitizer.Sanitize(request.TenantId), ex.GetType().Name);
             return Denied(ProviderAccessDenialReason.NotAttributed, request, now);
         }
 
@@ -205,11 +206,4 @@ public sealed class ProviderAccessAuthorizationService : IProviderAccessAuthoriz
         ProviderAccessDenialReason reason, ProviderAccessRequest request, DateTime now)
         => ProviderAccessDecision.Deny(
             reason, request.TenantId, request.MemberId, request.ProviderId, now);
-
-    /// <summary>Strips CR/LF so an id cannot forge a log entry (CWE-117).</summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

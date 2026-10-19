@@ -1,5 +1,6 @@
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services;
 
@@ -214,7 +215,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
         var claim = await _claimRepository.GetByIdAsync(claimId);
         if (claim == null)
         {
-            _logger.LogWarning("Finalize requested for unknown claim {ClaimId}", Sanitize(claimId));
+            _logger.LogWarning("Finalize requested for unknown claim {ClaimId}", LogSanitizer.Sanitize(claimId));
             return ClaimFinalizationResult.NotFound($"Claim {claimId} not found");
         }
 
@@ -228,13 +229,13 @@ public class ClaimFinalizationService : IClaimFinalizationService
             {
                 _logger.LogInformation(
                     "Claim {ClaimId} already finalized with CheckNumber {Check}; idempotent no-op",
-                    Sanitize(claim.Id), Sanitize(request.CheckNumber));
+                    LogSanitizer.Sanitize(claim.Id), LogSanitizer.Sanitize(request.CheckNumber));
                 return ClaimFinalizationResult.AlreadyFinalized(claim);
             }
 
             _logger.LogWarning(
                 "Claim {ClaimId} already finalized with CheckNumber {Existing}; refusing re-finalize with {Incoming}",
-                Sanitize(claim.Id), Sanitize(existingCheck), Sanitize(request.CheckNumber));
+                LogSanitizer.Sanitize(claim.Id), LogSanitizer.Sanitize(existingCheck), LogSanitizer.Sanitize(request.CheckNumber));
             return ClaimFinalizationResult.Conflict(
                 claim,
                 $"Claim already paid under check {existingCheck}; cannot re-finalize with {request.CheckNumber}");
@@ -253,7 +254,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
             {
                 _logger.LogInformation(
                     "Claim {ClaimId} already finalized as Denied; $0 remittance {Check} is an idempotent no-op",
-                    Sanitize(claim.Id), Sanitize(request.CheckNumber));
+                    LogSanitizer.Sanitize(claim.Id), LogSanitizer.Sanitize(request.CheckNumber));
                 return ClaimFinalizationResult.AlreadyFinalized(claim);
             }
             return ClaimFinalizationResult.InvalidSourceState(
@@ -271,7 +272,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
         {
             _logger.LogWarning(
                 "Claim {ClaimId} is Deny; refusing a paid remittance of {Amount}",
-                Sanitize(claim.Id), request.PayerPayment);
+                LogSanitizer.Sanitize(claim.Id), request.PayerPayment);
             return ClaimFinalizationResult.InvalidSourceState(
                 claim,
                 $"Claim is Deny; a denial is remitted at 0.00, not {request.PayerPayment:F2}. " +
@@ -281,7 +282,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
         {
             _logger.LogWarning(
                 "Claim {ClaimId} cannot finalize from {Status}; only Approved/PartiallyPaid → Paid and Deny → Denied supported",
-                Sanitize(claim.Id), claim.Status);
+                LogSanitizer.Sanitize(claim.Id), claim.Status);
             return ClaimFinalizationResult.InvalidSourceState(
                 claim,
                 $"Claim must be Approved (Pay), PartiallyPaid or Deny to finalize; current status is {claim.Status}");
@@ -340,15 +341,15 @@ public class ClaimFinalizationService : IClaimFinalizationService
         {
             _logger.LogError(ex,
                 "Failed to publish {Event} for claim {ClaimId}; claim already persisted",
-                deny ? "ClaimVersionDenied" : "ClaimVersionPaid", Sanitize(updated.Id));
+                deny ? "ClaimVersionDenied" : "ClaimVersionPaid", LogSanitizer.Sanitize(updated.Id));
         }
 
         await _kafkaEventPublisher.PublishClaimFinalizedAsync(updated, tenantId, ct);
 
         _logger.LogInformation(
             "Finalized claim {ClaimId} with CheckNumber {Check}; PaymentRun {PaymentRunId}, EraEnvelope {EnvelopeId}",
-            Sanitize(updated.Id), Sanitize(request.CheckNumber),
-            Sanitize(request.PaymentRunId), Sanitize(request.EraEnvelopeId));
+            LogSanitizer.Sanitize(updated.Id), LogSanitizer.Sanitize(request.CheckNumber),
+            LogSanitizer.Sanitize(request.PaymentRunId), LogSanitizer.Sanitize(request.EraEnvelopeId));
 
         return ClaimFinalizationResult.Finalized(updated);
     }
@@ -375,7 +376,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
         var claim = await _claimRepository.GetByIdAsync(claimId);
         if (claim == null || claim.TenantId != tenantId)
         {
-            _logger.LogWarning("Void requested for unknown claim {ClaimId}", Sanitize(claimId));
+            _logger.LogWarning("Void requested for unknown claim {ClaimId}", LogSanitizer.Sanitize(claimId));
             return ClaimVoidResult.NotFound($"Claim {claimId} not found");
         }
 
@@ -387,7 +388,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
             // reversal run retrying) is what completes it. The transition
             // only acts on a PendingReversal row, so repeating it is safe.
             _logger.LogInformation(
-                "Claim {ClaimId} already Voided; idempotent no-op apart from the adjustment transition", Sanitize(claim.Id));
+                "Claim {ClaimId} already Voided; idempotent no-op apart from the adjustment transition", LogSanitizer.Sanitize(claim.Id));
             // The reversal the void saved (outbox) is driven again; a claim
             // voided before the outbox existed is reversed directly.
             await ReverseEngineAccumulatorsAsync(claim, claim.PendingAccumulatorReversal, ct);
@@ -410,7 +411,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
             {
                 _logger.LogWarning(
                     "Claim {ClaimId} cannot void from Status={Status}/VersionState={VersionState}; only Paid/PartiallyPaid/Adjusted allowed",
-                    Sanitize(claim.Id), claim.Status, claim.VersionState);
+                    LogSanitizer.Sanitize(claim.Id), claim.Status, claim.VersionState);
                 return ClaimVoidResult.InvalidSourceState(
                     claim,
                     $"Claim must be Paid, PartiallyPaid, or Adjusted to void; current Status={claim.Status}, VersionState={claim.VersionState}");
@@ -436,7 +437,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
             // not-found rather than crashing.
             _logger.LogWarning(
                 "Void projection bypass for claim {ClaimId} matched 0 rows; treating as not-found",
-                Sanitize(claim.Id));
+                LogSanitizer.Sanitize(claim.Id));
             return ClaimVoidResult.NotFound($"Claim {claimId} not found (race or concurrent delete)");
         }
 
@@ -458,7 +459,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
             updated = claim;
             _logger.LogWarning(
                 "Void refetch returned null for claim {ClaimId}; emitting events from in-memory post-Void state",
-                Sanitize(claim.Id));
+                LogSanitizer.Sanitize(claim.Id));
         }
 
         try
@@ -469,7 +470,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
         {
             _logger.LogError(ex,
                 "Failed to publish ClaimVersionVoided for claim {ClaimId}; void already persisted",
-                Sanitize(updated.Id));
+                LogSanitizer.Sanitize(updated.Id));
         }
 
         // Emit to Kafka — the existing ClaimEventPublisher.Status mapper
@@ -501,7 +502,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
 
         _logger.LogInformation(
             "Voided claim {ClaimId}; reason='{Reason}'; ReversalRun={ReversalRunId}",
-            Sanitize(updated.Id), Sanitize(request.Reason), Sanitize(request.ReversalRunId));
+            LogSanitizer.Sanitize(updated.Id), LogSanitizer.Sanitize(request.Reason), LogSanitizer.Sanitize(request.ReversalRunId));
 
         return ClaimVoidResult.Voided(updated);
     }
@@ -521,7 +522,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
             {
                 _logger.LogError(ex,
                     "Void of claim {ClaimId}: the accumulator reversal attempt failed; the outbox dispatcher retries it",
-                    Sanitize(claim.Id));
+                    LogSanitizer.Sanitize(claim.Id));
             }
             return;
         }
@@ -530,7 +531,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
         {
             _logger.LogWarning(
                 "Void of claim {ClaimId}: BenefitPlanId is not a GUID; engine accumulators not reversed",
-                Sanitize(claim.Id));
+                LogSanitizer.Sanitize(claim.Id));
             return;
         }
         try
@@ -547,7 +548,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
         {
             _logger.LogError(ex,
                 "Void of claim {ClaimId}: reversing engine accumulators failed; a repeat void re-drives it",
-                Sanitize(claim.Id));
+                LogSanitizer.Sanitize(claim.Id));
         }
     }
 
@@ -569,10 +570,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
         {
             _logger.LogError(ex,
                 "Adjustment Active-transition callback failed for predecessor {ClaimId}; void already persisted, a repeat void retries it",
-                Sanitize(claimId));
+                LogSanitizer.Sanitize(claimId));
         }
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

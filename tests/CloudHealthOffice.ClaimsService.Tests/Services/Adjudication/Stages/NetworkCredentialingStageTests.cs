@@ -390,9 +390,9 @@ public class NetworkCredentialingStageTests
         Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
         // Verify the legacy tier (NetworkId=null) was skipped.
         // NSubstitute requires matchers throughout when any arg uses one,
-        // so the null check goes through Arg.Is<string?>.
+        // so the null check goes through Arg.Is.
         await _membership.DidNotReceive().GetMembershipAsync(
-            Arg.Any<string>(), Arg.Is<string?>(n => n == null), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Is<string>(n => n == null), Arg.Any<string>(),
             Arg.Any<DateTime>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 

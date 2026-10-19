@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using BenefitPlanService.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -254,9 +255,6 @@ public sealed class PlanDocumentLocationPolicy
     {
         _logger.LogWarning(
             "Plan document location withheld on read: tenant {TenantId} plan {PlanId} document {DocumentId}: {Reason}",
-            Sanitize(tenantId), Sanitize(planId), Sanitize(documentId), reason);
+            LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(planId), LogSanitizer.Sanitize(documentId), reason);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

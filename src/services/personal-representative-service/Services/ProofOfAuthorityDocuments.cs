@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PersonalRepresentativeService.Services;
 
@@ -89,7 +90,7 @@ public sealed class MemberDocumentProofOfAuthorityDocuments : IProofOfAuthorityD
             {
                 _logger.LogWarning(
                     "member-document-service returned {Status} for proof-of-authority document {DocumentId} in tenant {TenantId}",
-                    (int)response.StatusCode, LogSanitizer.SafeForLog(documentId), LogSanitizer.SafeForLog(tenantId));
+                    (int)response.StatusCode, LogSanitizer.Sanitize(documentId, 256), LogSanitizer.Sanitize(tenantId, 256));
                 return new(ProofOfAuthorityDocumentStatus.Unavailable);
             }
 
@@ -99,7 +100,7 @@ public sealed class MemberDocumentProofOfAuthorityDocuments : IProofOfAuthorityD
         {
             _logger.LogWarning(ex,
                 "Could not reach member-document-service for proof-of-authority document {DocumentId} in tenant {TenantId}",
-                LogSanitizer.SafeForLog(documentId), LogSanitizer.SafeForLog(tenantId));
+                LogSanitizer.Sanitize(documentId, 256), LogSanitizer.Sanitize(tenantId, 256));
             return new(ProofOfAuthorityDocumentStatus.Unavailable);
         }
 
@@ -111,7 +112,7 @@ public sealed class MemberDocumentProofOfAuthorityDocuments : IProofOfAuthorityD
         {
             _logger.LogWarning(ex,
                 "Unreadable member-document-service response for proof-of-authority document {DocumentId}",
-                LogSanitizer.SafeForLog(documentId));
+                LogSanitizer.Sanitize(documentId, 256));
             return new(ProofOfAuthorityDocumentStatus.Unavailable);
         }
     }

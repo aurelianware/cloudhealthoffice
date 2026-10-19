@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using CloudHealthOffice.TradingPartnerService.Models;
 using CloudHealthOffice.TradingPartnerService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.TradingPartnerService.Controllers;
 
@@ -308,8 +309,8 @@ public class TradingPartnersController : ControllerBase
 
         _logger.LogInformation(
             "AUDIT trading partner created: {TenantId}/{TradingPartnerId}/{Environment} by {Actor}",
-            SanitizeForLog(tenantId), SanitizeForLog(partner.TradingPartnerId), SanitizeForLog(partner.Environment),
-            SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(partner.TradingPartnerId), LogSanitizer.Sanitize(partner.Environment),
+            LogSanitizer.Sanitize(_actor.UserId));
 
         return CreatedAtAction(
             nameof(Get),
@@ -349,8 +350,8 @@ public class TradingPartnersController : ControllerBase
 
         _logger.LogInformation(
             "AUDIT trading partner updated: {TenantId}/{TradingPartnerId}/{Environment} by {Actor}",
-            SanitizeForLog(tenantId), SanitizeForLog(tradingPartnerId), SanitizeForLog(environment),
-            SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(tradingPartnerId), LogSanitizer.Sanitize(environment),
+            LogSanitizer.Sanitize(_actor.UserId));
 
         return Ok(TradingPartnerView.From(updated));
     }
@@ -372,8 +373,8 @@ public class TradingPartnersController : ControllerBase
 
         _logger.LogWarning(
             "AUDIT trading partner deleted: {TenantId}/{TradingPartnerId}/{Environment} by {Actor}",
-            SanitizeForLog(tenantId), SanitizeForLog(tradingPartnerId), SanitizeForLog(environment),
-            SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(tradingPartnerId), LogSanitizer.Sanitize(environment),
+            LogSanitizer.Sanitize(_actor.UserId));
 
         return NoContent();
     }
@@ -435,7 +436,7 @@ public class TradingPartnersController : ControllerBase
         {
             _logger.LogWarning(
                 "Trading partner write refused: body carries a credential at {Path} (tenant {TenantId}, subject {Actor})",
-                SanitizeForLog(path), SanitizeForLog(_actor.TenantId), SanitizeForLog(_actor.UserId));
+                LogSanitizer.Sanitize(path), LogSanitizer.Sanitize(_actor.TenantId), LogSanitizer.Sanitize(_actor.UserId));
             return (null, BadRequest(new
             {
                 message = $"Credentials are not accepted in trading partner configuration ({path}). " +
@@ -505,15 +506,8 @@ public class TradingPartnersController : ControllerBase
 
         _logger.LogWarning(
             "Trading partner request refused: path tenant {PathTenant} does not match the authenticated tenant {TokenTenant} (subject {Subject})",
-            SanitizeForLog(pathTenantId), SanitizeForLog(_actor.TenantId), SanitizeForLog(_actor.UserId));
+            LogSanitizer.Sanitize(pathTenantId), LogSanitizer.Sanitize(_actor.TenantId), LogSanitizer.Sanitize(_actor.UserId));
         return StatusCode(StatusCodes.Status403Forbidden,
             new { message = "The tenant in the path does not match the authenticated tenant." });
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

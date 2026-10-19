@@ -6,6 +6,7 @@ using CloudHealthOffice.ReferenceData.Persistence;
 using CloudHealthOffice.ReferenceData.Security;
 using CloudHealthOffice.ReferenceData.Sources;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ReferenceDataService.Controllers;
 
@@ -129,8 +130,8 @@ public sealed class CanonicalReferenceDataController : ControllerBase
             var result = await _repository.ImportAsync(records, subject, ct);
             _logger?.LogInformation(
                 "AUDIT reference-data import: {Count} {Scope} records (source {SourceId} {SourceVersion}) by {Subject} in tenant {TenantId}; already imported: {AlreadyImported}",
-                result.ImportedCount, global ? "global" : "tenant", Sanitize(records[0].SourceId), Sanitize(records[0].SourceVersion),
-                Sanitize(subject), Sanitize(tenantId), result.AlreadyImported);
+                result.ImportedCount, global ? "global" : "tenant", LogSanitizer.Sanitize(records[0].SourceId), LogSanitizer.Sanitize(records[0].SourceVersion),
+                LogSanitizer.Sanitize(subject), LogSanitizer.Sanitize(tenantId), result.AlreadyImported);
             return Ok(result);
         }
         catch (ArgumentException exception)
@@ -157,7 +158,4 @@ public sealed class CanonicalReferenceDataController : ControllerBase
             HttpContext.GetTenantId(),
             ChoPrincipal.IsService(User) || ChoPrincipal.HasPermission(User, GlobalWritePermission));
     }
-
-    private static string Sanitize(string? value)
-        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

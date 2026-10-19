@@ -3,6 +3,7 @@ using CHO.TerminologyService.Models;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CHO.TerminologyService.Controllers;
 
@@ -38,9 +39,6 @@ public class TmppmController : ControllerBase
     }
 
     private string? Actor => User.FindFirst(ChoClaimTypes.Subject)?.Value;
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     /// <summary>Rules for a procedure code (<c>code</c>) or a category (<c>category</c>), optionally one state.</summary>
     [HttpGet("rules")]
@@ -96,7 +94,7 @@ public class TmppmController : ControllerBase
             return BadRequest(new { error = "Every rule needs a ruleId" });
 
         var count = await _store.UpsertRulesAsync(rules, ct);
-        _logger.LogInformation("AUDIT tmppm rules upserted: {Count} by {Subject}", count, Sanitize(Actor));
+        _logger.LogInformation("AUDIT tmppm rules upserted: {Count} by {Subject}", count, LogSanitizer.Sanitize(Actor));
         return Ok(new { upserted = count });
     }
 
@@ -109,7 +107,7 @@ public class TmppmController : ControllerBase
             return BadRequest(new { error = "An edition body is required" });
         edition.EditionId = editionId;
         await _store.SaveEditionAsync(edition, ct);
-        _logger.LogInformation("AUDIT tmppm edition {EditionId} saved by {Subject}", Sanitize(editionId), Sanitize(Actor));
+        _logger.LogInformation("AUDIT tmppm edition {EditionId} saved by {Subject}", LogSanitizer.Sanitize(editionId), LogSanitizer.Sanitize(Actor));
         return Ok(edition);
     }
 
@@ -122,7 +120,7 @@ public class TmppmController : ControllerBase
             return BadRequest(new { error = "fromEdition and toEdition are required" });
         await _store.SaveDiffAsync(diff, ct);
         _logger.LogInformation("AUDIT tmppm diff {From} -> {To} saved by {Subject}",
-            Sanitize(diff.FromEdition), Sanitize(diff.ToEdition), Sanitize(Actor));
+            LogSanitizer.Sanitize(diff.FromEdition), LogSanitizer.Sanitize(diff.ToEdition), LogSanitizer.Sanitize(Actor));
         return Ok();
     }
 
@@ -143,7 +141,7 @@ public class TmppmController : ControllerBase
         var result = await _store.PublishOverridesAsync(tenant, request.EditionId, request.Rules, Actor, ct);
         _logger.LogInformation(
             "AUDIT tmppm overrides published: {Count} for edition {EditionId} in tenant {TenantId} by {Subject}",
-            result.OverridesPublished, Sanitize(request.EditionId), Sanitize(tenant), Sanitize(Actor));
+            result.OverridesPublished, LogSanitizer.Sanitize(request.EditionId), LogSanitizer.Sanitize(tenant), LogSanitizer.Sanitize(Actor));
         return Ok(result);
     }
 }

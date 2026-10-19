@@ -2,6 +2,7 @@ using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Persistence;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.BenefitEngine.Services;
 
@@ -38,9 +39,6 @@ public class MongoAccumulatorAuditWriter : IAccumulatorAuditWriter
 
     private readonly IAccumulatorRepository _repository;
     private readonly ILogger<MongoAccumulatorAuditWriter> _logger;
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     public MongoAccumulatorAuditWriter(
         IAccumulatorRepository repository,
@@ -135,7 +133,7 @@ public class MongoAccumulatorAuditWriter : IAccumulatorAuditWriter
                     _logger.LogWarning(
                         "Audit write failed after {Retries} retries for claim {ClaimId}, doc {DocId}; " +
                         "the accumulator operation fails and must be retried.",
-                        MaxRetries, SanitizeForLog(claimId), SanitizeForLog(doc.Id));
+                        MaxRetries, LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(doc.Id));
                     throw;
                 }
             }

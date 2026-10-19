@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using ProviderService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Services;
 
@@ -99,7 +100,7 @@ public class MpipRateService : IMpipRateService
         {
             _logger.LogDebug(
                 "MPIP: member age {Age} >= {MaxAge}, returning standard multiplier for provider {ProviderId}",
-                memberAgeAtServiceDate, MaxMemberAge, Sanitize(providerId));
+                memberAgeAtServiceDate, MaxMemberAge, LogSanitizer.Sanitize(providerId));
             return StandardMultiplier;
         }
 
@@ -113,7 +114,7 @@ public class MpipRateService : IMpipRateService
             _logger.LogDebug(
                 "MPIP: no qualification record for provider {ProviderId} in period {Period}, " +
                 "returning standard multiplier",
-                Sanitize(providerId), period);
+                LogSanitizer.Sanitize(providerId), period);
             return StandardMultiplier;
         }
 
@@ -123,7 +124,7 @@ public class MpipRateService : IMpipRateService
             _logger.LogInformation(
                 "MPIP: specialist provider {ProviderId} auto-qualifies for {Multiplier}x " +
                 "(member age {Age}, period {Period})",
-                Sanitize(providerId), EnhancedMultiplier, memberAgeAtServiceDate, period);
+                LogSanitizer.Sanitize(providerId), EnhancedMultiplier, memberAgeAtServiceDate, period);
             return EnhancedMultiplier;
         }
 
@@ -134,7 +135,7 @@ public class MpipRateService : IMpipRateService
             _logger.LogInformation(
                 "MPIP: {ProviderType} provider {ProviderId} qualified via {Method}, " +
                 "returning {Multiplier}x (member age {Age}, period {Period})",
-                qualification.ProviderType, Sanitize(providerId), qualification.QualificationMethod,
+                qualification.ProviderType, LogSanitizer.Sanitize(providerId), qualification.QualificationMethod,
                 EnhancedMultiplier, memberAgeAtServiceDate, period);
             return EnhancedMultiplier;
         }
@@ -142,7 +143,7 @@ public class MpipRateService : IMpipRateService
         _logger.LogDebug(
             "MPIP: provider {ProviderId} ({ProviderType}) not qualified for enhanced rate " +
             "in period {Period}",
-            Sanitize(providerId), qualification.ProviderType, period);
+            LogSanitizer.Sanitize(providerId), qualification.ProviderType, period);
         return StandardMultiplier;
     }
 
@@ -174,7 +175,7 @@ public class MpipRateService : IMpipRateService
             _logger.LogInformation(
                 "Updated MPIP qualification for provider {ProviderId} (period {Period}): " +
                 "qualified={Qualified}, method={Method}, multiplier={Multiplier}",
-                Sanitize(qualification.ProviderId), Sanitize(qualification.QualificationPeriod),
+                LogSanitizer.Sanitize(qualification.ProviderId), LogSanitizer.Sanitize(qualification.QualificationPeriod),
                 qualification.IsQualified, qualification.QualificationMethod,
                 qualification.EnhancedRateMultiplier);
         }
@@ -186,7 +187,7 @@ public class MpipRateService : IMpipRateService
             _logger.LogInformation(
                 "Created MPIP qualification for provider {ProviderId} (period {Period}): " +
                 "type={Type}, qualified={Qualified}, method={Method}",
-                Sanitize(qualification.ProviderId), Sanitize(qualification.QualificationPeriod),
+                LogSanitizer.Sanitize(qualification.ProviderId), LogSanitizer.Sanitize(qualification.QualificationPeriod),
                 qualification.ProviderType, qualification.IsQualified,
                 qualification.QualificationMethod);
         }
@@ -207,15 +208,9 @@ public class MpipRateService : IMpipRateService
 
         _logger.LogInformation(
             "Found {Count} qualified MPIP providers for tenant {TenantId}, period {Period}",
-            results.Count, Sanitize(tenantId), Sanitize(period));
+            results.Count, LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(period));
 
         return results;
-    }
-
-    private static string Sanitize(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────

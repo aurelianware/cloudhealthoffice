@@ -21,6 +21,7 @@
     "scripts/**/*",
     "core/**/*",
     "src/security/**/*",
+    "src/ai/**/*",
     "src/fhir/**/*"
   ],
   "exclude": [

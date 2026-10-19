@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using ClaimsService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -87,7 +88,7 @@ public class HttpCoverageClient : ICoverageClient
             {
                 _logger.LogWarning(
                     "Coverage service returned {StatusCode} resolving COB entries for member {Member}",
-                    response.StatusCode, SanitizeForLog(memberId));
+                    response.StatusCode, LogSanitizer.MaskId(memberId));
                 return null;
             }
 
@@ -103,11 +104,8 @@ public class HttpCoverageClient : ICoverageClient
         {
             _logger.LogWarning(ex,
                 "COB lookup failed for member {Member} tenant {Tenant}",
-                SanitizeForLog(memberId), SanitizeForLog(tenantId));
+                LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(tenantId));
             return null;
         }
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

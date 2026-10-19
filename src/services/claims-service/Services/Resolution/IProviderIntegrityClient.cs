@@ -2,9 +2,8 @@ namespace ClaimsService.Services.Resolution;
 
 /// <summary>
 /// Client for benefit-plan-service's <c>GET /api/v1/adjudication/provider-integrity/{npi}</c>
-/// endpoint -- the same <c>HttpProviderIntegrityGate</c> federal-exclusion
-/// check <c>AdjudicationController.Adjudicate</c> runs internally, exposed
-/// standalone so claims-service's <c>ProviderIntegrityStage</c> can run it
+/// endpoint -- the <c>HttpProviderIntegrityGate</c> federal-exclusion
+/// check, exposed standalone so claims-service's <c>ProviderIntegrityStage</c> can run it
 /// without going through <c>calculate-benefits</c> (which stays
 /// exclusion-check-free by design). See
 /// <c>docs/architecture/integrity-score-consumption.md</c>.

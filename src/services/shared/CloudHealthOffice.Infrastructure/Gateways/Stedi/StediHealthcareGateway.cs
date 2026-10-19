@@ -6,6 +6,7 @@ using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Gateways.Stedi;
 
@@ -161,7 +162,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error in Stedi eligibility for tenant {TenantId}",
-                SanitizeForLog(request.TenantId));
+                LogSanitizer.Sanitize(request.TenantId));
             return Fail(request, startedAt, stopwatch, 0,
                 GatewayErrorCategory.Internal, "Unexpected error executing the Stedi eligibility request.");
         }
@@ -306,7 +307,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error in Stedi claim submission for tenant {TenantId} claimType={ClaimType}",
-                SanitizeForLog(request.TenantId), request.ClaimType);
+                LogSanitizer.Sanitize(request.TenantId), request.ClaimType);
             record.Status = GatewayClaimTransmissionStatus.Failed;
             record.ErrorCategory = GatewayErrorCategory.Internal;
             await ClaimLifecycleWrites.SaveSubmitOutcomeAsync(_transmissions, record, _logger, ct).ConfigureAwait(false);
@@ -564,7 +565,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error retrieving Stedi 277CA for ack={AckId}",
-                SanitizeForLog(request.ExternalAcknowledgmentId));
+                LogSanitizer.Sanitize(request.ExternalAcknowledgmentId));
             return AckFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Internal,
                 "Unexpected error retrieving the Stedi claim acknowledgment.");
         }
@@ -628,7 +629,7 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error retrieving Stedi 835 for id={RemittanceId}",
-                SanitizeForLog(request.ExternalRemittanceId));
+                LogSanitizer.Sanitize(request.ExternalRemittanceId));
             return RemittanceFail(request, startedAt, stopwatch, 0, GatewayErrorCategory.Internal,
                 "Unexpected error retrieving the Stedi remittance.");
         }
@@ -885,18 +886,13 @@ public sealed class StediHealthcareGateway : IEligibilityGateway, IClaimSubmissi
             "category={ErrorCategory} correlation={CorrelationId} latencyMs={LatencyMs} retries={RetryCount} extId={ExternalTransactionId}",
             metadata.GatewayName,
             metadata.TransactionType,
-            SanitizeForLog(metadata.TenantId),
+            LogSanitizer.Sanitize(metadata.TenantId),
             metadata.Status,
             metadata.ErrorCategory,
-            SanitizeForLog(metadata.CorrelationId),
+            LogSanitizer.Sanitize(metadata.CorrelationId),
             metadata.Latency.TotalMilliseconds,
             metadata.RetryCount,
-            SanitizeForLog(metadata.ExternalTransactionId));
-
-    // Remove CR/LF so an attacker cannot forge additional log lines through a
-    // tenant id, correlation id, or vendor transaction id.
-    private static string? SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? value : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+            LogSanitizer.Sanitize(metadata.ExternalTransactionId));
 
     private static GatewayErrorCategory MapResolution(PayerResolutionStatus status) => status switch
     {

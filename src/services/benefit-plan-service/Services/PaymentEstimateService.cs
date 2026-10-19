@@ -9,6 +9,7 @@ using CloudHealthOffice.OperatingMode;
 using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
 using CloudHealthOffice.PriorAuthRuleEngine.Domain;
 using CloudHealthOffice.PriorAuthRuleEngine.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Services;
 
@@ -50,16 +51,6 @@ public class PaymentEstimateService : IPaymentEstimateService
         _logger = logger;
     }
 
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        var buffer = new System.Text.StringBuilder(value.Length);
-        foreach (var ch in value)
-            buffer.Append(char.IsControl(ch) ? '_' : ch);
-        if (buffer.Length > 256) buffer.Length = 256;
-        return buffer.ToString();
-    }
-
     public async Task<PaymentEstimateResponse> EstimateAsync(
         string tenantId,
         PaymentEstimateRequest request,
@@ -70,8 +61,8 @@ public class PaymentEstimateService : IPaymentEstimateService
 
         _logger.LogInformation(
             "Prospective estimate for member {MemberId}, plan {PlanId}, {LineCount} line(s), type {ClaimType}",
-            SanitizeForLog(request.MemberId), request.BenefitPlanId,
-            request.Lines.Count, SanitizeForLog(claimTypeCode));
+            LogSanitizer.MaskId(request.MemberId), request.BenefitPlanId,
+            request.Lines.Count, LogSanitizer.Sanitize(claimTypeCode, 256));
 
         var warnings = new List<EstimateMessage>();
 
@@ -118,7 +109,7 @@ public class PaymentEstimateService : IPaymentEstimateService
             pricedByLine[priced.LineNumber] = priced;
 
         // ── Step 2: Benefit calculation in read-only PROSPECTIVE mode ──
-        // Same seam as AdjudicationController.Adjudicate: the original billed
+        // Same seam as claims-service's BenefitCalculationStage: the original billed
         // charges stay on the lines and the priced allowed amounts go through
         // AllowedAmounts, so the engine's checks that compare them (e.g. a per-stay
         // allocation allowing a line more than it billed → pricing review) apply.
@@ -249,7 +240,7 @@ public class PaymentEstimateService : IPaymentEstimateService
 
     /// <summary>
     /// The benefit engine pended the estimate for pricing review (it would pend the
-    /// real claim the same way, e.g. 422 PRICING_REVIEW from /adjudicate). No allowed
+    /// real claim the same way: the claims pipeline pends it, PRICING_REVIEW). No allowed
     /// amount or cost share is quoted: every line is <c>needs_review</c> with the reason.
     /// </summary>
     private static PaymentEstimateResponse PricingReview(
@@ -331,7 +322,7 @@ public class PaymentEstimateService : IPaymentEstimateService
         {
             _logger.LogWarning(ex,
                 "Operating-mode resolution failed for tenant {TenantId}; defaulting estimate authority to Simulation",
-                SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(tenantId, 256));
             return EstimateAuthority.Simulation;
         }
     }

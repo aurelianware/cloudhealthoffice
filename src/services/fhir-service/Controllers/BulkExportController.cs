@@ -3,6 +3,7 @@ using FhirService.Models;
 using FhirService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Controllers;
 
@@ -53,7 +54,7 @@ public class BulkExportController : FhirControllerBase
 
         _logger.LogInformation(
             "Bulk export initiated: job={JobId}, tenant={TenantId}",
-            SanitizeForLog(job.JobId), SanitizeForLog(TenantId));
+            LogSanitizer.Sanitize(job.JobId), LogSanitizer.Sanitize(TenantId));
 
         Response.Headers["Content-Location"] = $"{FhirBaseUrl}/$export-status/{job.JobId}";
         return StatusCode(202);
@@ -83,7 +84,7 @@ public class BulkExportController : FhirControllerBase
 
         _logger.LogInformation(
             "Group bulk export initiated: job={JobId}, group={GroupId}, tenant={TenantId}",
-            SanitizeForLog(job.JobId), SanitizeForLog(groupId), SanitizeForLog(TenantId));
+            LogSanitizer.Sanitize(job.JobId), LogSanitizer.Sanitize(groupId), LogSanitizer.Sanitize(TenantId));
 
         Response.Headers["Content-Location"] = $"{FhirBaseUrl}/$export-status/{job.JobId}";
         return StatusCode(202);
@@ -122,7 +123,7 @@ public class BulkExportController : FhirControllerBase
             return NotFound(new { error = $"Export job '{jobId}' not found" });
 
         _logger.LogInformation("Bulk export job {JobId} cancelled by tenant {TenantId}",
-            SanitizeForLog(jobId), SanitizeForLog(TenantId));
+            LogSanitizer.Sanitize(jobId), LogSanitizer.Sanitize(TenantId));
 
         return StatusCode(202);
     }

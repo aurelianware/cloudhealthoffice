@@ -5,6 +5,8 @@ WORKDIR /repo
 # Central Package Management: every PackageReference resolves its version from
 # Directory.Packages.props, so restore fails without it in the build context.
 COPY Directory.Packages.props ./
+# Required by src/Directory.Build.props: retain the repository-wide warning gate.
+COPY Directory.Build.props ./
 
 COPY src/Directory.Build.props src/
 COPY src/tools/mcc-platform-validator/mcc-platform-validator.csproj src/tools/mcc-platform-validator/

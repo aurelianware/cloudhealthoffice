@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Controllers;
 
@@ -58,7 +59,7 @@ public class FhirPractitionerController : ControllerBase
     {
         if (!NpiPattern.IsMatch(npi))
         {
-            return FhirOperationOutcome(400, "invalid", $"NPI '{SanitizeForLog(npi)}' is not a 10-digit identifier.");
+            return FhirOperationOutcome(400, "invalid", $"NPI '{StripLineBreaks(npi)}' is not a 10-digit identifier.");
         }
 
         var provider = await _repository.GetByNPIAsync(npi);
@@ -123,7 +124,7 @@ public class FhirPractitionerController : ControllerBase
             if (string.IsNullOrEmpty(resolvedNpi))
             {
                 return FhirOperationOutcome(400, "invalid",
-                    $"identifier '{SanitizeForLog(identifier)}' is not a recognized NPI token; supply system http://hl7.org/fhir/sid/us-npi or no system.");
+                    $"identifier '{StripLineBreaks(identifier)}' is not a recognized NPI token; supply system http://hl7.org/fhir/sid/us-npi or no system.");
             }
         }
 
@@ -132,7 +133,7 @@ public class FhirPractitionerController : ControllerBase
             if (!NpiPattern.IsMatch(resolvedNpi))
             {
                 return FhirOperationOutcome(400, "invalid",
-                    $"identifier '{SanitizeForLog(identifier ?? npi ?? string.Empty)}' is not a valid NPI.");
+                    $"identifier '{StripLineBreaks(identifier ?? npi ?? string.Empty)}' is not a valid NPI.");
             }
 
             var single = await _repository.GetByNPIAsync(resolvedNpi);
@@ -279,7 +280,10 @@ public class FhirPractitionerController : ControllerBase
         return identifier;
     }
 
-    private static string SanitizeForLog(string value)
-        => value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                .Replace("\n", string.Empty, StringComparison.Ordinal);
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

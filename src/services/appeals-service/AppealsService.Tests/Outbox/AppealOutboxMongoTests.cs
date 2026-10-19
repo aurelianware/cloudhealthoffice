@@ -71,7 +71,7 @@ public sealed class AppealOutboxMongoTests : AppealOutboxStoreScenarios<AppealRe
         var stored = await StoredAsync(appeal.Id);
         stored.Notes.Should().ContainSingle();
         stored.Outbox!.Should().HaveCount(2);
-        if (lease.Result is not null) stored.OutboxLeaseOwner.Should().Be("pod-a");
+        if (await lease is not null) stored.OutboxLeaseOwner.Should().Be("pod-a");
     }
 
     /// <summary>The sweep sees every tenant, skips leased appeals until the lease lapses, and honours its limit.</summary>

@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using ClaimsService.Services;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -143,8 +144,8 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
             _logger.LogWarning(
                 ex,
                 "Authorization validation lookup failed for authorization {AuthorizationNumber} tenant {Tenant}",
-                SanitizeForLog(number),
-                SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(number),
+                LogSanitizer.Sanitize(tenantId));
             return AuthorizationLookupResult.Unavailable($"authorization lookup failed ({ex.GetType().Name})");
         }
     }
@@ -183,13 +184,10 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
     {
         _logger.LogWarning(
             "Authorization validation for {AuthorizationNumber} tenant {Tenant} not definitive ({StatusCode}): {Reason}",
-            SanitizeForLog(number),
-            SanitizeForLog(tenantId),
+            LogSanitizer.Sanitize(number),
+            LogSanitizer.Sanitize(tenantId),
             (int)status,
             reason);
         return AuthorizationLookupResult.Unavailable(reason);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

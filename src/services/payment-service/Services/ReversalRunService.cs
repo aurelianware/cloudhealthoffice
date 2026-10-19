@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Services;
 
@@ -256,7 +257,7 @@ public class ReversalRunService : IReversalRunService
                         $"Predecessor {pred.Id} (adjustment {adj.Id}) already has a reversal payment in payment-service; not reversed again");
                     _logger.LogWarning(
                         "Predecessor {ClaimId} already reversed in payment-service; adjustment {AdjustmentId} not reversed again by {ReversalRunNumber}",
-                        SanitizeForLog(pred.Id), SanitizeForLog(adj.Id), run.ReversalRunNumber);
+                        LogSanitizer.Sanitize(pred.Id), LogSanitizer.Sanitize(adj.Id), run.ReversalRunNumber);
                     await RetryPendingVoidForClaimAsync(pred.Id, adj, run);
                     continue;
                 }
@@ -298,7 +299,7 @@ public class ReversalRunService : IReversalRunService
                         $"Predecessor {pred.Id} (adjustment {adj.Id}) not reversed: {notReversible}; a reversal is never computed from approved or billed amounts");
                     _logger.LogWarning(
                         "Predecessor {ClaimId} has no single recorded payment; adjustment {AdjustmentId} not reversed by {ReversalRunNumber}",
-                        SanitizeForLog(pred.Id), SanitizeForLog(adj.Id), run.ReversalRunNumber);
+                        LogSanitizer.Sanitize(pred.Id), LogSanitizer.Sanitize(adj.Id), run.ReversalRunNumber);
                     continue;
                 }
                 if (Era835FinancialSegments.ServiceLineBalanceProblem(original) is { } unbalanced)
@@ -441,7 +442,7 @@ public class ReversalRunService : IReversalRunService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing reversal run {ReversalRunId}", SanitizeForLog(reversalRunId));
+            _logger.LogError(ex, "Error executing reversal run {ReversalRunId}", LogSanitizer.Sanitize(reversalRunId));
 
             run.Status = ReversalRunStatus.Failed;
             run.Errors.Add($"Execution failed: {ClientErrorText.For(ex)}");
@@ -559,7 +560,7 @@ public class ReversalRunService : IReversalRunService
             {
                 _logger.LogError(ex,
                     "Provider receivable for NPI {Npi} ({Amount:F2}, reversal 835 {EnvelopeId}) could not be recorded in run {ReversalRunNumber}",
-                    SanitizeForLog(npi), owed, envelopeId, run.ReversalRunNumber);
+                    LogSanitizer.Sanitize(npi), owed, envelopeId, run.ReversalRunNumber);
                 run.Warnings.Add(
                     $"Trading partner {env.TradingPartnerId}: NPI {npi} owes {owed:F2}, carried forward (PLB FB) in reversal 835 {envelopeId}, " +
                     $"but the receivable could not be recorded ({ex.GetType().Name}); it is UNRECORDED in the ledger and needs a person");
@@ -931,6 +932,8 @@ public class ReversalRunService : IReversalRunService
                     }
                     catch (PaymentConcurrencyException) when (attempt < ConcurrentSaves.MaxAttempts)
                     {
+                        // Lost the race: the loop re-reads the run and re-applies. The final
+                        // attempt's conflict is not caught and reaches the caller.
                     }
                 }
             }
@@ -969,26 +972,20 @@ public class ReversalRunService : IReversalRunService
             cp.FinalizeError = $"claims-service returned {(int)response.StatusCode}";
             _logger.LogWarning(
                 "Void of predecessor {ClaimId} (adjustment {AdjustmentId}) returned {Status}: {Body}",
-                SanitizeForLog(cp.ClaimId), SanitizeForLog(adjustmentId), response.StatusCode, SanitizeForLog(bodyText));
+                LogSanitizer.Sanitize(cp.ClaimId), LogSanitizer.Sanitize(adjustmentId), response.StatusCode, LogSanitizer.Sanitize(bodyText));
             return false;
         }
         catch (Exception ex)
         {
             cp.FinalizeError = ClientErrorText.VoidCallFailed;
             _logger.LogError(ex, "Void of predecessor {ClaimId} (adjustment {AdjustmentId}) threw",
-                SanitizeForLog(cp.ClaimId), SanitizeForLog(adjustmentId));
+                LogSanitizer.Sanitize(cp.ClaimId), LogSanitizer.Sanitize(adjustmentId));
             return false;
         }
     }
 
     private Task SavePaymentStatusAsync(Payment payment)
         => ConcurrentSaves.SaveFinalizeOutcomeAsync(_paymentRepository, payment);
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }
 
 // ── Cross-service DTOs (mirror claims-service surfaces) ─────────────────

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.PayerToPayer.Ingestion;
 
@@ -11,8 +12,8 @@ namespace FhirService.Services.PayerToPayer.Ingestion;
 /// MongoDB-backed <see cref="IPayerToPayerImportRepository"/> — the durable store
 /// a deployment gets when <c>MongoDb:ConnectionString</c> is configured. It
 /// mirrors the persistence idiom fhir-service already uses (see
-/// <c>DtrService</c>): it opens its own database handle from configuration, uses
-/// BSON documents, and ensures its indexes once at construction. It is
+/// <c>MongoDtrResourceStore</c>): it takes the host's client, names its database
+/// from configuration, uses BSON documents, and ensures its indexes once at construction. It is
 /// registered as a SINGLETON for exactly that reason — a per-request instance
 /// would re-issue createIndex on every call.
 ///
@@ -46,7 +47,7 @@ public sealed class MongoPayerToPayerImportRepository
     public MongoPayerToPayerImportRepository(
         IMongoClient client, IConfiguration configuration, ILogger<MongoPayerToPayerImportRepository> logger)
     {
-        var database = client.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "cloudhealthoffice");
+        var database = client.GetDatabase(configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice");
         _resources = database.GetCollection<BsonDocument>(ResourceCollectionName);
         _ledger = database.GetCollection<BsonDocument>(LedgerCollectionName);
         _logger = logger;
@@ -169,7 +170,7 @@ public sealed class MongoPayerToPayerImportRepository
 
         // Structured only: which exchange, which category. No member, no payload.
         _logger.LogWarning(
-            "P2P import failed: exchange={Exchange} category={Failure}", Clean(entry.ExchangeId), failure);
+            "P2P import failed: exchange={Exchange} category={Failure}", LogSanitizer.Sanitize(entry.ExchangeId), failure);
     }
 
     public async Task<IReadOnlyList<ImportedFhirResource>> GetImportedResourcesAsync(
@@ -285,7 +286,7 @@ public sealed class MongoPayerToPayerImportRepository
         {
             _logger.LogInformation(
                 "Clinical backfill left an exchange that changed since it was read: exchange={Exchange}",
-                Clean(entry.ExchangeId));
+                LogSanitizer.Sanitize(entry.ExchangeId));
         }
     }
 
@@ -555,11 +556,4 @@ public sealed class MongoPayerToPayerImportRepository
                 ? d["clinicalBackfilledAtUtc"].ToUniversalTime() : null,
         };
     }
-
-    /// <summary>Strips CR/LF so an id cannot forge a log entry (CWE-117).</summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

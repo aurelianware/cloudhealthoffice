@@ -5,6 +5,7 @@ using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Controllers;
 
@@ -103,7 +104,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
         {
             _logger.LogError(ex,
                 "ExplanationOfBenefit read failed for id {Id}",
-                SanitizeForLog(id));
+                LogSanitizer.Sanitize(id));
             return FhirOperationOutcome(500, "exception",
                 "ExplanationOfBenefit read failed.");
         }
@@ -226,7 +227,7 @@ public class FhirExplanationOfBenefitController : ControllerBase
         {
             _logger.LogError(ex,
                 "ExplanationOfBenefit search failed for tenant {TenantId}",
-                SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(tenantId));
             return FhirOperationOutcome(500, "exception",
                 "ExplanationOfBenefit search failed.");
         }
@@ -301,12 +302,5 @@ public class FhirExplanationOfBenefitController : ControllerBase
         return value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
             ? value[prefix.Length..]
             : value;
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                    .Replace("\n", string.Empty, StringComparison.Ordinal);
     }
 }

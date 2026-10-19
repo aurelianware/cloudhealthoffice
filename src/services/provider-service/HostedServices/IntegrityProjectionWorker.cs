@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.HostedServices;
 
@@ -131,7 +132,7 @@ public sealed class IntegrityProjectionWorker : BackgroundService
 
             _logger.LogInformation(
                 "IntegrityProjectionWorker tenant sweep: tenant={Tenant} inspected={Inspected} patched={Patched} skipped={Skipped} failed={Failed} stale={Stale} window={Window}",
-                Sanitize(tenantId), result.Inspected, result.Patched,
+                LogSanitizer.Sanitize(tenantId), result.Inspected, result.Patched,
                 result.Skipped, result.Failed, staleLabel, result.RefreshWindow);
         }
 
@@ -147,7 +148,4 @@ public sealed class IntegrityProjectionWorker : BackgroundService
         try { await Task.Delay(delay, ct); }
         catch (OperationCanceledException) { /* shutdown */ }
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

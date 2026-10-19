@@ -307,8 +307,9 @@ public class ProviderDirectoryMapperTests
         var org = ProviderDirectoryMapper.MapNppesToOrganization(MockOrganizationNppes);
 
         org.Type.Should().HaveCount(1);
-        org.Type![0].Coding![0].Code.Should().Be("282N00000X");
-        org.Type[0].Coding[0].Display.Should().Be("General Acute Care Hospital");
+        var coding = org.Type![0].Coding![0];
+        coding.Code.Should().Be("282N00000X");
+        coding.Display.Should().Be("General Acute Care Hospital");
     }
 
     [Fact]
@@ -324,8 +325,9 @@ public class ProviderDirectoryMapperTests
     // capability 5.8 (provider-service FhirPractitionerRoleProjector).
     // The helper is marked [Obsolete] so callers migrate, but these tests
     // continue to gate the helper's behaviour until capability 5.9
-    // retires the NPPES path entirely. Suppress CS0618 for the section.
-#pragma warning disable CS0618 // PractitionerRole helper is intentionally Obsolete (capability 5.8)
+    // retires the NPPES path entirely. CS0618 is already suppressed for the
+    // whole file (see the top); a restore here re-enabled it for the rest of
+    // the class.
 
     [Fact]
     public void MapNppesToPractitionerRole_CreatesResourceWithCorrectIdFormat()
@@ -387,8 +389,6 @@ public class ProviderDirectoryMapperTests
         role.Location.Should().HaveCount(1);
         role.Location![0].Reference.Should().Be("Location/1234567893-loc-0");
     }
-
-#pragma warning restore CS0618
 
     // ── NPPES → Location Mapping ─────────────────────────────────────────────
 

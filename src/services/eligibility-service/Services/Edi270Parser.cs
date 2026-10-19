@@ -1,4 +1,5 @@
 using EligibilityService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EligibilityService.Services;
 
@@ -198,7 +199,7 @@ public class Edi270Parser : IEdi270Parser
 
         _logger.LogInformation(
             "Parsed 270 EDI: subscriber={SubscriberId}, serviceType={ServiceType}, controlNumber={Control}",
-            SanitizeForLog(inquiry.SubscriberId), inquiry.ServiceTypeCode, SanitizeForLog(inquiry.ControlNumber));
+            LogSanitizer.MaskId(inquiry.SubscriberId), inquiry.ServiceTypeCode, LogSanitizer.Sanitize(inquiry.ControlNumber));
 
         return new Edi270ParseResult
         {
@@ -209,9 +210,6 @@ public class Edi270Parser : IEdi270Parser
             ApplicationReceiverId = gsAppReceiver,
         };
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     private static void ParseNm1(string[] seg, string hlLevel, EligibilityInquiry inquiry)
     {

@@ -4,6 +4,7 @@ using FhirService.Services.PayerToPayer;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Controllers;
 
@@ -82,7 +83,7 @@ public sealed class PayerToPayerController : FhirControllerBase
                 "A member identifier is required to resolve the member for export."),
             // NoMatch and TenantMismatch both surface as 404 so cross-tenant
             // existence is never revealed.
-            _ => FhirNotFound("Member", SanitizeForLog(body.MemberId) ?? "unknown"),
+            _ => FhirNotFound("Member", StripLineBreaks(body.MemberId) ?? "unknown"),
         };
     }
 
@@ -91,6 +92,13 @@ public sealed class PayerToPayerController : FhirControllerBase
 
     internal const string PayerBindingMessage =
         "Payer-to-Payer operations require a backend client registered with Cloud Health Office to the receiving payer.";
+
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>

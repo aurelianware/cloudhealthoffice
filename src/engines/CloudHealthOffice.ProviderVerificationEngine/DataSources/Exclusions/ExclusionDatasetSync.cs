@@ -224,18 +224,18 @@ public abstract class ExclusionDatasetSyncBase : IExclusionDatasetSync
         Source = Source, Succeeded = false, Error = error, Duration = sw.Elapsed
     };
 
-    private static void TryDelete(string path)
+    private void TryDelete(string path)
     {
+        // Runs in the sync's finally block: a temp file that cannot be removed must not mask
+        // the sync outcome. Each sync uses a fresh temp name, so a leftover is never re-read.
         try
         {
             if (File.Exists(path))
                 File.Delete(path);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-        }
-        catch (UnauthorizedAccessException)
-        {
+            Logger.LogDebug(ex, "Deleting the exclusion download temp file failed");
         }
     }
 

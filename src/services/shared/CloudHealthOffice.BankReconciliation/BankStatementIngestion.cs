@@ -3,6 +3,7 @@ using CloudHealthOffice.BankReconciliation.Bai2;
 using CloudHealthOffice.FieldProtection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.BankReconciliation;
 
@@ -104,12 +105,6 @@ public sealed class BankStatementIngestResult
 /// </summary>
 public sealed class BankStatementIngestion
 {
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
-
     private readonly IBankReconciliationStore _store;
     private readonly IFieldProtector _protector;
     private readonly BankReconciliationOptions _options;
@@ -149,7 +144,7 @@ public sealed class BankStatementIngestion
             Id = id,
             TenantId = tenantId,
             Sha256 = sha,
-            FileName = Sanitize(fileName),
+            FileName = CleanStoredText(fileName),
             ByteSize = bytes.LongLength,
             ReceivedByService = _options.ServiceName,
             ReceivedBy = receivedBy,
@@ -182,7 +177,7 @@ public sealed class BankStatementIngestion
                 record.Id = $"{id}-conflict-{record.ReceivedAt.Ticks}";
                 record.ProtectedContent = _protector.Protect(content, new FieldProtectionContext(tenantId, record.Id, ContentField)) ?? string.Empty;
                 record.Status = BankStatementStatus.Rejected;
-                record.Errors = [$"The bank file id {Sanitize(parsed.FileId)} (sender {Sanitize(parsed.SenderId)}, created {parsed.CreationDate:yyyy-MM-dd}) was already used by a different file ({latest.Id}). Ask the bank for a new file id, or have two people supersede {latest.Id} (POST bank-statements/{latest.Id}/supersede, then /approve) before sending the corrected file."];
+                record.Errors = [$"The bank file id {CleanStoredText(parsed.FileId)} (sender {CleanStoredText(parsed.SenderId)}, created {parsed.CreationDate:yyyy-MM-dd}) was already used by a different file ({latest.Id}). Ask the bank for a new file id, or have two people supersede {latest.Id} (POST bank-statements/{latest.Id}/supersede, then /approve) before sending the corrected file."];
             }
             else
             {
@@ -218,7 +213,7 @@ public sealed class BankStatementIngestion
 
         _logger.Log(record.Status == BankStatementStatus.Accepted ? LogLevel.Information : LogLevel.Warning,
             "BAI2 file {StatementId} for tenant {TenantId}: {Status}, {Groups} group(s), {Accounts} account(s), {Transactions} transaction(s), {ErrorCount} error(s)",
-            SanitizeForLog(id), SanitizeForLog(tenantId), record.Status, record.GroupCount, record.AccountCount, record.TransactionCount, record.Errors.Count);
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(tenantId), record.Status, record.GroupCount, record.AccountCount, record.TransactionCount, record.Errors.Count);
 
         return new BankStatementIngestResult
         {
@@ -302,16 +297,11 @@ public sealed class BankStatementIngestion
 
     private static BankStatementFile WithoutContent(BankStatementFile f) => f.WithoutContent();
 
-    internal static string Sanitize(string? value) => LogText.Clean(value);
-}
-
-/// <summary>
-/// Values from a bank file or a request, made safe for a log line: control
-/// characters (CR, LF, ...) removed, length capped. Same rule as the services'
-/// SanitizeForLog.
-/// </summary>
-public static class LogText
-{
-    public static string Clean(string? value) =>
+    /// <summary>
+    /// A bank-file value made safe to store and show: control characters
+    /// removed, length capped at 128. For log lines use
+    /// <see cref="LogSanitizer.Sanitize(string?, int)"/>.
+    /// </summary>
+    private static string CleanStoredText(string? value) =>
         value is null ? string.Empty : new string(value.Where(c => !char.IsControl(c)).Take(128).ToArray());
 }

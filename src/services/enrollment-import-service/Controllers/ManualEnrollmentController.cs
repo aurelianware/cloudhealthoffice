@@ -2,6 +2,7 @@ using EnrollmentImportService.Models;
 using EnrollmentImportService.Services;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EnrollmentImportService.Controllers;
 
@@ -83,16 +84,13 @@ public class ManualEnrollmentController : ControllerBase
 
         _logger.LogInformation(
             "Manual enrollment for tenant {TenantId} subscriber {SubscriberId} type {Type} actor {Actor} eventId {EventId}",
-            Sanitize(tenantId),
-            Sanitize(enrollment.SubscriberId),
-            Sanitize(enrollment.MaintenanceType),
-            Sanitize(actorId),
-            Sanitize(enrollment.EventId));
+            LogSanitizer.Sanitize(tenantId),
+            LogSanitizer.MaskId(enrollment.SubscriberId),
+            LogSanitizer.Sanitize(enrollment.MaintenanceType),
+            LogSanitizer.Sanitize(actorId),
+            LogSanitizer.Sanitize(enrollment.EventId));
 
         var result = await _importService.ImportEnrollmentAsync(batch, tenantId);
         return Ok(result);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

@@ -3,6 +3,7 @@ using FhirService.Services.Cdex;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Controllers;
 
@@ -171,9 +172,9 @@ public sealed class CdexController : FhirControllerBase
                 "CDex $submit-attachment: tenant={Tenant} caller={Caller} tracking={Tracking} "
                 + "request={Request} authorization={Auth} outcome={Outcome} recorded={Recorded} "
                 + "resumedReview={Resumed} at={At}",
-                SanitizeForLog(TenantId), SanitizeForLog(caller),
-                SanitizeForLog(result.TrackingId), SanitizeForLog(result.RequestId),
-                SanitizeForLog(result.AuthorizationNumber), result.Outcome,
+                LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(caller),
+                LogSanitizer.Sanitize(result.TrackingId), LogSanitizer.Sanitize(result.RequestId),
+                LogSanitizer.Sanitize(result.AuthorizationNumber), result.Outcome,
                 result.Recorded, result.ResumedReview, DateTime.UtcNow);
             return;
         }
@@ -181,8 +182,8 @@ public sealed class CdexController : FhirControllerBase
         _logger.LogWarning(
             "CDex $submit-attachment refused: tenant={Tenant} caller={Caller} tracking={Tracking} "
             + "request={Request} outcome={Outcome} at={At}",
-            SanitizeForLog(TenantId), SanitizeForLog(caller),
-            SanitizeForLog(result.TrackingId), SanitizeForLog(result.RequestId),
+            LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(caller),
+            LogSanitizer.Sanitize(result.TrackingId), LogSanitizer.Sanitize(result.RequestId),
             result.Outcome, DateTime.UtcNow);
     }
 

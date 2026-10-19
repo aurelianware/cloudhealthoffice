@@ -62,18 +62,21 @@ public class ValidatorOptionsTests
     }
 
     [Fact]
-    public void Parse_DefaultsToScoringThePipelineOutcome()
+    public void Parse_AcceptsRetiredModeFlagsAsNoOps()
     {
-        // The claims-service pipeline is the single adjudicator: by default the
-        // validator only submits and observes, it never adjudicates on the side.
-        Assert.True(ValidatorOptions.Parse([]).ServiceBusOnly);
-        Assert.True(ValidatorOptions.Parse(["--servicebus-only"]).ServiceBusOnly);
+        // Scoring the persisted pipeline outcome is the only mode. The retired
+        // flags still parse so older scripts keep working, and change nothing.
+        var baseline = ValidatorOptions.Parse([]);
+        var withRetiredFlags = ValidatorOptions.Parse(["--servicebus-only", "--no-pend-observation"]);
+
+        Assert.Equal(baseline, withRetiredFlags);
     }
 
     [Fact]
-    public void Parse_WhenSynchronousDiagnosticProvided_DisablesPipelineOnlyMode()
+    public void Parse_WhenSynchronousDiagnosticProvided_Throws()
     {
-        Assert.False(ValidatorOptions.Parse(["--synchronous-diagnostic"]).ServiceBusOnly);
+        var ex = Assert.Throws<ArgumentException>(() => ValidatorOptions.Parse(["--synchronous-diagnostic"]));
+        Assert.Contains("--synchronous-diagnostic", ex.Message);
     }
 
     [Fact]
@@ -127,12 +130,10 @@ public class ValidatorOptionsTests
     public void Parse_WhenPendObservationOptionsProvided_AppliesOverrides()
     {
         var options = ValidatorOptions.Parse([
-            "--no-pend-observation",
             "--pend-observation-timeout", "30",
             "--pend-observation-interval-ms", "500"
         ]);
 
-        Assert.False(options.PendObservationEnabled);
         Assert.Equal(30, options.PendObservationTimeoutSeconds);
         Assert.Equal(500, options.PendObservationIntervalMilliseconds);
     }

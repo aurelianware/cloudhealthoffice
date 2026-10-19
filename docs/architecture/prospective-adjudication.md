@@ -109,9 +109,10 @@ whole estimate side-effect free. This is covered by explicit tests:
 - `PaymentEstimateServiceTests`: the service always invokes the benefit engine
   with `ExecutionMode = Prospective`.
 
-Real claim adjudication behavior (`AdjudicationController.Adjudicate` →
-`CalculateWithModeAsync` → `CalculateAsync` with the default `Production` mode)
-is unchanged.
+Real claim adjudication is the claims-service pipeline
+(`BenefitCalculationStage` → `calculate-benefits` in Prospective mode, then
+`commit-accumulators` once the claim finally passes). The estimate does not
+change it.
 
 ## Authority model
 
@@ -306,7 +307,7 @@ Outcomes that adjudication would not pay as estimated:
 
 - **Pricing review.** When the benefit engine would pend the claim — e.g. a
   per-stay rate above total billed, which allocates a line more than it billed
-  (`/adjudicate` returns 422 `PRICING_REVIEW`) — the estimate's `status` is
+  (the claims pipeline pends it, `PRICING_REVIEW`) — the estimate's `status` is
   `needs_review`, every line is `needs_review` with a `PRICING_REVIEW` message
   carrying the reason, and no allowed amount or cost share is quoted.
 - **Stay denial.** When the stay's benefit cannot be resolved on the DRG /

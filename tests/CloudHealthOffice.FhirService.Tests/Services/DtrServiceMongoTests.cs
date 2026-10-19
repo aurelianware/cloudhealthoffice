@@ -1,8 +1,8 @@
+using CloudHealthOffice.Testing.FhirService;
 using FhirService.Models;
 using FhirService.Services;
 using Hl7.Fhir.Model;
 using FluentAssertions;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -18,16 +18,7 @@ public class DtrServiceMongoTests
         var config = Options.Create(new DtrConfig { Enabled = true });
         var logger = new Mock<ILogger<DtrService>>();
 
-        // Empty MongoDB connection string → in-memory fallback
-        var appConfig = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["MongoDb:ConnectionString"] = "",
-                ["MongoDb:DatabaseName"] = "test",
-            })
-            .Build();
-
-        _service = new DtrService(config, logger.Object, appConfig);
+        _service = new DtrService(config, new InMemoryDtrResourceStore(), logger.Object);
     }
 
     [Fact]

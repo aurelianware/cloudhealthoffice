@@ -3,6 +3,7 @@ using System.Text.Json;
 using CloudHealthOffice.Infrastructure.ReferenceData;
 using Microsoft.Extensions.Caching.Memory;
 using ClaimsService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services;
 
@@ -206,7 +207,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
         {
             _logger.LogDebug(
                 "Terminology ICD-10 display lookup timed out for {Code}",
-                SanitizeForLog(code));
+                LogSanitizer.Sanitize(code));
             return null;
         }
         catch (HttpRequestException ex)
@@ -214,7 +215,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             _logger.LogDebug(
                 ex,
                 "Terminology ICD-10 display lookup failed for {Code}",
-                SanitizeForLog(code));
+                LogSanitizer.Sanitize(code));
             return null;
         }
         catch (JsonException ex)
@@ -222,7 +223,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             _logger.LogDebug(
                 ex,
                 "Terminology ICD-10 display lookup returned malformed JSON for {Code}",
-                SanitizeForLog(code));
+                LogSanitizer.Sanitize(code));
             return null;
         }
         catch (NotSupportedException ex)
@@ -230,7 +231,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             _logger.LogDebug(
                 ex,
                 "Terminology ICD-10 display lookup returned an unsupported response for {Code}",
-                SanitizeForLog(code));
+                LogSanitizer.Sanitize(code));
             return null;
         }
     }
@@ -262,7 +263,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
         {
             _logger.LogDebug(
                 "Reference data ICD-10 display lookup timed out for {Code}",
-                SanitizeForLog(code));
+                LogSanitizer.Sanitize(code));
             return null;
         }
         catch (HttpRequestException ex)
@@ -270,7 +271,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             _logger.LogDebug(
                 ex,
                 "Reference data ICD-10 display lookup failed for {Code}",
-                SanitizeForLog(code));
+                LogSanitizer.Sanitize(code));
             return null;
         }
         catch (JsonException ex)
@@ -278,7 +279,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             _logger.LogDebug(
                 ex,
                 "Reference data ICD-10 display lookup returned malformed JSON for {Code}",
-                SanitizeForLog(code));
+                LogSanitizer.Sanitize(code));
             return null;
         }
         catch (NotSupportedException ex)
@@ -286,7 +287,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             _logger.LogDebug(
                 ex,
                 "Reference data ICD-10 display lookup returned an unsupported response for {Code}",
-                SanitizeForLog(code));
+                LogSanitizer.Sanitize(code));
             return null;
         }
     }
@@ -325,9 +326,6 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
 
         return code.Trim().ToUpperInvariant();
     }
-
-    private static string SanitizeForLog(string value) =>
-        value.Replace("\r", "").Replace("\n", "");
 
     private sealed record CachedDiagnosisDescription(string? Description);
 

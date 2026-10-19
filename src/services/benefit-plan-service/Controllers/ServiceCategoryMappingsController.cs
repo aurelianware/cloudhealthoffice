@@ -5,6 +5,7 @@ using BenefitPlanService.Repositories;
 using CloudHealthOffice.BenefitEngine.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Controllers;
 
@@ -129,9 +130,9 @@ public sealed class ServiceCategoryMappingsController : ControllerBase
 
         _logger.LogInformation(
             "service-category mapping created tenant={Tenant} planId={Plan} serviceTypeCode={Code} id={Id}",
-            Sanitize(tenantId),
+            LogSanitizer.Sanitize(tenantId),
             mapping.BenefitPlanId?.ToString() ?? "tenant-default",
-            Sanitize(mapping.ServiceTypeCode),
+            LogSanitizer.Sanitize(mapping.ServiceTypeCode),
             created.Id);
 
         return CreatedAtAction(
@@ -176,7 +177,7 @@ public sealed class ServiceCategoryMappingsController : ControllerBase
             var updated = await _writeRepo.UpdateAsync(mapping, ct);
             _logger.LogInformation(
                 "service-category mapping updated tenant={Tenant} id={Id}",
-                Sanitize(tenantId), updated.Id);
+                LogSanitizer.Sanitize(tenantId), updated.Id);
             return Ok(ServiceCategoryMappingResponse.From(updated));
         }
         catch (KeyNotFoundException)
@@ -207,7 +208,7 @@ public sealed class ServiceCategoryMappingsController : ControllerBase
         if (!deleted) return NotFound();
         _logger.LogInformation(
             "service-category mapping deleted tenant={Tenant} id={Id}",
-            Sanitize(tenantId), id);
+            LogSanitizer.Sanitize(tenantId), id);
         return NoContent();
     }
 
@@ -322,9 +323,6 @@ public sealed class ServiceCategoryMappingsController : ControllerBase
         }
         return null;
     }
-
-    private static string Sanitize(string value)
-        => value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>Request body for create/update.</summary>

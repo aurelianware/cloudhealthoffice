@@ -1,6 +1,7 @@
 using System.Diagnostics.Metrics;
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EnrollmentImportService.Services;
 
@@ -105,7 +106,7 @@ public sealed class EnrollmentEventPublisher : IEnrollmentEventPublisher
 
             _logger.LogWarning(
                 "EnrollmentEvent version {Version} conflict for {Tenant}:{Member}; retry {Attempt}/{Max}",
-                evt.Version, Sanitize(evt.TenantId), Sanitize(evt.MemberId), attempt + 1, MaxVersionRetries);
+                evt.Version, LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.MaskId(evt.MemberId), attempt + 1, MaxVersionRetries);
 
             if (attempt + 1 < MaxVersionRetries)
                 await Task.Delay(BackoffMs[attempt], ct);
@@ -117,21 +118,18 @@ public sealed class EnrollmentEventPublisher : IEnrollmentEventPublisher
     private void RecordReplay(EnrollmentEvent existing, string detection)
     {
         ReplayCounter.Add(1,
-            new KeyValuePair<string, object?>("tenantId", Sanitize(existing.TenantId)),
+            new KeyValuePair<string, object?>("tenantId", LogSanitizer.Sanitize(existing.TenantId)),
             new KeyValuePair<string, object?>("eventType", existing.EventType.ToString()),
             new KeyValuePair<string, object?>("source", existing.Source ?? "unknown"));
 
         // Debug-level so it doesn't flood production logs but is grep-able when triaging.
         _logger.LogDebug(
             "EnrollmentEvent replay deduped: eventId={EventId} tenant={Tenant} member={Member} type={Type} originallyOccurredAt={OccurredAt:o} detection={Detection}",
-            Sanitize(existing.EventId),
-            Sanitize(existing.TenantId),
-            Sanitize(existing.MemberId),
+            LogSanitizer.Sanitize(existing.EventId),
+            LogSanitizer.Sanitize(existing.TenantId),
+            LogSanitizer.MaskId(existing.MemberId),
             existing.EventType,
             existing.OccurredAt,
             detection);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

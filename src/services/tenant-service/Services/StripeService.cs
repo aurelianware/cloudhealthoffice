@@ -1,5 +1,6 @@
 using Stripe;
 using TenantService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace TenantService.Services;
 
@@ -124,7 +125,7 @@ public class StripeService : IStripeService
 
         await service.UpdateAsync(subscriptionId, options);
 
-        _logger.LogInformation("Updated Stripe subscription {SubscriptionId} to tier {Tier}", SanitizeForLog(subscriptionId), SanitizeForLog(newTier));
+        _logger.LogInformation("Updated Stripe subscription {SubscriptionId} to tier {Tier}", LogSanitizer.Sanitize(subscriptionId), LogSanitizer.Sanitize(newTier));
     }
 
     public async Task<Stripe.Invoice?> GetUpcomingInvoiceAsync(string customerId)
@@ -228,7 +229,7 @@ public class StripeService : IStripeService
             {
                 _logger.LogInformation(
                     "Tenant {TenantId} changed while a Stripe webhook was applied (attempt {Attempt}); re-reading",
-                    SanitizeForLog(tenantId), attempt);
+                    LogSanitizer.Sanitize(tenantId), attempt);
             }
         }
     }
@@ -256,7 +257,7 @@ public class StripeService : IStripeService
         });
         if (tenant == null) return;
 
-        _logger.LogInformation("Subscription created for tenant {TenantId}", SanitizeForLog(tenantId));
+        _logger.LogInformation("Subscription created for tenant {TenantId}", LogSanitizer.Sanitize(tenantId));
     }
 
     private async Task HandleSubscriptionUpdatedAsync(Event stripeEvent)
@@ -279,7 +280,7 @@ public class StripeService : IStripeService
         });
         if (tenant == null) return;
 
-        _logger.LogInformation("Subscription updated for tenant {TenantId}", SanitizeForLog(tenantId));
+        _logger.LogInformation("Subscription updated for tenant {TenantId}", LogSanitizer.Sanitize(tenantId));
     }
 
     private async Task HandleSubscriptionDeletedAsync(Event stripeEvent)
@@ -298,7 +299,7 @@ public class StripeService : IStripeService
         });
         if (tenant == null) return;
 
-        _logger.LogWarning("Subscription canceled for tenant {TenantId}, tenant suspended", SanitizeForLog(tenantId));
+        _logger.LogWarning("Subscription canceled for tenant {TenantId}, tenant suspended", LogSanitizer.Sanitize(tenantId));
     }
 
     private async Task HandlePaymentSucceededAsync(Event stripeEvent)
@@ -353,12 +354,5 @@ public class StripeService : IStripeService
             "enterprise" => priceIds["enterprise_monthly"] ?? throw new InvalidOperationException("Enterprise pricing ID not configured"),
             _ => throw new ArgumentException($"Unknown subscription tier: {tier}")
         };
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

@@ -2,6 +2,7 @@
 @using CloudHealthOffice.Portal.Services
 @inject CloudHealthOffice.Portal.Services.IAuthorizationService AuthorizationService
 @inject IServiceProvider ServiceProvider
+@inject ILogger<AuthorizationRecordView> Logger
 
 @* The authorization record (docs/architecture/portal-navigation.md §4):
    status, member and provider in the header, tabs with their own URLs
@@ -339,6 +340,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Loading the authorization record failed");
             _authorization = null;
         }
         finally

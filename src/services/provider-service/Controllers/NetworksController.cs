@@ -5,6 +5,7 @@ using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Security;
 using ProviderService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderService.Controllers;
 
@@ -67,7 +68,7 @@ public class NetworksController : ControllerBase
 
         _logger.LogInformation(
             "Listing networks: networkType={NetworkType}, lob={LOB}, parent={Parent}",
-            networkType, lineOfBusiness, SanitizeForLog(parentOrganizationId));
+            networkType, lineOfBusiness, LogSanitizer.Sanitize(parentOrganizationId));
 
         var (adapter, settings) = await _adapterFactory.GetAdapterWithSettingsAsync(TenantId);
         var response = await adapter.ListAsync(new OrganizationAdapterRequest
@@ -175,7 +176,7 @@ public class NetworksController : ControllerBase
         {
             _logger.LogInformation(
                 "Roster query rejected: code={Code} network={Network} tenant={Tenant}",
-                ex.ErrorCode, SanitizeForLog(id), SanitizeForLog(TenantId));
+                ex.ErrorCode, LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(TenantId));
             return BadRequest(new { error = ex.ErrorCode, message = ex.Message });
         }
     }
@@ -223,7 +224,7 @@ public class NetworksController : ControllerBase
             return NotFound(new
             {
                 error = "not_a_member",
-                message = $"NPI {SanitizeForLog(npi)} has no participation row in network {SanitizeForLog(id)}.",
+                message = $"NPI {StripLineBreaks(npi)} has no participation row in network {StripLineBreaks(id)}.",
             });
         }
 
@@ -313,11 +314,12 @@ public class NetworksController : ControllerBase
     /// </summary>
     private string ResolveActorId() => this.TokenActorId();
 
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
+    /// <summary>
+    /// Removes CR and LF from a value that is stored or returned (not only
+    /// logged). For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string StripLineBreaks(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>Page envelope for the list endpoint.</summary>

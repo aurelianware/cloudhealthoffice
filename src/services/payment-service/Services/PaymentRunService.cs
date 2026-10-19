@@ -4,6 +4,7 @@ using PaymentService.Repositories;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Services;
 
@@ -438,7 +439,7 @@ public class PaymentRunService : IPaymentRunService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing payment run {PaymentRunId}", SanitizeForLog(paymentRunId));
+            _logger.LogError(ex, "Error executing payment run {PaymentRunId}", LogSanitizer.Sanitize(paymentRunId));
 
             foreach (var claimId in reservedNotAttempted)
             {
@@ -449,7 +450,7 @@ public class PaymentRunService : IPaymentRunService
                 catch (Exception releaseEx)
                 {
                     _logger.LogError(releaseEx, "Could not release the reservation of claim {ClaimId} for failed run {PaymentRunId}",
-                        SanitizeForLog(claimId), SanitizeForLog(paymentRunId));
+                        LogSanitizer.Sanitize(claimId), LogSanitizer.Sanitize(paymentRunId));
                 }
             }
 
@@ -679,7 +680,7 @@ public class PaymentRunService : IPaymentRunService
             paymentRun.Warnings.Add($"Claim {claimId} already has a payment in payment-service; not paid again");
             _logger.LogWarning(
                 "Claim {ClaimId} is Approved in claims-service but already paid in payment-service; excluded from run {PaymentRunNumber}",
-                SanitizeForLog(claimId), paymentRun.PaymentRunNumber);
+                LogSanitizer.Sanitize(claimId), paymentRun.PaymentRunNumber);
 
             await RetryPendingFinalizeForClaimAsync(claimId, paymentRun);
         }
@@ -725,6 +726,8 @@ public class PaymentRunService : IPaymentRunService
                     }
                     catch (PaymentConcurrencyException) when (attempt < ConcurrentSaves.MaxAttempts)
                     {
+                        // Lost the race: the loop re-reads the run and re-applies. The final
+                        // attempt's conflict is not caught and reaches the caller.
                     }
                 }
             }
@@ -795,7 +798,7 @@ public class PaymentRunService : IPaymentRunService
                     $"Claim {claim.Id} not paid: claims-service returned it with status {claim.Status}, not Approved");
                 _logger.LogWarning(
                     "Claim {ClaimId} returned with status {Status}; excluded from payment run {PaymentRunNumber}",
-                    SanitizeForLog(claim.Id), claim.Status, paymentRun.PaymentRunNumber);
+                    LogSanitizer.Sanitize(claim.Id), claim.Status, paymentRun.PaymentRunNumber);
                 continue;
             }
 
@@ -808,7 +811,7 @@ public class PaymentRunService : IPaymentRunService
                     $"Claim {claim.Id} not paid: its plan-paid amount (adjudicationResult.payerPayment) is negative ({claim.PlanPaidAmount:F2})");
                 _logger.LogWarning(
                     "Claim {ClaimId} has a negative plan-paid amount; excluded from payment run {PaymentRunNumber}",
-                    SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+                    LogSanitizer.Sanitize(claim.Id), paymentRun.PaymentRunNumber);
                 continue;
             }
 
@@ -823,7 +826,7 @@ public class PaymentRunService : IPaymentRunService
                 $"Claim {claim.Id} not paid: claims-service returned no plan-paid amount (adjudicationResult.payerPayment); it is never paid at billed charges and will be picked up once it carries an adjudication result");
             _logger.LogWarning(
                 "Claim {ClaimId} has no plan-paid amount; excluded from payment run {PaymentRunNumber}",
-                SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+                LogSanitizer.Sanitize(claim.Id), paymentRun.PaymentRunNumber);
         }
         return payable;
     }
@@ -865,7 +868,7 @@ public class PaymentRunService : IPaymentRunService
                     ": its adjustments do not balance, so its 835 would not balance: " + string.Join("; ", casProblems));
                 _logger.LogWarning(
                     "Claim {ClaimId} adjustments do not balance; excluded from payment run {PaymentRunNumber}",
-                    SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+                    LogSanitizer.Sanitize(claim.Id), paymentRun.PaymentRunNumber);
                 continue;
             }
 
@@ -879,7 +882,7 @@ public class PaymentRunService : IPaymentRunService
                 ", so its 835 would not balance");
             _logger.LogWarning(
                 "Claim {ClaimId} service lines do not balance to its claim payment; excluded from payment run {PaymentRunNumber}",
-                SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+                LogSanitizer.Sanitize(claim.Id), paymentRun.PaymentRunNumber);
         }
         return kept;
     }
@@ -1058,12 +1061,12 @@ public class PaymentRunService : IPaymentRunService
             var bodyText = await response.Content.ReadAsStringAsync();
             _logger.LogWarning(
                 "Denial finalize call for claim {ClaimId} returned {Status}: {Body}",
-                SanitizeForLog(claimId), response.StatusCode, SanitizeForLog(bodyText));
+                LogSanitizer.Sanitize(claimId), response.StatusCode, LogSanitizer.Sanitize(bodyText));
             return $"claims-service returned {(int)response.StatusCode}";
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error finalizing denied claim {ClaimId}", SanitizeForLog(claimId));
+            _logger.LogError(ex, "Error finalizing denied claim {ClaimId}", LogSanitizer.Sanitize(claimId));
             return ClientErrorText.FinalizeCallFailed;
         }
     }
@@ -1525,13 +1528,13 @@ public class PaymentRunService : IPaymentRunService
             cp.FinalizeError = $"claims-service returned {(int)response.StatusCode}";
             _logger.LogWarning(
                 "Finalize call for claim {ClaimId} returned {Status}: {Body}",
-                SanitizeForLog(cp.ClaimId), response.StatusCode, SanitizeForLog(bodyText));
+                LogSanitizer.Sanitize(cp.ClaimId), response.StatusCode, LogSanitizer.Sanitize(bodyText));
             return false;
         }
         catch (Exception ex)
         {
             cp.FinalizeError = ClientErrorText.FinalizeCallFailed;
-            _logger.LogError(ex, "Error finalizing claim {ClaimId}", SanitizeForLog(cp.ClaimId));
+            _logger.LogError(ex, "Error finalizing claim {ClaimId}", LogSanitizer.Sanitize(cp.ClaimId));
             return false;
         }
     }
@@ -1550,12 +1553,6 @@ public class PaymentRunService : IPaymentRunService
             return lastRun.NextCheckNumber;
 
         return int.Parse(_configuration["Payment:StartingCheckNumber"] ?? "1000000");
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

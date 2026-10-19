@@ -43,6 +43,9 @@ public class SecretProviderConfigurationProvider : ConfigurationProvider, IDispo
     {
         try
         {
+            // ConfigurationProvider.Load is synchronous by contract and runs while the host's
+            // configuration is built, before any async context exists; ISecretProvider has no
+            // sync API. No SynchronizationContext at that point, so blocking cannot deadlock.
             var secrets = _secretProvider
                 .GetSecretsAsync(prefix: string.Empty)
                 .GetAwaiter()
@@ -64,6 +67,10 @@ public class SecretProviderConfigurationProvider : ConfigurationProvider, IDispo
 
         try
         {
+            // Runs on a System.Threading.Timer thread (no SynchronizationContext); kept
+            // synchronous so a reload failure with GracefulDegradation off still surfaces
+            // the way it always has (an exception on the timer thread), not as an
+            // unobserved task fault.
             var secrets = _secretProvider
                 .GetSecretsAsync(prefix: string.Empty)
                 .GetAwaiter()

@@ -1,6 +1,7 @@
 using MemberService.Models;
 using MemberService.Repositories;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace MemberService.Services;
 
@@ -54,7 +55,7 @@ public sealed class MemberEventPublisher : IMemberEventPublisher
         {
             _logger.LogDebug(
                 "MemberEvent {EventId} already present for {Tenant}:{Member} (idempotent no-op)",
-                SanitizeForLog(evt.EventId), SanitizeForLog(evt.TenantId), SanitizeForLog(evt.MemberId));
+                LogSanitizer.Sanitize(evt.EventId), LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.MaskId(evt.MemberId));
             return existing;
         }
 
@@ -75,7 +76,7 @@ public sealed class MemberEventPublisher : IMemberEventPublisher
 
             _logger.LogWarning(
                 "MemberEvent version {Version} conflict for {Tenant}:{Member}; retry {Attempt}/{Max}",
-                evt.Version, SanitizeForLog(evt.TenantId), SanitizeForLog(evt.MemberId), attempt + 1, MaxVersionRetries);
+                evt.Version, LogSanitizer.Sanitize(evt.TenantId), LogSanitizer.MaskId(evt.MemberId), attempt + 1, MaxVersionRetries);
 
             if (attempt + 1 < MaxVersionRetries)
             {
@@ -85,7 +86,4 @@ public sealed class MemberEventPublisher : IMemberEventPublisher
 
         throw new ConcurrencyException(evt.TenantId, evt.MemberId, MaxVersionRetries);
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

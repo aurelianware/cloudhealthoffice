@@ -2,6 +2,7 @@ using System.Diagnostics.Metrics;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Edi.Interchange;
 
@@ -193,8 +194,17 @@ public sealed class X12InterchangeIntake : IX12InterchangeIntake
         _clock = clock ?? TimeProvider.System;
     }
 
-    // No receipt is registered without a request, so Decide completes synchronously.
-    public InterchangeIntakeResult Preview(string content) => Decide(content, null, CancellationToken.None).GetAwaiter().GetResult();
+    public InterchangeIntakeResult Preview(string content)
+    {
+        // Preview is synchronous by contract (IX12InterchangeIntake). Without a receive
+        // request Decide never reaches the store (no duplicate check, no TA1 control
+        // number), so the task is already complete here and GetResult does not block.
+        // Refuse rather than block should that ever stop being true.
+        var decided = Decide(content, null, CancellationToken.None);
+        if (!decided.IsCompleted)
+            throw new InvalidOperationException("Interchange preview must not perform I/O.");
+        return decided.GetAwaiter().GetResult();
+    }
 
     public async Task<InterchangeIntakeResult> ReceiveAsync(InterchangeIntakeRequest request, CancellationToken ct = default)
     {
@@ -210,8 +220,8 @@ public sealed class X12InterchangeIntake : IX12InterchangeIntake
             {
                 _logger.LogWarning(
                     "Rejected {TransactionType} interchange {ControlNumber} from sender {SenderId} for tenant {TenantId}: TA105 {NoteCode}",
-                    Sanitize(request.TransactionType), Sanitize(outcome.ControlNumber), Sanitize(outcome.Envelope.Header?.SenderId),
-                    Sanitize(request.TenantId), outcome.Decision.NoteCode);
+                    LogSanitizer.Sanitize(request.TransactionType, 64), LogSanitizer.Sanitize(outcome.ControlNumber, 64), LogSanitizer.Sanitize(outcome.Envelope.Header?.SenderId, 64),
+                    LogSanitizer.Sanitize(request.TenantId, 64), outcome.Decision.NoteCode);
             }
 
             if (outcome.Ta1 is null) continue;
@@ -224,7 +234,7 @@ public sealed class X12InterchangeIntake : IX12InterchangeIntake
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // The TA1 still goes back in the response; only its stored copy is missing.
-                _logger.LogError(ex, "Failed to store TA1 for interchange {ControlNumber}", Sanitize(outcome.ControlNumber));
+                _logger.LogError(ex, "Failed to store TA1 for interchange {ControlNumber}", LogSanitizer.Sanitize(outcome.ControlNumber, 64));
             }
         }
         return result;
@@ -323,11 +333,11 @@ public sealed class X12InterchangeIntake : IX12InterchangeIntake
                 await _store.ReleaseReceiptAsync(request.TenantId, outcome.Envelope.Header!.PartyKey, outcome.Envelope.Header.ControlNumber,
                     outcome.ReceiptClaimedAt!.Value, ct);
                 _logger.LogInformation("Released ISA13 {ControlNumber} of a {TransactionType} interchange whose processing failed; a resend is accepted",
-                    Sanitize(outcome.ControlNumber), Sanitize(request.TransactionType));
+                    LogSanitizer.Sanitize(outcome.ControlNumber, 64), LogSanitizer.Sanitize(request.TransactionType, 64));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Could not release ISA13 {ControlNumber}; a resend will be refused as a duplicate", Sanitize(outcome.ControlNumber));
+                _logger.LogError(ex, "Could not release ISA13 {ControlNumber}; a resend will be refused as a duplicate", LogSanitizer.Sanitize(outcome.ControlNumber, 64));
             }
         }
     }
@@ -354,9 +364,6 @@ public sealed class X12InterchangeIntake : IX12InterchangeIntake
             Ta1Content = o.Ta1,
         };
     }
-
-    internal static string Sanitize(string? value) =>
-        value is null ? string.Empty : new string(value.Where(c => !char.IsControl(c)).Take(64).ToArray());
 }
 
 /// <summary>TA1 counters, on the shared CHO meter.</summary>

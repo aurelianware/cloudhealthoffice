@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderContractsService.Models;
 using ProviderContractsService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ProviderContractsService.Controllers;
 
@@ -121,7 +122,7 @@ public class ProviderContractsController : ControllerBase
         contract.LastVerifiedAt = null;
         contract.NextVerificationDue = null;
         _logger.LogInformation("Creating provider contract {ContractNumber} for provider {NPI}",
-            SanitizeForLog(contract.ContractNumber), SanitizeForLog(contract.ProviderNPI));
+            LogSanitizer.Sanitize(contract.ContractNumber), LogSanitizer.Sanitize(contract.ProviderNPI));
 
         var created = await _contractRepository.CreateAsync(contract);
         return CreatedAtAction(nameof(GetContractById), new { id = created.Id }, created);
@@ -194,7 +195,7 @@ public class ProviderContractsController : ControllerBase
             return BadRequest(new { error = $"Can only activate Draft or Suspended contracts, current: {contract.Status}" });
 
         contract.Status = ProviderContractStatus.Active;
-        _logger.LogInformation("Activated provider contract {ContractNumber}", SanitizeForLog(contract.ContractNumber));
+        _logger.LogInformation("Activated provider contract {ContractNumber}", LogSanitizer.Sanitize(contract.ContractNumber));
 
         var updated = await _contractRepository.UpdateAsync(contract);
         return Ok(updated);
@@ -217,7 +218,7 @@ public class ProviderContractsController : ControllerBase
 
         contract.Status = ProviderContractStatus.Suspended;
         _logger.LogInformation("Suspended provider contract {ContractNumber}: {Reason}",
-            contract.ContractNumber, SanitizeForLog(request.Reason));
+            contract.ContractNumber, LogSanitizer.Sanitize(request.Reason));
 
         var updated = await _contractRepository.UpdateAsync(contract);
         return Ok(updated);
@@ -242,7 +243,7 @@ public class ProviderContractsController : ControllerBase
         contract.TerminationDate = request.TerminationDate ?? DateTime.UtcNow;
         contract.TerminationReason = request.Reason;
         _logger.LogInformation("Terminated provider contract {ContractNumber}: {Reason}",
-            contract.ContractNumber, SanitizeForLog(request.Reason));
+            contract.ContractNumber, LogSanitizer.Sanitize(request.Reason));
 
         var updated = await _contractRepository.UpdateAsync(contract);
         return Ok(updated);
@@ -264,7 +265,7 @@ public class ProviderContractsController : ControllerBase
             return BadRequest(new { error = $"Can only reinstate Suspended contracts, current: {contract.Status}" });
 
         contract.Status = ProviderContractStatus.Active;
-        _logger.LogInformation("Reinstated provider contract {ContractNumber}", SanitizeForLog(contract.ContractNumber));
+        _logger.LogInformation("Reinstated provider contract {ContractNumber}", LogSanitizer.Sanitize(contract.ContractNumber));
 
         var updated = await _contractRepository.UpdateAsync(contract);
         return Ok(updated);
@@ -292,7 +293,7 @@ public class ProviderContractsController : ControllerBase
         amendment.ApprovedBy = actor.UserId;
         contract.Amendments.Add(amendment);
         _logger.LogInformation("Added amendment to provider contract {ContractNumber}: {Type}",
-            contract.ContractNumber, SanitizeForLog(amendment.AmendmentType));
+            contract.ContractNumber, LogSanitizer.Sanitize(amendment.AmendmentType));
 
         var updated = await _contractRepository.UpdateAsync(contract);
         return Ok(updated);
@@ -317,7 +318,7 @@ public class ProviderContractsController : ControllerBase
         // and to FfsRateConfig children via ffs-service when implemented.
         // Until then, returns 501 so callers know propagation did not occur.
         _logger.LogInformation("Sync-children requested for provider contract {ContractNumber}",
-            SanitizeForLog(contract.ContractNumber));
+            LogSanitizer.Sanitize(contract.ContractNumber));
 
         return StatusCode(StatusCodes.Status501NotImplemented, new
         {
@@ -378,13 +379,6 @@ public class ProviderContractsController : ControllerBase
 
         var last4 = digits[^4..];
         return $"***-**-{last4}";
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

@@ -1,5 +1,6 @@
 using ClaimsService.Models;
 using ClaimsService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Migrations;
 
@@ -99,7 +100,7 @@ public sealed class DenyStatusBackfillService
                 result.Reopened.Add(claim.Id);
                 _logger.LogInformation(
                     "AUDIT deny-backfill: claim {ClaimId} (tenant {TenantId}) Denied -> Deny by {Actor}",
-                    Sanitize(claim.Id), Sanitize(tenantId), Sanitize(actor));
+                    LogSanitizer.Sanitize(claim.Id), LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(actor));
             }
             else
             {
@@ -110,11 +111,8 @@ public sealed class DenyStatusBackfillService
         _logger.LogInformation(
             "Deny backfill (tenant {TenantId}, dryRun {DryRun}) by {Actor}: {Candidates} candidate(s), {Reopened} {Verb}, " +
             "{Remitted} left Denied as remitted, {Changed} changed meanwhile",
-            Sanitize(tenantId), request.DryRun, Sanitize(actor), result.Candidates, result.Reopened.Count,
+            LogSanitizer.Sanitize(tenantId), request.DryRun, LogSanitizer.Sanitize(actor), result.Candidates, result.Reopened.Count,
             request.DryRun ? "would move" : "moved", result.SkippedRemitted.Count, result.SkippedChanged.Count);
         return result;
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

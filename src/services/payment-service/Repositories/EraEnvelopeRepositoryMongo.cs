@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using PaymentService.Models;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Repositories;
 
@@ -131,13 +132,10 @@ public class EraEnvelopeRepositoryMongo : IEraEnvelopeRepository
         await _collection.InsertOneAsync(record);
         _logger.LogInformation(
             "Created EraEnvelope {Id} for PaymentRun {PaymentRunId} ({ClaimCount} claims, ${Amount:F2})",
-            SanitizeForLog(record.Id), SanitizeForLog(record.PaymentRunId),
+            LogSanitizer.Sanitize(record.Id), LogSanitizer.Sanitize(record.PaymentRunId),
             record.ClaimCount, record.TotalPaymentAmount);
         return record;
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }
 
 /// <summary>

@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PremiumBillingService.Models;
 using PremiumBillingService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PremiumBillingService.Controllers;
 
@@ -56,7 +57,7 @@ public class BillingRunsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BillingRun>> ExecuteBillingRun(string id)
     {
-        _logger.LogInformation("Executing billing run {BillingRunId}", SanitizeForLog(id));
+        _logger.LogInformation("Executing billing run {BillingRunId}", LogSanitizer.Sanitize(id));
 
         try
         {
@@ -134,12 +135,5 @@ public class BillingRunsController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }

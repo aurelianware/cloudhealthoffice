@@ -4,6 +4,7 @@ using FhirService.Models;
 using FhirService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Controllers;
 
@@ -99,7 +100,7 @@ public class DtrController : FhirControllerBase
         var created = await _dtrService.CreateQuestionnaireAsync(questionnaire, TenantId, ct);
 
         _logger.LogInformation("Created Questionnaire {Id} for tenant {TenantId}",
-            SanitizeForLog(created.Id), SanitizeForLog(TenantId));
+            LogSanitizer.Sanitize(created.Id), LogSanitizer.Sanitize(TenantId));
 
         SetLocationHeader("Questionnaire", created.Id);
         return StatusCode(201, created);
@@ -134,7 +135,7 @@ public class DtrController : FhirControllerBase
             return FhirNotFound("Questionnaire", id);
 
         _logger.LogInformation("Updated Questionnaire {Id} for tenant {TenantId}",
-            SanitizeForLog(id), SanitizeForLog(TenantId));
+            LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(TenantId));
 
         return Ok(updated);
     }
@@ -229,7 +230,7 @@ public class DtrController : FhirControllerBase
         var submitted = await _dtrService.SubmitResponseAsync(response, TenantId, ct);
 
         _logger.LogInformation("Submitted QuestionnaireResponse {Id} for tenant {TenantId}",
-            SanitizeForLog(submitted.Id), SanitizeForLog(TenantId));
+            LogSanitizer.Sanitize(submitted.Id), LogSanitizer.Sanitize(TenantId));
 
         SetLocationHeader("QuestionnaireResponse", submitted.Id);
         return StatusCode(201, submitted);

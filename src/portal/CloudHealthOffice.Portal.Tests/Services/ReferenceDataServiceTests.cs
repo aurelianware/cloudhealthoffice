@@ -178,6 +178,7 @@ public class ReferenceDataServiceTests
 
         var result = await sut.GetCodeUsageStatsAsync("CPT", "99213");
 
+        Assert.NotNull(result);
         result.ClaimsCount.Should().Be(5000);
         result.TotalBilledAmount.Should().Be(750000m);
         handler.CapturedUrls[0].Should().Contain("/codes/CPT/99213/usage");

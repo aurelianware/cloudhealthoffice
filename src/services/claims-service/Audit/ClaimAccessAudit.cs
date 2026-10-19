@@ -73,8 +73,8 @@ public sealed class ClaimAccessAuditWriter
             MemberId = memberFromQuery ?? (members.Count == 1 ? members[0] : null),
             ClaimIds = single
                 ? []
-                : subjects.Select(s => s.ClaimId).Where(id => !string.IsNullOrWhiteSpace(id))
-                    .Distinct().Take(ClaimAccessEvent.MaxClaimIds).ToList()!,
+                : subjects.Select(s => s.ClaimId).OfType<string>().Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct().Take(ClaimAccessEvent.MaxClaimIds).ToList(),
             ResultCount = single ? null : subjects.Count,
             Action = audit.Action,
             Outcome = outcome ?? OutcomeFor(statusCode),

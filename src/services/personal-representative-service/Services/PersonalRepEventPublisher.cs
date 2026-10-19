@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using PersonalRepresentativeService.Models;
 using Confluent.Kafka;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PersonalRepresentativeService.Services;
 
@@ -117,7 +118,7 @@ public sealed class PersonalRepEventPublisher : IPersonalRepEventPublisher, IHos
         {
             _logger.LogDebug(
                 "Kafka producer unavailable; skipping PersonalRepStatusChanged for rep {PersonalRepId}",
-                LogSanitizer.SafeForLog(rep.Id));
+                LogSanitizer.Sanitize(rep.Id, 256));
             return;
         }
 
@@ -140,21 +141,21 @@ public sealed class PersonalRepEventPublisher : IPersonalRepEventPublisher, IHos
             await _producer.ProduceAsync(StatusChangedTopic, message, ct);
             _logger.LogInformation(
                 "Published PersonalRepStatusChanged for rep {PersonalRepId} {From}->{To}",
-                LogSanitizer.SafeForLog(rep.Id),
+                LogSanitizer.Sanitize(rep.Id, 256),
                 fromStatus?.ToString() ?? "(none)", toStatus);
         }
         catch (ProduceException<string, string> ex)
         {
             _logger.LogError(ex,
                 "Failed to publish PersonalRepStatusChanged for rep {PersonalRepId}: {Reason}",
-                LogSanitizer.SafeForLog(rep.Id),
-                LogSanitizer.SafeForLog(ex.Error.Reason));
+                LogSanitizer.Sanitize(rep.Id, 256),
+                LogSanitizer.Sanitize(ex.Error.Reason, 256));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 "Unexpected error publishing PersonalRepStatusChanged for rep {PersonalRepId}",
-                LogSanitizer.SafeForLog(rep.Id));
+                LogSanitizer.Sanitize(rep.Id, 256));
         }
     }
 
@@ -171,8 +172,8 @@ public sealed class PersonalRepEventPublisher : IPersonalRepEventPublisher, IHos
             _logger.LogDebug(
                 "Kafka producer unavailable; skipping {EventType} for rep {PersonalRepId} member {MemberId}",
                 eventType,
-                LogSanitizer.SafeForLog(rep.Id),
-                LogSanitizer.SafeForLog(association.MemberId));
+                LogSanitizer.Sanitize(rep.Id, 256),
+                LogSanitizer.MaskId(association.MemberId));
             return;
         }
 
@@ -204,23 +205,23 @@ public sealed class PersonalRepEventPublisher : IPersonalRepEventPublisher, IHos
             _logger.LogInformation(
                 "Published {EventType} for rep {PersonalRepId} member {MemberId}",
                 eventTypeName,
-                LogSanitizer.SafeForLog(rep.Id),
-                LogSanitizer.SafeForLog(association.MemberId));
+                LogSanitizer.Sanitize(rep.Id, 256),
+                LogSanitizer.MaskId(association.MemberId));
         }
         catch (ProduceException<string, string> ex)
         {
             _logger.LogError(ex,
                 "Failed to publish {EventType} for rep {PersonalRepId}: {Reason}",
                 eventTypeName,
-                LogSanitizer.SafeForLog(rep.Id),
-                LogSanitizer.SafeForLog(ex.Error.Reason));
+                LogSanitizer.Sanitize(rep.Id, 256),
+                LogSanitizer.Sanitize(ex.Error.Reason, 256));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 "Unexpected error publishing {EventType} for rep {PersonalRepId}",
                 eventTypeName,
-                LogSanitizer.SafeForLog(rep.Id));
+                LogSanitizer.Sanitize(rep.Id, 256));
         }
     }
 

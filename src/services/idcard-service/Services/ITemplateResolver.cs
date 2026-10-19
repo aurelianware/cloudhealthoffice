@@ -1,5 +1,6 @@
 using IdCardService.Models;
 using IdCardService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace IdCardService.Services;
 
@@ -51,7 +52,7 @@ public class TemplateResolver : ITemplateResolver
         {
             _logger.LogError(
                 "No global default ID card template exists for tenant {TenantId}. Seed a global template.",
-                Sanitize(tenantId));
+                LogSanitizer.Sanitize(tenantId));
         }
         return global;
     }
@@ -70,7 +71,4 @@ public class TemplateResolver : ITemplateResolver
         if (template.SupportedLanguages.Count == 0) return true;
         return template.SupportedLanguages.Contains(languageCode, StringComparer.OrdinalIgnoreCase);
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

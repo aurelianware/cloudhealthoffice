@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using EligibilityService.Models;
 using EligibilityService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace EligibilityService.Adapters;
 
@@ -83,7 +84,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("No active coverage found for member {SubscriberId}", SanitizeForLog(subscriberId));
+            _logger.LogWarning("No active coverage found for member {SubscriberId}", LogSanitizer.MaskId(subscriberId));
             return null;
         }
 
@@ -111,7 +112,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Benefits not found for plan {BenefitPlanId}", SanitizeForLog(benefitPlanId));
+            _logger.LogWarning("Benefits not found for plan {BenefitPlanId}", LogSanitizer.Sanitize(benefitPlanId));
             return new List<EligibilityBenefit>();
         }
 
@@ -196,12 +197,6 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
             _logger.LogWarning(ex, "Error getting COB data");
             return new List<AdditionalInsurance>();
         }
-    }
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 }
 

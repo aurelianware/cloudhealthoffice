@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using CloudHealthOffice.Infrastructure.Logging;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -59,17 +60,9 @@ public sealed class SmartAuthAudit
             "SMART sign-in {Outcome}: method={Method} reason={Reason}",
             "refused", Clean(method), Clean(reason));
 
+    // "-" marks an absent field so the audit line keeps its shape.
     internal static string Clean(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return "-";
-        var buffer = new StringBuilder(Math.Min(value.Length, 256));
-        foreach (var ch in value)
-        {
-            if (buffer.Length == 256) break;
-            buffer.Append(char.IsControl(ch) ? '_' : ch);
-        }
-        return buffer.ToString();
-    }
+        => string.IsNullOrEmpty(value) ? "-" : LogSanitizer.Sanitize(value, 256);
 }
 
 /// <summary>Input rules for identifiers that end up in tokens.</summary>

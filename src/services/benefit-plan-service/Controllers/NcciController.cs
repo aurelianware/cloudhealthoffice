@@ -6,6 +6,7 @@ using CloudHealthOffice.NcciEngine.Import;
 using BenefitPlanService.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace BenefitPlanService.Controllers;
 
@@ -104,8 +105,8 @@ public class NcciController : ControllerBase
 
             _logger.LogInformation(
                 "AUDIT NCCI CMS load: {Kind} {Setting} {Quarter} by {Subject} in tenant {TenantId}: {Loaded} loaded, {Rejected} rejected, already loaded: {AlreadyLoaded}",
-                result.FileKind, result.Setting, SanitizeForLog(result.Quarter), SanitizeForLog(subject),
-                SanitizeForLog(TenantId), result.RowsLoaded, result.RowsRejected, result.AlreadyLoaded);
+                result.FileKind, result.Setting, LogSanitizer.Sanitize(result.Quarter), LogSanitizer.Sanitize(subject),
+                LogSanitizer.Sanitize(TenantId), result.RowsLoaded, result.RowsRejected, result.AlreadyLoaded);
 
             return Ok(result);
         }
@@ -157,7 +158,7 @@ public class NcciController : ControllerBase
 
         _logger.LogInformation(
             "NCCI scrub: claim {ClaimId} — {Failures} failures, {PairChecks} pair checks, {MueChecks} MUE checks",
-            SanitizeForLog(request.ClaimId), result.EditFailures.Count, result.NcciPairsChecked, result.MueChecked);
+            LogSanitizer.Sanitize(request.ClaimId), result.EditFailures.Count, result.NcciPairsChecked, result.MueChecked);
 
         return Ok(result);
     }
@@ -235,7 +236,7 @@ public class NcciController : ControllerBase
 
         _logger.LogInformation(
             "NCCI seed for tenant {TenantId} ({Quarter}): {Pairs} pairs, {Mue} MUE entries",
-            SanitizeForLog(tenantId), SanitizeForLog(quarter), pairsWritten, mueWritten);
+            LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(quarter), pairsWritten, mueWritten);
 
         return Ok(new
         {
@@ -246,9 +247,6 @@ public class NcciController : ControllerBase
             seedSource = "built-in Q1 2025 baseline",
         });
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }
 
 /// <summary>

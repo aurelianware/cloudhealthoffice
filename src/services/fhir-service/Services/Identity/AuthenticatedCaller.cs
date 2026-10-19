@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace FhirService.Services.Identity;
 
@@ -90,16 +91,20 @@ public sealed record AuthenticatedCaller
     /// </summary>
     public IReadOnlyDictionary<string, string> ToAuditFields() => new Dictionary<string, string>
     {
-        ["issuer"] = Sanitize(Issuer) ?? "(none)",
-        ["subject"] = Sanitize(Subject) ?? "(none)",
-        ["clientId"] = Sanitize(ClientId) ?? "(none)",
+        ["issuer"] = StripLineBreaksOrNull(Issuer) ?? "(none)",
+        ["subject"] = StripLineBreaksOrNull(Subject) ?? "(none)",
+        ["clientId"] = StripLineBreaksOrNull(ClientId) ?? "(none)",
         ["callerType"] = CallerType.ToString(),
         ["providerIdentity"] = HasVerifiedProviderIdentity ? "asserted" : "none",
     };
 
-    private static string? Sanitize(string? value)
-        => value?.Replace("\r", string.Empty).Replace("\n", string.Empty);
-
     /// <summary>The key under which the resolved caller travels on HttpContext.</summary>
     public const string HttpContextItemKey = "SmartCaller";
+
+    /// <summary>
+    /// Removes CR and LF from a value that is returned to the caller; null
+    /// stays null. For log lines use <see cref="LogSanitizer.Sanitize(string?)"/>.
+    /// </summary>
+    private static string? StripLineBreaksOrNull(string? value) =>
+        value?.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

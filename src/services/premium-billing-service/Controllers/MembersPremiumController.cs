@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PremiumBillingService.Controllers;
 
@@ -41,7 +42,7 @@ public class MembersPremiumController : ControllerBase
         if (string.IsNullOrWhiteSpace(memberId))
             return BadRequest(new { error = "memberId is required" });
 
-        _logger.LogInformation("Premium summary lookup for member {MemberId}", SanitizeForLog(memberId));
+        _logger.LogInformation("Premium summary lookup for member {MemberId}", LogSanitizer.MaskId(memberId));
 
         var invoices = (await _invoiceRepository.ListByMemberAsync(memberId, take: 12)).ToList();
         var summary = Build(memberId, invoices, DateTime.UtcNow);
@@ -129,10 +130,4 @@ public class MembersPremiumController : ControllerBase
         AptcMonthlyAmount = invoice.AptcMonthlyAmount,
         GraceType = invoice.GraceType
     };
-
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
 }

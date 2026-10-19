@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace PaymentService.Services;
 
@@ -116,7 +117,7 @@ public class TradingPartnersClient : ITradingPartnersClient
             {
                 _logger.LogError(
                     "Trading partner lookup for tenant {Tenant} npi {Npi} was refused ({Status}); the claims are left out of the 835s",
-                    Sanitize(tenantId), Sanitize(npi), response.StatusCode);
+                    LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(npi), response.StatusCode);
                 return null;
             }
 
@@ -124,7 +125,7 @@ public class TradingPartnersClient : ITradingPartnersClient
             {
                 _logger.LogDebug(
                     "Trading partner lookup miss: tenant {Tenant} npi {Npi} env {Env}",
-                    Sanitize(tenantId), Sanitize(npi), Sanitize(environment));
+                    LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(npi), LogSanitizer.Sanitize(environment));
                 return null;
             }
 
@@ -132,7 +133,7 @@ public class TradingPartnersClient : ITradingPartnersClient
             {
                 _logger.LogWarning(
                     "Trading partner lookup failed for tenant {Tenant} npi {Npi}: {Status}",
-                    Sanitize(tenantId), Sanitize(npi), response.StatusCode);
+                    LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(npi), response.StatusCode);
                 return null;
             }
 
@@ -142,11 +143,8 @@ public class TradingPartnersClient : ITradingPartnersClient
         {
             _logger.LogWarning(ex,
                 "Trading partner lookup threw for tenant {Tenant} npi {Npi}",
-                Sanitize(tenantId), Sanitize(npi));
+                LogSanitizer.Sanitize(tenantId), LogSanitizer.Sanitize(npi));
             return null;
         }
     }
-
-    private static string Sanitize(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

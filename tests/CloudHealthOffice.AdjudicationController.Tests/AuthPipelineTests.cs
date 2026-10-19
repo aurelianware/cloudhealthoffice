@@ -226,7 +226,7 @@ public class AuthPipelineTests : IClassFixture<AdjudicationControllerTests.Facto
     }
 
     [Fact]
-    public async Task BenefitsReaderWithoutClaimsWork_CanEstimate_ButCannotRunAccumulatorWritingAdjudication()
+    public async Task BenefitsReaderWithoutClaimsWork_CanEstimate_ButCannotRunAccumulatorWritingCalculation()
     {
         // MemberServices holds benefits:read but not claims:work or settings:manage.
         using var client = TokenClient("member-services-1", ChoRolePermissions.MemberServices);
@@ -235,8 +235,6 @@ public class AuthPipelineTests : IClassFixture<AdjudicationControllerTests.Facto
             (await client.PostAsJsonAsync("/api/v1/adjudication/estimate", EstimateBody())).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await client.PostAsJsonAsync("/api/v1/adjudication/calculate-benefits", BenefitsBody())).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", new { claimId = "CLM-AUTH" })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await client.PostAsJsonAsync("/api/v1/plans", PlanBody())).StatusCode);
     }

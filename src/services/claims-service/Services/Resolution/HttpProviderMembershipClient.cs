@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using ClaimsService.Services;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -84,7 +85,7 @@ public class HttpProviderMembershipClient : IProviderMembershipClient
             {
                 _logger.LogWarning(
                     "Provider service returned {StatusCode} resolving membership for network {Network} NPI {Npi}",
-                    response.StatusCode, SanitizeForLog(networkId), SanitizeForLog(npi));
+                    response.StatusCode, LogSanitizer.Sanitize(networkId), LogSanitizer.Sanitize(npi));
                 return null;
             }
 
@@ -98,11 +99,8 @@ public class HttpProviderMembershipClient : IProviderMembershipClient
         {
             _logger.LogWarning(ex,
                 "Membership lookup failed for network {Network} NPI {Npi} tenant {Tenant}",
-                SanitizeForLog(networkId), SanitizeForLog(npi), SanitizeForLog(tenantId));
+                LogSanitizer.Sanitize(networkId), LogSanitizer.Sanitize(npi), LogSanitizer.Sanitize(tenantId));
             return null;
         }
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

@@ -2,6 +2,7 @@ using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Json;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Caching;
 
@@ -54,15 +55,19 @@ internal sealed class RedisCacheProvider : ICacheProvider
             }
             catch (JsonException ex)
             {
-                _logger.LogWarning(ex, "Corrupted cache entry at {Key} — deleting", LogSanitize(key));
+                _logger.LogWarning(ex, "Corrupted cache entry at {Key} — deleting", LogSanitizer.Sanitize(key));
                 try { await db.KeyDeleteAsync(key).ConfigureAwait(false); }
-                catch (RedisException) { /* best-effort */ }
+                catch (RedisException deleteEx)
+                {
+                    // Still a miss either way; the entry's TTL removes it if the delete failed.
+                    _logger.LogDebug(deleteEx, "Deleting corrupted cache entry at {Key} failed", LogSanitizer.Sanitize(key));
+                }
                 return null;
             }
         }
         catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Redis unavailable on GetAsync({Key}) — treating as miss", LogSanitize(key));
+            _logger.LogWarning(ex, "Redis unavailable on GetAsync({Key}) — treating as miss", LogSanitizer.Sanitize(key));
             return null;
         }
     }
@@ -77,7 +82,7 @@ internal sealed class RedisCacheProvider : ICacheProvider
         }
         catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Redis unavailable on SetAsync({Key}) — entry not cached", LogSanitize(key));
+            _logger.LogWarning(ex, "Redis unavailable on SetAsync({Key}) — entry not cached", LogSanitizer.Sanitize(key));
         }
     }
 
@@ -90,7 +95,7 @@ internal sealed class RedisCacheProvider : ICacheProvider
         }
         catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Redis unavailable on RemoveAsync({Key}) — stale entry will expire via TTL", LogSanitize(key));
+            _logger.LogWarning(ex, "Redis unavailable on RemoveAsync({Key}) — stale entry will expire via TTL", LogSanitizer.Sanitize(key));
         }
     }
 
@@ -128,21 +133,5 @@ internal sealed class RedisCacheProvider : ICacheProvider
 
             return fresh;
         }, ct);
-    }
-
-    /// <summary>
-    /// Strips CR/LF/NUL before a cache key enters a log entry. CacheKeyGuard
-    /// already rejects those characters at the entry boundary, but CodeQL
-    /// (and any other taint tracker) cannot see that invariant across the
-    /// Guard → Provider call boundary. Applying defense-in-depth here is
-    /// cheap and silences the cs/log-forging alerts.
-    /// </summary>
-    private static string LogSanitize(string key)
-    {
-        if (string.IsNullOrEmpty(key)) return string.Empty;
-        return key
-            .Replace("\r", string.Empty)
-            .Replace("\n", string.Empty)
-            .Replace("\0", string.Empty);
     }
 }
