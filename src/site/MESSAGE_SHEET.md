@@ -22,18 +22,21 @@ Use the [canonical capability ledger](../../docs/CAPABILITY_RECONCILIATION.md) f
 These implementation statements do not assert full PAS/CRD/DTR/SMART conformance, universal compliance, production readiness or customer deployments. Unverified is not equivalent to missing. Preserve precise remaining limitations and reverify changed paths before stronger claims.
 
 ## Canonical one-liner
-Cloud Health Office is the claims platform you can put beside QNXT, Facets, or
-HealthEdge — for staged interoperability and modernization work without requiring an
-immediate core replacement.
+CloudHealthOffice is a source-available health plan administration platform designed to help health plans pursue greater operational and technological independence.
 
-## 15-second hero
-Health plans must expose FHIR APIs by January 1, 2027 and still run yesterday's
-core admin system. Cloud Health Office is a source-available payer platform you
-deploy in your own cloud. Start with the CMS-0057-F compliance surface. Move
-claims, payments, and provider operations over when you choose.
-
-## Category line (under the logo, every page)
-Payer claims platform. Compliance first. Core replacement optional.
+## Executive positioning — approved implementation, October 19, 2026
+**Category:** Health Plan Independence.
+**Primary:** The Future of Health Plan Administration Belongs to Health Plans.
+**Supporting:** Stop Renting Your Health Plan's Future.
+**Promise:** Your data. Your infrastructure. Your business rules. Your future.
+This promise expresses an aspiration for customer control; it grants no additional ownership, portability or licensing rights.
+**Category line:** Health Plan Independence. Source-available administration.
+**Primary CTA:** Discuss Your Independence Strategy.
+**Secondary CTA:** Read the Independence Manifesto.
+**License disclosure:** Source-available under BSL 1.1. Production use requires a commercial license.
+**Progression:** Foothold → Domain Cutover → Core Modernization. Each expansion requires evidence, acceptance criteria, reconciliation and rollback planning.
+The Founding Transformation Partnership is an invitation to scope evaluation, not a claim of existing commitments, discounts, capacity or production rights.
+Calculator outputs are buyer-entered scenarios, not quotes or guaranteed savings. Unknown alternative licensing/support must block complete totals. AI implementations are advisory; full standards conformance and production outcomes remain unverified.
 
 ## CMS-0057-F definition (reuse verbatim under every mention of the rule)
 CMS-0057-F is the federal rule that requires Medicare Advantage, Medicaid, CHIP,
@@ -68,28 +71,9 @@ workflow, and Platform Engagement (claims / payments / core replacement) are pai
 
 ---
 
-## Homepage copy (locked)
-- **Eyebrow:** Payer platform · Source-available · Runs in your cloud
-- **H1:** Plan your 2027 FHIR work alongside QNXT, Facets, or HealthEdge.
-- **H2:** Cloud Health Office deploys beside your core admin system. It provides
-  interoperability and administration capabilities that your team can evaluate and integrate by domain.
+## Homepage copy (approved October 19, 2026)
+Use the executive positioning above. Preserve CMS-0057-F/FHIR metadata intent and technical acquisition paths. Homepage narrative: dependency questions; four dimensions of independence; AI architecture; incremental modernization; evidence; economics; partnership invitation. Services remain accessible below the product-led hero.
 
-**Three tiles (business language only):**
-1. A scoped interoperability workstream beside your existing core
-2. Your cloud, your data, inspectable source
-3. 1,000,000-claim adjudication evidence, published with limits
-
-**Four-step picture:** Intake → Adjudicate / authorize → Pay → Prove (FHIR + audit)
-
-**Who this is for:**
-- Medicare Advantage / Medicaid / CHIP plans facing Jan 1, 2027
-- CIOs who will not sign a core replacement this budget cycle
-- Architects who want source and customer-owned cloud
-
-**CTAs:** Primary — Talk about a deployment · Secondary — Get the evaluator pack
-(register) · Tertiary — Run it locally / view source on GitHub
-
----
 
 ## Is
 - A payer administration platform (claims, benefits, eligibility, prior auth, payments, FHIR)
@@ -98,7 +82,7 @@ workflow, and Platform Engagement (claims / payments / core replacement) are pai
 - Source-available (BSL 1.1) so security teams can read the code
 
 ## Is not
-- A clearinghouse (Availity / Change / Stedi are pipes; Cloud Health Office is the plan's system)
+- A clearinghouse; the platform is intended for payer administration and can integrate with clearinghouses.
 - A hosted black-box SaaS that takes PHI out of the plan's boundary by default
 - An overnight Facets/QNXT replacement
 - Apache-licensed open source
@@ -276,7 +260,7 @@ solve the problem being discussed. Thin promotional content on that property def
 
 ## BANNED phrases on public marketing pages
 - open source
-- founding client / founding client program / we are selecting one
+- invented founding customer commitments, discounts or program capacity
 - we are pre-pilot
 - production SaaS live / multi-tenant at scale (unless a real paying tenant exists)
 - 24,000+ clones
@@ -299,7 +283,7 @@ solve the problem being discussed. Thin promotional content on that property def
 | --- | --- |
 | open source / open-source | source-available |
 | Apache 2.0 / Apache-2.0 | BSL 1.1 (source-available) |
-| Founding Client / Founding Partner (as program branding) | (remove; move economics to /deploy "First production deployment terms") |
+| Founding Transformation Partnership | Structured evaluation invitation only; commercial terms require agreement |
 | we are selecting one / pre-pilot | (remove; use the Stage language only on /deploy) |
 | strangler-fig | replace one domain at a time |
 | 7–14 days vs <500ms | (remove the apples-to-oranges comparison) |
@@ -309,7 +293,7 @@ solve the problem being discussed. Thin promotional content on that property def
 ---
 
 ## Information architecture
-Primary nav: **Product · CMS-0057-F · Evidence · Docs · Pricing · Services · Contact**
+Primary executive nav: **Why Independence · Platform · CMS-0057-F · Evidence · Documentation · Discuss Your Independence Strategy**. Pricing, Services, Trust and Contact remain accessible in footers; existing marketing navigation gains independence links selectively.
 
 Pages: `/` · `/what-is` · `/platform` (Product) · `/cms-0057f-compliance` ·
 `/evidence` · `/docs` · `/pricing` · `/services` · `/contact` · `/deploy` · `/start`
@@ -319,4 +303,4 @@ Pages: `/` · `/what-is` · `/platform` (Product) · `/cms-0057f-compliance` ·
 See [ADR 012](../../docs/adr/012-product-led-professional-services.md).
 
 Founding-client economics live on `/deploy` as **First production deployment terms**
-(waived platform license, engineer access, reference). No program branding.
+(waived platform license, engineer access, reference). Existing terms remain on /deploy; the partnership invitation confers no new terms.

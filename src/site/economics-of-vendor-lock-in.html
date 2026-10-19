@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Economics of Vendor Lock-In: Health Plan PMPM &amp; TCO Calculator | CloudHealthOffice</title>
+<meta name="description" content="Compare health plan administration scenarios using member months, recurring costs, transition, exit and parallel operations. Private, account-free PMPM and TCO modeling.">
+<link rel="canonical" href="https://cloudhealthoffice.com/economics-of-vendor-lock-in" />
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://cloudhealthoffice.com/economics-of-vendor-lock-in">
+<meta property="og:title" content="Economics of Vendor Lock-In: Health Plan PMPM &amp; TCO Calculator">
+<meta property="og:description" content="Compare health plan administration scenarios using member months, recurring costs, transition, exit and parallel operations. Private, account-free PMPM and TCO modeling.">
+<meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/claims-evidence-pipeline.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Economics of Vendor Lock-In: Health Plan PMPM &amp; TCO Calculator">
+<meta name="twitter:description" content="Compare health plan administration scenarios using member months, recurring costs, transition, exit and parallel operations. Private, account-free PMPM and TCO modeling.">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Economics of Vendor Lock-In: Health Plan PMPM &amp; TCO Calculator", "description": "Compare health plan administration scenarios using member months, recurring costs, transition, exit and parallel operations. Private, account-free PMPM and TCO modeling.", "url": "https://cloudhealthoffice.com/economics-of-vendor-lock-in", "publisher": {"@type": "Organization", "name": "Aurelianware, Inc."}}</script>
+<link rel="stylesheet" href="/css/independence.css">
+<script defer src="/js/mobile-nav.js">
+</script>
+<script defer src="/js/pmpm-calculator.js">
+</script>
+</head>
+<body class="independence">
+<a href="#main-content" class="skip-to-main">Skip to main content</a>
+<nav aria-label="Primary">
+<a class="brand" href="/">
+<img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="44" height="44">
+<span>Cloud Health Office<small>Health Plan Independence</small>
+</span>
+</a>
+<button id="mobileMenuToggle" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">Menu</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Why Independence</summary>
+<div>
+<a href="/health-plan-independence">Independence Manifesto</a>
+<a href="/economics-of-vendor-lock-in">Economics of Vendor Lock-In</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform Overview</a>
+<a href="/ai-ready-health-plan-architecture">AI-Ready Architecture</a>
+<a href="/incremental-modernization">Incremental Modernization</a>
+<a href="/deploy">Deployment</a>
+</div>
+</details>
+</li>
+<li>
+<a href="/cms-0057f-compliance">CMS-0057-F</a>
+</li>
+<li>
+<a href="/evidence">Evidence</a>
+</li>
+<li>
+<a href="/docs">Documentation</a>
+</li>
+<li>
+<a class="nav-cta" data-ga-event="independence_strategy_cta_click" href="/founding-transformation-partners#strategy">Discuss Your Independence Strategy</a>
+</li>
+</ul>
+</nav>
+<main id="main-content" tabindex="-1">
+<header class="hero">
+<p class="eyebrow">Economics / A scenario, not a quote</p>
+<h1>What Does Technology Dependency Really Cost?</h1>
+<p class="lede">Compare the operating scenarios you can actually defend.</p>
+<p>Enter your own assumptions. This calculator does not provide CloudHealthOffice pricing or guaranteed savings. Values stay in this page; financial inputs are not sent to analytics or stored.</p>
+</header>
+<section>
+<p class="eyebrow">01 / Define the scenario</p>
+<h2>Count Member Months, Then Costs.</h2>
+<p>All amounts are USD. Recurring PMPM is multiplied by annual member months. Enter annual categories only when they are excluded from PMPM and other rows. Licensing is included once in recurring PMPM or annual fixed costs; support is included once in PMPM or its support row.</p>
+<p id="calculator-status" role="status">Calculator unavailable until JavaScript initializes. Financial inputs are disabled; no financial values can be submitted.</p>
+<div id="economics-calculator" role="group" aria-label="Administration economics scenario">
+<fieldset id="calculator-controls" disabled>
+<legend>Local scenario calculator</legend>
+<fieldset>
+<legend>Volume and horizon</legend>
+<label for="members">Average covered members<input id="members" data-cost-key="members" type="number" min="0" step="1" value="100000" required>
+</label>
+<label for="derive">
+<input type="checkbox" id="derive" checked>Derive annual member months as average covered members × 12</label>
+<label for="memberMonths">Annual member months<input id="memberMonths" data-cost-key="memberMonths" type="number" min="0" step="1" value="1200000" required readonly>
+</label>
+<label for="horizon">Analysis horizon (whole years)<input id="horizon" data-cost-key="horizon" type="number" min="1" step="1" value="5" required max="50">
+</label>
+</fieldset>
+<fieldset>
+<legend>Annual recurring costs — enter each expense once</legend>
+<div class="cost-grid">
+<label for="currentPmpm">Current: recurring PMPM, including any PMPM licensing<input id="currentPmpm" data-cost-key="currentPmpm" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="alternativePmpm">Alternative: recurring PMPM, including any PMPM licensing<input id="alternativePmpm" data-cost-key="alternativePmpm" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="currentFixed">Current: annual fixed costs, including any fixed licensing<input id="currentFixed" data-cost-key="currentFixed" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="alternativeFixed">Alternative: annual fixed costs, including any fixed licensing<input id="alternativeFixed" data-cost-key="alternativeFixed" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="currentInfrastructure">Current: annual infrastructure<input id="currentInfrastructure" data-cost-key="currentInfrastructure" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="alternativeInfrastructure">Alternative: annual infrastructure<input id="alternativeInfrastructure" data-cost-key="alternativeInfrastructure" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="currentSupport">Current: annual support and maintenance<input id="currentSupport" data-cost-key="currentSupport" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="alternativeSupport">Alternative: annual support and maintenance<input id="alternativeSupport" data-cost-key="alternativeSupport" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="currentStaffing">Current: annual staffing and operations<input id="currentStaffing" data-cost-key="currentStaffing" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="alternativeStaffing">Alternative: annual staffing and operations<input id="alternativeStaffing" data-cost-key="alternativeStaffing" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="currentIntegration">Current: annual integration and change<input id="currentIntegration" data-cost-key="currentIntegration" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="alternativeIntegration">Alternative: annual integration and change<input id="alternativeIntegration" data-cost-key="alternativeIntegration" type="number" min="0" step="0.01" value="" required>
+</label>
+</div>
+<label for="licenseKnown">
+<input type="checkbox" id="licenseKnown">Alternative licensing is known and included once in alternative PMPM or fixed costs (enter an explicit zero only if supported by your terms).</label>
+<label for="supportKnown">
+<input type="checkbox" id="supportKnown">Alternative support is known and included once in alternative PMPM or support costs.</label>
+<p class="fine">Leave either unchecked if unknown. Complete alternative totals and payback will be withheld. A blank cost is unknown, not zero.</p>
+</fieldset>
+<fieldset>
+<legend>One-time costs and parallel operation</legend>
+<label for="transition">One-time transition and migration costs<input id="transition" data-cost-key="transition" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="exit">One-time exit costs<input id="exit" data-cost-key="exit" type="number" min="0" step="0.01" value="" required>
+</label>
+<label for="parallel">Incremental parallel-run costs across the entire horizon<input id="parallel" data-cost-key="parallel" type="number" min="0" step="0.01" value="" required>
+</label>
+<p class="fine">Parallel-run is the incremental total across the horizon, entered once. Exclude expenses already counted in either recurring scenario. One-time transition and exit are not annualized before calculation.</p>
+</fieldset>
+<button type="button" id="calculate">Calculate scenario</button> <button type="button" id="example" class="secondary">Load hypothetical example</button>
+<p id="calculator-error" role="alert" hidden>
+</p>
+</fieldset>
+</div>
+<noscript>
+<p>The calculator is unavailable without JavaScript. Financial inputs stay disabled and cannot be submitted. Formulas and the hypothetical example below remain available.</p>
+</noscript>
+</section>
+<section>
+<p class="eyebrow">02 / Compare</p>
+<h2>Your Modeled Results.</h2>
+<div id="calculator-results" class="results" aria-live="polite">
+<p>Enter explicit assumptions to calculate a complete scenario.</p>
+</div>
+<button type="button" id="print-results" disabled>Print scenario and assumptions</button>
+</section>
+<section>
+<p class="eyebrow">A hypothetical example</p>
+<h2>Lower PMPM Can Still Mean Higher Total Cost.</h2>
+<p>At 100,000 members (1,200,000 member months), current recurring PMPM of $2 and alternative PMPM of $1.50, with $100,000 annual fixed costs each, current annual cost is $2.5 million and alternative annual cost is $1.9 million. These example recurring costs include hypothetical licensing and support assumptions; they are not a vendor quote.</p>
+<p>Across three years, $2 million in transition/exit costs and $100,000 incremental parallel-run costs produce a current total of $7.5 million and alternative total of $7.8 million: <strong>$300,000 higher alternative cost</strong>, despite the lower recurring PMPM. Simple payback is 3.5 years, beyond the three-year horizon.</p>
+</section>
+<section>
+<p class="eyebrow">Method and limits</p>
+<h2>Make the Assumptions Reviewable.</h2>
+<p>V = annual member months; H = years; pA / pB = current / alternative PMPM; FA / FB = the sum of each scenario's annual fixed, infrastructure, support, staffing and integration costs; T = transition + exit; P = total incremental parallel-run costs.</p>
+<ul>
+<li>Current annual cost A = V × pA + FA</li>
+<li>Alternative annual cost B = V × pB + FB</li>
+<li>Current horizon cost = H × A</li>
+<li>Alternative horizon cost = H × B + T + P</li>
+<li>Modeled difference = H × (A − B) − T − P</li>
+<li>Effective alternative PMPM = (H × B + T + P) / (H × V)</li>
+<li>Simple payback = (T + P) / (A − B), only when A − B is positive</li>
+</ul>
+<p>This constant-volume, undiscounted model excludes taxes, inflation, financing, growth and the timing of cash flows. Simple payback is an approximation, especially when parallel-run expenses occur later. Validate assumptions with commercial and finance teams.</p>
+<a href="/founding-transformation-partners#strategy" data-ga-event="independence_strategy_cta_click" class="button">Discuss Your Independence Strategy</a>
+</section>
+</main>
+<footer>
+<a href="/">Cloud Health Office</a>
+<p>Health Plan Independence. Source-available administration.</p>
+<div class="footer-links">
+<a href="/platform">Platform</a>
+<a href="/start">Evaluator pack</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/services">Professional Services</a>
+<a href="/trust">Trust &amp; Security</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+<p class="fine">Source-available under BSL 1.1. Production use requires a commercial license. © 2026 Aurelianware, Inc.</p>
+</footer>
+</body>
+</html>

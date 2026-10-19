@@ -1,0 +1,141 @@
+{
+  "head": "dec71610ba665ef3ed7df69c0035a7b8ecc76bf0",
+  "preview": "https://pr-1411.cloudhealthoffice.pages.dev",
+  "checkedAt": "2026-10-19T23:00:12.055Z",
+  "checks": [
+    {
+      "route": "/",
+      "status": 200,
+      "location": null,
+      "noindex": "noindex",
+      "bodySha256": "92ef61c4f1e8af411928aef443e46d25a69e70e85bd9476a22528143fad981d4"
+    },
+    {
+      "route": "/index.html",
+      "status": 308,
+      "location": "/",
+      "noindex": null,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "route": "/health-plan-independence",
+      "status": 200,
+      "location": null,
+      "noindex": "noindex",
+      "bodySha256": "af2851c651f7e06d0e08b94ade0571a704afde64e570ebb8ea59d2c865a4e2c4"
+    },
+    {
+      "route": "/health-plan-independence.html",
+      "status": 308,
+      "location": "/health-plan-independence",
+      "noindex": null,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "route": "/health-plan-independence/",
+      "status": 308,
+      "location": "/health-plan-independence",
+      "noindex": null,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "route": "/economics-of-vendor-lock-in",
+      "status": 200,
+      "location": null,
+      "noindex": "noindex",
+      "bodySha256": "b4635650493b1e247584ca7978b0d124f6bf0c4d8c14c395432251cf545742eb"
+    },
+    {
+      "route": "/economics-of-vendor-lock-in.html",
+      "status": 308,
+      "location": "/economics-of-vendor-lock-in",
+      "noindex": null,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "route": "/economics-of-vendor-lock-in/",
+      "status": 308,
+      "location": "/economics-of-vendor-lock-in",
+      "noindex": null,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "route": "/ai-ready-health-plan-architecture",
+      "status": 200,
+      "location": null,
+      "noindex": "noindex",
+      "bodySha256": "e8b29c1a95186fd32e508a648963dbe59be19f6a916d1fd42a1609d9bf708130"
+    },
+    {
+      "route": "/ai-ready-health-plan-architecture.html",
+      "status": 308,
+      "location": "/ai-ready-health-plan-architecture",
+      "noindex": null,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "route": "/ai-ready-health-plan-architecture/",
+      "status": 308,
+      "location": "/ai-ready-health-plan-architecture",
+      "noindex": null,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "route": "/incremental-modernization",
+      "status": 200,
+      "location": null,
+      "noindex": "noindex",
+      "bodySha256": "7e41b2de4eec7bb2735605fc34f19ec28fa3a928ea1e117ec240ecd5f92885cf"
+    },
+    {
+      "route": "/incremental-modernization.html",
+      "status": 308,
+      "location": "/incremental-modernization",
+      "noindex": null,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "route": "/incremental-modernization/",
+      "status": 308,
+      "location": "/incremental-modernization",
+      "noindex": null,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "route": "/founding-transformation-partners",
+      "status": 200,
+      "location": null,
+      "noindex": "noindex",
+      "bodySha256": "bb9b586d74a349dd56230de2180c7e37dd78656dfcfd93eb4c281495cf82d57d"
+    },
+    {
+      "route": "/founding-transformation-partners.html",
+      "status": 308,
+      "location": "/founding-transformation-partners",
+      "noindex": null,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "route": "/founding-transformation-partners/",
+      "status": 308,
+      "location": "/founding-transformation-partners",
+      "noindex": null,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "route": "/docs/",
+      "status": 301,
+      "location": "/docs",
+      "noindex": null,
+      "bodySha256": "282470d864fe6e517317fa0db6b7f4ba4d233f3b29eb35e9961cf5cc26031b3c"
+    },
+    {
+      "route": "/js/pmpm-calculator.js",
+      "status": 200,
+      "location": null,
+      "noindex": "noindex",
+      "bodySha256": "9f302df27f1d88726589111275658449aaed994b46d76d892e77a29a9137e2c1"
+    }
+  ],
+  "verified": true
+}

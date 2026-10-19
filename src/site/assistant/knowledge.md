@@ -1,3 +1,6 @@
+## Executive positioning — October 19, 2026
+CloudHealthOffice is a source-available health plan administration platform designed to help health plans pursue greater operational and technological independence. The Future of Health Plan Administration Belongs to Health Plans. Source-available under BSL 1.1. Production use requires a commercial license. Your data / infrastructure / business rules / future is an aspiration, not a grant of unrestricted rights. Use /health-plan-independence, /economics-of-vendor-lock-in, /ai-ready-health-plan-architecture, /incremental-modernization and /founding-transformation-partners for the executive evaluation path. Partnership scope and terms require agreement; no customers, incentives or capacity are implied. Calculator inputs remain local, unknown licensing/support blocks totals, and results are scenarios rather than quotes. AI remains advisory; human oversight and payer-specific validation are required. This section supersedes earlier compliance-first positioning where inconsistent; the canonical capability ledger still governs technical claims.
+
 # Cloud Health Office — Assistant Knowledge Pack (ALLOWED ANSWERS)
 
 The on-site assistant answers **only** from this pack. It is a constrained product
@@ -34,9 +37,7 @@ already exists as published text on /pricing.
 ---
 
 ## One-liner
-Cloud Health Office is the claims platform you can put beside QNXT, Facets, or
-HealthEdge — for staged interoperability and modernization work without requiring an
-immediate core replacement.
+CloudHealthOffice is a source-available health plan administration platform designed to help health plans pursue greater operational and technological independence.
 
 ## What it is
 A payer administration platform — claims, benefits, eligibility, prior auth,
@@ -45,7 +46,7 @@ payments, and FHIR — that you deploy in your own Azure, AWS, or GCP. Source-av
 HealthEdge.
 
 ## What it is not
-- Not a clearinghouse. Availity, Change, and Stedi are pipes; Cloud Health Office is the plan's system.
+- Not a clearinghouse. The platform is intended for payer administration and can integrate with clearinghouses.
 - Not a hosted black-box SaaS that takes PHI out of the plan's boundary by default.
 - Not an overnight Facets/QNXT replacement.
 - Not Apache-licensed open source.

@@ -8,7 +8,8 @@
     "guides:capture:first-claim": "node scripts/capture-first-claim-guide.mjs",
     "guides:capture:pended-claim": "node scripts/capture-pended-claim-guide.mjs",
     "guides:capture:benefit-plans": "node scripts/capture-benefit-plan-guides.mjs",
-    "sitemap": "node scripts/generate-sitemap.mjs"
+    "sitemap": "node scripts/generate-sitemap.mjs",
+    "test:independence": "node --test tests/*.test.cjs"
   },
   "devDependencies": {
     "playwright": "^1.62.1"

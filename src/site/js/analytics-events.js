@@ -144,8 +144,7 @@
     // anonymous_id only and send a non-PII "identified" signal.
     choTrack('lead_identified', {
       anonymous_id: identifiedThisPage.anonymous_id,
-      has_company: identifiedThisPage.has_company,
-      role: identifiedThisPage.role
+      has_company: identifiedThisPage.has_company
     });
     try {
       if (typeof window.gtag === 'function') {
@@ -308,6 +307,10 @@
    * page_view_cho by path. Keyed on the normalized path (no trailing slash).
    */
   var PAGE_VIEW_EVENTS = {
+    '/health-plan-independence': 'manifesto_page_view',
+    '/economics-of-vendor-lock-in': 'economics_page_view',
+    '/ai-ready-health-plan-architecture': 'ai_architecture_page_view',
+    '/founding-transformation-partners': 'partnership_page_view',
     '/services': 'services_page_view',
     '/services/qnxt-cms-0057-f-adapter': 'qnxt_adapter_page_view',
     '/services/dental-payers': 'dental_payer_page_view',
@@ -332,7 +335,7 @@
   }
 
   /* ---------- scroll depth on key pages ---------- */
-  var SCROLL_PAGES = ['/', '/platform', '/cms-0057f-compliance', '/evidence', '/what-is', '/deploy', '/services'];
+  var SCROLL_PAGES = ['/health-plan-independence', '/ai-ready-health-plan-architecture', '/incremental-modernization', '/founding-transformation-partners', '/', '/platform', '/cms-0057f-compliance', '/evidence', '/what-is', '/deploy', '/services'];
   function initScrollDepth() {
     var path = pagePath().replace(/\/$/, '') || '/';
     if (SCROLL_PAGES.indexOf(path) === -1) return;

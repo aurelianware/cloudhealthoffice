@@ -1,917 +1,215 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CMS-0057-F FHIR APIs Beside QNXT, Facets &amp; HealthEdge | Cloud Health Office</title>
-  <meta name="description" content="Patient Access, Provider Access, Payer-to-Payer and Prior Auth FHIR APIs for health plans, deployed in your own cloud beside QNXT, Facets or HealthEdge." />
-  <link rel="canonical" href="https://cloudhealthoffice.com/" />
-
-  <!-- Open Graph -->
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Cloud Health Office" />
-  <meta property="og:url" content="https://cloudhealthoffice.com/" />
-  <meta property="og:title" content="CMS-0057-F FHIR APIs Beside QNXT, Facets &amp; HealthEdge | Cloud Health Office" />
-  <meta property="og:description" content="Patient Access, Provider Access, Payer-to-Payer and Prior Auth FHIR APIs for health plans, deployed in your own cloud beside QNXT, Facets or HealthEdge." />
-  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/claims-evidence-pipeline.jpg" />
-
-  <!-- Twitter / X -->
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:url" content="https://cloudhealthoffice.com/" />
-  <meta name="twitter:title" content="CMS-0057-F FHIR APIs Beside QNXT, Facets &amp; HealthEdge | Cloud Health Office" />
-  <meta name="twitter:description" content="Patient Access, Provider Access, Payer-to-Payer and Prior Auth FHIR APIs for health plans, deployed in your own cloud beside QNXT, Facets or HealthEdge." />
-  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/claims-evidence-pipeline.jpg" />
-
-  <!-- JSON-LD Structured Data -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    "name": "Cloud Health Office",
-    "url": "https://cloudhealthoffice.com",
-    "logo": "https://cloudhealthoffice.com/graphics/logo-cloudhealthoffice-sentinel-primary.svg",
-    "description": "Source-available payer platform with inspectable benchmark evidence, CMS-0057-F APIs, FHIR R4 workflows, multi-clearinghouse EDI, and your-cloud deployment.",
-    "foundingDate": "2024",
-    "contactPoint": {
-      "@type": "ContactPoint",
-      "email": "sales@cloudhealthoffice.com",
-      "contactType": "sales"
-    },
-    "sameAs": [
-      "https://github.com/aurelianware/cloudhealthoffice"
-    ]
-  }
-  </script>
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "Cloud Health Office",
-    "applicationCategory": "HealthApplication",
-    "operatingSystem": "Cloud (Azure, AWS, GCP, Kubernetes)",
-    "url": "https://cloudhealthoffice.com",
-    "softwareVersion": "2026",
-    "description": "Source-available payer infrastructure with inspectable claims-processing evidence, CMS-0057-F APIs, FHIR R4 workflows, and X12 EDI services. BSL 1.1 licensed.",
-    "author": {
-      "@type": "Organization",
-      "name": "Aurelianware, Inc.",
-      "url": "https://cloudhealthoffice.com"
-    }
-  }
-  </script>
-  <!-- Privacy-friendly analytics by Plausible -->
-  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
-  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()</script>
-  <link rel="stylesheet" href="css/sentinel.css" />
-  <link rel="stylesheet" href="css/editorial-visuals.css" />
-  <link rel="stylesheet" href="css/conversion.css" />
-  <link rel="stylesheet" href="css/services.css" />
-  <script src="js/auth.js"></script>
-  <script src="js/mobile-nav.js"></script>
-  <style>
-    .nav-dropdown {
-      position: relative;
-    }
-
-    .nav-dropdown-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .nav-dropdown-toggle::after {
-      content: '▾';
-      font-size: 0.75em;
-      opacity: 0.7;
-    }
-
-    .nav-dropdown-menu {
-      position: absolute;
-      top: calc(100% + 10px);
-      left: 0;
-      min-width: 240px;
-      background: rgba(5, 5, 10, 0.98);
-      border: 1px solid rgba(0, 255, 255, 0.18);
-      border-radius: 12px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
-      padding: 10px;
-      display: none;
-      z-index: 1200;
-    }
-
-    .nav-dropdown:hover .nav-dropdown-menu,
-    .nav-dropdown:focus-within .nav-dropdown-menu {
-      display: block;
-    }
-
-    .nav-dropdown-menu a {
-      display: block;
-      padding: 10px 12px;
-      border-radius: 8px;
-      white-space: nowrap;
-    }
-
-    .nav-dropdown-divider {
-      height: 1px;
-      background: rgba(0, 255, 255, 0.12);
-      margin: 8px 4px;
-    }
-
-    .audience-tabs {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 24px 80px;
-    }
-
-    .proof-quote {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 10px 0 10px 28px;
-      border-left: 2px solid #00ff88;
-    }
-
-    .proof-quote-text {
-      margin: 0;
-      font-family: Georgia, 'Times New Roman', serif;
-      font-size: clamp(1.45rem, 3vw, 2.2rem);
-      line-height: 1.5;
-      font-style: italic;
-      color: rgba(235,235,235,0.95);
-    }
-
-    .proof-quote-byline {
-      margin-top: 18px;
-      color: rgba(176,176,176,0.72);
-      font-size: 0.8rem;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      font-variant: small-caps;
-    }
-
-    .schedule-link {
-      display: inline-block;
-      margin-top: 18px;
-      font-size: 0.92rem;
-      color: rgba(176,176,176,0.72);
-      text-decoration: none;
-    }
-
-    .schedule-link:hover,
-    .schedule-link:focus-visible {
-      color: #00ffff;
-    }
-
-    @media (max-width: 960px) {
-      .nav-dropdown-menu {
-        position: static;
-        display: block;
-        min-width: 0;
-        margin-top: 8px;
-      }
-    }
-
-    @media (max-width: 768px) {
-      .proof-quote {
-        padding-left: 20px;
-      }
-
-      /* Mobile menu: lay the open menu out as block flow rather than a flex
-         column. The homepage nav contains the "Product" dropdown, and under
-         flex-column + max-height the submenu was compressed out of flow and
-         overlapped the links below it (CMS-0057-F, Evidence, Docs, Pricing,
-         Contact). Block flow lets the submenu push those items down. */
-      nav ul#mainNav.mobile-menu-open {
-        display: block;
-      }
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Health Plan Administration &amp; CMS-0057-F FHIR APIs, On Your Terms | CloudHealthOffice</title>
+<meta name="description" content="Source-available health plan administration, CMS-0057-F FHIR APIs and incremental modernization beside QNXT, Facets or HealthEdge. Explore technology independence.">
+<link rel="canonical" href="https://cloudhealthoffice.com/" />
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://cloudhealthoffice.com/">
+<meta property="og:title" content="Health Plan Administration &amp; CMS-0057-F FHIR APIs, On Your Terms">
+<meta property="og:description" content="Source-available health plan administration, CMS-0057-F FHIR APIs and incremental modernization beside QNXT, Facets or HealthEdge. Explore technology independence.">
+<meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/claims-evidence-pipeline.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Health Plan Administration &amp; CMS-0057-F FHIR APIs, On Your Terms">
+<meta name="twitter:description" content="Source-available health plan administration, CMS-0057-F FHIR APIs and incremental modernization beside QNXT, Facets or HealthEdge. Explore technology independence.">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Health Plan Administration &amp; CMS-0057-F FHIR APIs, On Your Terms", "description": "Source-available health plan administration, CMS-0057-F FHIR APIs and incremental modernization beside QNXT, Facets or HealthEdge. Explore technology independence.", "url": "https://cloudhealthoffice.com/", "publisher": {"@type": "Organization", "name": "Aurelianware, Inc."}}</script>
+<link rel="stylesheet" href="/css/independence.css">
+<script defer src="/js/mobile-nav.js">
+</script>
 </head>
-<body>
-  <a href="#main-content" class="skip-to-main">Skip to main content</a>
-
-  <!-- ===== CMS-0057-F DEADLINE VALUE BANNER ===== -->
-  <div id="fp-banner" role="region" aria-label="CMS-0057-F deadline" style="
-    background: linear-gradient(90deg, #001a0a 0%, #000d1a 50%, #001a0a 100%);
-    border-bottom: 1px solid rgba(0,255,136,0.3);
-    padding: 10px 20px;
-    text-align: center;
-    font-size: 0.9rem;
-    color: rgba(200,200,200,0.9);
-    position: relative;
-    z-index: 200;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  ">
-    <span>CMS-0057-F FHIR APIs are due January 1, 2027. Meet the mandate without replacing your core.</span>
-    <a href="/cms-0057f-compliance" style="
-      color: #00ff88;
-      font-weight: 600;
-      text-decoration: none;
-      white-space: nowrap;
-    " aria-label="Read the CMS-0057-F summary">Read the summary &rarr;</a>
-    <button id="fp-banner-dismiss" aria-label="Dismiss deadline banner" style="
-      background: none;
-      border: none;
-      color: rgba(200,200,200,0.5);
-      font-size: 1.1rem;
-      cursor: pointer;
-      padding: 0 4px;
-      line-height: 1;
-      position: absolute;
-      right: 16px;
-      top: 50%;
-      transform: translateY(-50%);
-    ">&times;</button>
-  </div>
-  <script>
-    (function() {
-      var btn = document.getElementById('fp-banner-dismiss');
-      if (btn) {
-        btn.addEventListener('click', function() {
-          var banner = document.getElementById('fp-banner');
-          if (banner) {
-            banner.style.display = 'none';
-            try { sessionStorage.setItem('fp-banner-dismissed', '1'); } catch(e) {}
-          }
-        });
-      }
-      try {
-        if (sessionStorage.getItem('fp-banner-dismissed')) {
-          var banner = document.getElementById('fp-banner');
-          if (banner) banner.style.display = 'none';
-        }
-      } catch(e) {}
-    })();
-  </script>
-
-  <!-- ===== NAVIGATION ===== -->
-  <nav>
-    <div class="nav-inner">
-      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
-        <img src="graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
-        <span class="nav-logo-lockup">
-          <span class="nav-logo-text">Cloud Health Office</span>
-          <span class="nav-logo-tagline">Payer claims platform. Compliance first. Core replacement optional.</span>
-        </span>
-      </a>
-      <div class="nav-right">
-        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
-        <ul id="mainNav">
-          <li class="nav-dropdown">
-            <a href="/platform" class="nav-dropdown-toggle">Product</a>
-            <div class="nav-dropdown-menu" aria-label="Product submenu">
-              <a href="/what-is">What is Cloud Health Office?</a>
-              <a href="/platform">Platform &amp; layers</a>
-              <a href="/solutions-payers">Solutions for payers</a>
-              <a href="/deploy">Deploy in your cloud</a>
-              <a href="/docs/architecture">Architecture</a>
-              <a href="/trust">Trust &amp; Security</a>
-              <div class="nav-dropdown-divider" aria-hidden="true"></div>
-              <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a>
-            </div>
-          </li>
-          <li><a href="/cms-0057f-compliance">CMS-0057-F</a></li>
-          <li><a href="/evidence">Evidence</a></li>
-          <li><a href="/docs">Docs</a></li>
-          <li><a href="/pricing">Pricing</a></li>
-          <li><a href="/services">Services</a></li><li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact</a></li>
-        </ul>
-      </div>
-    </div>
-  </nav>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      updateNavigation('#mainNav');
-    });
-  </script>
-
-  <main id="main-content">
-
-    <!-- ===== 1. HERO ===== -->
-    <section class="hero-section" aria-label="Cloud Health Office hero">
-      <div class="hero-circuit-bg" aria-hidden="true"></div>
-      <div class="hero-scan-line" aria-hidden="true"></div>
-      <div class="hero-radial" aria-hidden="true"></div>
-
-      <div class="hero-content">
-        <img src="graphics/logo-cloudhealthoffice-sentinel-primary.svg"
-             alt="Cloud Health Office The Sentinel"
-             class="hero-logo" />
-
-        <div class="hero-badge">Payer platform &nbsp;&middot;&nbsp; Source-available &nbsp;&middot;&nbsp; Runs in your cloud</div>
-
-        <h1 class="hero-headline">
-          Meet the 2027 FHIR deadline without<br>
-          replacing QNXT, Facets, or HealthEdge.
-        </h1>
-
-        <p class="hero-subheadline">
-          Cloud Health Office deploys beside your core admin system. It serves the CMS-0057-F APIs now,
-          then takes over claims domains when you are ready. It is a payer platform &mdash; not VMware CloudHealth or Salesforce Health Cloud.
-        </p>
-
-        <div class="hero-cta">
-          <a href="/contact"
-             class="button"
-             data-ga-event="talk_deployment_cta_click"
-             style="font-size:1.05rem; padding:15px 38px;">Talk about a deployment &rarr;</a>
-          <a href="/start"
-             class="button button-secondary"
-             data-ga-event="evaluator_pack_cta_click"
-             style="font-size:1.05rem; padding:15px 38px;">Get the evaluator pack &rarr;</a>
-        </div>
-
-        <p style="margin:0; font-size:0.85rem; color:rgba(176,176,176,0.6);">
-          Or <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:rgba(0,255,255,0.75);">run it locally / view source on GitHub</a>
-          &nbsp;&middot;&nbsp; <a href="/evidence" style="color:rgba(0,255,255,0.75);">inspect the public evidence</a>
-        </p>
-      </div>
-
-      <div class="hero-scroll-hint" aria-hidden="true">&darr; SCROLL</div>
-    </section>
-
-    <!-- ===== THREE TILES (business language) ===== -->
-    <section aria-label="Why Cloud Health Office" style="padding:48px 24px; background:#000; border-top:1px solid rgba(0,255,255,0.08);">
-      <div class="section-wrapper">
-        <div class="feature-grid">
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/><polyline points="9 12 11 14 15 10"/></svg>
-            </div>
-            <h3>Foothold &mdash; mandate beside the core</h3>
-            <p>Buy CMS-0057-F FHIR APIs in your cloud this year while QNXT, Facets, or HealthEdge stays the system of record.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><circle cx="7" cy="7.5" r="0.6"/><circle cx="7" cy="16.5" r="0.6"/></svg>
-            </div>
-            <h3>Your cloud, your data, inspectable source</h3>
-            <p>Deploy in your own Azure, AWS, or GCP. PHI stays inside your boundary. Source-available under BSL 1.1, so your security team can read the code.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 19V5"/><polyline points="4 15 9 10 13 13 20 6"/></svg>
-            </div>
-            <h3>1,000,000-claim adjudication evidence, published with limits</h3>
-            <p>We validated adjudication at one million deterministic synthetic claims &mdash; and publish the honest limits alongside the numbers.</p>
-          </div>
-        </div>
-        <p style="text-align:center; margin-top:28px; font-size:0.9rem; color:rgba(176,176,176,0.7);">
-          Then expand by domain, then core only if you choose. <a href="/platform#layers" style="color:#00ffff;">See the three-step ladder &rarr;</a>
-        </p>
-      </div>
-    </section>
-
-    <!-- ===== PLATFORM IN ONE VIEW ===== -->
-    <section id="platform-flow" aria-labelledby="claims-pipeline-heading" style="padding:1px 0 24px; background:linear-gradient(180deg,#000 0%,#020711 100%);">
-      <figure class="cho-visual cho-visual--lead">
-        <div class="cho-visual__intro">
-          <span class="cho-visual__eyebrow">The platform in one view</span>
-          <h2 id="claims-pipeline-heading" class="cho-visual__title">From raw claim to inspectable outcome.</h2>
-          <p class="cho-visual__summary">Cloud Health Office turns healthcare transactions into durable work, routes them through focused payer services, and preserves the evidence needed to explain what happened.</p>
-        </div>
-        <div class="cho-visual__frame">
-          <img class="cho-visual__image"
-               src="graphics/cloudhealthoffice/claims-evidence-pipeline.jpg"
-               width="1672" height="941"
-               loading="lazy"
-               alt="Healthcare transaction cards converge into a secure intake pipeline, move through an asynchronous message hub and modular payer services, then resolve into an evidence store, audit ledger, and verified claim outcome." />
-        </div>
-        <div class="cho-visual__key" aria-label="Claims platform flow">
-          <div class="cho-visual__key-item"><strong>1 · Intake</strong>X12 and API transactions become validated, durable work.</div>
-          <div class="cho-visual__key-item"><strong>2 · Adjudicate / authorize</strong>Eligibility, benefits, pricing, adjudication, and prior authorization.</div>
-          <div class="cho-visual__key-item"><strong>3 · Pay</strong>Payment services settle and reconcile independently.</div>
-          <div class="cho-visual__key-item"><strong>4 · Prove</strong>FHIR APIs plus a connected lifecycle and audit ledger.</div>
-        </div>
-        <figcaption class="cho-visual__caption">Conceptual platform view. Exact integrations and operating topology are validated for each payer environment.</figcaption>
-      </figure>
-    </section>
-
-    <!-- ===== 2. PROBLEM + LOW-RISK PATH ===== -->
-    <section id="cms-explainer" aria-label="The CMS-0057-F problem and the low-risk path" style="
-      background: linear-gradient(90deg, #000d1a 0%, #001a0a 50%, #000d1a 100%);
-      border-top: 1px solid rgba(0,255,136,0.2);
-      border-bottom: 1px solid rgba(0,255,136,0.2);
-      padding: 40px 24px;
-    ">
-      <div style="max-width: 860px; margin: 0 auto; text-align: center;">
-        <span class="section-eyebrow" style="color:#00ff88;">The problem &mdash; and the low-risk path</span>
-        <h2 style="font-size: clamp(1.4rem, 3vw, 2rem); color:#00ff88; text-shadow:0 0 20px rgba(0,255,136,0.3); margin: 12px 0 20px 0;">
-          The deadline is real. A full core replacement isn&rsquo;t the only answer.
-        </h2>
-        <p style="font-size: 1rem; color: rgba(200,200,200,0.85); line-height: 1.75; margin: 0 auto 24px auto; max-width: 720px;">
-          CMS-0057-F requires new FHIR APIs for patient access, prior authorization, and payer-to-payer exchange.
-          Waiting risks a scramble; ripping out your core admin system risks a multi-year, high-stakes project you don&rsquo;t have time for.
-          <br><br>
-          Cloud Health Office is the low-risk path: a compliance layer that sits <strong>alongside</strong> your existing core.
-          You meet the mandate in weeks &mdash; then modernize domain by domain, at your own pace, with your system of record intact.
-        </p>
-        <a href="/cms-0057f-compliance" class="button button-secondary" style="font-size:0.95rem; padding:12px 28px;">
-          Read the CMS-0057-F Summary &rarr;
-        </a>
-      </div>
-    </section>
-
-    <!-- ===== 3. PROOF (MILLION CLAIM CHALLENGE) ===== -->
-    <section class="compliance-section" aria-label="Million Claim Challenge proof">
-      <div class="section-wrapper">
-        <div class="section-header">
-          <span class="section-eyebrow" style="color:#00ffff;">Million Claim Challenge</span>
-          <h2 class="section-title">The proof is public.</h2>
-          <p class="section-subtitle">We validated adjudication at one million deterministic synthetic claims &mdash; and we publish the honest limits alongside the numbers.</p>
-        </div>
-
-        <div class="stats-inner stats-inner--proof" style="margin: 32px 0;">
-          <div class="stat-item">
-            <span class="stat-number">1M</span>
-            <span class="stat-label">Claims<br>Adjudicated</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-number">155.89</span>
-            <span class="stat-label">Claims/Sec<br>at 1M</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-number">0</span>
-            <span class="stat-label">Dead-Letter<br>Messages</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-number">$0.00</span>
-            <span class="stat-label">Average Payment Delta<br>(19,982 payment-comparable claims)</span>
-          </div>
-        </div>
-
-        <p style="text-align:center; color:#999; max-width:720px; margin:0 auto 28px;">
-          These figures are from local Docker Desktop Kubernetes validation, not a production-cloud capacity claim.
-          Every one of the 1,000,000 claims was verified terminal, with zero dead letters or pod restarts.
-        </p>
-
-        <div style="text-align:center;">
-          <a href="/docs/million-claim-challenge/evidence#episode-016" class="button">Inspect the Evidence Archive &rarr;</a>
-          <a href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus" class="button button-secondary">Read the Part 16 Write-up &rarr;</a>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== TRUST SIGNALS STRIP ===== -->
-    <section class="trust-strip" aria-label="Security and data-control commitments">
-      <div class="trust-strip__inner">
-        <div class="trust-item">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><circle cx="7" cy="7.5" r="0.6"/><circle cx="7" cy="16.5" r="0.6"/></svg>
-          <div>
-            <strong>Your cloud, your data</strong>
-            <span>Deploy in your own Azure, AWS, or GCP subscription. You own it permanently.</span>
-          </div>
-        </div>
-        <div class="trust-item">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.9 5.1A9 9 0 0 1 21 12a15 15 0 0 1-2.2 3M6.6 6.6A15 15 0 0 0 3 12a9 9 0 0 0 12 5.4"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><line x1="3" y1="3" x2="21" y2="21"/></svg>
-          <div>
-            <strong>PHI never leaves your walls</strong>
-            <span>No black-box vendor access to member data. Processing stays inside your environment.</span>
-          </div>
-        </div>
-        <div class="trust-item">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-          <div>
-            <strong>Private endpoints</strong>
-            <span>Network-isolated services and private connectivity, not the public internet.</span>
-          </div>
-        </div>
-        <div class="trust-item">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1H9V4z"/><line x1="8.5" y1="10" x2="15.5" y2="10"/><line x1="8.5" y1="14" x2="13.5" y2="14"/></svg>
-          <div>
-            <strong>Full audit evidence</strong>
-            <span>Every claim outcome carries a connected lifecycle and audit ledger you can inspect.</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== 4. HOW IT WORKS — THREE LAYERS ===== -->
-    <section aria-label="Three-layer engagement model">
-      <div class="section-wrapper">
-        <div class="section-header">
-          <span class="section-eyebrow">Where you start</span>
-          <h2 class="section-title">Three layers, at your pace.</h2>
-          <p class="section-subtitle">Most established payers start at Layer 1 &mdash; Foothold &mdash; and expand only when they&rsquo;re ready. Same platform, same team, no new vendor.</p>
-        </div>
-
-        <div class="feature-grid">
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/><polyline points="9 12 11 14 15 10"/></svg>
-            </div>
-            <h3>Layer 1 &mdash; Foothold</h3>
-            <p>What can we buy this year against the 1 Jan 2027 CMS-0057-F clock while QNXT, Facets, or HealthEdge stays the system of record? FHIR APIs in your cloud; the core stays authoritative. <strong style="color:#00ffff;">Most payers start here.</strong></p>
-          </div>
-
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><polyline points="21 3 21 9 15 9"/><path d="M3 12a9 9 0 0 1 15-6.7L21 9"/><polyline points="3 21 3 15 9 15"/><path d="M21 12a9 9 0 0 1-15 6.7L3 15"/></svg>
-            </div>
-            <h3>Layer 2 &mdash; Domain cutover</h3>
-            <p>Which one operational domain do we peel off the core without a rip-and-replace program? Prior auth, provider, eligibility, or claims intake. The core remains system of record for everything not cut over. Reversible.</p>
-          </div>
-
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.34 9.5 4 4 0 0 0 7 17.5h10.5z"/></svg>
-            </div>
-            <h3>Layer 3 &mdash; Core</h3>
-            <p>When, if ever, is Cloud Health Office the claims ledger? Only when you choose. Not a big-bang HealthEdge-style program, and not a claim that a live QNXT book has already moved.</p>
-          </div>
-        </div>
-
-        <p style="text-align:center; margin-top:32px; font-size:0.95rem; color:rgba(176,176,176,0.7);">
-          <a href="/platform#layers" style="color:#00ffff;">See the three-step ladder on the platform page &rarr;</a>
-        </p>
-      </div>
-    </section>
-
-    <!-- ===== 5. WHO IS THIS FOR ===== -->
-    <section aria-labelledby="audience-heading">
-      <div class="section-wrapper">
-        <div class="section-header">
-          <span class="section-eyebrow">Who this is for</span>
-          <h2 id="audience-heading" class="section-title">Built for payer operations teams.</h2>
-          <p class="section-subtitle">Medicare Advantage, Medicaid, and CHIP plans facing Jan 1, 2027 &middot; CIOs who will not sign a core replacement this budget cycle &middot; architects who want source and customer-owned cloud.</p>
-        </div>
-
-        <div class="feature-grid">
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><polygon points="13 2 4 14 11 14 10 22 20 9 13 9 13 2"/></svg>
-            </div>
-            <h3>CMS-0057-F Compliance Surface</h3>
-            <p>The FHIR APIs the mandate requires &mdash; patient access, prior authorization, payer-to-payer &mdash; running alongside your core without replacing the adjudication path.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>
-            </div>
-            <h3>Clearinghouse EDI + Prior Auth</h3>
-            <p>Outbound clearinghouse connectivity implemented against Stedi, with prior authorization workflows that replace manual and fax-based review. Availity and Change Healthcare adapters are scaffolds; additional clearinghouses are built per engagement.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><polyline points="21 3 21 9 15 9"/><path d="M3 12a9 9 0 0 1 15-6.7L21 9"/><polyline points="3 21 3 15 9 15"/><path d="M21 12a9 9 0 0 1-15 6.7L3 15"/></svg>
-            </div>
-            <h3>Domain cutover</h3>
-            <p>Replace your legacy core one domain at a time, on your schedule. Your system of record stays authoritative until you choose to cut over.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg>
-            </div>
-            <h3>Source-Available, Your Cloud</h3>
-            <p>Inspect every line and deploy in your own Azure, AWS, or GCP subscription. No black-box vendor lock-in; your data never leaves your walls.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== 6. HOW YOU ENGAGE ===== -->
-    <section id="engage" aria-labelledby="engage-heading" style="
-      padding: 80px 24px;
-      background: linear-gradient(180deg, #000 0%, #050510 100%);
-    ">
-      <div class="section-wrapper">
-        <div class="section-header">
-          <span class="section-eyebrow" style="color:#00ff88;">Get started</span>
-          <h2 id="engage-heading" class="section-title" style="color:#00ff88; text-shadow:0 0 30px rgba(0,255,136,0.3);">
-            Start where the risk is lowest.
-          </h2>
-          <p class="section-subtitle">
-            Evaluate the source and the evidence for free. When you are ready, we discuss a production
-            Layer&nbsp;1 deploy in your own cloud &mdash; and the terms for an early production tenant.
-          </p>
-        </div>
-
-        <div class="feature-grid">
-          <div class="feature-card" style="border-color: rgba(0,255,136,0.2);">
-            <h3 style="color:#00ff88;">1 &middot; Evaluate</h3>
-            <p>Run it locally, read the source, and inspect the Million Claim Challenge evidence. No form required.</p>
-            <p style="margin-top:14px;"><a href="/start" style="color:#00ffff;">Get the evaluator pack &rarr;</a></p>
-          </div>
-          <div class="feature-card" style="border-color: rgba(0,255,136,0.2);">
-            <h3 style="color:#00ff88;">2 &middot; Scope</h3>
-            <p>We map CHO to your core (QNXT, Facets, HealthEdge) and scope a CMS-0057-F Layer&nbsp;1 deployment in your cloud.</p>
-            <p style="margin-top:14px;"><a href="/deploy" style="color:#00ffff;">How deployment works &rarr;</a></p>
-          </div>
-          <div class="feature-card" style="border-color: rgba(0,255,136,0.2);">
-            <h3 style="color:#00ff88;">3 &middot; Deploy</h3>
-            <p>Deploy in your Azure, AWS, or GCP subscription &mdash; PHI never leaves your walls. First production deployment terms are on the deploy page.</p>
-            <p style="margin-top:14px;"><a href="/deploy#terms" style="color:#00ffff;">First production deployment terms &rarr;</a></p>
-          </div>
-        </div>
-
-        <div style="text-align: center; margin-top: 32px;">
-          <a href="/contact" class="button" style="font-size:1rem; padding:14px 36px;">
-            Talk about a deployment &rarr;
-          </a>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== 6b. SOFTWARE + DEPLOYMENT + SERVICES ===== -->
-    <section id="software-services" aria-labelledby="software-services-heading" class="cho-band">
-      <div class="cho-band__inner">
-        <div class="section-header">
-          <span class="section-eyebrow">Software &middot; Deployment &middot; Expertise</span>
-          <h2 id="software-services-heading" class="section-title">Software, deployment flexibility, and payer expertise</h2>
-          <p class="section-subtitle">
-            Cloud Health Office helps health plans connect CMS-0057-F requirements to existing payer operations
-            through flexible software, practical deployment options, and professional services.
-          </p>
-        </div>
-
-        <div class="cho-band__grid">
-          <div class="cho-band__card">
-            <h3>Software</h3>
-            <p>
-              The CMS-0057-F platform: FHIR R4 and Da Vinci workflows, core administration adapters, progressive
-              modernization, and published evidence. Source-available so your architects can read it first.
-            </p>
-            <a class="cho-band__more" href="/platform">Explore the platform &rarr;</a>
-          </div>
-          <div class="cho-band__card">
-            <h3>Deployment</h3>
-            <p>
-              Deploy it in your own cloud &mdash; available today. Have Aurelianware manage it in an environment you
-              control, or split operations under a shared-responsibility model, by engagement. A hosted service
-              is under evaluation.
-            </p>
-            <a class="cho-band__more" href="/deploy" data-ga-event="deployment_discussion_started">Compare operating models &rarr;</a>
-          </div>
-          <div class="cho-band__card">
-            <h3>Services</h3>
-            <p>
-              Implementation, architecture, vendor and SOW review, and fractional payer architecture leadership
-              &mdash; from the people who build the platform.
-            </p>
-            <a class="cho-band__more" href="/services" data-ga-event="platform_services_cta_click">Explore Professional Services &rarr;</a>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== 6c. EXPERTISE BEFORE SOFTWARE ===== -->
-    <section id="advisory" aria-labelledby="advisory-heading" class="cho-band" style="background:#000;">
-      <div class="cho-band__inner" style="max-width:820px; text-align:center;">
-        <span class="section-eyebrow" style="color:#00ff88;">Professional Services</span>
-        <h2 id="advisory-heading" class="section-title" style="color:#00ff88; text-shadow:0 0 30px rgba(0,255,136,0.3); margin-top:12px;">
-          Need expertise before you need software?
-        </h2>
-        <p class="section-subtitle">
-          Cloud Health Office Professional Services helps payer teams assess CMS-0057-F readiness, evaluate core
-          administration options, review vendor proposals, plan deployment, and lead complex interoperability
-          initiatives &mdash; whether or not Cloud Health Office ends up in the answer.
-        </p>
-        <p style="font-size:1.05rem; color:rgba(0,255,255,0.85); font-weight:600; margin-top:18px;">
-          Independent advice. Practical implementation. Software when it fits.
-        </p>
-        <div class="cho-band__actions">
-          <a href="/services" class="button" data-ga-event="platform_services_cta_click">Explore Professional Services &rarr;</a>
-          <a href="/contact?interest=fractional-architect" class="button button-secondary" data-ga-event="advisory_contact_started">Talk to an architect &rarr;</a>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== HOW IT WORKS (ENGAGEMENT PROCESS) ===== -->
-    <section aria-labelledby="how-it-works-heading" style="
-      padding: 80px 24px;
-      background: #000;
-      border-top: 1px solid rgba(0,255,255,0.08);
-    ">
-      <div class="section-wrapper">
-        <div class="section-header">
-          <span class="section-eyebrow">The Process</span>
-          <h2 id="how-it-works-heading" class="section-title">From first call to pilot</h2>
-          <p class="section-subtitle">From first call to a scoped pilot in under 8 weeks &mdash; in your own cloud subscription.</p>
-        </div>
-
-        <div style="
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-          gap: 32px;
-          margin-top: 48px;
-          counter-reset: step-counter;
-        ">
-          <div style="
-            background: rgba(255,255,255,0.02);
-            border: 1px solid rgba(0,255,255,0.12);
-            border-radius: 12px;
-            padding: 36px 28px;
-            position: relative;
-          ">
-            <div aria-hidden="true" style="
-              width: 40px; height: 40px;
-              border-radius: 50%;
-              background: rgba(0,255,255,0.1);
-              border: 1px solid rgba(0,255,255,0.3);
-              display: flex; align-items: center; justify-content: center;
-              font-size: 1.1rem; font-weight: 700; color: #00ffff;
-              margin-bottom: 20px;
-            ">1</div>
-            <h3 style="font-size: 1.15rem; margin-bottom: 10px;">Align on scope</h3>
-            <p style="font-size: 0.9rem; color: rgba(176,176,176,0.75); line-height: 1.65;">
-              We learn your current stack, your CMS-0057-F priorities, and the workflows that matter most.
-              Together we define a focused first milestone.
-            </p>
-            <p style="font-size: 0.82rem; color: rgba(0,255,255,0.5); margin-top: 14px; font-weight: 600;">1&ndash;2 weeks</p>
-          </div>
-
-          <div style="
-            background: rgba(255,255,255,0.02);
-            border: 1px solid rgba(0,255,255,0.12);
-            border-radius: 12px;
-            padding: 36px 28px;
-          ">
-            <div aria-hidden="true" style="
-              width: 40px; height: 40px;
-              border-radius: 50%;
-              background: rgba(0,255,255,0.1);
-              border: 1px solid rgba(0,255,255,0.3);
-              display: flex; align-items: center; justify-content: center;
-              font-size: 1.1rem; font-weight: 700; color: #00ffff;
-              margin-bottom: 20px;
-            ">2</div>
-            <h3 style="font-size: 1.15rem; margin-bottom: 10px;">Deploy to your subscription</h3>
-            <p style="font-size: 0.9rem; color: rgba(176,176,176,0.75); line-height: 1.65;">
-              We handle the full infrastructure setup in your Azure, AWS, or GCP environment. Your team watches
-              and approves &mdash; no black-box vendor access, no data ever leaves your walls.
-            </p>
-            <p style="font-size: 0.82rem; color: rgba(0,255,255,0.5); margin-top: 14px; font-weight: 600;">2&ndash;4 weeks</p>
-          </div>
-
-          <div style="
-            background: rgba(255,255,255,0.02);
-            border: 1px solid rgba(0,255,255,0.12);
-            border-radius: 12px;
-            padding: 36px 28px;
-          ">
-            <div aria-hidden="true" style="
-              width: 40px; height: 40px;
-              border-radius: 50%;
-              background: rgba(0,255,255,0.1);
-              border: 1px solid rgba(0,255,255,0.3);
-              display: flex; align-items: center; justify-content: center;
-              font-size: 1.1rem; font-weight: 700; color: #00ffff;
-              margin-bottom: 20px;
-            ">3</div>
-            <h3 style="font-size: 1.15rem; margin-bottom: 10px;">Validate &amp; co-develop</h3>
-            <p style="font-size: 0.9rem; color: rgba(176,176,176,0.75); line-height: 1.65;">
-              Your team validates the platform in a production-shaped environment. We run joint sprints to build out workflows, tune attribution
-              logic, and prioritize your roadmap based on measurable findings.
-            </p>
-            <p style="font-size: 0.82rem; color: rgba(0,255,136,0.5); margin-top: 14px; font-weight: 600;">Ongoing collaboration</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== EVIDENCE BRIDGE ===== -->
-    <section aria-label="Million Claim Challenge evidence point" style="
-      padding: 36px 24px 0;
-      background: linear-gradient(180deg, #050510 0%, #000 100%);
-      border-top: 1px solid rgba(0,255,255,0.08);
-    ">
-      <div class="proof-quote">
-        <p class="proof-quote-text">1,000,000 claims persisted. 1,000,000 eventually terminal. Zero dead letters. The run artifacts are public.</p>
-        <div class="proof-quote-byline">Episode 16 &middot; Local Kubernetes &middot; Azure Service Bus &middot; Local MongoDB</div>
-      </div>
-    </section>
-
-    <!-- ===== EVALUATOR / TALK NEXT STEP ===== -->
-    <section id="next-step" aria-labelledby="next-step-heading" style="
-      padding: 80px 24px;
-      background: #000;
-      border-top: 1px solid rgba(0,255,136,0.2);
-    ">
-      <div style="max-width: 760px; margin: 0 auto; text-align:center;">
-        <span class="section-eyebrow" style="color:#00ff88;">Two ways to move</span>
-        <h2 id="next-step-heading" class="section-title" style="color:#00ff88; text-shadow:0 0 30px rgba(0,255,136,0.3); margin-top:12px;">
-          Evaluate on your own, or talk about a deployment.
-        </h2>
-        <p class="section-subtitle" style="margin-bottom:32px;">
-          Engineers can clone and run it today. Teams scoping CMS-0057-F can get the evaluator pack
-          or book 30 minutes &mdash; we reply within one business day.
-        </p>
-        <div class="hero-cta" style="justify-content:center;">
-          <a href="/contact" class="button" style="font-size:1rem; padding:14px 34px;">Talk about a deployment &rarr;</a>
-          <a href="/start" class="button button-secondary" style="font-size:1rem; padding:14px 34px;">Get the evaluator pack &rarr;</a>
-        </div>
-        <p style="margin-top:18px; font-size:0.85rem; color:rgba(176,176,176,0.6);">
-          Prefer the source? <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:rgba(0,255,255,0.75);">Run it locally / view source on GitHub &rarr;</a>
-        </p>
-      </div>
-    </section>
-
-    <!-- ===== 7. BOTTOM CTA ===== -->
-    <section class="cta-section" style="margin: 100px auto; max-width: 1100px;">
-      <h2 style="margin-top:0;">Be Ready for CMS-0057-F.<br><span style="color:#00ff88;">On your terms.</span></h2>
-      <p style="max-width:700px; margin:0 auto 26px auto; color:rgba(176,176,176,0.8);">
-        Deploy in your cloud. Go live with your team. Move without betting your operations on a replatform.
-      </p>
-      <div>
-        <a href="/contact" class="button">Talk about a deployment &rarr;</a>
-        <a href="/start" class="button button-secondary">Get the evaluator pack &rarr;</a>
-      </div>
-    </section>
-  </main>
-
-  <!-- ===== STICKY PRIMARY CTA ===== -->
-  <div id="stickyCta" class="sticky-cta" role="region" aria-label="Get started with Cloud Health Office">
-    <p class="sticky-cta__text">Ready to meet CMS-0057-F on your terms?</p>
-    <a href="/contact" class="button sticky-cta__primary" data-ga-event="sticky_talk_deployment_click">Talk about a deployment &rarr;</a>
-    <a href="/start" class="button sticky-cta__secondary">Evaluator pack</a>
-  </div>
-  <script>
-    (function() {
-      var bar = document.getElementById('stickyCta');
-      var hero = document.querySelector('.hero-section');
-      var form = document.getElementById('next-step');
-      if (!bar || !hero) return;
-
-      function update() {
-        var show = hero.getBoundingClientRect().bottom < 0;
-        if (show && form) {
-          var r = form.getBoundingClientRect();
-          // Hide the bar while the next-step CTA band is on screen — it's redundant there.
-          if (r.top < window.innerHeight && r.bottom > 0) show = false;
-        }
-        bar.classList.toggle('visible', show);
-      }
-
-      window.addEventListener('scroll', update, { passive: true });
-      window.addEventListener('resize', update);
-      update();
-    })();
-  </script>
-
-  <!-- ===== FOOTER ===== -->
-  <footer class="site-footer">
-    <div class="footer-inner">
-      <div class="footer-grid">
-        <div class="footer-brand">
-          <h4>Cloud Health Office</h4>
-          <p>The compliance and modernization layer for legacy payer core admin systems. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
-          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
-          <p style="margin-top:14px;">
-            <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer"
-               aria-label="Cloud Health Office on GitHub"
-               style="display:inline-flex; align-items:center; gap:8px; color:rgba(176,176,176,0.85); font-size:0.85rem;">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.46-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.32 9.32 0 0 1 2.5-.34c.85 0 1.71.12 2.5.34 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.35 4.79-4.58 5.05.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.6.69.49A10.03 10.03 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"/></svg>
-              View source on GitHub
-            </a>
-          </p>
-        </div>
-        <div class="footer-col">
-          <h5>Product</h5>
-          <ul>
-            <li><a href="/what-is">What is Cloud Health Office?</a></li>
-            <li><a href="/platform">Platform</a></li>
-            <li><a href="/solutions-payers">Solutions</a></li>
-            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
-            <li><a href="/evidence">Evidence</a></li>
-            <li><a href="/deploy">Deploy</a></li>
-            <li><a href="/pricing">Pricing</a></li>
-            <li><a href="/release-notes">Release Notes</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h5>Documentation</h5>
-          <ul>
-            <li><a href="/docs/quickstart">Quick Start</a></li>
-            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
-            <li><a href="/docs/million-claim-challenge">Million Claim Challenge</a></li>
-            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
-            <li><a href="/docs/architecture">Architecture</a></li>
-            <li><a href="/trust">Trust &amp; Security</a></li>
-            <li><a href="/docs/api">API Reference</a></li>
-            <li><a href="/docs/deployment">Deployment</a></li>
-            <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h5>Company &amp; Contact</h5>
-          <ul>
-            <li><a href="/founder">Founder</a></li>
-            <li><a href="/contact">Contact</a></li><li><a href="/services">Professional Services</a></li>
-            <li><a href="/start">Get the evaluator pack</a></li>
-            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
-            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="footer-bottom">
-        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
-        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="legal/privacy-policy.html" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
-      </div>
-    </div>
-  </footer>
+<body class="independence">
+<a href="#main-content" class="skip-to-main">Skip to main content</a>
+<nav aria-label="Primary">
+<a class="brand" href="/">
+<img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="44" height="44">
+<span>Cloud Health Office<small>Health Plan Independence</small>
+</span>
+</a>
+<button id="mobileMenuToggle" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">Menu</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Why Independence</summary>
+<div>
+<a href="/health-plan-independence">Independence Manifesto</a>
+<a href="/economics-of-vendor-lock-in">Economics of Vendor Lock-In</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform Overview</a>
+<a href="/ai-ready-health-plan-architecture">AI-Ready Architecture</a>
+<a href="/incremental-modernization">Incremental Modernization</a>
+<a href="/deploy">Deployment</a>
+</div>
+</details>
+</li>
+<li>
+<a href="/cms-0057f-compliance">CMS-0057-F</a>
+</li>
+<li>
+<a href="/evidence">Evidence</a>
+</li>
+<li>
+<a href="/docs">Documentation</a>
+</li>
+<li>
+<a class="nav-cta" data-ga-event="independence_strategy_cta_click" href="/founding-transformation-partners#strategy">Discuss Your Independence Strategy</a>
+</li>
+</ul>
+</nav>
+<main id="main-content" tabindex="-1">
+<!-- ===== 1. HERO ===== -->
+<header class="hero">
+<p class="eyebrow">The future of health plan administration</p>
+<h1>The Future of Health Plan Administration <em>Belongs to Health Plans.</em>
+</h1>
+<h2>Stop Renting Your Health Plan's Future.</h2>
+<div class="intro">
+<p>Health plans have spent decades building their operations around proprietary platforms they don't fully control.</p>
+<p>At the dawn of AI, the question isn't simply whether your current platform can meet the next regulatory deadline. It's whether your organization should continue depending on technology it cannot fully inspect, operate, or evolve on its own terms.</p>
+<p>CloudHealthOffice is challenging that model with source-available health plan administration, customer-controlled infrastructure, and a practical path toward technology independence.</p>
+</div>
+<div class="actions">
+<a href="/founding-transformation-partners#strategy" data-ga-event="independence_strategy_cta_click" class="button">Discuss Your Independence Strategy</a>
+<a href="/health-plan-independence" class="button secondary">Read the Independence Manifesto</a>
+</div>
+<a href="/platform">Explore the Platform →</a>
+<p class="fine">Source-available under BSL 1.1. Production use requires a commercial license.</p>
+<div class="promise">Your data. Your infrastructure.<br>Your business rules. Your future.</div>
+<p class="fine">An aspiration for customer control, subject to licensing, operational responsibilities and agreed data access terms.</p>
+</header>
+<!-- ===== 2. INDEPENDENCE ===== -->
+<section>
+<p class="eyebrow">01 / The dependency question</p>
+<h2>Your Health Plan's Future Shouldn't Depend on Someone Else's Roadmap.</h2>
+<p>Technology dependency reaches beyond the age of a system. It shapes the choices available to your organization. Vendor arrangements differ; ask what your agreements and architecture actually allow.</p>
+<div class="questions">
+<p>Can your team modernize technology without waiting for a release?</p>
+<p>Can you inspect the business logic behind operational decisions?</p>
+<p>Can you integrate data and introduce AI with appropriate governance?</p>
+<p>Can you change workflows and understand the full cost?</p>
+<p>Do your vendor negotiations preserve practical alternatives?</p>
+</div>
+</section>
+<section>
+<p class="eyebrow">02 / Four dimensions</p>
+<h2>Independence You Can Evaluate.</h2>
+<div class="cards">
+<article>
+<span class="number">01</span>
+<h3>Infrastructure Independence</h3>
+<p>Operate in a customer-controlled environment with clearly defined operational responsibilities.</p>
+<a href="/deploy">Explore this dimension →</a>
+</article>
+<article>
+<span class="number">02</span>
+<h3>Data Independence</h3>
+<p>Establish explicit access to operational data, APIs, integration interfaces, and agreed retrieval procedures.</p>
+<a href="/docs/architecture">Explore this dimension →</a>
+</article>
+<article>
+<span class="number">03</span>
+<h3>Business Logic Transparency</h3>
+<p>Inspect implementation details and evaluate business rules under applicable licensing terms.</p>
+<a href="/health-plan-independence#principles">Explore this dimension →</a>
+</article>
+<article>
+<span class="number">04</span>
+<h3>Modernization Independence</h3>
+<p>Introduce new capabilities incrementally without requiring an immediate wholesale replacement of the existing administration platform.</p>
+<a href="/incremental-modernization">Explore this dimension →</a>
+</article>
+</div>
+</section>
+<section>
+<p class="eyebrow">03 / The AI inflection point</p>
+<h2>AI Changes the Economics of Technology Control.</h2>
+<p>AI creates opportunities to analyze operational data, assist workflows and improve decision support. Realizing them depends on data accessibility, integration architecture, governance and human oversight.</p>
+<p>CloudHealthOffice includes advisory rejection suggestions and a claims-examiner implementation. These are implementation evidence, with payer-specific integration and model evaluation still required. Autonomous adjudication and clinical decision-making are not established by that evidence.</p>
+<a href="/ai-ready-health-plan-architecture" data-ga-event="ai_architecture_cta_click">Explore AI-Ready Architecture →</a>
+</section>
+<section id="platform-flow" aria-labelledby="how-it-works-heading">
+<p class="eyebrow">04 / A practical progression</p>
+<h2 id="how-it-works-heading">Transformation Doesn't Have to Start With Replacing Your Core.</h2>
+<div id="claims-pipeline-heading">
+<ol class="progression">
+<li>Foothold</li>
+<li>Domain Cutover</li>
+<li>Core Modernization</li>
+</ol>
+</div>
+<p>Start with bounded workloads. Validate parallel operation, reconciliation, measurable acceptance criteria and rollback planning before expanding scope.</p>
+<a href="/incremental-modernization">Explore Incremental Modernization →</a>
+</section>
+<section>
+<p class="eyebrow">05 / Evidence before promises</p>
+<h2>Don't Take Our Word for It. Inspect the Evidence.</h2>
+<div class="evidence-links">
+<a href="https://github.com/aurelianware/cloudhealthoffice" data-ga-event="evidence_source_click">Public source repository</a>
+<a href="/docs/architecture" data-ga-event="evidence_source_click">Technical architecture</a>
+<a href="/evidence" data-ga-event="evidence_source_click">Synthetic workload evidence</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CAPABILITY_RECONCILIATION.md" data-ga-event="evidence_source_click">Capability documentation & known limitations</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/compliance/CMS-0057-F-READINESS-MATRIX.md" data-ga-event="evidence_source_click">Readiness assessments</a>
+</div>
+<p>Synthetic benchmarks and passing tests support evaluation; they do not establish production outcomes, full standards conformance or customer deployments.</p>
+<a href="/evidence">Explore the Evidence →</a>
+</section>
+<section>
+<p class="eyebrow">06 / The economics of independence</p>
+<h2>What Is Technology Dependency Really Costing Your Health Plan?</h2>
+<p>Licensing is one part of administration technology cost. Model infrastructure, support, staffing, integration, transition, exit and parallel operations using your own assumptions.</p>
+<a href="/economics-of-vendor-lock-in">Model Your Administration Economics →</a>
+</section>
+<section id="engage" aria-labelledby="engage-heading">
+<p class="eyebrow">07 / The invitation</p>
+<h2 id="engage-heading">Help Define the Next Generation of Health Plan Administration.</h2>
+<p>Explore a Founding Transformation Partnership: a structured evaluation of a bounded modernization workload, its evidence and the operating model needed to support it.</p>
+<div class="actions">
+<a href="/founding-transformation-partners#strategy" data-ga-event="independence_strategy_cta_click" class="button">Discuss Your Independence Strategy</a>
+<a href="/founding-transformation-partners#partnership" class="button secondary">Explore the Founding Transformation Partnership</a>
+</div>
+</section>
+<section id="cms-explainer" aria-labelledby="audience-heading">
+<p class="eyebrow">Continue your evaluation</p>
+<h2 id="audience-heading">CMS-0057-F, FHIR and Your Existing Core.</h2>
+<p>Keep interoperability work connected to the administration strategy. Explore Patient Access, Provider Access, Payer-to-Payer and Prior Authorization workflows alongside your existing core.</p>
+<a href="/cms-0057f-compliance">CMS-0057-F implementation →</a> · <a href="/docs">FHIR and API documentation →</a> · <a href="/start">Get the evaluator pack →</a>
+</section>
+<section id="software-services">
+<p class="eyebrow">Software and expertise</p>
+<h2 id="software-services-heading">Software, deployment flexibility, and payer expertise</h2>
+<p>Professional Services helps payer teams assess, deploy and integrate the platform, with independent architecture advice when another path fits better.</p>
+<a href="/services" data-ga-event="platform_services_cta_click">Explore Professional Services</a>
+</section>
+<section id="advisory">
+<div id="next-step">
+<p class="eyebrow">Independent architecture advice</p>
+<h2 id="next-step-heading">Plan the work with your team.</h2>
+<p id="advisory-heading"><a href="/contact" data-ga-event="deployment_discussion_started">Discuss deployment</a></p>
+</div>
+</section>
+</main>
+<footer>
+<a href="/">Cloud Health Office</a>
+<p>Health Plan Independence. Source-available administration.</p>
+<div class="footer-links">
+<a href="/platform">Platform</a>
+<a href="/start">Evaluator pack</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/services">Professional Services</a>
+<a href="/trust">Trust &amp; Security</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+<p class="fine">Source-available under BSL 1.1. Production use requires a commercial license. © 2026 Aurelianware, Inc.</p>
+</footer>
 </body>
 </html>
