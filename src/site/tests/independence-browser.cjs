@@ -205,6 +205,14 @@ const dist = path.resolve(__dirname, "../dist");
         ),
         fullPage: true,
       });
+      // Every executive page has a usable, focusable skip destination.
+      await p.goto(base + (slug === "index" ? "/" : "/" + slug));
+      await p.keyboard.press("Tab");
+      assert.equal(await p.evaluate(() => document.activeElement.className), "skip-to-main");
+      const outline = await p.locator(".skip-to-main").evaluate(el => getComputedStyle(el).outlineStyle);
+      assert.notEqual(outline, "none");
+      await p.keyboard.press("Enter");
+      assert.equal(await p.evaluate(() => document.activeElement.id), "main-content");
     }
     await keyboardAndFragments(p);
   }
