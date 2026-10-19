@@ -35,7 +35,12 @@ Startup ensures tenant/status indexes for expiration and approved service-end da
 
 The worker lists tenants without an HTTP context. Each expiry is a Mongo patch
 conditional on tenant, id, revision, approved/modified status and an ended period.
-Status, audit actor/timestamp, history and revision change atomically. A concurrent
+Status, audit actor/timestamp, history and revision change atomically.
+The original clinical A1/A2 outcome remains on the record. Reporting resolves
+clinical outcomes from decision history (with the stored code as a legacy fallback),
+so expiry/withdrawal does not erase approval metrics, original turnaround or
+automation provenance. Recent decisions expose both clinical `status` and current
+`lifecycleStatus`. Expired approvals remain in ended/unused-authorization reports. A concurrent
 period change or cancellation wins over a stale sweep. Unknown fields survive;
 legacy null history is initialized safely. No documents are deleted.
 

@@ -25,7 +25,7 @@ public interface IAuthorizationRepository
     Task<IEnumerable<Authorization>> ListActivityBetweenAsync(DateTime from, DateTime to);
 
     /// <summary>
-    /// The current tenant's approved authorizations (Approved or Modified)
+    /// The current tenant's approvals (Approved, Modified, or expired approvals)
     /// whose approved service period ended in [from, to]: the approved end
     /// date, or the expiration date when no end date was approved.
     /// </summary>

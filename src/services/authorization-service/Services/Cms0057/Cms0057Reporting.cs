@@ -26,6 +26,26 @@ public static class Cms0057Reporting
     public static bool IsApproved(AuthorizationStatus status) =>
         status is AuthorizationStatus.Approved or AuthorizationStatus.Modified;
 
+    /// <summary>Clinical outcome survives expiry/withdrawal; current lifecycle status is separate.</summary>
+    public static AuthorizationStatus DecisionStatus(Authorization auth)
+    {
+        if (IsDecided(auth.Status) || auth.Status is not (AuthorizationStatus.Expired or AuthorizationStatus.Cancelled))
+            return auth.Status;
+        var recorded = (auth.StatusHistory ?? new()).Where(h => IsDecided(h.Status))
+            .MaxBy(h => h.ChangedAt);
+        if (recorded is not null) return recorded.Status;
+        return auth.ReviewDecision switch
+        {
+            "A1" => AuthorizationStatus.Approved,
+            "A2" => AuthorizationStatus.Modified,
+            "A3" when auth.Status == AuthorizationStatus.Cancelled => AuthorizationStatus.Denied,
+            _ => auth.Status,
+        };
+    }
+
+    public static bool IsDecided(Authorization auth) => IsDecided(DecisionStatus(auth));
+    public static bool IsApproved(Authorization auth) => IsApproved(DecisionStatus(auth));
+
     public static bool IsExpedited(Authorization auth) =>
         string.Equals(auth.LevelOfService, "U", StringComparison.OrdinalIgnoreCase);
 
@@ -33,7 +53,7 @@ public static class Cms0057Reporting
         IsExpedited(auth) ? ExpeditedTimeframeHours : StandardTimeframeHours;
 
     public static double? DecisionHours(Authorization auth) =>
-        IsDecided(auth.Status) && auth.ReviewedDate is { } reviewed
+        IsDecided(auth) && auth.ReviewedDate is { } reviewed
             ? Math.Max(0, (reviewed - auth.SubmittedDate).TotalHours)
             : null;
 
@@ -41,11 +61,11 @@ public static class Cms0057Reporting
     /// The history entry that recorded the decision (the latest change to the
     /// current decided status), or null when the record carries no history.
     /// </summary>
-    public static AuthorizationStatusChange? DecisionEntry(Authorization auth) =>
-        auth.StatusHistory
-            .Where(h => h.Status == auth.Status)
-            .OrderByDescending(h => h.ChangedAt)
-            .FirstOrDefault();
+    public static AuthorizationStatusChange? DecisionEntry(Authorization auth)
+    {
+        var decision = DecisionStatus(auth);
+        return (auth.StatusHistory ?? new()).Where(h => h.Status == decision).MaxBy(h => h.ChangedAt);
+    }
 
     /// <summary>True when an automated rule, not a reviewer, made the decision.</summary>
     public static bool IsAutomated(Authorization auth) =>
@@ -67,7 +87,7 @@ public static class Cms0057Reporting
     {
         var inPeriod = InPeriod(authorizations, from, to, lineOfBusiness).ToList();
 
-        var decided = inPeriod.Where(a => IsDecided(a.Status)).ToList();
+        var decided = inPeriod.Where(a => IsDecided(a)).ToList();
         return new Cms0057Metrics
         {
             From = from,
@@ -91,17 +111,17 @@ public static class Cms0057Reporting
 
     private static Cms0057RequestTypeMetrics Group(IReadOnlyList<Authorization> requests, double timeframeHours)
     {
-        var decided = requests.Where(a => IsDecided(a.Status)).ToList();
+        var decided = requests.Where(a => IsDecided(a)).ToList();
         var hours = decided.Select(DecisionHours).OfType<double>().OrderBy(h => h).ToList();
         return new Cms0057RequestTypeMetrics
         {
             TimeframeHours = timeframeHours,
             Requests = requests.Count,
             Decided = decided.Count,
-            Approved = decided.Count(a => IsApproved(a.Status)),
-            Denied = decided.Count(a => a.Status == AuthorizationStatus.Denied),
-            ApprovedPercent = Percent(decided.Count(a => IsApproved(a.Status)), decided.Count),
-            DeniedPercent = Percent(decided.Count(a => a.Status == AuthorizationStatus.Denied), decided.Count),
+            Approved = decided.Count(a => IsApproved(a)),
+            Denied = decided.Count(a => DecisionStatus(a) == AuthorizationStatus.Denied),
+            ApprovedPercent = Percent(decided.Count(a => IsApproved(a)), decided.Count),
+            DeniedPercent = Percent(decided.Count(a => DecisionStatus(a) == AuthorizationStatus.Denied), decided.Count),
             AverageDecisionHours = hours.Count == 0 ? null : Math.Round(hours.Average(), 1),
             MedianDecisionHours = hours.Count == 0 ? null : Math.Round(Median(hours), 1),
             DecidedWithinTimeframe = hours.Count(h => h <= timeframeHours),
@@ -113,7 +133,7 @@ public static class Cms0057Reporting
         IEnumerable<Authorization> authorizations, DateTime since, int limit)
     {
         return authorizations
-            .Where(a => IsDecided(a.Status) && a.ReviewedDate >= since)
+            .Where(a => IsDecided(a) && a.ReviewedDate >= since)
             .OrderByDescending(a => a.ReviewedDate)
             .Take(limit)
             .Select(a =>
@@ -128,7 +148,8 @@ public static class Cms0057Reporting
                     MemberId = a.MemberId,
                     RequestingProviderName = a.RequestingProviderName,
                     RequestType = IsExpedited(a) ? "Expedited" : "Standard",
-                    Status = a.Status,
+                    Status = DecisionStatus(a),
+                    LifecycleStatus = a.Status,
                     SubmittedDate = a.SubmittedDate,
                     DecidedDate = a.ReviewedDate!.Value,
                     DecisionHours = hours is null ? null : Math.Round(hours.Value, 1),
@@ -138,7 +159,7 @@ public static class Cms0057Reporting
                     DecidedBy = IsAutomated(a)
                         ? entry?.Source
                         : a.ReviewerName ?? entry?.ChangedBy,
-                    Reason = a.Status == AuthorizationStatus.Denied
+                    Reason = DecisionStatus(a) == AuthorizationStatus.Denied
                         ? a.DenialReason ?? entry?.Reason
                         : entry?.Reason ?? a.ReviewDecision,
                     DenialReasonCode = a.DenialReasonCode,
@@ -191,6 +212,7 @@ public sealed record Cms0057MetricGap(string Metric, string Reason);
 
 public sealed class Cms0057Decision
 {
+    public AuthorizationStatus LifecycleStatus { get; set; }
     public string Id { get; set; } = string.Empty;
     public string AuthorizationNumber { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;
