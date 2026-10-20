@@ -9,6 +9,9 @@ public interface IAuthorizationValidationClient
     /// authorization-service is <see cref="AuthorizationLookupStatus.Unavailable"/>
     /// (D-04, owner decision Q-9 — a failed lookup never pays or denies).
     /// Cancellation of <paramref name="ct"/> itself still throws.
+    /// <paramref name="authorizationLineNumber"/> identifies a service on the
+    /// authorization, never the claim's line ordinal. Ambiguous matching is
+    /// Unavailable rather than a definitive clinical denial.
     /// </summary>
     Task<AuthorizationLookupResult> ValidateAsync(
         string tenantId,
@@ -16,7 +19,8 @@ public interface IAuthorizationValidationClient
         string? procedureCode,
         DateTime serviceDate,
         string? providerNpi,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        int? authorizationLineNumber = null);
 }
 
 /// <summary>Outcome of one prior-authorization lookup.</summary>
@@ -68,4 +72,5 @@ public sealed record AuthorizationValidationResult(
     DateTime? ApprovedServiceDateTo,
     DateTime? ExpirationDate,
     decimal? ApprovedUnits,
-    string? ValidationMessage);
+    string? ValidationMessage,
+    string? ValidationCode = null);

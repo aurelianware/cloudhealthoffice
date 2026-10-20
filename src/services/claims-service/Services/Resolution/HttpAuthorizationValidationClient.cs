@@ -49,7 +49,8 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
         string? procedureCode,
         DateTime serviceDate,
         string? providerNpi,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        int? authorizationLineNumber = null)
     {
         if (string.IsNullOrWhiteSpace(authorizationNumber))
         {
@@ -75,6 +76,13 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
             if (!string.IsNullOrWhiteSpace(providerNpi))
             {
                 url += $"&providerNpi={Uri.EscapeDataString(providerNpi.Trim())}";
+            }
+
+            if (authorizationLineNumber.HasValue)
+            {
+                if (authorizationLineNumber <= 0 || string.IsNullOrWhiteSpace(procedureCode))
+                    return AuthorizationLookupResult.Unavailable("authorization line reference requires a positive number and procedure code");
+                url += $"&lineNumber={authorizationLineNumber.Value.ToString(CultureInfo.InvariantCulture)}";
             }
 
             // Always claims-service's own identity, never the caller's (#1299
@@ -122,6 +130,12 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
             {
                 return Unavailable("authorization-service answered for a different authorization number", number, tenantId, response.StatusCode);
             }
+
+            // Ambiguous matching is not a clinical rejection. The message fallback
+            // supports the previous producer during a rolling deployment.
+            if (validation.ValidationCode == "AmbiguousServiceLine"
+                || validation.ValidationMessage == "Procedure occurs on multiple lines; specify lineNumber")
+                return AuthorizationLookupResult.Unavailable("authorization service line is ambiguous; provide the authorization line reference");
 
             return validation.IsValid
                 ? AuthorizationLookupResult.Valid(validation)
