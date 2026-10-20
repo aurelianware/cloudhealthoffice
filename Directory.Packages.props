@@ -51,7 +51,7 @@
     <PackageVersion Include="AngleSharp" Version="1.5.0" />
     <PackageVersion Include="AspNetCore.HealthChecks.NpgSql" Version="8.0.0" />
     <PackageVersion Include="AspNetCore.HealthChecks.Uris" Version="8.0.1" />
-    <PackageVersion Include="Azure.Core" Version="1.63.0" />
+    <PackageVersion Include="Azure.Core" Version="1.44.1" />
     <PackageVersion Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.4.0" />
     <!-- Field encryption key ring (CloudHealthOffice.FieldProtection): Azure.Core 1.44.1
          and Azure.Storage.Blobs 12.23.0 floors, so no Azure.Core 1.55 is pulled in. -->
@@ -147,7 +147,7 @@
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.13" />
     <PackageVersion Include="System.ServiceModel.Http" Version="8.0.0" />
-    <PackageVersion Include="System.Text.Json" Version="10.0.10" />
+    <PackageVersion Include="System.Text.Json" Version="8.0.6" />
     <PackageVersion Include="System.Text.RegularExpressions" Version="4.3.1" />
     <PackageVersion Include="System.Threading.Channels" Version="8.0.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
