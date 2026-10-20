@@ -167,6 +167,42 @@ public class CoveragePipelineAuthTests : IClassFixture<CoveragePipelineAuthTests
         c.GetProperty("terminationDate").GetString().Should().Be("2025-06-30T00:00:00");
     }
 
+    [Theory]
+    [InlineData("active")]
+    [InlineData("cob")]
+    public async Task Claims_service_token_is_accepted_for_pipeline_reads_and_scoped_to_its_tenant(string operation)
+    {
+        _factory.Coverage.Setup(r => r.GetActiveCoverageByMemberIdAsync("tenant-claims", "M1", It.IsAny<DateTime>(), null))
+            .ReturnsAsync(new List<Coverage>
+            {
+                new() { Id = "cov-claims", TenantId = "tenant-claims", MemberId = "M1", GroupNumber = "G", PlanId = "P",
+                    OtherInsurance = new OtherInsuranceInfo { PayerName = "Other payer", PolicyNumber = "OTHER-1", IsPrimaryPayer = false },
+                    EffectiveDate = DateTime.UtcNow.Date.AddMonths(-1), Status = CoverageStatus.Active },
+            });
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer",
+            ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("claims-service", "tenant-claims"));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-claims");
+
+        var response = await client.GetAsync($"/api/v1/coverage/member/M1/{operation}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        _factory.Coverage.Verify(r => r.GetActiveCoverageByMemberIdAsync("tenant-claims", "M1", It.IsAny<DateTime>(), null), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("active")]
+    [InlineData("cob")]
+    public async Task Claims_service_token_cannot_read_a_different_header_tenant(string operation)
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer",
+            ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("claims-service", "tenant-claims"));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-other");
+        (await client.GetAsync($"/api/v1/coverage/member/M1/{operation}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        _factory.Coverage.VerifyNoOtherCalls();
+    }
+
     // ── premium billing reads coverage with the Finance user's token ────
 
     /// <summary>The search premium-billing's CoverageServiceClient makes.</summary>
