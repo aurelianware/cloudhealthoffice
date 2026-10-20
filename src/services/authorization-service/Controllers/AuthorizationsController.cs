@@ -327,6 +327,7 @@ public class AuthorizationsController : ControllerBase
             ApprovedServiceDateTo = authorization.ApprovedServiceDateTo,
             ExpirationDate = authorization.ExpirationDate,
             ApprovedUnits = approvedUnits,
+            ValidationCode = ambiguousProcedure ? "AmbiguousServiceLine" : null,
             ValidationMessage = !isValid ? "Authorization not approved" :
                                !isActive ? "Authorization expired or not yet active" :
                                ambiguousProcedure ? "Procedure occurs on multiple lines; specify lineNumber" :

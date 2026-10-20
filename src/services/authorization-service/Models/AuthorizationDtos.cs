@@ -16,6 +16,8 @@ public class AuthorizationValidationResponse
     public DateTime? ExpirationDate { get; set; }
     public decimal? ApprovedUnits { get; set; }
     public string? ValidationMessage { get; set; }
+    /// <summary>Stable reason code; ambiguous matching requires line selection, not a clinical denial.</summary>
+    public string? ValidationCode { get; set; }
 }
 
 /// <summary>

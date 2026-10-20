@@ -708,6 +708,13 @@ public class ClaimLine
     public string? PriorAuthorizationNumber { get; set; }
 
     /// <summary>
+    /// Explicit service line number on the referenced authorization. Independent
+    /// of this claim's LineNumber; never inferred from an 837 LX sequence.
+    /// </summary>
+    [Range(1, int.MaxValue)]
+    public int? PriorAuthorizationLineNumber { get; set; }
+
+    /// <summary>
     /// MPIP rate multiplier applied to this line's allowed amount during adjudication.
     /// 1.063 if FL SMMC 3.0 enhanced rate applies, null if MPIP was not evaluated.
     /// </summary>

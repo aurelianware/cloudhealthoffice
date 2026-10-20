@@ -363,6 +363,7 @@ public class AdapterClaimLine
 
     /// <summary>837 2400 REF*G1; see <see cref="ClaimLine.PriorAuthorizationNumber"/>.</summary>
     public string? PriorAuthorizationNumber { get; set; }
+    public int? PriorAuthorizationLineNumber { get; set; }
     public decimal? MpipMultiplierApplied { get; set; }
     public AdapterLineAdjudicationResult? AdjudicationResult { get; set; }
 
@@ -383,6 +384,7 @@ public class AdapterClaimLine
         DrugQuantity = src.DrugQuantity,
         DrugUnitOfMeasure = src.DrugUnitOfMeasure,
         PriorAuthorizationNumber = src.PriorAuthorizationNumber,
+        PriorAuthorizationLineNumber = src.PriorAuthorizationLineNumber,
         MpipMultiplierApplied = src.MpipMultiplierApplied,
         AdjudicationResult = src.AdjudicationResult is null
             ? null
@@ -406,6 +408,7 @@ public class AdapterClaimLine
         DrugQuantity = DrugQuantity,
         DrugUnitOfMeasure = DrugUnitOfMeasure,
         PriorAuthorizationNumber = PriorAuthorizationNumber,
+        PriorAuthorizationLineNumber = PriorAuthorizationLineNumber,
         MpipMultiplierApplied = MpipMultiplierApplied,
         AdjudicationResult = AdjudicationResult?.ToLineAdjudicationResult(),
     };
