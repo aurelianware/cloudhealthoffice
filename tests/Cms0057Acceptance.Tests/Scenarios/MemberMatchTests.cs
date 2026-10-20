@@ -37,13 +37,16 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// </summary>
 public class MemberMatchTests
 {
-    private static PayerToPayerMemberMatchService Service()
+    private const string RequestingPayer = "receiving-payer-001";
+
+    private static PayerToPayerMemberMatchService Service(IPayerToPayerConsentAttestationStore? store = null)
     {
         var provider = new MockPatientAccessDataProvider();
         var source = new PatientAccessPayerToPayerMemberMatchSource(
             provider, Options.Create(new FhirAdapterOptions { TenantId = AcceptanceContext.TenantId }));
         return new PayerToPayerMemberMatchService(
-            source, AcceptanceContext.Logger<PayerToPayerMemberMatchService>());
+            source, store ?? new InMemoryPayerToPayerConsentAttestationStore(), AcceptanceContext.Directory(),
+            TimeProvider.System, AcceptanceContext.Logger<PayerToPayerMemberMatchService>());
     }
 
     private static MemberMatchRequest Req(
@@ -51,10 +54,13 @@ public class MemberMatchTests
         string? memberId = null, string? family = null, string? given = null,
         string? dob = null, string? gender = null, string? ssn = null,
         string? postalCode = null, string? phone = null, string? email = null,
-        string? requestedPayerId = null, string? requestedSubscriberId = null, string? asOf = null) => new()
+        string? requestedPayerId = null, string? requestedSubscriberId = null, string? asOf = null,
+        System.Text.Json.Nodes.JsonObject? consent = null, bool withConsent = true) => new()
     {
         TenantId = tenant,
-        ReceivingPayerId = "receiving-payer-001",
+        ReceivingPayerId = RequestingPayer,
+        // The member's consent, as the requesting payer collected it (ADR 022).
+        Consent = withConsent ? consent ?? AcceptanceContext.PdexConsent(RequestingPayer) : null,
         MemberId = memberId,
         FamilyName = family,
         GivenName = given,
@@ -359,22 +365,25 @@ public class MemberMatchTests
         // A match yields a stable CHO member id; that id flows straight into the
         // P2P-01 respond service (with the member's opt-in on record) and produces
         // the member's export — no re-matching, no unsafe guessing.
-        var match = await Service().MatchAsync(Req(family: "Smith", dob: "1955-07-14", memberId: "pat-001"));
+        // The match records the requesting payer's consent; the export that
+        // follows reads it from the same store, for that payer only.
+        var store = new InMemoryPayerToPayerConsentAttestationStore();
+        var match = await Service(store).MatchAsync(Req(family: "Smith", dob: "1955-07-14", memberId: "pat-001"));
         match.Outcome.Should().Be(MemberMatchOutcome.Matched);
 
         var provider = new MockPatientAccessDataProvider();
         var exportSource = new PatientAccessPayerToPayerMemberSource(
             provider, Options.Create(new FhirAdapterOptions { TenantId = AcceptanceContext.TenantId }));
-        var consent = AcceptanceContext.PayerToPayerConsentGate(match.MatchedMemberId!);
         var export = new PayerToPayerExchangeService(
-            new PayerToPayerMemberResolver(exportSource), new PatientAccessPayerToPayerExportSource(provider), consent,
+            new PayerToPayerMemberResolver(exportSource), new PatientAccessPayerToPayerExportSource(provider), store,
+            AcceptanceContext.Directory(), TimeProvider.System,
             new PayerToPayerExportBuilder(),
             AcceptanceContext.Logger<PayerToPayerExchangeService>());
 
         var result = await export.RespondAsync(new PayerToPayerExchangeRequest
         {
             TenantId = AcceptanceContext.TenantId,
-            ReceivingPayerId = "receiving-payer-001",
+            ReceivingPayerId = RequestingPayer,
             MemberId = match.MatchedMemberId,
         });
 
@@ -382,5 +391,80 @@ public class MemberMatchTests
         result.MatchedMemberId.Should().Be("pat-001");
         result.Bundle!.Entry!.Select(e => e.Resource).OfType<FhirPatient>()
             .Should().ContainSingle().Which.Id.Should().Be("pat-001");
+    }
+
+    // ── Consent (D-13, ADR 022) ─────────────────────────────────────────────────
+
+    [Theory]
+    [Trait("Scenario", "P2P-04")]
+    [Trait("Backend", "Replace")]
+    [InlineData("none")]
+    [InlineData("other-payer")]
+    [InlineData("regular")]
+    public async Task P2P04_Replace_WithoutAnAcceptableConsentNoMemberIsLookedAt(string kind)
+    {
+        var source = new RecordingSource();
+        var service = new PayerToPayerMemberMatchService(source, new InMemoryPayerToPayerConsentAttestationStore(),
+            AcceptanceContext.Directory(), TimeProvider.System, AcceptanceContext.Logger<PayerToPayerMemberMatchService>());
+        var request = kind switch
+        {
+            "none" => Req(memberId: "pat-001", family: "Smith", dob: "1955-07-14", withConsent: false),
+            "other-payer" => Req(memberId: "pat-001", family: "Smith", dob: "1955-07-14",
+                consent: AcceptanceContext.PdexConsent("other-payer-002")),
+            _ => Req(memberId: "pat-001", family: "Smith", dob: "1955-07-14",
+                consent: AcceptanceContext.PdexConsent(RequestingPayer, policy: PdexConsentValidator.RegularPolicy)),
+        };
+
+        var result = await service.MatchAsync(request);
+
+        result.Outcome.Should().Be(MemberMatchOutcome.ConsentNotAccepted);
+        result.Member.Should().BeNull();
+        source.Calls.Should().Be(0, "the consent is decided before any member is looked at");
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-04")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P04_Replace_AMatchRecordsTheConsentForTheRequestingPayerOnly()
+    {
+        var store = new InMemoryPayerToPayerConsentAttestationStore();
+
+        var match = await Service(store).MatchAsync(Req(family: "Smith", dob: "1955-07-14", memberId: "pat-001"));
+
+        match.Outcome.Should().Be(MemberMatchOutcome.Matched);
+        match.Audit.ConsentFingerprint.Should().NotBeNullOrEmpty();
+        store.Records.Should().ContainSingle().Which.Should().Match<PayerToPayerConsentAttestation>(a =>
+            a.MemberId == "pat-001" && a.ReceivingPayerId == RequestingPayer
+            && a.Policy == PdexConsentValidator.SensitivePolicy);
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-04")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P04_Replace_AFailedMatchRecordsNoConsent()
+    {
+        var store = new InMemoryPayerToPayerConsentAttestationStore();
+
+        (await Service(store).MatchAsync(Req(family: "Nobody", dob: "1900-01-01"))).Outcome
+            .Should().Be(MemberMatchOutcome.NoMatch);
+        store.Records.Should().BeEmpty();
+    }
+
+    private sealed class RecordingSource : IPayerToPayerMemberMatchSource
+    {
+        public int Calls { get; private set; }
+        public string ServedTenantId => AcceptanceContext.TenantId;
+
+        public Task<MemberMatchCandidates> GetCandidatesAsync(string tenantId, MemberMatchCriteria criteria, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult(MemberMatchCandidates.None);
+        }
+
+        public Task<IReadOnlyList<ChoCoverage>> GetCoveragesAsync(string tenantId, string memberId, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult<IReadOnlyList<ChoCoverage>>([]);
+        }
     }
 }

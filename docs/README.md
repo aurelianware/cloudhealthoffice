@@ -117,6 +117,7 @@ healthcare payer systems.
 - [FHIR Patient and Coverage served from CHO's own member and coverage services](adr/018-fhir-patient-coverage-from-cho-services.md)
 - [Extend without forking: the extension model and the plan edit service](adr/019-extension-model-plan-edit-service.md) ([contract v1](contracts/plan-edits/v1/README.md))
 - [Payer-to-Payer member data and member match from CHO's own services](adr/020-payer-to-payer-from-cho-services.md)
+- [Payer-to-Payer consent comes from the requesting payer, bound to it](adr/022-payer-to-payer-consent-from-the-requesting-payer.md)
 
 ## Roadmap
 

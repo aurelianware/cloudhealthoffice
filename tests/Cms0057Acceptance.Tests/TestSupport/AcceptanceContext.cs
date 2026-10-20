@@ -21,6 +21,47 @@ internal static class AcceptanceContext
 
     public static ILogger<T> Logger<T>() => NullLogger<T>.Instance;
 
+    /// <summary>CHO's own payer id in the Payer-to-Payer directory the scenarios use.</summary>
+    public const string LocalPayerId = "cloud-health-office";
+
+    public static Microsoft.Extensions.Options.IOptions<FhirService.Services.PayerToPayer.Outbound.PayerToPayerDirectoryOptions>
+        Directory() => Microsoft.Extensions.Options.Options.Create(
+            new FhirService.Services.PayerToPayer.Outbound.PayerToPayerDirectoryOptions { LocalPayerId = LocalPayerId });
+
+    /// <summary>
+    /// A consent store holding, for each member, an in-force consent the given
+    /// requesting payer supplied earlier (as a $member-match would record it).
+    /// </summary>
+    public static FhirService.Services.PayerToPayer.InMemoryPayerToPayerConsentAttestationStore AttestedFor(
+        string requestingPayerId, params string[] memberIds)
+    {
+        var store = new FhirService.Services.PayerToPayer.InMemoryPayerToPayerConsentAttestationStore();
+        foreach (var member in memberIds)
+            store.RecordAsync(new FhirService.Services.PayerToPayer.PayerToPayerConsentAttestation
+            {
+                TenantId = TenantId, MemberId = member, ReceivingPayerId = requestingPayerId,
+                Policy = FhirService.Services.PayerToPayer.PdexConsentValidator.SensitivePolicy,
+                PeriodStartUtc = DateTime.UtcNow.AddDays(-1), ConsentFingerprint = $"fp-{member}",
+                RecordedAtUtc = DateTime.UtcNow.AddDays(-1), RecordedBy = "acceptance",
+            }).GetAwaiter().GetResult();
+        return store;
+    }
+
+    /// <summary>
+    /// The member's HRex Payer-to-Payer consent as a requesting payer sends it
+    /// (ADR 022): naming <paramref name="requestingPayerId"/> as recipient and CHO
+    /// as source, in force from a day ago unless told otherwise.
+    /// </summary>
+    public static System.Text.Json.Nodes.JsonObject PdexConsent(
+        string requestingPayerId, DateTime? startUtc = null, DateTime? endUtc = null, string? policy = null)
+    {
+        var consent = FhirService.Services.PayerToPayer.PdexConsentBuilder.Build(
+            "Patient/member", requestingPayerId, LocalPayerId, startUtc ?? DateTime.UtcNow.AddDays(-1), endUtc);
+        if (policy is not null)
+            consent["policy"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["uri"] = policy });
+        return consent;
+    }
+
     /// <summary>An empty configuration (no MongoDB → services fall back to in-memory).</summary>
     public static IConfiguration EmptyConfig() =>
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();

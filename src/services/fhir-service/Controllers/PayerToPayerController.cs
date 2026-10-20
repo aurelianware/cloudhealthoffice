@@ -69,6 +69,7 @@ public sealed class PayerToPayerController : FhirControllerBase
             LastName = body.LastName,
             Dob = body.Dob,
             Gender = body.Gender,
+            Consent = body.Consent,
         };
 
         var result = await _exchange.RespondAsync(request, ct);
@@ -76,7 +77,8 @@ public sealed class PayerToPayerController : FhirControllerBase
         {
             PayerToPayerOutcome.Exported => Ok(result.Bundle),
             PayerToPayerOutcome.NotAuthorized => FhirForbidden(
-                "Member has not authorized a Payer-to-Payer exchange (no active opt-in consent)."),
+                "No consent from the requesting payer is in force for this member. Supply the member's HRex consent "
+                + "naming the requesting payer, with this request or with $member-match first."),
             PayerToPayerOutcome.AmbiguousMatch => FhirUnprocessable(
                 "The supplied identifiers matched more than one member; refusing to return data."),
             PayerToPayerOutcome.InsufficientCriteria => FhirBadRequest(
@@ -108,6 +110,12 @@ public sealed class PayerToPayerController : FhirControllerBase
 /// </summary>
 public sealed class PayerToPayerExportRequestDto
 {
+    /// <summary>
+    /// Optional: the member's HRex consent naming the requesting payer, for a
+    /// payer that skips $member-match (ADR 022).
+    /// </summary>
+    public System.Text.Json.Nodes.JsonObject? Consent { get; set; }
+
     public string? ReceivingPayerId { get; set; }
     public string? MemberId { get; set; }
     public string? LastName { get; set; }

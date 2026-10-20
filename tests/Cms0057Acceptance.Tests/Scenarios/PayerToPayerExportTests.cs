@@ -35,10 +35,12 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// </summary>
 public class PayerToPayerExportTests
 {
-    // Members with a server-side opt-in on record for the demo tenant. Consent is
-    // decided here, never from the request — a caller cannot self-attest it.
-    private static IPayerToPayerConsentGate Gate(params string[] membersWithP2pConsent) =>
-        AcceptanceContext.PayerToPayerConsentGate(membersWithP2pConsent);
+    // Members for whom the requesting payer's consent is on record (as its
+    // $member-match recorded it, ADR 022).
+    private const string RequestingPayer = "receiving-payer-001";
+
+    private static IPayerToPayerConsentAttestationStore Gate(params string[] membersWithP2pConsent) =>
+        AcceptanceContext.AttestedFor(RequestingPayer, membersWithP2pConsent);
 
     private static PayerToPayerExchangeService ServiceOverCho(params string[] optedInMembers)
     {
@@ -47,12 +49,14 @@ public class PayerToPayerExportTests
             provider, Options.Create(new FhirAdapterOptions { TenantId = AcceptanceContext.TenantId }));
         return new PayerToPayerExchangeService(
             new PayerToPayerMemberResolver(source), new PatientAccessPayerToPayerExportSource(provider), Gate(optedInMembers),
+            AcceptanceContext.Directory(), TimeProvider.System,
             new PayerToPayerExportBuilder(), AcceptanceContext.Logger<PayerToPayerExchangeService>());
     }
 
     private static PayerToPayerExchangeService ServiceOverSource(
         IPayerToPayerMemberSource source, params string[] optedInMembers) =>
         new(new PayerToPayerMemberResolver(source), new PatientAccessPayerToPayerExportSource(new MockPatientAccessDataProvider()), Gate(optedInMembers),
+            AcceptanceContext.Directory(), TimeProvider.System,
             new PayerToPayerExportBuilder(), AcceptanceContext.Logger<PayerToPayerExchangeService>());
 
     private static PayerToPayerExchangeRequest Request(
@@ -60,7 +64,7 @@ public class PayerToPayerExportTests
         string? dob = null, DateTime? exchangeDate = null) => new()
     {
         TenantId = tenant,
-        ReceivingPayerId = "receiving-payer-001",
+        ReceivingPayerId = RequestingPayer,
         MemberId = memberId,
         Dob = dob,
         ExchangeDateUtc = exchangeDate ?? new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc),
@@ -179,10 +183,9 @@ public class PayerToPayerExportTests
     [Trait("Backend", "Replace")]
     public async Task P2P01_Replace_MemberNotOptedIn_IsNotAuthorized_NoExport()
     {
-        // Consent is enforced, not bypassed: a matched member with no active
-        // opt-in yields NotAuthorized and no data. (This does not introduce a
-        // dedicated Payer-to-Payer ConsentType — P2P-03 stays PARTIAL.)
-        var result = await ServiceOverCho(/* pat-001 NOT opted in */).RespondAsync(Request("pat-001"));
+        // Consent is enforced, not bypassed: a matched member with no consent
+        // from the requesting payer on record yields NotAuthorized and no data.
+        var result = await ServiceOverCho(/* no consent on record */).RespondAsync(Request("pat-001"));
 
         result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
         result.Bundle.Should().BeNull();

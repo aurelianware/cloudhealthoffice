@@ -13,7 +13,12 @@ using Microsoft.Extensions.Options;
 namespace Cms0057Acceptance.Tests.Scenarios;
 
 /// <summary>
-/// P2P-03 — Payer-to-Payer opt-in enforcement as a first-class consent purpose.
+/// P2P-03 — Payer-to-Payer opt-in enforcement.
+///
+/// Inbound (CHO is the prior payer, ADR 022): the requesting payer collected the
+/// member's opt-in and supplies it as an HRex Consent naming itself; CHO records
+/// it per payer and serves only that payer. Outbound (CHO is the new payer): the
+/// member's opt-in is read from CHO's own registry, as below.
 ///
 /// Authorization for a Payer-to-Payer exchange is no longer "the member has some
 /// Active consent". It is an Active consent whose PURPOSE is
@@ -57,171 +62,156 @@ public class PayerToPayerConsentTests
         ExpiresAt = expiresAt,
     };
 
-    // ── Inbound respond ─────────────────────────────────────────────────────────
+    // ── Inbound respond: the requesting payer's consent, bound to that payer (D-13, ADR 022) ──
 
-    private static PayerToPayerExchangeService InboundWith(params ConfiguredConsentRecord[] consents)
+    private const string RequestingPayer = "receiving-payer-001";
+    private const string OtherPayer = "other-payer-002";
+
+    private static (PayerToPayerExchangeService Service, InMemoryPayerToPayerConsentAttestationStore Store) Inbound()
     {
         var provider = new MockPatientAccessDataProvider();
         var source = new PatientAccessPayerToPayerMemberSource(
             provider, Options.Create(new FhirAdapterOptions { TenantId = AcceptanceContext.TenantId }));
+        var store = new InMemoryPayerToPayerConsentAttestationStore();
 
-        return new PayerToPayerExchangeService(
+        return (new PayerToPayerExchangeService(
             new PayerToPayerMemberResolver(source), new PatientAccessPayerToPayerExportSource(provider),
-            AcceptanceContext.ConsentGateFor(consents),
+            store, AcceptanceContext.Directory(), TimeProvider.System,
             new PayerToPayerExportBuilder(),
-            AcceptanceContext.Logger<PayerToPayerExchangeService>());
+            AcceptanceContext.Logger<PayerToPayerExchangeService>()), store);
     }
 
-    private static PayerToPayerExchangeRequest InboundRequest(DateTime? exchangeDateUtc = null) => new()
+    private static PayerToPayerExchangeRequest InboundRequest(
+        System.Text.Json.Nodes.JsonObject? consent = null, string payer = RequestingPayer, string member = Member) => new()
     {
         TenantId = AcceptanceContext.TenantId,
-        ReceivingPayerId = "receiving-payer-001",
-        MemberId = Member,
-        ExchangeDateUtc = exchangeDateUtc ?? new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc),
+        ReceivingPayerId = payer,
+        MemberId = member,
+        ExchangeDateUtc = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc),
+        Consent = consent,
     };
 
     [Fact]
     [Trait("Scenario", "P2P-03")]
     [Trait("Backend", "Replace")]
-    public async Task P2P03_Replace_ActivePayerToPayerConsent_AuthorizesInboundRespond()
+    public async Task P2P03_Replace_AConsentNamingTheRequestingPayer_AuthorizesInboundRespond()
     {
-        var result = await InboundWith(Consent(ConsentPurposeOfUse.PayerToPayerExchange))
-            .RespondAsync(InboundRequest());
+        var (service, store) = Inbound();
+
+        var result = await service.RespondAsync(InboundRequest(AcceptanceContext.PdexConsent(RequestingPayer)));
 
         result.Outcome.Should().Be(PayerToPayerOutcome.Exported);
-        result.Bundle.Should().NotBeNull();
-
-        // The audit names WHICH authorization allowed the disclosure.
-        result.Audit.AuthorizingConsentId.Should().Be("consent-PayerToPayerExchange-Active");
-        result.Audit.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.Granted));
+        result.Audit.AuthorizingConsentId.Should().StartWith("p2p-consent:", "the decision names its evidence");
+        store.Records.Should().ContainSingle(r => r.ReceivingPayerId == RequestingPayer && r.MemberId == Member);
     }
 
     [Fact]
     [Trait("Scenario", "P2P-03")]
     [Trait("Backend", "Replace")]
-    public async Task P2P03_Replace_ProviderAccessConsentAlone_DoesNotAuthorizeInboundRespond()
+    public async Task P2P03_Replace_ARecordedConsentAuthorizesThatPayerAndNoOther()
     {
-        // The member authorized their providers to see their data. That is not
-        // permission to hand the record to another payer.
-        var result = await InboundWith(Consent(ConsentPurposeOfUse.ProviderAccess))
-            .RespondAsync(InboundRequest());
+        // The D-13 remainder: consent bound to the receiving payer. One payer's
+        // recorded consent opens this member to that payer only.
+        var (service, _) = Inbound();
+        (await service.RespondAsync(InboundRequest(AcceptanceContext.PdexConsent(RequestingPayer))))
+            .Outcome.Should().Be(PayerToPayerOutcome.Exported);
+
+        (await service.RespondAsync(InboundRequest())).Outcome.Should().Be(PayerToPayerOutcome.Exported,
+            "the same payer's consent is on record");
+        var other = await service.RespondAsync(InboundRequest(payer: OtherPayer));
+        other.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
+        other.Bundle.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-03")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P03_Replace_NoConsentOnRecord_IsNotAuthorized()
+    {
+        var (service, _) = Inbound();
+
+        var result = await service.RespondAsync(InboundRequest());
 
         result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
         result.Bundle.Should().BeNull();
-        result.Audit.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.NoConsentForPurpose));
+        result.Audit.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.NoConsentOnRecord));
     }
 
     [Fact]
     [Trait("Scenario", "P2P-03")]
     [Trait("Backend", "Replace")]
-    public async Task P2P03_Replace_ConsentWithNoPurposeRecorded_DoesNotAuthorizeInboundRespond()
+    public async Task P2P03_Replace_AConsentNamingAnotherPayer_IsRefused()
     {
-        // A generic Active consent — the pre-purpose record shape — authorizes
-        // nothing here. This is the ambiguity the purpose axis exists to remove,
-        // and the migration position: history is not reinterpreted.
-        var result = await InboundWith(Consent(ConsentPurposeOfUse.Unspecified))
-            .RespondAsync(InboundRequest());
+        // A payer cannot pass off a consent the member gave someone else.
+        var (service, store) = Inbound();
+
+        var result = await service.RespondAsync(InboundRequest(AcceptanceContext.PdexConsent(OtherPayer)));
 
         result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
-        result.Audit.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.NoConsentForPurpose));
-    }
-
-    [Fact]
-    [Trait("Scenario", "P2P-03")]
-    [Trait("Backend", "Replace")]
-    public async Task P2P03_Replace_BackDatedExchangeDate_DoesNotAuthorizeLapsedConsent()
-    {
-        // ExchangeDateUtc arrives ON THE REQUEST and anchors the five-year
-        // lookback window. It must not also decide WHEN authorization is judged.
-        // A consent still persisted Active but whose period has run out is the
-        // case that bites: expiry is compared against the evaluation instant, so
-        // a receiving payer that back-dates ExchangeDateUtc (or a delayed or
-        // replayed request) would be judged against consent as it stood while it
-        // was still in force. The authorization instant is the disclosure
-        // attempt — now — and CHO picks it, not the caller.
-        var request = InboundRequest(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-
-        var lapsedSinceThen = Consent(
-            ConsentPurposeOfUse.PayerToPayerExchange,
-            effectiveAt: new DateTime(2019, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            expiresAt: new DateTime(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-
-        var result = await InboundWith(lapsedSinceThen).RespondAsync(request);
-
-        result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
-        result.Bundle.Should().BeNull();
-        result.Audit.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.Expired));
-    }
-
-    [Fact]
-    [Trait("Scenario", "P2P-03")]
-    [Trait("Backend", "Replace")]
-    public async Task P2P03_Replace_FutureDatedExchangeDate_DoesNotAuthorizeNotYetEffectiveConsent()
-    {
-        // The mirror image: a forward-dated ExchangeDateUtc must not reach a
-        // consent that has not started yet. Same principle — the caller does not
-        // choose the authorization instant in either direction.
-        var request = InboundRequest(new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-
-        var startsLater = Consent(
-            ConsentPurposeOfUse.PayerToPayerExchange,
-            effectiveAt: DateTime.UtcNow.AddYears(2));
-
-        var result = await InboundWith(startsLater).RespondAsync(request);
-
-        result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
-        result.Audit.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.NotYetEffective));
+        result.Audit.ConsentFailure.Should().Be(nameof(PdexConsentFailure.UnknownParty));
+        store.Records.Should().BeEmpty();
     }
 
     [Theory]
     [Trait("Scenario", "P2P-03")]
     [Trait("Backend", "Replace")]
-    [InlineData(ConsentLifecycleStatus.Draft, nameof(ConsentAuthorizationReason.NotActivated))]
-    [InlineData(ConsentLifecycleStatus.Revoked, nameof(ConsentAuthorizationReason.Revoked))]
-    [InlineData(ConsentLifecycleStatus.Expired, nameof(ConsentAuthorizationReason.Expired))]
-    public async Task P2P03_Replace_ConsentNotInForce_DeniesInboundRespondWithItsOwnReason(
-        ConsentLifecycleStatus status, string expectedReason)
+    [InlineData(-30, -1)]   // ended yesterday
+    [InlineData(1, 30)]     // starts tomorrow
+    public async Task P2P03_Replace_AConsentNotInForce_IsRefused(int startDays, int endDays)
     {
-        var result = await InboundWith(Consent(ConsentPurposeOfUse.PayerToPayerExchange, status))
-            .RespondAsync(InboundRequest());
+        var (service, _) = Inbound();
+        var consent = AcceptanceContext.PdexConsent(RequestingPayer,
+            DateTime.UtcNow.AddDays(startDays), DateTime.UtcNow.AddDays(endDays));
+
+        var result = await service.RespondAsync(InboundRequest(consent));
 
         result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
-        result.Bundle.Should().BeNull();
-        // "They revoked" and "it lapsed" and "never activated" are different
-        // facts an operator needs to tell apart.
-        result.Audit.ConsentDecisionReason.Should().Be(expectedReason);
+        result.Audit.ConsentFailure.Should().Be(nameof(PdexConsentFailure.NotInForce));
     }
 
     [Fact]
     [Trait("Scenario", "P2P-03")]
     [Trait("Backend", "Replace")]
-    public async Task P2P03_Replace_ConsentThatHasLapsed_DeniesEvenWhilePersistedActive()
+    public async Task P2P03_Replace_ARecordedConsentLapsesAtItsEnd()
     {
-        // The registry may not have written the expiry transition yet. The policy
-        // applies the period itself, so a lapsed authorization cannot be used in
-        // the window before the store catches up.
-        var lapsed = Consent(
-            ConsentPurposeOfUse.PayerToPayerExchange,
-            ConsentLifecycleStatus.Active,
-            expiresAt: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        // Judged at the disclosure instant, not at the request's exchange date.
+        var (service, store) = Inbound();
+        await store.RecordAsync(new PayerToPayerConsentAttestation
+        {
+            TenantId = AcceptanceContext.TenantId, MemberId = Member, ReceivingPayerId = RequestingPayer,
+            Policy = PdexConsentValidator.SensitivePolicy,
+            PeriodStartUtc = DateTime.UtcNow.AddYears(-1), PeriodEndUtc = DateTime.UtcNow.AddMinutes(-1),
+            ConsentFingerprint = "f", RecordedAtUtc = DateTime.UtcNow.AddYears(-1), RecordedBy = "test",
+        });
 
-        var result = await InboundWith(lapsed).RespondAsync(InboundRequest());
-
-        result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
-        result.Audit.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.Expired));
+        (await service.RespondAsync(InboundRequest())).Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
     }
 
     [Fact]
     [Trait("Scenario", "P2P-03")]
     [Trait("Backend", "Replace")]
-    public async Task P2P03_Replace_ConsentForAnotherMember_DoesNotAuthorizeThisMember()
+    public async Task P2P03_Replace_TheRegularPolicyIsRefusedBecauseCHOCannotSegmentSensitiveData()
     {
-        var result = await InboundWith(
-                Consent(ConsentPurposeOfUse.PayerToPayerExchange, member: "pat-002"))
-            .RespondAsync(InboundRequest());
+        var (service, _) = Inbound();
+
+        var result = await service.RespondAsync(InboundRequest(
+            AcceptanceContext.PdexConsent(RequestingPayer, policy: PdexConsentValidator.RegularPolicy)));
 
         result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
-        result.Audit.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.NoConsentOnRecord));
+        result.Audit.ConsentFailure.Should().Be(nameof(PdexConsentFailure.SegmentationUnsupported));
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-03")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P03_Replace_OneMembersConsentDoesNotOpenAnother()
+    {
+        var (service, _) = Inbound();
+        (await service.RespondAsync(InboundRequest(AcceptanceContext.PdexConsent(RequestingPayer))))
+            .Outcome.Should().Be(PayerToPayerOutcome.Exported);
+
+        (await service.RespondAsync(InboundRequest(member: "pat-002"))).Outcome
+            .Should().BeOneOf(PayerToPayerOutcome.NotAuthorized, PayerToPayerOutcome.NoMatch);
     }
 
     // ── Outbound initiation ─────────────────────────────────────────────────────
@@ -302,6 +292,13 @@ public class PayerToPayerConsentTests
         result.Exchange.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.Granted));
         result.Exchange.ConsentEvaluatedAtUtc.Should().NotBeNull();
         result.Audit.AuthorizingConsentId.Should().Be("consent-PayerToPayerExchange-Active");
+
+        // Both calls carry the member's opt-in as an HRex consent the prior payer
+        // can bind: CHO as recipient, the prior payer as the only other party.
+        harness.Peer.Consents.Should().HaveCount(2).And.OnlyContain(c => c != null);
+        foreach (var consent in harness.Peer.Consents)
+            PdexConsentValidator.Validate(consent, "cloud-health-office", TargetPayer, DateTime.UtcNow)
+                .Valid.Should().BeTrue("a CHO prior payer would accept it");
     }
 
     [Theory]
@@ -445,17 +442,28 @@ public class PayerToPayerConsentTests
     [Trait("Backend", "Replace")]
     public async Task P2P03_Replace_ConsentIsNeverAcceptedFromACaller()
     {
-        // Structural: no request type on either direction carries an
-        // authorization the caller can assert.
-        var requestFields = typeof(PayerToPayerExchangeRequest).GetProperties()
-            .Concat(typeof(PayerToPayerOutboundRequest).GetProperties())
-            .Concat(typeof(FhirService.Controllers.PayerToPayerExportRequestDto).GetProperties())
+        // Structural. CHO's own outbound initiation takes no caller-asserted
+        // authorization: the member's opt-in is read from the registry. Inbound,
+        // the only consent a requesting payer can supply is an HRex Consent
+        // RESOURCE, validated and bound to that payer (ADR 022), never a flag.
+        var outboundFields = typeof(PayerToPayerOutboundRequest).GetProperties()
             .Concat(typeof(FhirService.Controllers.PayerToPayerInitiateRequestDto).GetProperties())
             .Select(p => p.Name);
-
-        requestFields.Should().NotContain(n =>
+        outboundFields.Should().NotContain(n =>
             n.Contains("consent", StringComparison.OrdinalIgnoreCase)
             || n.Contains("optIn", StringComparison.OrdinalIgnoreCase)
+            || n.Contains("authorized", StringComparison.OrdinalIgnoreCase)
+            || n.Contains("purpose", StringComparison.OrdinalIgnoreCase));
+
+        var inbound = typeof(PayerToPayerExchangeRequest).GetProperties()
+            .Concat(typeof(FhirService.Controllers.PayerToPayerExportRequestDto).GetProperties())
+            .Concat(typeof(MemberMatchRequest).GetProperties())
+            .Concat(typeof(FhirService.Controllers.MemberMatchRequestDto).GetProperties())
+            .ToList();
+        inbound.Where(p => p.Name.Contains("consent", StringComparison.OrdinalIgnoreCase))
+            .Should().OnlyContain(p => p.PropertyType == typeof(System.Text.Json.Nodes.JsonObject));
+        inbound.Select(p => p.Name).Should().NotContain(n =>
+            n.Contains("optIn", StringComparison.OrdinalIgnoreCase)
             || n.Contains("authorized", StringComparison.OrdinalIgnoreCase)
             || n.Contains("purpose", StringComparison.OrdinalIgnoreCase));
 
@@ -521,6 +529,7 @@ public class PayerToPayerConsentTests
     private sealed class RecordingPeer : IPayerToPayerRemoteClient
     {
         public List<string> Calls { get; } = [];
+        public List<System.Text.Json.Nodes.JsonObject?> Consents { get; } = [];
 
         /// <summary>Runs when the match is issued — lets a test revoke mid-exchange.</summary>
         public Action? OnMatch { get; set; }
@@ -531,6 +540,7 @@ public class PayerToPayerConsentTests
             PayerToPayerEndpoint endpoint, RemoteMemberMatchRequest request, CancellationToken ct = default)
         {
             Calls.Add("member-match");
+            Consents.Add(request.Consent);
             OnMatch?.Invoke();
             return Task.FromResult(RemoteCallResponse.Success(ConsentTestPackages.MatchBundle(RemoteMemberId)));
         }
@@ -539,6 +549,7 @@ public class PayerToPayerConsentTests
             PayerToPayerEndpoint endpoint, RemoteMemberDataRequest request, CancellationToken ct = default)
         {
             Calls.Add("member-data-export");
+            Consents.Add(request.Consent);
             return Task.FromResult(FailExport
                 ? RemoteCallResponse.Failure(RemoteCallOutcome.Unavailable)
                 : RemoteCallResponse.Success(ConsentTestPackages.ExportBundle(RemoteMemberId)));
