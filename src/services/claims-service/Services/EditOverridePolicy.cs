@@ -62,6 +62,7 @@ public sealed class EditOverridePolicy
     public const string MueDateClinical = "MUE_MAI3";
     public const string MueIndicatorUnknown = "MUE_MAI_UNKNOWN";
     public const string Duplicate = "DUPLICATE";
+    public const string PlanEdit = "PLAN_EDIT";
 
     public static readonly IReadOnlyList<EditOverrideRule> Defaults =
     [
@@ -73,6 +74,7 @@ public sealed class EditOverridePolicy
         new(MueDateClinical, "MUE, MAI 3: per day, clinical", OverrideLevel.Supervisor, true, true),
         new(MueIndicatorUnknown, "MUE, adjudication indicator not recorded", OverrideLevel.Supervisor, true, true),
         new(Duplicate, "Duplicate claim or line", OverrideLevel.Examiner, true, false),
+        new(PlanEdit, "The plan's own edit (its edit service)", OverrideLevel.Examiner, true, false),
     ];
 
     /// <summary>Rows that stay Never for Medicare and Medicaid whatever a tenant sets.</summary>
@@ -114,6 +116,8 @@ public sealed class EditOverridePolicy
     }
 
     public static string Category(DuplicateFindingSnapshot _) => Duplicate;
+
+    public static string Category(PlanEditFindingSnapshot _) => PlanEdit;
 
     /// <summary>The effective policy for a tenant and line of business.</summary>
     public IReadOnlyList<EditOverrideRule> For(string tenantId, LineOfBusiness lineOfBusiness)
