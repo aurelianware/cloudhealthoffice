@@ -59,4 +59,16 @@ public sealed class EvidencePolicyTests
         Assert.False(EvidencePolicy.PositiveControlPassed([], "control"));
         Assert.False(EvidencePolicy.PositiveControlPassed([new("control", "PASS", "test"), new("control", "PASS", "test")], "control"));
     }
+    [Fact] public void FhirCatalogRequiresItsOwnCompleteInventory()
+    {
+        var results = FhirSmartCampaign.ScenarioIds.Select(id => new CaseResult(id, "PASS", "test")).ToArray();
+        Assert.Equal(42, results.Length);
+        Assert.Equal(results.Length, results.Select(r => r.Id).Distinct().Count());
+        Assert.True(EvidencePolicy.IsCompletePass(true, results, FhirSmartCampaign.ScenarioIds));
+        Assert.False(EvidencePolicy.IsCompletePass(true, results, ClaimsAppealsCampaign.ScenarioIds));
+        Assert.False(EvidencePolicy.IsCompletePass(true, Passing(), FhirSmartCampaign.ScenarioIds));
+        Assert.False(EvidencePolicy.IsCompletePass(false, results, FhirSmartCampaign.ScenarioIds));
+        results[0] = results[0] with { Outcome = "FAIL" };
+        Assert.False(EvidencePolicy.IsCompletePass(true, results, FhirSmartCampaign.ScenarioIds));
+    }
 }
