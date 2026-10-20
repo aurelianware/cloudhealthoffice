@@ -417,8 +417,8 @@ These are the ground-truth numbers for Cloud Health Office as of the most recent
 | Adjudication/rules engines | 9 | BenefitEngine, FeeScheduleEngine, NcciEngine, CobEngine, RiskAdjustmentEngine, EncounterEngine, ClaimsScrubEngine, PriorAuthRuleEngine, ProviderVerificationEngine |
 | Supporting engine projects | 4 | DocumentStore, OperatingMode, ProviderEnrollmentService, ReferenceData (plus the `cho-enrollment-wiring` folder) |
 | Test projects | 66 | `*.Tests.csproj` files (the same count CI injects into `docs/guides/FEATURES.md`) |
-| Test methods | ~10,750 | xUnit `[Fact]` + `[Theory]` attributes; CI counts ~15,000 executed tests because theories expand |
-| Production C# lines | ~331,000 | Excluding tests, bin, obj, and migrations |
+| Test methods | ~10,850 | xUnit `[Fact]` + `[Theory]` attributes; CI counts ~15,000 executed tests because theories expand |
+| Production C# lines | ~333,000 | Excluding tests, bin, obj, and migrations |
 | Documentation lines | ~123,000 | Markdown and text under `docs/` |
 | Pricing framework | PMPM-based, pilot-specific | Indicative ranges are maintained in a private repository |
 

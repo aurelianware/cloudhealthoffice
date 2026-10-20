@@ -69,7 +69,7 @@ ffs-service 42%, Portal 47% and ProviderEnrollmentService 49%.
 
 | Finding | Disposition |
 | --- | --- |
-| FHIR Patient and Coverage served only synthetic data: `MockFhirDataAdapter` was the sole `IFhirDataAdapter` and was registered unconditionally (CAP-22) | Addressed in PR #1420 (open at the time of writing): Patient and Coverage served from member-service and coverage-service when bound to `ChoNative` (ADR 018, added by that PR). Encounter, Claim and the Payer-to-Payer member source remain mock |
+| FHIR Patient and Coverage served only synthetic data: `MockFhirDataAdapter` was the sole `IFhirDataAdapter` and was registered unconditionally (CAP-22) | Addressed in PR #1420 (merged 2026-10-20): Patient and Coverage served from member-service and coverage-service when bound to `ChoNative` ([ADR 018](../docs/adr/018-fhir-patient-coverage-from-cho-services.md)). Encounter, Claim and the Payer-to-Payer member source remain mock |
 | Database-per-tenant mode (`MongoDb:UseTenantScoping=true`) is refused by the claim-event outbox, accumulator outbox and authorization SLA watchdog | Documented in the security one-pager: isolation is shared-database with tenant filters |
 | `docs/status/MODULE-STATUS.md` last updated May 2026, five domains only | Fixed by this PR (October snapshot of all domains) |
 | `docs/POSITIONING.md` Canonical Facts from July 2026 (190K lines, 45 test projects) | Fixed by this PR; `scripts/verify-canonical-facts.sh` now recomputes them |
@@ -80,7 +80,7 @@ ffs-service 42%, Portal 47% and ProviderEnrollmentService 49%.
 
 ## Open items carried forward
 
-1. Rescore CMS-0057-F scenarios PAT-01, PROV-01 and P2P-01 once PR #1420 merges.
+1. Rescore CMS-0057-F scenarios PAT-01, PROV-01 and P2P-01 after PR #1420 (done in PR #1423: the data-source row moves S → P; all three stay GAP on data ADR 018 left on the mock or on missing PA data).
 2. Raise coverage on the lowest components listed above.
 3. Owner actions: credential rotation where `reference-data-service` ran shared;
    a precise statement of what any cloud subscription hosts.
