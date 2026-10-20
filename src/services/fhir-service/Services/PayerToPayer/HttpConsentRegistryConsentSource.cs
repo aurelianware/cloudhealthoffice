@@ -21,9 +21,11 @@ namespace FhirService.Services.PayerToPayer;
 /// the tenant and correlation propagation handlers attached, so consent-service
 /// sees the same tenant context the FHIR caller arrived with.
 ///
-/// Fail-closed: anything other than a successful, parseable response yields NO
-/// snapshots, and no snapshots means no authorization. A registry that is down
-/// stops the exchange rather than waving it through.
+/// Fail-closed: anything other than a successful, parseable response throws
+/// <see cref="ConsentRegistryUnavailableException"/>, which the evaluator turns
+/// into a refusal for every purpose. An empty list would not do: for an opt-out
+/// purpose (Provider Access) it means "never opted out", so a registry that is
+/// down would wave the disclosure through.
 /// </summary>
 public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSource, IConsentSource
 {
@@ -72,7 +74,7 @@ public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSourc
             _logger.LogWarning(
                 "Consent registry unreachable for tenant={Tenant} ({Fault}); authorization will be denied.",
                 LogSanitizer.Sanitize(tenantId), ex.GetType().Name);
-            return Array.Empty<ConsentAuthorizationSnapshot>();
+            throw new ConsentRegistryUnavailableException("The consent registry could not be read.");
         }
 
         using (response)
@@ -86,7 +88,7 @@ public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSourc
                     "Consent registry refused the call ({Status}) for tenant={Tenant}; check service "
                     + "authentication. Authorization will be denied.",
                     (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
-                return Array.Empty<ConsentAuthorizationSnapshot>();
+                throw new ConsentRegistryUnavailableException("The consent registry could not be read.");
             }
 
             if (response.StatusCode != HttpStatusCode.OK)
@@ -94,22 +96,22 @@ public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSourc
                 _logger.LogWarning(
                     "Consent registry returned {Status} for tenant={Tenant}; authorization will be denied.",
                     (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
-                return Array.Empty<ConsentAuthorizationSnapshot>();
+                throw new ConsentRegistryUnavailableException("The consent registry could not be read.");
             }
 
             try
             {
                 var payload = await response.Content
                     .ReadFromJsonAsync<ConsentSnapshotEnvelope>(JsonOptions, ct);
-                return payload?.Items ?? (IReadOnlyList<ConsentAuthorizationSnapshot>)
-                    Array.Empty<ConsentAuthorizationSnapshot>();
+                return payload?.Items
+                       ?? throw new ConsentRegistryUnavailableException("The consent registry returned no body.");
             }
             catch (Exception ex) when (ex is JsonException or NotSupportedException)
             {
                 _logger.LogWarning(
                     "Consent registry response could not be read for tenant={Tenant}; authorization will be denied.",
                     LogSanitizer.Sanitize(tenantId));
-                return Array.Empty<ConsentAuthorizationSnapshot>();
+                throw new ConsentRegistryUnavailableException("The consent registry could not be read.");
             }
         }
     }

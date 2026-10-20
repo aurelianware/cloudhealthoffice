@@ -29,7 +29,7 @@ namespace FhirService.Controllers;
 /// <c>patient|user|system/{Type}.read</c>, <c>TenantMiddleware</c> has already
 /// established the tenant, and the globally registered
 /// <c>ProviderAccessAuthorizationFilter</c> has already required attribution and
-/// an active ProviderAccess consent for any provider- or backend-shaped caller.
+/// no Provider Access opt-out for any provider- or backend-shaped caller.
 /// None of that is re-implemented here and none of it is opt-in.
 ///
 /// WHAT THIS CONTROLLER ADDS is the last control, the one only it can apply: the

@@ -57,6 +57,16 @@ public class Consent
     public ConsentPurposeOfUse PurposeOfUse { get; set; } = ConsentPurposeOfUse.Unspecified;
 
     /// <summary>
+    /// Whether this record permits or refuses <see cref="PurposeOfUse"/>. A
+    /// <see cref="ConsentProvision.Deny"/> record is the member's opt-out (for
+    /// Provider Access, which CMS-0057-F shares unless the member opts out):
+    /// activating it opts the member out, revoking it opts them back in.
+    /// Defaults to <see cref="ConsentProvision.Permit"/>, so records written
+    /// before the field existed keep their meaning.
+    /// </summary>
+    public ConsentProvision Provision { get; set; } = ConsentProvision.Permit;
+
+    /// <summary>
     /// Optional sub-category when the record falls under a heightened regulatory
     /// regime (42 CFR Part 2, state-law sensitive categories). Free-form string
     /// so the enum stays stable across sub-type additions. Known values:
@@ -185,6 +195,7 @@ public class Consent
         MemberId = MemberId,
         ConsentId = Id,
         PurposeOfUse = PurposeOfUse,
+        Provision = Provision,
         Status = (ConsentLifecycleStatus)(int)Status,
         EffectiveAt = EffectiveAt,
         ExpiresAt = ExpiresAt,

@@ -14,8 +14,9 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// shared ConsentAuthorizationPolicy.
 ///
 /// Provider Access requires ALL of: an authenticated caller, an adequate SMART
-/// scope, provider/member attribution, an active ProviderAccess-purpose consent,
-/// and tenant/member isolation. Authentication and SMART scope are enforced
+/// scope, provider/member attribution, no in-force ProviderAccess opt-out
+/// (CMS-0057-F shares unless the patient opts out; D-11), and tenant/member
+/// isolation. Authentication and SMART scope are enforced
 /// upstream (SmartScopeEnforcementMiddleware — see SEC-01 and the SmartAuth
 /// suite, which drives the composed decision over real HTTP); these tests pin the
 /// two controls this service owns and the independence of all of them.
@@ -95,21 +96,162 @@ public class ProviderAccessConsentTests
         ProviderId = provider,
     };
 
-    // ── Happy path ──────────────────────────────────────────────────────────────
+    private static ConfiguredConsentRecord OptOut(
+        ConsentPurposeOfUse purpose = ConsentPurposeOfUse.ProviderAccess,
+        ConsentLifecycleStatus status = ConsentLifecycleStatus.Active,
+        string member = Member,
+        DateTime? effectiveAt = null,
+        DateTime? expiresAt = null) => new()
+    {
+        MemberId = member,
+        ConsentId = $"opt-out-{purpose}-{status}",
+        PurposeOfUse = purpose,
+        Status = status,
+        Provision = ConsentProvision.Deny,
+        EffectiveAt = effectiveAt,
+        ExpiresAt = expiresAt,
+    };
+
+    // ── Sharing by default (CMS-0057-F opt-out, D-11) ───────────────────────────
 
     [Fact]
     [Trait("Scenario", "CONSENT-01")]
     [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_AttributedMemberWithProviderAccessConsent_IsAuthorized()
+    public async Task CONSENT01_Replace_AttributedMemberWhoNeverOptedOut_IsShared()
+    {
+        // CMS-0057-F: the payer shares with an attributed provider unless the
+        // patient opts out. No record is not a refusal.
+        var decision = await Service().AuthorizeAsync(Request());
+
+        decision.Allowed.Should().BeTrue();
+        decision.Attributed.Should().BeTrue();
+        decision.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.NotOptedOut));
+        decision.AuthorizingConsentId.Should().BeNull("no consent authorized it; sharing is the default");
+    }
+
+    [Fact]
+    [Trait("Scenario", "CONSENT-01")]
+    [Trait("Backend", "Replace")]
+    public async Task CONSENT01_Replace_ExplicitPermitOnRecord_IsSharedAndNamed()
     {
         var decision = await Service(consents: [Consent(ConsentPurposeOfUse.ProviderAccess)])
             .AuthorizeAsync(Request());
 
         decision.Allowed.Should().BeTrue();
-        decision.Attributed.Should().BeTrue();
-        // The decision names WHICH authorization permitted the disclosure.
         decision.AuthorizingConsentId.Should().Be("consent-ProviderAccess-Active");
         decision.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.Granted));
+    }
+
+    // ── PROV-03: the patient's opt-out is honoured, and only it stops sharing ──
+
+    [Fact]
+    [Trait("Scenario", "PROV-03")]
+    [Trait("Backend", "Replace")]
+    public async Task PROV03_Replace_SharingStopsWhenTheMemberOptsOutAndResumesWhenTheyOptBackIn()
+    {
+        // CMS-0057-F Provider Access: an attributed provider receives the
+        // member's data unless the member opts out. The member's three states,
+        // through the real attribution, registry evaluator and policy.
+        var never = await Service().AuthorizeAsync(Request());
+        var optedOut = await Service(consents: [OptOut()]).AuthorizeAsync(Request());
+        var optedBackIn = await Service(consents: [OptOut(status: ConsentLifecycleStatus.Revoked)]).AuthorizeAsync(Request());
+
+        never.Allowed.Should().BeTrue();
+        optedOut.Allowed.Should().BeFalse();
+        optedOut.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.OptedOut));
+        optedBackIn.Allowed.Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Scenario", "PROV-03")]
+    [Trait("Backend", "Replace")]
+    public async Task PROV03_Replace_AnOptOutCannotBeAssumedAwayWhenTheRegistryIsDown()
+    {
+        var decision = await Service(consentSource: new ThrowingConsentSource()).AuthorizeAsync(Request());
+
+        decision.Allowed.Should().BeFalse();
+        decision.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.RegistryUnavailable));
+    }
+
+    // ── Opting out ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    [Trait("Scenario", "CONSENT-01")]
+    [Trait("Backend", "Replace")]
+    public async Task CONSENT01_Replace_InForceOptOut_StopsSharing()
+    {
+        var decision = await Service(consents: [OptOut()]).AuthorizeAsync(Request());
+
+        decision.Allowed.Should().BeFalse();
+        decision.Reason.Should().Be(ProviderAccessDenialReason.ConsentDenied);
+        decision.Attributed.Should().BeTrue("the panel check passed; the opt-out is what refused");
+        decision.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.OptedOut));
+        decision.AuthorizingConsentId.Should().Be("opt-out-ProviderAccess-Active");
+    }
+
+    [Fact]
+    [Trait("Scenario", "CONSENT-01")]
+    [Trait("Backend", "Replace")]
+    public async Task CONSENT01_Replace_OptOutWinsOverAPermit()
+    {
+        var decision = await Service(consents: [Consent(ConsentPurposeOfUse.ProviderAccess), OptOut()])
+            .AuthorizeAsync(Request());
+
+        decision.Allowed.Should().BeFalse();
+        decision.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.OptedOut));
+    }
+
+    [Theory]
+    [Trait("Scenario", "CONSENT-01")]
+    [Trait("Backend", "Replace")]
+    [InlineData(ConsentLifecycleStatus.Revoked)]
+    [InlineData(ConsentLifecycleStatus.Expired)]
+    [InlineData(ConsentLifecycleStatus.Draft)]
+    public async Task CONSENT01_Replace_AnOptOutNotInForce_DoesNotStopSharing(ConsentLifecycleStatus status)
+    {
+        // Revoking the opt-out opts the member back in; a lapsed or never
+        // activated one refuses nothing.
+        var decision = await Service(consents: [OptOut(status: status)]).AuthorizeAsync(Request());
+
+        decision.Allowed.Should().BeTrue();
+        decision.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.NotOptedOut));
+    }
+
+    [Fact]
+    [Trait("Scenario", "CONSENT-01")]
+    [Trait("Backend", "Replace")]
+    public async Task CONSENT01_Replace_OptOutIsInForceOnlyWithinItsPeriod()
+    {
+        // Expiry and effective dates are applied at the evaluation instant.
+        var lapsed = await Service(consents:
+                [OptOut(effectiveAt: DateTime.UtcNow.AddYears(-2), expiresAt: DateTime.UtcNow.AddDays(-1))])
+            .AuthorizeAsync(Request());
+        var future = await Service(consents: [OptOut(effectiveAt: DateTime.UtcNow.AddDays(30))])
+            .AuthorizeAsync(Request());
+
+        lapsed.Allowed.Should().BeTrue();
+        future.Allowed.Should().BeTrue("the opt-out takes effect later");
+    }
+
+    [Fact]
+    [Trait("Scenario", "CONSENT-01")]
+    [Trait("Backend", "Replace")]
+    public async Task CONSENT01_Replace_AWithdrawnOptInIsHonouredAsAnOptOut()
+    {
+        // Under the opt-in model that preceded D-11, revoking a Provider Access
+        // consent was how a member said no. That refusal is not reversed.
+        var withdrawn = await Service(consents: [Consent(ConsentPurposeOfUse.ProviderAccess, ConsentLifecycleStatus.Revoked)])
+            .AuthorizeAsync(Request());
+        var renewed = await Service(consents:
+            [
+                Consent(ConsentPurposeOfUse.ProviderAccess, ConsentLifecycleStatus.Revoked),
+                Consent(ConsentPurposeOfUse.ProviderAccess),
+            ])
+            .AuthorizeAsync(Request());
+
+        withdrawn.Allowed.Should().BeFalse();
+        withdrawn.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.Revoked));
+        renewed.Allowed.Should().BeTrue("a permit in force after the withdrawal is the member's latest word");
     }
 
     // ── Purpose isolation ───────────────────────────────────────────────────────
@@ -117,134 +259,40 @@ public class ProviderAccessConsentTests
     [Fact]
     [Trait("Scenario", "CONSENT-01")]
     [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_PayerToPayerConsentAlone_DoesNotAuthorizeProviderAccess()
+    public async Task CONSENT01_Replace_OnlyAProviderAccessOptOutStopsProviderAccess()
     {
-        // The member authorized their data to move to another payer. That is not
-        // permission for a provider to read the record. The mirror of the P2P-03
-        // rule, decided by the same policy from the other side.
-        var decision = await Service(consents: [Consent(ConsentPurposeOfUse.PayerToPayerExchange)])
+        // Refusing Payer-to-Payer, or refusing "no purpose", is not refusing
+        // Provider Access: the purposes stay independent, from this side too.
+        var p2pOptOut = await Service(consents: [OptOut(ConsentPurposeOfUse.PayerToPayerExchange)])
+            .AuthorizeAsync(Request());
+        var noPurpose = await Service(consents: [OptOut(ConsentPurposeOfUse.Unspecified)])
+            .AuthorizeAsync(Request());
+        var p2pPermit = await Service(consents: [Consent(ConsentPurposeOfUse.PayerToPayerExchange)])
             .AuthorizeAsync(Request());
 
-        decision.Allowed.Should().BeFalse();
-        decision.Reason.Should().Be(ProviderAccessDenialReason.ConsentDenied);
-        decision.ConsentDecisionReason.Should()
-            .Be(nameof(ConsentAuthorizationReason.NoConsentForPurpose));
+        p2pOptOut.Allowed.Should().BeTrue();
+        noPurpose.Allowed.Should().BeTrue();
+        p2pPermit.Allowed.Should().BeTrue();
+        p2pPermit.AuthorizingConsentId.Should().BeNull("a Payer-to-Payer consent authorizes nothing here");
     }
+
+    // ── Attribution is independent of the opt-out ──────────────────────────────
 
     [Fact]
     [Trait("Scenario", "CONSENT-01")]
     [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_ConsentWithNoPurposeRecorded_DoesNotAuthorizeProviderAccess()
+    public async Task CONSENT01_Replace_NotAttributed_IsDeniedWhateverTheConsents()
     {
-        // A generic Active consent — the pre-purpose record shape — authorizes
-        // nothing here. History is not reinterpreted for this purpose either.
-        var decision = await Service(consents: [Consent(ConsentPurposeOfUse.Unspecified)])
+        // Sharing by default is sharing with the member's providers only. A
+        // permit does not create a treatment relationship either.
+        var none = await Service(panel: ["someone-else"]).AuthorizeAsync(Request());
+        var permit = await Service(panel: ["someone-else"], consents: [Consent(ConsentPurposeOfUse.ProviderAccess)])
             .AuthorizeAsync(Request());
 
-        decision.Allowed.Should().BeFalse();
-        decision.ConsentDecisionReason.Should()
-            .Be(nameof(ConsentAuthorizationReason.NoConsentForPurpose));
-    }
-
-    [Fact]
-    [Trait("Scenario", "CONSENT-01")]
-    [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_NoConsentOnRecord_DoesNotAuthorizeProviderAccess()
-    {
-        var decision = await Service().AuthorizeAsync(Request());
-
-        decision.Allowed.Should().BeFalse();
-        decision.Reason.Should().Be(ProviderAccessDenialReason.ConsentDenied);
-        decision.ConsentDecisionReason.Should()
-            .Be(nameof(ConsentAuthorizationReason.NoConsentOnRecord));
-    }
-
-    // ── Lifecycle — the same rules as Payer-to-Payer, from the shared policy ────
-
-    [Theory]
-    [Trait("Scenario", "CONSENT-01")]
-    [Trait("Backend", "Replace")]
-    [InlineData(ConsentLifecycleStatus.Draft, nameof(ConsentAuthorizationReason.NotActivated))]
-    [InlineData(ConsentLifecycleStatus.Revoked, nameof(ConsentAuthorizationReason.Revoked))]
-    [InlineData(ConsentLifecycleStatus.Expired, nameof(ConsentAuthorizationReason.Expired))]
-    public async Task CONSENT01_Replace_ConsentNotInForce_DeniesWithItsOwnReason(
-        ConsentLifecycleStatus status, string expectedReason)
-    {
-        var decision = await Service(
-                consents: [Consent(ConsentPurposeOfUse.ProviderAccess, status)])
-            .AuthorizeAsync(Request());
-
-        decision.Allowed.Should().BeFalse();
-        decision.ConsentDecisionReason.Should().Be(expectedReason);
-    }
-
-    [Fact]
-    [Trait("Scenario", "CONSENT-01")]
-    [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_LapsedConsent_DeniesEvenWhilePersistedActive()
-    {
-        // Expiry is applied by the policy at the evaluation instant, not trusted
-        // from the stored status.
-        var decision = await Service(consents:
-            [
-                Consent(ConsentPurposeOfUse.ProviderAccess,
-                    effectiveAt: DateTime.UtcNow.AddYears(-2),
-                    expiresAt: DateTime.UtcNow.AddDays(-1))
-            ])
-            .AuthorizeAsync(Request());
-
-        decision.Allowed.Should().BeFalse();
-        decision.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.Expired));
-    }
-
-    [Fact]
-    [Trait("Scenario", "CONSENT-01")]
-    [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_NotYetEffectiveConsent_Denies()
-    {
-        var decision = await Service(consents:
-            [
-                Consent(ConsentPurposeOfUse.ProviderAccess,
-                    effectiveAt: DateTime.UtcNow.AddDays(30))
-            ])
-            .AuthorizeAsync(Request());
-
-        decision.Allowed.Should().BeFalse();
-        decision.ConsentDecisionReason.Should()
-            .Be(nameof(ConsentAuthorizationReason.NotYetEffective));
-    }
-
-    // ── Attribution is independent of consent ──────────────────────────────────
-
-    [Fact]
-    [Trait("Scenario", "CONSENT-01")]
-    [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_ValidConsentButNoAttribution_IsDenied()
-    {
-        // The member authorized Provider Access generally; this provider is still
-        // not theirs. Consent does not create a treatment relationship.
-        var decision = await Service(
-                panel: ["someone-else"],
-                consents: [Consent(ConsentPurposeOfUse.ProviderAccess)])
-            .AuthorizeAsync(Request());
-
-        decision.Allowed.Should().BeFalse();
-        decision.Reason.Should().Be(ProviderAccessDenialReason.NotAttributed);
-        decision.Attributed.Should().BeFalse();
-    }
-
-    [Fact]
-    [Trait("Scenario", "CONSENT-01")]
-    [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_AttributedButNoConsent_IsDenied()
-    {
-        // And the converse: the member is on this provider's panel and still has
-        // not authorized the disclosure. Attribution does not imply consent.
-        var decision = await Service(panel: [Member]).AuthorizeAsync(Request());
-
-        decision.Allowed.Should().BeFalse();
-        decision.Reason.Should().Be(ProviderAccessDenialReason.ConsentDenied);
-        decision.Attributed.Should().BeTrue("the panel check passed; consent is what refused");
+        none.Allowed.Should().BeFalse();
+        none.Reason.Should().Be(ProviderAccessDenialReason.NotAttributed);
+        permit.Reason.Should().Be(ProviderAccessDenialReason.NotAttributed);
+        permit.Attributed.Should().BeFalse();
     }
 
     [Fact]
@@ -254,8 +302,7 @@ public class ProviderAccessConsentTests
     {
         // No caller identity means no panel can be checked. Fail closed rather
         // than treat an unidentified caller as universally attributed.
-        var decision = await Service(consents: [Consent(ConsentPurposeOfUse.ProviderAccess)])
-            .AuthorizeAsync(Request(provider: null));
+        var decision = await Service().AuthorizeAsync(Request(provider: null));
 
         decision.Allowed.Should().BeFalse();
         decision.Reason.Should().Be(ProviderAccessDenialReason.NoCallerIdentity);
@@ -266,10 +313,7 @@ public class ProviderAccessConsentTests
     [Trait("Backend", "Replace")]
     public async Task CONSENT01_Replace_NoMemberContext_IsDenied()
     {
-        // Nothing to evaluate consent against — a membership-wide read is refused
-        // rather than allowed to proceed unauthorized.
-        var decision = await Service(consents: [Consent(ConsentPurposeOfUse.ProviderAccess)])
-            .AuthorizeAsync(Request(member: string.Empty));
+        var decision = await Service().AuthorizeAsync(Request(member: string.Empty));
 
         decision.Allowed.Should().BeFalse();
         decision.Reason.Should().Be(ProviderAccessDenialReason.NoMemberContext);
@@ -280,10 +324,9 @@ public class ProviderAccessConsentTests
     [Fact]
     [Trait("Scenario", "CONSENT-01")]
     [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_ConsentFromAnotherTenant_DoesNotAuthorize()
+    public async Task CONSENT01_Replace_AnotherTenant_IsDenied()
     {
-        var decision = await Service(consents: [Consent(ConsentPurposeOfUse.ProviderAccess)])
-            .AuthorizeAsync(Request(tenant: "some-other-tenant"));
+        var decision = await Service().AuthorizeAsync(Request(tenant: "some-other-tenant"));
 
         decision.Allowed.Should().BeFalse();
     }
@@ -291,18 +334,33 @@ public class ProviderAccessConsentTests
     [Fact]
     [Trait("Scenario", "CONSENT-01")]
     [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_ConsentForAnotherMember_DoesNotAuthorize()
+    public async Task CONSENT01_Replace_OneMembersOptOutIsTheirsAlone()
     {
-        // pat-002 authorized Provider Access; pat-001 did not. The panel covers
-        // both, so only the consent match keeps them apart.
-        var decision = await Service(
-                panel: [Member, "pat-002"],
-                consents: [Consent(ConsentPurposeOfUse.ProviderAccess, member: "pat-002")])
-            .AuthorizeAsync(Request(member: Member));
+        var panel = new[] { Member, "pat-002" };
+        var consents = new[] { OptOut(member: "pat-002") };
 
-        decision.Allowed.Should().BeFalse();
-        decision.ConsentDecisionReason.Should()
-            .Be(nameof(ConsentAuthorizationReason.NoConsentOnRecord));
+        (await Service(panel, consents).AuthorizeAsync(Request(member: Member))).Allowed.Should().BeTrue();
+        (await Service(panel, consents).AuthorizeAsync(Request(member: "pat-002"))).Allowed.Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Scenario", "CONSENT-01")]
+    [Trait("Backend", "Replace")]
+    public void CONSENT01_Replace_AnOptOutRecordedForAnotherTenantOrMemberIsIgnored()
+    {
+        // The policy compares tenant and member on each record; a snapshot for
+        // someone else can neither refuse nor permit for this member.
+        var foreign = new ConsentAuthorizationSnapshot
+        {
+            TenantId = "some-other-tenant", MemberId = Member, ConsentId = "x",
+            PurposeOfUse = ConsentPurposeOfUse.ProviderAccess, Provision = ConsentProvision.Deny,
+            Status = ConsentLifecycleStatus.Active,
+        };
+
+        ConsentAuthorizationPolicy.EvaluateOptOut(AcceptanceContext.TenantId, Member,
+                ConsentPurposeOfUse.ProviderAccess, [foreign, foreign with { TenantId = AcceptanceContext.TenantId, MemberId = "pat-002" }],
+                DateTime.UtcNow)
+            .Allowed.Should().BeTrue();
     }
 
     // ── Registry failure ───────────────────────────────────────────────────────
@@ -310,31 +368,38 @@ public class ProviderAccessConsentTests
     [Fact]
     [Trait("Scenario", "CONSENT-01")]
     [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_UnreachableRegistry_DeniesRatherThanFallingBack()
+    public async Task CONSENT01_Replace_UnreachableRegistry_DeniesRatherThanAssumingNoOptOut()
     {
-        // An unreadable registry must not degrade to "SMART + attribution were
-        // fine, let it through". It is not permission.
-        var decision = await Service(
-                consentSource: new ThrowingConsentSource())
+        // Sharing by default must not become sharing when the registry is down:
+        // an unreadable registry cannot show the member has not opted out.
+        var decision = await Service(consentSource: new ThrowingConsentSource())
             .AuthorizeAsync(Request());
 
         decision.Allowed.Should().BeFalse();
         decision.Reason.Should().Be(ProviderAccessDenialReason.ConsentDenied);
+        decision.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.RegistryUnavailable));
         decision.Attributed.Should().BeTrue("attribution passed; the registry is what failed");
     }
 
-    [Fact]
+    [Theory]
     [Trait("Scenario", "CONSENT-01")]
     [Trait("Backend", "Replace")]
-    public async Task CONSENT01_Replace_MalformedRegistryResponse_Denies()
+    [InlineData(System.Net.HttpStatusCode.OK, "not json")]
+    [InlineData(System.Net.HttpStatusCode.OK, "null")]
+    [InlineData(System.Net.HttpStatusCode.ServiceUnavailable, "{}")]
+    [InlineData(System.Net.HttpStatusCode.Forbidden, "{}")]
+    [InlineData(System.Net.HttpStatusCode.NotFound, "{}")]
+    public async Task CONSENT01_Replace_AnUnusableRegistryAnswerDenies(System.Net.HttpStatusCode status, string body)
     {
-        // A source that answers with nothing usable authorizes nothing.
-        var decision = await Service(consentSource: new EmptyConsentSource())
-            .AuthorizeAsync(Request());
+        // The production HTTP source: any answer other than a readable 200 is a
+        // registry failure, never "no records on file".
+        var source = new HttpConsentRegistryConsentSource(new FixedResponse(status, body),
+            AcceptanceContext.Logger<HttpConsentRegistryConsentSource>());
+
+        var decision = await Service(consentSource: source).AuthorizeAsync(Request());
 
         decision.Allowed.Should().BeFalse();
-        decision.ConsentDecisionReason.Should()
-            .Be(nameof(ConsentAuthorizationReason.NoConsentOnRecord));
+        decision.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.RegistryUnavailable));
     }
 
     // ── Structural: coverage of every governed resource ────────────────────────
@@ -421,11 +486,17 @@ public class ProviderAccessConsentTests
             => throw new HttpRequestException("consent registry unreachable");
     }
 
-    private sealed class EmptyConsentSource : IConsentSource
+    private sealed class FixedResponse(System.Net.HttpStatusCode status, string body) : IHttpClientFactory
     {
-        public Task<IReadOnlyList<ConsentAuthorizationSnapshot>> GetConsentsAsync(
-            string tenantId, string memberId, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<ConsentAuthorizationSnapshot>>(
-                Array.Empty<ConsentAuthorizationSnapshot>());
+        public HttpClient CreateClient(string name) => new(new Handler(status, body)) { BaseAddress = new Uri("http://consent/") };
+
+        private sealed class Handler(System.Net.HttpStatusCode status, string body) : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+                Task.FromResult(new HttpResponseMessage(status)
+                {
+                    Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+                });
+        }
     }
 }

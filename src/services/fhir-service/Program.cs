@@ -223,7 +223,7 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsen
     FhirService.Services.PayerToPayer.ConsentRegistryPayerToPayerConsentGate>();
 
 // Provider Access authorization (CONSENT-01). Attribution and the
-// ProviderAccess-purpose consent decision, composed on top of the
+// ProviderAccess opt-out decision (D-11), composed on top of the
 // authentication and SMART-scope controls the middleware already enforces.
 builder.Services.Configure<FhirService.Services.ProviderAccess.ProviderAttributionOptions>(
     builder.Configuration.GetSection(
