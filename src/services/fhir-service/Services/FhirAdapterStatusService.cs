@@ -133,7 +133,7 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
         // HealthEdge) Provider Access integration exists.
         ("ProviderAccess", FhirAdapterModes.Demo,
             "ProviderAccessAuthorizationService (authentication + SMART scope + provider/member "
-            + "attribution + active ProviderAccess-purpose consent, each independent and mandatory, "
+            + "attribution + no ProviderAccess opt-out (shared unless the member opts out), each independent and mandatory, "
             + "composed fail-closed) enforced by a global ProviderAccessAuthorizationFilter over every "
             + "member-scoped FHIR resource"),
         // Payer-to-Payer over CHO-owned data: inbound respond (P2P-01),

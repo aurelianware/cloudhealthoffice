@@ -42,6 +42,141 @@ public class ConsentAuthorizationPolicyTests
         => ConsentAuthorizationPolicy.Evaluate(
             Tenant, Member, ConsentPurposeOfUse.PayerToPayerExchange, consents, Now);
 
+    private static ConsentAuthorizationSnapshot OptOut(
+        ConsentPurposeOfUse purpose = ConsentPurposeOfUse.ProviderAccess,
+        ConsentLifecycleStatus status = ConsentLifecycleStatus.Active,
+        DateTime? effectiveAt = null,
+        DateTime? expiresAt = null,
+        string consentId = "opt-out-1") =>
+        Snapshot(purpose, status, effectiveAt: effectiveAt, expiresAt: expiresAt, consentId: consentId)
+            with { Provision = ConsentProvision.Deny };
+
+    private static ConsentDecision EvaluateOptOut(params ConsentAuthorizationSnapshot[] consents)
+        => ConsentAuthorizationPolicy.EvaluateOptOut(
+            Tenant, Member, ConsentPurposeOfUse.ProviderAccess, consents, Now);
+
+    // ── Opt-in purposes and opt-out records ────────────────────────────────────
+
+    [Fact]
+    public void An_opt_out_never_authorizes_an_opt_in_purpose_and_wins_over_a_permit()
+    {
+        var alone = Evaluate(OptOut(ConsentPurposeOfUse.PayerToPayerExchange));
+        var withPermit = Evaluate(Snapshot(), OptOut(ConsentPurposeOfUse.PayerToPayerExchange));
+
+        alone.Allowed.Should().BeFalse();
+        withPermit.Allowed.Should().BeFalse();
+        withPermit.Reason.Should().Be(ConsentAuthorizationReason.OptedOut);
+        withPermit.ConsentId.Should().Be("opt-out-1");
+    }
+
+    [Fact]
+    public void A_lapsed_opt_out_leaves_an_opt_in_permit_in_force()
+        => Evaluate(Snapshot(), OptOut(ConsentPurposeOfUse.PayerToPayerExchange, ConsentLifecycleStatus.Revoked))
+            .Allowed.Should().BeTrue();
+
+    // ── Opt-out purposes ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Opt_out_with_nothing_on_record_allows_and_names_no_consent()
+    {
+        var decision = EvaluateOptOut();
+
+        decision.Allowed.Should().BeTrue();
+        decision.Reason.Should().Be(ConsentAuthorizationReason.NotOptedOut);
+        decision.ConsentId.Should().BeNull();
+    }
+
+    [Fact]
+    public void Opt_out_in_force_denies_and_wins_over_a_permit()
+    {
+        var decision = EvaluateOptOut(Snapshot(ConsentPurposeOfUse.ProviderAccess, consentId: "permit"), OptOut());
+
+        decision.Allowed.Should().BeFalse();
+        decision.Reason.Should().Be(ConsentAuthorizationReason.OptedOut);
+        decision.ConsentId.Should().Be("opt-out-1");
+    }
+
+    [Theory]
+    [InlineData(ConsentLifecycleStatus.Draft)]
+    [InlineData(ConsentLifecycleStatus.Revoked)]
+    [InlineData(ConsentLifecycleStatus.Expired)]
+    public void Opt_out_not_active_does_not_deny(ConsentLifecycleStatus status)
+        => EvaluateOptOut(OptOut(status: status)).Allowed.Should().BeTrue();
+
+    [Fact]
+    public void Opt_out_applies_only_within_its_period()
+    {
+        EvaluateOptOut(OptOut(expiresAt: Now)).Allowed.Should().BeTrue("expiry is exclusive of the instant");
+        EvaluateOptOut(OptOut(effectiveAt: Now.AddSeconds(1))).Allowed.Should().BeTrue();
+        EvaluateOptOut(OptOut(effectiveAt: Now)).Allowed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_revoked_permit_is_a_refusal_until_a_permit_is_in_force_again()
+    {
+        var revoked = Snapshot(ConsentPurposeOfUse.ProviderAccess, ConsentLifecycleStatus.Revoked, consentId: "old");
+
+        EvaluateOptOut(revoked).Reason.Should().Be(ConsentAuthorizationReason.Revoked);
+        EvaluateOptOut(revoked, Snapshot(ConsentPurposeOfUse.ProviderAccess, consentId: "new"))
+            .Reason.Should().Be(ConsentAuthorizationReason.Granted);
+    }
+
+    [Fact]
+    public void A_members_newer_word_overrides_their_earlier_revocation()
+    {
+        var t0 = Now.AddYears(-2);
+        var revoked = Snapshot(ConsentPurposeOfUse.ProviderAccess, ConsentLifecycleStatus.Revoked, consentId: "old")
+            with { ActivatedAt = t0, RevokedAt = t0.AddMonths(1) };
+
+        // Opted out after the revocation, then revoked the opt-out: back in.
+        EvaluateOptOut(revoked, OptOut(status: ConsentLifecycleStatus.Revoked) with { RevokedAt = t0.AddMonths(6) })
+            .Allowed.Should().BeTrue();
+        // A permit activated after the revocation that has since lapsed: back in.
+        EvaluateOptOut(revoked, Snapshot(ConsentPurposeOfUse.ProviderAccess, ConsentLifecycleStatus.Expired, consentId: "renewed")
+                with { ActivatedAt = t0.AddMonths(2) })
+            .Allowed.Should().BeTrue();
+        // Something older than the revocation does not undo it.
+        EvaluateOptOut(revoked, OptOut(status: ConsentLifecycleStatus.Revoked) with { RevokedAt = t0.AddDays(1) })
+            .Reason.Should().Be(ConsentAuthorizationReason.Revoked);
+    }
+
+    [Fact]
+    public void A_revocation_that_was_not_the_members_choice_is_not_a_refusal()
+        => EvaluateOptOut(Snapshot(ConsentPurposeOfUse.ProviderAccess, ConsentLifecycleStatus.Revoked)
+                with { RevokedByMember = false })
+            .Allowed.Should().BeTrue();
+
+    [Fact]
+    public void An_unknown_provision_value_is_treated_as_an_opt_out_never_a_permit()
+    {
+        var unknown = OptOut() with { Provision = (ConsentProvision)7 };
+
+        EvaluateOptOut(unknown).Reason.Should().Be(ConsentAuthorizationReason.OptedOut);
+        Evaluate(unknown with { PurposeOfUse = ConsentPurposeOfUse.PayerToPayerExchange }).Allowed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Opt_out_of_another_purpose_tenant_or_member_is_ignored()
+    {
+        EvaluateOptOut(
+                OptOut(ConsentPurposeOfUse.PayerToPayerExchange),
+                OptOut(ConsentPurposeOfUse.Unspecified),
+                OptOut() with { TenantId = "other" },
+                OptOut() with { MemberId = "other" })
+            .Allowed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Opt_out_of_no_purpose_or_without_tenant_or_member_denies()
+    {
+        ConsentAuthorizationPolicy.EvaluateOptOut(Tenant, Member, ConsentPurposeOfUse.Unspecified, [], Now)
+            .Allowed.Should().BeFalse();
+        ConsentAuthorizationPolicy.EvaluateOptOut("", Member, ConsentPurposeOfUse.ProviderAccess, [], Now)
+            .Allowed.Should().BeFalse();
+        ConsentAuthorizationPolicy.EvaluateOptOut(Tenant, " ", ConsentPurposeOfUse.ProviderAccess, [], Now)
+            .Allowed.Should().BeFalse();
+    }
+
     [Fact]
     public void AnActiveConsentForThePurpose_Authorizes()
     {
