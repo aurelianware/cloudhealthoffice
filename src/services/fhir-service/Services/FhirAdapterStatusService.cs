@@ -1,4 +1,5 @@
 using FhirService.Models;
+using FhirService.Services.ChoNative;
 using Microsoft.Extensions.Options;
 
 namespace FhirService.Services;
@@ -158,19 +159,46 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
     private readonly FhirAdapterOptions _options;
     private readonly IConfiguration _config;
 
-    public FhirAdapterStatusService(IOptions<FhirAdapterOptions> options, IConfiguration config)
+    private readonly FhirDataBindings _bindings;
+
+    /// <param name="bindings">
+    /// The bindings the adapter router uses (registered at start-up). When not
+    /// supplied they are resolved from <paramref name="options"/>, which is what
+    /// the router would have resolved.
+    /// </param>
+    public FhirAdapterStatusService(IOptions<FhirAdapterOptions> options, IConfiguration config, FhirDataBindings? bindings = null)
     {
         _options = options.Value;
         _config = config;
+        _bindings = bindings ?? FhirDataBindings.From(_options);
     }
 
     public FhirAdapterStatusReport GetStatus()
     {
         var resources = new List<FhirAdapterResourceStatus>(Defaults.Length);
+        var bindings = _bindings;
         foreach (var (resource, defaultMode, source) in Defaults)
         {
             var mode = ResolveMode(resource, defaultMode);
             var resolvedSource = source;
+            // Data-adapter resources report the binding the router actually
+            // uses (ADR 018): a Mock binding is Demo whatever label is
+            // configured; a CHO-native binding is Hybrid unless labelled.
+            if (bindings.SourceOf(resource) is { } bound)
+            {
+                if (bound == FhirAdapterSources.ChoNative)
+                {
+                    mode = ResolveMode(resource, FhirAdapterModes.Hybrid);
+                    resolvedSource = resource == "Patient"
+                        ? "member-service FHIR Patient projection (CHO-native)"
+                        : "coverage-service FHIR Coverage projection (CHO-native)";
+                }
+                else
+                {
+                    mode = FhirAdapterModes.Demo;
+                    resolvedSource = "MockFhirDataAdapter";
+                }
+            }
             if (resource == "Appeal")
             {
                 var useMock = _config.GetValue("Appeals:UseMockAdapter", true);

@@ -4,9 +4,11 @@ using FhirService.Models;
 namespace FhirService.Services;
 
 /// <summary>
-/// Abstraction over the CHO domain data layer.
-/// Sprint 3 will replace MockFhirDataAdapter with adapters that call real CHO services
-/// (member-service, coverage-service, claims-service, etc.) via typed HttpClients.
+/// Abstraction over the CHO domain data layer. The registered implementation is
+/// <see cref="ChoNative.RoutingFhirDataAdapter"/>, which sends each resource to the
+/// source <c>FhirAdapters:Sources</c> binds (ADR 018): Patient and Coverage to
+/// member-service and coverage-service via <see cref="ChoNative.ChoNativeFhirDataAdapter"/>
+/// when bound to ChoNative; everything else, and the default, to <see cref="MockFhirDataAdapter"/>.
 /// </summary>
 public interface IFhirDataAdapter
 {
