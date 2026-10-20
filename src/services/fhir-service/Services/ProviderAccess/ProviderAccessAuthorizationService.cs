@@ -20,7 +20,10 @@ public enum ProviderAccessDenialReason
     NoCallerIdentity = 3,
     /// <summary>The member is not on this provider's panel.</summary>
     NotAttributed = 4,
-    /// <summary>The member has not authorized Provider Access for this plan.</summary>
+    /// <summary>
+    /// The member has opted out of Provider Access (or withdrew an earlier
+    /// opt-in), or the consent registry could not be read to show they have not.
+    /// </summary>
     ConsentDenied = 5,
 }
 
@@ -40,7 +43,10 @@ public sealed record ProviderAccessDecision
     /// <summary>True once the panel check passed. False on any earlier refusal.</summary>
     public bool Attributed { get; init; }
 
-    /// <summary>Which consent authorized this, when one did.</summary>
+    /// <summary>
+    /// The consent that decided this: the opt-out that refused it, or an explicit
+    /// permit on record. Null when the member simply never opted out.
+    /// </summary>
     public string? AuthorizingConsentId { get; init; }
 
     /// <summary>The consent policy's own reason code, when consent was reached.</summary>
@@ -91,8 +97,9 @@ public sealed record ProviderAccessRequest
 /// Composes the Provider Access authorization decision.
 ///
 /// Provider Access requires ALL of: an authenticated caller, an adequate SMART
-/// scope, provider/member attribution, an active Provider-Access-purpose consent,
-/// and tenant/member isolation. This service owns the last three; authentication
+/// scope, provider/member attribution, no Provider Access opt-out from the
+/// member (CMS-0057-F shares with attributed providers unless the patient opts
+/// out, 42 CFR 422.121(b)(4) and parallels), and tenant/member isolation. This service owns the last three; authentication
 /// and SMART scope are established upstream (authentication middleware and
 /// <c>SmartScopeEnforcementMiddleware</c>) and are NOT re-implemented here — the
 /// abstraction coordinates the controls, it does not duplicate the security
@@ -175,11 +182,12 @@ public sealed class ProviderAccessAuthorizationService : IProviderAccessAuthoriz
         if (!attributed)
             return Denied(ProviderAccessDenialReason.NotAttributed, request, now);
 
-        // ── Consent ───────────────────────────────────────────────────────────
-        // The same registry and the same policy Payer-to-Payer uses, asked for a
-        // different purpose. A PayerToPayerExchange consent, an Unspecified one,
-        // or a historical generic record satisfies nothing here.
-        var consent = await _consent.EvaluateAsync(
+        // ── Opt-out ───────────────────────────────────────────────────────────
+        // The same registry Payer-to-Payer uses, asked whether the member opted
+        // out of this purpose. Sharing is the default; an in-force opt-out, a
+        // withdrawn opt-in, or a registry that cannot be read refuses. A
+        // Payer-to-Payer record says nothing about Provider Access either way.
+        var consent = await _consent.EvaluateOptOutAsync(
             request.TenantId, request.MemberId, RequiredPurpose, asOfUtc: now, ct);
 
         if (!consent.Allowed)

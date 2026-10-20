@@ -286,18 +286,21 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
         {
             _logger.LogInformation(
                 "Provider Access granted: tenant={Tenant} provider={Provider} member={Member} "
-                + "resource={Resource} consent={Consent} at={At}",
+                + "resource={Resource} consent={Consent} basis={ConsentReason} at={At}",
                 LogSanitizer.Sanitize(decision.TenantId), LogSanitizer.Sanitize(decision.ProviderId), LogSanitizer.MaskId(decision.MemberId),
-                LogSanitizer.Sanitize(resourceType), LogSanitizer.Sanitize(decision.AuthorizingConsentId), decision.EvaluatedAtUtc);
+                LogSanitizer.Sanitize(resourceType), LogSanitizer.Sanitize(decision.AuthorizingConsentId),
+                LogSanitizer.Sanitize(decision.ConsentDecisionReason), decision.EvaluatedAtUtc);
             return;
         }
 
         _logger.LogWarning(
             "Provider Access denied: tenant={Tenant} provider={Provider} member={Member} "
-            + "resource={Resource} reason={Reason} attributed={Attributed} consent={ConsentReason} at={At}",
+            + "resource={Resource} reason={Reason} attributed={Attributed} consent={ConsentReason} "
+            + "consentId={ConsentId} at={At}",
             LogSanitizer.Sanitize(decision.TenantId), LogSanitizer.Sanitize(decision.ProviderId), LogSanitizer.MaskId(decision.MemberId),
             LogSanitizer.Sanitize(resourceType), decision.Reason, decision.Attributed,
-            LogSanitizer.Sanitize(decision.ConsentDecisionReason), decision.EvaluatedAtUtc);
+            LogSanitizer.Sanitize(decision.ConsentDecisionReason), LogSanitizer.Sanitize(decision.AuthorizingConsentId),
+            decision.EvaluatedAtUtc);
     }
 
     private static string? ParseResourceType(PathString path)

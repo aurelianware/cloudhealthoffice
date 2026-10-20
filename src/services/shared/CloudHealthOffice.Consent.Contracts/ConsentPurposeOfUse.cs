@@ -40,3 +40,19 @@ public enum ConsentPurposeOfUse
     /// </summary>
     ProviderAccess = 2,
 }
+
+/// <summary>
+/// Whether a consent record permits or refuses its purpose, as FHIR
+/// <c>Consent.provision.type</c> does. <see cref="Permit"/> is the default, so
+/// every record written before this axis existed keeps its meaning.
+///
+/// A <see cref="Deny"/> record is a member's opt-out: CMS-0057-F Provider
+/// Access shares by default and stops when the member opts out, so the opt-out
+/// is a record of its own, in force from its effective date until it is revoked
+/// or lapses.
+/// </summary>
+public enum ConsentProvision
+{
+    Permit = 0,
+    Deny = 1,
+}
