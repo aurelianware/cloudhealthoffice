@@ -115,6 +115,7 @@ healthcare payer systems.
 - [One contract model feeding one pricing engine](adr/016-unified-contract-pricing.md)
 - [MongoDB API is the only document persistence path](adr/017-mongodb-api-only-persistence.md)
 - [FHIR Patient and Coverage served from CHO's own member and coverage services](adr/018-fhir-patient-coverage-from-cho-services.md)
+- [Extend without forking: the extension model and the plan edit service](adr/019-extension-model-plan-edit-service.md) ([contract v1](contracts/plan-edits/v1/README.md))
 
 ## Roadmap
 

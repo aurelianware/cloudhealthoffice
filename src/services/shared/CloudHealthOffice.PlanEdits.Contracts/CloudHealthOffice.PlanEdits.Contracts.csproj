@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CloudHealthOffice.PlanEdits.Contracts</RootNamespace>
+    <AssemblyName>CloudHealthOffice.PlanEdits.Contracts</AssemblyName>
+    <!--
+      The plan edit service contract (ADR 019): the request claims-service
+      sends to a health plan's own edit service, the response it accepts,
+      the request signature, and the response rules. No dependencies beyond
+      the framework, so a plan's .NET service can reference it as-is; plans
+      on any other stack implement the same JSON (docs/contracts/plan-edits/v1).
+    -->
+  </PropertyGroup>
+
+</Project>

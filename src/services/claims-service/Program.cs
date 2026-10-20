@@ -13,6 +13,7 @@ using ClaimsService.Models.Messaging;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
 using ClaimsService.Services.Adjudication;
+using ClaimsService.Services.Adjudication.PlanEdits;
 using ClaimsService.Services.Adjudication.Stages;
 using ClaimsService.Services.Migrations;
 using ClaimsService.Services.Resolution;
@@ -436,6 +437,10 @@ builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>()
 builder.Services.AddScoped<IClaimAdjudicationStage, PricingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStage>();
+// The plan's own edit service (ADR 019), Order=450. Passes straight through
+// for a tenant with no Adjudication:PlanEdits:Tenants entry.
+builder.Services.AddPlanEditService(builder.Configuration, builder.Environment);
+builder.Services.AddScoped<IClaimAdjudicationStage, PlanEditsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();

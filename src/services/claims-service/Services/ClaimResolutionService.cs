@@ -649,7 +649,16 @@ public sealed class ClaimResolutionService : IClaimResolutionService
         BuildEditDecisions(Claim claim, ResolvePendedClaimRequest request, ClaimStatus disposition, string examinerUserId, string tenantId)
     {
         if (request.EditDecisions is null && request.LineDenials is null)
-            return ([], [], null);
+        {
+            // A whole-claim approval decides no edit one by one. The plan's own
+            // edits still stand (ADR 019): each is upheld by default, so a denial
+            // edit denies its lines and nothing the plan flagged is paid without a
+            // decision. Overriding one needs an edit-level approval under the
+            // PLAN_EDIT policy. CHO's own edits keep their whole-claim behaviour.
+            return disposition == ClaimStatus.Approved
+                ? (PlanEditsUpheldByDefault(claim, examinerUserId), [], null)
+                : ([], [], null);
+        }
         if (disposition != ClaimStatus.Approved)
             return ([], [], BadRequest("editDecisions and lineDenials apply only to an approval."));
 
@@ -748,6 +757,25 @@ public sealed class ClaimResolutionService : IClaimResolutionService
         }
 
         return (dispositions, denials, null);
+    }
+
+    private static IReadOnlyList<EditDisposition> PlanEditsUpheldByDefault(Claim claim, string examinerUserId)
+    {
+        var now = DateTime.UtcNow;
+        return ClaimEditCatalog.Edits(claim.PendDetails)
+            .Where(e => e.EditType == ClaimEditCatalog.PlanEditType)
+            .Select(e => new EditDisposition
+            {
+                EditKey = e.EditKey,
+                EditType = e.EditType,
+                RuleId = e.RuleId,
+                LineNumbers = e.LineNumbers.ToList(),
+                Decision = EditDecision.Uphold,
+                UpheldByDefault = true,
+                DecidedBy = examinerUserId,
+                DecidedAt = now,
+            })
+            .ToList();
     }
 
     /// <summary>
