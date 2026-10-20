@@ -52,15 +52,15 @@
     <PackageVersion Include="AspNetCore.HealthChecks.NpgSql" Version="8.0.0" />
     <PackageVersion Include="AspNetCore.HealthChecks.Uris" Version="8.0.1" />
     <PackageVersion Include="Azure.Core" Version="1.44.1" />
-    <PackageVersion Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.5.2" />
+    <PackageVersion Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.4.0" />
     <!-- Field encryption key ring (CloudHealthOffice.FieldProtection): Azure.Core 1.44.1
          and Azure.Storage.Blobs 12.23.0 floors, so no Azure.Core 1.55 is pulled in. -->
     <PackageVersion Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="1.5.0" />
     <PackageVersion Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="1.4.0" />
-    <PackageVersion Include="Azure.Identity" Version="1.21.0" />
-    <PackageVersion Include="Azure.Messaging.ServiceBus" Version="7.21.0" />
+    <PackageVersion Include="Azure.Identity" Version="1.13.2" />
+    <PackageVersion Include="Azure.Messaging.ServiceBus" Version="7.17.5" />
     <PackageVersion Include="Azure.Security.KeyVault.Keys" Version="4.7.0" />
-    <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.11.2" />
+    <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.7.0" />
     <!-- 12.30+ requires Azure.Core >= 1.60 (NU1605 against the overrides above); held by .github/dependabot.yml. -->
     <PackageVersion Include="Azure.Storage.Blobs" Version="12.29.2" />
     <PackageVersion Include="Blazored.LocalStorage" Version="4.5.0" />
@@ -99,7 +99,7 @@
     <PackageVersion Include="Microsoft.Extensions.Options" Version="8.0.2" />
     <PackageVersion Include="Microsoft.Identity.Web" Version="4.3.0" />
     <PackageVersion Include="Microsoft.Identity.Web.UI" Version="4.3.0" />
-    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="7.1.2" />
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="7.7.3" />
     <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.16.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="MongoDB.Driver" Version="3.12.0" />

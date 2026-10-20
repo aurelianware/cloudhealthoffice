@@ -50,7 +50,8 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
   <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
-  <PackageReference Include="System.IdentityModel.Tokens.Jwt" VersionOverride="7.1.2" />
+    <!-- JwtBearer 8.0.32 requires IdentityModel >= 7.7.3; retain the 7.x family here. -->
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" VersionOverride="7.7.3" />
   </ItemGroup>
 
 </Project>
