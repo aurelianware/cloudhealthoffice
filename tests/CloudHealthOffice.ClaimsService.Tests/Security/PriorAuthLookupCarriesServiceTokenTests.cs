@@ -56,17 +56,18 @@ public class PriorAuthLookupCarriesServiceTokenTests
         host.Services.GetRequiredService<IHttpContextAccessor>().HttpContext = ExaminerRequest(Tenant, role);
         host.Outbound.Respond = _ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("""{"authorizationNumber":"AUTH-1","isValid":true}""",
+            Content = new StringContent("""{"authorizationNumber":"AUTH-1","isValid":true,"validatedMemberId":"MEM-1","memberMatches":true}""",
                 System.Text.Encoding.UTF8, "application/json"),
         };
         using var scope = host.Services.CreateScope();
 
         var result = await scope.ServiceProvider.GetRequiredService<HttpAuthorizationValidationClient>()
-            .ValidateAsync(Tenant, "AUTH-1", "99213", new DateTime(2026, 4, 15), "1234567890");
+            .ValidateAsync(Tenant, "AUTH-1", "99213", new DateTime(2026, 4, 15), "1234567890", memberId: "MEM-1");
 
         result.Status.Should().Be(AuthorizationLookupStatus.Valid);
         var sent = host.Outbound.Last!;
         sent.RequestUri!.AbsolutePath.Should().Be("/api/authorizations/AUTH-1/validate");
+        sent.RequestUri.Query.Should().Contain("memberId=MEM-1");
         NoCallerHost.TokenOf(sent).Should().Be((Tenant, ClientId));
         sent.Headers.GetValues("X-Tenant-ID").Should().ContainSingle().Which.Should().Be(Tenant);
     }
@@ -78,7 +79,7 @@ public class PriorAuthLookupCarriesServiceTokenTests
         using var scope = host.Services.CreateScope();
 
         await scope.ServiceProvider.GetRequiredService<HttpAuthorizationValidationClient>()
-            .ValidateAsync(Tenant, "AUTH-1", "99213", new DateTime(2026, 4, 15), "1234567890");
+            .ValidateAsync(Tenant, "AUTH-1", "99213", new DateTime(2026, 4, 15), "1234567890", memberId: "MEM-1");
 
         NoCallerHost.TokenOf(host.Outbound.Last).Should().Be((Tenant, ClientId));
     }
@@ -97,7 +98,7 @@ public class PriorAuthLookupCarriesServiceTokenTests
         using var scope = host.Services.CreateScope();
 
         await scope.ServiceProvider.GetRequiredService<HttpAuthorizationValidationClient>()
-            .ValidateAsync(Tenant, "AUTH-1", "99213", new DateTime(2026, 4, 15), "1234567890");
+            .ValidateAsync(Tenant, "AUTH-1", "99213", new DateTime(2026, 4, 15), "1234567890", memberId: "MEM-1");
 
         host.Outbound.Last!.Headers.Authorization.Should().BeNull();
     }

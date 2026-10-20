@@ -77,14 +77,17 @@ public class AuthorizationAuthenticationTests : IClassFixture<AuthorizationApiFa
     /// examiner's token lacks authorizations:read). authorization-service must
     /// accept that token for /validate and scope it to the token's tenant.
     /// </summary>
-    [Fact]
-    public async Task Validate_ClaimsServiceServiceToken_IsAccepted()
+    [Theory]
+    [InlineData("CHILD-1", true)]
+    [InlineData("PARENT-1", false)]
+    public async Task Validate_ClaimsServiceServiceToken_IsAccepted(string requestedMember, bool matches)
     {
         var number = "AUTH-SVC-" + Guid.NewGuid().ToString("N")[..8];
         _repo.GetByAuthorizationNumberAsync(number).Returns(new Authorization
         {
             Id = Guid.NewGuid().ToString(),
             TenantId = Tenant,
+            MemberId = "CHILD-1",
             AuthorizationNumber = number,
             Status = AuthorizationStatus.Approved,
             ApprovedServiceDateFrom = DateTime.UtcNow.AddDays(-30),
@@ -94,11 +97,14 @@ public class AuthorizationAuthenticationTests : IClassFixture<AuthorizationApiFa
             ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("claims-service", Tenant));
         client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
 
-        var response = await client.GetAsync($"/api/authorizations/{number}/validate");
+        var response = await client.GetAsync($"/api/authorizations/{number}/validate?memberId={requestedMember}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
-        Assert.True(body.GetProperty("isValid").GetBoolean());
+        Assert.Equal(matches, body.GetProperty("isValid").GetBoolean());
+        Assert.Equal(matches, body.GetProperty("memberMatches").GetBoolean());
+        Assert.Equal(requestedMember, body.GetProperty("validatedMemberId").GetString());
+        if (!matches) Assert.DoesNotContain("CHILD-1", body.GetRawText());
     }
 
     /// <summary>Why the lookup cannot forward an examiner's token: it is refused.</summary>

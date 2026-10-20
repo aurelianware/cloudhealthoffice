@@ -255,7 +255,8 @@ public class AuthorizationsController : ControllerBase
         [FromQuery] DateTime? serviceDate = null,
         [FromQuery] string? providerNpi = null,
         [FromServices] RecordAccessWriter? accessLog = null,
-        [FromQuery] int? lineNumber = null)
+        [FromQuery] int? lineNumber = null,
+        [FromQuery] string? memberId = null)
     {
         var checkDate = serviceDate ?? DateTime.UtcNow;
 
@@ -276,6 +277,18 @@ public class AuthorizationsController : ControllerBase
             await RecordValidateAsync(accessLog, authorization.Id, authorization.MemberId, StatusCodes.Status400BadRequest);
             return BadRequest(new { error = "A positive line number requires a procedure code." });
         }
+
+        var requestedMember = memberId?.Trim();
+        var memberRequested = memberId is not null || Request.Query.ContainsKey(nameof(memberId));
+        if (memberRequested && (string.IsNullOrEmpty(requestedMember) || requestedMember.Length > 50))
+        {
+            await RecordValidateAsync(accessLog, authorization.Id, authorization.MemberId, StatusCodes.Status400BadRequest);
+            return BadRequest(new { error = "A member identifier of 1 to 50 characters is required when supplied." });
+        }
+        bool? memberMatches = requestedMember is null || string.IsNullOrWhiteSpace(authorization.MemberId)
+            ? null
+            : string.Equals(authorization.MemberId.Trim(), requestedMember, StringComparison.Ordinal);
+        var memberConfirmed = requestedMember is null || memberMatches == true;
 
         var originalDecision = AuthorizationLifecyclePolicy.ClinicalDecisionStatus(authorization);
         var today = DateTime.UtcNow.Date;
@@ -321,14 +334,20 @@ public class AuthorizationsController : ControllerBase
         var response = new AuthorizationValidationResponse
         {
             AuthorizationNumber = authorization.AuthorizationNumber,
-            IsValid = isValid && isActive && procedureApproved && providerApproved,
+            IsValid = isValid && isActive && procedureApproved && providerApproved && memberConfirmed,
             Status = authorization.Status,
             ApprovedServiceDateFrom = authorization.ApprovedServiceDateFrom,
             ApprovedServiceDateTo = authorization.ApprovedServiceDateTo,
             ExpirationDate = authorization.ExpirationDate,
             ApprovedUnits = approvedUnits,
-            ValidationCode = ambiguousProcedure ? "AmbiguousServiceLine" : null,
-            ValidationMessage = !isValid ? "Authorization not approved" :
+            ValidatedMemberId = requestedMember,
+            MemberMatches = memberMatches,
+            ValidationCode = !memberConfirmed ? (memberMatches == false ? "MemberMismatch" : "MemberIdentityUnavailable")
+                : ambiguousProcedure ? "AmbiguousServiceLine" : null,
+            ValidationMessage = !memberConfirmed ? (memberMatches == false
+                                    ? "Authorization does not belong to this claim's member"
+                                    : "Authorization member identity is unavailable") :
+                               !isValid ? "Authorization not approved" :
                                !isActive ? "Authorization expired or not yet active" :
                                ambiguousProcedure ? "Procedure occurs on multiple lines; specify lineNumber" :
                                !procedureApproved ? $"Procedure {procedureCode} not approved" :
