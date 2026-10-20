@@ -634,7 +634,7 @@ public partial class BenefitCalculationStageTests
         Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredReason, ctx.AdjudicationResult.DenialReason);
         await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
         await _authorizationValidationClient.DidNotReceiveWithAnyArgs()
-            .ValidateAsync(default!, default!, default, default, default, default);
+            .ValidateAsync(default!, default!, default, default, default, "MEM-1", default);
     }
 
     [Fact]
@@ -684,7 +684,7 @@ public partial class BenefitCalculationStageTests
         };
 
         _authorizationValidationClient.ValidateAsync(
-                "tenant-1", "AUTH-123", "99213", claim.ServiceDateFrom, "9876543210", Arg.Any<CancellationToken>())
+                "tenant-1", "AUTH-123", "99213", claim.ServiceDateFrom, "9876543210", "MEM-1", Arg.Any<CancellationToken>())
             .Returns(AuthorizationLookupResult.Valid(new AuthorizationValidationResult(
                 "AUTH-123", true, "Approved", null, null, null, 1, "Authorization valid")));
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
@@ -698,7 +698,7 @@ public partial class BenefitCalculationStageTests
             "AUTH-123",
             "99213",
             claim.ServiceDateFrom,
-            "9876543210",
+            "9876543210", "MEM-1",
             Arg.Any<CancellationToken>());
         await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
     }
@@ -726,7 +726,7 @@ public partial class BenefitCalculationStageTests
                 "AUTH-EXPIRED",
                 "99213",
                 claim.ServiceDateFrom,
-                "1234567890",
+                "1234567890", "MEM-1",
                 Arg.Any<CancellationToken>())
             .Returns(AuthorizationLookupResult.Invalid(
                 new AuthorizationValidationResult(
@@ -780,7 +780,7 @@ public partial class BenefitCalculationStageTests
                 "AUTH-UNKNOWN",
                 "99213",
                 claim.ServiceDateFrom,
-                "1234567890",
+                "1234567890", "MEM-1",
                 Arg.Any<CancellationToken>())
             .Returns(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
@@ -841,7 +841,7 @@ public partial class BenefitCalculationStageTests
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
         _authorizationValidationClient
-            .ValidateAsync(default!, default!, default, default, default, default)
+            .ValidateAsync(default!, default!, default, default, default, "MEM-1", default)
             .ThrowsAsyncForAnyArgs(new InvalidOperationException("boom"));
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
@@ -873,7 +873,7 @@ public partial class BenefitCalculationStageTests
             PendDetails = new PendDetails { PendCode = "PRICING", PendReason = "Fee schedule unavailable" },
         };
         _authorizationValidationClient
-            .ValidateAsync(default!, default!, default, default, default, default)
+            .ValidateAsync(default!, default!, default, default, default, "MEM-1", default)
             .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization lookup failed (HttpRequestException)"));
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);

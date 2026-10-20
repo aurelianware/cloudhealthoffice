@@ -31,6 +31,53 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
             new AuthenticationHeaderValue("Bearer", factory.IssueToken());
     }
 
+    [Theory]
+    [InlineData("CHILD-1", "CHILD-1", true)]
+    [InlineData("CHILD-1", "PARENT-1", false)]
+    [InlineData("CHILD-1", "child-1", false)]
+    [InlineData(" CHILD-1 ", " CHILD-1 ", true)]
+    public async Task Validate_MemberBinding_IsIndividualAndCaseSensitive(string stored, string requested, bool matches)
+    {
+        var id = SetupAuth(AuthorizationStatus.Approved);
+        var auth = (await _factory.AuthorizationRepository.GetByIdAsync(id))!;
+        auth.MemberId = stored;
+        auth.ApprovedServiceDateFrom = DateTime.UtcNow.AddDays(-1);
+        _factory.AuthorizationRepository.GetByAuthorizationNumberAsync(auth.AuthorizationNumber).Returns(auth);
+        var path = $"/api/authorizations/{auth.AuthorizationNumber}/validate?memberId={Uri.EscapeDataString(requested)}";
+        var body = await _client.GetFromJsonAsync<JsonElement>(path, Json);
+        Assert.Equal(matches, body.GetProperty("isValid").GetBoolean());
+        Assert.Equal(matches, body.GetProperty("memberMatches").GetBoolean());
+        Assert.Equal(requested.Trim(), body.GetProperty("validatedMemberId").GetString());
+        Assert.False(body.TryGetProperty("memberId", out _));
+        if (!matches) Assert.Equal("MemberMismatch", body.GetProperty("validationCode").GetString());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("123456789012345678901234567890123456789012345678901")]
+    public async Task Validate_InvalidExplicitMember_Returns400(string member)
+    {
+        var id = SetupAuth(AuthorizationStatus.Approved);
+        var auth = (await _factory.AuthorizationRepository.GetByIdAsync(id))!;
+        _factory.AuthorizationRepository.GetByAuthorizationNumberAsync(auth.AuthorizationNumber).Returns(auth);
+        var response = await _client.GetAsync($"/api/authorizations/{auth.AuthorizationNumber}/validate?memberId={Uri.EscapeDataString(member)}");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Validate_StoredMemberMissing_IsUnconfirmed_NotAnApprovalOrMismatch()
+    {
+        var id = SetupAuth(AuthorizationStatus.Approved);
+        var auth = (await _factory.AuthorizationRepository.GetByIdAsync(id))!;
+        auth.MemberId = "";
+        _factory.AuthorizationRepository.GetByAuthorizationNumberAsync(auth.AuthorizationNumber).Returns(auth);
+        var body = await _client.GetFromJsonAsync<JsonElement>($"/api/authorizations/{auth.AuthorizationNumber}/validate?memberId=CHILD-1", Json);
+        Assert.False(body.GetProperty("isValid").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("memberMatches").ValueKind);
+        Assert.Equal("MemberIdentityUnavailable", body.GetProperty("validationCode").GetString());
+    }
+
     [Fact]
     public async Task MixedReviewerDecision_ClaimsValidationUsesTheIdentifiedLine()
     {

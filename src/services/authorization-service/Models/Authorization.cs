@@ -49,7 +49,7 @@ public class Authorization
     public string AuthorizationNumber { get; set; } = string.Empty;
 
     /// <summary>
-    /// Member ID (subscriber ID)
+    /// Member ID of the individual receiving services (a dependent uses their own ID).
     /// </summary>
     [Required]
     [StringLength(50)]

@@ -1026,7 +1026,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         _ncciPends = false;
         _priorAuthCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "99213" };
         _beforeSubmit = claim => claim.PriorAuthorizationNumber = "AUTH-GOLD-01";
-        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+        _authorization.ValidateAsync(default!, default!, default, default, default, Member, default)
             .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
 
         var pended = await SubmitAndAdjudicateAsync();
@@ -1038,7 +1038,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         await AssertBalances(0m, 0m);
         await AssertNoWriteForAsync(pended.Id);
         await _authorization.Received(1).ValidateAsync(Tenant, "AUTH-GOLD-01", "99213",
-            Arg.Any<DateTime>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+            Arg.Any<DateTime>(), Arg.Any<string?>(), Member, Arg.Any<CancellationToken>());
 
         // Still down: the approval is refused and nothing is written.
         var refused = await ResolveAsync("examiner-1", pended.Id, "Approved");
@@ -1049,7 +1049,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         await AssertNoWriteForAsync(pended.Id);
 
         // authorization-service answers: the approval re-run prices and commits once.
-        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+        _authorization.ValidateAsync(default!, default!, default, default, default, Member, default)
             .ReturnsForAnyArgs(AuthorizationLookupResult.Valid(new AuthorizationValidationResult(
                 "AUTH-GOLD-01", true, "Approved", null, null, null, 1, "Authorization valid")));
         var approved = await ResolveAsync("examiner-1", pended.Id, "Approved");
@@ -1073,7 +1073,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         _ncciPends = false;
         _priorAuthCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "99213" };
         _beforeSubmit = claim => claim.PriorAuthorizationNumber = "AUTH-GOLD-01";
-        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+        _authorization.ValidateAsync(default!, default!, default, default, default, Member, default)
             .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
         var pended = await SubmitAndAdjudicateAsync();
         Assert.Equal(BenefitCalculationStage.PriorAuthorizationUnavailablePendCode, pended.PendDetails!.PendCode);
@@ -1084,7 +1084,7 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         await AssertBalances(0m, 0m);
         await AssertNoWriteForAsync(pended.Id);
 
-        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+        _authorization.ValidateAsync(default!, default!, default, default, default, Member, default)
             .ReturnsForAnyArgs(AuthorizationLookupResult.Valid(new AuthorizationValidationResult(
                 "AUTH-GOLD-01", true, "Approved", null, null, null, 1, "Authorization valid")));
         var run = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
@@ -1109,11 +1109,11 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         _ncciPends = false;
         _priorAuthCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "99213" };
         _beforeSubmit = claim => claim.PriorAuthorizationNumber = "AUTH-GOLD-UNKNOWN";
-        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+        _authorization.ValidateAsync(default!, default!, default, default, default, Member, default)
             .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
         var pended = await SubmitAndAdjudicateAsync();
 
-        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+        _authorization.ValidateAsync(default!, default!, default, default, default, Member, default)
             .ReturnsForAnyArgs(AuthorizationLookupResult.NotFound());
         var run = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
 
@@ -1144,10 +1144,10 @@ public abstract class AccumulatorIntegrityTests : IAsyncLifetime
         _ncciPends = false;
         _priorAuthCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "99213" };
         _beforeSubmit = claim => claim.PriorAuthorizationNumber = "AUTH-GOLD-UNKNOWN";
-        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+        _authorization.ValidateAsync(default!, default!, default, default, default, Member, default)
             .ReturnsForAnyArgs(AuthorizationLookupResult.Unavailable("authorization-service returned 503"));
         var pended = await SubmitAndAdjudicateAsync();
-        _authorization.ValidateAsync(default!, default!, default, default, default, default)
+        _authorization.ValidateAsync(default!, default!, default, default, default, Member, default)
             .ReturnsForAnyArgs(AuthorizationLookupResult.NotFound());
         var run = await _operations.RerunPriorAuthUnavailablePendsAsync(Tenant, "ops-1", 10, CancellationToken.None);
         Assert.Equal(1, run.Denied);
