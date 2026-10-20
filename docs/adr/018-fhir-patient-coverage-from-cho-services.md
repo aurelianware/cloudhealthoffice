@@ -63,12 +63,20 @@ Two defects stood in the way:
    `FhirAdapters:Resources`. The four data resources are therefore no longer
    labelled in `appsettings.json`. Data classification stays independent: a
    synthetic demo tenant can be wired natively.
-5. **Failures are explicit.** Upstream 404 is FHIR 404. Upstream 5xx,
+5. **Confinement is checked twice.** A patient- or provider-confined search
+   is narrowed by the upstream's member filter, and fhir-service then refuses
+   (502) a result that names any other member, so a data source that ignored
+   the filter cannot leak records. A read returns 404 unless the resource is
+   the bound member's.
+6. **Nothing is silently ignored.** A search parameter, modifier or control
+   (`_include`, `_sort`) the native path does not apply is a 400, because the
+   bundle's self link echoes the query as given.
+7. **Failures are explicit.** Upstream 404 is FHIR 404. Upstream 5xx,
    transport failure, timeout or an unparseable body is FHIR 502 with a
    transient OperationOutcome and no upstream detail. Unsupported search
    input (an unknown date prefix, an identifier system CHO does not index) is
    FHIR 400, never silently ignored.
-6. **Identity and tenancy are unchanged.** Calls use the existing outbound
+8. **Identity and tenancy are unchanged.** Calls use the existing outbound
    chain: a SMART caller's request carries fhir-service's own service token
    for the caller's tenant; a CHO caller's token is forwarded. The upstream
    resolves the tenant from the token and filters every query by it.
@@ -88,6 +96,12 @@ Not in this change, each recorded as a follow-up:
   are a follow-up join.
 - Patient search results omit `generalPractitioner` (a PCP lookup per row);
   the read includes it.
+- Record-access audit for SMART callers records fhir-service's service
+  identity upstream, not the end user or app; accounting of disclosures for
+  Patient Access needs fhir-service to log the SMART subject and client.
+- The data-class label is tenant-wide: with Patient and Coverage served from
+  plan records and Encounter and Claim still mock, the per-resource modes in
+  adapter-status are the precise statement.
 
 ## Consequences
 

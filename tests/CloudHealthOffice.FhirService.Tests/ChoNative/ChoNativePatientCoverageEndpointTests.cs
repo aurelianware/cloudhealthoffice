@@ -123,7 +123,8 @@ public class ChoNativePatientCoverageEndpointTests : IClassFixture<ChoNativePati
         var call = _host.Upstream.Calls.Should().ContainSingle().Subject;
         call.PathAndQuery.Should().Be("/api/v1/members/pat-001/fhir");
         call.Tenant.Should().Be("test-tenant");
-        (call.Authorization ?? string.Empty).Should().NotContain(token, "a SMART token is never forwarded to CHO services");
+        call.Authorization.Should().StartWith("Bearer ", "the call carries fhir-service's own service token");
+        call.Authorization.Should().NotContain(token, "a SMART token is never forwarded to CHO services");
     }
 
     [Fact]
@@ -190,6 +191,71 @@ public class ChoNativePatientCoverageEndpointTests : IClassFixture<ChoNativePati
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var outcome = await Body(response);
         outcome["issue"]![0]!["code"]!.ToString().Should().Be("not-supported");
+        _host.Upstream.Calls.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("/fhir/r4/Patient?_id=pat-002")]
+    [InlineData("/fhir/r4/Patient?identifier=urn:cho:member-id|pat-002")]
+    public async Task A_patient_searching_for_someone_else_gets_an_empty_bundle_without_any_upstream_call(string path)
+    {
+        var response = await Get(path, PatientToken("pat-001"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Body(response))["total"]!.GetValue<int>().Should().Be(0);
+        _host.Upstream.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_patient_naming_another_beneficiary_is_refused()
+    {
+        var response = await Get("/fhir/r4/Coverage?beneficiary=Patient/pat-002", PatientToken("pat-001"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        _host.Upstream.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task An_upstream_that_ignores_the_member_filter_is_withheld_not_returned()
+    {
+        // Defence in depth: if a deployed member-service ever stopped applying
+        // memberId (renamed parameter, version skew), a patient-bound search
+        // must not hand back other members.
+        _host.Upstream.Override = r => r.RequestUri!.AbsolutePath == "/api/v1/members/fhir/Patient"
+            ? Upstream.Json("{\"total\":2,\"items\":[{\"resource\":" + Upstream.PatientJson("pat-001", "Smith")
+                + "},{\"resource\":" + Upstream.PatientJson("pat-002", "Jones") + "}]}")
+            : null!;
+
+        var response = await Get("/fhir/r4/Patient", PatientToken("pat-001"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadGateway);
+        (await response.Content.ReadAsStringAsync()).Should().NotContain("Jones");
+    }
+
+    [Fact]
+    public async Task A_read_that_returns_a_different_member_is_not_found()
+    {
+        _host.Upstream.Override = r => r.RequestUri!.AbsolutePath == "/api/v1/members/pat-001/fhir"
+            ? Upstream.Json(Upstream.PatientJson("pat-002", "Jones"))
+            : null!;
+
+        var response = await Get("/fhir/r4/Patient/pat-001", PatientToken("pat-001"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Theory]
+    [InlineData("/fhir/r4/Patient?family:exact=Smith")]
+    [InlineData("/fhir/r4/Patient?_include=Patient:general-practitioner")]
+    [InlineData("/fhir/r4/Patient?address=Main")]
+    [InlineData("/fhir/r4/Coverage?_id=cov-001,cov-002")]
+    [InlineData("/fhir/r4/Coverage?_sort=-period")]
+    public async Task Parameters_the_server_would_not_apply_are_refused(string path)
+    {
+        var response = await Get(path, PatientToken("pat-001"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Body(response))["issue"]![0]!["code"]!.ToString().Should().Be("not-supported");
         _host.Upstream.Calls.Should().BeEmpty();
     }
 

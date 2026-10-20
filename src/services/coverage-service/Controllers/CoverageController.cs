@@ -11,6 +11,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Audit;
 
 namespace CoverageService.Controllers;
 
@@ -102,17 +103,30 @@ public class CoverageController : ControllerBase
         return Ok(coverage);
     }
 
-    /// <summary>FHIR R4 Coverage projection of one coverage record (ADR 018).</summary>
+    /// <summary>
+    /// FHIR R4 Coverage projection of one coverage record (ADR 018). Logged in
+    /// the record access log with the coverage's member, found or not.
+    /// </summary>
+    [AuditRecordAccess("Coverage", "Fhir", RecordIdRouteValue = "id", RecordedByAction = true)]
     [HttpGet("{id}/fhir")]
     [Produces("application/fhir+json", "application/json")]
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetFhirCoverage(
         [FromRoute] string id,
-        [FromServices] IFhirCoverageProjector projector)
+        [FromServices] IFhirCoverageProjector projector,
+        [FromServices] RecordAccessWriter accessLog,
+        [FromServices] ICurrentActor actor)
     {
         var coverage = await _coverageRepository.GetByIdAsync(TenantId, id);
-        if (coverage == null) return NotFound();
+        var audit = new AuditRecordAccessAttribute("Coverage", "Fhir") { RecordIdRouteValue = "id" };
+        if (coverage == null)
+        {
+            await accessLog.RecordAsync(HttpContext, audit, actor, StatusCodes.Status404NotFound, null, []);
+            return NotFound();
+        }
+        await accessLog.RecordAsync(HttpContext, audit, actor, StatusCodes.Status200OK, null,
+            [new RecordSubject(coverage.Id, coverage.MemberId)]);
 
         return new ContentResult
         {
@@ -131,6 +145,7 @@ public class CoverageController : ControllerBase
     /// ordered by member, most recent effective date first, and the total counts
     /// every match.
     /// </summary>
+    [AuditRecordAccess("Coverage", RecordAccessActions.Search, ResultIdProperty = "Id", ResultMemberProperty = "MemberId")]
     [HttpGet("fhir/Coverage")]
     [ProducesResponseType(typeof(CoverageFhirSearchResponse), 200)]
     [ProducesResponseType(400)]

@@ -94,6 +94,22 @@ public abstract class FhirControllerBase : ControllerBase
         return !string.Equals(member, bound, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Defence in depth for a search confined to one member: true when any
+    /// result belongs to someone else, which means the data source ignored the
+    /// member filter it was given. Logged as an error; the caller answers 502
+    /// rather than return or silently trim another member's data.
+    /// </summary>
+    protected bool ResultsLeaveConfinement(string resourceType, IEnumerable<string?> memberReferences)
+    {
+        if (AuthorizedMemberId is null) return false;
+        if (!memberReferences.Any(IsOutsidePatientContext)) return false;
+
+        HttpContext.RequestServices.GetService<ILoggerFactory>()?.CreateLogger(GetType())
+            .LogError("{Resource} search returned records outside the caller's member confinement; response withheld.", resourceType);
+        return true;
+    }
+
     /// <summary>SMART scopes approved for this request.</summary>
     protected IReadOnlySet<string> SmartScopes
         => HttpContext.Items["SmartScopes"] as HashSet<string> ?? new HashSet<string>();

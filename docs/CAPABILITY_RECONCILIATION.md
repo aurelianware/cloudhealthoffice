@@ -447,11 +447,17 @@ narrows CAP-22. Behaviour changes beyond the new endpoints: member-service's FHI
 Patient projection now uses the member id as `Patient.id` (matching
 `EOB.patient` and the SMART launch context) and hides draft members; the
 adapter-status report can no longer label a mock-bound data resource Live.
+An independent review before merge added: a 502 when a member-confined search
+returns another member (defence against a data source ignoring its filter), a
+Patient read checked against the bound member, 400 for search parameters the
+server would not apply, PHI-free upstream logs, record-access audit on the
+coverage-service FHIR endpoints, and a production-PHI data label in the
+Kubernetes manifest (synthetic in the GKE demo render).
 
 Validation on SDK 8.0.426 against branch `feat/fhir-native-patient-coverage`:
-full solution Release build 0 warnings, 0 errors; fhir-service suite 1,215 passed
-(71 new); member-service suite 209 passed (20 new); coverage-service suite 171
-passed (26 new); SMART auth suite 262 passed; CMS acceptance suite 373 passed;
+full solution Release build 0 warnings, 0 errors; fhir-service suite 1,229 passed
+(85 new); member-service suite 209 passed (20 new); coverage-service suite 172
+passed (27 new); SMART auth suite 262 passed; CMS acceptance suite 373 passed;
 Da Vinci interop suite 148 passed, 3 skipped (pre-existing skips). No CMS-0057-F
 §11 scenario score is changed by this record: PAT-01, PROV-01 and P2P-01 need a
 focused rescoring (P2P-01 still reads the mock member source). Final CI results
