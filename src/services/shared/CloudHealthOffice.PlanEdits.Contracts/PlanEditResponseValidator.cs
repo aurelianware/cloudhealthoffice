@@ -11,16 +11,25 @@ namespace CloudHealthOffice.PlanEdits.Contracts;
 /// </summary>
 public static partial class PlanEditResponseValidator
 {
-    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant)]
-    private static partial Regex RuleIdPattern();
+    /// <summary>The <see cref="PlanEdit.RuleId"/> pattern (the length limit is separate).</summary>
+    public const string RuleIdPattern = "^[A-Za-z0-9][A-Za-z0-9._-]*$";
+
+    /// <summary>The <see cref="PlanEdit.SuggestedCarc"/> pattern.</summary>
+    public const string CarcPattern = "^[A-Z0-9]{1,3}$";
+
+    /// <summary>The <see cref="PlanEdit.SuggestedRarc"/> pattern.</summary>
+    public const string RarcPattern = "^[A-Z]{1,2}[0-9]{1,4}$";
+
+    [GeneratedRegex(RuleIdPattern, RegexOptions.CultureInvariant)]
+    private static partial Regex RuleIdRegex();
 
     /// <summary>CARCs are one to three upper-case letters or digits: 96, 204, B7, P14.</summary>
-    [GeneratedRegex("^[A-Z0-9]{1,3}$", RegexOptions.CultureInvariant)]
-    private static partial Regex CarcPattern();
+    [GeneratedRegex(CarcPattern, RegexOptions.CultureInvariant)]
+    private static partial Regex CarcRegex();
 
     /// <summary>RARCs are one or two letters and up to four digits: N130, M15, MA130.</summary>
-    [GeneratedRegex("^[A-Z]{1,2}[0-9]{1,4}$", RegexOptions.CultureInvariant)]
-    private static partial Regex RarcPattern();
+    [GeneratedRegex(RarcPattern, RegexOptions.CultureInvariant)]
+    private static partial Regex RarcRegex();
 
     /// <summary>
     /// The problems with <paramref name="response"/> for a claim with
@@ -62,7 +71,7 @@ public static partial class PlanEditResponseValidator
 
             if (string.IsNullOrEmpty(edit.RuleId))
                 problems.Add($"{at}.ruleId: required");
-            else if (edit.RuleId.Length > PlanEditContract.MaxRuleIdLength || !RuleIdPattern().IsMatch(edit.RuleId))
+            else if (edit.RuleId.Length > PlanEditContract.MaxRuleIdLength || !RuleIdRegex().IsMatch(edit.RuleId))
                 problems.Add($"{at}.ruleId: letters, digits, '.', '_' and '-', starting with a letter or digit, at most {PlanEditContract.MaxRuleIdLength} characters");
 
             if (string.IsNullOrWhiteSpace(edit.Message))
@@ -79,7 +88,7 @@ public static partial class PlanEditResponseValidator
 
             if (edit.SuggestedCarc is not null)
             {
-                if (!CarcPattern().IsMatch(edit.SuggestedCarc))
+                if (!CarcRegex().IsMatch(edit.SuggestedCarc))
                     problems.Add($"{at}.suggestedCarc: one to three upper-case letters or digits");
                 if (editLines.Count == 0)
                     problems.Add($"{at}.suggestedCarc: a denial edit must name its lineNumbers");
@@ -87,7 +96,7 @@ public static partial class PlanEditResponseValidator
 
             if (edit.SuggestedRarc is not null)
             {
-                if (!RarcPattern().IsMatch(edit.SuggestedRarc))
+                if (!RarcRegex().IsMatch(edit.SuggestedRarc))
                     problems.Add($"{at}.suggestedRarc: one or two upper-case letters and up to four digits");
                 if (edit.SuggestedCarc is null)
                     problems.Add($"{at}.suggestedRarc: needs a suggestedCarc");
