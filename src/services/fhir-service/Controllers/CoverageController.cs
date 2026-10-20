@@ -48,6 +48,8 @@ public class CoverageController : FhirControllerBase
         if (AuthorizedMemberId is { } bound) search.Patient = bound;
 
         var (items, total) = await _adapter.SearchCoverageAsync(search, TenantId, ct);
+        if (ResultsLeaveConfinement("Coverage", items.Select(c => c.Beneficiary?.Reference)))
+            return FhirBadGateway("Coverage search could not be confined to the authorized member.");
 
         var bundle = _bundleBuilder.Build(
             items, total, search.Page, search.Count,

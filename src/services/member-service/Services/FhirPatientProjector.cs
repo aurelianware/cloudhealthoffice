@@ -28,7 +28,11 @@ public sealed class FhirPatientProjector : IFhirPatientProjector
         var patient = new JsonObject
         {
             ["resourceType"] = "Patient",
-            ["id"] = member.Id,
+            // The member id, not the internal document id: every CHO resource
+            // references a patient as Patient/{memberId} (ExplanationOfBenefit,
+            // Coverage, the SMART launch context), so this is the id a client
+            // following one of those references must land on (ADR 018).
+            ["id"] = member.MemberId,
             ["active"] = member.Status == EnrollmentStatus.Active
         };
 
