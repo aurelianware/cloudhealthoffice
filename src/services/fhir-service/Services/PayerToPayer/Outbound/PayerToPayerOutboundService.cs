@@ -157,9 +157,14 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
             return await FailAsync(request, exchange, PayerToPayerOutboundStatus.NotAuthorized,
                 PayerToPayerOutboundFailure.NotAuthorized, ct);
 
-        // 5. Remote member-match.
+        // 5. Remote member-match. The member's opt-in travels with it as an HRex
+        //    consent naming CHO as recipient and the prior payer as source, so a
+        //    peer can bind it to CHO (ADR 022).
         var priorPayerMemberId = coverage.Coverage?.SubscriberId;
-        var matched = await MatchWithRemoteAsync(request, exchange, endpoint, member, priorPayerMemberId, ct);
+        var consent = PdexConsentBuilder.Build(
+            priorPayerMemberId, _directory.Value.LocalPayerId, endpoint.PayerId,
+            authorization.EvaluatedAtUtc, endUtc: null, family: member.LastName, birthDate: member.Dob);
+        var matched = await MatchWithRemoteAsync(request, exchange, endpoint, member, priorPayerMemberId, consent, ct);
         if (matched.Failure is { } matchFailure)
             return await FailAsync(request, exchange, matchFailure.Status, matchFailure.Failure, ct);
 
@@ -194,6 +199,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
             ReceivingPayerId = _directory.Value.LocalPayerId,
             MemberId = matched.RemoteMemberId!,
             LookbackYears = request.LookbackYears,
+            Consent = consent,
         }, ct);
 
         exchange.ExportOutcome = dataResponse.Outcome.ToString();
@@ -326,7 +332,8 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
 
     private async Task<MatchStep> MatchWithRemoteAsync(
         PayerToPayerOutboundRequest request, PayerToPayerOutboundExchange exchange,
-        PayerToPayerEndpoint endpoint, ChoMember member, string? priorPayerMemberId, CancellationToken ct)
+        PayerToPayerEndpoint endpoint, ChoMember member, string? priorPayerMemberId,
+        System.Text.Json.Nodes.JsonObject consent, CancellationToken ct)
     {
         // A payer that does not require $member-match can be called directly with
         // the identifier CHO already holds for the member with that payer. Without
@@ -352,6 +359,7 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
             BirthDate = member.Dob,
             RequestedPayerId = endpoint.PayerId,
             AsOfDate = request.AsOfDate,
+            Consent = consent,
         }, ct);
 
         exchange.MemberMatchOutcome = response.Outcome.ToString();

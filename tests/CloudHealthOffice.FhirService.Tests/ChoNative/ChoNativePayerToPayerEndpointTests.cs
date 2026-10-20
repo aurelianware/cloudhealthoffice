@@ -138,7 +138,7 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
         using var client = _host.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, path)
         {
-            Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"),
+            Content = new StringContent(CloudHealthOffice.FhirService.Tests.PayerToPayer.P2PTestConsent.Serialize(body, token), Encoding.UTF8, "application/json"),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         var response = await client.SendAsync(request);
