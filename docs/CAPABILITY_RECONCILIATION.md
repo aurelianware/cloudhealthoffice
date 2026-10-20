@@ -462,3 +462,11 @@ Da Vinci interop suite 148 passed, 3 skipped (pre-existing skips). No CMS-0057-F
 §11 scenario score is changed by this record: PAT-01, PROV-01 and P2P-01 need a
 focused rescoring (P2P-01 still reads the mock member source). Final CI results
 are recorded in the implementation PR.
+
+Rescoring after merge (October 20, 2026): the gap matrix §4.5 data-source row
+moves from S to P and T-4 is narrowed. PAT-01, PROV-01 and P2P-01 stay GAP,
+with updated justifications: PAT-01's product path is real (fhir-service
+proxies ExplanationOfBenefit to claims-service's CARIN projection) but its
+acceptance test still runs on the mock mapper; PROV-01 still lacks Provider Access PA data and its claims and
+encounter data are still mock; P2P-01 still reads the mock member source and
+D-13 remains open.
