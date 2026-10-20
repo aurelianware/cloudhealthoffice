@@ -56,6 +56,7 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
         var path = $"/api/authorizations/{auth.AuthorizationNumber}/validate?procedureCode=72148&serviceDate=2026-05-15";
         var ambiguous = await _client.GetFromJsonAsync<JsonElement>(path, Json);
         Assert.False(ambiguous.GetProperty("isValid").GetBoolean());
+        Assert.Equal("AmbiguousServiceLine", ambiguous.GetProperty("validationCode").GetString());
         var approved = await _client.GetFromJsonAsync<JsonElement>(path + "&lineNumber=7", Json);
         Assert.True(approved.GetProperty("isValid").GetBoolean());
         Assert.Equal(4, approved.GetProperty("approvedUnits").GetDecimal());
