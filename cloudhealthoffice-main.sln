@@ -287,6 +287,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "shared", "shared", "{A152AE
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.PlanEdits.Contracts", "src\services\shared\CloudHealthOffice.PlanEdits.Contracts\CloudHealthOffice.PlanEdits.Contracts.csproj", "{7156B517-8BB3-4DE2-B6F2-AF6A344F1B79}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.PlanEdits.Contracts.Tests", "src\services\shared\CloudHealthOffice.PlanEdits.Contracts.Tests\CloudHealthOffice.PlanEdits.Contracts.Tests.csproj", "{662D3414-4DA4-4852-8FE3-FE37306218A0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1677,6 +1679,18 @@ Global
 		{7156B517-8BB3-4DE2-B6F2-AF6A344F1B79}.Release|x64.Build.0 = Release|Any CPU
 		{7156B517-8BB3-4DE2-B6F2-AF6A344F1B79}.Release|x86.ActiveCfg = Release|Any CPU
 		{7156B517-8BB3-4DE2-B6F2-AF6A344F1B79}.Release|x86.Build.0 = Release|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Debug|x64.Build.0 = Debug|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Debug|x86.Build.0 = Debug|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Release|x64.ActiveCfg = Release|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Release|x64.Build.0 = Release|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Release|x86.ActiveCfg = Release|Any CPU
+		{662D3414-4DA4-4852-8FE3-FE37306218A0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1803,6 +1817,7 @@ Global
 		{0B70D02F-CC53-4562-B45A-FE961BEBFA11} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 		{279D9E4F-8BE8-464A-A295-A604B6DBECEC} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{7156B517-8BB3-4DE2-B6F2-AF6A344F1B79} = {A152AE0B-3259-491C-82C1-D7342C1086F8}
+		{662D3414-4DA4-4852-8FE3-FE37306218A0} = {A152AE0B-3259-491C-82C1-D7342C1086F8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C10C3349-5BEE-4B34-9987-23F0142F9D98}
