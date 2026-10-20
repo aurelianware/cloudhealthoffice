@@ -25,6 +25,27 @@ public sealed class FhirAdapterOptions
     /// </summary>
     public Dictionary<string, string> Resources { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Which implementation serves each <see cref="Services.IFhirDataAdapter"/>
+    /// resource (ADR 018). Keys: Patient, Coverage, Encounter, Claim. Values:
+    /// <see cref="FhirAdapterSources.Mock"/> (the default) or, for Patient and
+    /// Coverage, <see cref="FhirAdapterSources.ChoNative"/>. This decides the
+    /// binding; <see cref="Resources"/> only labels it, and a Mock binding is
+    /// always reported as Demo whatever label is configured.
+    /// </summary>
+    public Dictionary<string, string> Sources { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+}
+
+/// <summary>Implementations a FHIR data resource can be bound to.</summary>
+public static class FhirAdapterSources
+{
+    /// <summary>The in-memory synthetic data in <c>MockFhirDataAdapter</c>.</summary>
+    public const string Mock = "Mock";
+
+    /// <summary>CHO's own domain service and its FHIR projection (member-service, coverage-service).</summary>
+    public const string ChoNative = "ChoNative";
 }
 
 public static class FhirAdapterModes

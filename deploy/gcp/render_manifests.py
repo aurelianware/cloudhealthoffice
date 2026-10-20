@@ -232,6 +232,10 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
         for key, value in list(data.items()):
             if key == "Messaging__Backend" and value == "Auto":
                 data[key] = "InMemory"
+        if name == "fhir-service-config":
+            # The manifest labels its data production PHI; the demo cluster
+            # holds synthetic members only, and its FHIR responses must say so.
+            data["FhirAdapters__DataClassification"] = "synthetic"
         if name == "smart-auth-service-config":
             data["SmartAuth__DevMode"] = "true"
             # Placeholder CIDRs fail parsing at startup; there is no ingress proxy in the demo.

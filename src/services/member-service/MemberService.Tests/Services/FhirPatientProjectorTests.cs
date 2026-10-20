@@ -68,7 +68,8 @@ public class FhirPatientProjectorTests
         var json = new FhirPatientProjector().Project(m);
 
         json["resourceType"]!.ToString().Should().Be("Patient");
-        json["id"]!.ToString().Should().Be(m.Id);
+        json["id"]!.ToString().Should().Be(m.MemberId);
+        json["id"]!.ToString().Should().NotBe(m.Id, "the internal document id is never the FHIR id");
         json["active"]!.GetValue<bool>().Should().BeTrue();
         json["birthDate"]!.ToString().Should().Be("1985-06-15");
         json["gender"]!.ToString().Should().Be("female");
