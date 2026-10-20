@@ -19,7 +19,7 @@ public interface IDtrService
     Task<QuestionnaireResponse> SubmitResponseAsync(QuestionnaireResponse response, string tenantId, CancellationToken ct = default);
 
     // Validation
-    bool QuestionnaireExists(string questionnaireRef, string tenantId);
+    Task<bool> QuestionnaireExistsAsync(string questionnaireRef, string tenantId, CancellationToken ct = default);
 
     // $questionnaire-package
     Task<Bundle?> GetQuestionnairePackageAsync(string questionnaireId, string? patientId, string tenantId, CancellationToken ct = default);

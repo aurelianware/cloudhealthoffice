@@ -14,7 +14,7 @@ Use the [canonical capability ledger](../../../docs/CAPABILITY_RECONCILIATION.md
 
 - PAS submission stores the request and decision before responding; inquiry returns stored outcomes. CHO validates and persists service-line decisions and adverse reasons and projects them into PAS responses.
 - CRD unresolved/uncoded inputs and evaluation failures return uncertainty rather than a no-authorization-needed assertion.
-- DTR creates, response submission and id-based reads use MongoDB; questionnaire updates and search/existence indexes remain in-process. Say “durable creation/read-back,” not “all DTR CRUD is durable.”
+- DTR creates, conditional questionnaire updates, response submission, reads, searches and existence checks use MongoDB across pods. Full answer validation, canonical URL/version resolution and complete packages remain incomplete; do not claim full DTR conformance.
 - SMART tenant/client-bound launch and patient/encounter token context are implemented; withdrawing an application approval affects refresh. This is not a claim of every SMART response field or revocation mechanism.
 - CMS reporting computes standard/expedited counts, rates, mean/median and timeliness. Appeal/extension metrics and complete public reporting remain separate.
 - Ordinary CHO authorization workflows enforce transition guards, audit cancellation and expire approvals atomically while preserving clinical outcomes. Tenant-database sweeps and separate reopening/overturn workflows remain outside this scope. See CAP-23 and `docs/operations/AUTHORIZATION-LIFECYCLE.md`.

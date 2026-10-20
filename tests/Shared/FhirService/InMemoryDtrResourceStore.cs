@@ -12,7 +12,7 @@ namespace CloudHealthOffice.Testing.FhirService;
 /// <summary>
 /// In-process <see cref="IDtrResourceStore"/> with the semantics of
 /// <see cref="MongoDtrResourceStore"/>: one entry per (tenant id, resource id),
-/// an upsert replaces, a seed never overwrites, and each read returns a fresh
+/// conditional writes never overwrite a newer version, seeds never overwrite, and each read returns a fresh
 /// copy parsed from the stored FHIR JSON rather than the object that was written.
 /// </summary>
 public sealed class InMemoryDtrResourceStore : IDtrResourceStore
@@ -32,10 +32,35 @@ public sealed class InMemoryDtrResourceStore : IDtrResourceStore
             ? Parser.Parse<Questionnaire>(json)
             : null);
 
-    public System.Threading.Tasks.Task UpsertQuestionnaireAsync(Questionnaire questionnaire, string tenantId, CancellationToken ct = default)
+    public System.Threading.Tasks.Task<bool> TryInsertQuestionnaireAsync(Questionnaire questionnaire, string tenantId, CancellationToken ct = default)
+        => System.Threading.Tasks.Task.FromResult(_questionnaires.TryAdd(
+            (tenantId, questionnaire.Id), Serializer.SerializeToString(questionnaire)));
+
+    public System.Threading.Tasks.Task<bool> TryReplaceQuestionnaireAsync(
+        Questionnaire questionnaire, string tenantId, string? expectedVersion, CancellationToken ct = default)
     {
-        _questionnaires[(tenantId, questionnaire.Id)] = Serializer.SerializeToString(questionnaire);
-        return System.Threading.Tasks.Task.CompletedTask;
+        var key = (tenantId, questionnaire.Id);
+        var saved = _questionnaires.TryGetValue(key, out var json)
+            && Parser.Parse<Questionnaire>(json).Meta?.VersionId == expectedVersion
+            && _questionnaires.TryUpdate(key, Serializer.SerializeToString(questionnaire), json);
+        return System.Threading.Tasks.Task.FromResult(saved);
+    }
+
+    public System.Threading.Tasks.Task<IReadOnlyList<Questionnaire>> ListVisibleQuestionnairesAsync(string tenantId, CancellationToken ct = default)
+    {
+        IReadOnlyList<Questionnaire> items = _questionnaires
+            .Where(kv => kv.Key.TenantId == tenantId || kv.Key.TenantId == DtrService.DefaultLibraryTenant)
+            .GroupBy(kv => kv.Key.Id, StringComparer.Ordinal)
+            .Select(g => g.FirstOrDefault(kv => kv.Key.TenantId == tenantId).Value ?? g.First().Value)
+            .Select(json => Parser.Parse<Questionnaire>(json)).ToList();
+        return System.Threading.Tasks.Task.FromResult(items);
+    }
+
+    public System.Threading.Tasks.Task<IReadOnlyList<QuestionnaireResponse>> ListResponsesAsync(string tenantId, CancellationToken ct = default)
+    {
+        IReadOnlyList<QuestionnaireResponse> items = _responses.Where(kv => kv.Key.TenantId == tenantId)
+            .Select(kv => Parser.Parse<QuestionnaireResponse>(kv.Value)).ToList();
+        return System.Threading.Tasks.Task.FromResult(items);
     }
 
     public System.Threading.Tasks.Task<QuestionnaireResponse?> FindResponseAsync(string tenantId, string id, CancellationToken ct = default)

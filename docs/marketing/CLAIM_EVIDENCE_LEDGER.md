@@ -11,7 +11,7 @@ index, not a second capability-status table.
 | --- | --- |
 | PAS submission, inquiry, service-line decisions | CAP-01, CAP-02 |
 | CRD uncertainty handling | CAP-03 |
-| DTR durable creation/read-back and incomplete update/search/package paths | CAP-04, CAP-09, CAP-15 |
+| DTR durable resource operations/searches; incomplete validation/canonical/package semantics | CAP-04, CAP-09, CAP-15 |
 | SMART launch context, approval withdrawal and scope handling | CAP-05, CAP-11 |
 | Reporting, receipt deadlines and ordinary authorization lifecycle | CAP-06, CAP-07, CAP-23 |
 | Tenant/payer binding and Mongo concurrency | CAP-08, CAP-10, CAP-12, CAP-21 |

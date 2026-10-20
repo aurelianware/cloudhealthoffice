@@ -60,9 +60,9 @@ public sealed class MongoDtrResourceStore : IDtrResourceStore
 
     public void SeedDefaultQuestionnaire(Questionnaire questionnaire)
     {
-        var exists = _questionnaires.Find(Key(DtrService.DefaultLibraryTenant, questionnaire.Id)).Any();
-        if (!exists)
-            _questionnaires.InsertOne(SerializeQuestionnaire(questionnaire, DtrService.DefaultLibraryTenant));
+        // Insert-only with the unique tenant/id index: concurrent pods never replace
+        // an existing library entry and a seeding race is harmless.
+        TryInsertQuestionnaireAsync(questionnaire, DtrService.DefaultLibraryTenant).GetAwaiter().GetResult();
     }
 
     public async Task<Questionnaire?> FindQuestionnaireAsync(string tenantId, string id, CancellationToken ct = default)
@@ -71,10 +71,53 @@ public sealed class MongoDtrResourceStore : IDtrResourceStore
         return doc != null ? _parser.Parse<Questionnaire>(doc["fhirJson"].AsString) : null;
     }
 
-    public Task UpsertQuestionnaireAsync(Questionnaire questionnaire, string tenantId, CancellationToken ct = default)
-        => _questionnaires.ReplaceOneAsync(
-            Key(tenantId, questionnaire.Id), SerializeQuestionnaire(questionnaire, tenantId),
-            new ReplaceOptions { IsUpsert = true }, ct);
+    public async Task<bool> TryInsertQuestionnaireAsync(Questionnaire questionnaire, string tenantId, CancellationToken ct = default)
+    {
+        try
+        {
+            await _questionnaires.InsertOneAsync(SerializeQuestionnaire(questionnaire, tenantId), cancellationToken: ct);
+            return true;
+        }
+        catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> TryReplaceQuestionnaireAsync(
+        Questionnaire questionnaire, string tenantId, string? expectedVersion, CancellationToken ct = default)
+    {
+        var key = Key(tenantId, questionnaire.Id);
+        var previous = await _questionnaires.Find(key).FirstOrDefaultAsync(ct);
+        if (previous == null) return false;
+        var json = previous["fhirJson"].AsString;
+        if (_parser.Parse<Questionnaire>(json).Meta?.VersionId != expectedVersion) return false;
+
+        // Fence with the exact stored JSON, including legacy resources without meta.
+        // Patch only the payload: preserve createdAt and fields from newer pods.
+        var result = await _questionnaires.UpdateOneAsync(
+            Builders<BsonDocument>.Filter.And(key, Builders<BsonDocument>.Filter.Eq("fhirJson", json)),
+            Builders<BsonDocument>.Update.Set("fhirJson", _serializer.SerializeToString(questionnaire)),
+            cancellationToken: ct);
+        return result.ModifiedCount == 1;
+    }
+
+    public async Task<IReadOnlyList<Questionnaire>> ListVisibleQuestionnairesAsync(string tenantId, CancellationToken ct = default)
+    {
+        var docs = await _questionnaires.Find(Builders<BsonDocument>.Filter.In("tenantId",
+            new[] { tenantId, DtrService.DefaultLibraryTenant })).ToListAsync(ct);
+        // Resolve overrides BEFORE search filters/pagination: a hidden default
+        // must not reappear merely because the tenant's override does not match.
+        return docs.GroupBy(d => d["resourceId"].AsString, StringComparer.Ordinal)
+            .Select(g => g.FirstOrDefault(d => d["tenantId"].AsString == tenantId) ?? g.First())
+            .Select(d => _parser.Parse<Questionnaire>(d["fhirJson"].AsString)).ToList();
+    }
+
+    public async Task<IReadOnlyList<QuestionnaireResponse>> ListResponsesAsync(string tenantId, CancellationToken ct = default)
+    {
+        var docs = await _responses.Find(Builders<BsonDocument>.Filter.Eq("tenantId", tenantId)).ToListAsync(ct);
+        return docs.Select(d => _parser.Parse<QuestionnaireResponse>(d["fhirJson"].AsString)).ToList();
+    }
 
     public async Task<QuestionnaireResponse?> FindResponseAsync(string tenantId, string id, CancellationToken ct = default)
     {
