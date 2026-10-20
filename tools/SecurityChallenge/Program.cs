@@ -85,7 +85,7 @@ try
     service.BeginOutputReadLine(); service.BeginErrorReadLine();
     try
     {
-        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false })
         { BaseAddress = address, Timeout = TimeSpan.FromSeconds(10) };
         var ready = false;
         for (var attempt = 0; attempt < 100 && !service.HasExited; attempt++)

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudhealthoffice.com/schemas/security-challenge/v1/scenario-result.schema.json",
+  "title": "Open Security Challenge scenario result v1.0",
+  "description": "One scenario-results.jsonl line. Resolve the scenario inventory and source/binary identity through the packet manifest. This schema alone does not establish complete coverage or authorize publication.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "outcome", "assertion"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "outcome": { "enum": ["PASS", "FAIL", "ERROR", "INCONCLUSIVE", "UNSUPPORTED"] },
+    "assertion": { "type": "string", "minLength": 1 }
+  }
+}

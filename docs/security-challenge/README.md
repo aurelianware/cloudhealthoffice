@@ -37,7 +37,7 @@ dotnet tools/SecurityChallenge/bin/Release/net8.0/SecurityChallenge.dll \
 The service gets an allowlisted environment, loopback-only binding, generated
 throwaway database, explicit `Testing` identity configuration and `CHO_TESTING=1`.
 Its outbound service URLs point to loopback port 1, and OTLP/Kafka are disabled.
-The runner uses the repository's **public development signing key**; this is
+HTTP proxy use and redirects are disabled. The runner uses the repository's **public development signing key**; this is
 local authentication middleware coverage, not assurance of production OIDC,
 key custody, certificates, gateway rules or workload identity. Startup failure,
 port collision, Mongo failure and assertion exceptions produce ERROR, not PASS.
@@ -56,8 +56,8 @@ stderr. Keep those logs restricted; they are **not** part of the evidence packet
 
 ## Scenario catalog v1
 
-The exact executable inventory is `EvidencePolicy.ScenarioIds` in
-`tools/SecurityChallenge/EvidencePolicy.cs`. Fixture creation must return 201 for
+The exact executable inventory is `EvidencePolicy.ScenarioIds` in the
+[scenario catalog](../../tools/SecurityChallenge/EvidencePolicy.cs). Fixture creation must return 201 for
 both payers before any scenario runs. Positive controls are included in the
 20-scenario denominator, not reported as 20 attempted attacks.
 
@@ -87,7 +87,8 @@ Member authorization validation and approved-unit accounting are not tested here
   source HEAD plus dirty flag, runtime/OS, actual Mongo version, fixture/profile
   and publication state `REQUIRES_REVIEW`. Dirty runs cannot establish a clean
   commit-only reproduction; rebuild from clean source for a release claim.
-- `scenario-results.jsonl`: one ID, outcome and assertion reference per executed
+- `scenario-results.jsonl`: [v1.0 JSON schema](scenario-result.schema.json);
+  one ID, outcome and assertion reference per executed
   case. Outcomes are PASS, FAIL, ERROR, INCONCLUSIVE or UNSUPPORTED. This runner
   emits the first three and lists unsupported tracks separately in coverage.
 - `http-observations.json`: scenario-linked request method/path, status,
