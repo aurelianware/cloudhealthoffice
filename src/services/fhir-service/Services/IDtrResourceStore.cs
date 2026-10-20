@@ -24,8 +24,17 @@ public interface IDtrResourceStore
     /// <summary>The questionnaire stored under exactly this tenant and id, or null.</summary>
     Task<Questionnaire?> FindQuestionnaireAsync(string tenantId, string id, CancellationToken ct = default);
 
-    /// <summary>Inserts or replaces the questionnaire stored under this tenant and its id.</summary>
-    Task UpsertQuestionnaireAsync(Questionnaire questionnaire, string tenantId, CancellationToken ct = default);
+    /// <summary>Insert only; false if this tenant already has the id. Never overwrites.</summary>
+    Task<bool> TryInsertQuestionnaireAsync(Questionnaire questionnaire, string tenantId, CancellationToken ct = default);
+
+    /// <summary>Replace only the expected stored version; false on a concurrent change or missing record.</summary>
+    Task<bool> TryReplaceQuestionnaireAsync(Questionnaire questionnaire, string tenantId, string? expectedVersion, CancellationToken ct = default);
+
+    /// <summary>Own tenant plus un-overridden shared defaults, selected by stored tenant keys.</summary>
+    Task<IReadOnlyList<Questionnaire>> ListVisibleQuestionnairesAsync(string tenantId, CancellationToken ct = default);
+
+    /// <summary>Responses belonging to exactly this tenant.</summary>
+    Task<IReadOnlyList<QuestionnaireResponse>> ListResponsesAsync(string tenantId, CancellationToken ct = default);
 
     /// <summary>The response stored under exactly this tenant and id, or null.</summary>
     Task<QuestionnaireResponse?> FindResponseAsync(string tenantId, string id, CancellationToken ct = default);

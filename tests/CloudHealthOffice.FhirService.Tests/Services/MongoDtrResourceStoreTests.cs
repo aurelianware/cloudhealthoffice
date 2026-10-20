@@ -122,11 +122,12 @@ public sealed class MongoDtrResourceStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public async System.Threading.Tasks.Task An_upsert_replaces_the_tenants_copy()
+    public async System.Threading.Tasks.Task Insert_is_create_only_and_a_conditional_update_replaces_the_tenants_copy()
     {
         var store = NewStore();
-        await store.UpsertQuestionnaireAsync(Form("q-upsert", "First"), Tenant);
-        await store.UpsertQuestionnaireAsync(Form("q-upsert", "Second"), Tenant);
+        (await store.TryInsertQuestionnaireAsync(Form("q-upsert", "First"), Tenant)).Should().BeTrue();
+        (await store.TryInsertQuestionnaireAsync(Form("q-upsert", "Duplicate"), Tenant)).Should().BeFalse();
+        (await store.TryReplaceQuestionnaireAsync(Form("q-upsert", "Second"), Tenant, null)).Should().BeTrue();
 
         (await Questionnaires.CountDocumentsAsync(Builders<BsonDocument>.Filter.Eq("resourceId", "q-upsert")))
             .Should().Be(1);
@@ -168,4 +169,185 @@ public sealed class MongoDtrResourceStoreTests : IAsyncLifetime
 
         (await NewService().GetResponseAsync(submitted.Id, "tenant-b")).Should().BeNull();
     }
+    [Fact]
+    public async System.Threading.Tasks.Task Existing_pods_and_restarts_search_and_update_the_same_durable_resources()
+    {
+        var reader = NewService(); // alive before another pod writes
+        var writer = NewService();
+        await writer.CreateQuestionnaireAsync(Form("q-live", "Original"), Tenant);
+        (await reader.QuestionnaireExistsAsync("Questionnaire/q-live", Tenant)).Should().BeTrue();
+        (await reader.QuestionnaireExistsAsync("q-live", "tenant-b")).Should().BeFalse();
+        var first = await reader.SearchQuestionnairesAsync(new() { Id = "q-live" }, Tenant);
+        first.Total.Should().Be(1);
+
+        var update = Form("ignored-body-id", "Updated after restart");
+        update.Name = "durable-updated";
+        update.Status = PublicationStatus.Draft;
+        (await NewService().UpdateQuestionnaireAsync("q-live", update, Tenant))!.Meta.VersionId.Should().Be("2");
+        var result = await reader.SearchQuestionnairesAsync(new()
+        {
+            Id = "q-live", Name = "UPDATED", Title = "AFTER RESTART", Status = "draft",
+        }, Tenant);
+        result.Total.Should().Be(1);
+        result.Items.Should().ContainSingle().Which.Title.Should().Be("Updated after restart");
+        (await writer.GetQuestionnaireAsync("q-live", Tenant))!.Meta.VersionId.Should().Be("2");
+        (await NewService().GetQuestionnairePackageAsync("q-live", null, Tenant))!
+            .Entry.Single().Resource.Should().BeOfType<Questionnaire>().Which.Title.Should().Be("Updated after restart");
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Shared_defaults_are_shadowed_before_filtering_and_overrides_never_cross_tenants()
+    {
+        var reader = NewService();
+        await NewService().UpdateQuestionnaireAsync("q-imaging-mri", Form("ignored", "Tenant custom form"), Tenant);
+        await NewService().UpdateQuestionnaireAsync("q-imaging-mri", Form("ignored", "Another tenant"), "tenant-b");
+        var hidden = await reader.SearchQuestionnairesAsync(new() { Id = "q-imaging-mri", Title = "MRI" }, Tenant);
+        hidden.Total.Should().Be(0); // matching default must stay hidden
+        var own = await reader.SearchQuestionnairesAsync(new() { Id = "q-imaging-mri" }, Tenant);
+        own.Items.Should().ContainSingle().Which.Title.Should().Be("Tenant custom form");
+        (await NewService().GetQuestionnaireAsync("q-imaging-mri", "tenant-c"))!.Title.Should().Contain("MRI");
+        (await NewStore().FindQuestionnaireAsync(DtrService.DefaultLibraryTenant, "q-imaging-mri"))!
+            .Title.Should().Contain("MRI");
+        (await NewService().UpdateQuestionnaireAsync("missing", Form("missing", "Missing"), Tenant)).Should().BeNull();
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Questionnaire_search_is_stably_paged_and_uses_exact_stored_tenant_keys()
+    {
+        foreach (var id in new[] { "q-z", "q-a", "q-m" })
+            await NewService().CreateQuestionnaireAsync(Form(id, "Paging form"), Tenant);
+        await NewService().CreateQuestionnaireAsync(Form("q-b", "Paging foreign"), Tenant + ":nested");
+        await NewService().CreateQuestionnaireAsync(Form("q-c", "Paging foreign"), "tenant-b");
+        var first = await NewService().SearchQuestionnairesAsync(new() { Title = "Paging", Count = 2, Page = 1 }, Tenant);
+        var second = await NewService().SearchQuestionnairesAsync(new() { Title = "Paging", Count = 2, Page = 2 }, Tenant);
+        first.Total.Should().Be(3);
+        second.Total.Should().Be(3);
+        first.Items.Select(q => q.Id).Should().Equal("q-a", "q-m");
+        second.Items.Select(q => q.Id).Should().Equal("q-z");
+    }
+
+    private static QuestionnaireResponse Answer(string patient, string questionnaire = "Questionnaire/q-imaging-mri") => new()
+    {
+        Status = QuestionnaireResponse.QuestionnaireResponseStatus.Completed,
+        Questionnaire = questionnaire,
+        Subject = new ResourceReference(patient),
+    };
+
+    [Fact]
+    public async System.Threading.Tasks.Task Response_search_survives_restarts_and_filters_before_count_and_pagination()
+    {
+        var reader = NewService();
+        var writer = NewService();
+        var one = await writer.SubmitResponseAsync(Answer("Patient/member-1"), Tenant);
+        var two = await writer.SubmitResponseAsync(Answer("member-1"), Tenant);
+        await writer.SubmitResponseAsync(Answer("Patient/member-2"), Tenant);
+        await writer.SubmitResponseAsync(Answer("Patient/member-1"), "tenant-b");
+        await writer.SubmitResponseAsync(Answer("Patient/member-1"), Tenant + ":nested");
+        await writer.SubmitResponseAsync(Answer("Patient/member-1", "Questionnaire/q-dme-equipment"), Tenant);
+        var amended = Answer("Patient/member-1");
+        amended.Status = QuestionnaireResponse.QuestionnaireResponseStatus.Amended;
+        await writer.SubmitResponseAsync(amended, Tenant);
+        var filter = new QuestionnaireResponseSearchParams
+        {
+            Patient = "Patient/member-1", QuestionnaireRef = "Questionnaire/q-imaging-mri", Status = "completed", Count = 1,
+        };
+        var first = await reader.SearchResponsesAsync(filter, Tenant);
+        filter.Page = 2;
+        var second = await NewService().SearchResponsesAsync(filter, Tenant);
+        first.Total.Should().Be(2);
+        second.Total.Should().Be(2);
+        first.Items.Concat(second.Items).Select(r => r.Id)
+            .Should().Equal(new[] { one.Id, two.Id }.OrderBy(id => id, StringComparer.Ordinal));
+        var byId = await reader.SearchResponsesAsync(new() { Id = one.Id }, Tenant);
+        byId.Items.Should().ContainSingle().Which.Id.Should().Be(one.Id);
+        (await reader.SearchResponsesAsync(new() { Id = one.Id }, "tenant-b")).Total.Should().Be(0);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Legacy_payload_only_documents_remain_searchable_and_updates_preserve_envelope_fields()
+    {
+        NewService();
+        var serializer = new Hl7.Fhir.Serialization.FhirJsonSerializer();
+        await Questionnaires.InsertOneAsync(new BsonDocument
+        {
+            { "tenantId", Tenant }, { "resourceId", "q-legacy" },
+            { "fhirJson", serializer.SerializeToString(Form("q-legacy", "Legacy form")) },
+            { "createdAt", "original timestamp" }, { "futureEnvelopeField", "preserve" },
+        });
+        await Responses.InsertOneAsync(new BsonDocument
+        {
+            { "tenantId", Tenant }, { "resourceId", "qr-legacy" },
+            { "fhirJson", serializer.SerializeToString(new QuestionnaireResponse
+                { Id = "qr-legacy", Subject = new ResourceReference("Patient/legacy"),
+                  Questionnaire = "Questionnaire/q-legacy", Status = QuestionnaireResponse.QuestionnaireResponseStatus.Completed }) },
+        });
+        var reader = NewService();
+        (await reader.SearchQuestionnairesAsync(new() { Id = "q-legacy" }, Tenant)).Total.Should().Be(1);
+        (await reader.SearchResponsesAsync(new() { Patient = "legacy" }, Tenant)).Total.Should().Be(1);
+        (await reader.UpdateQuestionnaireAsync("q-legacy", Form("ignored", "Migrated by normal update"), Tenant))!
+            .Meta.VersionId.Should().Be("1");
+        var doc = await Questionnaires.Find(Builders<BsonDocument>.Filter.Eq("resourceId", "q-legacy")).SingleAsync();
+        doc["createdAt"].AsString.Should().Be("original timestamp");
+        doc["futureEnvelopeField"].AsString.Should().Be("preserve");
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Concurrent_creates_with_the_same_id_never_overwrite_the_first_form()
+    {
+        var services = new[] { NewService(), NewService() };
+        var created = await System.Threading.Tasks.Task.WhenAll(services.Select((s, i) =>
+            s.CreateQuestionnaireAsync(Form("q-race", $"Form {i}"), Tenant)));
+        created.Select(q => q.Id).Distinct().Should().HaveCount(2);
+        var reader = NewService();
+        foreach (var form in created)
+            (await reader.GetQuestionnaireAsync(form.Id, Tenant))!.Title.Should().Be(form.Title);
+        (await reader.SearchQuestionnairesAsync(new() { Title = "Form " }, Tenant)).Total.Should().Be(2);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Conditional_updates_have_one_winner_and_reject_stale_or_foreign_writes()
+    {
+        await NewService().CreateQuestionnaireAsync(Form("q-cas", "Original"), Tenant);
+        var contenders = new[] { Form("q-cas", "One"), Form("q-cas", "Two") };
+        foreach (var q in contenders) q.Meta = new Meta { VersionId = "2" };
+        var results = await System.Threading.Tasks.Task.WhenAll(contenders.Select(q =>
+            NewStore().TryReplaceQuestionnaireAsync(q, Tenant, "1")));
+        results.Count(won => won).Should().Be(1);
+        (await NewStore().TryReplaceQuestionnaireAsync(Form("q-cas", "Stale"), Tenant, "1")).Should().BeFalse();
+        (await NewStore().TryReplaceQuestionnaireAsync(Form("q-cas", "Foreign"), "tenant-b", "2")).Should().BeFalse();
+        (await NewService().GetQuestionnaireAsync("q-cas", Tenant))!.Meta.VersionId.Should().Be("2");
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Concurrent_pod_seeding_keeps_one_copy_of_each_default()
+    {
+        NewStore();
+        await System.Threading.Tasks.Task.WhenAll(Enumerable.Range(0, 6).Select(_ =>
+            System.Threading.Tasks.Task.Run(() => NewService())));
+        (await Questionnaires.CountDocumentsAsync(Builders<BsonDocument>.Filter.Eq("tenantId", DtrService.DefaultLibraryTenant)))
+            .Should().Be(5);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Response_intake_checks_the_durable_library_from_an_already_running_pod()
+    {
+        var reader = NewService();
+        var controller = new global::FhirService.Controllers.DtrController(reader,
+            new FhirBundleBuilder(_configuration), NullLogger<global::FhirService.Controllers.DtrController>.Instance);
+        var context = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        context.Items["TenantId"] = Tenant;
+        context.Request.Scheme = "https";
+        context.Request.Host = new Microsoft.AspNetCore.Http.HostString("test.example.com");
+        controller.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = context };
+        await NewService().CreateQuestionnaireAsync(Form("q-another-pod", "New form"), Tenant);
+        var response = Answer("Patient/member-1", "Questionnaire/q-another-pod");
+        var result = await controller.SubmitQuestionnaireResponse(response, CancellationToken.None);
+        result.Should().BeOfType<Microsoft.AspNetCore.Mvc.ObjectResult>().Which.StatusCode.Should().Be(201);
+        (await NewService().GetResponseAsync(response.Id, Tenant)).Should().NotBeNull();
+        await NewService().CreateQuestionnaireAsync(Form("q-foreign", "Foreign"), "tenant-b");
+        var refused = await controller.SubmitQuestionnaireResponse(
+            Answer("Patient/member-1", "Questionnaire/q-foreign"), CancellationToken.None);
+        refused.Should().BeOfType<Microsoft.AspNetCore.Mvc.ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
 }
