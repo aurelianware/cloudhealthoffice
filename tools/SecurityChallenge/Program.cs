@@ -327,7 +327,8 @@ await File.WriteAllTextAsync(Path.Combine(output, "manifest.json"), JsonSerializ
 await File.WriteAllLinesAsync(Path.Combine(output, "scenario-results.jsonl"), results.Select(x => JsonSerializer.Serialize(x, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
 await File.WriteAllTextAsync(Path.Combine(output, "coverage.json"), JsonSerializer.Serialize(new
 {
-    planned = EvidencePolicy.ScenarioIds.Count, executed = results.Count(x => x.Id != "lab.prerequisites"),
+    planned = EvidencePolicy.ScenarioIds.Count, executed = EvidencePolicy.ExecutedCount(results),
+    reported = results.Count(x => x.Id != "lab.prerequisites"),
     pass = results.Count(x => x.Outcome == "PASS"), fail = results.Count(x => x.Outcome == "FAIL"),
     error = results.Count(x => x.Outcome == "ERROR"), inconclusive = results.Count(x => x.Outcome == "INCONCLUSIVE"), unsupported
 }, json));

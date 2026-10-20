@@ -17,6 +17,9 @@ public static class EvidencePolicy
         "member.wrong-line", "member.wrong-procedure", "member.wrong-provider", "member.trimmed-id-control"
     });
 
+    public static int ExecutedCount(IEnumerable<CaseResult> results) => results.Count(x =>
+        x.Id != "lab.prerequisites" && x.Outcome is "PASS" or "FAIL" or "ERROR");
+
     // Never infer assurance from a successful setup or a count padded with duplicates.
     public static bool IsCompletePass(bool completed, IReadOnlyCollection<CaseResult> results) =>
         completed && results.Count == ScenarioIds.Count
