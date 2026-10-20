@@ -8,6 +8,33 @@ namespace CloudHealthOffice.ClaimsService.Tests.Services.Resolution;
 
 public sealed class HttpAuthorizationValidationClientTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AmbiguousServiceLine_IsUnavailableEvenIfBodyClaimsValid(bool isValid)
+    {
+        var body = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            authorizationNumber = "AUTH-1", isValid, validationCode = "AmbiguousServiceLine",
+            validationMessage = "Select the relevant service line"
+        });
+        var sut = CreateClient(FakeHttpMessageHandler.Json(body));
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "72148", DateTime.UtcNow, "1234567890");
+        Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
+    }
+
+    [Theory]
+    [InlineData(0, "72148")]
+    [InlineData(-1, "72148")]
+    [InlineData(7, null)]
+    public async Task InvalidExplicitLine_PendsWithoutCallingProducer(int lineNumber, string? code)
+    {
+        var sut = CreateClient(new FakeHttpMessageHandler(_ => throw new InvalidOperationException("must not send")));
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", code, DateTime.UtcNow, "1234567890", authorizationLineNumber: lineNumber);
+        Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
+        Assert.Contains("positive number and procedure", result.Reason);
+    }
+
     [Fact]
     public async Task ValidateAsync_SendsTenantProcedureAndServiceDate()
     {

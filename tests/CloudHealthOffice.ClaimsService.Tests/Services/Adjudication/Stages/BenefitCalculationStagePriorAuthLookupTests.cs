@@ -40,6 +40,67 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
             .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() });
     }
 
+    [Fact]
+    public async Task ExplicitAuthorizationLines_AreIndependentOfClaimOrdinalsAndLookupCache()
+    {
+        var (stage, handler) = StageOver(req =>
+        {
+            var authLine = Query(req, "lineNumber");
+            return ValidationBody("AUTH-1", authLine == "7", authLine == "7" ? "Authorization valid" : "Procedure not approved");
+        });
+        var ctx = InpatientMedicaid("AUTH-1", "72148", "72148");
+        ctx.Claim.ClaimLines[0].PriorAuthorizationLineNumber = 7;
+        ctx.Claim.ClaimLines[1].PriorAuthorizationLineNumber = 12;
+
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        Assert.Equal(2, handler.RequestCount);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task UnselectedRepeatedProcedure_PendsInsteadOfDenyingAndDoesNotInferClaimOrdinal()
+    {
+        string? sentAuthorizationLine = "not-called";
+        var (stage, _) = StageOver(req =>
+        {
+            sentAuthorizationLine = Query(req, "lineNumber");
+            return ValidationBody("AUTH-1", false, "Procedure occurs on multiple lines; specify lineNumber");
+        });
+        var ctx = InpatientMedicaid("AUTH-1", "72148");
+        ctx.Claim.ClaimLines[0].LineNumber = 7;
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+        AssertPendedPaUnavailable(result, ctx);
+        Assert.Null(sentAuthorizationLine);
+    }
+
+    [Fact]
+    public async Task ExplicitApprovedAuthorizationLine_PassesWithClaimNumberFallback()
+    {
+        var (stage, _) = StageOver(req =>
+        {
+            Assert.Equal("12", Query(req, "lineNumber"));
+            Assert.Contains("/AUTH-1/validate", req.RequestUri!.AbsolutePath);
+            return ValidationBody("AUTH-1", true, "Authorization valid");
+        });
+        var ctx = InpatientMedicaid("AUTH-1", "72148");
+        ctx.Claim.ClaimLines[0].PriorAuthorizationLineNumber = 12;
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void ExplicitAuthorizationLine_SurvivesAdapterRoundTrip()
+    {
+        var line = new ClaimLine { LineNumber = 2, PriorAuthorizationNumber = "AUTH-1", PriorAuthorizationLineNumber = 12 };
+        var roundTrip = AdapterClaimLine.From(line).ToClaimLine();
+        Assert.Equal(12, roundTrip.PriorAuthorizationLineNumber);
+        Assert.Equal(2, roundTrip.LineNumber);
+        Assert.Equal("AUTH-1", roundTrip.PriorAuthorizationNumber);
+    }
+
     // ── The auth number does not exist (definitive 404) ───────────────
 
     [Fact]

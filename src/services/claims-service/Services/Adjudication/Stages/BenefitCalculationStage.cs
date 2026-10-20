@@ -566,7 +566,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
         string? denialReason = null;
         var unavailable = new List<string>();
-        var lookups = new Dictionary<(string Number, string? Code, DateTime Date), AuthorizationLookupResult>();
+        var lookups = new Dictionary<(string Number, string? Code, DateTime Date, int? AuthLine), AuthorizationLookupResult>();
 
         foreach (var line in lines)
         {
@@ -579,7 +579,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
             var procedureCode = string.IsNullOrWhiteSpace(line.ProcedureCode) ? null : line.ProcedureCode.Trim();
             var serviceDate = line.ServiceDateFrom == default ? claim.ServiceDateFrom : line.ServiceDateFrom;
-            var key = (number, procedureCode, serviceDate);
+            var key = (number, procedureCode, serviceDate, line.PriorAuthorizationLineNumber);
 
             if (!lookups.TryGetValue(key, out var lookup))
             {
@@ -588,7 +588,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                     // A null from a substitute or a future implementation is
                     // not an answer either.
                     lookup = await _authorizationValidationClient
-                        .ValidateAsync(context.TenantId, number, procedureCode, serviceDate, providerNpi, ct)
+                        .ValidateAsync(context.TenantId, number, procedureCode, serviceDate, providerNpi, ct, line.PriorAuthorizationLineNumber)
                         .ConfigureAwait(false)
                         ?? AuthorizationLookupResult.Unavailable("authorization lookup returned no result");
                 }
