@@ -117,6 +117,17 @@ updates:
       # #1318 broke restore (NU1605) in attachment-service.
       - dependency-name: "Azure.Storage.Blobs"
         versions: [">= 12.30.0"]
+      # #1412: these upgrades pull Configuration/System.Text.Json 10.x and
+      # break the supported .NET 8 graph (NU1605). Reassess as a coordinated
+      # dependency update; do not raise the application target framework.
+      - dependency-name: "Azure.Extensions.AspNetCore.Configuration.Secrets"
+        versions: ["> 1.4.0"]
+      - dependency-name: "Azure.Identity"
+        versions: ["> 1.13.2"]
+      - dependency-name: "Azure.Messaging.ServiceBus"
+        versions: ["> 7.17.5"]
+      - dependency-name: "Azure.Security.KeyVault.Secrets"
+        versions: ["> 4.7.0"]
 
   # ============================================================
   # NuGet — Engines
@@ -160,6 +171,17 @@ updates:
       # #1318 broke restore (NU1605) in attachment-service.
       - dependency-name: "Azure.Storage.Blobs"
         versions: [">= 12.30.0"]
+      # #1412: these upgrades pull Configuration/System.Text.Json 10.x and
+      # break the supported .NET 8 graph (NU1605). Reassess as a coordinated
+      # dependency update; do not raise the application target framework.
+      - dependency-name: "Azure.Extensions.AspNetCore.Configuration.Secrets"
+        versions: ["> 1.4.0"]
+      - dependency-name: "Azure.Identity"
+        versions: ["> 1.13.2"]
+      - dependency-name: "Azure.Messaging.ServiceBus"
+        versions: ["> 7.17.5"]
+      - dependency-name: "Azure.Security.KeyVault.Secrets"
+        versions: ["> 4.7.0"]
 
   # ============================================================
   # Docker — Base images
