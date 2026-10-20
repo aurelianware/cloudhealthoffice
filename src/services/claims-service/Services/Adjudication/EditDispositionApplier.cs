@@ -5,7 +5,7 @@ namespace ClaimsService.Services.Adjudication;
 
 /// <summary>
 /// A line (or some of its units) denied because a reviewer upheld an edit.
-/// Group CO: an NCCI, MUE or duplicate denial is the provider's liability.
+/// Group CO: an NCCI, MUE, duplicate or plan-edit denial is the provider's liability.
 /// </summary>
 public sealed record UpheldEditLineDenial(
     int LineNumber,
@@ -28,7 +28,8 @@ public sealed record UpheldEditLineDenial(
 /// <list type="bullet">
 ///   <item><description><b>Override</b> — the edit stage suppresses the edit (it neither pends nor denies).</description></item>
 ///   <item><description><b>Uphold</b> — the edit stage treats it as decided, and benefit calculation denies
-///     what the edit covers: the column-2 line of an NCCI pair, the units over an MUE limit, the duplicate line.</description></item>
+///     what the edit covers: the column-2 line of an NCCI pair, the units over an MUE limit, the duplicate line,
+///     the lines a plan's denial edit names.</description></item>
 /// </list>
 /// An edit that fires with no disposition is one the reviewer never saw; it
 /// pends as usual and the approval is refused.
@@ -98,6 +99,20 @@ public static class EditDispositionApplier
             if (!upheld.Contains(key) || !lines.TryGetValue(finding.LineNumber, out var line)) continue;
             denials.Add(new(finding.LineNumber, line.Units, line.Units,
                 finding.SuggestedCarc ?? DuplicateCarc, null, key));
+        }
+
+        // A plan's denial edit denies the lines it names with the CARC it
+        // gave; a review edit (no CARC) upheld changes no payment.
+        foreach (var edit in pend?.PlanEditFindings ?? [])
+        {
+            if (!edit.IsDenialEdit) continue;
+            var key = edit.EditKey ?? EditIdentity.Key(edit);
+            if (!upheld.Contains(key)) continue;
+            foreach (var lineNumber in edit.LineNumbers.Distinct())
+            {
+                if (!lines.TryGetValue(lineNumber, out var line)) continue;
+                denials.Add(new(lineNumber, line.Units, line.Units, edit.SuggestedCarc!, edit.SuggestedRarc, key));
+            }
         }
 
         // One denial per line: a line denied in full by one edit and partly by

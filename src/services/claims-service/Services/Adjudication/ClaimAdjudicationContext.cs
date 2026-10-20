@@ -175,6 +175,14 @@ public class ClaimAdjudicationContext
     public List<DuplicateFindingSnapshot> DuplicateFindings { get; } = new();
 
     /// <summary>
+    /// The plan's own edits <see cref="Stages.PlanEditsStage"/> pended the
+    /// claim with (ADR 019). Held here as well as on <see cref="PendDetails"/>
+    /// for the same reason as <see cref="DuplicateFindings"/>: a later stage
+    /// may replace <see cref="PendDetails"/>, and PersistenceStage re-attaches these.
+    /// </summary>
+    public List<PlanEditFindingSnapshot> PlanEditFindings { get; } = new();
+
+    /// <summary>
     /// Coordination of Benefits outcome populated by
     /// <see cref="Stages.CoordinationOfBenefitsStage"/> (capability 5.8).
     /// Null until the COB stage runs. Phase 1 (α posture, mirrors 5.4
