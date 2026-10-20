@@ -9,29 +9,18 @@ public sealed class PriorAuthAdjudicationOptions
     public const string SectionName = "ClaimsAdjudication:PriorAuth";
 
     /// <summary>
-    /// Also check lines whose procedure code the claim's plan flags as
-    /// requiring prior authorization (<c>benefits[].priorAuthRequired</c> /
-    /// <c>requiresPriorAuth</c> with <c>cptCodes</c>). <b>Off by default</b>
-    /// until line-level authorization decisions (G-07, D-06) land:
-    /// <c>/validate</c> with a procedure code answers Invalid for any
-    /// authorization decided through the API (no line <c>ServiceStatus</c> is
-    /// written), so turning this on today would deny (CARC 197) plan-flagged
-    /// lines of claims whose authorization was approved. The default scope —
-    /// every line of an institutional Medicaid inpatient (POS 21) claim — is
-    /// unaffected by this setting.
+    /// Also check lines whose plan flags require prior authorization
+    /// (<c>benefits[].priorAuthRequired</c> / <c>requiresPriorAuth</c> with CPT codes).
+    /// Off by default for staged rollout (G-64). CHO line-level decisions
+    /// (G-07) and the service-owned coverage/plan lookups (D-36/D-40) are now
+    /// implemented; their completion does not change this setting.
     ///
     /// <para>
-    /// <b>Prerequisites for turning it on</b> (owner decision 2026-10-11,
-    /// docs/epa-gap-matrix.md §7.1 Q-16), besides G-07:
-    /// <list type="number">
-    ///   <item>D-36 — examiner approval re-runs call coverage-service with the
-    ///   examiner's token, which lacks <c>coverage:read</c>;</item>
-    ///   <item>D-40 — plan lookups (<c>HttpBenefitPlanResolver</c>) forward the
-    ///   caller's token: on an approval re-run every examiner role must hold
-    ///   <c>benefits:read</c> in the stored TenantRole catalogue, or plan lookups
-    ///   must use the service identity (<c>UseChoServiceIdentity</c>). Otherwise
-    ///   every approval re-run of a claim outside the floor pends PLANUNAVAIL.</item>
-    /// </list>
+    /// Before enabling in a deployment, verify its claims-service token source,
+    /// trusted issuer and downstream access, and exercise the intended tenant's
+    /// plan flags and claims-to-authorization service-line mapping. The existing
+    /// institutional Medicaid inpatient (POS 21) floor is unaffected.
+    /// See docs/operations/CLAIMS-ADJUDICATION-SERVICE-IDENTITY.md.
     /// </para>
     /// </summary>
     public bool UsePlanFlaggedCodes { get; set; }
