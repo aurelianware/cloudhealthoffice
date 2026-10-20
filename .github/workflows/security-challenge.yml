@@ -6,6 +6,7 @@ on:
     paths:
       - 'tools/SecurityChallenge/**'
       - 'tools/SecurityChallenge.Tests/**'
+      - 'docs/security-challenge/**'
       - 'src/services/authorization-service/**'
       - 'src/services/shared/CloudHealthOffice.Infrastructure/**'
       - 'Directory.Packages.props'
