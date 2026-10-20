@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using CoverageService.Models;
 
@@ -55,7 +56,7 @@ public sealed class FhirCoverageProjector : IFhirCoverageProjector
         {
             ["resourceType"] = "Coverage",
             ["id"] = coverage.Id,
-            ["meta"] = new JsonObject { ["lastUpdated"] = AsUtc(coverage.LastUpdatedDate).ToString("o") },
+            ["meta"] = new JsonObject { ["lastUpdated"] = AsUtc(coverage.LastUpdatedDate).ToString("o", CultureInfo.InvariantCulture) },
             ["extension"] = new JsonArray(new JsonObject
             {
                 ["url"] = CoverageStatusExtension,
@@ -112,9 +113,9 @@ public sealed class FhirCoverageProjector : IFhirCoverageProjector
 
     private static JsonObject Period(Coverage coverage)
     {
-        var period = new JsonObject { ["start"] = coverage.EffectiveDate.ToString("yyyy-MM-dd") };
+        var period = new JsonObject { ["start"] = coverage.EffectiveDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) };
         if (coverage.TerminationDate is { } end)
-            period["end"] = end.ToString("yyyy-MM-dd");
+            period["end"] = end.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         return period;
     }
 

@@ -47,6 +47,12 @@ public sealed class ChoNativeFhirDataAdapter
     /// <summary>The code system of Coverage.type in coverage-service's projection.</summary>
     public const string LineOfBusinessSystem = "http://fhir.cloudhealthoffice.com/CodeSystem/cho-line-of-business";
 
+    /// <summary>member-service's FHIR Patient search; its <c>memberId</c> filter is what confines a patient-bound search.</summary>
+    public const string PatientSearchRoute = "/api/v1/members/fhir/Patient";
+
+    /// <summary>coverage-service's FHIR Coverage search; its <c>memberId</c> filter is what confines a patient-bound search.</summary>
+    public const string CoverageSearchRoute = "/api/v1/coverage/fhir/Coverage";
+
     /// <summary>The deepest offset the CHO search endpoints accept.</summary>
     public const int MaxOffset = 10_000;
 
@@ -71,7 +77,7 @@ public sealed class ChoNativeFhirDataAdapter
     public async Task<Patient?> GetPatientAsync(string id, string tenantId, CancellationToken ct)
     {
         RequireRequestTenant(tenantId);
-        var body = await GetAsync(MemberServiceClient, "Patient", $"/api/v1/members/{Uri.EscapeDataString(id)}/fhir", ct);
+        var body = await GetAsync(MemberServiceClient, "Patient", $"/api/v1/members/{Uri.EscapeDataString(id)}/fhir", "/api/v1/members/{memberId}/fhir", ct);
         return body is null ? null : ParseResource<Patient>("Patient", body);
     }
 
@@ -79,9 +85,14 @@ public sealed class ChoNativeFhirDataAdapter
         PatientSearchParams search, string tenantId, CancellationToken ct)
     {
         RequireRequestTenant(tenantId);
+        RejectUnsupportedParameters(PatientParameters);
         var q = new QueryBuilder();
 
-        // _id and a member-id identifier both name the member; both given must agree.
+        // _id and a member-id identifier both name the member; both given must
+        // agree. The value used is search.Id, which the controller may have
+        // pinned to a patient-bound token's member; the raw query is only
+        // checked for repeats and OR lists.
+        FhirSearchTranslation.Single("_id", Values("_id", search.Id));
         var memberId = search.Id;
         if (FhirSearchTranslation.Single("identifier", Values("identifier", search.Identifier)) is { } identifier)
         {
@@ -110,7 +121,7 @@ public sealed class ChoNativeFhirDataAdapter
         }
 
         q.AddPage(search.Page, search.Count);
-        return await SearchAsync<Patient>(MemberServiceClient, "Patient", "/api/v1/members/fhir/Patient" + q, ct);
+        return await SearchAsync<Patient>(MemberServiceClient, "Patient", PatientSearchRoute, PatientSearchRoute + q, ct);
     }
 
     // ── Coverage ─────────────────────────────────────────────────────────────
@@ -118,7 +129,7 @@ public sealed class ChoNativeFhirDataAdapter
     public async Task<Coverage?> GetCoverageAsync(string id, string tenantId, CancellationToken ct)
     {
         RequireRequestTenant(tenantId);
-        var body = await GetAsync(CoverageServiceClient, "Coverage", $"/api/v1/coverage/{Uri.EscapeDataString(id)}/fhir", ct);
+        var body = await GetAsync(CoverageServiceClient, "Coverage", $"/api/v1/coverage/{Uri.EscapeDataString(id)}/fhir", "/api/v1/coverage/{id}/fhir", ct);
         return body is null ? null : ParseResource<Coverage>("Coverage", body);
     }
 
@@ -126,12 +137,15 @@ public sealed class ChoNativeFhirDataAdapter
         CoverageSearchParams search, string tenantId, CancellationToken ct)
     {
         RequireRequestTenant(tenantId);
+        RejectUnsupportedParameters(CoverageParameters);
         var q = new QueryBuilder();
+        FhirSearchTranslation.Single("_id", Values("_id", search.Id));
         q.Add("coverageId", search.Id);
 
         // patient and beneficiary both name the member (AND): when both are
         // given they must agree. search.Patient may already be the SMART-bound
         // patient the controller pinned.
+        FhirSearchTranslation.Single("patient", Values("patient", search.Patient));
         var patient = search.Patient is null ? null : FhirSearchTranslation.ParsePatientReference("patient", search.Patient);
         var beneficiary = FhirSearchTranslation.Single("beneficiary", Values("beneficiary", search.Beneficiary)) is { } b
             ? FhirSearchTranslation.ParsePatientReference("beneficiary", b)
@@ -161,10 +175,40 @@ public sealed class ChoNativeFhirDataAdapter
             return (Array.Empty<Coverage>(), 0);
 
         q.AddPage(search.Page, search.Count);
-        return await SearchAsync<Coverage>(CoverageServiceClient, "Coverage", "/api/v1/coverage/fhir/Coverage" + q, ct);
+        return await SearchAsync<Coverage>(CoverageServiceClient, "Coverage", CoverageSearchRoute, CoverageSearchRoute + q, ct);
     }
 
     // ── Plumbing ─────────────────────────────────────────────────────────────
+
+    /// <summary>Request parameters that never filter: paging and output format.</summary>
+    private static readonly string[] ControlParameters = ["_count", "_page", "_format", "_pretty"];
+
+    private static readonly HashSet<string> PatientParameters = new(
+        ControlParameters.Concat(["_id", "_lastUpdated", "identifier", "family", "given", "name", "gender", "birthdate"]),
+        StringComparer.Ordinal);
+
+    private static readonly HashSet<string> CoverageParameters = new(
+        ControlParameters.Concat(["_id", "_lastUpdated", "patient", "beneficiary", "status", "type"]),
+        StringComparer.Ordinal);
+
+    /// <summary>
+    /// Refuses any parameter this server would not apply — an unknown name, a
+    /// modifier (<c>family:exact</c>), <c>_include</c>, <c>_sort</c> — so a
+    /// caller never receives a broader result than the query it sent (the
+    /// bundle's self link echoes the query as given).
+    /// </summary>
+    private void RejectUnsupportedParameters(IReadOnlySet<string> supported)
+    {
+        var query = _http.HttpContext?.Request.Query;
+        if (query is null) return;
+        var unsupported = query.Keys.Where(k => !supported.Contains(k)).OrderBy(k => k, StringComparer.Ordinal).ToList();
+        if (unsupported.Count > 0)
+        {
+            throw new FhirSearchNotSupportedException(
+                "Unsupported search parameter(s): " + string.Join(", ", unsupported)
+                + ". Supported: " + string.Join(", ", supported.Except(ControlParameters).OrderBy(k => k, StringComparer.Ordinal)) + ".");
+        }
+    }
 
     /// <summary>
     /// Every value the request gave for a parameter. FHIR repeats a parameter
@@ -215,7 +259,8 @@ public sealed class ChoNativeFhirDataAdapter
     }
 
     /// <summary>The body of a 2xx answer, or null on 404.</summary>
-    private async Task<string?> GetAsync(string clientName, string resource, string path, CancellationToken ct)
+    /// <param name="route">The route template, for logs: the path itself can carry member ids and names.</param>
+    private async Task<string?> GetAsync(string clientName, string resource, string path, string route, CancellationToken ct)
     {
         var client = _clients.CreateClient(clientName);
         HttpResponseMessage response;
@@ -229,7 +274,7 @@ public sealed class ChoNativeFhirDataAdapter
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or TimeoutException)
         {
-            _logger.LogWarning(ex, "{Resource} upstream unreachable for {Path}", resource, LogSanitizer.Sanitize(path));
+            _logger.LogWarning(ex, "{Resource} upstream unreachable at {Route}", resource, route);
             throw new FhirUpstreamException(resource, $"{resource} upstream is unreachable.", ex);
         }
 
@@ -242,18 +287,30 @@ public sealed class ChoNativeFhirDataAdapter
                 // 5xx is an outage; 4xx means fhir-service sent something the
                 // upstream refused (a contract or credential defect), which the
                 // FHIR caller cannot fix either. Neither body is passed on.
-                _logger.LogWarning("{Resource} upstream answered {Status} for {Path}",
-                    resource, (int)response.StatusCode, LogSanitizer.Sanitize(path));
+                _logger.LogWarning("{Resource} upstream answered {Status} at {Route}",
+                    resource, (int)response.StatusCode, route);
                 throw new FhirUpstreamException(resource, $"{resource} upstream is unavailable.");
             }
-            return await response.Content.ReadAsStringAsync(ct);
+            try
+            {
+                return await response.Content.ReadAsStringAsync(ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
+            {
+                _logger.LogWarning(ex, "{Resource} upstream response body could not be read at {Route}", resource, route);
+                throw new FhirUpstreamException(resource, $"{resource} upstream is unreachable.", ex);
+            }
         }
     }
 
     private async Task<(IReadOnlyList<T> Items, int Total)> SearchAsync<T>(
-        string clientName, string resource, string path, CancellationToken ct) where T : Resource
+        string clientName, string resource, string route, string path, CancellationToken ct) where T : Resource
     {
-        var body = await GetAsync(clientName, resource, path, ct)
+        var body = await GetAsync(clientName, resource, path, route, ct)
                    ?? throw new FhirUpstreamException(resource, $"{resource} search endpoint was not found upstream.");
         try
         {

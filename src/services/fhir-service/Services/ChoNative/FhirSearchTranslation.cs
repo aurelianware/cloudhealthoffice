@@ -68,7 +68,27 @@ public static class FhirSearchTranslation
         return range;
     }
 
+    /// <summary>FHIR dateTime/instant forms with a time part (seconds optional, zone optional; no zone means UTC).</summary>
+    private static readonly string[] InstantFormats =
+    [
+        "yyyy-MM-dd'T'HH:mm:ssK", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFK", "yyyy-MM-dd'T'HH:mmK",
+        "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF", "yyyy-MM-dd'T'HH:mm",
+    ];
+
     private static (DateTime Start, DateTime End) ParseInterval(string parameter, string value)
+    {
+        try
+        {
+            return ParseIntervalCore(parameter, value);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            // The end of the matched interval is past DateTime.MaxValue (year 9999).
+            throw new FhirSearchNotSupportedException($"{parameter} value is outside the supported date range.");
+        }
+    }
+
+    private static (DateTime Start, DateTime End) ParseIntervalCore(string parameter, string value)
     {
         var inv = CultureInfo.InvariantCulture;
         if (value.Length == 4 && DateTime.TryParseExact(value, "yyyy", inv, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var year))
@@ -77,7 +97,7 @@ public static class FhirSearchTranslation
             return (Utc(month), Utc(month).AddMonths(1));
         if (value.Length == 10 && DateTime.TryParseExact(value, "yyyy-MM-dd", inv, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var day))
             return (Utc(day), Utc(day).AddDays(1));
-        if (value.Length > 10 && DateTimeOffset.TryParse(value, inv, DateTimeStyles.AssumeUniversal, out var instant))
+        if (value.Length > 10 && DateTimeOffset.TryParseExact(value, InstantFormats, inv, DateTimeStyles.AssumeUniversal, out var instant))
         {
             var utc = instant.UtcDateTime;
             // An instant matches the second it names (FHIR precision of the value).

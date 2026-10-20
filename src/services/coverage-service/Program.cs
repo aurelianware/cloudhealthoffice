@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CoverageService.Repositories;
 using CoverageService.Services;
@@ -80,6 +81,9 @@ builder.Services.AddSingleton<ICareTeamProjector, CareTeamProjector>();
 builder.Services.AddSingleton<IFhirCoverageProjector>(_ => new FhirCoverageProjector(
     builder.Configuration.GetSection(FhirCoverageProjectionOptions.SectionName).Get<FhirCoverageProjectionOptions>()));
 builder.Services.AddScoped<ICoverageFhirSearchRepository, CoverageFhirSearchRepository>();
+// Record access log (who read which member's coverage), used by the FHIR
+// projection endpoints; stored in this service's MongoDB database.
+builder.Services.AddRecordAccessAudit();
 builder.Services.AddScoped<PcpPanelReconciliationJob>();
 // Daily: flips coverages whose (future-dated) termination date has arrived to
 // Terminated, and promotes Pending ones whose effective date has arrived to Active

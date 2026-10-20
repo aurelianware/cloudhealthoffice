@@ -52,6 +52,10 @@ public class FhirSearchTranslationTests
     [InlineData("80-05-17")]
     [InlineData("1980-13-01")]
     [InlineData("yesterday")]
+    [InlineData("9999-12-31")]
+    [InlineData("9999")]
+    [InlineData("01/02/2020 10:00")]
+    [InlineData("2020-01-02 10:00")]
     public void Malformed_dates_are_refused(string raw)
     {
         var act = () => FhirSearchTranslation.ParseDate("birthdate", raw);

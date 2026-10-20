@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json.Nodes;
+using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Security;
 using CoverageService.Controllers;
 using CoverageService.Models;
@@ -24,6 +25,7 @@ public class CoverageFhirPipelineTests : IClassFixture<CoverageFhirPipelineTests
     {
         public Mock<ICoverageRepository> Coverage { get; } = new();
         public Mock<ICoverageFhirSearchRepository> Search { get; } = new();
+        public RecordAccessStoreInMemory AccessLog { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -36,6 +38,8 @@ public class CoverageFhirPipelineTests : IClassFixture<CoverageFhirPipelineTests
                 services.AddSingleton(Coverage.Object);
                 services.RemoveAll<ICoverageFhirSearchRepository>();
                 services.AddSingleton(Search.Object);
+                services.RemoveAll<IRecordAccessStore>();
+                services.AddSingleton<IRecordAccessStore>(AccessLog);
                 services.RemoveAll<IPcpAssignmentRepository>();
                 services.AddSingleton(Mock.Of<IPcpAssignmentRepository>());
             });
@@ -71,9 +75,11 @@ public class CoverageFhirPipelineTests : IClassFixture<CoverageFhirPipelineTests
         Status = CoverageStatus.Active,
     };
 
-    private HttpClient As(params string[] roles)
+    private HttpClient As(params string[] roles) => AsUser("user-1", roles);
+
+    private HttpClient AsUser(string user, params string[] roles)
     {
-        var client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler("user-1", roles));
+        var client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler(user, roles));
         client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
         return client;
     }
@@ -156,5 +162,27 @@ public class CoverageFhirPipelineTests : IClassFixture<CoverageFhirPipelineTests
         (await As(ChoRolePermissions.ClaimsExaminer).GetAsync(path)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await _factory.CreateClient().GetAsync(path)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         _calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Reads_and_searches_are_logged_with_the_members_they_returned()
+    {
+        await AsUser("csr-read", ChoRolePermissions.MemberServices).GetAsync("/api/v1/coverage/cov-1/fhir");
+        await AsUser("csr-miss", ChoRolePermissions.MemberServices).GetAsync("/api/v1/coverage/nope/fhir");
+        await AsUser("csr-search", ChoRolePermissions.MemberServices).GetAsync("/api/v1/coverage/fhir/Coverage?memberId=M1");
+
+        var read = _factory.AccessLog.All.Should().ContainSingle(e => e.ActorId == "csr-read").Subject;
+        read.RecordType.Should().Be("Coverage");
+        read.RecordId.Should().Be("cov-1");
+        read.MemberId.Should().Be("M1");
+        read.TenantId.Should().Be(Tenant);
+
+        _factory.AccessLog.All.Should().ContainSingle(e => e.ActorId == "csr-miss")
+            .Which.Outcome.Should().Be(RecordAccessOutcomes.For(404));
+
+        var search = _factory.AccessLog.All.Should().ContainSingle(e => e.ActorId == "csr-search").Subject;
+        search.Action.Should().Be(RecordAccessActions.Search);
+        search.RecordIds.Should().BeEquivalentTo("cov-1", "cov-2");
+        search.MemberId.Should().Be("M1");
     }
 }
