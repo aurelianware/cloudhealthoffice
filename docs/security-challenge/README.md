@@ -14,8 +14,8 @@ URL. Two wholly synthetic payers deliberately share an authorization number and
 member identifier, with different patient canaries. All writes go through HTTP;
 the runner independently reads Mongo for state and audit checks.
 
-This first slice has **20 scenarios**, including positive controls, rather than
-the proposed 30–50-case first campaign. Member binding, claims, appeals, payments,
+This first slice has **33 scenarios**, including positive controls, within the proposed
+30–50-case first campaign. Claims, appeals, payments,
 FHIR, production identity, ingress, resilience and mutation sensitivity remain
 explicitly unsupported. No live deployment has been tested by this harness.
 
@@ -59,7 +59,7 @@ stderr. Keep those logs restricted; they are **not** part of the evidence packet
 The exact executable inventory is `EvidencePolicy.ScenarioIds` in the
 [scenario catalog](../../tools/SecurityChallenge/EvidencePolicy.cs). Fixture creation must return 201 for
 both payers before any scenario runs. Positive controls are included in the
-20-scenario denominator, not reported as 20 attempted attacks.
+33-scenario denominator, not reported as 33 attempted attacks.
 
 | IDs | Required assertion |
 | --- | --- |
@@ -67,7 +67,7 @@ both payers before any scenario runs. Positive controls are included in the
 | `isolation.{a,b}.foreign-id` | 404, no patient canary, unchanged authoritative authorization collection hash |
 | `isolation.{a,b}.overlapping-number` | Same number resolves own canary, never other payer canary |
 | `isolation.{a,b}.search` | Shared member search returns own canary and excludes other payer canary |
-| `integrity.{a,b}.create-overposting` | Mongo tenant from token, actor not supplied actor, approved units null and status Submitted despite injected approval |
+| `integrity.{a,b}.create-overposting` | Mongo tenant from token, actor exactly from token, approved units null and status Submitted despite injected approval |
 | `identity.write.{anonymous,malformed,reader}` | 401/401/403 respectively, no patient canary, unchanged authorization collection hash |
 | `privilege.reader-decision` | Read-only identity cannot cancel; 403 and unchanged authorization collection hash |
 | `identity.reader-positive-control` | Same restricted identity can read own record; own canary only |
@@ -75,11 +75,28 @@ both payers before any scenario runs. Positive controls are included in the
 | `identity.wrong-{issuer,audience}` | Otherwise correctly signed synthetic admin token rejected with 401, no canary and no authorization mutation |
 | `audit.authorized-read-attribution` | Mongo audit entry names payer A, its record and its actual token subject with 200 |
 | `privilege.admin-decision-control` | Admin can cancel through the same endpoint; Mongo status becomes Cancelled |
+| `isolation.{a,b}.foreign-decision` | Cross-payer admin cancellation returns 404 with no authorization mutation or canary |
+| `identity.bad-signature` | Trusted issuer/audience with different signing key rejected with 401 and no authorization mutation |
+| `member.approval-control` | Synthetic dependent authorization is created and approved through HTTP; Mongo confirms Approved |
+| `member.own-positive-control` | Approved matching member/procedure/line/provider returns IsValid=true, MemberMatches=true and exact requested member echo |
+| `member.{foreign-member,subscriber-substitution,case-sensitive-id}` | 200 business denial, IsValid=false, MemberMatches=false, MemberMismatch and requested identifier echo without the stored member identifier |
+| `member.blank-id` | Explicit empty member query rejected with 400 |
+| `member.{wrong-line,wrong-procedure,wrong-provider}` | Correct member still receives IsValid=false when another required dimension differs |
+| `member.trimmed-id-control` | Whitespace-normalized correct member remains valid |
+
+All member validation calls assert the authorization collection remains unchanged.
+If approval or the matching-member validation control fails, dependent member
+scenarios become INCONCLUSIVE; an already-invalid authorization cannot prove
+member-mismatch protection.
 
 Canary checks are explicit synthetic markers, not generic PHI detection. The
 audit check covers an authorized record read, not rejected requests before the
 controller, audit durability under failure, completeness or tamper resistance.
-Member authorization validation and approved-unit accounting are not tested here.
+Member checks exercise the authorization-service validation endpoint with synthetic
+identifiers. They do not establish a subscriber/dependent relationship graph,
+claims-client enforcement, historical identity reconciliation, or approved-unit
+accounting. Expired-token, key-rotation and production federation coverage remain
+outside this campaign.
 
 ## Evidence contract v1.0
 
@@ -96,8 +113,10 @@ Member authorization validation and approved-unit accounting are not tested here
 - `state-assertions.json`: scenario-linked before/after collection digests,
   document count and final cancellation predicate.
 - `audit-assertions.json`: synthetic actor/tenant/record and matching-entry count.
-- `coverage.json`: planned and executed denominators, PASS/FAIL/ERROR counts and
+- `coverage.json`: planned and executed denominators, PASS/FAIL/ERROR/INCONCLUSIVE counts and
   explicit unsupported tracks. A prerequisite error is not an executed scenario.
+- `findings-summary.json`: unreviewed failed/error/inconclusive scenario IDs;
+  confirmed findings are null until private review, never inferred as zero.
 - `knowledge-base-draft.md`: result summary with limitations; always a draft.
 - `reproduce.md`: source-linked replay instructions and the generated-ID limitation.
 - `artifact-checksums.txt`: SHA-256 of every other packet file. Checksums detect
@@ -130,8 +149,8 @@ reviewer and publication date. Use explicit states **proposed, tested, finding,
 fixed, retested, independently reproduced**. Never infer a later state from a PR
 merge or a previous green run. Keep restricted findings outside the public KB.
 
-The series should progressively add member/subscriber binding and auth lines,
-claims and appeal authorization, payment idempotency and concurrency, FHIR/PAS
+The series should progressively add claims-client member binding and ambiguous
+authorization-line handling, claims and appeal authorization, payment idempotency and concurrency, FHIR/PAS
 boundaries, sensitive-data canaries, production identity and ingress, then an
 independent reproduction campaign. Each expansion must ship executable oracles
 and a revised denominator before being described as tested.
