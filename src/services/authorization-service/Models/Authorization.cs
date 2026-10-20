@@ -527,6 +527,12 @@ public class RequestedService
     [StringLength(10)]
     public string? UnitType { get; set; }
 
+    /// <summary>Opaque quantity code and coding system. Never inferred from the legacy unit label.</summary>
+    [StringLength(256)]
+    public string? UnitCode { get; set; }
+    [StringLength(256)]
+    public string? UnitSystem { get; set; }
+
     /// <summary>
     /// Place of service code
     /// 278: SV109 (2000F)

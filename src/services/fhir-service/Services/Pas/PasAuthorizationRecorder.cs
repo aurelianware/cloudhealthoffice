@@ -272,7 +272,26 @@ public sealed class HttpPasAuthorizationRecorder : IPasAuthorizationRecorder
         => stored is not null
            && string.Equals(stored.AuthorizationNumber, request.AuthorizationNumber, StringComparison.Ordinal)
            && string.Equals(stored.TenantId, tenantId, StringComparison.Ordinal)
-           && (!requireHash || string.Equals(stored.RequestHash, request.RequestHash, StringComparison.Ordinal));
+           && (!requireHash || string.Equals(stored.RequestHash, request.RequestHash, StringComparison.Ordinal))
+           && QuantityCodingMatches(stored, request);
+
+    private static bool QuantityCodingMatches(PasStoredAuthorization stored, PasAuthorizationRecordRequest request)
+    {
+        foreach (var (line, index) in request.RequestedServices.Select((line, index) => (line, index)))
+        {
+            if (line.UnitCode is null && line.UnitSystem is null) continue;
+            if (stored.RequestedServices is null || stored.RequestedServices.Any(candidate => candidate is null)) return false;
+            var number = line.LineNumber ?? index + 1;
+            var matches = stored.RequestedServices
+                .Select((candidate, i) => (Line: candidate, Number: candidate.LineNumber ?? i + 1))
+                .Where(candidate => candidate.Number == number).ToList();
+            if (matches.Count != 1
+                || !string.Equals(matches[0].Line.UnitCode, line.UnitCode, StringComparison.Ordinal)
+                || !string.Equals(matches[0].Line.UnitSystem, line.UnitSystem, StringComparison.Ordinal))
+                return false;
+        }
+        return true;
+    }
 
     /// <summary>
     /// SHA-256 (lower-case hex) of the request as it goes on the wire, with no

@@ -130,6 +130,9 @@ public sealed record PriorAuthorizationService
 
     [JsonPropertyName("requestedUnits")]
     public decimal? RequestedUnits { get; init; }
+    public string? UnitType { get; init; }
+    public string? UnitCode { get; init; }
+    public string? UnitSystem { get; init; }
 
     [JsonPropertyName("approvedUnits")]
     public decimal? ApprovedUnits { get; init; }

@@ -17,6 +17,53 @@ public class PasAuthorizationMapperTests
     private static PasMappingResult Map(Bundle bundle) => PasAuthorizationMapper.Map(bundle, PasBundles.ClaimOf(bundle), Received);
 
     [Fact]
+    public void QuantityCoding_IsIndependentOfDisplay_AndParticipatesInRequestHash()
+    {
+        var bundle = PasBundles.Complete();
+        PasBundles.ClaimOf(bundle).Item[0].Quantity = new Quantity
+        {
+            Value = 3, Unit = "units", Code = "mL", System = "http://unitsofmeasure.org"
+        };
+        var request = Map(bundle).Request!;
+        var line = request.RequestedServices.Single();
+        line.UnitType.Should().Be("units");
+        line.UnitCode.Should().Be("mL");
+        line.UnitSystem.Should().Be("http://unitsofmeasure.org");
+        var original = HttpPasAuthorizationRecorder.HashOf(request);
+        line.UnitCode = "L";
+        HttpPasAuthorizationRecorder.HashOf(request).Should().NotBe(original);
+        line.UnitCode = "mL";
+        line.UnitSystem = "https://example.test/custom-units";
+        HttpPasAuthorizationRecorder.HashOf(request).Should().NotBe(original);
+    }
+
+    [Fact]
+    public void DisplayOnlyQuantity_DoesNotInventCodingOrChangeLegacyNullWireShape()
+    {
+        var bundle = PasBundles.Complete();
+        PasBundles.ClaimOf(bundle).Item[0].Quantity = new Quantity { Value = 1, Unit = "units" };
+        var request = Map(bundle).Request!;
+        var line = request.RequestedServices.Single();
+        line.UnitCode.Should().BeNull();
+        line.UnitSystem.Should().BeNull();
+        var wire = System.Text.Json.JsonSerializer.Serialize(line, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        wire.Should().NotContain("unitCode").And.NotContain("unitSystem");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void OverlongQuantityCoding_IsRejectedRatherThanTruncated(bool code)
+    {
+        var bundle = PasBundles.Complete();
+        var quantity = PasBundles.ClaimOf(bundle).Item[0].Quantity;
+        if (code) quantity.Code = new string('x', 257); else quantity.System = new string('x', 257);
+        var result = Map(bundle);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Expression.EndsWith(".quantity"));
+    }
+
+    [Fact]
     public void NonOrdinalSequences_ArePreserved_AndDuplicateSequencesAreRejected()
     {
         var bundle = PasBundles.Complete();
