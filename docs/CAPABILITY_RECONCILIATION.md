@@ -470,3 +470,11 @@ proxies ExplanationOfBenefit to claims-service's CARIN projection) but its
 acceptance test still runs on the mock mapper; PROV-01 still lacks Provider Access PA data and its claims and
 encounter data are still mock; P2P-01 still reads the mock member source and
 D-13 remains open.
+
+PAT-01 follow-up (October 20, 2026): PAT-01 moves GAP → PARTIAL. A
+Replace-tagged acceptance test (`PatientAccessClaimsTests`) drives fhir-service's
+ExplanationOfBenefit read and search over HTTP into claims-service's controller
+and projector, and fhir-service now withholds (502) a patient-confined EOB
+search whose results include another member. It stays short of PASSABLE because
+the EOB projection is not CARIN Blue Button: no profile, required elements
+missing, no CARIN BB validation run.
