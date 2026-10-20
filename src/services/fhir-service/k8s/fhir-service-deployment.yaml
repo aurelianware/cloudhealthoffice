@@ -47,6 +47,8 @@ stringData:
   Services__MemberServiceUrl: "http://member-service/api"
   Services__CoverageServiceUrl: "http://coverage-service/api"
   Services__ClaimsServiceUrl: "http://claims-service/api"
+  # The consent registry. Without it every consent decision refuses (ADR 021).
+  Services__ConsentServiceUrl: "http://consent-service"
 
 ---
 apiVersion: apps/v1

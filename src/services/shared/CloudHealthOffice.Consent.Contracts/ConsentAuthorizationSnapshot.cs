@@ -21,12 +21,30 @@ public sealed record ConsentAuthorizationSnapshot
 
     public ConsentPurposeOfUse PurposeOfUse { get; init; } = ConsentPurposeOfUse.Unspecified;
 
+    /// <summary>Whether the record permits or refuses its purpose; an opt-out is <see cref="ConsentProvision.Deny"/>.</summary>
+    public ConsentProvision Provision { get; init; } = ConsentProvision.Permit;
+
     /// <summary>
     /// Persisted lifecycle status, as the registry holds it. Expiry is applied by
     /// the policy from <see cref="ExpiresAt"/>, so a record persisted Active but
     /// past its expiry is not treated as authorization.
     /// </summary>
     public ConsentLifecycleStatus Status { get; init; } = ConsentLifecycleStatus.Draft;
+
+    /// <summary>When the record was activated, when known.</summary>
+    public DateTime? ActivatedAt { get; init; }
+
+    /// <summary>When the record was revoked, when known.</summary>
+    public DateTime? RevokedAt { get; init; }
+
+    /// <summary>
+    /// For a revoked record: whether the revocation was the member's own choice
+    /// (a member request, an unrecorded reason, or "other"), as opposed to an
+    /// administrative correction, a supersession or an expiry. Only a member's
+    /// revocation of a permit refuses an opt-out purpose. Defaults to true, so
+    /// a registry that does not say is read as the member's refusal.
+    /// </summary>
+    public bool RevokedByMember { get; init; } = true;
 
     /// <summary>When the authorization takes effect; null means immediately.</summary>
     public DateTime? EffectiveAt { get; init; }
