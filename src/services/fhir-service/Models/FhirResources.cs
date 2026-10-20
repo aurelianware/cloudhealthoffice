@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace FhirService.Models;
@@ -278,6 +279,25 @@ public record FhirPeriod
 // ── FHIR Resource Records ──────────────────────────────────────────────────
 
 /// <summary>
+/// Writes a <see cref="FhirResource"/> by its runtime type. System.Text.Json
+/// serializes a property by its declared type, so without this a bundle entry
+/// declared as <see cref="FhirResource"/> carried only <c>resourceType</c>,
+/// <c>id</c>, <c>meta</c> and <c>extension</c>: a Payer-to-Payer export, a
+/// <c>$member-match</c> answer or a Location search sent hollow resources.
+/// The lightweight records are response models only; reading one back is not
+/// supported (CHO's FHIR inputs are parsed with the Firely SDK).
+/// </summary>
+public sealed class FhirResourceRuntimeTypeConverter : JsonConverter<FhirResource>
+{
+    public override FhirResource? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        throw new NotSupportedException("Lightweight FHIR resource records are written, never read.");
+
+    public override void Write(Utf8JsonWriter writer, FhirResource value, JsonSerializerOptions options) =>
+        // The runtime type has no converter of its own, so this never recurses.
+        JsonSerializer.Serialize(writer, value, value.GetType(), options);
+}
+
+/// <summary>
 /// Base for all lightweight FHIR resource records.
 /// </summary>
 public abstract record FhirResource
@@ -455,6 +475,7 @@ public record FhirBundleEntry
     public string? FullUrl { get; init; }
 
     [JsonPropertyName("resource")]
+    [JsonConverter(typeof(FhirResourceRuntimeTypeConverter))]
     public FhirResource? Resource { get; init; }
 }
 
@@ -532,6 +553,7 @@ public record FhirBundleEntryWithSearch
     public string? FullUrl { get; init; }
 
     [JsonPropertyName("resource")]
+    [JsonConverter(typeof(FhirResourceRuntimeTypeConverter))]
     public FhirResource? Resource { get; init; }
 
     [JsonPropertyName("search")]
