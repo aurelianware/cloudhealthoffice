@@ -21,7 +21,6 @@ Customer deployment status, reference permissions and current commercial terms m
 | [INCIDENT-AND-SUPPORT.md](INCIDENT-AND-SUPPORT.md) | Contacts, severity, response targets for a founding-partner pilot |
 | [SAMPLE-PILOT-CHECKLIST.md](SAMPLE-PILOT-CHECKLIST.md) | Worked example of the CMS-0057-F diligence checklist |
 | [IMPLEMENTATION-BLUEPRINT.md](../implementation/IMPLEMENTATION-BLUEPRINT.md) | Phases, plan team staffing, RACI, decision gates and risks for each engagement layer (estimates until the first pilot) |
-| [FOUNDING-PARTNER-TARGET-LIST.md](FOUNDING-PARTNER-TARGET-LIST.md) | 25 named **targets**, not a claimed pipeline |
 
 ## Already-canonical companions (do not fork)
 

@@ -43,8 +43,6 @@ k8s/
 ├── cert-manager-issuer.yaml        # Let's Encrypt issuers
 ├── namespaces.yaml                 # Namespace definitions
 ├── backend-api-integration.yaml    # Backend API configuration
-├── coverage-service-deployment.yaml
-├── member-service-deployment.yaml
 ├── mock-services-deployment.yaml
 ├── sftp-server-deployment.yaml
 ├── sponsor-service-deployment.yaml
@@ -100,8 +98,9 @@ k8s/
 3. **Core Services**
    ```bash
    kubectl apply -f backend-api-integration.yaml
-   kubectl apply -f coverage-service-deployment.yaml
-   kubectl apply -f member-service-deployment.yaml
+   # Member and coverage services deploy from their own manifests:
+   kubectl apply -f ../../src/services/coverage-service/k8s/
+   kubectl apply -f ../../src/services/member-service/k8s/
    # ... other services
    ```
 

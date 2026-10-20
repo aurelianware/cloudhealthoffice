@@ -1,3 +1,5 @@
+> **Historical record (status as of its date).** Test counts, coverage figures and readiness labels below are superseded; current figures are CI-injected in [FEATURES.md](../guides/FEATURES.md) and reconciled capability status is in the [capability ledger](../CAPABILITY_RECONCILIATION.md). Updated 2026-10-20.
+
 # Website Updates - Final Status Report
 
 **Date:** February 3, 2026  
