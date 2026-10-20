@@ -1,6 +1,6 @@
 # Security One-Pager — Cloud Health Office Layer 1 Pilot
 
-**Status as of:** September 2026
+**Status as of:** October 20, 2026 (verified against `main` at `a17c9f3`; see [AUDIT/repository-verification-2026-10.md](../../AUDIT/repository-verification-2026-10.md))
 **Audience:** payer CISO / security architecture review
 **Scope:** CMS-0057-F Compliance Accelerator (Layer 1), founding-partner pilot
 
@@ -14,13 +14,13 @@ A Kubernetes-native FHIR / SMART / prior-authorization / audit layer that deploy
 
 | Control | How it is implemented | Evidence |
 | --- | --- | --- |
-| Tenant isolation | `TenantMiddleware` on services; Cosmos / Mongo partition by `tenantId` on migrated containers; Kafka topic namespacing pattern | claims 5.1b partition migration; service middleware |
-| AuthN / AuthZ | SMART-on-FHIR JWT bearer via `smart-auth-service`; resource-type scope enforcement in `fhir-service` | `SmartScopeEnforcementMiddleware`; patient-binding tests |
-| Secrets | Azure Key Vault configuration provider; no production secrets in git | `AddAzureKeyVaultConfiguration`; `SECURITY.md` |
+| Tenant isolation | Tenant comes only from the validated token: `TenantMiddleware` answers 401 when the token carries no tenant and 403 when an `X-Tenant-ID` header disagrees with it; there is no default tenant and no header fallback. Repositories filter every query by tenant in a shared MongoDB database (database-per-tenant mode is not supported by the claim, accumulator and authorization background workers). | `src/services/shared/CloudHealthOffice.Infrastructure/Middleware/TenantMiddleware.cs`; tenant-isolation tests across services |
+| AuthN / AuthZ | Every service requires a CHO token (`AddChoAuthentication`) and every endpoint is permission-gated: an endpoint with no stated permission requires the service's default read or write permission, and is refused if the service sets none. Service-to-service calls carry the calling service's own identity. External FHIR clients use SMART on FHIR via `smart-auth-service`; `fhir-service` enforces scopes and patient binding and never forwards a SMART token to CHO services. | `ChoAuthenticationExtensions`, `DefaultPermissionConvention`, `SmartCallerOutboundHandler`; per-service auth pipeline tests |
+| Secrets | Azure Key Vault configuration provider; no production secrets in git; gitleaks secret scanning in CI | `AddAzureKeyVaultConfiguration`; `docs/security/CREDENTIAL-ROTATION.md`; `SECURITY.md` |
 | Encryption in transit | TLS on ingress; service-mesh / cluster policy is a deployment choice | Helm / AKS path |
 | Encryption at rest | Store and Key Vault managed keys on Azure deployments; field-level encryption on appeals PHI. Customer-managed key module available; not yet wired into default deployment. | appeals-service (Layer 2, already shipped) |
 | PHI in telemetry | OpenTelemetry with PHI-scrubbing span processor | Infrastructure observability |
-| Audit | Request tenant + correlation headers; authorization and consent services emit events | correlation / tenant propagation handlers |
+| Audit | Record access log (who read which member's record, allowed or denied) in member, authorization, provider and payment services; tenant and correlation propagation; authorization and consent services emit events | `AuditRecordAccessAttribute`, `RecordAccessAudit.cs`; access-log endpoints need `audit:read` |
 | Dependency and code scanning | Dependabot + Trivy + gitleaks in GitHub Actions; CodeQL static analysis via GitHub code scanning **default setup** (actions, csharp, javascript, javascript-typescript, python, typescript; default query suite; weekly plus per-PR) | Three different locations, deliberately listed separately: **Dependabot** schedules live in `.github/dependabot.yml` (only the auto-merge step is an Action); **Trivy and gitleaks** run in `.github/workflows/security-scan.yml`; **CodeQL** is configured in repository Security settings via code scanning default setup and so appears in no workflow file — verify with `gh api repos/aurelianware/cloudhealthoffice/code-scanning/default-setup` |
 | License / production use | BSL 1.1; production PHI or live operations require a commercial license | `COMMERCIAL-LICENSING.md` |
 
