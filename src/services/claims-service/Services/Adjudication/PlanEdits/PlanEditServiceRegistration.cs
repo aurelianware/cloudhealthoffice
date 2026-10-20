@@ -16,11 +16,11 @@ public static class PlanEditServiceRegistration
     public static IServiceCollection AddPlanEditService(
         this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
-        var section = configuration.GetSection(PlanEditServiceOptions.SectionName);
-        services.Configure<PlanEditServiceOptions>(section);
-
+        // One bound copy serves validation, the per-tenant clients and the
+        // runtime options, so no tenant can be served without being validated
+        // and given its own client.
         var options = new PlanEditServiceOptions();
-        section.Bind(options);
+        configuration.GetSection(PlanEditServiceOptions.SectionName).Bind(options);
 
         var allowInsecureHttp = environment.IsDevelopment() || environment.IsEnvironment("Testing");
         var problems = options.Validate(new ChoOutboundHosts(configuration, environment), allowInsecureHttp);
@@ -44,6 +44,7 @@ public static class PlanEditServiceRegistration
                 });
         }
 
+        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(options));
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IPlanEditServiceClient, PlanEditServiceClient>();
         return services;

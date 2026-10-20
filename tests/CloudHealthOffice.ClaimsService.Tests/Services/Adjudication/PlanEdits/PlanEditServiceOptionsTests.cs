@@ -33,6 +33,7 @@ public class PlanEditServiceOptionsTests
     [InlineData("ftp://edits.plan.example/v1", "must be https")]
     [InlineData("https://user:pw@edits.plan.example/v1", "must not carry credentials")]
     [InlineData("https://edits.plan.example/v1#x", "must not have a fragment")]
+    [InlineData("https://edits.plan.example/api/edits?code=SECRETKEY", "must not have a query string")]
     public void Bad_endpoints_are_refused(string? endpoint, string problem)
     {
         var problems = Validate(new PlanEditTenantOptions { Endpoint = endpoint, SigningSecret = Secret });

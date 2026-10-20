@@ -70,16 +70,19 @@ a plan that needs it is a sign an extension point is missing.
 
 CHO sends each claim to the plan's edit service and pends the claim with the
 edits that fired, for an examiner to uphold or override like any CHO edit.
+Each response is bounded in time as well as size: the whole exchange, body
+included, must finish within the tenant's timeout.
 
-**Placement.** `PlanEditsStage`, Order 450: after CHO's NCCI/MUE edits (400) and
-before coordination of benefits (500). Optional (`IsRequired = false`). A
+**Placement.** `PlanEditsStage`, Order 450: after CHO's NCCI/MUE edits (400), and
+so after pricing, coordination of benefits (275) and benefit calculation (300);
+before the AI examination (600). Optional (`IsRequired = false`). A
 tenant with no configured service passes straight through and nothing is sent.
 
 **Configuration** (`Adjudication:PlanEdits:Tenants:{tenantId}`):
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `Endpoint` | — | Absolute https URL (http only in Development/Testing). Must not be a CHO service host: those receive CHO service tokens. |
+| `Endpoint` | — | Absolute https URL (http only in Development/Testing), with no credentials, query string or fragment (a key in a query string would be logged). Must not be a CHO service host: those receive CHO service tokens. |
 | `SigningSecret` | — | At least 32 characters, from a secret store. |
 | `Mode` | `PendForReview` | `PendForReview` pends on fired edits (pend code `PLANEDIT`); `SoftValidation` records them on the stage result and in telemetry only, for proving a new service on live claims. |
 | `WhenUnavailable` | `Pend` | `Pend` pends `SVCUNAVAIL` (transient: never overridden by an approval, retried on the approval re-run); `Pass` continues without the plan's edits and says so in the stage notes. |
@@ -127,7 +130,12 @@ another plan's circuit breaker. Redirects are not followed.
 
 On the approval re-run the plan's service is asked again, with purpose
 `approval-readjudication`. Edits the examiner decided are settled; an edit
-nobody decided pends and the approval is refused.
+nobody decided — a new rule, or the same rule on different lines — pends and
+the approval is refused. Only a decision per edit settles a plan edit: unlike
+CHO's own review pends, a plan-edit pend is never passed because its pend reason
+was reviewed. A whole-claim approval (no edit-level decisions) upholds every
+plan edit by default, so a denial edit still denies its lines; overriding one
+takes an edit-level approval under the `PLAN_EDIT` policy.
 
 **Guardrails in this version.** A plan edit never approves, pays, removes a CHO
 edit, or denies a whole claim on its own. Automatic denial without an examiner

@@ -32,7 +32,7 @@ public class PlanEditServiceClientTests
     };
 
     [Fact]
-    public async Task The_request_is_a_signed_json_post_with_the_request_id_and_no_credentials()
+    public async Task The_request_is_a_signed_json_post_with_the_request_id_and_no_authorization_header_of_its_own()
     {
         var stub = new Stub(_ => Json("""{"contractVersion":"1","edits":[]}"""));
         var client = Build(stub);
@@ -123,6 +123,21 @@ public class PlanEditServiceClientTests
     }
 
     [Fact]
+    public async Task A_service_that_sends_headers_then_stalls_the_body_is_a_timeout_within_the_budget()
+    {
+        var stub = new Stub(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new StallingStream()) { Headers = { ContentType = new("application/json") } },
+        });
+        var started = System.Diagnostics.Stopwatch.StartNew();
+
+        var result = await Build(stub, timeoutMs: 200).EvaluateAsync(Tenant, Request, Lines, CancellationToken.None);
+
+        Assert.Equal(PlanEditUnavailableKinds.Timeout, Assert.IsType<PlanEditCallResult.Unavailable>(result).Kind);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(3), $"took {started.Elapsed}");
+    }
+
+    [Fact]
     public async Task The_callers_cancellation_is_not_swallowed()
     {
         using var cts = new CancellationTokenSource();
@@ -163,12 +178,14 @@ public class PlanEditServiceClientTests
         Assert.DoesNotContain("1980", detail);
     }
 
-    [Fact]
-    public async Task A_non_json_content_type_is_invalid()
+    [Theory]
+    [InlineData("text/html")]
+    [InlineData("application/problem+json")]
+    public async Task A_content_type_other_than_application_json_is_invalid(string mediaType)
     {
         var stub = new Stub(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("""{"contractVersion":"1","edits":[]}""", Encoding.UTF8, "text/html"),
+            Content = new StringContent("""{"contractVersion":"1","edits":[]}""", Encoding.UTF8, mediaType),
         });
 
         var result = await Build(stub).EvaluateAsync(Tenant, Request, Lines, CancellationToken.None);
@@ -237,6 +254,30 @@ public class PlanEditServiceClientTests
         public string ApplicationName { get; set; } = "claims-service";
         public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
+    /// <summary>A body that never yields a byte until cancelled.</summary>
+    private sealed class StallingStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            return 0;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct) =>
+            ReadAsync(buffer.AsMemory(offset, count), ct).AsTask();
     }
 
     private sealed record Sent(HttpMethod Method, string Uri, string? ContentType, Dictionary<string, string> Headers, byte[] Body);

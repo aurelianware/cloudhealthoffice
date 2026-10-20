@@ -69,6 +69,9 @@ public static class SamplePlanEditEndpoint
 {
     public const string Route = "/v1/claims";
 
+    /// <summary>Largest request body the sample reads before it checks the signature.</summary>
+    public const int MaxRequestBytes = 1024 * 1024;
+
     public static IEndpointRouteBuilder MapSamplePlanEdits(this IEndpointRouteBuilder app)
     {
         app.MapPost(Route, HandleAsync);
@@ -77,9 +80,19 @@ public static class SamplePlanEditEndpoint
 
     private static async Task<IResult> HandleAsync(HttpContext http, Microsoft.Extensions.Options.IOptions<SamplePlanEditOptions> options, TimeProvider time)
     {
-        // Read the exact bytes: the signature is over them, not over a re-serialization.
+        // Read the exact bytes, up to a limit: the signature is over them, not
+        // over a re-serialization, and nothing unauthenticated is read without bound.
+        if (http.Request.ContentLength is > MaxRequestBytes)
+            return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
         using var buffer = new MemoryStream();
-        await http.Request.Body.CopyToAsync(buffer, http.RequestAborted);
+        var chunk = new byte[16 * 1024];
+        int read;
+        while ((read = await http.Request.Body.ReadAsync(chunk, http.RequestAborted)) > 0)
+        {
+            buffer.Write(chunk, 0, read);
+            if (buffer.Length > MaxRequestBytes)
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+        }
         var body = buffer.ToArray();
 
         if (!PlanEditSignature.Verify(

@@ -14,6 +14,8 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
+using PlanEditsNs = global::ClaimsService.Services.Adjudication.PlanEdits;
+using Contracts = global::CloudHealthOffice.PlanEdits.Contracts;
 
 namespace CloudHealthOffice.ClaimsService.Tests.Services.Adjudication;
 
@@ -772,6 +774,118 @@ public class ClaimAdjudicationOrchestratorTests
         Assert.Equal(ClaimAdjudicationOutcome.Pass, b.Outcome);
         Assert.Equal(ClaimAdjustmentStatus.PendingReversal, adjustment.Status);
         await _eventPublisher.ReceivedWithAnyArgs(1).PublishVersionAdjudicatedAsync(default!, default!, default, default);
+    }
+
+    // ── The plan's own edits (ADR 019) ────────────────────────────────────
+
+    private static PlanEditsStage PlanEdits(params Contracts.PlanEdit[] edits) =>
+        new(new FixedPlanEditClient(edits), NullLogger<PlanEditsStage>.Instance);
+
+    private static readonly Contracts.PlanEdit PlanDenial =
+        new() { RuleId = "PLAN-NC-7", Message = "Not covered", LineNumbers = [1], SuggestedCarc = "96" };
+
+    private async Task<PendDetails> PlanEditPendAsync()
+    {
+        ClaimAdjudicationContext? seen = null;
+        SetupAdapterReturningClaim();
+        var orch = BuildOrchestrator(new IClaimAdjudicationStage[]
+        {
+            PlanEdits(PlanDenial),
+            new RecordingStage("Persistence", 999, isRequired: true, [], ctx => { seen = ctx; return ClaimAdjudicationStageResult.Pass("Persistence"); }),
+        });
+        await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+        return seen!.PendDetails!;
+    }
+
+    [Fact]
+    public async Task PlanEdit_pend_is_recorded_with_its_edits()
+    {
+        var pend = await PlanEditPendAsync();
+
+        Assert.Equal("PLANEDIT", pend.PendCode);
+        Assert.Equal("Plan edit PLAN-NC-7: Not covered", pend.PendReason);
+        Assert.Equal("PLAN|PLAN-NC-7|1", Assert.Single(pend.PlanEditFindings).EditKey);
+    }
+
+    [Fact]
+    public async Task PlanEdit_pend_is_never_passed_on_a_reviewed_reason_alone()
+    {
+        var pend = await PlanEditPendAsync();
+        var orch = BuildOrchestrator(new IClaimAdjudicationStage[] { PlanEdits(PlanDenial) });
+
+        // The examiner reviewed exactly this pend but decided no edit.
+        var result = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1",
+            new ExaminerApproval { ExaminerId = "examiner-1", ReviewedPend = pend }, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Empty(result.OverriddenPends);
+    }
+
+    [Fact]
+    public async Task PlanEdit_on_new_lines_pends_even_when_its_reason_matches_the_reviewed_one()
+    {
+        var pend = await PlanEditPendAsync();
+        var widened = PlanDenial with { LineNumbers = [1, 2] };
+        var orch = BuildOrchestrator(new IClaimAdjudicationStage[] { PlanEdits(widened) });
+
+        var result = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1", new ExaminerApproval
+        {
+            ExaminerId = "examiner-1",
+            ReviewedPend = pend,
+            EditDispositions = [new EditDisposition { EditKey = "PLAN|PLAN-NC-7|1", Decision = EditDecision.Override, Reason = "ok" }],
+        }, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+    }
+
+    [Fact]
+    public async Task PlanEdit_decided_by_the_examiner_passes_on_the_approval_re_run()
+    {
+        var pend = await PlanEditPendAsync();
+        var orch = BuildOrchestrator(new IClaimAdjudicationStage[] { PlanEdits(PlanDenial) });
+
+        var result = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1", new ExaminerApproval
+        {
+            ExaminerId = "examiner-1",
+            ReviewedPend = pend,
+            EditDispositions = [new EditDisposition { EditKey = "PLAN|PLAN-NC-7|1", Decision = EditDecision.Uphold, UpheldByDefault = true }],
+        }, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.Contains(result.OverriddenPends, p => p.Contains("PLAN-NC-7 upheld by examiner"));
+    }
+
+    [Fact]
+    public async Task PlanEdit_after_an_earlier_pend_is_added_to_it_and_keeps_its_edits()
+    {
+        ClaimAdjudicationContext? seen = null;
+        SetupAdapterReturningClaim();
+        var orch = BuildOrchestrator(new IClaimAdjudicationStage[]
+        {
+            new RecordingStage(NetworkCredentialingStage.StageName, 200, isRequired: false, [],
+                _ => ClaimAdjudicationStageResult.Pend(NetworkCredentialingStage.StageName, "Credentialing: lapsed")),
+            PlanEdits(PlanDenial),
+            new RecordingStage("Persistence", 999, isRequired: true, [], ctx => { seen = ctx; return ClaimAdjudicationStageResult.Pass("Persistence"); }),
+        });
+
+        await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+
+        Assert.Equal("NETWORK", seen!.PendDetails!.PendCode);
+        Assert.Contains("PLANEDIT: Plan edit PLAN-NC-7: Not covered", seen.PendDetails.AdditionalPendReasons);
+        Assert.Single(seen.PendDetails.PlanEditFindings);
+    }
+
+    private sealed class FixedPlanEditClient(params Contracts.PlanEdit[] edits)
+        : PlanEditsNs.IPlanEditServiceClient
+    {
+        public PlanEditsNs.PlanEditTenantOptions? For(string tenantId) =>
+            new() { Endpoint = "https://edits.plan.example/v1" };
+
+        public Task<PlanEditsNs.PlanEditCallResult> EvaluateAsync(
+            string tenantId, Contracts.PlanEditRequest request,
+            IReadOnlyCollection<int> claimLineNumbers, CancellationToken ct) =>
+            Task.FromResult<PlanEditsNs.PlanEditCallResult>(
+                new PlanEditsNs.PlanEditCallResult.Answered(edits));
     }
 
     // ── helpers ─────────────────────────────────────────────────────────
