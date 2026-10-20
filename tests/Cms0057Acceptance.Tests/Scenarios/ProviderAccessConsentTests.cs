@@ -386,6 +386,8 @@ public class ProviderAccessConsentTests
     [Trait("Backend", "Replace")]
     [InlineData(System.Net.HttpStatusCode.OK, "not json")]
     [InlineData(System.Net.HttpStatusCode.OK, "null")]
+    [InlineData(System.Net.HttpStatusCode.OK, "{}")]
+    [InlineData(System.Net.HttpStatusCode.OK, "{\"data\":[]}")]
     [InlineData(System.Net.HttpStatusCode.ServiceUnavailable, "{}")]
     [InlineData(System.Net.HttpStatusCode.Forbidden, "{}")]
     [InlineData(System.Net.HttpStatusCode.NotFound, "{}")]
@@ -475,6 +477,21 @@ public class ProviderAccessConsentTests
             || n.Contains("Address", StringComparison.OrdinalIgnoreCase)
             || n.Contains("Narrative", StringComparison.OrdinalIgnoreCase)
             || n.Contains("Payload", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    [Trait("Scenario", "CONSENT-01")]
+    [Trait("Backend", "Replace")]
+    public async Task CONSENT01_Replace_WithNoRegistryConfiguredEveryDecisionRefuses()
+    {
+        // Outside Development, fhir-service with no consent registry and no
+        // catalog reads nothing, so it cannot claim nobody opted out.
+        var decision = await Service(consentSource: new UnavailableConsentSource(
+                AcceptanceContext.Logger<UnavailableConsentSource>()))
+            .AuthorizeAsync(Request());
+
+        decision.Allowed.Should().BeFalse();
+        decision.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.RegistryUnavailable));
     }
 
     // ── Test doubles ───────────────────────────────────────────────────────────

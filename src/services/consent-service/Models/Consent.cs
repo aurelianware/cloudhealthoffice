@@ -197,6 +197,11 @@ public class Consent
         PurposeOfUse = PurposeOfUse,
         Provision = Provision,
         Status = (ConsentLifecycleStatus)(int)Status,
+        ActivatedAt = ActivatedAt,
+        RevokedAt = RevokedAt,
+        RevokedByMember = RevocationReasonCode is null
+            or ConsentRevocationReasonCode.MemberRequest
+            or ConsentRevocationReasonCode.Other,
         EffectiveAt = EffectiveAt,
         ExpiresAt = ExpiresAt,
     };

@@ -96,6 +96,27 @@ public class ConsentsControllerTests
         publisher.Calls.Should().ContainSingle();
     }
 
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(ConsentRevocationReasonCode.MemberRequest, true)]
+    [InlineData(ConsentRevocationReasonCode.Other, true)]
+    [InlineData(ConsentRevocationReasonCode.AdminError, false)]
+    [InlineData(ConsentRevocationReasonCode.SupersededByNewConsent, false)]
+    [InlineData(ConsentRevocationReasonCode.Expired, false)]
+    public void The_snapshot_says_whether_a_revocation_was_the_members_choice(
+        ConsentRevocationReasonCode? reason, bool byMember)
+    {
+        var revokedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc);
+        var snapshot = new Consent
+        {
+            TenantId = "t", MemberId = "M1", GrantedBy = "M1", Status = ConsentStatus.Revoked,
+            RevokedAt = revokedAt, RevocationReasonCode = reason,
+        }.ToAuthorizationSnapshot();
+
+        snapshot.RevokedByMember.Should().Be(byMember);
+        snapshot.RevokedAt.Should().Be(revokedAt);
+    }
+
     [Fact]
     public async Task Create_AnOptOutWithNoPurpose_Returns400_AndWritesNothing()
     {

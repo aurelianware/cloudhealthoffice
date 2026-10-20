@@ -31,6 +31,21 @@ public sealed record ConsentAuthorizationSnapshot
     /// </summary>
     public ConsentLifecycleStatus Status { get; init; } = ConsentLifecycleStatus.Draft;
 
+    /// <summary>When the record was activated, when known.</summary>
+    public DateTime? ActivatedAt { get; init; }
+
+    /// <summary>When the record was revoked, when known.</summary>
+    public DateTime? RevokedAt { get; init; }
+
+    /// <summary>
+    /// For a revoked record: whether the revocation was the member's own choice
+    /// (a member request, an unrecorded reason, or "other"), as opposed to an
+    /// administrative correction, a supersession or an expiry. Only a member's
+    /// revocation of a permit refuses an opt-out purpose. Defaults to true, so
+    /// a registry that does not say is read as the member's refusal.
+    /// </summary>
+    public bool RevokedByMember { get; init; } = true;
+
     /// <summary>When the authorization takes effect; null means immediately.</summary>
     public DateTime? EffectiveAt { get; init; }
 

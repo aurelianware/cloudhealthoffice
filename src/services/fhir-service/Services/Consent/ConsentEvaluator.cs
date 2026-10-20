@@ -61,6 +61,43 @@ public interface IConsentEvaluator
         CancellationToken ct = default);
 }
 
+/// <summary>Which consent source fhir-service uses when no registry URL is configured.</summary>
+public static class ConsentSourceSelection
+{
+    /// <summary>
+    /// The configured catalog stands in for the registry in Development and
+    /// Testing, and where a deployment deliberately configured one (a demo).
+    /// Anywhere else, with neither, <see cref="UnavailableConsentSource"/> refuses
+    /// every decision.
+    /// </summary>
+    public static bool UseConfiguredCatalog(IHostEnvironment environment, IConfiguration configuration) =>
+        environment.IsDevelopment()
+        || environment.IsEnvironment("Testing")
+        || configuration.GetSection(
+                FhirService.Services.PayerToPayer.PayerToPayerConsentOptions.SectionName + ":ConsentsByTenant")
+            .GetChildren().Any();
+}
+
+/// <summary>
+/// The source when no consent registry is configured outside Development and no
+/// catalog was configured either: every read fails, so every consent decision
+/// refuses. Never an empty answer, which Provider Access would read as "nobody
+/// opted out" (ADR 021).
+/// </summary>
+public sealed class UnavailableConsentSource : FhirService.Services.PayerToPayer.IPayerToPayerConsentSource
+{
+    private readonly ILogger<UnavailableConsentSource> _logger;
+
+    public UnavailableConsentSource(ILogger<UnavailableConsentSource> logger) => _logger = logger;
+
+    public Task<IReadOnlyList<ConsentAuthorizationSnapshot>> GetConsentsAsync(
+        string tenantId, string memberId, CancellationToken ct = default)
+    {
+        _logger.LogError("No consent registry is configured (Services:ConsentServiceUrl); consent decisions are refused.");
+        throw new ConsentRegistryUnavailableException("No consent registry is configured.");
+    }
+}
+
 /// <summary>The consent registry could not be read: unreachable, refused, or unreadable.</summary>
 public sealed class ConsentRegistryUnavailableException : Exception
 {

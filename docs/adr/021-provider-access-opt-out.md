@@ -40,13 +40,23 @@ policy. Then, in order:
 
 1. An in-force opt-out refuses (`OptedOut`). It wins over any permit.
 2. An in-force permit allows, and is named as the authorization.
-3. A **revoked permit**, with no permit in force, refuses (`Revoked`). Under
-   the opt-in model, revoking was how a member said no. That refusal is
-   honoured, not silently reversed.
+3. A permit **the member revoked** refuses (`Revoked`) unless the member has
+   spoken since. Under the opt-in model, revoking was how a member said no, so
+   that refusal is honoured, not silently reversed.
+   - The member's newer word is a permit activated later, or an opt-out
+     revoked later.
+   - A revocation for an administrative error, a supersession or an expiry is
+     not a refusal.
+   - When there are no timestamps to compare, the refusal stands.
 4. Otherwise the purpose is allowed (`NotOptedOut`), and no consent is named.
 
 The opt-in policy (Payer-to-Payer) also honours opt-outs. An in-force `Deny`
-refuses the purpose whatever permits exist, and a `Deny` never grants.
+refuses the purpose whatever permits exist, and a `Deny` never grants. Any
+provision value other than a recognised `Permit` counts as an opt-out.
+
+The authorization snapshot carries what this needs and nothing narrative: the
+provision, the activation and revocation instants, and whether a revocation
+was the member's own choice.
 
 ### 3. An unreadable registry refuses
 
@@ -55,6 +65,12 @@ that cannot be read must never look like an empty one. The HTTP registry
 source now throws on any answer other than a readable 200: unreachable, 401/403,
 5xx, 404, or an unreadable or empty body. The evaluator turns that into a
 refusal (`RegistryUnavailable`) for every purpose.
+
+With no registry URL configured, fhir-service uses its configured consent
+catalog only in Development and Testing, or where a deployment deliberately
+configured one (a demo). Anywhere else it uses a source that refuses every
+decision, so an empty catalog can never mean "nobody opted out". The Kubernetes
+manifest now sets `Services__ConsentServiceUrl`.
 
 ### 4. Provider Access uses the opt-out evaluation
 
@@ -77,10 +93,14 @@ Positive:
 
 Tradeoffs:
 
-- Members whose earlier opt-in was revoked stay opted out until a permit is
-  recorded again or the revoked record is superseded.
-- A configured (demo) consent catalog with no entries shares with every
-  attributed provider.
+- Members who revoked an earlier opt-in themselves stay opted out until they
+  record a newer choice.
+- A demo's configured catalog shares with every attributed provider it does not
+  list as opted out.
+- A fhir-service deployed without the consent registry URL refuses all
+  Provider Access and Payer-to-Payer decisions until the URL is set.
+- The `consent.status-changed.v1` event still carries neither purpose nor
+  provision. Nothing consumes it yet.
 
 ## Scope boundaries
 
