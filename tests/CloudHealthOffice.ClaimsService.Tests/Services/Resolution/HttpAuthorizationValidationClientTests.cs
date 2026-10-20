@@ -8,6 +8,19 @@ namespace CloudHealthOffice.ClaimsService.Tests.Services.Resolution;
 
 public sealed class HttpAuthorizationValidationClientTests
 {
+    [Fact]
+    public async Task ValidationResult_RetainsApprovedQuantityCodingWithoutConvertingIt()
+    {
+        var sut = CreateClient(FakeHttpMessageHandler.Json(
+            """{"authorizationNumber":"AUTH-1","isValid":true,"validatedMemberId":"MEM-1","memberMatches":true,"approvedUnits":2,"approvedUnitType":"units","approvedUnitCode":"mL","approvedUnitSystem":"http://unitsofmeasure.org"}"""));
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "72148", DateTime.UtcNow, null, "MEM-1");
+        Assert.Equal(AuthorizationLookupStatus.Valid, result.Status);
+        Assert.Equal(2, result.Validation!.ApprovedUnits);
+        Assert.Equal("mL", result.Validation.ApprovedUnitCode);
+        Assert.Equal("http://unitsofmeasure.org", result.Validation.ApprovedUnitSystem);
+        Assert.Equal("units", result.Validation.ApprovedUnitType);
+    }
+
     [Theory]
     [InlineData(null, null)]
     [InlineData("MEM-1", null)]

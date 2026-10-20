@@ -70,6 +70,7 @@ Records without an individual identifier require correction through an audited
 workflow rather than a fabricated identifier or automatic family match.
 
 `ClaimsAdjudication:PriorAuth:UsePlanFlaggedCodes` remains false by default.
+Unit identity preservation is implemented in [the unit accounting prerequisite](AUTHORIZATION-UNIT-ACCOUNTING.md); no unit ledger is implemented yet.
 G-64 still requires unit-of-measure agreement and concurrency-safe authorized-unit
 accounting across claims/adjustments, EDI authorization-line enrichment where
 needed, tenant plan scope checks and deployment validation. G-61/G-62 floor

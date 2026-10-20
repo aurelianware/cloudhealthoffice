@@ -73,13 +73,53 @@ public class FhirAdapterStatusServiceTests
             Mode = FhirAdapterModes.Hybrid,
             Resources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["Patient"] = FhirAdapterModes.Live,
+                ["ExplanationOfBenefit"] = FhirAdapterModes.Live,
             },
         };
         var report = CreateService(options, useMockAppeal: true).GetStatus();
 
-        report.Resources.Single(r => r.Resource == "Patient").Mode
+        report.Resources.Single(r => r.Resource == "ExplanationOfBenefit").Mode
             .Should().Be(FhirAdapterModes.Live);
+    }
+
+    [Theory]
+    [InlineData("Patient")]
+    [InlineData("Coverage")]
+    [InlineData("Encounter")]
+    [InlineData("Claim")]
+    public void A_mock_bound_data_resource_reports_demo_whatever_label_is_configured(string resource)
+    {
+        // ADR 018: the label cannot claim more than the binding delivers.
+        var options = new FhirAdapterOptions
+        {
+            Resources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [resource] = FhirAdapterModes.Live },
+        };
+
+        var status = CreateService(options).GetStatus().Resources.Single(r => r.Resource == resource);
+
+        status.Mode.Should().Be(FhirAdapterModes.Demo);
+        status.Source.Should().Be("MockFhirDataAdapter");
+    }
+
+    [Theory]
+    [InlineData("Patient", "member-service")]
+    [InlineData("Coverage", "coverage-service")]
+    public void A_cho_native_binding_reports_hybrid_and_its_source_unless_labelled(string resource, string service)
+    {
+        var bound = new FhirAdapterOptions
+        {
+            Sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [resource] = FhirAdapterSources.ChoNative },
+        };
+        var status = CreateService(bound).GetStatus().Resources.Single(r => r.Resource == resource);
+        status.Mode.Should().Be(FhirAdapterModes.Hybrid);
+        status.Source.Should().Contain(service).And.Contain("CHO-native");
+
+        bound.Resources[resource] = FhirAdapterModes.Live;
+        CreateService(bound).GetStatus().Resources.Single(r => r.Resource == resource).Mode
+            .Should().Be(FhirAdapterModes.Live, "an operator may label a CHO-native binding Live for a pilot");
+
+        CreateService(bound).GetStatus().Public().Resources.Single(r => r.Resource == resource).Source
+            .Should().BeNull("the anonymous report never names backing services");
     }
 
     private static FhirAdapterStatusService CreateService(

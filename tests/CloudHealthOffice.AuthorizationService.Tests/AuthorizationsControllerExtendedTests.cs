@@ -31,6 +31,33 @@ public class AuthorizationsControllerExtendedTests : IClassFixture<Authorization
             new AuthenticationHeaderValue("Bearer", factory.IssueToken());
     }
 
+    [Fact]
+    public async Task Validate_UnitsCarryOnlyTheSelectedAuthorizationLinesCoding()
+    {
+        var id = SetupAuth(AuthorizationStatus.Approved);
+        var auth = (await _factory.AuthorizationRepository.GetByIdAsync(id))!;
+        auth.ApprovedServiceDateFrom = DateTime.UtcNow.AddDays(-1);
+        auth.RequestedServices = new()
+        {
+            new() { LineNumber = 7, ProcedureCode = "72148", ServiceStatus = "A2", ApprovedUnits = 2,
+                UnitType = "units", UnitCode = "mL", UnitSystem = "http://unitsofmeasure.org" },
+            new() { LineNumber = 12, ProcedureCode = "72148", ServiceStatus = "A1", RequestedUnits = 3, UnitType = "DA" }
+        };
+        _factory.AuthorizationRepository.GetByAuthorizationNumberAsync(auth.AuthorizationNumber).Returns(auth);
+        var path = $"/api/authorizations/{auth.AuthorizationNumber}/validate?procedureCode=72148";
+        var selected = await _client.GetFromJsonAsync<JsonElement>(path + "&lineNumber=7", Json);
+        Assert.Equal(2, selected.GetProperty("approvedUnits").GetDecimal());
+        Assert.Equal("units", selected.GetProperty("approvedUnitType").GetString());
+        Assert.Equal("mL", selected.GetProperty("approvedUnitCode").GetString());
+        Assert.Equal("http://unitsofmeasure.org", selected.GetProperty("approvedUnitSystem").GetString());
+        var legacy = await _client.GetFromJsonAsync<JsonElement>(path + "&lineNumber=12", Json);
+        Assert.Equal("DA", legacy.GetProperty("approvedUnitType").GetString());
+        Assert.Equal(JsonValueKind.Null, legacy.GetProperty("approvedUnitCode").ValueKind);
+        var ambiguous = await _client.GetFromJsonAsync<JsonElement>(path, Json);
+        Assert.False(ambiguous.GetProperty("isValid").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, ambiguous.GetProperty("approvedUnitCode").ValueKind);
+    }
+
     [Theory]
     [InlineData("CHILD-1", "CHILD-1", true)]
     [InlineData("CHILD-1", "PARENT-1", false)]

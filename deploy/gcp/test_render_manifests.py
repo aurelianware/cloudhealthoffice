@@ -177,3 +177,11 @@ def test_portal_knows_the_work_management_service():
     docs = render()
     config = next(d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "portal-config")
     assert config["data"]["Services__WorkManagementService"] == "http://work-management-service.cloudhealthoffice/api/v1"
+
+
+def test_fhir_serves_cho_native_patient_and_coverage_labelled_synthetic():
+    docs = render()
+    config = next(d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "fhir-service-config")
+    assert config["data"]["FhirAdapters__Sources__Patient"] == "ChoNative"
+    assert config["data"]["FhirAdapters__Sources__Coverage"] == "ChoNative"
+    assert config["data"]["FhirAdapters__DataClassification"] == "synthetic"

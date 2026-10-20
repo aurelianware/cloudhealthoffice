@@ -78,6 +78,33 @@ public sealed class PasSubmitPersistenceSeamTests : IAsyncLifetime
     // ── D-01: the record is stored, and a preAuthRef names a stored record ──
 
     [Fact]
+    public async Task CodedQuantity_CrossesTheRealRecordingSeamAndPersistsWithoutUsingItsDisplayAsCode()
+    {
+        var bundle = PasBundles.Complete(procedureCode: ApproveCode);
+        PasBundles.ClaimOf(bundle).Item[0].Quantity = new Quantity
+        {
+            Value = 3, Unit = "units", Code = "mL", System = "http://unitsofmeasure.org"
+        };
+        var response = await SubmitAsync(bundle);
+        var stored = await StoredAsync(response.PreAuthRef);
+        var line = stored!.RequestedServices.Single();
+        line.RequestedUnits.Should().Be(3);
+        line.UnitType.Should().Be("units");
+        line.UnitCode.Should().Be("mL");
+        line.UnitSystem.Should().Be("http://unitsofmeasure.org");
+        // The read DTO used by both recording and inquiry must also retain it.
+        var json = JsonSerializer.Serialize(stored, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+        });
+        var read = JsonSerializer.Deserialize<global::FhirService.Services.Pas.PasStoredAuthorization>(json,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } });
+        read!.RequestedServices.Single().UnitCode.Should().Be("mL");
+        read.RequestedServices.Single().UnitSystem.Should().Be("http://unitsofmeasure.org");
+    }
+
+    [Fact]
     public async Task ApprovedSubmit_IsStoredWithTheDecisionAndTheRequestedPeriod()
     {
         var before = DateTime.UtcNow;
