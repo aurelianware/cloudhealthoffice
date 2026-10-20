@@ -118,6 +118,7 @@ healthcare payer systems.
 - [Extend without forking: the extension model and the plan edit service](adr/019-extension-model-plan-edit-service.md) ([contract v1](contracts/plan-edits/v1/README.md))
 - [Payer-to-Payer member data and member match from CHO's own services](adr/020-payer-to-payer-from-cho-services.md)
 - [Provider Access shares unless the member opts out](adr/021-provider-access-opt-out.md)
+- [Payer-to-Payer consent comes from the requesting payer, bound to it](adr/022-payer-to-payer-consent-from-the-requesting-payer.md)
 
 ## Roadmap
 

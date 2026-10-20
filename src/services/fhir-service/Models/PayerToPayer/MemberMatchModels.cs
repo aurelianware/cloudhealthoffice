@@ -57,6 +57,13 @@ public sealed class MemberMatchRequest
     /// coverages. Defaults to the match date when absent.
     /// </summary>
     public string? AsOfDate { get; init; }
+
+    /// <summary>
+    /// The member's Payer-to-Payer consent, collected by the requesting payer
+    /// (Da Vinci HRex <c>hrex-consent</c>, ADR 022). Required: without an
+    /// accepted consent naming the requesting payer, no member is matched.
+    /// </summary>
+    public System.Text.Json.Nodes.JsonObject? Consent { get; init; }
 }
 
 /// <summary>Terminal outcome of a member-match.</summary>
@@ -79,6 +86,12 @@ public enum MemberMatchOutcome
 
     /// <summary>A single member resolved, but the coverage context could not be reduced to one.</summary>
     AmbiguousCoverage,
+
+    /// <summary>
+    /// The request carried no consent, or one CHO cannot honour (ADR 022). Decided
+    /// before any member is looked at, so it reveals nothing about membership.
+    /// </summary>
+    ConsentNotAccepted,
 }
 
 /// <summary>
@@ -184,5 +197,9 @@ public sealed class MemberMatchAuditEntry
     public string? MatchedMemberId { get; init; }
     public string? SelectedCoverageId { get; init; }
     public string Outcome { get; init; } = string.Empty;
+
+    /// <summary>The fingerprint of the accepted consent, or why it was refused.</summary>
+    public string? ConsentFingerprint { get; init; }
+    public string? ConsentFailure { get; init; }
     public DateTime OccurredAtUtc { get; init; } = DateTime.UtcNow;
 }

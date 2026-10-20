@@ -21,10 +21,12 @@ namespace FhirService.Services.PayerToPayer;
 ///   5. audit — record the outcome without member demographics.
 ///
 /// This is the domain/application layer — the FHIR controller is a thin routing
-/// surface over it, so no matching logic lives in the controller. It does NOT
-/// gate on consent: member-match is an identity operation that precedes the data
-/// exchange; the P2P-01 respond path enforces the member's opt-in when data is
-/// actually returned. That keeps P2P-03 (dedicated consent) independent.
+/// surface over it, so no matching logic lives in the controller.
+///
+/// Consent (D-13, ADR 022): before any member is looked at, the request must
+/// carry the member's HRex consent naming the requesting payer (the client's
+/// registered payer). A match records it for that payer, so the export that
+/// follows is served to that payer only.
 /// </summary>
 public interface IPayerToPayerMemberMatchService
 {
@@ -34,12 +36,22 @@ public interface IPayerToPayerMemberMatchService
 public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchService
 {
     private readonly IPayerToPayerMemberMatchSource _source;
+    private readonly IPayerToPayerConsentAttestationStore _attestations;
+    private readonly string _localPayerId;
+    private readonly TimeProvider _time;
     private readonly ILogger<PayerToPayerMemberMatchService> _logger;
 
     public PayerToPayerMemberMatchService(
-        IPayerToPayerMemberMatchSource source, ILogger<PayerToPayerMemberMatchService> logger)
+        IPayerToPayerMemberMatchSource source,
+        IPayerToPayerConsentAttestationStore attestations,
+        Microsoft.Extensions.Options.IOptions<Outbound.PayerToPayerDirectoryOptions> directory,
+        TimeProvider time,
+        ILogger<PayerToPayerMemberMatchService> logger)
     {
         _source = source;
+        _attestations = attestations;
+        _localPayerId = directory.Value.LocalPayerId;
+        _time = time;
         _logger = logger;
     }
 
@@ -52,6 +64,11 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         var tenantId = request.TenantId?.Trim() ?? string.Empty;
         if (!string.Equals(tenantId, _source.ServedTenantId, StringComparison.Ordinal))
             return Failed(request, MemberMatchOutcome.TenantMismatch);
+
+        var now = _time.GetUtcNow().UtcDateTime;
+        var consent = PdexConsentValidator.Validate(request.Consent, request.ReceivingPayerId, _localPayerId, now);
+        if (!consent.Valid)
+            return Failed(request, MemberMatchOutcome.ConsentNotAccepted, consentFailure: consent.Failure);
 
         var criteria = MemberMatchCriteria.From(request);
         if (!criteria.IsSufficient)
@@ -107,7 +124,31 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         if (selection.Outcome == CoverageSelectionOutcome.Ambiguous)
             return Failed(request, MemberMatchOutcome.AmbiguousCoverage, matched.MemberId);
 
-        var audit = Audit(request, MemberMatchOutcome.Matched, matched.MemberId, selection.Coverage?.CoverageId);
+        // The consent must be this member's: its patient bears one of the member's
+        // identifiers, or agrees on family name and birth date. Otherwise one
+        // consent could be replayed for any member. Answered as no match, so a
+        // match that a mismatched consent spoiled reveals nothing more.
+        if (!consent.NamesMember(
+                matchedCoverages.Select(c => c.SubscriberId).Append(matched.MemberId), matched.LastName, matched.Dob))
+            return Failed(request, MemberMatchOutcome.NoMatch, consentFailure: PdexConsentFailure.PatientNotBound);
+
+        // Bound to the requesting payer: the export it asks for next is served
+        // to that payer, for this member, while the consent is in force.
+        await _attestations.RecordAsync(new PayerToPayerConsentAttestation
+        {
+            TenantId = tenantId,
+            MemberId = matched.MemberId,
+            ReceivingPayerId = request.ReceivingPayerId,
+            Policy = consent.Policy!,
+            PeriodStartUtc = consent.PeriodStartUtc!.Value,
+            PeriodEndUtc = consent.PeriodEndUtc,
+            ConsentFingerprint = consent.Fingerprint!,
+            RecordedAtUtc = now,
+            RecordedBy = request.InitiatedBy ?? "unknown",
+        }, ct);
+
+        var audit = Audit(request, MemberMatchOutcome.Matched, matched.MemberId, selection.Coverage?.CoverageId,
+            consent.Fingerprint);
         _logger.LogInformation(
             "P2P member-match: tenant={Tenant} receivingPayer={Payer} member={Member} coverage={Coverage}",
             LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), LogSanitizer.MaskId(audit.MatchedMemberId), LogSanitizer.Sanitize(audit.SelectedCoverageId));
@@ -116,17 +157,20 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
     }
 
     private MemberMatchResult Failed(
-        MemberMatchRequest request, MemberMatchOutcome outcome, string? matchedMemberId = null)
+        MemberMatchRequest request, MemberMatchOutcome outcome, string? matchedMemberId = null,
+        PdexConsentFailure? consentFailure = null)
     {
-        var audit = Audit(request, outcome, matchedMemberId, selectedCoverageId: null);
+        var audit = Audit(request, outcome, matchedMemberId, selectedCoverageId: null, consentFailure: consentFailure);
         _logger.LogInformation(
-            "P2P member-match declined: tenant={Tenant} receivingPayer={Payer} outcome={Outcome}",
-            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), audit.Outcome);
+            "P2P member-match declined: tenant={Tenant} receivingPayer={Payer} outcome={Outcome} consent={Consent}",
+            LogSanitizer.Sanitize(audit.TenantId), LogSanitizer.Sanitize(audit.ReceivingPayerId), audit.Outcome,
+            audit.ConsentFailure ?? "n/a");
         return MemberMatchResult.Failure(outcome, audit);
     }
 
     private static MemberMatchAuditEntry Audit(
-        MemberMatchRequest request, MemberMatchOutcome outcome, string? matchedMemberId, string? selectedCoverageId) =>
+        MemberMatchRequest request, MemberMatchOutcome outcome, string? matchedMemberId, string? selectedCoverageId,
+        string? consentFingerprint = null, PdexConsentFailure? consentFailure = null) =>
         new()
         {
             // Record the trimmed tenant — the same value scoping treats as
@@ -137,5 +181,7 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
             MatchedMemberId = matchedMemberId,
             SelectedCoverageId = selectedCoverageId,
             Outcome = outcome.ToString(),
+            ConsentFingerprint = consentFingerprint,
+            ConsentFailure = consentFailure?.ToString(),
         };
 }

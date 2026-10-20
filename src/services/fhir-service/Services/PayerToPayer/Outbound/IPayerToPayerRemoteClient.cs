@@ -42,6 +42,9 @@ public sealed class RemoteMemberMatchRequest
     /// <summary>Coverage context to resolve against: the target payer, as of a date.</summary>
     public string? RequestedPayerId { get; init; }
     public string? AsOfDate { get; init; }
+
+    /// <summary>The member's opt-in as an HRex consent naming CHO as recipient (ADR 022).</summary>
+    public System.Text.Json.Nodes.JsonObject? Consent { get; init; }
 }
 
 /// <summary>
@@ -57,6 +60,9 @@ public sealed class RemoteMemberDataRequest
     public string MemberId { get; init; } = string.Empty;
 
     public int LookbackYears { get; init; } = 5;
+
+    /// <summary>The same consent, for a peer that skipped $member-match.</summary>
+    public System.Text.Json.Nodes.JsonObject? Consent { get; init; }
 }
 
 /// <summary>

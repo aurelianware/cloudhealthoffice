@@ -316,6 +316,15 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.Outbound.IPayerToPa
 // Singleton: the repository ensures its indexes at construction, so a
 // per-request instance would re-issue createIndex on every call. It holds
 // only collection handles and is safe to share.
+// Payer-to-Payer consents accepted from requesting payers, one per (tenant,
+// member, payer): an export is served only to the payer whose consent is on
+// record (D-13, ADR 022). Singleton for the same index reason as below.
+builder.Services.AddSingleton<
+    FhirService.Services.PayerToPayer.IPayerToPayerConsentAttestationStore,
+    FhirService.Services.PayerToPayer.MongoPayerToPayerConsentAttestationStore>();
+Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton(
+    builder.Services, TimeProvider.System);
+
 builder.Services.AddSingleton<
     FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository,
     FhirService.Services.PayerToPayer.Ingestion.MongoPayerToPayerImportRepository>();

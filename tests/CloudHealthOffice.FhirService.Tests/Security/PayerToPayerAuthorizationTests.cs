@@ -114,7 +114,7 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
         using var client = _factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, path)
         {
-            Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"),
+            Content = new StringContent(CloudHealthOffice.FhirService.Tests.PayerToPayer.P2PTestConsent.Serialize(body, token), Encoding.UTF8, "application/json"),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return await client.SendAsync(request);
@@ -196,7 +196,7 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
     }
 
     [Fact]
-    public async Task Export_BackendTokenWithTheExplicitP2PScope_ExportsTheOptedInMember()
+    public async Task Export_BackendTokenWithTheExplicitP2PScope_ExportsTheConsentedMember()
     {
         // Positive control: the legitimate backend flow still works.
         var response = await PostAsync(ExportPath, BackendToken(P2PScope), ExportBody("pat-002"));
@@ -209,10 +209,38 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
     }
 
     [Fact]
-    public async Task Export_BackendToken_MemberWithoutOptIn_IsRefused()
-        // pat-001 has only a ProviderAccess consent, which does not open P2P.
-        => (await PostAsync(ExportPath, BackendToken(), ExportBody("pat-001")))
+    public async Task Export_BackendToken_WithoutTheRequestingPayersConsent_IsRefused()
+        // No consent from NEW-PLAN for pat-001 is supplied or on record (ADR 022).
+        => (await PostAsync(ExportPath, BackendToken(), new { receivingPayerId = "NEW-PLAN", memberId = "pat-001", consent = (object?)null }))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+    [Fact]
+    public async Task Export_AnotherPayersConsent_DoesNotOpenTheMemberToThisPayer()
+    {
+        // D-13: OTHER-PLAN supplies the member's consent naming itself; it is
+        // recorded for OTHER-PLAN only. NEW-PLAN, a correctly registered payer
+        // client, still cannot export the member.
+        var other = OtherPayerToken();
+        (await PostAsync(ExportPath, other, new { memberId = "pat-003" })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await PostAsync(ExportPath, BackendToken(), new { memberId = "pat-003", consent = (object?)null }))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await PostAsync(ExportPath, other, new { memberId = "pat-003", consent = (object?)null }))
+            .StatusCode.Should().Be(HttpStatusCode.OK, "OTHER-PLAN's own consent is on record");
+    }
+
+    [Fact]
+    public async Task MemberMatch_WithoutAConsent_Is422AndCarriesNoMemberData()
+    {
+        var response = await PostAsync(MatchPath, BackendToken(), new { memberId = "pat-002", consent = (object?)null });
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await response.Content.ReadAsStringAsync()).Should().NotContain("pat-002");
+    }
+
+    private string OtherPayerToken()
+        => _factory.IssueToken(P2PScope, patientId: null, tenantId: "test-tenant",
+            extraClaims: [new SecurityClaim("client_id", "other-plan-backend"), new SecurityClaim("payer_id", "OTHER-PLAN")]);
 
     [Fact]
     public async Task Export_BackendTokenForAnotherTenant_CannotReachThisTenantsMember()

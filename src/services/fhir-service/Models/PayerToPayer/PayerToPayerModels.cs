@@ -7,10 +7,9 @@ namespace FhirService.Models.PayerToPayer;
 /// payer holds and the exchange context.
 ///
 /// The member's opt-in authorization is deliberately NOT carried here: it is
-/// decided server-side by <c>IPayerToPayerConsentGate</c> from the plan's own
-/// consent state, so a receiving payer cannot self-attest consent. That gate
-/// uses the generic active opt-in signal and does not introduce a dedicated
-/// Payer-to-Payer ConsentType — P2P-03 stays PARTIAL and independent.
+/// decided from the member's consent as the requesting payer collected it
+/// (ADR 022): an HRex Consent naming that payer, accepted with
+/// <c>$member-match</c> or with this request, and recorded per payer.
 /// </summary>
 public sealed class PayerToPayerExchangeRequest
 {
@@ -35,6 +34,13 @@ public sealed class PayerToPayerExchangeRequest
 
     /// <summary>Claims lookback for included data (locked P2P rule: 5 years).</summary>
     public int LookbackYears { get; init; } = 5;
+
+    /// <summary>
+    /// Optional: the member's HRex consent naming the requesting payer, for a
+    /// payer that skips <c>$member-match</c>. Without it, a consent the same payer
+    /// supplied with an earlier match must be on record (ADR 022).
+    /// </summary>
+    public System.Text.Json.Nodes.JsonObject? Consent { get; init; }
 }
 
 /// <summary>Terminal outcome of an inbound P2P respond.</summary>
@@ -103,6 +109,9 @@ public sealed class PayerToPayerAuditEntry
     /// content, no PHI.
     /// </summary>
     public string? ConsentDecisionReason { get; init; }
+
+    /// <summary>Why a consent supplied with the request was refused (ADR 022), when one was.</summary>
+    public string? ConsentFailure { get; init; }
 }
 
 /// <summary>
