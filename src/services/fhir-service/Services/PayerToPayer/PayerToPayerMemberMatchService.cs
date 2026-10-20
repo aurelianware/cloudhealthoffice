@@ -66,6 +66,11 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         // proven, so the request is answered as ambiguous rather than guessed.
         if (!candidates.Complete)
             return Failed(request, MemberMatchOutcome.AmbiguousMatch);
+        // A supplied SSN the source cannot compare could contradict the member on
+        // file (another person sharing a name and birth date): ignoring it would
+        // let that contradiction pass, so the request is answered as ambiguous.
+        if (criteria.Ssn is not null && !candidates.SsnVerifiable)
+            return Failed(request, MemberMatchOutcome.AmbiguousMatch);
         var members = candidates.Members;
 
         // A supplied member/subscriber id is the only criterion that needs a

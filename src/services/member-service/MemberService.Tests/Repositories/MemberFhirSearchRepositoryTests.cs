@@ -122,6 +122,43 @@ public sealed class MemberFhirSearchRepositoryTests(MongoRunnerFixture mongo) : 
     }
 
     [Fact]
+    public async Task Any_identifier_form_matches_every_spelling_that_normalizes_alike_and_nothing_else()
+    {
+        await _db.GetCollection<Member>("Members").InsertManyAsync(new[]
+        {
+            Member("AB12", "Lee", "A", null, new DateTime(1990, 1, 1), "F", Updated(1)),
+            Member("ab-12", "Lee", "B", null, new DateTime(1990, 1, 1), "F", Updated(1)),
+            Member("A B 1\u20112", "Lee", "C", null, new DateTime(1990, 1, 1), "F", Updated(1)),
+            Member("AB123", "Lee", "D", null, new DateTime(1990, 1, 1), "F", Updated(1)),
+            Member("XAB12", "Lee", "E", null, new DateTime(1990, 1, 1), "F", Updated(1)),
+            Member("ab.12", "Lee", "F", null, new DateTime(1990, 1, 1), "F", Updated(1)),
+        });
+
+        var (anyForm, _) = await Search(new MemberFhirSearchQuery { MemberId = "AB12", AnyIdentifierForm = true, Limit = 100 });
+        var (exact, _) = await Search(new MemberFhirSearchQuery { MemberId = "AB12", Limit = 100 });
+
+        anyForm.Should().BeEquivalentTo("AB12", "ab-12", "A B 1\u20112");
+        exact.Should().Equal("AB12");
+    }
+
+    [Fact]
+    public async Task Any_identifier_form_applies_to_the_subscriber_in_the_graph_and_the_legacy_field()
+    {
+        await SeedFamilyAsync();
+        await _db.GetCollection<Member>("Members").InsertOneAsync(Dependent("D10", legacySubscriber: "m-02"));
+
+        var (ids, _) = await Search(new MemberFhirSearchQuery { SubscriberMemberId = "M02", AnyIdentifierForm = true, Limit = 100 });
+
+        ids.Should().Equal("D01", "D02", "D10");
+    }
+
+    [Fact]
+    public void Any_form_of_nothing_but_separators_is_no_filter()
+    {
+        MemberFhirSearchRepository.AnyForm(" - ").Should().BeNull();
+    }
+
+    [Fact]
     public async Task Subscribers_prefer_the_graph_then_the_legacy_field_and_are_null_for_subscribers()
     {
         await SeedFamilyAsync();

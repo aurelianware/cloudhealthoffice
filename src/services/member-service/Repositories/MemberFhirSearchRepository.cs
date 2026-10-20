@@ -49,7 +49,7 @@ public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
 
         var filter = BuildFilter(tenantId, query);
         if (!string.IsNullOrWhiteSpace(query.SubscriberMemberId))
-            filter &= await SubscriberFilterAsync(tenantId, query.SubscriberMemberId.Trim(), ct);
+            filter &= await SubscriberFilterAsync(tenantId, query.SubscriberMemberId.Trim(), query.AnyIdentifierForm, ct);
         var total = await _collection.CountDocumentsAsync(filter, cancellationToken: ct);
         if (total == 0 || query.Limit <= 0)
             return (Array.Empty<Member>(), total);
@@ -70,16 +70,21 @@ public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
     /// <paramref name="subscriber"/>; each result carries its derived subscriber
     /// (<see cref="SubscribersAsync"/>) so a caller can tell them apart.
     /// </summary>
-    private async Task<FilterDefinition<Member>> SubscriberFilterAsync(string tenantId, string subscriber, CancellationToken ct)
+    private async Task<FilterDefinition<Member>> SubscriberFilterAsync(
+        string tenantId, string subscriber, bool anyForm, CancellationToken ct)
     {
+        var pattern = anyForm ? AnyForm(subscriber) : null;
+        var rf = Builders<FamilyRelationship>.Filter;
+        var related = pattern is null ? rf.Eq(r => r.RelatedMemberId, subscriber) : rf.Regex(r => r.RelatedMemberId, pattern);
         var dependents = await _relationships
-            .Find(ActiveDependentEdges(tenantId) & Builders<FamilyRelationship>.Filter.Eq(r => r.RelatedMemberId, subscriber))
+            .Find(ActiveDependentEdges(tenantId) & related)
             .Project(r => r.SubjectMemberId)
             .ToListAsync(ct);
 
         var f = Builders<Member>.Filter;
 #pragma warning disable CS0618 // the legacy field is still the fallback the member read uses
-        var legacy = f.Eq(m => m.SubscriberMemberId, subscriber) & f.Ne(m => m.IsSubscriber, true);
+        var legacy = (pattern is null ? f.Eq(m => m.SubscriberMemberId, subscriber) : f.Regex(m => m.SubscriberMemberId, pattern))
+                     & f.Ne(m => m.IsSubscriber, true);
 #pragma warning restore CS0618
         return dependents.Count == 0 ? legacy : f.Or(f.In(m => m.MemberId, dependents.Distinct()), legacy);
     }
@@ -126,7 +131,11 @@ public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
         var filter = f.Eq(m => m.TenantId, tenantId) & f.Ne(m => m.IsDraft, true);
 
         if (!string.IsNullOrWhiteSpace(query.MemberId))
-            filter &= f.Eq(m => m.MemberId, query.MemberId.Trim());
+        {
+            filter &= query.AnyIdentifierForm && AnyForm(query.MemberId) is { } anyForm
+                ? f.Regex(m => m.MemberId, anyForm)
+                : f.Eq(m => m.MemberId, query.MemberId.Trim());
+        }
 
 
         if (Prefix(query.Family) is { } family)
@@ -178,6 +187,24 @@ public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
             // {$in: []} matches no document.
             _ => f.In(m => m.MemberId, Array.Empty<string>()),
         };
+    }
+
+    /// <summary>
+    /// Every stored spelling of an identifier that normalizes to the same value
+    /// as <paramref name="value"/> (case, spaces and hyphens ignored, as
+    /// Payer-to-Payer member match normalizes): <c>AB12</c> matches <c>ab-12</c>
+    /// and <c>A B 12</c>. Null for a value with nothing left after normalizing.
+    /// Anchored and case-insensitive, so it scans the tenant's index keys rather
+    /// than seeking; bounded by one tenant.
+    /// </summary>
+    internal static BsonRegularExpression? AnyForm(string? value)
+    {
+        // The hyphens are literal characters: MongoDB's regex engine has no \u escape.
+        const string separators = "[\\s\\-\u2010\u2011]*";
+        var core = (value ?? string.Empty).Where(c => !char.IsWhiteSpace(c) && c is not ('-' or '\u2010' or '\u2011')).ToList();
+        if (core.Count == 0) return null;
+        var pattern = "^" + separators + string.Join(separators, core.Select(c => Regex.Escape(c.ToString()))) + separators + "$";
+        return new BsonRegularExpression(pattern, "i");
     }
 
     /// <summary>A case-insensitive starts-with match on the literal text (FHIR string search).</summary>

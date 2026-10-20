@@ -618,6 +618,7 @@ public class MembersController : ControllerBase
         [FromServices] IMemberFhirSearchRepository search,
         [FromQuery][StringLength(MaxNameSearchLength)] string? memberId = null,
         [FromQuery][StringLength(MaxNameSearchLength)] string? subscriberMemberId = null,
+        [FromQuery] bool anyIdentifierForm = false,
         [FromQuery][StringLength(MaxNameSearchLength)] string? family = null,
         [FromQuery][StringLength(MaxNameSearchLength)] string? given = null,
         [FromQuery][StringLength(MaxNameSearchLength)] string? name = null,
@@ -639,6 +640,7 @@ public class MembersController : ControllerBase
         {
             MemberId = memberId,
             SubscriberMemberId = subscriberMemberId,
+            AnyIdentifierForm = anyIdentifierForm,
             Family = family,
             Given = given,
             Name = name,

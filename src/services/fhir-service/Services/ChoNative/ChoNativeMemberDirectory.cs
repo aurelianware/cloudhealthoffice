@@ -58,12 +58,27 @@ public sealed class ChoNativeMemberDirectory
         return page.Members.FirstOrDefault(m => string.Equals(m.MemberId, memberId, StringComparison.Ordinal));
     }
 
-    /// <summary>The members whose subscriber may be <paramref name="subscriberMemberId"/>, up to <paramref name="max"/>.</summary>
+    /// <summary>
+    /// The members whose member id is <paramref name="memberId"/> in any case or
+    /// separator spelling (spaces and hyphens ignored), up to <paramref name="max"/>:
+    /// every member <see cref="FhirService.Services.PayerToPayer.MemberIdentityNormalizer"/> treats as the same id.
+    /// </summary>
+    public Task<DirectoryMembers> FindByMemberIdAnyFormAsync(
+        string tenantId, string memberId, int max, CancellationToken ct = default)
+    {
+        RequireRequestTenant(tenantId);
+        return MembersAsync($"memberId={Escape(memberId)}&anyIdentifierForm=true", max, ct);
+    }
+
+    /// <summary>
+    /// The members whose subscriber may be <paramref name="subscriberMemberId"/>,
+    /// in any case or separator spelling, up to <paramref name="max"/>.
+    /// </summary>
     public Task<DirectoryMembers> FindBySubscriberAsync(
         string tenantId, string subscriberMemberId, int max, CancellationToken ct = default)
     {
         RequireRequestTenant(tenantId);
-        return MembersAsync($"subscriberMemberId={Escape(subscriberMemberId)}", max, ct);
+        return MembersAsync($"subscriberMemberId={Escape(subscriberMemberId)}&anyIdentifierForm=true", max, ct);
     }
 
     /// <summary>The members born on <paramref name="birthDate"/>, up to <paramref name="max"/>.</summary>
@@ -81,25 +96,34 @@ public sealed class ChoNativeMemberDirectory
     {
         RequireRequestTenant(tenantId);
         var all = new List<JsonObject>();
+        long? firstTotal = null;
         for (var offset = 0; ; offset += PageSize)
         {
             var body = await GetAsync(ChoNativeFhirDataAdapter.CoverageServiceClient, "Coverage",
                 $"{ChoNativeFhirDataAdapter.CoverageSearchRoute}?memberId={Escape(memberId)}&offset={offset}&limit={PageSize}",
                 ChoNativeFhirDataAdapter.CoverageSearchRoute, ct);
             var (total, items) = ReadPage("Coverage", body);
+            firstTotal ??= total;
+            // A total that moves between pages, or a page that ends early, means
+            // the set changed under the read: the export would be silently partial.
+            if (total != firstTotal || (items.Count == 0 && offset < total))
+                throw Inconsistent("Coverage");
             foreach (var item in items)
             {
                 var resource = item?["resource"] as JsonObject ?? throw Unreadable("Coverage");
                 all.Add(resource.DeepClone().AsObject());
             }
-            if (items.Count == 0 || offset + PageSize >= total || offset + PageSize > ChoNativeFhirDataAdapter.MaxOffset) break;
+            if (offset + items.Count >= total) break;
+            if (offset + PageSize > ChoNativeFhirDataAdapter.MaxOffset) throw TooMany("Coverage");
         }
         return all;
     }
 
     /// <summary>
     /// The member's ExplanationOfBenefit resources, as claims-service projects
-    /// them, up to <see cref="MaxEobPages"/> pages.
+    /// them. More than <see cref="MaxEobPages"/> pages, a total that moves between
+    /// pages or a page that ends early raise <see cref="FhirUpstreamException"/>:
+    /// the export is never silently partial.
     /// </summary>
     public async Task<IReadOnlyList<JsonObject>> GetExplanationsOfBenefitAsync(
         string tenantId, string memberId, CancellationToken ct = default)
@@ -107,7 +131,8 @@ public sealed class ChoNativeMemberDirectory
         RequireRequestTenant(tenantId);
         const string route = "fhir/ExplanationOfBenefit";
         var all = new List<JsonObject>();
-        for (var page = 1; page <= MaxEobPages; page++)
+        long? firstTotal = null;
+        for (var page = 1; ; page++)
         {
             var body = await GetAsync(UpstreamClientNames.ClaimsService, "ExplanationOfBenefit",
                 $"{route}?patient={Escape(memberId)}&_count={EobPageSize}&_page={page}", route, ct);
@@ -125,6 +150,12 @@ public sealed class ChoNativeMemberDirectory
                 throw Unreadable("ExplanationOfBenefit", ex);
             }
 
+            firstTotal ??= total;
+            if (total > (long)MaxEobPages * EobPageSize) throw TooMany("ExplanationOfBenefit");
+            var offset = (long)(page - 1) * EobPageSize;
+            if (total != firstTotal || (entries.Count == 0 && offset < total))
+                throw Inconsistent("ExplanationOfBenefit");
+
             foreach (var entry in entries)
             {
                 var resource = entry?["resource"] as JsonObject ?? throw Unreadable("ExplanationOfBenefit");
@@ -139,7 +170,7 @@ public sealed class ChoNativeMemberDirectory
                 }
                 all.Add(resource.DeepClone().AsObject());
             }
-            if (entries.Count == 0 || (long)page * EobPageSize >= total) break;
+            if (offset + entries.Count >= total) break;
         }
         return all;
     }
@@ -147,11 +178,17 @@ public sealed class ChoNativeMemberDirectory
     private async Task<DirectoryMembers> MembersAsync(string filter, int max, CancellationToken ct)
     {
         var all = new List<DirectoryMember>();
+        long? firstTotal = null;
         for (var offset = 0; offset < max; offset += PageSize)
         {
             var page = await MembersPageAsync(filter, offset, Math.Min(PageSize, max - offset), ct);
+            firstTotal ??= page.Total;
+            // The set changed under the read (a total that moves, a page that ends
+            // early): a member may have been skipped, so uniqueness is unproven.
+            if (page.Total != firstTotal || (page.Members.Count == 0 && offset < page.Total))
+                return new DirectoryMembers(all, Complete: false);
             all.AddRange(page.Members);
-            if (page.Members.Count == 0 || offset + page.Members.Count >= page.Total)
+            if (offset + page.Members.Count >= page.Total)
                 return new DirectoryMembers(all, Complete: true);
         }
         // The bound was reached with members still unread.
@@ -203,12 +240,26 @@ public sealed class ChoNativeMemberDirectory
     private static FhirUpstreamException Unreadable(string resource, Exception? inner = null) =>
         new(resource, $"{resource} upstream returned an unreadable response.", inner);
 
+    private FhirUpstreamException Inconsistent(string resource)
+    {
+        _logger.LogWarning("{Resource} upstream paging changed during the read; the read is refused.", resource);
+        return new FhirUpstreamException(resource, $"{resource} upstream changed during the read.");
+    }
+
+    private FhirUpstreamException TooMany(string resource)
+    {
+        _logger.LogWarning("{Resource} upstream holds more records for the member than one read can carry.", resource);
+        return new FhirUpstreamException(resource, $"{resource} upstream holds more records than one read can carry.");
+    }
+
     private static string Escape(string value) => Uri.EscapeDataString(value);
 
     private void RequireRequestTenant(string tenantId)
     {
         var requestTenant = _http.HttpContext?.GetTenantId();
-        if (string.IsNullOrEmpty(tenantId) || (requestTenant is not null && !string.Equals(requestTenant, tenantId, StringComparison.Ordinal)))
+        // No request tenant (no request, or one never tenant-resolved) is refused
+        // too: these reads only ever answer an authenticated request.
+        if (string.IsNullOrEmpty(tenantId) || !string.Equals(requestTenant, tenantId, StringComparison.Ordinal))
         {
             _logger.LogError(
                 "CHO-native member directory read refused: tenant argument {ParamTenant} does not match the request tenant {RequestTenant}.",

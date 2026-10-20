@@ -122,24 +122,60 @@ public class ChoNativePayerToPayerSourceTests
     }
 
     [Fact]
-    public async Task Candidates_are_the_member_its_dependents_and_everyone_born_that_day_once_each()
+    public async Task With_a_member_id_candidates_are_the_members_bearing_it_in_any_form_and_birth_date_is_not_read()
     {
         var (directory, upstream) = Directory();
         upstream.Respond = r =>
         {
             var q = Uri.UnescapeDataString(r.RequestUri!.Query);
-            if (q.Contains("subscriberMemberId=S-1")) return Json(Page(1, Member("D-1", subscriber: "S-1")));
-            if (q.Contains("memberId=S-1")) return Json(Page(1, Member("S-1")));
-            if (q.Contains("birthDateFrom=1962-03-22")) return Json(Page(2, Member("S-1"), Member("B-2")));
-            return Json(Page(0));
+            if (q.Contains("subscriberMemberId=s-1"))
+                return Json(Page(2, Member("D-1", subscriber: "S-1"), Member("D-9", subscriber: "OTHER")));
+            if (q.Contains("memberId=s-1")) return Json(Page(2, Member("S-1"), Member("S1")));
+            return Json(Page(1, Member("B-2")));
         };
 
-        var candidates = await MatchSource(directory).GetCandidatesAsync(Tenant, Criteria(memberId: "S-1", dob: "1962-03-22"));
+        var candidates = await MatchSource(directory).GetCandidatesAsync(Tenant, Criteria(memberId: "s-1", dob: "1962-03-22"));
 
         candidates.Searchable.Should().BeTrue();
         candidates.Complete.Should().BeTrue();
-        candidates.Members.Select(m => m.MemberId).Should().Equal("B-2", "D-1", "S-1");
-        upstream.Requests.Should().Contain(r => r.Contains("memberId=S1"), "the normalized id is searched as well as the supplied one");
+        candidates.SsnVerifiable.Should().BeFalse();
+        // D-9 matched the subscriber filter on another family edge, but its
+        // derived subscriber does not bear the id: the policy would rule it out.
+        candidates.Members.Select(m => m.MemberId).Should().Equal("D-1", "S-1", "S1");
+        upstream.Requests.Should().OnlyContain(r => r.Contains("anyIdentifierForm=true"));
+        upstream.Requests.Should().NotContain(r => r.Contains("birthDate"));
+    }
+
+    [Fact]
+    public async Task Without_a_member_id_candidates_are_everyone_born_that_day()
+    {
+        var (directory, upstream) = Directory();
+        upstream.Respond = r => Uri.UnescapeDataString(r.RequestUri!.Query).Contains("birthDateFrom=1962-03-22&birthDateTo=1962-03-23")
+            ? Json(Page(2, Member("B-2"), Member("A-1")))
+            : Json(Page(0));
+
+        var candidates = await MatchSource(directory).GetCandidatesAsync(Tenant, Criteria(dob: "1962-03-22", family: "Jones"));
+
+        candidates.Members.Select(m => m.MemberId).Should().Equal("A-1", "B-2");
+        upstream.Requests.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Member_paging_that_changes_under_the_read_is_reported_incomplete()
+    {
+        var full = Enumerable.Range(0, ChoNativeMemberDirectory.PageSize).Select(i => Member($"M{i:D4}")).ToArray();
+
+        var (moving, movingUpstream) = Directory();
+        movingUpstream.Respond = r => Uri.UnescapeDataString(r.RequestUri!.Query).Contains("offset=0")
+            ? Json(Page(150, full))
+            : Json(Page(149, Member("Z-1")));
+        (await moving.FindByBirthDateAsync(Tenant, new DateOnly(1962, 3, 22), 500)).Complete.Should().BeFalse();
+
+        var (shortened, shortUpstream) = Directory();
+        shortUpstream.Respond = r => Uri.UnescapeDataString(r.RequestUri!.Query).Contains("offset=0")
+            ? Json(Page(150, full))
+            : Json(Page(150));
+        (await shortened.FindByBirthDateAsync(Tenant, new DateOnly(1962, 3, 22), 500)).Complete.Should().BeFalse();
     }
 
     [Fact]
@@ -195,6 +231,21 @@ public class ChoNativePayerToPayerSourceTests
     }
 
     [Fact]
+    public async Task A_supplied_SSN_the_candidates_cannot_verify_is_never_ignored()
+    {
+        var jones = new ChoMember { MemberId = "M-1", FirstName = "Pat", LastName = "Jones", Dob = "1962-03-22", Gender = "F" };
+        var unverifiable = new PayerToPayerMemberMatchService(
+            new FixedCandidates(new MemberMatchCandidates([jones], SsnVerifiable: false)),
+            NullLogger<PayerToPayerMemberMatchService>.Instance);
+        var withSsn = new MemberMatchRequest { TenantId = Tenant, FamilyName = "Jones", BirthDate = "1962-03-22", Ssn = "123456789" };
+        var withoutSsn = new MemberMatchRequest { TenantId = Tenant, FamilyName = "Jones", BirthDate = "1962-03-22" };
+
+        // The SSN may belong to someone else who shares the name and birth date.
+        (await unverifiable.MatchAsync(withSsn)).Outcome.Should().Be(MemberMatchOutcome.AmbiguousMatch);
+        (await unverifiable.MatchAsync(withoutSsn)).Outcome.Should().NotBe(MemberMatchOutcome.AmbiguousMatch);
+    }
+
+    [Fact]
     public async Task Another_tenant_gets_no_candidates_and_nothing_is_read()
     {
         var (directory, upstream) = Directory();
@@ -229,6 +280,54 @@ public class ChoNativePayerToPayerSourceTests
     }
 
     [Fact]
+    public async Task Exported_claims_carry_no_remittance_or_cost_sharing()
+    {
+        var (directory, upstream) = Directory();
+        const string money = "{\"value\":10,\"currency\":\"USD\"}";
+        const string adjudication = "[{\"category\":{\"coding\":[{\"code\":\"copay\"}]},\"amount\":" + money +
+                                    ",\"reason\":{\"coding\":[{\"code\":\"CO-45\"}]}}]";
+        var eob = "{\"resource\":{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"e-1\",\"patient\":{\"reference\":\"Patient/M-1\"}," +
+                  "\"billablePeriod\":{\"start\":\"2026-01-01\"},\"total\":[{\"amount\":" + money + "}],\"payment\":{\"amount\":" + money + "}," +
+                  "\"payee\":{\"type\":{\"text\":\"provider\"}},\"adjudication\":" + adjudication + ",\"benefitBalance\":[{}],\"processNote\":[{\"text\":\"n\"}]," +
+                  "\"addItem\":[{\"adjudication\":" + adjudication + "}]," +
+                  "\"item\":[{\"sequence\":1,\"productOrService\":{\"coding\":[{\"code\":\"99213\"}]},\"unitPrice\":" + money + ",\"net\":" + money +
+                  ",\"adjudication\":" + adjudication + ",\"detail\":[{\"sequence\":1,\"net\":" + money + ",\"adjudication\":" + adjudication +
+                  ",\"subDetail\":[{\"sequence\":1,\"adjudication\":" + adjudication + "}]}]}]}}";
+        upstream.Respond = r => r.RequestUri!.AbsolutePath switch
+        {
+            var p when p.Contains("members") => Json(Page(1, Member("M-1"))),
+            var p when p.Contains("coverage") => Json(Page(0)),
+            _ => Json(Bundle(1, eob)),
+        };
+        var member = new ChoMember { MemberId = "M-1", FirstName = "Pat", LastName = "Jones", Dob = "1962-03-22", Gender = "F" };
+
+        var resources = await new ChoNativePayerToPayerExportSource(directory).GetResourcesAsync(member,
+            new PayerToPayerExchangeRequest { TenantId = Tenant, ExchangeDateUtc = new DateTime(2026, 9, 1), LookbackYears = 5 });
+
+        var resource = resources.Single(r => r.ResourceType == "ExplanationOfBenefit");
+        var exported = System.Text.Json.JsonSerializer.Serialize(resource, resource.GetType());
+        exported.Should().NotContainAny("\"total\"", "\"payment\"", "\"payee\"", "\"adjudication\"", "\"benefitBalance\"",
+            "\"processNote\"", "\"addItem\"", "\"unitPrice\"", "\"net\"", "CO-45", "USD");
+        exported.Should().Contain("99213").And.Contain("\"subDetail\"").And.Contain("2026-01-01");
+    }
+
+    [Fact]
+    public void The_mock_export_sends_no_paid_amount()
+    {
+        var eob = PatientAccessMapperPaymentEob();
+        eob.Payment.Should().BeNull();
+    }
+
+    private static FhirExplanationOfBenefit PatientAccessMapperPaymentEob()
+    {
+        var provider = new FixedPayments();
+        var member = new ChoMember { MemberId = "M-1", FirstName = "Pat", LastName = "Jones", Dob = "1962-03-22", Gender = "F" };
+        var resources = new PatientAccessPayerToPayerExportSource(provider).GetResourcesAsync(member,
+            new PayerToPayerExchangeRequest { TenantId = Tenant, ExchangeDateUtc = new DateTime(2026, 9, 1), LookbackYears = 5 }).Result;
+        return resources.OfType<FhirExplanationOfBenefit>().Single();
+    }
+
+    [Fact]
     public async Task Claims_are_read_page_by_page_until_the_total()
     {
         var (directory, upstream) = Directory();
@@ -243,6 +342,48 @@ public class ChoNativePayerToPayerSourceTests
 
         eobs.Should().HaveCount(ChoNativeMemberDirectory.EobPageSize + 1);
         upstream.Requests.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Claims_beyond_what_one_read_can_carry_fail_rather_than_truncate()
+    {
+        var (directory, upstream) = Directory();
+        upstream.Respond = _ => Json(Bundle((long)ChoNativeMemberDirectory.MaxEobPages * ChoNativeMemberDirectory.EobPageSize + 1,
+            Eob("e-1", "M-1", "2026-01-01")));
+
+        var act = () => directory.GetExplanationsOfBenefitAsync(Tenant, "M-1");
+
+        await act.Should().ThrowAsync<FhirUpstreamException>();
+        upstream.Requests.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Claim_or_coverage_paging_that_changes_under_the_read_fails()
+    {
+        var fullEobs = Enumerable.Range(0, ChoNativeMemberDirectory.EobPageSize).Select(i => Eob($"e{i}", "M-1", "2026-01-01")).ToArray();
+        var (eobDirectory, eobUpstream) = Directory();
+        eobUpstream.Respond = r => Uri.UnescapeDataString(r.RequestUri!.Query).Contains("_page=1")
+            ? Json(Bundle(250, fullEobs))
+            : Json(Bundle(250));
+        await ((Func<Task>)(() => eobDirectory.GetExplanationsOfBenefitAsync(Tenant, "M-1"))).Should().ThrowAsync<FhirUpstreamException>();
+
+        var fullCoverages = Enumerable.Range(0, ChoNativeMemberDirectory.PageSize).Select(i => Coverage($"c{i}", "M-1")).ToArray();
+        var (covDirectory, covUpstream) = Directory();
+        covUpstream.Respond = r => Uri.UnescapeDataString(r.RequestUri!.Query).Contains("offset=0")
+            ? Json(Page(150, fullCoverages))
+            : Json(Page(151, Coverage("c-x", "M-1")));
+        await ((Func<Task>)(() => covDirectory.GetCoveragesAsync(Tenant, "M-1"))).Should().ThrowAsync<FhirUpstreamException>();
+    }
+
+    [Fact]
+    public async Task A_read_outside_a_tenant_resolved_request_is_refused()
+    {
+        var (directory, upstream) = Directory(requestTenant: null);
+
+        var act = () => directory.FindByMemberIdAsync(Tenant, "M-1");
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        upstream.Requests.Should().BeEmpty();
     }
 
     [Theory]
@@ -269,6 +410,16 @@ public class ChoNativePayerToPayerSourceTests
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         upstream.Requests.Should().BeEmpty();
+    }
+
+    private sealed class FixedPayments : global::FhirService.Services.IPatientAccessDataProvider
+    {
+        public Task<ChoMember?> GetMemberAsync(string memberId, CancellationToken ct = default) => Task.FromResult<ChoMember?>(null);
+        public Task<IReadOnlyList<ChoMember>> GetMembersByPatientIdAsync(string patientId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ChoMember>>([]);
+        public Task<IReadOnlyList<ChoPaymentDocument>> GetPaymentsByPatientIdAsync(string patientId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ChoPaymentDocument>>(
+                [new ChoPaymentDocument { PaymentId = "p-1", ClaimId = "c-1", MemberId = "M-1", PaymentDate = "2026-01-01", TotalPaid = 125m }]);
     }
 
     private sealed class FixedCandidates(MemberMatchCandidates candidates) : IPayerToPayerMemberMatchSource

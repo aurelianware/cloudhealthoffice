@@ -110,11 +110,16 @@ public sealed class ChoNativePayerToPayerMemberSource : IPayerToPayerMemberSourc
 }
 
 /// <summary>
-/// <c>$member-match</c> candidates over member-service (ADR 020): the member
-/// with the supplied id, the members whose subscriber it is, and every member
-/// born on the supplied date — a superset of every strong match except by SSN,
-/// which CHO cannot search. A request with neither a member id nor a birth date
-/// is therefore not searchable.
+/// <c>$member-match</c> candidates over member-service (ADR 020).
+/// <list type="bullet">
+///   <item><description>With a member id: the members whose member id, or whose
+///     subscriber, is that id in any case or separator spelling. The policy makes
+///     every other member a conflict, so nothing else is read.</description></item>
+///   <item><description>Without one: every member born on the supplied date.</description></item>
+/// </list>
+/// That is a superset of every strong match except by SSN, which CHO cannot
+/// search; a request with neither a member id nor a birth date is therefore not
+/// searchable. The candidates carry no SSN, so they are not SSN-verifiable.
 /// </summary>
 public sealed class ChoNativePayerToPayerMemberMatchSource : IPayerToPayerMemberMatchSource
 {
@@ -153,28 +158,27 @@ public sealed class ChoNativePayerToPayerMemberMatchSource : IPayerToPayerMember
             return MemberMatchCandidates.NotSearchable;
 
         var found = new List<DirectoryMember>();
-        var complete = true;
+        bool complete;
 
-        // The id as supplied and as normalized: stored ids keep their own
-        // punctuation and case, and the policy compares normalized forms.
-        var ids = new[] { criteria.SuppliedMemberId, criteria.MemberId }
-            .Where(id => !string.IsNullOrEmpty(id))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-        foreach (var memberId in ids)
+        if (criteria.MemberId is { } memberId)
         {
-            if (await _directory.FindByMemberIdAsync(tenantId, memberId!, ct) is { } byId)
-                found.Add(byId);
-            var dependents = await _directory.FindBySubscriberAsync(tenantId, memberId!, MaxCandidates, ct);
-            found.AddRange(dependents.Members);
-            complete &= dependents.Complete;
+            // member-service matches every spelling that normalizes alike; the
+            // supplied form is used so its own characters reach the search.
+            var lookup = criteria.SuppliedMemberId ?? memberId;
+            var byId = await _directory.FindByMemberIdAnyFormAsync(tenantId, lookup, MaxCandidates, ct);
+            var dependents = await _directory.FindBySubscriberAsync(tenantId, lookup, MaxCandidates, ct);
+            complete = byId.Complete && dependents.Complete;
+            // Keep only members the policy could find bearing the id: their own id,
+            // or their subscriber's (the subscriber id on their coverage).
+            found.AddRange(byId.Members.Concat(dependents.Members).Where(m =>
+                MemberIdentityNormalizer.Identifier(m.MemberId) == memberId
+                || MemberIdentityNormalizer.Identifier(m.SubscriberMemberId) == memberId));
         }
-
-        if (birthDate is { } date)
+        else
         {
-            var born = await _directory.FindByBirthDateAsync(tenantId, date, MaxCandidates, ct);
+            var born = await _directory.FindByBirthDateAsync(tenantId, birthDate!.Value, MaxCandidates, ct);
+            complete = born.Complete;
             found.AddRange(born.Members);
-            complete &= born.Complete;
         }
 
         var distinct = found
@@ -184,7 +188,10 @@ public sealed class ChoNativePayerToPayerMemberMatchSource : IPayerToPayerMember
             .ToList();
         foreach (var m in distinct) _subscribers[m.MemberId] = m.SubscriberMemberId;
 
-        return new MemberMatchCandidates(distinct.Select(ChoNativePayerToPayerMapping.ToChoMember).ToList(), Complete: complete);
+        return new MemberMatchCandidates(
+            distinct.Select(ChoNativePayerToPayerMapping.ToChoMember).ToList(),
+            Complete: complete,
+            SsnVerifiable: false);
     }
 
     public async Task<IReadOnlyList<ChoCoverage>> GetCoveragesAsync(
@@ -207,7 +214,9 @@ public sealed class ChoNativePayerToPayerMemberMatchSource : IPayerToPayerMember
 /// The P2P-01 export from CHO's own services (ADR 020): the Patient from
 /// member-service, every Coverage from coverage-service, and the member's
 /// ExplanationOfBenefit resources from claims-service whose service period
-/// starts within the lookback window — each exactly as its service projects it.
+/// starts within the lookback window, each as its service projects it — except
+/// that every EOB is stripped of remittance and cost-sharing data
+/// (<see cref="PayerToPayerEobRedaction"/>), which CMS-0057-F excludes.
 /// </summary>
 public sealed class ChoNativePayerToPayerExportSource : IPayerToPayerExportSource
 {
@@ -234,7 +243,7 @@ public sealed class ChoNativePayerToPayerExportSource : IPayerToPayerExportSourc
             .Where(e => PayerToPayerExportPolicy.WithinLookback(
                 e["billablePeriod"]?["start"]?.GetValue<string>(), request.ExchangeDateUtc, request.LookbackYears))
             .OrderBy(e => e["id"]?.GetValue<string>(), StringComparer.Ordinal)
-            .Select(e => new FhirJsonResource(e)));
+            .Select(e => new FhirJsonResource(PayerToPayerEobRedaction.Redact(e))));
 
         return resources;
     }

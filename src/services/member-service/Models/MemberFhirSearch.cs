@@ -26,6 +26,14 @@ public sealed class MemberFhirSearchQuery
     /// </summary>
     public string? SubscriberMemberId { get; init; }
 
+    /// <summary>
+    /// Match <see cref="MemberId"/> and <see cref="SubscriberMemberId"/> in any
+    /// form that normalizes to the same identifier: ignoring case, spaces and
+    /// hyphens, as Payer-to-Payer member match compares them (ADR 020). Off, the
+    /// match is exact.
+    /// </summary>
+    public bool AnyIdentifierForm { get; init; }
+
     /// <summary>Case-insensitive prefix of the family name.</summary>
     public string? Family { get; init; }
 
@@ -55,10 +63,10 @@ public sealed class MemberFhirSearchQuery
     public int Limit { get; init; } = 20;
 }
 
-/// <summary>One projected Patient and the member it was projected from.</summary>
 /// <summary>
 /// One search result: the member id, the projected Patient, and the member's
-/// subscriber (null for a member with none recorded), which a Patient does not carry.
+/// subscriber, which a Patient does not carry. It is null for a subscriber (a
+/// subscriber has no subscriber of their own) and for a member with none recorded.
 /// </summary>
 public sealed record MemberFhirSearchEntry(string MemberId, JsonObject Resource, string? SubscriberMemberId = null);
 

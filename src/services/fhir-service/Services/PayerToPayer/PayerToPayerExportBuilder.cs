@@ -51,7 +51,8 @@ public interface IPayerToPayerExportSource
 /// <summary>
 /// The mock export source: the member mapped to US Core Patient and Coverage,
 /// and the member's payments from <see cref="IPatientAccessDataProvider"/> as
-/// EOBs, filtered by <see cref="PayerToPayerExportPolicy"/>, ordered by payment id.
+/// EOBs without the paid amount, filtered by <see cref="PayerToPayerExportPolicy"/>,
+/// ordered by payment id.
 /// </summary>
 public sealed class PatientAccessPayerToPayerExportSource : IPayerToPayerExportSource
 {
@@ -73,7 +74,8 @@ public sealed class PatientAccessPayerToPayerExportSource : IPayerToPayerExportS
             .Where(p => string.Equals(p.MemberId, member.MemberId, StringComparison.Ordinal))
             .Where(p => PayerToPayerExportPolicy.IncludePayment(p, request.ExchangeDateUtc, request.LookbackYears))
             .OrderBy(p => p.PaymentId, StringComparer.Ordinal)
-            .Select(PatientAccessMapper.MapPaymentToEob));
+            // CMS-0057-F excludes provider remittances from Payer-to-Payer data.
+            .Select(p => PatientAccessMapper.MapPaymentToEob(p) with { Payment = null }));
         return resources;
     }
 }
