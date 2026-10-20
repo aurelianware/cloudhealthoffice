@@ -86,7 +86,7 @@ public sealed class PayerToPayerMemberMatchController : FhirControllerBase
                 Ok(PayerToPayerMemberMatchResponseBuilder.Build(result.Member!, result.Coverage)),
 
             MemberMatchOutcome.InsufficientCriteria => FhirBadRequest(
-                "Insufficient identifying criteria: supply a member/subscriber id or SSN, or a family name with a birth date."),
+                "Insufficient identifying criteria: supply a member or subscriber id, or a family name with a birth date."),
 
             // No-match, ambiguous identity, ambiguous coverage, and cross-tenant all
             // collapse to one generic 422 so the endpoint cannot reveal whether a

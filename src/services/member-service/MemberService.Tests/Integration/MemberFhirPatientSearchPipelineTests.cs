@@ -86,6 +86,40 @@ public class MemberFhirPatientSearchPipelineTests : IClassFixture<MemberFhirSmok
     }
 
     [Fact]
+    public async Task Search_passes_the_subscriber_filter_and_returns_each_members_subscriber()
+    {
+        var dependent = Member("FS-003", "Charlie");
+        dependent.IsSubscriber = false;
+#pragma warning disable CS0618
+        dependent.SubscriberMemberId = "FS-001";
+#pragma warning restore CS0618
+        _search.Members.Add(dependent);
+
+        var response = await As(ChoRolePermissions.MemberServices)
+            .GetAsync("/api/v1/members/fhir/Patient?subscriberMemberId=FS-001&limit=50");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        _search.Calls.Single().Query.SubscriberMemberId.Should().Be("FS-001");
+        var items = (await Json(response))["items"]!.AsArray();
+        items.Single(i => i!["memberId"]!.ToString() == "FS-003")!["subscriberMemberId"]!.ToString().Should().Be("FS-001");
+        items.Single(i => i!["memberId"]!.ToString() == "FS-001")!["subscriberMemberId"].Should().BeNull();
+    }
+
+    [Fact]
+    public async Task An_any_form_search_is_passed_through_and_echoed_so_callers_can_tell_it_was_applied()
+    {
+        var client = As(ChoRolePermissions.MemberServices);
+
+        var anyForm = await Json(await client.GetAsync("/api/v1/members/fhir/Patient?memberId=fs-001&anyIdentifierForm=true"));
+        var exact = await Json(await client.GetAsync("/api/v1/members/fhir/Patient?memberId=FS-001"));
+
+        _search.Calls[0].Query.AnyIdentifierForm.Should().BeTrue();
+        _search.Calls[1].Query.AnyIdentifierForm.Should().BeFalse();
+        anyForm["anyIdentifierForm"]!.GetValue<bool>().Should().BeTrue();
+        exact["anyIdentifierForm"]?.GetValue<bool>().Should().NotBe(true);
+    }
+
+    [Fact]
     public async Task Search_runs_in_the_callers_tenant_with_the_filters_it_was_given()
     {
         var response = await As(ChoRolePermissions.MemberServices).GetAsync(
