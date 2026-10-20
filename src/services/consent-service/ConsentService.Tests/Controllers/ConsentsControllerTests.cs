@@ -1,3 +1,4 @@
+using CloudHealthOffice.Consent.Contracts;
 using System.Security.Claims;
 using ConsentService.Controllers;
 using ConsentService.Middleware;
@@ -70,6 +71,86 @@ public class ConsentsControllerTests
         repo.SnapshotEvents().Should().ContainSingle()
             .Which.ActorId.Should().Be("token-user-7");
         publisher.Calls.Should().ContainSingle().Which.Actor.Should().Be("token-user-7");
+    }
+
+    [Fact]
+    public async Task Create_AnOptOut_IsStoredAsDenyAndReachesTheAuthorizationSnapshot()
+    {
+        var (controller, repo, publisher, _) = BuildController();
+
+        var result = await controller.CreateConsent("M1", new CreateConsentRequest
+        {
+            ConsentType = ConsentType.GeneralAuthorization,
+            PurposeOfUse = ConsentPurposeOfUse.ProviderAccess,
+            Provision = ConsentProvision.Deny,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1"
+        }, CancellationToken.None);
+
+        var view = ((CreatedAtActionResult)result).Value.Should().BeOfType<Consent>().Subject;
+        view.Provision.Should().Be(ConsentProvision.Deny);
+        view.PurposeOfUse.Should().Be(ConsentPurposeOfUse.ProviderAccess);
+        var stored = (await repo.GetByIdAsync("tenant-a", "M1", view.Id))!;
+        stored.Provision.Should().Be(ConsentProvision.Deny);
+        stored.ToAuthorizationSnapshot().Provision.Should().Be(ConsentProvision.Deny);
+        publisher.Calls.Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(ConsentRevocationReasonCode.MemberRequest, true)]
+    [InlineData(ConsentRevocationReasonCode.Other, true)]
+    [InlineData(ConsentRevocationReasonCode.AdminError, false)]
+    [InlineData(ConsentRevocationReasonCode.SupersededByNewConsent, false)]
+    [InlineData(ConsentRevocationReasonCode.Expired, false)]
+    public void The_snapshot_says_whether_a_revocation_was_the_members_choice(
+        ConsentRevocationReasonCode? reason, bool byMember)
+    {
+        var revokedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc);
+        var snapshot = new Consent
+        {
+            TenantId = "t", MemberId = "M1", GrantedBy = "M1", Status = ConsentStatus.Revoked,
+            RevokedAt = revokedAt, RevocationReasonCode = reason,
+        }.ToAuthorizationSnapshot();
+
+        snapshot.RevokedByMember.Should().Be(byMember);
+        snapshot.RevokedAt.Should().Be(revokedAt);
+    }
+
+    [Fact]
+    public async Task Create_AnOptOutWithNoPurpose_Returns400_AndWritesNothing()
+    {
+        var (controller, repo, publisher, _) = BuildController();
+
+        var result = await controller.CreateConsent("M1", new CreateConsentRequest
+        {
+            ConsentType = ConsentType.GeneralAuthorization,
+            Provision = ConsentProvision.Deny,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1"
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>()
+            .Which.Value.Should().BeOfType<ValidationProblemDetails>()
+            .Which.Errors.Should().ContainKey(nameof(CreateConsentRequest.Provision));
+        (await repo.ListByMemberAsync("tenant-a", "M1", activeOnly: false)).Should().BeEmpty();
+        publisher.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_record_written_before_the_provision_existed_is_a_permit()
+    {
+        new Consent().Provision.Should().Be(ConsentProvision.Permit);
+        new CreateConsentRequest().Provision.Should().Be(ConsentProvision.Permit);
+
+        // As stored: a document with no provision element reads back as Permit,
+        // and a Deny survives the round trip.
+        var stored = MongoDB.Bson.Serialization.BsonSerializer.Deserialize<Consent>(
+            new MongoDB.Bson.BsonDocument { ["TenantId"] = "t", ["_id"] = "c1", ["MemberId"] = "M1", ["GrantedBy"] = "M1" });
+        stored.Provision.Should().Be(ConsentProvision.Permit);
+        var optOut = new Consent { TenantId = "t", Id = "c2", MemberId = "M1", GrantedBy = "M1", Provision = ConsentProvision.Deny };
+        MongoDB.Bson.Serialization.BsonSerializer.Deserialize<Consent>(MongoDB.Bson.BsonExtensionMethods.ToBsonDocument(optOut))
+            .Provision.Should().Be(ConsentProvision.Deny);
     }
 
     [Theory]

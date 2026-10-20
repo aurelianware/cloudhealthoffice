@@ -138,6 +138,8 @@ public sealed class InMemoryConsentRepository : IConsentRepository, IConsentEven
         Id = c.Id,
         MemberId = c.MemberId,
         ConsentType = c.ConsentType,
+        PurposeOfUse = c.PurposeOfUse,
+        Provision = c.Provision,
         SensitiveCategory = c.SensitiveCategory,
         Status = c.Status,
         EffectiveAt = c.EffectiveAt,

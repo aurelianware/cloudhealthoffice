@@ -264,9 +264,19 @@ public class PatientAccessClinicalTests
     [Fact]
     [Trait("Scenario", "PAT-02")]
     [Trait("Backend", "Replace")]
-    public async Task PAT02_Replace_ProviderWithoutProviderAccessConsent_IsDeniedClinicalData()
+    public async Task PAT02_Replace_AMemberWhoOptedOutOfProviderAccess_IsDeniedClinicalData()
     {
-        var decision = await ProviderDecisionAsync(consents: []);
+        var decision = await ProviderDecisionAsync(consents:
+        [
+            new ConfiguredConsentRecord
+            {
+                MemberId = Member,
+                ConsentId = "opt-out",
+                PurposeOfUse = ConsentPurposeOfUse.ProviderAccess,
+                Provision = ConsentProvision.Deny,
+                Status = ConsentLifecycleStatus.Active,
+            },
+        ]);
 
         decision.Allowed.Should().BeFalse();
         decision.Reason.Should().Be(ProviderAccessDenialReason.ConsentDenied);
@@ -275,11 +285,12 @@ public class PatientAccessClinicalTests
     [Fact]
     [Trait("Scenario", "PAT-02")]
     [Trait("Backend", "Replace")]
-    public async Task PAT02_Replace_APayerToPayerConsentDoesNotOpenClinicalDataToAProvider()
+    public async Task PAT02_Replace_AnAttributedProviderMayReadClinicalDataUnlessTheMemberOptedOut()
     {
-        // The consent that authorized the EXCHANGE that brought this data in is
-        // not the consent that authorizes a provider to read it.
-        var decision = await ProviderDecisionAsync(consents:
+        // CMS-0057-F Provider Access shares by default (D-11). A Payer-to-Payer
+        // consent neither opens nor closes it: only a Provider Access opt-out does.
+        var none = await ProviderDecisionAsync(consents: []);
+        var p2pOnly = await ProviderDecisionAsync(consents:
         [
             new ConfiguredConsentRecord
             {
@@ -290,8 +301,9 @@ public class PatientAccessClinicalTests
             },
         ]);
 
-        decision.Allowed.Should().BeFalse();
-        decision.Reason.Should().Be(ProviderAccessDenialReason.ConsentDenied);
+        none.Allowed.Should().BeTrue();
+        p2pOnly.Allowed.Should().BeTrue();
+        p2pOnly.AuthorizingConsentId.Should().BeNull();
     }
 
     [Fact]
