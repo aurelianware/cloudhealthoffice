@@ -122,6 +122,40 @@ public class ConsentAuthorizationPolicyTests
     }
 
     [Fact]
+    public void A_members_newer_word_overrides_their_earlier_revocation()
+    {
+        var t0 = Now.AddYears(-2);
+        var revoked = Snapshot(ConsentPurposeOfUse.ProviderAccess, ConsentLifecycleStatus.Revoked, consentId: "old")
+            with { ActivatedAt = t0, RevokedAt = t0.AddMonths(1) };
+
+        // Opted out after the revocation, then revoked the opt-out: back in.
+        EvaluateOptOut(revoked, OptOut(status: ConsentLifecycleStatus.Revoked) with { RevokedAt = t0.AddMonths(6) })
+            .Allowed.Should().BeTrue();
+        // A permit activated after the revocation that has since lapsed: back in.
+        EvaluateOptOut(revoked, Snapshot(ConsentPurposeOfUse.ProviderAccess, ConsentLifecycleStatus.Expired, consentId: "renewed")
+                with { ActivatedAt = t0.AddMonths(2) })
+            .Allowed.Should().BeTrue();
+        // Something older than the revocation does not undo it.
+        EvaluateOptOut(revoked, OptOut(status: ConsentLifecycleStatus.Revoked) with { RevokedAt = t0.AddDays(1) })
+            .Reason.Should().Be(ConsentAuthorizationReason.Revoked);
+    }
+
+    [Fact]
+    public void A_revocation_that_was_not_the_members_choice_is_not_a_refusal()
+        => EvaluateOptOut(Snapshot(ConsentPurposeOfUse.ProviderAccess, ConsentLifecycleStatus.Revoked)
+                with { RevokedByMember = false })
+            .Allowed.Should().BeTrue();
+
+    [Fact]
+    public void An_unknown_provision_value_is_treated_as_an_opt_out_never_a_permit()
+    {
+        var unknown = OptOut() with { Provision = (ConsentProvision)7 };
+
+        EvaluateOptOut(unknown).Reason.Should().Be(ConsentAuthorizationReason.OptedOut);
+        Evaluate(unknown with { PurposeOfUse = ConsentPurposeOfUse.PayerToPayerExchange }).Allowed.Should().BeFalse();
+    }
+
+    [Fact]
     public void Opt_out_of_another_purpose_tenant_or_member_is_ignored()
     {
         EvaluateOptOut(

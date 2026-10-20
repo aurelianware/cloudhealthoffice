@@ -116,10 +116,14 @@ public static class ConsentAuthorizationPolicy
     ///   * an in-force opt-out (Active <see cref="ConsentProvision.Deny"/>)
     ///     refuses (<see cref="ConsentAuthorizationReason.OptedOut"/>);
     ///   * an in-force permit allows and is named as the authorization;
-    ///   * a revoked permit with no permit in force refuses
-    ///     (<see cref="ConsentAuthorizationReason.Revoked"/>): under the opt-in
-    ///     model that preceded this one, revoking was how a member said no, and
-    ///     that refusal is honoured rather than silently reversed;
+    ///   * a permit the member revoked refuses
+    ///     (<see cref="ConsentAuthorizationReason.Revoked"/>) unless the member
+    ///     has spoken since: under the opt-in model that preceded this one,
+    ///     revoking was how a member said no, and that refusal is honoured
+    ///     rather than silently reversed. A later activated permit or a later
+    ///     revoked opt-out is the member's newer word; a revocation that was an
+    ///     administrative correction or a supersession is not a refusal. With no
+    ///     timestamps to compare, the refusal stands;
     ///   * otherwise allows (<see cref="ConsentAuthorizationReason.NotOptedOut"/>).
     /// A lapsed or revoked opt-out no longer refuses. The caller supplies only
     /// records it actually read: a registry it could not read must be refused
@@ -156,12 +160,30 @@ public static class ConsentAuthorizationPolicy
         if (permit is not null)
             return ConsentDecision.Grant(purpose, permit, asOfUtc);
 
-        var revoked = forPurpose
-            .Where(c => c.Provision == ConsentProvision.Permit && c.Status == ConsentLifecycleStatus.Revoked)
-            .OrderBy(c => c.ConsentId, StringComparer.Ordinal)
+        var refusal = forPurpose
+            .Where(c => c.Provision == ConsentProvision.Permit
+                        && c.Status == ConsentLifecycleStatus.Revoked && c.RevokedByMember)
+            .OrderByDescending(c => c.RevokedAt ?? DateTime.MinValue)
+            .ThenBy(c => c.ConsentId, StringComparer.Ordinal)
             .FirstOrDefault();
-        if (revoked is not null)
-            return ConsentDecision.Deny(purpose, ConsentAuthorizationReason.Revoked, asOfUtc, revoked.ConsentId);
+        if (refusal is not null)
+        {
+            // The member's newest word since: a permit they activated, or an
+            // opt-out they revoked.
+            var since = forPurpose
+                .Select(c => c.Provision == ConsentProvision.Permit
+                             && c.Status is ConsentLifecycleStatus.Active or ConsentLifecycleStatus.Expired
+                        ? c.ActivatedAt ?? c.EffectiveAt
+                        : c.Provision != ConsentProvision.Permit && c.Status == ConsentLifecycleStatus.Revoked
+                            ? c.RevokedAt
+                            : null)
+                .Where(t => t.HasValue)
+                .Select(t => t!.Value)
+                .DefaultIfEmpty(DateTime.MinValue)
+                .Max();
+            if (since <= (refusal.RevokedAt ?? DateTime.MinValue))
+                return ConsentDecision.Deny(purpose, ConsentAuthorizationReason.Revoked, asOfUtc, refusal.ConsentId);
+        }
 
         return new ConsentDecision
         {
@@ -175,7 +197,9 @@ public static class ConsentAuthorizationPolicy
     private static ConsentAuthorizationSnapshot? InForceOptOut(
         IEnumerable<ConsentAuthorizationSnapshot> forPurpose, DateTime asOfUtc) =>
         forPurpose
-            .Where(c => c.Provision == ConsentProvision.Deny
+            // Anything but a recognised Permit refuses: an unknown provision
+            // value must not be read as permission.
+            .Where(c => c.Provision != ConsentProvision.Permit
                         && c.Status == ConsentLifecycleStatus.Active && IsInForce(c, asOfUtc))
             .OrderBy(c => c.ConsentId, StringComparer.Ordinal)
             .FirstOrDefault();

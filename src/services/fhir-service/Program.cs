@@ -187,9 +187,8 @@ builder.Services.Configure<FhirService.Services.PayerToPayer.PayerToPayerConsent
         FhirService.Services.PayerToPayer.PayerToPayerConsentOptions.SectionName));
 
 // The registry in consent-service is authoritative when its base URL is
-// configured; otherwise the configured records serve Demo mode with the same
-// purpose/status/period semantics. Neither is a boolean allow-list, and an
-// empty catalog authorizes no one.
+// configured; otherwise the configured records serve Development and demos with
+// the same purpose/status/period semantics. Neither is a boolean allow-list.
 var consentServiceUrl = builder.Configuration["Services:ConsentServiceUrl"];
 if (!string.IsNullOrWhiteSpace(consentServiceUrl))
 {
@@ -204,13 +203,28 @@ if (!string.IsNullOrWhiteSpace(consentServiceUrl))
     builder.Services.AddScoped<FhirService.Services.Consent.IConsentSource>(sp =>
         sp.GetRequiredService<FhirService.Services.PayerToPayer.HttpConsentRegistryConsentSource>());
 }
-else
+else if (FhirService.Services.Consent.ConsentSourceSelection.UseConfiguredCatalog(
+             builder.Environment, builder.Configuration))
 {
+    // Development, or a deployment that deliberately configured a consent
+    // catalog (a demo): the configured records stand in for the registry.
     builder.Services.AddScoped<FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentSource>();
     builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentSource>(sp =>
         sp.GetRequiredService<FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentSource>());
     builder.Services.AddScoped<FhirService.Services.Consent.IConsentSource>(sp =>
         sp.GetRequiredService<FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentSource>());
+}
+else
+{
+    // No registry and no catalog outside Development: nothing can show what a
+    // member chose. Every consent decision refuses (Provider Access shares only
+    // when the registry shows no opt-out, ADR 021) rather than reading an empty
+    // catalog as "nobody opted out".
+    builder.Services.AddScoped<FhirService.Services.Consent.UnavailableConsentSource>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentSource>(sp =>
+        sp.GetRequiredService<FhirService.Services.Consent.UnavailableConsentSource>());
+    builder.Services.AddScoped<FhirService.Services.Consent.IConsentSource>(sp =>
+        sp.GetRequiredService<FhirService.Services.Consent.UnavailableConsentSource>());
 }
 
 // ONE evaluator for every purpose: the same fail-closed registry read and the

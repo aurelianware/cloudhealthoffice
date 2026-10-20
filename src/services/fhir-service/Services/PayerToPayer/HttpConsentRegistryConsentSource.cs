@@ -118,6 +118,7 @@ public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSourc
 
     private sealed class ConsentSnapshotEnvelope
     {
-        public List<ConsentAuthorizationSnapshot> Items { get; set; } = new();
+        // Null unless the body names it: a 200 without "items" is not "no records".
+        public List<ConsentAuthorizationSnapshot>? Items { get; set; }
     }
 }
