@@ -86,6 +86,26 @@ public class MemberFhirPatientSearchPipelineTests : IClassFixture<MemberFhirSmok
     }
 
     [Fact]
+    public async Task Search_passes_the_subscriber_filter_and_returns_each_members_subscriber()
+    {
+        var dependent = Member("FS-003", "Charlie");
+        dependent.IsSubscriber = false;
+#pragma warning disable CS0618
+        dependent.SubscriberMemberId = "FS-001";
+#pragma warning restore CS0618
+        _search.Members.Add(dependent);
+
+        var response = await As(ChoRolePermissions.MemberServices)
+            .GetAsync("/api/v1/members/fhir/Patient?subscriberMemberId=FS-001&limit=50");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        _search.Calls.Single().Query.SubscriberMemberId.Should().Be("FS-001");
+        var items = (await Json(response))["items"]!.AsArray();
+        items.Single(i => i!["memberId"]!.ToString() == "FS-003")!["subscriberMemberId"]!.ToString().Should().Be("FS-001");
+        items.Single(i => i!["memberId"]!.ToString() == "FS-001")!["subscriberMemberId"].Should().BeNull();
+    }
+
+    [Fact]
     public async Task Search_runs_in_the_callers_tenant_with_the_filters_it_was_given()
     {
         var response = await As(ChoRolePermissions.MemberServices).GetAsync(

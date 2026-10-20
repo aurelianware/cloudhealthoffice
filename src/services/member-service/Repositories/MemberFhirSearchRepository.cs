@@ -19,15 +19,26 @@ public interface IMemberFhirSearchRepository
     /// </summary>
     Task<(IReadOnlyList<Member> Items, long Total)> SearchAsync(
         string tenantId, MemberFhirSearchQuery query, CancellationToken ct = default);
+
+    /// <summary>
+    /// Each member's subscriber, as the member read derives it: the active
+    /// family-relationship graph first (the earliest-starting dependent edge),
+    /// else the legacy recorded value. Subscribers and members with neither map
+    /// to null. One query for the whole page.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string?>> SubscribersAsync(
+        string tenantId, IReadOnlyList<Member> members, CancellationToken ct = default);
 }
 
 public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
 {
     private readonly IMongoCollection<Member> _collection;
+    private readonly IMongoCollection<FamilyRelationship> _relationships;
 
     public MemberFhirSearchRepository(IMongoDatabase database)
     {
         _collection = database.GetCollection<Member>("Members");
+        _relationships = database.GetCollection<FamilyRelationship>(FamilyRelationshipRepositoryMongo.CollectionName);
     }
 
     public async Task<(IReadOnlyList<Member> Items, long Total)> SearchAsync(
@@ -37,6 +48,8 @@ public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
         ArgumentNullException.ThrowIfNull(query);
 
         var filter = BuildFilter(tenantId, query);
+        if (!string.IsNullOrWhiteSpace(query.SubscriberMemberId))
+            filter &= await SubscriberFilterAsync(tenantId, query.SubscriberMemberId.Trim(), ct);
         var total = await _collection.CountDocumentsAsync(filter, cancellationToken: ct);
         if (total == 0 || query.Limit <= 0)
             return (Array.Empty<Member>(), total);
@@ -50,6 +63,63 @@ public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
         return (items, total);
     }
 
+    /// <summary>
+    /// Members whose subscriber may be <paramref name="subscriber"/>: the subjects
+    /// of active dependent edges pointing at it, and members whose legacy recorded
+    /// subscriber is it. A superset of the members whose derived subscriber is
+    /// <paramref name="subscriber"/>; each result carries its derived subscriber
+    /// (<see cref="SubscribersAsync"/>) so a caller can tell them apart.
+    /// </summary>
+    private async Task<FilterDefinition<Member>> SubscriberFilterAsync(string tenantId, string subscriber, CancellationToken ct)
+    {
+        var dependents = await _relationships
+            .Find(ActiveDependentEdges(tenantId) & Builders<FamilyRelationship>.Filter.Eq(r => r.RelatedMemberId, subscriber))
+            .Project(r => r.SubjectMemberId)
+            .ToListAsync(ct);
+
+        var f = Builders<Member>.Filter;
+#pragma warning disable CS0618 // the legacy field is still the fallback the member read uses
+        var legacy = f.Eq(m => m.SubscriberMemberId, subscriber) & f.Ne(m => m.IsSubscriber, true);
+#pragma warning restore CS0618
+        return dependents.Count == 0 ? legacy : f.Or(f.In(m => m.MemberId, dependents.Distinct()), legacy);
+    }
+
+    public async Task<IReadOnlyDictionary<string, string?>> SubscribersAsync(
+        string tenantId, IReadOnlyList<Member> members, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        var result = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var dependents = members.Where(m => !m.IsSubscriber).Select(m => m.MemberId).Distinct().ToList();
+        foreach (var m in members) result[m.MemberId] = null;
+        if (dependents.Count == 0) return result;
+
+        var edges = await _relationships
+            .Find(ActiveDependentEdges(tenantId) & Builders<FamilyRelationship>.Filter.In(r => r.SubjectMemberId, dependents))
+            .ToListAsync(ct);
+        var derived = edges
+            .GroupBy(e => e.SubjectMemberId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.OrderBy(e => e.StartDate).First().RelatedMemberId, StringComparer.Ordinal);
+
+        foreach (var member in members.Where(m => !m.IsSubscriber))
+        {
+#pragma warning disable CS0618
+            var legacy = string.IsNullOrWhiteSpace(member.SubscriberMemberId) ? null : member.SubscriberMemberId;
+#pragma warning restore CS0618
+            result[member.MemberId] = derived.TryGetValue(member.MemberId, out var fromGraph) ? fromGraph : legacy;
+        }
+        return result;
+    }
+
+    /// <summary>Not deleted, not ended, and a dependent-to-subscriber code (as FamilyRelationshipService derives).</summary>
+    private static FilterDefinition<FamilyRelationship> ActiveDependentEdges(string tenantId)
+    {
+        var fb = Builders<FamilyRelationship>.Filter;
+        return fb.Eq(r => r.TenantId, tenantId)
+               & fb.Eq(r => r.DeletedAt, (DateTime?)null)
+               & (fb.Eq(r => r.EndDate, (DateTime?)null) | fb.Gt(r => r.EndDate, DateTime.UtcNow))
+               & fb.In(r => r.RelationshipCode, Services.FamilyRelationshipService.DependentToSubscriberCodes);
+    }
+
     internal static FilterDefinition<Member> BuildFilter(string tenantId, MemberFhirSearchQuery query)
     {
         var f = Builders<Member>.Filter;
@@ -57,6 +127,7 @@ public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
 
         if (!string.IsNullOrWhiteSpace(query.MemberId))
             filter &= f.Eq(m => m.MemberId, query.MemberId.Trim());
+
 
         if (Prefix(query.Family) is { } family)
             filter &= f.Regex(m => m.LastName, family);
