@@ -216,7 +216,7 @@ A payer locked into QNXT, HealthEdge, Facets, or a comparable legacy core, stari
 
 #### Commercial shape
 
-Small annual subscription, weeks-to-deploy, Kubernetes cluster or Azure AKS target. The SKU we sell first is the founding-partner CMS-0057-F Compliance Accelerator (maintained in a private repository) ($90,000 / 6–8 weeks / one LOB). Diligence packet: [docs/diligence/README.md](diligence/README.md). Broader PMPM list figures stay on the order form, not this document.
+Small annual subscription, weeks-to-deploy, Kubernetes cluster or Azure AKS target. The SKU we sell first is the founding-partner CMS-0057-F Compliance Accelerator (maintained in a private repository): a fixed-scope engagement of 6–8 weeks for one line of business, with terms set per engagement. Diligence packet: [docs/diligence/README.md](diligence/README.md). Broader PMPM list figures stay on the order form, not this document.
 
 ### Layer 2 — Domain cutover
 
@@ -406,22 +406,23 @@ We are not in an active acquisition process. We are building the platform with t
 
 ## Canonical Facts
 
-*Last verified: July 2026*
+*Last verified: October 20, 2026, at `a17c9f3`, with `scripts/verify-canonical-facts.sh`*
 
 These are the ground-truth numbers for Cloud Health Office as of the most recent verification. Any artifact citing service counts, engine counts, test counts, or documentation volume should reconcile to this section. When these numbers drift from reality, update this section first; derivative artifacts then reconcile to it.
 
 | Metric | Value | Source |
 | --- | --- | --- |
-| Service projects | 36 | `src/services/*/`, including shared projects such as contracts, infrastructure, and events |
+| Service directories | 38 | `src/services/*/`, excluding `shared` |
+| Shared service libraries | 8 | Non-test projects under `src/services/shared` (infrastructure, events, contracts and similar) |
 | Adjudication/rules engines | 9 | BenefitEngine, FeeScheduleEngine, NcciEngine, CobEngine, RiskAdjustmentEngine, EncounterEngine, ClaimsScrubEngine, PriorAuthRuleEngine, ProviderVerificationEngine |
-| Supporting engine projects | 4 | DocumentStore, OperatingMode, ProviderEnrollmentService, enrollment-wiring |
-| Test projects | 45 | `*.Tests.csproj` files |
-| Test methods | ~4,100 | xUnit Facts + Theories |
-| Production C# lines | ~190,000 | Excluding tests, bin, obj, and migrations |
-| Documentation lines | ~108,000 | Markdown and text under `docs/` |
+| Supporting engine projects | 4 | DocumentStore, OperatingMode, ProviderEnrollmentService, ReferenceData (plus the `cho-enrollment-wiring` folder) |
+| Test projects | 66 | `*.Tests.csproj` files (the same count CI injects into `docs/guides/FEATURES.md`) |
+| Test methods | ~10,750 | xUnit `[Fact]` + `[Theory]` attributes; CI counts ~15,000 executed tests because theories expand |
+| Production C# lines | ~331,000 | Excluding tests, bin, obj, and migrations |
+| Documentation lines | ~123,000 | Markdown and text under `docs/` |
 | Pricing framework | PMPM-based, pilot-specific | Indicative ranges are maintained in a private repository |
 
-Verification procedure documented at `scripts/verify-canonical-facts.sh` (to be created in a follow-up PR). Numbers should be re-verified at each major release and when the Canonical Facts section is cited by another artifact.
+Verification procedure: `scripts/verify-canonical-facts.sh` prints these figures from the working tree. Numbers should be re-verified at each major release and when the Canonical Facts section is cited by another artifact.
 
 ## Governance
 

@@ -1,6 +1,6 @@
 # CloudHealthOffice — Investor Readiness Audit (September 2026)
 
-> **Historical record — superseded October 19, 2026.** The body below preserves the September 2026 investor audit, including its original recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../docs/CAPABILITY_RECONCILIATION.md) for reconciled status.
+> **Historical record — superseded October 19, 2026.** Re-verified finding by finding on October 20, 2026: see [repository-verification-2026-10.md](repository-verification-2026-10.md). The body below preserves the September 2026 investor audit, including its original recommendations and readiness labels. It is not current capability or compliance guidance; use the [canonical capability ledger](../docs/CAPABILITY_RECONCILIATION.md) for reconciled status.
 
 **Date:** 2026-09-18
 **Scope:** `aurelianware/cloudhealthoffice` @ `main` (HEAD `9dd308d`)
