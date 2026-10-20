@@ -146,6 +146,16 @@ public sealed class ClaimStatusTransitionService : IClaimStatusTransitionService
         }
 
         claim.Status = statusResult.PersistedStatus!.Value;
+        // The atomic status patch bumps Revision. Replacing the pre-patch
+        // snapshot would self-conflict even with no competing writer. Re-read
+        // before applying the remaining operational fields, retaining any
+        // intervening changes and the current CAS revision.
+        var current = await _claimRepository.GetByIdAsync(id);
+        if (current is null)
+            return new ClaimStatusTransitionResult.ClaimNotFound($"Claim {id} not found");
+        if (current.Status != statusResult.PersistedStatus.Value)
+            return new ClaimStatusTransitionResult.Updated(current);
+        claim = current;
         claim.LastUpdatedDate = DateTime.UtcNow;
 
         if (statusResult.Outcome == StatusWriteOutcome.Suppressed)
