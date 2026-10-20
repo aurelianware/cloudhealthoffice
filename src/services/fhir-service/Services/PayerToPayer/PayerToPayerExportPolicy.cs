@@ -25,6 +25,19 @@ public static class PayerToPayerExportPolicy
     public static bool IncludePayment(ChoPaymentDocument payment, DateTime exchangeDateUtc, int lookbackYears)
         => WithinLookback(payment, exchangeDateUtc, lookbackYears) && !IsExcludedCategory(payment);
 
+    /// <summary>
+    /// Whether a record dated <paramref name="date"/> (ISO 8601) is inside the
+    /// lookback window ending at <paramref name="exchangeDateUtc"/>. A missing
+    /// or unreadable date is outside it: never assumed to be in the window.
+    /// </summary>
+    public static bool WithinLookback(string? date, DateTime exchangeDateUtc, int lookbackYears)
+    {
+        if (!DateTime.TryParse(date, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+            return false;
+        return parsed.Date >= exchangeDateUtc.AddYears(-Math.Abs(lookbackYears)).Date;
+    }
+
     private static bool WithinLookback(ChoPaymentDocument payment, DateTime exchangeDateUtc, int lookbackYears)
     {
         // A payment with no parseable date is conservatively excluded from the

@@ -93,6 +93,13 @@ public sealed class MemberMatchCriteria
     public string? BirthDate { get; init; }
     public string? Gender { get; init; }
     public string? MemberId { get; init; }
+
+    /// <summary>
+    /// The member id exactly as supplied (trimmed), before normalization. A
+    /// source that looks members up by id (ADR 020) searches both this and
+    /// <see cref="MemberId"/>, since stored ids keep their own punctuation and case.
+    /// </summary>
+    public string? SuppliedMemberId { get; init; }
     public string? Ssn { get; init; }
     public string? PostalCode { get; init; }
     public string? Phone { get; init; }
@@ -123,6 +130,7 @@ public sealed class MemberMatchCriteria
         BirthDate = MemberIdentityNormalizer.BirthDate(request.BirthDate),
         Gender = MemberIdentityNormalizer.Gender(request.Gender),
         MemberId = MemberIdentityNormalizer.Identifier(request.MemberId),
+        SuppliedMemberId = string.IsNullOrWhiteSpace(request.MemberId) ? null : request.MemberId.Trim(),
         Ssn = MemberIdentityNormalizer.Identifier(request.Ssn),
         PostalCode = MemberIdentityNormalizer.PostalCode(request.PostalCode),
         Phone = MemberIdentityNormalizer.Phone(request.Phone),

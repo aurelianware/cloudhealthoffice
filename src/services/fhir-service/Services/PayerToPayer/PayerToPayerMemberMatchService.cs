@@ -57,7 +57,16 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         if (!criteria.IsSufficient)
             return Failed(request, MemberMatchOutcome.InsufficientCriteria);
 
-        var members = await _source.GetMembersAsync(tenantId, ct);
+        var candidates = await _source.GetCandidatesAsync(tenantId, criteria, ct);
+        // The source cannot look these criteria up (an SSN-only request where
+        // SSNs cannot be searched, ADR 020): no match can be proven either way.
+        if (!candidates.Searchable)
+            return Failed(request, MemberMatchOutcome.InsufficientCriteria);
+        // More candidates than the source reads: a unique match cannot be
+        // proven, so the request is answered as ambiguous rather than guessed.
+        if (!candidates.Complete)
+            return Failed(request, MemberMatchOutcome.AmbiguousMatch);
+        var members = candidates.Members;
 
         // A supplied member/subscriber id is the only criterion that needs a
         // candidate's coverages to decide match strength (subscriber ids live on

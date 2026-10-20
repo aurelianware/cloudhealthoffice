@@ -150,11 +150,15 @@ if (fhirDataBindings.AnyNative)
             .AddHttpMessageHandler<CorrelationIdPropagationHandler>();
     }
 
-    if (fhirDataBindings.Patient == FhirAdapterSources.ChoNative)
-        AddChoNativeClient(ChoNativeFhirDataAdapter.MemberServiceClient, "Services:MemberServiceUrl", "Patient");
-    if (fhirDataBindings.Coverage == FhirAdapterSources.ChoNative)
-        AddChoNativeClient(ChoNativeFhirDataAdapter.CoverageServiceClient, "Services:CoverageServiceUrl", "Coverage");
+    // Payer-to-Payer needs both (ADR 020), whatever the Patient and Coverage bindings.
+    if (fhirDataBindings.Patient == FhirAdapterSources.ChoNative || fhirDataBindings.PayerToPayerNative)
+        AddChoNativeClient(ChoNativeFhirDataAdapter.MemberServiceClient, "Services:MemberServiceUrl",
+            fhirDataBindings.Patient == FhirAdapterSources.ChoNative ? "Patient" : "PayerToPayer");
+    if (fhirDataBindings.Coverage == FhirAdapterSources.ChoNative || fhirDataBindings.PayerToPayerNative)
+        AddChoNativeClient(ChoNativeFhirDataAdapter.CoverageServiceClient, "Services:CoverageServiceUrl",
+            fhirDataBindings.Coverage == FhirAdapterSources.ChoNative ? "Coverage" : "PayerToPayer");
     builder.Services.AddSingleton<ChoNativeFhirDataAdapter>();
+    builder.Services.AddScoped<ChoNativeMemberDirectory>();
 }
 builder.Services.AddSingleton<IFhirDataAdapter>(sp => new RoutingFhirDataAdapter(
     sp.GetRequiredService<FhirDataBindings>(),
@@ -174,8 +178,26 @@ builder.Services.AddSingleton<ICms0057ComplianceChecker, Cms0057ComplianceChecke
 // data provider + mapper). Tenant-scoped, deterministic member resolution with a
 // consent/authorization gate. Outbound initiation (P2P-02) is wired separately
 // below.
-builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberSource,
-    FhirService.Services.PayerToPayer.PatientAccessPayerToPayerMemberSource>();
+// The member, coverage and claims behind Payer-to-Payer: the mock directory, or
+// CHO's own services when FhirAdapters:Sources:PayerToPayer is ChoNative (ADR 020).
+if (fhirDataBindings.PayerToPayerNative)
+{
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberSource,
+        FhirService.Services.PayerToPayer.ChoNative.ChoNativePayerToPayerMemberSource>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerExportSource,
+        FhirService.Services.PayerToPayer.ChoNative.ChoNativePayerToPayerExportSource>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberMatchSource,
+        FhirService.Services.PayerToPayer.ChoNative.ChoNativePayerToPayerMemberMatchSource>();
+}
+else
+{
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberSource,
+        FhirService.Services.PayerToPayer.PatientAccessPayerToPayerMemberSource>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerExportSource,
+        FhirService.Services.PayerToPayer.PatientAccessPayerToPayerExportSource>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberMatchSource,
+        FhirService.Services.PayerToPayer.PatientAccessPayerToPayerMemberMatchSource>();
+}
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberResolver,
     FhirService.Services.PayerToPayer.PayerToPayerMemberResolver>();
 // Payer-to-Payer authorization. The gate applies the shared
@@ -241,8 +263,6 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerExchan
 // Deterministic, fail-safe cross-payer identity resolution + coverage selection
 // over the same CHO-owned member/coverage directory. Identity only; the P2P-01
 // respond path enforces consent when data is actually returned.
-builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberMatchSource,
-    FhirService.Services.PayerToPayer.PatientAccessPayerToPayerMemberMatchSource>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberMatchService,
     FhirService.Services.PayerToPayer.PayerToPayerMemberMatchService>();
 

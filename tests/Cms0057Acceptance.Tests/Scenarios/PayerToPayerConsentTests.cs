@@ -66,7 +66,7 @@ public class PayerToPayerConsentTests
             provider, Options.Create(new FhirAdapterOptions { TenantId = AcceptanceContext.TenantId }));
 
         return new PayerToPayerExchangeService(
-            new PayerToPayerMemberResolver(source), source,
+            new PayerToPayerMemberResolver(source), new PatientAccessPayerToPayerExportSource(provider),
             AcceptanceContext.ConsentGateFor(consents),
             new PayerToPayerExportBuilder(),
             AcceptanceContext.Logger<PayerToPayerExchangeService>());
