@@ -12,16 +12,15 @@ internal sealed class LocalService : IAsyncDisposable
     private readonly string? _contentRoot;
     public HttpClient Http { get; }
 
-    public LocalService(string assembly, string mongoConnection, string database, bool development)
+    public LocalService(string assembly, string mongoConnection, string database, bool development, IReadOnlyDictionary<string, string?>? overrides = null)
     {
         using var socket = new TcpListener(IPAddress.Loopback, 0);
         socket.Start();
         var port = ((IPEndPoint)socket.LocalEndpoint).Port;
         socket.Stop();
         var address = new Uri($"http://127.0.0.1:{port}");
-        // Appeals' checked-in settings enable Key Vault encryption. A separate,
-        // empty development content root selects its existing documented NoOp mode;
-        // the production service and its configuration are never modified.
+        // An empty owned development content root selects the existing Development-only
+        // NoOp encryption modes for appeals/member labs. Production guards stay intact.
         if (development)
         {
             _contentRoot = Path.Combine(Path.GetTempPath(), "cho-security-host-" + Guid.NewGuid().ToString("N"));
@@ -52,6 +51,8 @@ internal sealed class LocalService : IAsyncDisposable
             settings["Services:" + name] = "http://127.0.0.1:1/";
         foreach (var setting in ChoDevelopmentAuth.Configuration(Path.GetFileNameWithoutExtension(assembly)))
             settings[setting.Key] = setting.Value;
+        if (overrides != null)
+            foreach (var setting in overrides) settings[setting.Key] = setting.Value?.Replace("{SELF}", address.ToString(), StringComparison.Ordinal);
         foreach (var setting in settings) start.Environment[setting.Key.Replace(":", "__")] = setting.Value;
         _process = Process.Start(start) ?? throw new InvalidOperationException("Local process start failed");
         _process.OutputDataReceived += Log;

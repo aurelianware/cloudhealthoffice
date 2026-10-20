@@ -26,6 +26,15 @@ profile. Its outcome and unsupported areas are reported independently; the
 33-scenario authorization profile above retains its original scope. Both feed
 the same review-only knowledge-base workflow and result schema.
 
+## FHIR and SMART campaign
+
+The [FHIR/SMART extension](FHIR-SMART.md) adds an independent 42-scenario profile
+through actual FHIR/member-service processes and two local RSA/JWKS issuers. Its
+sensitivity runner builds two disposable mutants and requires targeted failures
+with healthy controls. Patient data is ChoNative; bulk coverage is job metadata
+only. All three profiles feed review-only knowledge-base drafts; their individual
+unsupported areas remain explicit.
+
 ## Reproduce
 
 Run from the repository root with the pinned .NET 8 SDK, Git and network access

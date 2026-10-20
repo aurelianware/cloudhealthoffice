@@ -12,6 +12,8 @@ using EphemeralMongo;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
+if (args.FirstOrDefault() == "fhir-smart") return await FhirSmartCampaign.Run(args);
+
 if (args.FirstOrDefault() == "claims-appeals") return await ClaimsAppealsCampaign.Run(args);
 
 // This runner accepts no remote target. It owns the service and database lifecycle.

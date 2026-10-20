@@ -10,6 +10,8 @@ on:
       - 'src/services/authorization-service/**'
       - 'src/services/claims-service/**'
       - 'src/services/appeals-service/**'
+      - 'src/services/fhir-service/**'
+      - 'src/services/member-service/**'
       - 'src/services/shared/CloudHealthOffice.Infrastructure/**'
       - 'Directory.Packages.props'
       - 'Directory.Build.props'
@@ -63,3 +65,31 @@ jobs:
           src/services/appeals-service/bin/Release/net8.0/appeals-service.dll
           "${{ runner.temp }}/cho-claims-appeals-evidence"
       # No automatic upload of finding-bearing evidence; review privately first.
+
+  fhir-smart-lab:
+    name: Synthetic FHIR SMART security lab and sensitivity (.NET 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build real FHIR and member services
+        run: |
+          dotnet build src/services/fhir-service --configuration Release --verbosity quiet
+          dotnet build src/services/member-service --configuration Release --verbosity quiet
+      - name: Test evidence policy and build runner
+        run: dotnet test tools/SecurityChallenge.Tests --configuration Release --verbosity quiet
+      - name: Run disposable FHIR SMART lab
+        run: >-
+          dotnet tools/SecurityChallenge/bin/Release/net8.0/SecurityChallenge.dll fhir-smart
+          src/services/fhir-service/bin/Release/net8.0/fhir-service.dll
+          src/services/member-service/bin/Release/net8.0/member-service.dll
+          "${{ runner.temp }}/cho-fhir-smart-evidence"
+      - name: Prove audience and scope defects are detected
+        run: >-
+          python3 tools/SecurityChallenge/run-fhir-sensitivity.py
+          src/services/member-service/bin/Release/net8.0/member-service.dll
+          "${{ runner.temp }}/cho-fhir-smart-sensitivity"
+      # No finding-bearing artifact uploads. Review before publishing KB evidence.
