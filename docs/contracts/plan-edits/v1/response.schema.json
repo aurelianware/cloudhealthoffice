@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudhealthoffice.com/contracts/plan-edits/v1/response.schema.json",
+  "title": "Plan edit response, contract version 1",
+  "description": "What a health plan's edit service returns for one claim (ADR 019): HTTP 200, application/json, at most 262144 bytes. Rules a schema cannot express: every lineNumbers entry must be a line on the claim in the request. CHO ignores properties it does not know. A response that breaks any rule is treated as no usable answer, never as no edits.",
+  "type": "object",
+  "required": ["contractVersion", "edits"],
+  "properties": {
+    "contractVersion": { "const": "1" },
+    "edits": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/edit" }
+    }
+  },
+  "$defs": {
+    "edit": {
+      "type": "object",
+      "required": ["ruleId", "message"],
+      "properties": {
+        "ruleId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "maxLength": 40,
+          "description": "Stable across releases of the plan's service; an examiner's decision is matched by rule and lines."
+        },
+        "message": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "\\S" },
+        "lineNumbers": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Empty or absent: the edit is about the whole claim and can only be a review edit."
+        },
+        "suggestedCarc": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]{1,3}$",
+          "description": "Makes this a denial edit: upheld, it denies lineNumbers in full, group CO."
+        },
+        "suggestedRarc": { "type": "string", "pattern": "^[A-Z]{1,2}[0-9]{1,4}$" }
+      },
+      "dependentRequired": { "suggestedRarc": ["suggestedCarc"] },
+      "if": { "required": ["suggestedCarc"] },
+      "then": { "required": ["lineNumbers"], "properties": { "lineNumbers": { "minItems": 1 } } }
+    }
+  }
+}

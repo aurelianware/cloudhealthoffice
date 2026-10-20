@@ -119,6 +119,7 @@ POST /api/v1/claims                                     (capability 5.3)
    │       250  PricingStage                 ★ real (added 10/26) │
    │       300  BenefitCalculationStage      ★ real (5.5)         │
    │       400  NcciEditsStage               ★ real (5.7)         │
+   │       450  PlanEditsStage               ★ real (ADR 019)     │
    │       500  CoordinationOfBenefitsStage  ★ real (5.8)         │
    │       600  AiExaminationStage           ★ real (5.9)         │
    │       999  PersistenceStage             ★ real (5.5)         │
@@ -483,6 +484,7 @@ exclusion check on a hypothetical calculation.
         "NetworkCredentialing": true,
         "BenefitCalculation": true,
         "NcciEdits": true,
+        "PlanEdits": true,
         "CoordinationOfBenefits": true,
         "AiExamination": true
       }
