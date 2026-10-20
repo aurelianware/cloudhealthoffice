@@ -1,3 +1,5 @@
+> **Historical record.** An early product concept, not a current offer or price list. Current commercial shape is in [POSITIONING.md](../POSITIONING.md); offers and terms are set per engagement. Updated 2026-10-20.
+
 > **Note:** This document references Azure Logic Apps, which were the original orchestration runtime. CHO has since migrated to Argo Workflows on AKS — see [ADR-004](../adr/004-remove-logic-apps.md) for details.
 
 # Enhanced Claim Status Plus - Commercialization Guide
