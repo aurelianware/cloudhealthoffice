@@ -35,6 +35,8 @@ COPY src/engines/CloudHealthOffice.CobEngine/CloudHealthOffice.CobEngine.csproj 
 # (PricingRequest / PricingResultSet) + its ReferenceData dependency.
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj src/engines/CloudHealthOffice.FeeScheduleEngine/
 COPY src/engines/CloudHealthOffice.ReferenceData/CloudHealthOffice.ReferenceData.csproj src/engines/CloudHealthOffice.ReferenceData/
+# PlanEditsStage (ADR 019): the plan edit service contract.
+COPY src/services/shared/CloudHealthOffice.PlanEdits.Contracts/CloudHealthOffice.PlanEdits.Contracts.csproj src/services/shared/CloudHealthOffice.PlanEdits.Contracts/
 RUN dotnet restore src/services/claims-service/claims-service.csproj
 
 # Copy source code and build
@@ -48,6 +50,7 @@ COPY src/engines/CloudHealthOffice.NcciEngine/ src/engines/CloudHealthOffice.Ncc
 COPY src/engines/CloudHealthOffice.CobEngine/ src/engines/CloudHealthOffice.CobEngine/
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
 COPY src/engines/CloudHealthOffice.ReferenceData/ src/engines/CloudHealthOffice.ReferenceData/
+COPY src/services/shared/CloudHealthOffice.PlanEdits.Contracts/ src/services/shared/CloudHealthOffice.PlanEdits.Contracts/
 RUN dotnet build src/services/claims-service/claims-service.csproj -c Release --no-restore
 
 # Publish stage

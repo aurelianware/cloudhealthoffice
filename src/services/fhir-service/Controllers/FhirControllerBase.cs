@@ -300,7 +300,8 @@ public abstract class FhirControllerBase : ControllerBase
         string path,
         ILogger logger,
         CancellationToken ct,
-        Func<string, bool>? successBodyAllowed = null)
+        Func<string, bool>? successBodyAllowed = null,
+        Func<string, bool>? successBodyLeavesConfinement = null)
     {
         ArgumentNullException.ThrowIfNull(upstream);
         ArgumentNullException.ThrowIfNull(logger);
@@ -340,6 +341,17 @@ public abstract class FhirControllerBase : ControllerBase
                     OperationOutcome.IssueSeverity.Error,
                     OperationOutcome.IssueType.NotFound,
                     $"{resourceLabel} not found"));
+            }
+
+            // A confined search whose results include another member's
+            // resource means the upstream ignored its filter: nothing of it is
+            // returned (defence in depth, as for Patient and Coverage, ADR 018).
+            if (response.IsSuccessStatusCode && successBodyLeavesConfinement != null && successBodyLeavesConfinement(body))
+            {
+                logger.LogError(
+                    "{Upstream} {Resource} search returned records outside the caller's member confinement for {Path}; response withheld",
+                    upstreamLabel, resourceLabel, loggablePath);
+                return FhirBadGateway($"{resourceLabel} upstream returned records outside the request's member scope.");
             }
 
             return new ContentResult

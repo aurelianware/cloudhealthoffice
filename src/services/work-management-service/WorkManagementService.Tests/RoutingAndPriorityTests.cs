@@ -32,6 +32,7 @@ public class RoutingTests
     [InlineData("SVCUNAVAIL", "claim.svcunavail")]
     [InlineData("PLANUNAVAIL", "claim.svcunavail")]
     [InlineData("DUPLICATE", "claim.duplicate")]
+    [InlineData("PLANEDIT", "claim.planedit")]
     [InlineData("PRICING", "claim.pricing")]
     [InlineData("RETROELIG", "claim.other")]
     [InlineData("SUBRO", "claim.other")]
