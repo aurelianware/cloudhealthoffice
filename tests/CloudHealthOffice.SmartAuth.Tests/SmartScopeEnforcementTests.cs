@@ -203,10 +203,25 @@ public class SmartScopeEnforcementTests : IClassFixture<FhirServiceFactory>
     }
 
     [Fact]
-    public async Task EobSearch_UserToken_AttributedButNoConsent_IsForbidden()
+    public async Task EobSearch_UserToken_AttributedAndNeverOptedOut_IsAllowed()
     {
-        // provider-002 has pat-003 on its panel, but pat-003 has no
-        // ProviderAccess consent. Attribution does not imply consent.
+        // pat-004 is on provider-001's panel and has no Provider Access record at
+        // all (only a Payer-to-Payer consent). CMS-0057-F shares unless the
+        // member opts out, so the composed decision allows it (D-11).
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer",
+                _factory.IssueToken("provider-001", "user/*.read"));
+
+        var resp = await client.GetAsync("/fhir/r4/ExplanationOfBenefit?patient=pat-004");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task EobSearch_UserToken_AttributedButOptedOut_IsForbidden()
+    {
+        // provider-002 has pat-003 on its panel, but pat-003 opted out of
+        // Provider Access. Attribution does not override the member's opt-out.
         var client = CreateClient();
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer",
@@ -407,11 +422,12 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
         // decision rather than an empty catalog that would deny everything.
         //
         //   provider-001      panel: pat-001, pat-004      (pat-001 consented)
-        //   provider-002      panel: pat-003               (pat-003 NOT consented)
+        //   provider-002      panel: pat-003               (pat-003 opted OUT)
         //   cho-payer-system  panel: pat-001               (consented)
         //
-        // pat-002 is on nobody's panel; pat-004 is attributed but its consent is
-        // for the Payer-to-Payer purpose only.
+        // pat-002 is on nobody's panel; pat-004 is attributed and has only a
+        // Payer-to-Payer consent, which neither opens nor closes Provider Access
+        // (CMS-0057-F shares unless the member opts out, D-11).
         builder.ConfigureAppConfiguration((_, config) =>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
@@ -432,6 +448,11 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
                 ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:1:ConsentId"] = "consent-p2p-pat-004",
                 ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:1:PurposeOfUse"] = "PayerToPayerExchange",
                 ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:1:Status"] = "Active",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:2:MemberId"] = "pat-003",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:2:ConsentId"] = "opt-out-pa-pat-003",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:2:PurposeOfUse"] = "ProviderAccess",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:2:Provision"] = "Deny",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:2:Status"] = "Active",
             });
         });
 

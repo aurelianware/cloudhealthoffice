@@ -62,26 +62,8 @@ public class ProviderAndPatientAccessTests
         payments.Should().BeEmpty();
     }
 
-    // ── PROV-03 patient opt-out honored ─────────────────────────────────────────
-
-    [Fact]
-    [Trait("Scenario", "PROV-03")]
-    public void PROV03_RevokedConsent_IsNotActive_SoProviderAccessIsBlocked()
-    {
-        // The consent registry models opt-out as a Revoked consent. A revoked
-        // record is not Active, so Provider Access must be withheld.
-        global::ConsentService.Services.ConsentStateMachine
-            .IsAllowed(global::ConsentService.Models.ConsentStatus.Active,
-                       global::ConsentService.Models.ConsentStatus.Revoked)
-            .Should().BeTrue("a member may opt out of an active authorization");
-
-        var optedOut = new global::ConsentService.Models.Consent
-        {
-            Status = global::ConsentService.Models.ConsentStatus.Revoked,
-        };
-        (optedOut.Status == global::ConsentService.Models.ConsentStatus.Active)
-            .Should().BeFalse();
-    }
+    // PROV-03 (patient opt-out honored) is driven through the real composed
+    // decision in ProviderAccessConsentTests.PROV03_*.
 
     // ── PAT-01 member claims / CARIN EOB ────────────────────────────────────────
 

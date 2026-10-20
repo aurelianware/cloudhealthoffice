@@ -75,13 +75,17 @@ public sealed class ConfiguredConsentRecord
 
     public ConsentLifecycleStatus Status { get; set; } = ConsentLifecycleStatus.Draft;
 
+    /// <summary>Permit (default) or Deny; a Deny record is an opt-out.</summary>
+    public ConsentProvision Provision { get; set; } = ConsentProvision.Permit;
+
     public DateTime? EffectiveAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
 }
 
 /// <summary>
 /// Configuration-backed consent source (Demo default, and the fallback when no
-/// consent registry is configured). An empty catalog authorizes no one.
+/// consent registry is configured). An empty catalog authorizes no opt-in
+/// purpose (Payer-to-Payer) and records no opt-out (Provider Access shares).
 /// </summary>
 public sealed class ConfiguredPayerToPayerConsentSource : IPayerToPayerConsentSource, IConsentSource
 {
@@ -109,6 +113,7 @@ public sealed class ConfiguredPayerToPayerConsentSource : IPayerToPayerConsentSo
                     ? $"configured-consent-{index}"
                     : r.ConsentId,
                 PurposeOfUse = r.PurposeOfUse,
+                Provision = r.Provision,
                 Status = r.Status,
                 EffectiveAt = r.EffectiveAt,
                 ExpiresAt = r.ExpiresAt,

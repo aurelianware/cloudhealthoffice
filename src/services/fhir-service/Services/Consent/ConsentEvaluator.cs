@@ -15,6 +15,12 @@ namespace FhirService.Services.Consent;
 /// </summary>
 public interface IConsentSource
 {
+    /// <summary>
+    /// Every consent on record for the member. A registry that cannot be read
+    /// throws <see cref="ConsentRegistryUnavailableException"/>; it never
+    /// answers with an empty list, which for an opt-out purpose would mean "the
+    /// member never opted out".
+    /// </summary>
     Task<IReadOnlyList<ConsentAuthorizationSnapshot>> GetConsentsAsync(
         string tenantId, string memberId, CancellationToken ct = default);
 }
@@ -40,6 +46,25 @@ public interface IConsentEvaluator
         ConsentPurposeOfUse purpose,
         DateTime? asOfUtc = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Evaluates a purpose that is allowed unless the member has opted out
+    /// (CMS-0057-F Provider Access), by
+    /// <see cref="ConsentAuthorizationPolicy.EvaluateOptOut"/>. An unreadable
+    /// registry refuses: it cannot show the member has not opted out.
+    /// </summary>
+    Task<ConsentDecision> EvaluateOptOutAsync(
+        string tenantId,
+        string memberId,
+        ConsentPurposeOfUse purpose,
+        DateTime? asOfUtc = null,
+        CancellationToken ct = default);
+}
+
+/// <summary>The consent registry could not be read: unreachable, refused, or unreadable.</summary>
+public sealed class ConsentRegistryUnavailableException : Exception
+{
+    public ConsentRegistryUnavailableException(string message, Exception? inner = null) : base(message, inner) { }
 }
 
 /// <summary>
@@ -63,12 +88,29 @@ public sealed class RegistryConsentEvaluator : IConsentEvaluator
         _logger = logger;
     }
 
-    public async Task<ConsentDecision> EvaluateAsync(
+    public Task<ConsentDecision> EvaluateAsync(
         string tenantId,
         string memberId,
         ConsentPurposeOfUse purpose,
         DateTime? asOfUtc = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        DecideAsync(tenantId, memberId, purpose, asOfUtc, ConsentAuthorizationPolicy.Evaluate, ct);
+
+    public Task<ConsentDecision> EvaluateOptOutAsync(
+        string tenantId,
+        string memberId,
+        ConsentPurposeOfUse purpose,
+        DateTime? asOfUtc = null,
+        CancellationToken ct = default) =>
+        DecideAsync(tenantId, memberId, purpose, asOfUtc, ConsentAuthorizationPolicy.EvaluateOptOut, ct);
+
+    private async Task<ConsentDecision> DecideAsync(
+        string tenantId,
+        string memberId,
+        ConsentPurposeOfUse purpose,
+        DateTime? asOfUtc,
+        Func<string, string, ConsentPurposeOfUse, IReadOnlyList<ConsentAuthorizationSnapshot>, DateTime, ConsentDecision> policy,
+        CancellationToken ct)
     {
         var asOf = asOfUtc ?? DateTime.UtcNow;
 
@@ -90,9 +132,9 @@ public sealed class RegistryConsentEvaluator : IConsentEvaluator
             _logger.LogWarning(
                 "Consent lookup failed for tenant={Tenant} purpose={Purpose}; denying ({Fault}).",
                 LogSanitizer.Sanitize(tenantId), purpose, ex.GetType().Name);
-            return ConsentDecision.Deny(purpose, ConsentAuthorizationReason.NoConsentOnRecord, asOf);
+            return ConsentDecision.Deny(purpose, ConsentAuthorizationReason.RegistryUnavailable, asOf);
         }
 
-        return ConsentAuthorizationPolicy.Evaluate(tenantId, memberId, purpose, consents, asOf);
+        return policy(tenantId, memberId, purpose, consents, asOf);
     }
 }

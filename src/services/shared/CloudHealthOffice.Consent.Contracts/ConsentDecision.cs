@@ -31,6 +31,25 @@ public enum ConsentAuthorizationReason
 
     /// <summary>A consent for the purpose exists but does not take effect until later.</summary>
     NotYetEffective,
+
+    /// <summary>
+    /// The member has an in-force opt-out (a <see cref="ConsentProvision.Deny"/>
+    /// record) for the purpose. It wins over any permit.
+    /// </summary>
+    OptedOut,
+
+    /// <summary>
+    /// Opt-out purposes only: the member has not opted out, so the purpose is
+    /// allowed by default. No consent authorized it; none is named.
+    /// </summary>
+    NotOptedOut,
+
+    /// <summary>
+    /// The consent registry could not be read. Denies every purpose: for an
+    /// opt-out purpose an unreadable registry cannot show the member has not
+    /// opted out.
+    /// </summary>
+    RegistryUnavailable,
 }
 
 /// <summary>

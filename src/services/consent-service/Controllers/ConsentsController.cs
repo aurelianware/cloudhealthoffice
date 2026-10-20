@@ -74,7 +74,10 @@ public class ConsentsController : ControllerBase
 
         // Enforced here as well as by model validation, so a direct caller of
         // the action cannot skip it.
-        var grantorError = ValidateGrantor(memberId, request);
+        var grantorError = ValidateGrantor(memberId, request)
+            ?? (request.Provision == ConsentProvision.Deny && request.PurposeOfUse == ConsentPurposeOfUse.Unspecified
+                ? (nameof(CreateConsentRequest.Provision), "An opt-out (Deny) must name the purpose it refuses.")
+                : null);
         if (grantorError is not null)
         {
             ModelState.AddModelError(grantorError.Value.Field, grantorError.Value.Message);
@@ -92,6 +95,7 @@ public class ConsentsController : ControllerBase
             // is taken from the authenticated context above, so a caller can
             // name what they are authorizing but not whose data it covers.
             PurposeOfUse = request.PurposeOfUse,
+            Provision = request.Provision,
             SensitiveCategory = request.SensitiveCategory,
             Status = ConsentStatus.Draft,
             EffectiveAt = request.EffectiveAt,
@@ -422,6 +426,7 @@ public class ConsentsController : ControllerBase
             // Enum-valued, no PHI: the audit trail answers "which purpose did
             // this grant or revocation cover?" without carrying any narrative.
             ["purposeOfUse"] = consent.PurposeOfUse.ToString(),
+            ["provision"] = consent.Provision.ToString(),
             ["sensitiveCategory"] = consent.SensitiveCategory,
             ["fromStatus"] = fromStatus?.ToString(),
             ["toStatus"] = toStatus.ToString(),
@@ -456,6 +461,8 @@ public class ConsentsController : ControllerBase
             Id = consent.Id,
             MemberId = consent.MemberId,
             ConsentType = consent.ConsentType,
+            PurposeOfUse = consent.PurposeOfUse,
+            Provision = consent.Provision,
             SensitiveCategory = consent.SensitiveCategory,
             Status = consent.ObservedStatus(),
             EffectiveAt = consent.EffectiveAt,
@@ -502,6 +509,13 @@ public class CreateConsentRequest
     /// disclosure — a caller must ask for a purpose to get one.
     /// </summary>
     public ConsentPurposeOfUse PurposeOfUse { get; set; } = ConsentPurposeOfUse.Unspecified;
+
+    /// <summary>
+    /// <c>Permit</c> (the default) or <c>Deny</c>. A <c>Deny</c> record is an
+    /// opt-out and must name its purpose: refusing "no purpose" refuses nothing.
+    /// </summary>
+    [EnumDataType(typeof(ConsentProvision))]
+    public ConsentProvision Provision { get; set; } = ConsentProvision.Permit;
 
     [StringLength(100)]
     public string? SensitiveCategory { get; set; }

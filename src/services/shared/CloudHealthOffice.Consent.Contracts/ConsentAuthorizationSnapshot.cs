@@ -21,6 +21,9 @@ public sealed record ConsentAuthorizationSnapshot
 
     public ConsentPurposeOfUse PurposeOfUse { get; init; } = ConsentPurposeOfUse.Unspecified;
 
+    /// <summary>Whether the record permits or refuses its purpose; an opt-out is <see cref="ConsentProvision.Deny"/>.</summary>
+    public ConsentProvision Provision { get; init; } = ConsentProvision.Permit;
+
     /// <summary>
     /// Persisted lifecycle status, as the registry holds it. Expiry is applied by
     /// the policy from <see cref="ExpiresAt"/>, so a record persisted Active but
