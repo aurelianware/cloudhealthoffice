@@ -8,6 +8,8 @@ public interface IAuthorizationValidationClient
     /// a failed lookup: anything that is not a definitive answer from
     /// authorization-service is <see cref="AuthorizationLookupStatus.Unavailable"/>
     /// (D-04, owner decision Q-9 — a failed lookup never pays or denies).
+    /// The individual receiving services is <paramref name="memberId"/>; a
+    /// subscriber or PAS Patient reference is not an identity fallback.
     /// Cancellation of <paramref name="ct"/> itself still throws.
     /// <paramref name="authorizationLineNumber"/> identifies a service on the
     /// authorization, never the claim's line ordinal. Ambiguous matching is
@@ -19,6 +21,7 @@ public interface IAuthorizationValidationClient
         string? procedureCode,
         DateTime serviceDate,
         string? providerNpi,
+        string memberId,
         CancellationToken ct = default,
         int? authorizationLineNumber = null);
 }
@@ -73,4 +76,6 @@ public sealed record AuthorizationValidationResult(
     DateTime? ExpirationDate,
     decimal? ApprovedUnits,
     string? ValidationMessage,
-    string? ValidationCode = null);
+    string? ValidationCode = null,
+    string? ValidatedMemberId = null,
+    bool? MemberMatches = null);

@@ -49,6 +49,24 @@ public class ClaimSubmissionServiceTests
     }
 
     [Fact]
+    public async Task EdiDependentWithoutOwnIdentifier_FailsIntakeBeforeAdapterOrEvent()
+    {
+        var edi = new CloudHealthOffice.ClaimsScrubEngine.Models.X12837Claim
+        {
+            ClaimId = "dependent-missing-id", BillingProvider = new() { Npi = "1234567890" },
+            Subscriber = new() { MemberId = "PARENT-1" },
+            Patient = new() { RelationshipCode = "19", FirstName = "Child", MemberId = null },
+            ClaimHeader = new(),
+        };
+        var inbound = global::ClaimsService.EDI.Inbound.X12837ClaimMapper.Map(edi, "tenant-1");
+        var result = await _sut.SubmitAsync(inbound, "tenant-1", "actor", null);
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, e => e.Field == "MemberId" && e.Code == "Required");
+        await _adapter.DidNotReceiveWithAnyArgs().SubmitClaimAsync(default!, default);
+        await _publisher.DidNotReceiveWithAnyArgs().PublishVersionSubmittedAsync(default!, default, default, default);
+    }
+
+    [Fact]
     public async Task Submit_HappyPath_CallsAdapter_EmitsEvent_ReturnsCreatedClaim()
     {
         var inbound = BuildClaim();

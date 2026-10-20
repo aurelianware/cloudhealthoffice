@@ -48,14 +48,10 @@ public class X12837ClaimMapperTests
     }
 
     [Fact]
-    public void Map_DependentWithNoOwnId_FallsBackToSubscriberId_NotBlank()
+    public void Map_DependentWithNoOwnId_LeavesMemberUnresolvedForIntakeValidation()
     {
-        // Documented, accepted limitation: some 837s don't carry the
-        // dependent's own id at all. Falling back to the subscriber's id
-        // (rather than leaving it blank, which would fail validation
-        // outright) lets the claim reach adjudication, where it will very
-        // likely fail member resolution against the wrong person — a
-        // real, informative failure, not a silent success.
+        // Demographic matching is not implemented. Do not authorize or price
+        // this dependent under the policy holder's identity.
         var claim = X12837Parser.Parse(FmmisHlSample)[0] with
         {
             Patient = new() { FirstName = "Jimmy", LastName = "Doe", DateOfBirth = "20150101", RelationshipCode = "19", MemberId = null }
@@ -63,7 +59,8 @@ public class X12837ClaimMapperTests
 
         var adapterClaim = X12837ClaimMapper.Map(claim, "tenant-1");
 
-        Assert.Equal(claim.Subscriber.MemberId, adapterClaim.MemberId);
+        Assert.Equal(string.Empty, adapterClaim.MemberId);
+        Assert.Equal(claim.Subscriber.MemberId, adapterClaim.SubscriberId);
     }
 
     [Fact]

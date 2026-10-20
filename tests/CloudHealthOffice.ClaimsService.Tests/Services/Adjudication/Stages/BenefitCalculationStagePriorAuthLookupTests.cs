@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 using ClaimsService.Models;
 using ClaimsService.Models.Adjudication;
@@ -38,6 +39,55 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
     {
         _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
             .Returns(new BenefitResolutionResult { PreparedAccumulatorCommit = Prepared, Success = true, Totals = new ClaimTotals() });
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DependentClaim_IsBoundToItsOwnMember_NotSubscriber(bool authorizationMatches)
+    {
+        string? sentMember = null;
+        var (stage, _) = StageOver(req =>
+        {
+            sentMember = Query(req, "memberId");
+            return ValidationBody("AUTH-1", true, "Authorization valid", "CHILD-1", authorizationMatches);
+        });
+        var ctx = InpatientMedicaid("AUTH-1");
+        ctx.Claim.MemberId = "CHILD-1";
+        ctx.Claim.SubscriberId = "PARENT-1";
+        ctx.Claim.PatientRelationship = "19";
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+        Assert.Equal("CHILD-1", sentMember);
+        Assert.Equal(authorizationMatches ? ClaimAdjudicationOutcome.Pass : ClaimAdjudicationOutcome.Deny, result.Outcome);
+        if (!authorizationMatches)
+        {
+            Assert.Equal(BenefitCalculationStage.PriorAuthorizationRequiredCode, ctx.AdjudicationResult.DenialReasonCode);
+            await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+        }
+    }
+
+    [Theory]
+    [InlineData("", null)]
+    [InlineData("MEM-1", "19")]
+    public async Task MissingOrLegacyDependentIdentity_PendsWithoutLookup(string memberId, string? relationship)
+    {
+        var (stage, handler) = StageOver(_ => ValidationBody("AUTH-1", true, "Authorization valid"));
+        var ctx = InpatientMedicaid("AUTH-1");
+        ctx.Claim.MemberId = memberId;
+        ctx.Claim.SubscriberId = "MEM-1";
+        ctx.Claim.PatientRelationship = relationship;
+        var result = await stage.ExecuteAsync(ctx, CancellationToken.None);
+        AssertPendedPaUnavailable(result, ctx);
+        Assert.Equal(0, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task OlderProducerWithoutMemberComparison_PendsBeforeBenefitCalculation()
+    {
+        var (stage, _) = StageOver(_ => ValidationBody("AUTH-1", true, "Authorization valid", null, null));
+        var result = await stage.ExecuteAsync(InpatientMedicaid("AUTH-1"), CancellationToken.None);
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
     }
 
     [Fact]
@@ -578,20 +628,15 @@ public sealed class BenefitCalculationStagePriorAuthLookupTests
         };
     }
 
-    private static HttpResponseMessage ValidationBody(string number, bool isValid, string message) =>
+    private static HttpResponseMessage ValidationBody(string number, bool isValid, string message,
+        string? validatedMemberId = "MEM-1", bool? memberMatches = true) =>
         new(HttpStatusCode.OK)
         {
-            Content = new StringContent(
-                $$"""
-                {
-                  "authorizationNumber": "{{number}}",
-                  "isValid": {{(isValid ? "true" : "false")}},
-                  "status": "{{(isValid ? "Approved" : "Denied")}}",
-                  "validationMessage": "{{message}}"
-                }
-                """,
-                Encoding.UTF8,
-                "application/json"),
+            Content = JsonContent.Create(new
+            {
+                authorizationNumber = number, isValid, status = isValid ? "Approved" : "Denied",
+                validationMessage = message, validatedMemberId, memberMatches
+            }),
         };
 
     private static string? Query(HttpRequestMessage request, string name) =>

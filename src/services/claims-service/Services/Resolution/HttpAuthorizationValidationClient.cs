@@ -49,9 +49,11 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
         string? procedureCode,
         DateTime serviceDate,
         string? providerNpi,
+        string memberId,
         CancellationToken ct = default,
         int? authorizationLineNumber = null)
     {
+        ct.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(authorizationNumber))
         {
             // Callers decide "required but not provided" themselves; a blank
@@ -59,6 +61,10 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
             return AuthorizationLookupResult.NotFound();
         }
 
+        if (string.IsNullOrWhiteSpace(memberId))
+            return AuthorizationLookupResult.Unavailable("claim member identity is missing");
+
+        var member = memberId.Trim();
         var number = authorizationNumber.Trim();
         try
         {
@@ -66,7 +72,7 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
             var serviceDateQuery = serviceDate.ToUniversalTime()
                 .ToString("o", CultureInfo.InvariantCulture);
             var url = $"/api/authorizations/{Uri.EscapeDataString(number)}/validate" +
-                      $"?serviceDate={Uri.EscapeDataString(serviceDateQuery)}";
+                      $"?serviceDate={Uri.EscapeDataString(serviceDateQuery)}&memberId={Uri.EscapeDataString(member)}";
 
             if (!string.IsNullOrWhiteSpace(procedureCode))
             {
@@ -130,6 +136,15 @@ public sealed class HttpAuthorizationValidationClient : IAuthorizationValidation
             {
                 return Unavailable("authorization-service answered for a different authorization number", number, tenantId, response.StatusCode);
             }
+
+            // Require proof that this producer compared the requested individual.
+            // An old producer silently ignoring memberId is not a bound answer.
+            if (!string.Equals(validation.ValidatedMemberId, member, StringComparison.Ordinal)
+                || !validation.MemberMatches.HasValue)
+                return AuthorizationLookupResult.Unavailable("authorization member comparison was not confirmed");
+
+            if (!validation.MemberMatches.Value)
+                return AuthorizationLookupResult.Invalid(validation, "Authorization does not belong to this claim's member");
 
             // Ambiguous matching is not a clinical rejection. The message fallback
             // supports the previous producer during a rolling deployment.

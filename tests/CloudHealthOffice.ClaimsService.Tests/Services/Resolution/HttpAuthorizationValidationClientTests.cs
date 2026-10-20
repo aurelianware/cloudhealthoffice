@@ -9,6 +9,58 @@ namespace CloudHealthOffice.ClaimsService.Tests.Services.Resolution;
 public sealed class HttpAuthorizationValidationClientTests
 {
     [Theory]
+    [InlineData(null, null)]
+    [InlineData("MEM-1", null)]
+    [InlineData("OTHER", true)]
+    [InlineData("mem-1", true)]
+    public async Task UnconfirmedMemberComparison_IsUnavailable(string? echoedMember, bool? matches)
+    {
+        var body = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            authorizationNumber = "AUTH-1", isValid = true, validatedMemberId = echoedMember, memberMatches = matches
+        });
+        var sut = CreateClient(FakeHttpMessageHandler.Json(body));
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "72148", DateTime.UtcNow, null, "MEM-1");
+        Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
+    }
+
+    [Fact]
+    public async Task ConfirmedWrongMember_IsInvalidEvenIfBodyClaimsValid()
+    {
+        var sut = CreateClient(FakeHttpMessageHandler.Json(
+            """{"authorizationNumber":"AUTH-1","isValid":true,"validatedMemberId":"CHILD-1","memberMatches":false}"""));
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "72148", DateTime.UtcNow, null, "CHILD-1");
+        Assert.Equal(AuthorizationLookupStatus.Invalid, result.Status);
+        Assert.DoesNotContain("CHILD-1", result.Reason);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task MissingMember_IsUnavailableWithoutHttpRequest(string? member)
+    {
+        var sent = false;
+        var sut = CreateClient(new FakeHttpMessageHandler(_ => { sent = true; throw new InvalidOperationException(); }));
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "72148", DateTime.UtcNow, null, member!);
+        Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
+        Assert.False(sent);
+    }
+
+    [Fact]
+    public async Task MemberQuery_IsTrimmedAndEscapedWithoutLosingIdentifierCharacters()
+    {
+        string? query = null;
+        var sut = CreateClient(new FakeHttpMessageHandler(req =>
+        {
+            query = req.RequestUri!.Query;
+            return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        }));
+        await sut.ValidateAsync("tenant-1", "AUTH-1", "72148", DateTime.UtcNow, null, "  CHILD+1/&  ");
+        Assert.Contains("memberId=CHILD%2B1%2F%26", query);
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task AmbiguousServiceLine_IsUnavailableEvenIfBodyClaimsValid(bool isValid)
@@ -16,10 +68,11 @@ public sealed class HttpAuthorizationValidationClientTests
         var body = System.Text.Json.JsonSerializer.Serialize(new
         {
             authorizationNumber = "AUTH-1", isValid, validationCode = "AmbiguousServiceLine",
+            validatedMemberId = "MEM-1", memberMatches = true,
             validationMessage = "Select the relevant service line"
         });
         var sut = CreateClient(FakeHttpMessageHandler.Json(body));
-        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "72148", DateTime.UtcNow, "1234567890");
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "72148", DateTime.UtcNow, "1234567890", memberId: "MEM-1");
         Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
     }
 
@@ -30,7 +83,7 @@ public sealed class HttpAuthorizationValidationClientTests
     public async Task InvalidExplicitLine_PendsWithoutCallingProducer(int lineNumber, string? code)
     {
         var sut = CreateClient(new FakeHttpMessageHandler(_ => throw new InvalidOperationException("must not send")));
-        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", code, DateTime.UtcNow, "1234567890", authorizationLineNumber: lineNumber);
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", code, DateTime.UtcNow, "1234567890", "MEM-1", authorizationLineNumber: lineNumber);
         Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
         Assert.Contains("positive number and procedure", result.Reason);
     }
@@ -48,6 +101,7 @@ public sealed class HttpAuthorizationValidationClientTests
                     """
                     {
                       "authorizationNumber": "AUTH-EXPIRED",
+                      "validatedMemberId": "MEM-1", "memberMatches": true,
                       "isValid": false,
                       "status": "Approved",
                       "approvedServiceDateFrom": "2026-01-01T00:00:00Z",
@@ -68,7 +122,7 @@ public sealed class HttpAuthorizationValidationClientTests
             "AUTH-EXPIRED",
             "99213",
             new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc),
-            "1234567890");
+            "1234567890", memberId: "MEM-1");
 
         Assert.Equal(AuthorizationLookupStatus.Invalid, result.Status);
         Assert.Equal("AUTH-EXPIRED", result.Validation!.AuthorizationNumber);
@@ -86,9 +140,9 @@ public sealed class HttpAuthorizationValidationClientTests
     public async Task ValidateAsync_ValidBody_IsValid()
     {
         var sut = CreateClient(FakeHttpMessageHandler.Json(
-            """{ "authorizationNumber": "AUTH-1", "isValid": true, "status": "Approved", "validationMessage": "Authorization valid" }"""));
+            """{ "authorizationNumber": "AUTH-1", "isValid": true, "status": "Approved", "validatedMemberId": "MEM-1", "memberMatches": true, "validationMessage": "Authorization valid" }"""));
 
-        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890", memberId: "MEM-1");
 
         Assert.Equal(AuthorizationLookupStatus.Valid, result.Status);
     }
@@ -103,7 +157,7 @@ public sealed class HttpAuthorizationValidationClientTests
         });
         var sut = CreateClient(handler);
 
-        var result = await sut.ValidateAsync("tenant-1", "AUTH-UNKNOWN", "99213", DateTime.UtcNow, "1234567890");
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-UNKNOWN", "99213", DateTime.UtcNow, "1234567890", memberId: "MEM-1");
 
         Assert.Equal(AuthorizationLookupStatus.NotFound, result.Status);
     }
@@ -124,7 +178,7 @@ public sealed class HttpAuthorizationValidationClientTests
         });
         var sut = CreateClient(handler);
 
-        var result = await sut.ValidateAsync("tenant-1", number, "99213", DateTime.UtcNow, "1234567890");
+        var result = await sut.ValidateAsync("tenant-1", number, "99213", DateTime.UtcNow, "1234567890", memberId: "MEM-1");
 
         Assert.Equal(AuthorizationLookupStatus.NotFound, result.Status);
     }
@@ -135,7 +189,7 @@ public sealed class HttpAuthorizationValidationClientTests
     {
         var sut = CreateClient(FakeHttpMessageHandler.Status(HttpStatusCode.NotFound));
 
-        var result = await sut.ValidateAsync("tenant-1", "AUTH-UNKNOWN", "99213", DateTime.UtcNow, "1234567890");
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-UNKNOWN", "99213", DateTime.UtcNow, "1234567890", memberId: "MEM-1");
 
         Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
     }
@@ -153,7 +207,7 @@ public sealed class HttpAuthorizationValidationClientTests
     {
         var sut = CreateClient(FakeHttpMessageHandler.Status(status));
 
-        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890", memberId: "MEM-1");
 
         Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
         Assert.Contains(((int)status).ToString(), result.Reason);
@@ -165,7 +219,7 @@ public sealed class HttpAuthorizationValidationClientTests
         var sut = CreateClient(FakeHttpMessageHandler.Json(
             """{ "authorizationNumber": "AUTH-OTHER", "isValid": true, "status": "Approved" }"""));
 
-        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890", memberId: "MEM-1");
 
         Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
     }
@@ -177,7 +231,7 @@ public sealed class HttpAuthorizationValidationClientTests
     {
         var sut = CreateClient(FakeHttpMessageHandler.Json(body));
 
-        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890", memberId: "MEM-1");
 
         Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
     }
@@ -187,7 +241,7 @@ public sealed class HttpAuthorizationValidationClientTests
     {
         var sut = CreateClient(FakeHttpMessageHandler.Throw(new TaskCanceledException("HttpClient.Timeout")));
 
-        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890", memberId: "MEM-1");
 
         Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
     }
@@ -197,7 +251,7 @@ public sealed class HttpAuthorizationValidationClientTests
     {
         var sut = CreateClient(FakeHttpMessageHandler.Throw(new HttpRequestException("Connection refused")));
 
-        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890");
+        var result = await sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890", memberId: "MEM-1");
 
         Assert.Equal(AuthorizationLookupStatus.Unavailable, result.Status);
     }
@@ -211,7 +265,7 @@ public sealed class HttpAuthorizationValidationClientTests
         var sut = CreateClient(new FakeHttpMessageHandler(_ => throw new TaskCanceledException()));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890", cts.Token));
+            sut.ValidateAsync("tenant-1", "AUTH-1", "99213", DateTime.UtcNow, "1234567890", "MEM-1", cts.Token));
     }
 
     private static HttpAuthorizationValidationClient CreateClient(FakeHttpMessageHandler handler)

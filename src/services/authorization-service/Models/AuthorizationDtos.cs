@@ -18,6 +18,10 @@ public class AuthorizationValidationResponse
     public string? ValidationMessage { get; set; }
     /// <summary>Stable reason code; ambiguous matching requires line selection, not a clinical denial.</summary>
     public string? ValidationCode { get; set; }
+    /// <summary>Echoes the requested individual, never the stored authorization owner's identity.</summary>
+    public string? ValidatedMemberId { get; set; }
+    /// <summary>Null when no member was requested or the stored identity is unavailable.</summary>
+    public bool? MemberMatches { get; set; }
 }
 
 /// <summary>

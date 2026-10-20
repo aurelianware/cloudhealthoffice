@@ -41,13 +41,13 @@ outbound X12 mapping for this field is invented.
 
 `ClaimsAdjudication:PriorAuth:UsePlanFlaggedCodes` stays false by default. The
 line-selection defect is fixed; this is not approval to expand PA enforcement.
-Source review at baseline `b6f97595` also confirms these open checks:
+The original review at `b6f97595` identified the checks below; the member-binding
+follow-up is based on `634e8046`:
 
-* **Member binding:** the validation request does not send the claim member and
-  the response has no member identity. An approved number/procedure/provider/date
-  is not proof that the authorization belongs to this claim's member. Match
-  canonical patient/member identity, including dependent semantics; do not
-  substitute a PAS patient reference or a subscriber's identity blindly.
+* **Member binding implemented:** claims requires a confirmed comparison to the
+  individual member, with dependent intake guards. See
+  [member-binding runbook](CLAIMS-AUTHORIZATION-MEMBER-BINDING.md) for legacy and
+  rollout limits. Historical identity data quality is not inferred.
 * **Quantity accounting:** the API returns approved units, but claims does not
   compare or consume them. Define matching units of measure, aggregation across
   claim lines, and concurrency-safe reservation/release across claims and

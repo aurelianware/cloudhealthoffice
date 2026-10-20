@@ -108,7 +108,7 @@ public sealed class PriorAuthRerunPipelineTests
     }
 
     private void PriorAuthAnswers(AuthorizationLookupResult answer) =>
-        _authorization.ValidateAsync(default!, default!, default, default, default, default).ReturnsForAnyArgs(answer);
+        _authorization.ValidateAsync(default!, default!, default, default, default, "MEM-1", default).ReturnsForAnyArgs(answer);
 
     private static AuthorizationLookupResult Valid() => AuthorizationLookupResult.Valid(
         new AuthorizationValidationResult("AUTH-1", true, "Approved", null, null, null, 1, "Authorization valid"));
