@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Http;
 using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace ClaimsService.Services.Adjudication.PlanEdits;
 
@@ -43,6 +44,7 @@ public static class PlanEditServiceRegistration
                 });
         }
 
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IPlanEditServiceClient, PlanEditServiceClient>();
         return services;
     }

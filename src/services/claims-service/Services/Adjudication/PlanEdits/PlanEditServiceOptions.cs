@@ -90,7 +90,8 @@ public sealed class PlanEditServiceOptions
             if (string.IsNullOrWhiteSpace(tenantId))
                 problems.Add($"{at}: the tenant id is empty");
 
-            if (!Uri.TryCreate(tenant.Endpoint, UriKind.Absolute, out var uri))
+            // On Linux "/path" parses as an absolute file: URI; it is still not a URL.
+            if (!Uri.TryCreate(tenant.Endpoint, UriKind.Absolute, out var uri) || uri.IsFile || uri.IsUnc)
             {
                 problems.Add($"{at}:Endpoint: an absolute URL is required");
             }
