@@ -110,7 +110,8 @@ No edits fired: `{"contractVersion":"1","edits":[]}`.
 | `suggestedCarc` | Makes the edit a **denial edit**: one to three upper-case letters or digits, and `lineNumbers` must name at least one line. |
 | `suggestedRarc` | Optional, with a `suggestedCarc` only: one or two upper-case letters and up to four digits. |
 
-At most 100 edits and 262,144 bytes. Unknown properties are ignored.
+At most 100 edits and 262,144 bytes. Two edits may not share both `ruleId`
+(compared without case) and `lineNumbers`. Unknown properties are ignored.
 
 ### What CHO does with each edit
 
@@ -121,12 +122,15 @@ At most 100 edits and 262,144 bytes. Unknown properties are ignored.
 
 Overriding needs the permission the tenant's `PLAN_EDIT` override policy sets
 (default: any examiner, with a reason).
+An examiner who approves the claim as a whole, without deciding edits one by
+one, upholds every plan edit. A plan edit that comes back on the approval
+re-run with a rule and lines nobody decided pends again.
 
 ### When there is no usable answer
 
 Any of these means CHO did not get an answer, never that no edits fired:
 
-- no response within the timeout, or the connection fails;
+- no complete response (headers and body) within the timeout, or the connection fails;
 - any status other than 200 (redirects are not followed);
 - a content type other than JSON, or a body over the size limit;
 - a body that breaks any rule above.
@@ -157,7 +161,8 @@ lets you recognise the repeat.
 Start with `"Mode": "SoftValidation"` to see which claims your edits would pend
 without pending any, then switch to `PendForReview`. claims-service refuses to
 start if the endpoint is not https, is a CHO service host, or the secret is
-shorter than 32 characters.
+shorter than 32 characters. The endpoint may not carry credentials, a query
+string or a fragment: authenticate with the signature, not a URL key.
 
 ## Versioning
 

@@ -26,7 +26,7 @@ public class PlanEditsStageTests
     // ── Stage contract ────────────────────────────────────────────────────
 
     [Fact]
-    public void Runs_after_NCCI_and_before_COB_and_is_optional()
+    public void Runs_after_NCCI_and_before_the_AI_examination_and_is_optional()
     {
         var stage = new PlanEditsStage(new FakeClient(), NullLogger<PlanEditsStage>.Instance);
 

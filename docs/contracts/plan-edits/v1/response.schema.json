@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://cloudhealthoffice.com/contracts/plan-edits/v1/response.schema.json",
   "title": "Plan edit response, contract version 1",
-  "description": "What a health plan's edit service returns for one claim (ADR 019): HTTP 200, application/json, at most 262144 bytes. Rules a schema cannot express: every lineNumbers entry must be a line on the claim in the request. CHO ignores properties it does not know. A response that breaks any rule is treated as no usable answer, never as no edits.",
+  "description": "What a health plan's edit service returns for one claim (ADR 019): HTTP 200, application/json, at most 262144 bytes. Rules a schema cannot express: every lineNumbers entry must be a line on the claim in the request, and no two edits may share both ruleId (case-insensitive) and lineNumbers. CHO ignores properties it does not know. A response that breaks any rule is treated as no usable answer, never as no edits.",
   "type": "object",
   "required": ["contractVersion", "edits"],
   "properties": {

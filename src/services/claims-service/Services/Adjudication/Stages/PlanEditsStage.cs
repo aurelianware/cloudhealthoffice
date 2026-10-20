@@ -11,8 +11,9 @@ namespace ClaimsService.Services.Adjudication.Stages;
 /// edit service — the plan's code, in the plan's repository, deployed by the
 /// plan — and pends the claim with every edit that fired, for an examiner to
 /// uphold or override like any CHO edit. Runs at <see cref="Order"/> = 450,
-/// after CHO's own NCCI/MUE edits (400) and before coordination of benefits
-/// (500).
+/// after CHO's own NCCI/MUE edits (400) — so after pricing, coordination of
+/// benefits (275) and benefit calculation (300) too — and before the AI
+/// examination (600).
 ///
 /// <list type="bullet">
 ///   <item><description><b>No plan edit service</b> for the tenant → Pass, nothing sent.</description></item>
@@ -42,7 +43,10 @@ namespace ClaimsService.Services.Adjudication.Stages;
 /// <b>Approval re-run.</b> The plan's service is asked again
 /// (<see cref="PlanEditPurpose.ApprovalReadjudication"/>). Edits the examiner
 /// decided — matched by rule and lines (<see cref="EditIdentity"/>) — are
-/// settled; an edit nobody decided pends and the approval is refused.
+/// settled; an edit nobody decided pends and the approval is refused. This
+/// stage is deliberately not one the orchestrator passes on a reviewed pend
+/// reason: only a decision per edit settles a plan edit. A whole-claim
+/// approval upholds every plan edit by default (ClaimResolutionService).
 /// </para>
 /// </summary>
 public sealed class PlanEditsStage : IClaimAdjudicationStage

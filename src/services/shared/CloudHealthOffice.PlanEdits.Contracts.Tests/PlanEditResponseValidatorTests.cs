@@ -82,6 +82,17 @@ public class PlanEditResponseValidatorTests
     }
 
     [Fact]
+    public void Two_edits_with_the_same_rule_and_lines_are_invalid_whatever_the_case_or_order()
+    {
+        var review = Review("PLAN-001", 2, 1);
+        var denial = new PlanEdit { RuleId = "plan-001", Message = "m", LineNumbers = [1, 2], SuggestedCarc = "96" };
+
+        PlanEditResponseValidator.Validate(Response(review, denial), Lines)
+            .Should().ContainSingle().Which.Should().Be("edits[1]: same ruleId and lineNumbers as edits[0]");
+        PlanEditResponseValidator.Validate(Response(review, Review("PLAN-001", 1)), Lines).Should().BeEmpty();
+    }
+
+    [Fact]
     public void More_than_the_edit_limit_is_invalid()
     {
         var edits = Enumerable.Range(0, PlanEditContract.MaxEdits + 1).Select(i => Review($"R{i}")).ToArray();

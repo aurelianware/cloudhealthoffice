@@ -100,7 +100,7 @@ public sealed class PlanEditServiceClient : IPlanEditServiceClient
         message.Headers.Add(PlanEditContract.IdempotencyKeyHeader, request.RequestId);
 
         var started = Stopwatch.GetTimestamp();
-        var result = await SendAsync(tenantId, message, claimLineNumbers, ct).ConfigureAwait(false);
+        var result = await SendAsync(tenantId, tenant, message, claimLineNumbers, ct).ConfigureAwait(false);
         var elapsedMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
         if (result is PlanEditCallResult.Unavailable unavailable)
@@ -120,7 +120,8 @@ public sealed class PlanEditServiceClient : IPlanEditServiceClient
     }
 
     private async Task<PlanEditCallResult> SendAsync(
-        string tenantId, HttpRequestMessage message, IReadOnlyCollection<int> claimLineNumbers, CancellationToken ct)
+        string tenantId, PlanEditTenantOptions tenant, HttpRequestMessage message,
+        IReadOnlyCollection<int> claimLineNumbers, CancellationToken ct)
     {
         var client = _clients.CreateClient(ClientName(tenantId));
         HttpResponseMessage response;
@@ -155,9 +156,7 @@ public sealed class PlanEditServiceClient : IPlanEditServiceClient
             }
 
             var mediaType = response.Content.Headers.ContentType?.MediaType;
-            if (mediaType is null
-                || !(mediaType.Equals(PlanEditContract.MediaType, StringComparison.OrdinalIgnoreCase)
-                     || mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase)))
+            if (mediaType is null || !mediaType.Equals(PlanEditContract.MediaType, StringComparison.OrdinalIgnoreCase))
             {
                 return new PlanEditCallResult.Unavailable(PlanEditUnavailableKinds.InvalidResponse,
                     $"content type must be {PlanEditContract.MediaType}");
@@ -169,10 +168,15 @@ public sealed class PlanEditServiceClient : IPlanEditServiceClient
                     $"body over {PlanEditContract.MaxResponseBytes} bytes");
             }
 
+            // The client's timeouts stop at the response headers; the body gets
+            // its own deadline, so a service that sends 200 and then stalls
+            // cannot hold the adjudication consumer.
             byte[] bytes;
+            using var bodyDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            bodyDeadline.CancelAfter(TimeSpan.FromMilliseconds(tenant.TimeoutMilliseconds));
             try
             {
-                bytes = await ReadLimitedAsync(response.Content, ct).ConfigureAwait(false);
+                bytes = await ReadLimitedAsync(response.Content, bodyDeadline.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

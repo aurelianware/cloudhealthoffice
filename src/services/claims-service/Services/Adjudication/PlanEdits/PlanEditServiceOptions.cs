@@ -103,6 +103,10 @@ public sealed class PlanEditServiceOptions
                     problems.Add($"{at}:Endpoint: must not carry credentials");
                 if (!string.IsNullOrEmpty(uri.Fragment))
                     problems.Add($"{at}:Endpoint: must not have a fragment");
+                // A key in a query string ends up in HTTP client logs; the
+                // request is authenticated by its signature instead.
+                if (!string.IsNullOrEmpty(uri.Query))
+                    problems.Add($"{at}:Endpoint: must not have a query string (authenticate with the signature, not a URL key)");
                 // A CHO host receives CHO service tokens from the outbound
                 // token handler; a plan's service must never be one.
                 if (choHosts.IsChoService(uri))

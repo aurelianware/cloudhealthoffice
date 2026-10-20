@@ -59,6 +59,7 @@ public static partial class PlanEditResponseValidator
             problems.Add($"edits: at most {PlanEditContract.MaxEdits}");
 
         var lines = claimLineNumbers as ISet<int> ?? claimLineNumbers.ToHashSet();
+        var seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < response.Edits.Count; i++)
         {
             var edit = response.Edits[i];
@@ -80,6 +81,18 @@ public static partial class PlanEditResponseValidator
                 problems.Add($"{at}.message: at most {PlanEditContract.MaxMessageLength} characters");
 
             var editLines = edit.LineNumbers ?? [];
+
+            // An edit is its rule and its lines (CHO matches decisions by them),
+            // so one response may not carry two edits with both the same.
+            if (!string.IsNullOrEmpty(edit.RuleId))
+            {
+                var identity = edit.RuleId + "|" + string.Join(",", editLines.Distinct().Order());
+                if (seen.TryGetValue(identity, out var first))
+                    problems.Add($"{at}: same ruleId and lineNumbers as edits[{first}]");
+                else
+                    seen[identity] = i;
+            }
+
             foreach (var line in editLines.Distinct())
             {
                 if (!lines.Contains(line))
