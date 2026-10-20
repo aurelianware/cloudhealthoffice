@@ -16,6 +16,7 @@ public static class AdjudicationTransparencyBuilder
             Steps = BuildSteps(claim),
             NcciResults = BuildNcciResults(claim),
             DuplicateResults = BuildDuplicateResults(claim),
+            PlanEditResults = BuildPlanEditResults(claim),
             FeeScheduleResults = BuildFeeScheduleResults(claim),
             BenefitCalculation = BuildBenefitCalculation(claim)
         };
@@ -121,6 +122,23 @@ public static class AdjudicationTransparencyBuilder
                 MatchedLineNumber = finding.MatchedLineNumber
             })
             .ToList();
+    }
+
+    private static List<PlanEditResult> BuildPlanEditResults(Claim claim)
+    {
+        if (claim.PendDetails?.PlanEditFindings is not { Count: > 0 } edits)
+        {
+            return new List<PlanEditResult>();
+        }
+
+        return edits.Select(edit => new PlanEditResult
+        {
+            EditCode = edit.RuleId,
+            Description = edit.Message ?? string.Empty,
+            Passed = false,
+            FailureReason = edit.IsDenialEdit ? $"Suggested CARC {edit.SuggestedCarc}" : "Review edit",
+            LineNumbers = edit.LineNumbers.ToList(),
+        }).ToList();
     }
 
     private static List<FeeScheduleResult> BuildFeeScheduleResults(Claim claim)

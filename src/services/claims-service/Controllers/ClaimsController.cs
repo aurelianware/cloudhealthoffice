@@ -1528,6 +1528,7 @@ public class ClaimsController : ControllerBase
         "COB" => "COB Required",
         "MEDREVIEW" or "CLINICAL" => "Medical Review",
         "DUPLICATE" => "Possible Duplicate",
+        Services.Adjudication.Stages.PlanEditsStage.PlanEditPendCode => "Plan Edit Review",
         _ => "Pending Review"
     };
 

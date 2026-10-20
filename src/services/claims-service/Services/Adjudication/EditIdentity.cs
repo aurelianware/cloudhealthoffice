@@ -32,6 +32,25 @@ public static class EditIdentity
         Join("DUP", finding.RuleId, finding.LineNumber.ToString(CultureInfo.InvariantCulture),
             finding.MatchedClaimId, finding.MatchedLineNumber?.ToString(CultureInfo.InvariantCulture));
 
+    /// <summary>
+    /// A plan edit is its rule and the lines it names. A key past the 200
+    /// characters an edit key may hold (an edit naming very many lines) keeps
+    /// its rule and replaces the line list with a hash of it, so it stays
+    /// stable and unique.
+    /// </summary>
+    public static string Key(PlanEditFindingSnapshot edit)
+    {
+        var lines = Lines(edit.LineNumbers);
+        var key = Join("PLAN", edit.RuleId, lines);
+        if (key.Length <= MaxKeyLength) return key;
+
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(lines));
+        return Join("PLAN", edit.RuleId, "H" + Convert.ToHexString(hash, 0, 16));
+    }
+
+    /// <summary>The longest key an edit snapshot stores.</summary>
+    public const int MaxKeyLength = 200;
+
     private static string Lines(IEnumerable<int>? lines) =>
         string.Join(",", (lines ?? []).Distinct().OrderBy(l => l));
 

@@ -30,6 +30,20 @@ public class DuplicateEditResult
     public int? MatchedLineNumber { get; set; }
 }
 
+/// <summary>
+/// One of the health plan's own edits (its edit service, ADR 019) that fired
+/// on the claim. Reported apart from NCCI and duplicate results: these are
+/// the plan's rules.
+/// </summary>
+public class PlanEditResult
+{
+    public string EditCode { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public bool Passed { get; set; }
+    public string? FailureReason { get; set; }
+    public List<int> LineNumbers { get; set; } = new();
+}
+
 public class FeeScheduleResult
 {
     public string ProcedureCode { get; set; } = string.Empty;
@@ -88,6 +102,7 @@ public class AdjudicationTransparencyData
     public List<AdjudicationStep> Steps { get; set; } = new();
     public List<NcciEditResult> NcciResults { get; set; } = new();
     public List<DuplicateEditResult> DuplicateResults { get; set; } = new();
+    public List<PlanEditResult> PlanEditResults { get; set; } = new();
     public List<FeeScheduleResult> FeeScheduleResults { get; set; } = new();
     public BenefitCalculationResult? BenefitCalculation { get; set; }
 }

@@ -212,7 +212,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     /// <summary>
     /// Stages whose Pend is a review an examiner resolves by approving the
     /// claim (possible duplicate, provider integrity, network, NCCI edits,
-    /// scrubbing). On an approval re-run their Pend becomes Pass — but only
+    /// the plan's own edits, scrubbing). On an approval re-run their Pend becomes Pass — but only
     /// when the examiner reviewed that pend (PR #1278 round 3, B1): its code
     /// and exact reason are in the claim's persisted pend
     /// (<see cref="ExaminerApproval.ReviewedPend"/>), and it is not a
@@ -232,6 +232,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         Stages.ProviderIntegrityStage.StageName,
         Stages.NetworkCredentialingStage.StageName,
         Stages.NcciEditsStage.StageName,
+        Stages.PlanEditsStage.StageName,
         Stages.ScrubbingStage.StageName,
     };
 
@@ -608,8 +609,8 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     /// <summary>
     /// Adds <paramref name="later"/> (a pend a later stage recorded as a new
     /// <see cref="PendDetails"/>) to <paramref name="earlier"/>: its
-    /// "{code}: {reason}" and its own additional reasons, and its NCCI /
-    /// duplicate evidence. Nothing is added twice.
+    /// "{code}: {reason}" and its own additional reasons, and its NCCI,
+    /// duplicate and plan-edit evidence. Nothing is added twice.
     /// </summary>
     internal static void MergeInto(PendDetails earlier, PendDetails later)
     {
@@ -629,6 +630,8 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             earlier.EditFailures.Add(failure);
         foreach (var finding in later.DuplicateFindings)
             earlier.DuplicateFindings.Add(finding);
+        foreach (var edit in later.PlanEditFindings)
+            earlier.PlanEditFindings.Add(edit);
     }
 
     private async Task EmitAdjudicatedEventAsync(

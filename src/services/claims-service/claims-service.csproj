@@ -56,6 +56,10 @@
          the engine itself runs in benefit-plan-service, the same posture
          as BenefitEngine + HttpBenefitCalculationEngineClient. -->
     <ProjectReference Include="../../engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj" />
+    <!-- PlanEditsStage (Order=450, ADR 019) calls the health plan's own edit
+         service; the contract (request, response, signature, response rules)
+         is shared with plan services that run on .NET. -->
+    <ProjectReference Include="../shared/CloudHealthOffice.PlanEdits.Contracts/CloudHealthOffice.PlanEdits.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
