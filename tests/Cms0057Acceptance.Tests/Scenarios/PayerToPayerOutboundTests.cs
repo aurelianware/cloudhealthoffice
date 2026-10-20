@@ -759,8 +759,9 @@ public class PayerToPayerOutboundTests
 
         public string ServedTenantId { get; }
 
-        public Task<IReadOnlyList<ChoMember>> GetMembersAsync(string tenantId, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<ChoMember>>(Array.Empty<ChoMember>());
+        public Task<MemberMatchCandidates> GetCandidatesAsync(
+            string tenantId, MemberMatchCriteria criteria, CancellationToken ct = default) =>
+            Task.FromResult(MemberMatchCandidates.None);
 
         public Task<IReadOnlyList<ChoCoverage>> GetCoveragesAsync(
             string tenantId, string memberId, CancellationToken ct = default) =>

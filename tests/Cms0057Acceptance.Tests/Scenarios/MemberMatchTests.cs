@@ -367,7 +367,7 @@ public class MemberMatchTests
             provider, Options.Create(new FhirAdapterOptions { TenantId = AcceptanceContext.TenantId }));
         var consent = AcceptanceContext.PayerToPayerConsentGate(match.MatchedMemberId!);
         var export = new PayerToPayerExchangeService(
-            new PayerToPayerMemberResolver(exportSource), exportSource, consent,
+            new PayerToPayerMemberResolver(exportSource), new PatientAccessPayerToPayerExportSource(provider), consent,
             new PayerToPayerExportBuilder(),
             AcceptanceContext.Logger<PayerToPayerExchangeService>());
 

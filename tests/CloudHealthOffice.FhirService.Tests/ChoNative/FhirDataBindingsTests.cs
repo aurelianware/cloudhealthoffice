@@ -35,6 +35,17 @@ public class FhirDataBindingsTests
         bindings.SourceOf("ExplanationOfBenefit").Should().BeNull();
     }
 
+    [Fact]
+    public void Payer_to_payer_can_be_bound_to_cho_native_on_its_own()
+    {
+        var bindings = FhirDataBindings.From(With(("PayerToPayer", "ChoNative")));
+
+        bindings.PayerToPayerNative.Should().BeTrue();
+        bindings.AnyNative.Should().BeTrue();
+        bindings.Patient.Should().Be(FhirAdapterSources.Mock);
+        bindings.SourceOf("PayerToPayer").Should().Be(FhirAdapterSources.ChoNative);
+    }
+
     [Theory]
     [InlineData("Encounter")]
     [InlineData("Claim")]

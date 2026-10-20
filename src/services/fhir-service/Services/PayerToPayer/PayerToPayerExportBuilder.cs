@@ -7,40 +7,18 @@ namespace FhirService.Services.PayerToPayer;
 /// <summary>Assembles the member-scoped FHIR export package for an inbound respond.</summary>
 public interface IPayerToPayerExportBuilder
 {
-    FhirBundle Build(ChoMember member, IReadOnlyList<ChoPaymentDocument> payments, PayerToPayerExchangeRequest request);
+    /// <summary>The export bundle for <paramref name="member"/>: the resources its export source gathered, in order.</summary>
+    FhirBundle Build(ChoMember member, IReadOnlyList<FhirResource> resources, PayerToPayerExchangeRequest request);
 }
 
-/// <summary>
-/// Builds a deterministic FHIR <c>collection</c> Bundle for the matched member,
-/// reusing the existing <see cref="PatientAccessMapper"/> (CARIN/US Core
-/// projection) over CHO-owned data. The package contains the member's Patient
-/// and Coverage plus the ExplanationOfBenefit resources that pass the
-/// <see cref="PayerToPayerExportPolicy"/> (5-year lookback). Only the matched
-/// member's data is included; references are internal and consistent.
-/// </summary>
 public sealed class PayerToPayerExportBuilder : IPayerToPayerExportBuilder
 {
     public FhirBundle Build(
-        ChoMember member, IReadOnlyList<ChoPaymentDocument> payments, PayerToPayerExchangeRequest request)
+        ChoMember member, IReadOnlyList<FhirResource> resources, PayerToPayerExchangeRequest request)
     {
-        var entries = new List<FhirBundleEntry>();
-
-        // Member demographics + coverage (US Core / CARIN projection).
-        var patient = PatientAccessMapper.MapMemberToPatient(member);
-        entries.Add(new FhirBundleEntry { FullUrl = $"Patient/{patient.Id}", Resource = patient });
-
-        var coverage = PatientAccessMapper.MapMemberToCoverage(member);
-        entries.Add(new FhirBundleEntry { FullUrl = $"Coverage/{coverage.Id}", Resource = coverage });
-
-        // Member's claims payments as CARIN EOBs, filtered by the P2P policy and
-        // scoped to this member. Deterministic order by payment id.
-        var eobs = payments
-            .Where(p => string.Equals(p.MemberId, member.MemberId, StringComparison.Ordinal))
-            .Where(p => PayerToPayerExportPolicy.IncludePayment(p, request.ExchangeDateUtc, request.LookbackYears))
-            .OrderBy(p => p.PaymentId, StringComparer.Ordinal)
-            .Select(PatientAccessMapper.MapPaymentToEob)
-            .Select(eob => new FhirBundleEntry { FullUrl = $"ExplanationOfBenefit/{eob.Id}", Resource = eob });
-        entries.AddRange(eobs);
+        var entries = resources
+            .Select(r => new FhirBundleEntry { FullUrl = $"{r.ResourceType}/{r.Id}", Resource = r })
+            .ToList();
 
         return new FhirBundle
         {
@@ -56,5 +34,46 @@ public sealed class PayerToPayerExportBuilder : IPayerToPayerExportBuilder
             },
             Entry = entries,
         };
+    }
+}
+
+/// <summary>
+/// Gathers the resources the Payer-to-Payer export sends for a resolved,
+/// authorized member: demographics, coverage and claims within the lookback
+/// window, in a stable order.
+/// </summary>
+public interface IPayerToPayerExportSource
+{
+    Task<IReadOnlyList<FhirResource>> GetResourcesAsync(
+        ChoMember member, PayerToPayerExchangeRequest request, CancellationToken ct = default);
+}
+
+/// <summary>
+/// The mock export source: the member mapped to US Core Patient and Coverage,
+/// and the member's payments from <see cref="IPatientAccessDataProvider"/> as
+/// EOBs, filtered by <see cref="PayerToPayerExportPolicy"/>, ordered by payment id.
+/// </summary>
+public sealed class PatientAccessPayerToPayerExportSource : IPayerToPayerExportSource
+{
+    private readonly IPatientAccessDataProvider _provider;
+
+    public PatientAccessPayerToPayerExportSource(IPatientAccessDataProvider provider) => _provider = provider;
+
+    public async Task<IReadOnlyList<FhirResource>> GetResourcesAsync(
+        ChoMember member, PayerToPayerExchangeRequest request, CancellationToken ct = default)
+    {
+        var resources = new List<FhirResource>
+        {
+            PatientAccessMapper.MapMemberToPatient(member),
+            PatientAccessMapper.MapMemberToCoverage(member),
+        };
+
+        var payments = await _provider.GetPaymentsByPatientIdAsync(member.MemberId, ct);
+        resources.AddRange(payments
+            .Where(p => string.Equals(p.MemberId, member.MemberId, StringComparison.Ordinal))
+            .Where(p => PayerToPayerExportPolicy.IncludePayment(p, request.ExchangeDateUtc, request.LookbackYears))
+            .OrderBy(p => p.PaymentId, StringComparer.Ordinal)
+            .Select(PatientAccessMapper.MapPaymentToEob));
+        return resources;
     }
 }
