@@ -50,6 +50,7 @@ All evidence paths are repository-relative; method names follow a colon. Test-ru
 | CAP-21 | Implemented | 2026-10-19 / `d5af561d` | **Authorization updates are last-write-wins** — docs/architecture/prior-authorization.md Limitations | src/services/authorization-service/Repositories/AuthorizationRepositoryMongo.cs:RevisionIs/UpdateAsync; src/services/authorization-service/Exceptions/AuthorizationConcurrencyException.cs | src/services/authorization-service/AuthorizationService.Tests/Persistence/AuthorizationRepositoryMongoConcurrencyTests.cs:TwoConcurrentUpdates_FromTheSameRead_ExactlyOneWins_TheOtherConflicts; AReplaceBasedOnAReadBeforeAnSlaEscalation_Conflicts_InsteadOfUndoingIt (A1) | Real Mongo conditional writes use the read Revision; exactly one concurrent writer succeeds and stale updates cannot undo escalation. Scoped to the current Mongo repository; not a claim of distributed transactions across services. | docs/architecture/prior-authorization.md |
 | CAP-22 | Confirmed Gap | 2026-10-19 / `d5af561d` | **Default FHIR reads are all live payer-backed** — readiness matrix adapter warnings / ePA G-30 | src/services/fhir-service/Program.cs default IFhirDataAdapter and IPatientAccessDataProvider registrations | Host registration inspected; no live payer integration test executed | Default bindings still use MockFhirDataAdapter and MockPatientAccessDataProvider. This does not imply every FHIR endpoint or CHO-owned authorization record is mocked. | docs/compliance/CMS-0057-F-READINESS-MATRIX.md; src/site/MESSAGE_SHEET.md; src/site/assistant/knowledge.md |
 | CAP-23 | Implemented | 2026-10-19 / `3b5a2035` | **No authorization state machine, audited cancellation or expiry / D-23,G-24** — docs/epa-gap-matrix.md historical defect/register | src/services/authorization-service/Backends/AuthorizationLifecyclePolicy.cs; src/services/authorization-service/Backends/ChoAuthorizationBackend.cs; src/services/authorization-service/Controllers/AuthorizationsController.cs; src/services/authorization-service/Services/AuthorizationExpiryWorker.cs; src/services/authorization-service/Repositories/AuthorizationRepositoryMongo.cs | tests/CloudHealthOffice.AuthorizationService.Tests/AuthorizationLifecycleTests.cs; tests/CloudHealthOffice.AuthorizationService.Tests/UnusedAuthorizationsTests.cs; src/services/authorization-service/AuthorizationService.Tests/Persistence/AuthorizationRepositoryMongoConcurrencyTests.cs; src/services/authorization-service/AuthorizationService.Tests/Services/Cms0057ReportingTests.cs (refresh checks below) | Ordinary transition guards, audited cancellation and atomic tenant/revision-checked expiry are implemented. Expiry preserves clinical reporting and explicitly covered historical service dates. Per-tenant-database sweeps (D-38), appeals/overturn/reopening workflows and deployment readiness remain separate. | docs/epa-gap-matrix.md; src/site/MESSAGE_SHEET.md; src/site/assistant/knowledge.md |
+| CAP-24 | Implemented (pipeline identity) | 2026-10-19 / follow-up based on `a8065f11` | **Examiner coverage/plan lookup identity / D-36,D-40** | src/services/claims-service/Services/Resolution/HttpCoverageClient.cs; HttpCoverageResolver.cs; HttpBenefitPlanResolver.cs | tests/CloudHealthOffice.ClaimsService.Tests/Security/AdjudicationLookupsCarryServiceIdentityTests.cs; src/services/coverage-service/CoverageService.Tests/Security/CoveragePipelineAuthTests.cs; tests/CloudHealthOffice.BenefitPlanService.Tests/Security/ClaimsPlanReadAuthenticationTests.cs | The three internal reads use the existing tenant-guarded service identity through the real outbound handler, including approval preparation and COB. Receiving API tests verify acceptance and tenancy; missing/foreign tenants, untrusted hosts and issuer failures remain restricted. User roles and global authentication policies are unchanged. Deployment identity validation and G-64 enablement remain separate. | docs/operations/CLAIMS-ADJUDICATION-SERVICE-IDENTITY.md; docs/epa-gap-matrix.md |
 
 ## Repository-wide discovery inventory
 
@@ -160,11 +161,11 @@ The following is an index of historical D/G identifiers, not a new finding list.
 | D-33 | Unverified in this reconciliation; retain historical evidence pending focused review. |
 | D-34 | Unverified in this reconciliation; retain historical evidence pending focused review. |
 | D-35 | Unverified in this reconciliation; retain historical evidence pending focused review. |
-| D-36 | Unverified in this reconciliation; retain historical evidence pending focused review. |
+| D-36 | CAP-24: pipeline identity fixed; deployment validation and G-64 scope rollout remain separate. |
 | D-37 | CAP-12 |
 | D-38 | Unverified in this reconciliation; retain historical evidence pending focused review. |
 | D-39 | CAP-12 |
-| D-40 | Unverified in this reconciliation; retain historical evidence pending focused review. |
+| D-40 | CAP-24: pipeline identity fixed; deployment validation and G-64 scope rollout remain separate. |
 | G-01 | Unverified in this reconciliation; retain the historical assessment pending focused review. |
 | G-02 | Unverified in this reconciliation; retain the historical assessment pending focused review. |
 | G-03 | Unverified in this reconciliation; retain the historical assessment pending focused review. |
@@ -424,3 +425,14 @@ and `dotnet test tests/Cms0057Acceptance.Tests/Cms0057Acceptance.Tests.csproj -m
 Earlier F1/F2/S1 totals above retain their original baseline and are not
 retroactively attributed to this follow-up. Final CI results are recorded in
 the implementation PR.
+
+## Claims upstream identity follow-up (October 19, 2026)
+
+CAP-24 supersedes the D-36/D-40 caller-token findings for the three claims
+pipeline reads. See [the operations notes](operations/CLAIMS-ADJUDICATION-SERVICE-IDENTITY.md)
+for unchanged failure semantics and deployment/rollout limits. G-64 is not enabled
+by this change. On SDK 8.0.426 the full claims suite passed 1,452 tests (including
+32 new handler/readjudicator cases); the coverage authentication suite passed
+16 and the new plan authentication suite passed 4. Broader regression and CI
+results are recorded in the implementation PR; earlier capability test totals
+retain their original baselines.
