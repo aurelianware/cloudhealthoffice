@@ -46,9 +46,13 @@ and `Services:CoverageServiceUrl` (startup refuses otherwise).
 
 For `$member-match`, the candidates are the union of:
 
-- the member whose member id is the supplied member id;
+- the member whose member id is the supplied member id, looked up both as
+  supplied and as normalized (stored ids keep their own case and punctuation;
+  the policy compares normalized forms);
 - the members whose subscriber is the supplied member id (dependents carry
-  their subscriber's id on their card);
+  their subscriber's id on their card), the subscriber taken from the family
+  relationship graph, with the legacy recorded field as fallback, as the member
+  read derives it;
 - every member born on the supplied birth date.
 
 The existing policy then decides among them, unchanged. Every strong path
@@ -82,7 +86,7 @@ The bundle carries, as their owning services project them:
   An EOB without a readable service date is left out, as the mock path already
   did.
 
-The plan's own payer id (`PayerToPayer:Directory:LocalPayerId`) is the payer of
+The plan's own payer id (`Cms0057:PayerToPayerOutbound:LocalPayerId`) is the payer of
 every CHO coverage, and a coverage's subscriber id is the member's subscriber
 (the member's own id for a subscriber).
 
