@@ -88,3 +88,6 @@ artifacts/interop/
 interop/.external/
 # A host-specific proxy overlay copied from interop/docker-compose.proxy.example.yml.
 interop/docker-compose.proxy.yml
+
+# Security challenge packets require private triage before publication.
+artifacts/security-challenge/
