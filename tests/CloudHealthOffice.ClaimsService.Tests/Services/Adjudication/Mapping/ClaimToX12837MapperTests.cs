@@ -17,6 +17,16 @@ public class ClaimToX12837MapperTests
     private static readonly DateTime ServiceDate = new(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc);
 
     [Fact]
+    public void LegacyMissingServiceUnit_IsUnknown_AndDrugUnitsStaySeparate()
+    {
+        var claim = NewProfessionalClaim();
+        claim.ClaimLines[0].DrugUnitOfMeasure = "ML";
+        var engine = ClaimToX12837Mapper.Map(claim, null);
+        Assert.Null(engine.ServiceLines[0].UnitType);
+        Assert.Equal("ML", engine.ServiceLines[0].DrugUnitOfMeasure);
+    }
+
+    [Fact]
     public void Maps_required_engine_fields_from_AdapterClaim()
     {
         var claim = NewProfessionalClaim();
