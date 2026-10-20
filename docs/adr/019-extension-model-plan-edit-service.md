@@ -187,4 +187,5 @@ In the order we expect to need them:
 - `src/services/claims-service/Services/Adjudication/PlanEdits/`
 - `src/services/shared/CloudHealthOffice.PlanEdits.Contracts/`
 - [Plan edit service contract, version 1](../contracts/plan-edits/v1/README.md)
+- `src/samples/CloudHealthOffice.PlanEditService.Sample/` — a worked example a plan would keep in its own repository
 - [ADR 011: rules and evidence](011-rules-and-evidence-model.md)
