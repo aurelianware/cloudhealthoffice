@@ -49,8 +49,10 @@ For `$member-match`, the candidates depend on what the request supplies:
 - **A member id.** The members whose member id is that id, and the members
   whose subscriber is that id (dependents carry their subscriber's id on their
   card), each in any case or separator spelling: member-service ignores case,
-  spaces and hyphens, exactly the differences `MemberIdentityNormalizer`
-  collapses. The subscriber comes from the family relationship graph, with the
+  every Unicode space and the hyphens, a superset of what
+  `MemberIdentityNormalizer` collapses. A member-service that does not echo the
+  any-form mode (an older one, which would match exactly) is refused as an
+  upstream failure. The subscriber comes from the family relationship graph, with the
   legacy recorded field as fallback, as the member read derives it. Of those,
   only members whose own id or derived subscriber normalizes to the supplied id
   are kept. The policy makes every member not bearing a supplied id a conflict,
@@ -97,11 +99,15 @@ The bundle carries, as their owning services project them (except as below):
   did.
 
 CMS-0057-F excludes provider remittances and enrollee cost-sharing from the
-Payer-to-Payer claims data, so every EOB is redacted before it leaves
-(`PayerToPayerEobRedaction`): `total`, `payment`, `payee`, `adjudication`,
-`benefitBalance`, `processNote` and `addItem` are removed, and on every item,
-detail and sub-detail the `adjudication` (amounts and CARC/RARC reasons),
-`unitPrice` and `net`. The mock path sends its EOBs without the paid amount.
+Payer-to-Payer claims data, and CHO's internal adjudication (the examiner and
+AI dispositions the projector writes to `supportingInfo`) is not the receiving
+payer's either. So every EOB passes an **allowlist** before it leaves
+(`PayerToPayerEobRedaction`): who, when, what services and diagnoses, the
+coverage and prior-authorization reference. Every amount, every adjudication
+with its CARC/RARC reasons, the payee, disposition, process notes, added items,
+supporting information, narrative, extensions and contained resources stay
+home, and an element the projector adds later stays home until it is listed.
+The mock path sends its EOBs without the paid amount.
 
 The export is never silently partial: coverage or claims paging that changes
 during the read, or more EOBs than one read carries (10,000), answer FHIR 502.
@@ -145,6 +151,14 @@ Tradeoffs:
   ambiguous.
 - The export makes one call per Coverage page and per EOB page; it is bounded by
   the same page limits as the services' own searches.
+- Any-form id matching is an anchored case-insensitive regex, which MongoDB
+  cannot bound by index: each `$member-match` with an id scans the tenant's
+  member ids and family relationships. A stored, indexed normalized id (which
+  would also replace the regex) is the follow-up before large tenants go live.
+- Offset paging detects a total that moves or a page that ends early, not an
+  insert and a delete between pages that leave the total unchanged.
+- Case folding is MongoDB's: an id whose case only .NET folds (a dotless `ı`)
+  is not found in its other case.
 
 ## Scope boundaries
 
