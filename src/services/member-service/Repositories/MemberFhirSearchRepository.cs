@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using MemberService.Models;
 using MongoDB.Bson;
@@ -199,13 +200,27 @@ public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
     /// </summary>
     internal static BsonRegularExpression? AnyForm(string? value)
     {
-        // The hyphens are literal characters: MongoDB's regex engine has no \u escape.
-        const string separators = "[\\s\\-\u2010\u2011]*";
-        var core = (value ?? string.Empty).Where(c => !char.IsWhiteSpace(c) && c is not ('-' or '\u2010' or '\u2011')).ToList();
+        var core = (value ?? string.Empty).EnumerateRunes().Where(r => !IsSeparator(r)).ToList();
         if (core.Count == 0) return null;
-        var pattern = "^" + separators + string.Join(separators, core.Select(c => Regex.Escape(c.ToString()))) + separators + "$";
+        var pattern = "^" + Separators
+                          + string.Join(Separators, core.Select(r => Regex.Escape(r.ToString())))
+                          + Separators + "$";
         return new BsonRegularExpression(pattern, "i");
     }
+
+    // Every character .NET calls whitespace (which Trim strips from a stored id
+    // before the policy compares it, ADR 020) and the hyphens the normalizer
+    // removes. MongoDB's \s is ASCII-only and its regex has no \u escape, so the
+    // others are written as literal characters.
+    private static readonly string Separators = "[\\s\\-" + new string(
+        Enumerable.Range(0x80, 0x3000 - 0x80 + 1)
+            .Where(c => char.IsWhiteSpace((char)c))
+            .Select(c => (char)c)
+            .Concat(['\u2010', '\u2011'])
+            .ToArray()) + "]*";
+
+    private static bool IsSeparator(Rune r) =>
+        Rune.IsWhiteSpace(r) || r.Value is '-' or 0x2010 or 0x2011;
 
     /// <summary>A case-insensitive starts-with match on the literal text (FHIR string search).</summary>
     private static BsonRegularExpression? Prefix(string? value)

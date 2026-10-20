@@ -202,6 +202,14 @@ public sealed class ChoNativeMemberDirectory
             $"{ChoNativeFhirDataAdapter.PatientSearchRoute}?{filter}&offset={offset}&limit={limit}",
             ChoNativeFhirDataAdapter.PatientSearchRoute, ct);
         var (total, items) = ReadPage("Patient", body);
+        // An older member-service ignores anyIdentifierForm and matches exactly,
+        // which would silently narrow the candidates (ADR 020): it must echo it.
+        if (filter.Contains("anyIdentifierForm=true", StringComparison.Ordinal)
+            && !EchoesAnyIdentifierForm(body))
+        {
+            _logger.LogError("Patient search did not apply any-form identifier matching; the read is refused.");
+            throw new FhirUpstreamException("Patient", "Patient upstream does not support any-form identifier matching.");
+        }
         var members = new List<DirectoryMember>(items.Count);
         foreach (var item in items)
         {
@@ -234,6 +242,18 @@ public sealed class ChoNativeMemberDirectory
         catch (Exception ex) when (ex is FormatException or JsonException or InvalidOperationException)
         {
             throw Unreadable(resource, ex);
+        }
+    }
+
+    private static bool EchoesAnyIdentifierForm(string body)
+    {
+        try
+        {
+            return JsonNode.Parse(body)?["anyIdentifierForm"]?.GetValue<bool>() == true;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            return false;
         }
     }
 

@@ -658,7 +658,7 @@ public class MembersController : ControllerBase
         var items = members
             .Select(m => new MemberFhirSearchEntry(m.MemberId, _fhirProjector.Project(m), subscribers.GetValueOrDefault(m.MemberId)))
             .ToList();
-        return Ok(new MemberFhirSearchResponse(total, items));
+        return Ok(new MemberFhirSearchResponse(total, items, anyIdentifierForm ? true : null));
     }
 
     // ── Event stream ─────────────────────────────────────────────────

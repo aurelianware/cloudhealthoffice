@@ -40,7 +40,18 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
                     request.Headers.TryGetValues("X-Tenant-ID", out var t) ? t.Single() : null,
                     request.Headers.Authorization?.ToString()));
             }
-            return Task.FromResult(Override?.Invoke(request) ?? Default(request));
+            return Task.FromResult(EchoAnyForm(request, Override?.Invoke(request) ?? Default(request)));
+        }
+
+        // A current member-service echoes an any-form request (ADR 020).
+        private static HttpResponseMessage EchoAnyForm(HttpRequestMessage request, HttpResponseMessage response)
+        {
+            if (!request.RequestUri!.Query.Contains("anyIdentifierForm=true") || !response.IsSuccessStatusCode) return response;
+            if (System.Text.Json.Nodes.JsonNode.Parse(response.Content.ReadAsStringAsync().Result) is not System.Text.Json.Nodes.JsonObject page)
+                return response;
+            page["anyIdentifierForm"] = true;
+            response.Content = new StringContent(page.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
+            return response;
         }
 
         private static HttpResponseMessage Default(HttpRequestMessage request)

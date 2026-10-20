@@ -132,12 +132,14 @@ public sealed class MemberFhirSearchRepositoryTests(MongoRunnerFixture mongo) : 
             Member("AB123", "Lee", "D", null, new DateTime(1990, 1, 1), "F", Updated(1)),
             Member("XAB12", "Lee", "E", null, new DateTime(1990, 1, 1), "F", Updated(1)),
             Member("ab.12", "Lee", "F", null, new DateTime(1990, 1, 1), "F", Updated(1)),
+            // Unicode spaces .NET trims, as an import might leave them.
+            Member("\u00A0AB12\u3000", "Lee", "G", null, new DateTime(1990, 1, 1), "F", Updated(1)),
         });
 
         var (anyForm, _) = await Search(new MemberFhirSearchQuery { MemberId = "AB12", AnyIdentifierForm = true, Limit = 100 });
         var (exact, _) = await Search(new MemberFhirSearchQuery { MemberId = "AB12", Limit = 100 });
 
-        anyForm.Should().BeEquivalentTo("AB12", "ab-12", "A B 1\u20112");
+        anyForm.Should().BeEquivalentTo("AB12", "ab-12", "A B 1\u20112", "\u00A0AB12\u3000");
         exact.Should().Equal("AB12");
     }
 
