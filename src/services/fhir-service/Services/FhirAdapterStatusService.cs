@@ -184,7 +184,22 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
             // Data-adapter resources report the binding the router actually
             // uses (ADR 018): a Mock binding is Demo whatever label is
             // configured; a CHO-native binding is Hybrid unless labelled.
-            if (bindings.SourceOf(resource) is { } bound)
+            if (resource == "PayerToPayer")
+            {
+                // The exchange's member, coverage and claims source (ADR 020): a
+                // Mock binding is Demo whatever label is configured.
+                if (bindings.PayerToPayerNative)
+                {
+                    mode = ResolveMode(resource, FhirAdapterModes.Hybrid);
+                    resolvedSource = source + "; members, coverage and claims from member-service, coverage-service and claims-service (CHO-native)";
+                }
+                else
+                {
+                    mode = FhirAdapterModes.Demo;
+                    resolvedSource = source + "; members and payments from MockPatientAccessDataProvider";
+                }
+            }
+            else if (bindings.SourceOf(resource) is { } bound)
             {
                 if (bound == FhirAdapterSources.ChoNative)
                 {

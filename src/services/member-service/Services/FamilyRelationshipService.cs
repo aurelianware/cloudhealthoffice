@@ -23,7 +23,13 @@ namespace MemberService.Services;
 public class FamilyRelationshipService : IFamilyRelationshipService
 {
     /// <summary>Subset of X12 INS02 codes that indicate "dependent → subscriber".</summary>
-    private static readonly HashSet<string> DependentToSubscriberCodes = new() { "19", "17", "10", "01", "53", "22", "29" };
+    /// <summary>
+    /// INS02 codes in which the related member is the subject's subscriber. Shared
+    /// with <see cref="Repositories.MemberFhirSearchRepository"/>, which derives
+    /// subscribers for a whole page at once by the same rule.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> DependentToSubscriberCodes =
+        new HashSet<string> { "19", "17", "10", "01", "53", "22", "29" };
 
     private readonly IFamilyRelationshipRepository _repo;
     private readonly IMemberRepository _memberRepo;

@@ -1,4 +1,5 @@
 using FhirService.Models;
+using FhirService.Models.PayerToPayer;
 using FhirService.Services;
 using Microsoft.Extensions.Options;
 
@@ -17,8 +18,14 @@ public interface IPayerToPayerMemberMatchSource
     /// <summary>The tenant this source serves. Requests for other tenants match nothing.</summary>
     string ServedTenantId { get; }
 
-    /// <summary>Candidate members within the tenant. Empty when the tenant is not served.</summary>
-    Task<IReadOnlyList<ChoMember>> GetMembersAsync(string tenantId, CancellationToken ct = default);
+    /// <summary>
+    /// Every member within the tenant that could be a strong match for
+    /// <paramref name="criteria"/> (a superset: <see cref="MemberMatchPolicy"/>
+    /// decides). Empty when the tenant is not served. See <see cref="MemberMatchCandidates"/>
+    /// for a source that cannot search the criteria, or cannot list every candidate.
+    /// </summary>
+    Task<MemberMatchCandidates> GetCandidatesAsync(
+        string tenantId, MemberMatchCriteria criteria, CancellationToken ct = default);
 
     /// <summary>The member's coverage records within the tenant. Empty when the tenant is not served.</summary>
     Task<IReadOnlyList<ChoCoverage>> GetCoveragesAsync(
@@ -26,9 +33,31 @@ public interface IPayerToPayerMemberMatchSource
 }
 
 /// <summary>
+/// Candidates for a member match.
+/// <list type="bullet">
+///   <item><description><see cref="Searchable"/> false: the source cannot look the
+///     criteria up (an SSN-only request where SSNs cannot be searched, ADR 020);
+///     the match answers insufficient criteria.</description></item>
+///   <item><description><see cref="Complete"/> false: there were more candidates than
+///     the source reads, so uniqueness cannot be proven; the match answers ambiguous.</description></item>
+///   <item><description><see cref="SsnVerifiable"/> false: the candidates carry no SSN
+///     to compare (CHO's projections redact it, ADR 020), so a supplied SSN could
+///     contradict the member on file unseen; a request that supplies one answers
+///     ambiguous rather than ignore it.</description></item>
+/// </list>
+/// </summary>
+public sealed record MemberMatchCandidates(
+    IReadOnlyList<ChoMember> Members, bool Searchable = true, bool Complete = true, bool SsnVerifiable = true)
+{
+    public static readonly MemberMatchCandidates None = new([]);
+    public static readonly MemberMatchCandidates NotSearchable = new([], Searchable: false);
+}
+
+/// <summary>
 /// Default <see cref="IPayerToPayerMemberMatchSource"/> over the CHO member
 /// directory, scoped to the fhir-service's configured tenant
-/// (<see cref="FhirAdapterOptions.TenantId"/>).
+/// (<see cref="FhirAdapterOptions.TenantId"/>). It offers every member as a
+/// candidate; the mock directory is small.
 /// </summary>
 public sealed class PatientAccessPayerToPayerMemberMatchSource : IPayerToPayerMemberMatchSource
 {
@@ -45,8 +74,9 @@ public sealed class PatientAccessPayerToPayerMemberMatchSource : IPayerToPayerMe
 
     public string ServedTenantId { get; }
 
-    public async Task<IReadOnlyList<ChoMember>> GetMembersAsync(string tenantId, CancellationToken ct = default)
-        => ServesTenant(tenantId) ? await _directory.GetAllMembersAsync(ct) : Array.Empty<ChoMember>();
+    public async Task<MemberMatchCandidates> GetCandidatesAsync(
+        string tenantId, MemberMatchCriteria criteria, CancellationToken ct = default)
+        => ServesTenant(tenantId) ? new MemberMatchCandidates(await _directory.GetAllMembersAsync(ct)) : MemberMatchCandidates.None;
 
     public async Task<IReadOnlyList<ChoCoverage>> GetCoveragesAsync(
         string tenantId, string memberId, CancellationToken ct = default)

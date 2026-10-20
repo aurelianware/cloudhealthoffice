@@ -28,6 +28,7 @@ data:
   # Services__MemberServiceUrl / Services__CoverageServiceUrl below.
   FhirAdapters__Sources__Patient: "ChoNative"
   FhirAdapters__Sources__Coverage: "ChoNative"
+  FhirAdapters__Sources__PayerToPayer: "ChoNative"
   # What the adapter headers and /fhir/r4/adapter-status tell callers about the
   # data. Served from a plan's own records, so production PHI here; the GKE
   # demo render overrides it to synthetic. Mode stays derived per resource.

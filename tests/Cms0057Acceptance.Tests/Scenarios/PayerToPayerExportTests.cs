@@ -46,13 +46,13 @@ public class PayerToPayerExportTests
         var source = new PatientAccessPayerToPayerMemberSource(
             provider, Options.Create(new FhirAdapterOptions { TenantId = AcceptanceContext.TenantId }));
         return new PayerToPayerExchangeService(
-            new PayerToPayerMemberResolver(source), source, Gate(optedInMembers),
+            new PayerToPayerMemberResolver(source), new PatientAccessPayerToPayerExportSource(provider), Gate(optedInMembers),
             new PayerToPayerExportBuilder(), AcceptanceContext.Logger<PayerToPayerExchangeService>());
     }
 
     private static PayerToPayerExchangeService ServiceOverSource(
         IPayerToPayerMemberSource source, params string[] optedInMembers) =>
-        new(new PayerToPayerMemberResolver(source), source, Gate(optedInMembers),
+        new(new PayerToPayerMemberResolver(source), new PatientAccessPayerToPayerExportSource(new MockPatientAccessDataProvider()), Gate(optedInMembers),
             new PayerToPayerExportBuilder(), AcceptanceContext.Logger<PayerToPayerExchangeService>());
 
     private static PayerToPayerExchangeRequest Request(

@@ -8,16 +8,20 @@ namespace FhirService.Services.ChoNative;
 /// router and the adapter-status report both read this, so the report cannot
 /// describe a binding the router does not use.
 /// </summary>
-public sealed record FhirDataBindings(string Patient, string Coverage, string Encounter, string Claim)
+public sealed record FhirDataBindings(string Patient, string Coverage, string Encounter, string Claim,
+    string PayerToPayer = FhirAdapterSources.Mock)
 {
     /// <summary>Resources that can be served by CHO's own services today.</summary>
     public static readonly IReadOnlySet<string> NativeCapable =
-        new HashSet<string>(["Patient", "Coverage"], StringComparer.OrdinalIgnoreCase);
+        new HashSet<string>(["Patient", "Coverage", "PayerToPayer"], StringComparer.OrdinalIgnoreCase);
 
-    private static readonly string[] Known = ["Patient", "Coverage", "Encounter", "Claim"];
+    private static readonly string[] Known = ["Patient", "Coverage", "Encounter", "Claim", "PayerToPayer"];
 
     public bool AnyNative =>
-        Patient == FhirAdapterSources.ChoNative || Coverage == FhirAdapterSources.ChoNative;
+        Patient == FhirAdapterSources.ChoNative || Coverage == FhirAdapterSources.ChoNative || PayerToPayerNative;
+
+    /// <summary>Payer-to-Payer members, coverage and claims come from CHO's own services (ADR 020).</summary>
+    public bool PayerToPayerNative => PayerToPayer == FhirAdapterSources.ChoNative;
 
     /// <summary>The source bound to <paramref name="resource"/>, or null when it is not a data-adapter resource.</summary>
     public string? SourceOf(string resource) => resource switch
@@ -26,6 +30,7 @@ public sealed record FhirDataBindings(string Patient, string Coverage, string En
         "Coverage" => Coverage,
         "Encounter" => Encounter,
         "Claim" => Claim,
+        "PayerToPayer" => PayerToPayer,
         _ => null,
     };
 
@@ -66,7 +71,7 @@ public sealed record FhirDataBindings(string Patient, string Coverage, string En
             return FhirAdapterSources.Mock;
         }
 
-        var bindings = new FhirDataBindings(Resolve("Patient"), Resolve("Coverage"), Resolve("Encounter"), Resolve("Claim"));
+        var bindings = new FhirDataBindings(Resolve("Patient"), Resolve("Coverage"), Resolve("Encounter"), Resolve("Claim"), Resolve("PayerToPayer"));
         if (errors.Count > 0)
             throw new InvalidOperationException("Invalid FHIR adapter sources: " + string.Join(" ", errors));
         return bindings;

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using FhirService.Models;
 using FhirService.Services;
+using FhirService.Services.ChoNative;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
@@ -28,6 +29,26 @@ public class FhirAdapterStatusServiceTests
         report.Resources.Should().Contain(r =>
             r.Resource == "PayerToPayer" && r.Mode == FhirAdapterModes.Demo);
         report.Resources.Should().NotContain(r => r.Mode == FhirAdapterModes.Live);
+    }
+
+    [Fact]
+    public void PayerToPayer_reports_the_binding_its_member_data_comes_from()
+    {
+        var options = Options.Create(new FhirAdapterOptions());
+        var config = new ConfigurationBuilder().Build();
+
+        var mock = new FhirAdapterStatusService(options, config,
+            new FhirDataBindings(FhirAdapterSources.Mock, FhirAdapterSources.Mock, FhirAdapterSources.Mock, FhirAdapterSources.Mock));
+        var native = new FhirAdapterStatusService(options, config,
+            new FhirDataBindings(FhirAdapterSources.Mock, FhirAdapterSources.Mock, FhirAdapterSources.Mock, FhirAdapterSources.Mock,
+                PayerToPayer: FhirAdapterSources.ChoNative));
+
+        var mockRow = mock.GetStatus().Resources.Single(r => r.Resource == "PayerToPayer");
+        mockRow.Mode.Should().Be(FhirAdapterModes.Demo);
+        mockRow.Source.Should().Contain("MockPatientAccessDataProvider");
+        var nativeRow = native.GetStatus().Resources.Single(r => r.Resource == "PayerToPayer");
+        nativeRow.Mode.Should().Be(FhirAdapterModes.Hybrid);
+        nativeRow.Source.Should().Contain("CHO-native");
     }
 
     [Fact]
