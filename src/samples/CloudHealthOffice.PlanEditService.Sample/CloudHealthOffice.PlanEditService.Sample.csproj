@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PlanEditServiceSample</RootNamespace>
+    <!--
+      A worked example of a health plan's own edit service (ADR 019,
+      docs/contracts/plan-edits/v1). It belongs in the plan's repository, not
+      CHO's: this copy exists to show the contract end to end and to test
+      claims-service against a real implementation. The two rules are
+      illustrations, not policy.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../services/shared/CloudHealthOffice.PlanEdits.Contracts/CloudHealthOffice.PlanEdits.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudhealthoffice.com/contracts/plan-edits/v1/request.schema.json",
+  "title": "Plan edit request, contract version 1",
+  "description": "What Cloud Health Office posts to a health plan's edit service for one claim (ADR 019). Receivers must ignore properties they do not know: later minor additions add properties.",
+  "type": "object",
+  "required": ["contractVersion", "requestId", "tenantId", "purpose", "claim"],
+  "properties": {
+    "contractVersion": { "const": "1" },
+    "requestId": { "type": "string", "minLength": 1, "description": "Unique per request; repeated in X-CHO-Request-Id and Idempotency-Key." },
+    "tenantId": { "type": "string", "minLength": 1 },
+    "purpose": { "enum": ["adjudication", "approval-readjudication"] },
+    "claim": { "$ref": "#/$defs/claim" }
+  },
+  "$defs": {
+    "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "claim": {
+      "type": "object",
+      "required": ["claimId", "claimVersionId", "versionNumber", "claimNumber", "claimType", "frequencyCode", "lineOfBusiness", "memberId", "billingProviderNpi", "serviceDateFrom", "serviceDateTo", "totalCharge", "diagnoses", "lines"],
+      "properties": {
+        "claimId": { "type": "string" },
+        "claimVersionId": { "type": "string" },
+        "versionNumber": { "type": "integer" },
+        "claimNumber": { "type": "string" },
+        "claimType": { "type": "string", "description": "Professional, Institutional, Dental, Pharmacy or Vision." },
+        "frequencyCode": { "type": "string", "description": "837 claim frequency: 1 original, 7 replacement, 8 void." },
+        "lineOfBusiness": { "type": "string" },
+        "benefitPlanId": { "type": "string" },
+        "memberId": { "type": "string" },
+        "subscriberId": { "type": "string" },
+        "member": {
+          "type": "object",
+          "properties": {
+            "birthDate": { "$ref": "#/$defs/date" },
+            "gender": { "type": "string", "description": "M, F or U as CHO holds it." }
+          }
+        },
+        "billingProviderNpi": { "type": "string" },
+        "renderingProviderNpi": { "type": "string" },
+        "facilityNpi": { "type": "string" },
+        "placeOfService": { "type": "string" },
+        "serviceDateFrom": { "$ref": "#/$defs/date" },
+        "serviceDateTo": { "$ref": "#/$defs/date" },
+        "totalCharge": { "type": "number" },
+        "priorAuthorizationNumber": { "type": "string" },
+        "referralNumber": { "type": "string" },
+        "diagnoses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code", "qualifier", "pointer"],
+            "properties": {
+              "code": { "type": "string" },
+              "qualifier": { "type": "string" },
+              "pointer": { "type": "integer" }
+            }
+          }
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["lineNumber", "procedureCode", "modifiers", "units", "charge", "serviceDateFrom", "serviceDateTo", "diagnosisPointers"],
+            "properties": {
+              "lineNumber": { "type": "integer" },
+              "procedureCode": { "type": "string" },
+              "modifiers": { "type": "array", "items": { "type": "string" } },
+              "revenueCode": { "type": "string" },
+              "units": { "type": "number" },
+              "unitType": { "type": "string" },
+              "charge": { "type": "number" },
+              "serviceDateFrom": { "$ref": "#/$defs/date" },
+              "serviceDateTo": { "$ref": "#/$defs/date" },
+              "placeOfService": { "type": "string" },
+              "diagnosisPointers": { "type": "array", "items": { "type": "integer" } },
+              "nationalDrugCode": { "type": "string" },
+              "priorAuthorizationNumber": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

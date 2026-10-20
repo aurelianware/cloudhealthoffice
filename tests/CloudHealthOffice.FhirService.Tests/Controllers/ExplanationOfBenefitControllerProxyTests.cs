@@ -299,6 +299,89 @@ public class ExplanationOfBenefitControllerProxyTests
         outcome.Issue.Single().Diagnostics.Should().NotContain("leaky upstream message");
     }
 
+    // ── Confined search: results must stay inside the member scope ───────────
+
+    private static string Bundle(params string[] patients) =>
+        "{\"resourceType\":\"Bundle\",\"type\":\"searchset\",\"total\":" + patients.Length + ",\"entry\":[" +
+        string.Join(",", patients.Select((p, i) =>
+            "{\"resource\":{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"E" + i + "\",\"patient\":{\"reference\":\"Patient/" + p + "\"}}}")) +
+        "]}";
+
+    private void BoundTo(string member, string query = "?_count=10")
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Items["SmartPatientId"] = member;
+        ctx.Request.QueryString = new QueryString(query);
+        _controller.ControllerContext = new ControllerContext { HttpContext = ctx };
+    }
+
+    [Fact]
+    public async Task SearchEobs_confined_search_returns_the_members_own_results()
+    {
+        BoundTo("MEM-1");
+        _claimsHandler.Respond(_ => Json(HttpStatusCode.OK, Bundle("MEM-1", "MEM-1")));
+
+        var result = await _controller.SearchEobs(default);
+
+        var content = result.Should().BeOfType<ContentResult>().Subject;
+        content.StatusCode.Should().Be(200);
+        content.Content.Should().Contain("Patient/MEM-1");
+    }
+
+    [Theory]
+    [InlineData("MEM-2")]
+    [InlineData("")]
+    public async Task SearchEobs_confined_search_withholds_results_that_include_another_member(string other)
+    {
+        BoundTo("MEM-1");
+        _claimsHandler.Respond(_ => Json(HttpStatusCode.OK, Bundle("MEM-1", other)));
+
+        var result = await _controller.SearchEobs(default);
+
+        var status = result.Should().BeOfType<ObjectResult>().Subject;
+        status.StatusCode.Should().Be(502);
+        status.Value.Should().BeOfType<OperationOutcome>().Subject
+            .Issue.Single().Diagnostics.Should().Contain("outside the request's member scope").And.NotContain("MEM-2");
+    }
+
+    [Theory]
+    [InlineData("{\"resourceType\":\"ExplanationOfBenefit\",\"patient\":{\"reference\":\"Patient/MEM-1\"}}")]
+    [InlineData("{\"resourceType\":\"Bundle\",\"entry\":{}}")]
+    [InlineData("not json")]
+    public async Task SearchEobs_confined_search_withholds_a_body_that_is_not_a_readable_bundle(string body)
+    {
+        BoundTo("MEM-1");
+        _claimsHandler.Respond(_ => Json(HttpStatusCode.OK, body));
+
+        var result = await _controller.SearchEobs(default);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(502);
+    }
+
+    [Fact]
+    public async Task SearchEobs_confined_search_passes_an_empty_bundle()
+    {
+        BoundTo("MEM-1");
+        _claimsHandler.Respond(_ => Json(HttpStatusCode.OK, "{\"resourceType\":\"Bundle\",\"type\":\"searchset\",\"total\":0}"));
+
+        var result = await _controller.SearchEobs(default);
+
+        result.Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task SearchEobs_unconfined_caller_gets_the_upstream_results_unchanged()
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.QueryString = new QueryString("?patient=MEM-1");
+        _controller.ControllerContext = new ControllerContext { HttpContext = ctx };
+        _claimsHandler.Respond(_ => Json(HttpStatusCode.OK, Bundle("MEM-1", "MEM-2")));
+
+        var result = await _controller.SearchEobs(default);
+
+        result.Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(200);
+    }
+
     private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
         new(status)
         {
