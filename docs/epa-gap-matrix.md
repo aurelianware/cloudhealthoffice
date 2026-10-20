@@ -79,7 +79,7 @@ test first.
 | **CMS-0057-F timeframes** | **Partial** | Receipt-based UTC targets are persisted and used by tenant-scoped watchdog escalation; PAS urgency is mapped and RFAI does not restart the clock. Program-specific extensions, tighter rules, alerts and tenant-database background support remain open. |
 | **CMS-0057-F denial reasons** | **Partial** | Required and persisted for CHO full/partial adverse decisions, with line projections in PAS. X12 `reviewAction.reasonCode` semantics, 278 HCR encoding and notices remain. |
 | **CMS-0057-F public metrics** | **Partially Implemented** | Standard/expedited counts, rates, mean/median and timeliness exist. Appeal/extension outcomes remain explicitly untracked; complete annual publication is not established (CAP-06). |
-| **Patient / Provider / Payer-to-Payer PA data** | **Missing (PA) / Stub (data)** | No API exposes PA data. Patient, Coverage and Claim reads come from a **mock adapter registered in every environment** that ignores tenant (G-30). Bulk `$export` is a stub. Provider Access is opt-in (D-11). |
+| **Patient / Provider / Payer-to-Payer PA data** | **Missing (PA) / Stub (data)** | No API exposes PA data. Patient and Coverage reads come from member-service and coverage-service when bound to `ChoNative` (CAP-27, ADR 018); Encounter and Claim reads, and the Payer-to-Payer member source, still come from a mock that ignores tenant (G-30, narrowed). Bulk `$export` is a stub. Provider Access is opt-in (D-11). |
 | **SMART on FHIR / OAuth2** | **Partially Implemented** | Launch binding, patient/encounter token context and approval withdrawal affecting refresh are implemented and integration-tested (CAP-05). Do not equate those with every SMART conformance requirement or production deployment. |
 | **CMS-0062-P readiness** | **Not ready (design only)** | No benefit-channel field, days supply or refills. PAS drops the drug code system. |
 | **X12 278 bridging** | **Stub / Missing** | No .NET 278 parser or encoder. An Argo/Python tokenizer feeds a Kafka topic that nothing consumes. |
@@ -120,7 +120,7 @@ test first.
 | X12 278 inbound | `infrastructure/argo-workflows/x12-278-ingest.yaml`, `containers/x12-parser/parse_x12.py` | S | Generic tokenizer; Kafka `edi-278` has no consumer. |
 | X12 278 outbound | `containers/x12-encoder` (277 only) | M | — |
 | PAS ↔ 278 mapping (TS) | `src/fhir/prior-auth-api.ts` | S (orphaned) | JSON-object mapper; nothing imports it; clearinghouse functions are self-declared placeholders (:843-901). |
-| FHIR Patient/Coverage/Encounter/Claim data | `FS/Services/MockFhirDataAdapter.cs`, `FS/Program.cs:144-151` | S | Mock registered unconditionally; ignores tenant. |
+| FHIR Patient/Coverage/Encounter/Claim data | `FS/Services/ChoNative/RoutingFhirDataAdapter.cs`, `FS/Services/MockFhirDataAdapter.cs` | P | Updated 2026-10-20 (CAP-27): Patient and Coverage are I+T, tenant-scoped from member-service and coverage-service when bound to ChoNative; Encounter and Claim remain mock (S). |
 | Patient Access data | `FS/Services/IPatientAccessDataProvider.cs` (Mock) | S | 5 hard-coded members, 3 payments. |
 | Provider Access authorization | `FS/Services/ProviderAccess/*` | P, defect | Opt-in instead of opt-out (D-11); static attribution. |
 | Bulk `$export` | `FS/Services/BulkExportService.cs:24-70` | S | Marks jobs Complete instantly with count 0; output URLs have no route. |

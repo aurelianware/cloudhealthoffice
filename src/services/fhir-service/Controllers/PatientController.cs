@@ -30,7 +30,10 @@ public class PatientController : FhirControllerBase
     public async Task<IActionResult> Read(string id, CancellationToken ct)
     {
         var patient = await _adapter.GetPatientAsync(id, TenantId, ct);
-        return patient is null ? FhirNotFound("Patient", id) : Ok(patient);
+        // The resource itself, not just the requested id, must be the bound member.
+        return patient is null || IsOutsidePatientContext($"Patient/{patient.Id}")
+            ? FhirNotFound("Patient", id)
+            : Ok(patient);
     }
 
     /// <summary>GET /fhir/r4/Patient — search Patients</summary>
@@ -56,6 +59,8 @@ public class PatientController : FhirControllerBase
         }
 
         var (items, total) = await _adapter.SearchPatientsAsync(search, TenantId, ct);
+        if (ResultsLeaveConfinement("Patient", items.Select(p => $"Patient/{p.Id}")))
+            return FhirBadGateway("Patient search could not be confined to the authorized member.");
 
         var bundle = _bundleBuilder.Build(
             items, total, search.Page, search.Count,

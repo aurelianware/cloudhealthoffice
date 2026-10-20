@@ -14,7 +14,7 @@ namespace CoverageService.Repositories;
 public class CoverageRepositoryMongo : ICoverageRepository
 {
     private readonly IMongoCollection<Coverage> _collection;
-    private const string CollectionName = "Coverage";
+    public const string CollectionName = "Coverage";
 
     public CoverageRepositoryMongo(IMongoDatabase database)
     {
