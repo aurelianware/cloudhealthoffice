@@ -19,16 +19,12 @@ public static class X12837ClaimMapper
 {
     public static AdapterClaim Map(EngineModels.X12837Claim source, string tenantId)
     {
-        // A dependent-as-patient claim must resolve against the
-        // dependent's own MemberId, not the subscriber's — attributing
-        // it to the subscriber would misfile it against the wrong
-        // person's accumulators. When the source 837 doesn't carry the
-        // dependent's own id (some payers expect demographic matching
-        // instead, which nothing in this codebase does), this falls
-        // through to the subscriber's id and the claim will very likely
-        // fail member resolution downstream — a real, informative
-        // failure, not a silent misattribution.
-        var memberId = source.Patient?.MemberId ?? source.Subscriber.MemberId;
+        // A separate patient's missing identity must fail intake validation,
+        // never silently use the policy holder's authorization or accumulators.
+        // This code does not implement demographic dependent matching.
+        var memberId = source.Patient is null
+            ? source.Subscriber.MemberId
+            : source.Patient.MemberId ?? string.Empty;
 
         var institutional = source.ClaimType == EngineModels.ClaimType.Institutional
             ? MapInstitutional(source.ClaimHeader)

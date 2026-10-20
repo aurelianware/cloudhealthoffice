@@ -560,6 +560,19 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return default;
         }
 
+        var claimMemberId = claim.MemberId?.Trim();
+        if (string.IsNullOrWhiteSpace(claimMemberId))
+            return new PriorAuthorizationDecision(null,
+                $"{PriorAuthorizationUnavailableReason} (claim member identity is missing); {TransientPendClearedBy}");
+
+        // Older EDI imports may have substituted the policy holder's ID for
+        // an unidentified dependent. Do not bind that record to the parent's PA.
+        if (!string.IsNullOrWhiteSpace(claim.PatientRelationship)
+            && claim.PatientRelationship.Trim() != "18"
+            && string.Equals(claimMemberId, claim.SubscriberId?.Trim(), StringComparison.Ordinal))
+            return new PriorAuthorizationDecision(null,
+                $"{PriorAuthorizationUnavailableReason} (dependent member identity is unresolved); {TransientPendClearedBy}");
+
         var providerNpi = string.IsNullOrWhiteSpace(claim.RenderingProviderNPI)
             ? claim.BillingProviderNPI
             : claim.RenderingProviderNPI;
@@ -588,7 +601,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                     // A null from a substitute or a future implementation is
                     // not an answer either.
                     lookup = await _authorizationValidationClient
-                        .ValidateAsync(context.TenantId, number, procedureCode, serviceDate, providerNpi, ct, line.PriorAuthorizationLineNumber)
+                        .ValidateAsync(context.TenantId, number, procedureCode, serviceDate, providerNpi, claimMemberId, ct, line.PriorAuthorizationLineNumber)
                         .ConfigureAwait(false)
                         ?? AuthorizationLookupResult.Unavailable("authorization lookup returned no result");
                 }
