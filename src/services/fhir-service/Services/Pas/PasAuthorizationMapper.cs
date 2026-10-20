@@ -407,6 +407,12 @@ public static class PasAuthorizationMapper
                 continue;
             }
 
+            if (item.Quantity?.Code?.Length > 256 || item.Quantity?.System?.Length > 256)
+            {
+                errors.Add(new($"Claim.item[{item.Sequence}].quantity", "Quantity code and system must each be at most 256 characters."));
+                continue;
+            }
+
             request.RequestedServices.Add(new PasRequestedService
             {
                 LineNumber = item.Sequence,
@@ -414,6 +420,8 @@ public static class PasAuthorizationMapper
                 ProductOrServiceSystem = coding.System,
                 ProcedureDescription = Truncate(coding.Display ?? item.ProductOrService?.Text, 500),
                 RequestedUnits = units,
+                UnitCode = item.Quantity?.Code,
+                UnitSystem = item.Quantity?.System,
                 UnitType = new[] { item.Quantity?.Unit, item.Quantity?.Code }
                     .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u) && u.Length <= 10),
                 Modifiers = item.Modifier?
@@ -799,6 +807,10 @@ public sealed class PasRequestedService
     public List<string> Modifiers { get; set; } = [];
     public decimal RequestedUnits { get; set; } = 1;
     public string? UnitType { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? UnitCode { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? UnitSystem { get; set; }
     public string? PlaceOfServiceCode { get; set; }
     public string? RevenueCode { get; set; }
 }

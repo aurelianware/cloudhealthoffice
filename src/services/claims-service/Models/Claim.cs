@@ -640,6 +640,10 @@ public class ClaimLine
     [Range(0, 9999)]
     public decimal Units { get; set; } = 1;
 
+    /// <summary>Service quantity unit code (837 SV103/SV204), distinct from drug CTP units. Null means unknown.</summary>
+    [StringLength(10)]
+    public string? UnitType { get; set; }
+
     /// <summary>
     /// Line-item charge amount: the TOTAL billed for this line across all
     /// <see cref="Units"/> (NOT a per-unit price). Σ ChargeAmount over all
