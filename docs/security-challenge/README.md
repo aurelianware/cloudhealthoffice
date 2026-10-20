@@ -19,6 +19,13 @@ This first slice has **33 scenarios**, including positive controls, within the p
 FHIR, production identity, ingress, resilience and mutation sensitivity remain
 explicitly unsupported. No live deployment has been tested by this harness.
 
+## Claims and appeals campaign
+
+The [claims and appeals extension](CLAIMS-APPEALS.md) adds a separate 47-scenario
+profile. Its outcome and unsupported areas are reported independently; the
+33-scenario authorization profile above retains its original scope. Both feed
+the same review-only knowledge-base workflow and result schema.
+
 ## Reproduce
 
 Run from the repository root with the pinned .NET 8 SDK, Git and network access

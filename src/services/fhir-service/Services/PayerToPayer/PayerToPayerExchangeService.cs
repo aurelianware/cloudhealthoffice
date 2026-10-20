@@ -29,20 +29,20 @@ public interface IPayerToPayerExchangeService
 public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
 {
     private readonly IPayerToPayerMemberResolver _resolver;
-    private readonly IPayerToPayerMemberSource _source;
+    private readonly IPayerToPayerExportSource _exportSource;
     private readonly IPayerToPayerConsentGate _consentGate;
     private readonly IPayerToPayerExportBuilder _builder;
     private readonly ILogger<PayerToPayerExchangeService> _logger;
 
     public PayerToPayerExchangeService(
         IPayerToPayerMemberResolver resolver,
-        IPayerToPayerMemberSource source,
+        IPayerToPayerExportSource exportSource,
         IPayerToPayerConsentGate consentGate,
         IPayerToPayerExportBuilder builder,
         ILogger<PayerToPayerExchangeService> logger)
     {
         _resolver = resolver;
-        _source = source;
+        _exportSource = exportSource;
         _consentGate = consentGate;
         _builder = builder;
         _logger = logger;
@@ -75,8 +75,8 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
         if (!decision.Allowed)
             return Failed(request, PayerToPayerOutcome.NotAuthorized, member.MemberId, decision);
 
-        var payments = await _source.GetPaymentsAsync(request.TenantId, member.MemberId, ct);
-        var bundle = _builder.Build(member, payments, request);
+        var resources = await _exportSource.GetResourcesAsync(member, request, ct);
+        var bundle = _builder.Build(member, resources, request);
 
         var audit = Audit(request, PayerToPayerOutcome.Exported, member.MemberId, bundle.Total, decision);
         _logger.LogInformation(

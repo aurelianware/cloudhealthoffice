@@ -610,13 +610,15 @@ public class MembersController : ControllerBase
     /// results are ordered by member id, and the total counts every match.
     /// Results omit <c>generalPractitioner</c>, which only the read fetches.
     /// </summary>
-    [AuditRecordAccess("Member", RecordAccessActions.Search, ResultIdProperty = "MemberId", MemberQueryParameters = ["memberId"])]
+    [AuditRecordAccess("Member", RecordAccessActions.Search, ResultIdProperty = "MemberId", MemberQueryParameters = ["memberId", "subscriberMemberId"])]
     [HttpGet("fhir/Patient")]
     [ProducesResponseType(typeof(MemberFhirSearchResponse), 200)]
     [ProducesResponseType(400)]
     public async Task<IActionResult> SearchFhirPatients(
         [FromServices] IMemberFhirSearchRepository search,
         [FromQuery][StringLength(MaxNameSearchLength)] string? memberId = null,
+        [FromQuery][StringLength(MaxNameSearchLength)] string? subscriberMemberId = null,
+        [FromQuery] bool anyIdentifierForm = false,
         [FromQuery][StringLength(MaxNameSearchLength)] string? family = null,
         [FromQuery][StringLength(MaxNameSearchLength)] string? given = null,
         [FromQuery][StringLength(MaxNameSearchLength)] string? name = null,
@@ -637,6 +639,8 @@ public class MembersController : ControllerBase
         var query = new MemberFhirSearchQuery
         {
             MemberId = memberId,
+            SubscriberMemberId = subscriberMemberId,
+            AnyIdentifierForm = anyIdentifierForm,
             Family = family,
             Given = given,
             Name = name,
@@ -650,10 +654,11 @@ public class MembersController : ControllerBase
         };
 
         var (members, total) = await search.SearchAsync(TenantId, query, HttpContext.RequestAborted);
+        var subscribers = await search.SubscribersAsync(TenantId, members, HttpContext.RequestAborted);
         var items = members
-            .Select(m => new MemberFhirSearchEntry(m.MemberId, _fhirProjector.Project(m)))
+            .Select(m => new MemberFhirSearchEntry(m.MemberId, _fhirProjector.Project(m), subscribers.GetValueOrDefault(m.MemberId)))
             .ToList();
-        return Ok(new MemberFhirSearchResponse(total, items));
+        return Ok(new MemberFhirSearchResponse(total, items, anyIdentifierForm ? true : null));
     }
 
     // ── Event stream ─────────────────────────────────────────────────

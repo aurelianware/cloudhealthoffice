@@ -84,6 +84,21 @@ public sealed class MemberIndexInitializer : IHostedService
             new CreateIndexModel<Member>(keys, new CreateIndexOptions { Name = "ix_tenant_member" }),
             cancellationToken: cancellationToken);
 
+        // Payer-to-Payer member match (ADR 020) finds candidates by birth date
+        // and by subscriber; without these both are collection scans.
+        collection.Indexes.CreateOne(
+            new CreateIndexModel<Member>(
+                Builders<Member>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.DateOfBirth),
+                new CreateIndexOptions { Name = "ix_tenant_dob" }),
+            cancellationToken: cancellationToken);
+#pragma warning disable CS0618 // the legacy subscriber field is still the read fallback
+        collection.Indexes.CreateOne(
+            new CreateIndexModel<Member>(
+                Builders<Member>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.SubscriberMemberId),
+                new CreateIndexOptions { Name = "ix_tenant_subscriber", Sparse = true }),
+            cancellationToken: cancellationToken);
+#pragma warning restore CS0618
+
         var alerts = _db.GetCollection<MemberAlert>("MemberAlerts");
         alerts.Indexes.CreateOne(
             new CreateIndexModel<MemberAlert>(

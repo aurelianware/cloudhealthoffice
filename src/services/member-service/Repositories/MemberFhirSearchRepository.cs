@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using MemberService.Models;
 using MongoDB.Bson;
@@ -19,15 +20,26 @@ public interface IMemberFhirSearchRepository
     /// </summary>
     Task<(IReadOnlyList<Member> Items, long Total)> SearchAsync(
         string tenantId, MemberFhirSearchQuery query, CancellationToken ct = default);
+
+    /// <summary>
+    /// Each member's subscriber, as the member read derives it: the active
+    /// family-relationship graph first (the earliest-starting dependent edge),
+    /// else the legacy recorded value. Subscribers and members with neither map
+    /// to null. One query for the whole page.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string?>> SubscribersAsync(
+        string tenantId, IReadOnlyList<Member> members, CancellationToken ct = default);
 }
 
 public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
 {
     private readonly IMongoCollection<Member> _collection;
+    private readonly IMongoCollection<FamilyRelationship> _relationships;
 
     public MemberFhirSearchRepository(IMongoDatabase database)
     {
         _collection = database.GetCollection<Member>("Members");
+        _relationships = database.GetCollection<FamilyRelationship>(FamilyRelationshipRepositoryMongo.CollectionName);
     }
 
     public async Task<(IReadOnlyList<Member> Items, long Total)> SearchAsync(
@@ -37,6 +49,8 @@ public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
         ArgumentNullException.ThrowIfNull(query);
 
         var filter = BuildFilter(tenantId, query);
+        if (!string.IsNullOrWhiteSpace(query.SubscriberMemberId))
+            filter &= await SubscriberFilterAsync(tenantId, query.SubscriberMemberId.Trim(), query.AnyIdentifierForm, ct);
         var total = await _collection.CountDocumentsAsync(filter, cancellationToken: ct);
         if (total == 0 || query.Limit <= 0)
             return (Array.Empty<Member>(), total);
@@ -50,13 +64,80 @@ public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
         return (items, total);
     }
 
+    /// <summary>
+    /// Members whose subscriber may be <paramref name="subscriber"/>: the subjects
+    /// of active dependent edges pointing at it, and members whose legacy recorded
+    /// subscriber is it. A superset of the members whose derived subscriber is
+    /// <paramref name="subscriber"/>; each result carries its derived subscriber
+    /// (<see cref="SubscribersAsync"/>) so a caller can tell them apart.
+    /// </summary>
+    private async Task<FilterDefinition<Member>> SubscriberFilterAsync(
+        string tenantId, string subscriber, bool anyForm, CancellationToken ct)
+    {
+        var pattern = anyForm ? AnyForm(subscriber) : null;
+        var rf = Builders<FamilyRelationship>.Filter;
+        var related = pattern is null ? rf.Eq(r => r.RelatedMemberId, subscriber) : rf.Regex(r => r.RelatedMemberId, pattern);
+        var dependents = await _relationships
+            .Find(ActiveDependentEdges(tenantId) & related)
+            .Project(r => r.SubjectMemberId)
+            .ToListAsync(ct);
+
+        var f = Builders<Member>.Filter;
+#pragma warning disable CS0618 // the legacy field is still the fallback the member read uses
+        var legacy = (pattern is null ? f.Eq(m => m.SubscriberMemberId, subscriber) : f.Regex(m => m.SubscriberMemberId, pattern))
+                     & f.Ne(m => m.IsSubscriber, true);
+#pragma warning restore CS0618
+        return dependents.Count == 0 ? legacy : f.Or(f.In(m => m.MemberId, dependents.Distinct()), legacy);
+    }
+
+    public async Task<IReadOnlyDictionary<string, string?>> SubscribersAsync(
+        string tenantId, IReadOnlyList<Member> members, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        var result = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var dependents = members.Where(m => !m.IsSubscriber).Select(m => m.MemberId).Distinct().ToList();
+        foreach (var m in members) result[m.MemberId] = null;
+        if (dependents.Count == 0) return result;
+
+        var edges = await _relationships
+            .Find(ActiveDependentEdges(tenantId) & Builders<FamilyRelationship>.Filter.In(r => r.SubjectMemberId, dependents))
+            .ToListAsync(ct);
+        var derived = edges
+            .GroupBy(e => e.SubjectMemberId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.OrderBy(e => e.StartDate).First().RelatedMemberId, StringComparer.Ordinal);
+
+        foreach (var member in members.Where(m => !m.IsSubscriber))
+        {
+#pragma warning disable CS0618
+            var legacy = string.IsNullOrWhiteSpace(member.SubscriberMemberId) ? null : member.SubscriberMemberId;
+#pragma warning restore CS0618
+            result[member.MemberId] = derived.TryGetValue(member.MemberId, out var fromGraph) ? fromGraph : legacy;
+        }
+        return result;
+    }
+
+    /// <summary>Not deleted, not ended, and a dependent-to-subscriber code (as FamilyRelationshipService derives).</summary>
+    private static FilterDefinition<FamilyRelationship> ActiveDependentEdges(string tenantId)
+    {
+        var fb = Builders<FamilyRelationship>.Filter;
+        return fb.Eq(r => r.TenantId, tenantId)
+               & fb.Eq(r => r.DeletedAt, (DateTime?)null)
+               & (fb.Eq(r => r.EndDate, (DateTime?)null) | fb.Gt(r => r.EndDate, DateTime.UtcNow))
+               & fb.In(r => r.RelationshipCode, Services.FamilyRelationshipService.DependentToSubscriberCodes);
+    }
+
     internal static FilterDefinition<Member> BuildFilter(string tenantId, MemberFhirSearchQuery query)
     {
         var f = Builders<Member>.Filter;
         var filter = f.Eq(m => m.TenantId, tenantId) & f.Ne(m => m.IsDraft, true);
 
         if (!string.IsNullOrWhiteSpace(query.MemberId))
-            filter &= f.Eq(m => m.MemberId, query.MemberId.Trim());
+        {
+            filter &= query.AnyIdentifierForm && AnyForm(query.MemberId) is { } anyForm
+                ? f.Regex(m => m.MemberId, anyForm)
+                : f.Eq(m => m.MemberId, query.MemberId.Trim());
+        }
+
 
         if (Prefix(query.Family) is { } family)
             filter &= f.Regex(m => m.LastName, family);
@@ -108,6 +189,38 @@ public sealed class MemberFhirSearchRepository : IMemberFhirSearchRepository
             _ => f.In(m => m.MemberId, Array.Empty<string>()),
         };
     }
+
+    /// <summary>
+    /// Every stored spelling of an identifier that normalizes to the same value
+    /// as <paramref name="value"/> (case, spaces and hyphens ignored, as
+    /// Payer-to-Payer member match normalizes): <c>AB12</c> matches <c>ab-12</c>
+    /// and <c>A B 12</c>. Null for a value with nothing left after normalizing.
+    /// Anchored and case-insensitive, so it scans the tenant's index keys rather
+    /// than seeking; bounded by one tenant.
+    /// </summary>
+    internal static BsonRegularExpression? AnyForm(string? value)
+    {
+        var core = (value ?? string.Empty).EnumerateRunes().Where(r => !IsSeparator(r)).ToList();
+        if (core.Count == 0) return null;
+        var pattern = "^" + Separators
+                          + string.Join(Separators, core.Select(r => Regex.Escape(r.ToString())))
+                          + Separators + "$";
+        return new BsonRegularExpression(pattern, "i");
+    }
+
+    // Every character .NET calls whitespace (which Trim strips from a stored id
+    // before the policy compares it, ADR 020) and the hyphens the normalizer
+    // removes. MongoDB's \s is ASCII-only and its regex has no \u escape, so the
+    // others are written as literal characters.
+    private static readonly string Separators = "[\\s\\-" + new string(
+        Enumerable.Range(0x80, 0x3000 - 0x80 + 1)
+            .Where(c => char.IsWhiteSpace((char)c))
+            .Select(c => (char)c)
+            .Concat(['\u2010', '\u2011'])
+            .ToArray()) + "]*";
+
+    private static bool IsSeparator(Rune r) =>
+        Rune.IsWhiteSpace(r) || r.Value is '-' or 0x2010 or 0x2011;
 
     /// <summary>A case-insensitive starts-with match on the literal text (FHIR string search).</summary>
     private static BsonRegularExpression? Prefix(string? value)

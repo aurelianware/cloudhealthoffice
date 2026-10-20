@@ -17,13 +17,20 @@ public static class EvidencePolicy
         "member.wrong-line", "member.wrong-procedure", "member.wrong-provider", "member.trimmed-id-control"
     });
 
+    public static bool PositiveControlPassed(IReadOnlyCollection<CaseResult> results, string id) =>
+        results.Count(r => r.Id == id) == 1 && results.Single(r => r.Id == id).Outcome == "PASS";
+
     public static int ExecutedCount(IEnumerable<CaseResult> results) => results.Count(x =>
         x.Id != "lab.prerequisites" && x.Outcome is "PASS" or "FAIL" or "ERROR");
 
     // Never infer assurance from a successful setup or a count padded with duplicates.
     public static bool IsCompletePass(bool completed, IReadOnlyCollection<CaseResult> results) =>
-        completed && results.Count == ScenarioIds.Count
+        IsCompletePass(completed, results, ScenarioIds);
+
+    public static bool IsCompletePass(bool completed, IReadOnlyCollection<CaseResult> results, IReadOnlyList<string> expected) =>
+        expected.Count > 0 && expected.Distinct(StringComparer.Ordinal).Count() == expected.Count
+        && completed && results.Count == expected.Count
         && results.All(x => x.Outcome == "PASS")
         && results.Select(x => x.Id).Order(StringComparer.Ordinal)
-            .SequenceEqual(ScenarioIds.Order(StringComparer.Ordinal));
+            .SequenceEqual(expected.Order(StringComparer.Ordinal));
 }

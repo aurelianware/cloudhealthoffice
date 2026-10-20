@@ -23,9 +23,6 @@ public interface IPayerToPayerMemberSource
     /// </summary>
     Task<IReadOnlyList<ChoMember>> FindCandidatesAsync(
         string tenantId, PayerToPayerMemberCriteria criteria, CancellationToken ct = default);
-
-    Task<IReadOnlyList<ChoPaymentDocument>> GetPaymentsAsync(
-        string tenantId, string memberId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -58,21 +55,25 @@ public sealed class PatientAccessPayerToPayerMemberSource : IPayerToPayerMemberS
             return Array.Empty<ChoMember>();
 
         var member = await _provider.GetMemberAsync(criteria.MemberId, ct);
-        if (member is null || !DemographicsAgree(member, criteria))
+        if (member is null || !PayerToPayerDemographics.Agree(member, criteria))
             return Array.Empty<ChoMember>();
 
         return new[] { member };
     }
 
-    public async Task<IReadOnlyList<ChoPaymentDocument>> GetPaymentsAsync(
-        string tenantId, string memberId, CancellationToken ct = default)
-    {
-        if (!ServesTenant(tenantId)) return Array.Empty<ChoPaymentDocument>();
-        return await _provider.GetPaymentsByPatientIdAsync(memberId, ct);
-    }
-
     private bool ServesTenant(string tenantId) =>
         string.Equals(tenantId, ServedTenantId, StringComparison.Ordinal);
+}
+
+/// <summary>
+/// The demographics check P2P-01 resolution applies whatever the member
+/// source: any demographics the receiving payer supplied must match the
+/// matched member; a mismatch rejects the candidate so the member id alone can
+/// never return the wrong person's record.
+/// </summary>
+public static class PayerToPayerDemographics
+{
+    public static bool Agree(ChoMember member, PayerToPayerMemberCriteria criteria) => DemographicsAgree(member, criteria);
 
     /// <summary>
     /// Any demographics the receiving payer supplied must match the matched
