@@ -166,6 +166,23 @@ public class PayerToPayerReceivingPayerBindingTests : IClassFixture<PayerToPayer
     }
 
     [Fact]
+    public async Task Export_SendsTheResourcesInFull_NotJustTheirBaseFields()
+    {
+        var response = await PostAsync(ExportPath, BackendToken(PayerA, clientId: "export-content"),
+            new { receivingPayerId = PayerA, memberId = "pat-002" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var resources = doc.RootElement.GetProperty("entry").EnumerateArray()
+            .Select(e => e.GetProperty("resource")).ToList();
+        var patient = resources.Single(r => r.GetProperty("resourceType").GetString() == "Patient");
+        patient.TryGetProperty("birthDate", out _).Should().BeTrue("the receiving payer needs the member's demographics");
+        patient.TryGetProperty("name", out _).Should().BeTrue();
+        var coverage = resources.Single(r => r.GetProperty("resourceType").GetString() == "Coverage");
+        coverage.TryGetProperty("beneficiary", out _).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Export_BodyOmitsReceivingPayer_UsesTheTokensPayer()
     {
         // The body field is optional now: the token says who the receiving
