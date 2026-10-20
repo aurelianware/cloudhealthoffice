@@ -4,14 +4,14 @@
 **Machine-readable inventory:** `GET /fhir/r4/adapter-status`
 **Response headers (every FHIR call):** `X-CHO-Adapter-Mode`, `X-CHO-Data-Class`, `X-CHO-Adapter-Label`
 
-This table is the September 2026 **synthetic demo tenant** default. A live pilot overwrites it in config (`FhirAdapters` + `Appeals:UseMockAdapter`) so the endpoint cannot silently look broader than the wiring.
+This table is the **synthetic demo tenant** default (updated October 2026 for [ADR 018](../adr/018-fhir-patient-coverage-from-cho-services.md)). With Patient and Coverage bound to CHO's own services, the demo shows whatever synthetic members and coverage are loaded into member-service and coverage-service; the Patient Access data provider and Payer-to-Payer member directory still read the synthetic mock store. A live pilot overwrites it in config (`FhirAdapters` + `Appeals:UseMockAdapter`) so the endpoint cannot silently look broader than the wiring.
 
 ## Default demo tenant (`demo-tenant`, data class `synthetic`)
 
 | Resource / capability | Mode | Source in repo | Buyer-safe wording |
 | --- | --- | --- | --- |
-| Patient | Demo | `MockFhirDataAdapter` | Demonstrates technical behavior with synthetic data. |
-| Coverage | Demo | `MockFhirDataAdapter` | Demonstrates technical behavior with synthetic data. |
+| Patient | Hybrid when `FhirAdapters:Sources:Patient=ChoNative` (the Kubernetes manifest), else Demo | member-service FHIR Patient projection via `ChoNativeFhirDataAdapter` ([ADR 018](../adr/018-fhir-patient-coverage-from-cho-services.md)); `MockFhirDataAdapter` when bound to Mock | Served from the plan's member records in CHO; source labels shown per resource. |
+| Coverage | Hybrid when `FhirAdapters:Sources:Coverage=ChoNative` (the Kubernetes manifest), else Demo | coverage-service FHIR Coverage projection via `ChoNativeFhirDataAdapter`; `MockFhirDataAdapter` when bound to Mock | Served from the plan's coverage records in CHO; source labels shown per resource. |
 | Encounter | Demo | `MockFhirDataAdapter` | Demonstrates technical behavior with synthetic data. |
 | Claim | Demo | `MockFhirDataAdapter` | Demonstrates technical behavior with synthetic data. |
 | ExplanationOfBenefit | Hybrid | claims-service FHIR proxy | Pilot wiring in progress; source labels shown per resource. |
@@ -28,12 +28,12 @@ This table is the September 2026 **synthetic demo tenant** default. A live pilot
 | Payer-to-Payer | Out of scope | Bulk FHIR + consent only | Not in current pilot scope. |
 | Provider Access | Demo | `ProviderAccessAuthorizationService` + global `ProviderAccessAuthorizationFilter` | Demonstrates technical behavior with synthetic data. Authentication, SMART scope, provider/member attribution and an active purpose-scoped consent are each independent and mandatory. Attribution panels are configured, not fed from a live payer roster. |
 
-Effective mode for the default tenant is **Hybrid**, because some resources proxy to other services while Patient / Coverage remain mock. Configured mode is **Demo**. The endpoint reports both so a reviewer can see the difference.
+Effective mode for the default tenant is **Hybrid**, because some resources proxy to CHO services while others (Encounter, Claim, Appeal by default, CRD/DTR, bulk export) remain demo implementations. Configured mode is **Demo**. The endpoint reports both so a reviewer can see the difference.
 
 ## How a pilot moves a resource to Live
 
 1. Sign BAA.
-2. Point the resource at the payer source system (typed HTTP adapter or the existing proxy).
+2. Point the resource at its source: `FhirAdapters:Sources:<Resource>=ChoNative` for Patient and Coverage served from CHO, or a typed HTTP adapter / the existing proxy for others.
 3. Set `FhirAdapters:Resources:<Name>=Live` and `FhirAdapters:DataClassification` to the real class.
 4. For appeals, set `Appeals:UseMockAdapter=false` and `Services:AppealsServiceUrl`.
 5. Re-fetch `/fhir/r4/adapter-status`. If any in-scope resource is still Demo, **effective mode stays Hybrid**. That is intentional.

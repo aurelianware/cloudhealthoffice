@@ -34,6 +34,7 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
     {
         public InMemoryMemberRepository MemberRepo { get; } = new();
         public InMemoryMemberEventRepository EventRepo { get; } = new();
+        public RecordingMemberFhirSearchRepository FhirSearch { get; } = new();
 
         protected override IHost CreateHost(IHostBuilder builder)
         {
@@ -54,6 +55,7 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
             builder.ConfigureServices(services =>
             {
                 RemoveAll<IMemberRepository>(services);
+                RemoveAll<IMemberFhirSearchRepository>(services);
                 RemoveAll<IMemberEventRepository>(services);
                 RemoveAll<IFamilyRelationshipRepository>(services);
                 // Only the Mongo alert/note registrations: a test that installs its
@@ -89,6 +91,7 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
                 RemoveAll<IMemberAlertGuard>(services);
 
                 services.AddSingleton<IMemberRepository>(MemberRepo);
+                services.AddSingleton<IMemberFhirSearchRepository>(FhirSearch);
                 services.AddSingleton<IMemberEventRepository>(EventRepo);
                 services.AddSingleton<IFamilyRelationshipRepository>(new InMemoryFamilyRelationshipRepository());
                 services.TryAddSingleton<IMemberAlertRepository>(new InMemoryMemberAlertRepository());

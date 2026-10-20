@@ -23,6 +23,11 @@ data:
   Fhir__DefaultPageSize: "20"
   Fhir__MaxPageSize: "100"
   Fhir__ServerBaseUrl: "https://api.cloudhealthoffice.com/fhir/r4"
+  # Patient and Coverage come from CHO's own member-service and coverage-service
+  # projections (ADR 018); Encounter and Claim stay on the synthetic mock. Uses
+  # Services__MemberServiceUrl / Services__CoverageServiceUrl below.
+  FhirAdapters__Sources__Patient: "ChoNative"
+  FhirAdapters__Sources__Coverage: "ChoNative"
 
 ---
 apiVersion: v1
@@ -32,7 +37,8 @@ metadata:
   namespace: cloudhealthoffice
 type: Opaque
 stringData:
-  # Sprint 3: add CHO service URLs and credentials when real adapters land
+  # CHO service URLs. fhir-service calls them root-relative (/api/v1/...), so a
+  # path on the base URL is ignored. Member and coverage serve Patient/Coverage.
   Services__MemberServiceUrl: "http://member-service/api"
   Services__CoverageServiceUrl: "http://coverage-service/api"
   Services__ClaimsServiceUrl: "http://claims-service/api"

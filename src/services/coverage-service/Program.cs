@@ -75,6 +75,11 @@ builder.Services.AddHttpClient<IPanelCounter, HttpPanelCounter>((sp, client) =>
 });
 builder.Services.AddScoped<IPcpAssignmentService, PcpAssignmentService>();
 builder.Services.AddSingleton<ICareTeamProjector, CareTeamProjector>();
+// FHIR Coverage projection (ADR 018): the payor named on each Coverage comes
+// from Fhir:Coverage:PayorDisplay / PayorReference, else the tenant id.
+builder.Services.AddSingleton<IFhirCoverageProjector>(_ => new FhirCoverageProjector(
+    builder.Configuration.GetSection(FhirCoverageProjectionOptions.SectionName).Get<FhirCoverageProjectionOptions>()));
+builder.Services.AddScoped<ICoverageFhirSearchRepository, CoverageFhirSearchRepository>();
 builder.Services.AddScoped<PcpPanelReconciliationJob>();
 // Daily: flips coverages whose (future-dated) termination date has arrived to
 // Terminated, and promotes Pending ones whose effective date has arrived to Active
