@@ -247,6 +247,7 @@ public static class X12837ClaimMapper
             Modifiers = line.Modifiers ?? [],
             DiagnosisPointers = line.DiagnosisPointers ?? [],
             Units = line.Units,
+            UnitType = line.UnitType,
             ChargeAmount = line.ChargeAmount,
             ServiceDateFrom = from,
             ServiceDateTo = to,

@@ -456,6 +456,65 @@ public class PasInquireCallerTests
 /// </summary>
 public class HttpPasAuthorizationRecorderTests
 {
+    [Fact]
+    public async Task CodedQuantity_NullStoredLinesIsRejectedWithoutThrowing()
+    {
+        var request = Request();
+        request.RequestedServices = new() { new() { ProcedureCode = "72148", UnitCode = "mL" } };
+        var (recorder, _) = Recorder(_ => Json(HttpStatusCode.Created, new
+        {
+            tenantId = Tenant, authorizationNumber = request.AuthorizationNumber, status = "Approved",
+            requestedServices = (object?)null
+        }));
+        var result = await recorder.RecordAsync(request, Tenant);
+        result.Failure.Should().Be(PasRecordFailure.Rejected);
+    }
+
+    [Theory]
+    [InlineData(12, "mL", "http://unitsofmeasure.org", true)]
+    [InlineData(7, "mL", "http://unitsofmeasure.org", false)]
+    [InlineData(12, null, null, false)]
+    [InlineData(12, "ML", "http://unitsofmeasure.org", false)]
+    [InlineData(12, "mL", "https://example.test/other", false)]
+    public async Task CodedQuantity_IsConfirmedByStableLineAndExactCoding(int lineNumber, string? code, string? system, bool recorded)
+    {
+        var request = Request();
+        request.RequestedServices = new()
+        {
+            new() { LineNumber = 12, ProcedureCode = "72148", RequestedUnits = 3,
+                UnitType = "units", UnitCode = "mL", UnitSystem = "http://unitsofmeasure.org" }
+        };
+        var (recorder, _) = Recorder(_ => Json(HttpStatusCode.Created, new
+        {
+            tenantId = Tenant, authorizationNumber = request.AuthorizationNumber, status = "Approved",
+            requestedServices = new[] { new { lineNumber, unitCode = code, unitSystem = system } }
+        }));
+        var result = await recorder.RecordAsync(request, Tenant);
+        result.Recorded.Should().Be(recorded);
+        if (!recorded) result.Failure.Should().Be(PasRecordFailure.Rejected);
+    }
+
+    [Fact]
+    public async Task LostWriteAnswer_ReadBackMustConfirmQuantityCodingAsWellAsHash()
+    {
+        var request = Request();
+        request.RequestedServices = new()
+        {
+            new() { LineNumber = 12, ProcedureCode = "72148", UnitCode = "mL", UnitSystem = "http://unitsofmeasure.org" }
+        };
+        var (recorder, _) = Recorder(r => r.Method == HttpMethod.Post
+            ? throw new TaskCanceledException("lost write answer")
+            : Json(HttpStatusCode.OK, new
+            {
+                tenantId = Tenant, authorizationNumber = request.AuthorizationNumber, status = "Approved",
+                requestHash = request.RequestHash,
+                requestedServices = new[] { new { lineNumber = 12, unitCode = "L", unitSystem = "http://unitsofmeasure.org" } }
+            }));
+        var result = await recorder.RecordAsync(request, Tenant);
+        result.Recorded.Should().BeFalse();
+        result.Failure.Should().Be(PasRecordFailure.Unavailable);
+    }
+
     private const string Tenant = "tenant-a";
 
     private sealed class Handler(Func<HttpRequestMessage, Task<HttpResponseMessage>> respond) : HttpMessageHandler

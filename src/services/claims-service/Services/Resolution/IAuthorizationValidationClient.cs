@@ -78,4 +78,7 @@ public sealed record AuthorizationValidationResult(
     string? ValidationMessage,
     string? ValidationCode = null,
     string? ValidatedMemberId = null,
-    bool? MemberMatches = null);
+    bool? MemberMatches = null,
+    string? ApprovedUnitType = null,
+    string? ApprovedUnitCode = null,
+    string? ApprovedUnitSystem = null);
