@@ -11,6 +11,7 @@ plan adjudicates. The design is [ADR 019](../../../adr/019-extension-model-plan-
 | Request schema | [`request.schema.json`](request.schema.json) |
 | Response schema | [`response.schema.json`](response.schema.json) |
 | .NET types | `CloudHealthOffice.PlanEdits.Contracts` (request, response, signature, response rules) |
+| Worked example | `src/samples/CloudHealthOffice.PlanEditService.Sample` (two illustrative rules; tested end to end with claims-service) |
 
 ## The request
 
