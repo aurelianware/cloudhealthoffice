@@ -23,4 +23,14 @@ public sealed class RecordingMemberFhirSearchRepository : IMemberFhirSearchRepos
         IReadOnlyList<Member> page = matches.Skip(query.Offset).Take(query.Limit).ToList();
         return Task.FromResult((page, (long)matches.Count));
     }
+
+    public Task<IReadOnlyDictionary<string, string?>> SubscribersAsync(
+        string tenantId, IReadOnlyList<Member> members, CancellationToken ct = default)
+    {
+#pragma warning disable CS0618
+        IReadOnlyDictionary<string, string?> map = members.ToDictionary(
+            m => m.MemberId, m => m.IsSubscriber ? null : m.SubscriberMemberId);
+#pragma warning restore CS0618
+        return Task.FromResult(map);
+    }
 }

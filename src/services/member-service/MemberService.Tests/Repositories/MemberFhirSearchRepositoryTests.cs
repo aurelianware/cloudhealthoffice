@@ -62,6 +62,91 @@ public sealed class MemberFhirSearchRepositoryTests(MongoRunnerFixture mongo) : 
         return (items.Select(m => m.MemberId).ToArray(), total);
     }
 
+    // ── Subscriber (ADR 020): the family graph first, the legacy field as fallback ──
+
+    private static Member Dependent(string memberId, string? legacySubscriber, string tenant = Tenant, bool draft = false)
+    {
+        var member = Member(memberId, "Kin", "Dee", null, new DateTime(2010, 1, 1), "F", Updated(9), tenant, draft);
+#pragma warning disable CS0618
+        member.SubscriberMemberId = legacySubscriber;
+#pragma warning restore CS0618
+        member.IsSubscriber = false;
+        return member;
+    }
+
+    private static FamilyRelationship Edge(string subject, string related, string code = "19", DateTime? start = null,
+        DateTime? end = null, bool deleted = false, string tenant = Tenant) => new()
+    {
+        TenantId = tenant,
+        SubjectMemberId = subject,
+        RelatedMemberId = related,
+        RelationshipCode = code,
+        PairId = Guid.NewGuid().ToString("N"),
+        StartDate = start ?? new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        EndDate = end,
+        DeletedAt = deleted ? DateTime.UtcNow : null,
+    };
+
+    private async Task SeedFamilyAsync()
+    {
+        await _db.GetCollection<Member>("Members").InsertManyAsync(new[]
+        {
+            Dependent("D01", legacySubscriber: null),      // graph only
+            Dependent("D02", legacySubscriber: "M02"),     // legacy only
+            Dependent("D03", legacySubscriber: "M04"),     // another subscriber
+            Dependent("D04", legacySubscriber: "M02", tenant: "t2"),
+            Dependent("D05", legacySubscriber: "M02", draft: true),
+            Dependent("D06", legacySubscriber: null),      // ended edge
+            Dependent("D07", legacySubscriber: null),      // deleted edge
+            Dependent("D08", legacySubscriber: null),      // edge with a non-dependent code (18, self)
+        });
+        await _db.GetCollection<FamilyRelationship>(FamilyRelationshipRepositoryMongo.CollectionName).InsertManyAsync(new[]
+        {
+            Edge("D01", "M02"),
+            Edge("D06", "M02", end: new DateTime(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            Edge("D07", "M02", deleted: true),
+            Edge("D08", "M02", code: "18"),
+            Edge("D01", "M02", tenant: "t2"),
+        });
+    }
+
+    [Fact]
+    public async Task SubscriberMemberId_finds_dependents_by_the_active_graph_and_by_the_legacy_field_in_the_tenant()
+    {
+        await SeedFamilyAsync();
+
+        var (ids, total) = await Search(new MemberFhirSearchQuery { SubscriberMemberId = " M02 ", Limit = 100 });
+
+        ids.Should().Equal("D01", "D02");
+        total.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Subscribers_prefer_the_graph_then_the_legacy_field_and_are_null_for_subscribers()
+    {
+        await SeedFamilyAsync();
+        var members = _db.GetCollection<Member>("Members");
+        // A dependent whose graph says M04 although its legacy field says M02:
+        // the graph wins, so it is not M02's dependent.
+        await members.InsertOneAsync(Dependent("D09", legacySubscriber: "M02"));
+        await _db.GetCollection<FamilyRelationship>(FamilyRelationshipRepositoryMongo.CollectionName).InsertManyAsync(new[]
+        {
+            Edge("D09", "M04", start: new DateTime(2019, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+            Edge("D09", "M02", start: new DateTime(2022, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
+        });
+        var page = await members.Find(m => m.TenantId == Tenant && (m.MemberId == "D01" || m.MemberId == "D02"
+            || m.MemberId == "D06" || m.MemberId == "D09" || m.MemberId == "M01")).ToListAsync();
+        page.Single(m => m.MemberId == "M01").IsSubscriber = true;
+
+        var subscribers = await _repo.SubscribersAsync(Tenant, page);
+
+        subscribers["D01"].Should().Be("M02", "the active graph edge");
+        subscribers["D02"].Should().Be("M02", "no graph edge: the legacy value");
+        subscribers["D06"].Should().BeNull("an ended edge and no legacy value");
+        subscribers["D09"].Should().Be("M04", "the earliest active edge, as the member read derives it");
+        subscribers["M01"].Should().BeNull("a subscriber has no subscriber");
+    }
+
     [Fact]
     public async Task No_filters_returns_the_tenants_non_draft_members_in_member_id_order_with_the_total()
     {

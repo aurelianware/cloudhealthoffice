@@ -19,6 +19,13 @@ public sealed class MemberFhirSearchQuery
     /// <summary>Exact member id (FHIR <c>_id</c> or a member-id identifier).</summary>
     public string? MemberId { get; init; }
 
+    /// <summary>
+    /// Members whose subscriber is this member id (the subscriber themself is
+    /// not included unless their own record names them). Payer-to-Payer member
+    /// match uses it to find the dependents who carry a subscriber's id (ADR 020).
+    /// </summary>
+    public string? SubscriberMemberId { get; init; }
+
     /// <summary>Case-insensitive prefix of the family name.</summary>
     public string? Family { get; init; }
 
@@ -49,7 +56,11 @@ public sealed class MemberFhirSearchQuery
 }
 
 /// <summary>One projected Patient and the member it was projected from.</summary>
-public sealed record MemberFhirSearchEntry(string MemberId, JsonObject Resource);
+/// <summary>
+/// One search result: the member id, the projected Patient, and the member's
+/// subscriber (null for a member with none recorded), which a Patient does not carry.
+/// </summary>
+public sealed record MemberFhirSearchEntry(string MemberId, JsonObject Resource, string? SubscriberMemberId = null);
 
 /// <summary>
 /// A page of projected Patients. <see cref="Items"/> carries <c>MemberId</c> on
