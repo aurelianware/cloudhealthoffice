@@ -1,0 +1,39 @@
+name: Open Security Challenge
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/SecurityChallenge/**'
+      - 'tools/SecurityChallenge.Tests/**'
+      - 'src/services/authorization-service/**'
+      - 'src/services/shared/CloudHealthOffice.Infrastructure/**'
+      - 'Directory.Packages.props'
+      - 'Directory.Build.props'
+      - 'global.json'
+      - '.github/workflows/security-challenge.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  authorization-lab:
+    name: Synthetic authorization security lab (.NET 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build actual authorization service
+        run: dotnet build src/services/authorization-service --configuration Release --verbosity quiet
+      - name: Test evidence policy and build runner
+        run: dotnet test tools/SecurityChallenge.Tests --configuration Release --verbosity quiet
+      - name: Run disposable loopback lab
+        run: >-
+          dotnet tools/SecurityChallenge/bin/Release/net8.0/SecurityChallenge.dll
+          src/services/authorization-service/bin/Release/net8.0/authorization-service.dll
+          "${{ runner.temp }}/cho-security-evidence"
+      # Deliberately no artifact upload: failed packets require private triage.
+      # Reviewed publication is a separate human-controlled process.
