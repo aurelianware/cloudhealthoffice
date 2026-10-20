@@ -35,4 +35,28 @@ public sealed class EvidencePolicyTests
         ];
         Assert.Equal(3, EvidencePolicy.ExecutedCount(results));
     }
+    [Fact] public void CampaignCatalogsCannotSatisfyEachOther()
+    {
+        var second = ClaimsAppealsCampaign.ScenarioIds.Select(id => new CaseResult(id, "PASS", "test")).ToArray();
+        Assert.Equal(47, second.Length);
+        Assert.Equal(second.Length, second.Select(x => x.Id).Distinct().Count());
+        Assert.True(EvidencePolicy.IsCompletePass(true, second, ClaimsAppealsCampaign.ScenarioIds));
+        Assert.False(EvidencePolicy.IsCompletePass(true, second));
+        Assert.False(EvidencePolicy.IsCompletePass(true, Passing(), ClaimsAppealsCampaign.ScenarioIds));
+    }
+    [Fact] public void EmptyOrDuplicateExpectedCatalogCannotClaimPass()
+    {
+        Assert.False(EvidencePolicy.IsCompletePass(true, [], []));
+        Assert.False(EvidencePolicy.IsCompletePass(true, [new("x", "PASS", "test"), new("x", "PASS", "test")], ["x", "x"]));
+    }
+    [Theory]
+    [InlineData("FAIL")][InlineData("ERROR")][InlineData("INCONCLUSIVE")][InlineData("UNSUPPORTED")]
+    public void FailedControlCannotAuthorizeDependentAssertions(string outcome) =>
+        Assert.False(EvidencePolicy.PositiveControlPassed([new("control", outcome, "test")], "control"));
+    [Fact] public void OnlyOnePassingControlIsSufficient()
+    {
+        Assert.True(EvidencePolicy.PositiveControlPassed([new("control", "PASS", "test")], "control"));
+        Assert.False(EvidencePolicy.PositiveControlPassed([], "control"));
+        Assert.False(EvidencePolicy.PositiveControlPassed([new("control", "PASS", "test"), new("control", "PASS", "test")], "control"));
+    }
 }

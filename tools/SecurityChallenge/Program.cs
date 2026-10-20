@@ -12,6 +12,8 @@ using EphemeralMongo;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
+if (args.FirstOrDefault() == "claims-appeals") return await ClaimsAppealsCampaign.Run(args);
+
 // This runner accepts no remote target. It owns the service and database lifecycle.
 if (args.Length != 2 || !File.Exists(args[0]) || Directory.Exists(args[1]))
 {
@@ -20,7 +22,8 @@ if (args.Length != 2 || !File.Exists(args[0]) || Directory.Exists(args[1]))
 }
 var serviceDll = Path.GetFullPath(args[0]);
 var output = Path.GetFullPath(args[1]);
-Directory.CreateDirectory(output);
+if (OperatingSystem.IsWindows()) Directory.CreateDirectory(output);
+else Directory.CreateDirectory(output, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 var json = new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true };
 var results = new List<CaseResult>();
 var runId = Guid.NewGuid().ToString("N");

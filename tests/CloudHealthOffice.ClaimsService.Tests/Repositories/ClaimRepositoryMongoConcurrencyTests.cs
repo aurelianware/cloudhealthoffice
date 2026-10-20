@@ -1,4 +1,6 @@
 using ClaimsService.Exceptions;
+using ClaimsService.Services;
+using Moq;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using CloudHealthOffice.Testing.Mongo;
@@ -49,6 +51,52 @@ public sealed class ClaimRepositoryMongoConcurrencyTests(MongoRunnerFixture mong
     });
 
     private async Task<Claim> ReadAsync(string id) => (await Repo().GetByIdAsync(id))!;
+
+    [Fact]
+    public async Task OperationalStatusService_RefreshesItsOwnPatchRevision_AndPreservesNotes()
+    {
+        await SeedAsync("status-service");
+        var repo = Repo();
+        var service = new ClaimStatusTransitionService(repo, Mock.Of<IClaimEventPublisher>(),
+            Mock.Of<IClaimVoidService>(), NullLogger<ClaimStatusTransitionService>.Instance);
+        var received = await service.TransitionAsync("status-service",
+            new ClaimStatusUpdate { Status = ClaimStatus.Received, Notes = "first note" },
+            () => Tenant, null, CancellationToken.None);
+        received.Should().BeOfType<ClaimStatusTransitionResult.Updated>();
+        var first = (await repo.GetByIdAsync("status-service"))!;
+        first.Status.Should().Be(ClaimStatus.Received);
+        first.Revision.Should().Be(2);
+        first.ClaimNotes.Should().Be("first note");
+        var receipt = first.ReceivedDate;
+
+        await service.TransitionAsync("status-service",
+            new ClaimStatusUpdate { Status = ClaimStatus.InAdjudication, Notes = "second note" },
+            () => Tenant, null, CancellationToken.None);
+        var stored = (await repo.GetByIdAsync("status-service"))!;
+        stored.Status.Should().Be(ClaimStatus.InAdjudication);
+        stored.Revision.Should().Be(4);
+        stored.ReceivedDate.Should().Be(receipt);
+        stored.ClaimNotes.Should().Contain("first note").And.Contain("second note");
+    }
+
+    [Fact]
+    public async Task OperationalStatusService_DoesNotReplaceAStatusAdvancedAfterItsPatch()
+    {
+        var repository = new Mock<IClaimRepository>();
+        repository.SetupSequence(r => r.GetByIdAsync("C1"))
+            .ReturnsAsync(new Claim { Id = "C1", Status = ClaimStatus.Received })
+            .ReturnsAsync(new Claim { Id = "C1", Status = ClaimStatus.Paid, Revision = 2, ClaimNotes = "newer" });
+        repository.Setup(r => r.TryTransitionStatusAsync(Tenant, "C1", ClaimStatus.InAdjudication, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StatusWriteResult(StatusWriteOutcome.Applied, ClaimStatus.InAdjudication));
+        var service = new ClaimStatusTransitionService(repository.Object, Mock.Of<IClaimEventPublisher>(),
+            Mock.Of<IClaimVoidService>(), NullLogger<ClaimStatusTransitionService>.Instance);
+        var result = await service.TransitionAsync("C1", new ClaimStatusUpdate { Status = ClaimStatus.InAdjudication },
+            () => Tenant, null, CancellationToken.None);
+        var updated = result.Should().BeOfType<ClaimStatusTransitionResult.Updated>().Subject;
+        updated.Claim.Status.Should().Be(ClaimStatus.Paid);
+        updated.Claim.ClaimNotes.Should().Be("newer");
+        repository.Verify(r => r.UpdateAsync(It.IsAny<Claim>()), Times.Never);
+    }
 
     [Fact]
     public async Task TwoConcurrentUpdates_FromTheSameRead_ExactlyOneWins_TheOtherConflicts()
