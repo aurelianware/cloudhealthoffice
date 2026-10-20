@@ -74,7 +74,12 @@ public sealed record MemberFhirSearchEntry(string MemberId, JsonObject Resource,
 /// A page of projected Patients. <see cref="Items"/> carries <c>MemberId</c> on
 /// each entry so the record-access audit logs which members were returned.
 /// </summary>
-public sealed record MemberFhirSearchResponse(long Total, IReadOnlyList<MemberFhirSearchEntry> Items);
+/// <summary>
+/// A page of results. <see cref="AnyIdentifierForm"/> echoes an any-form request,
+/// so a caller can tell this service applied it rather than an older one that
+/// ignored the parameter and matched exactly.
+/// </summary>
+public sealed record MemberFhirSearchResponse(long Total, IReadOnlyList<MemberFhirSearchEntry> Items, bool? AnyIdentifierForm = null);
 
 /// <summary>The FHIR administrative-gender codes this search understands.</summary>
 public static class FhirGenderCodes

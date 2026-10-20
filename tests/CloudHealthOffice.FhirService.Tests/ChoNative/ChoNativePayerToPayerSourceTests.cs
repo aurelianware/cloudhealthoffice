@@ -28,10 +28,23 @@ public class ChoNativePayerToPayerSourceTests
         public List<string> Requests { get; } = new();
         public Func<HttpRequestMessage, HttpResponseMessage> Respond { get; set; } = _ => Json(Page(0));
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        /// <summary>Answer as a current member-service: echo an any-form request.</summary>
+        public bool EchoAnyForm { get; set; } = true;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             Requests.Add(Uri.UnescapeDataString(request.RequestUri!.PathAndQuery));
-            return Task.FromResult(Respond(request));
+            var response = Respond(request);
+            if (EchoAnyForm && request.RequestUri!.Query.Contains("anyIdentifierForm=true") && response.Content is { } content)
+            {
+                var body = await content.ReadAsStringAsync(ct);
+                if (System.Text.Json.Nodes.JsonNode.Parse(body) is System.Text.Json.Nodes.JsonObject page)
+                {
+                    page["anyIdentifierForm"] = true;
+                    response.Content = new StringContent(page.ToJsonString(), Encoding.UTF8, "application/json");
+                }
+            }
+            return response;
         }
     }
 
@@ -144,6 +157,18 @@ public class ChoNativePayerToPayerSourceTests
         candidates.Members.Select(m => m.MemberId).Should().Equal("D-1", "S-1", "S1");
         upstream.Requests.Should().OnlyContain(r => r.Contains("anyIdentifierForm=true"));
         upstream.Requests.Should().NotContain(r => r.Contains("birthDate"));
+    }
+
+    [Fact]
+    public async Task A_member_service_that_ignores_any_form_matching_is_refused()
+    {
+        var (directory, upstream) = Directory();
+        upstream.EchoAnyForm = false;
+        upstream.Respond = _ => Json(Page(1, Member("S-1")));
+
+        var act = () => MatchSource(directory).GetCandidatesAsync(Tenant, Criteria(memberId: "S-1"));
+
+        await act.Should().ThrowAsync<FhirUpstreamException>();
     }
 
     [Fact]
@@ -290,6 +315,9 @@ public class ChoNativePayerToPayerSourceTests
                   "\"billablePeriod\":{\"start\":\"2026-01-01\"},\"total\":[{\"amount\":" + money + "}],\"payment\":{\"amount\":" + money + "}," +
                   "\"payee\":{\"type\":{\"text\":\"provider\"}},\"adjudication\":" + adjudication + ",\"benefitBalance\":[{}],\"processNote\":[{\"text\":\"n\"}]," +
                   "\"addItem\":[{\"adjudication\":" + adjudication + "}]," +
+                  "\"supportingInfo\":[{\"sequence\":1,\"valueString\":\"ai-recommendation\"}],\"disposition\":\"paid-in-full\"," +
+                  "\"extension\":[{\"url\":\"x\",\"valueString\":\"internal\"}],\"contained\":[{\"resourceType\":\"ClaimResponse\"}]," +
+                  "\"insurance\":[{\"focal\":true,\"coverage\":{\"reference\":\"Coverage/cov-1\"},\"extension\":[{\"url\":\"y\"}]}]," +
                   "\"item\":[{\"sequence\":1,\"productOrService\":{\"coding\":[{\"code\":\"99213\"}]},\"unitPrice\":" + money + ",\"net\":" + money +
                   ",\"adjudication\":" + adjudication + ",\"detail\":[{\"sequence\":1,\"net\":" + money + ",\"adjudication\":" + adjudication +
                   ",\"subDetail\":[{\"sequence\":1,\"adjudication\":" + adjudication + "}]}]}]}}";
@@ -307,8 +335,9 @@ public class ChoNativePayerToPayerSourceTests
         var resource = resources.Single(r => r.ResourceType == "ExplanationOfBenefit");
         var exported = System.Text.Json.JsonSerializer.Serialize(resource, resource.GetType());
         exported.Should().NotContainAny("\"total\"", "\"payment\"", "\"payee\"", "\"adjudication\"", "\"benefitBalance\"",
-            "\"processNote\"", "\"addItem\"", "\"unitPrice\"", "\"net\"", "CO-45", "USD");
-        exported.Should().Contain("99213").And.Contain("\"subDetail\"").And.Contain("2026-01-01");
+            "\"processNote\"", "\"addItem\"", "\"unitPrice\"", "\"net\"", "CO-45", "USD", "ai-recommendation", "paid-in-full",
+            "internal", "ClaimResponse", "\"extension\"");
+        exported.Should().Contain("99213").And.Contain("\"subDetail\"").And.Contain("2026-01-01").And.Contain("Coverage/cov-1");
     }
 
     [Fact]
