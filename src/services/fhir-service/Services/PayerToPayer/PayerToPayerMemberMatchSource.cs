@@ -40,9 +40,14 @@ public interface IPayerToPayerMemberMatchSource
 ///     the match answers insufficient criteria.</description></item>
 ///   <item><description><see cref="Complete"/> false: there were more candidates than
 ///     the source reads, so uniqueness cannot be proven; the match answers ambiguous.</description></item>
+///   <item><description><see cref="SsnVerifiable"/> false: the candidates carry no SSN
+///     to compare (CHO's projections redact it, ADR 020), so a supplied SSN could
+///     contradict the member on file unseen; a request that supplies one answers
+///     ambiguous rather than ignore it.</description></item>
 /// </list>
 /// </summary>
-public sealed record MemberMatchCandidates(IReadOnlyList<ChoMember> Members, bool Searchable = true, bool Complete = true)
+public sealed record MemberMatchCandidates(
+    IReadOnlyList<ChoMember> Members, bool Searchable = true, bool Complete = true, bool SsnVerifiable = true)
 {
     public static readonly MemberMatchCandidates None = new([]);
     public static readonly MemberMatchCandidates NotSearchable = new([], Searchable: false);
