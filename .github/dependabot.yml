@@ -117,6 +117,13 @@ updates:
       # #1318 broke restore (NU1605) in attachment-service.
       - dependency-name: "Azure.Storage.Blobs"
         versions: [">= 12.30.0"]
+      # #1415: Azure.Core 1.63 introduces Microsoft.Extensions.* 10.x
+      # floors incompatible with the pinned .NET 8 graph. Keep the known
+      # compatible baseline until a coordinated dependency review.
+      - dependency-name: "Azure.Core"
+        versions: ["> 1.44.1"]
+      - dependency-name: "System.Text.Json"
+        versions: [">= 9.0.0"]
       # #1412: these upgrades pull Configuration/System.Text.Json 10.x and
       # break the supported .NET 8 graph (NU1605). Reassess as a coordinated
       # dependency update; do not raise the application target framework.
@@ -183,6 +190,13 @@ updates:
       # #1318 broke restore (NU1605) in attachment-service.
       - dependency-name: "Azure.Storage.Blobs"
         versions: [">= 12.30.0"]
+      # #1415: Azure.Core 1.63 introduces Microsoft.Extensions.* 10.x
+      # floors incompatible with the pinned .NET 8 graph. Keep the known
+      # compatible baseline until a coordinated dependency review.
+      - dependency-name: "Azure.Core"
+        versions: ["> 1.44.1"]
+      - dependency-name: "System.Text.Json"
+        versions: [">= 9.0.0"]
       # #1412: these upgrades pull Configuration/System.Text.Json 10.x and
       # break the supported .NET 8 graph (NU1605). Reassess as a coordinated
       # dependency update; do not raise the application target framework.

@@ -1,9 +1,9 @@
-name: Dependabot Auto-Merge
+name: Dependabot Review
 
 on: pull_request
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
 
 jobs:
@@ -24,9 +24,7 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable auto-merge for patch and minor updates
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
-        run: gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # main currently permits merging without required CI. `gh pr merge --auto`
+      # therefore merged #1415 immediately even though its checks failed.
+      # Keep dependency PRs open for exact-head CI verification before merge.
+      # Re-enable merging only after required checks are enforced by branch rules.
