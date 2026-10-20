@@ -347,6 +347,7 @@ public class AdapterClaimLine
     public List<string> Modifiers { get; set; } = new();
     public List<int> DiagnosisPointers { get; set; } = new();
     public decimal Units { get; set; } = 1;
+    public string? UnitType { get; set; }
 
     /// <summary>
     /// Line-item charge: the total billed for this line across all
@@ -375,6 +376,7 @@ public class AdapterClaimLine
         Modifiers = src.Modifiers.ToList(),
         DiagnosisPointers = src.DiagnosisPointers.ToList(),
         Units = src.Units,
+        UnitType = src.UnitType,
         ChargeAmount = src.ChargeAmount,
         ServiceDateFrom = src.ServiceDateFrom,
         ServiceDateTo = src.ServiceDateTo,
@@ -399,6 +401,7 @@ public class AdapterClaimLine
         Modifiers = Modifiers.ToList(),
         DiagnosisPointers = DiagnosisPointers.ToList(),
         Units = Units,
+        UnitType = UnitType,
         ChargeAmount = ChargeAmount,
         ServiceDateFrom = ServiceDateFrom,
         ServiceDateTo = ServiceDateTo,

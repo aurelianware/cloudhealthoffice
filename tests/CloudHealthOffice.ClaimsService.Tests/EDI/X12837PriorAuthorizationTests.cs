@@ -82,6 +82,25 @@ public class X12837PriorAuthorizationTests
         "GE*1*202~" +
         "IEA*1*000000202~";
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ServiceQuantityUnit_SurvivesEdiNativeAndEngineRoundTrip(bool institutional)
+    {
+        var source = Assert.Single(X12837Parser.Parse(institutional ? Institutional : Professional));
+        var native = X12837ClaimMapper.Map(source, "tenant-1");
+        var expected = institutional ? "DA" : "UN";
+        Assert.Equal(expected, native.ClaimLines[0].UnitType);
+        var line = native.ClaimLines[0].ToClaimLine();
+        var reloaded = global::ClaimsService.Models.AdapterClaimLine.From(line);
+        Assert.Equal(expected, reloaded.UnitType);
+        Assert.Equal(source.ServiceLines[0].Units, reloaded.Units);
+        native.ClaimLines[0] = reloaded;
+        var engine = global::ClaimsService.Services.Adjudication.Mapping.ClaimToX12837Mapper.Map(native, null);
+        Assert.Equal(expected, engine.ServiceLines[0].UnitType);
+        Assert.Null(reloaded.DrugUnitOfMeasure);
+    }
+
     [Fact]
     public void Institutional_ParsesClaimAndLineLevelRefG1()
     {

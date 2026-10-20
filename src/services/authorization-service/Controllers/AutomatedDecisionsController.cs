@@ -135,6 +135,8 @@ public sealed class AutomatedDecisionsController : ControllerBase
                 Modifiers = s.Modifiers ?? new List<string>(),
                 RequestedUnits = s.RequestedUnits,
                 UnitType = s.UnitType,
+                UnitCode = s.UnitCode,
+                UnitSystem = s.UnitSystem,
                 PlaceOfServiceCode = s.PlaceOfServiceCode,
                 RevenueCode = s.RevenueCode,
             }).ToList(),

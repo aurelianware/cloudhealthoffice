@@ -11,6 +11,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Audit;
 
 namespace CoverageService.Controllers;
 
@@ -100,6 +101,103 @@ public class CoverageController : ControllerBase
         }
 
         return Ok(coverage);
+    }
+
+    /// <summary>
+    /// FHIR R4 Coverage projection of one coverage record (ADR 018). Logged in
+    /// the record access log with the coverage's member, found or not.
+    /// </summary>
+    [AuditRecordAccess("Coverage", "Fhir", RecordIdRouteValue = "id", RecordedByAction = true)]
+    [HttpGet("{id}/fhir")]
+    [Produces("application/fhir+json", "application/json")]
+    [ProducesResponseType(200)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetFhirCoverage(
+        [FromRoute] string id,
+        [FromServices] IFhirCoverageProjector projector,
+        [FromServices] RecordAccessWriter accessLog,
+        [FromServices] ICurrentActor actor)
+    {
+        var coverage = await _coverageRepository.GetByIdAsync(TenantId, id);
+        var audit = new AuditRecordAccessAttribute("Coverage", "Fhir") { RecordIdRouteValue = "id" };
+        if (coverage == null)
+        {
+            await accessLog.RecordAsync(HttpContext, audit, actor, StatusCodes.Status404NotFound, null, []);
+            return NotFound();
+        }
+        await accessLog.RecordAsync(HttpContext, audit, actor, StatusCodes.Status200OK, null,
+            [new RecordSubject(coverage.Id, coverage.MemberId)]);
+
+        return new ContentResult
+        {
+            ContentType = "application/fhir+json",
+            Content = projector.Project(coverage).ToJsonString(),
+            StatusCode = 200,
+        };
+    }
+
+    /// <summary>
+    /// FHIR R4 Coverage projections of the coverage records matching structured
+    /// filters (ADR 018). fhir-service parses FHIR search syntax and calls this
+    /// with resolved filters: <paramref name="status"/> takes FHIR status codes
+    /// (active, cancelled, draft, entered-in-error) and
+    /// <paramref name="lineOfBusiness"/> CHO line-of-business names. Results are
+    /// ordered by member, most recent effective date first, and the total counts
+    /// every match.
+    /// </summary>
+    [AuditRecordAccess("Coverage", RecordAccessActions.Search, ResultIdProperty = "Id", ResultMemberProperty = "MemberId")]
+    [HttpGet("fhir/Coverage")]
+    [ProducesResponseType(typeof(CoverageFhirSearchResponse), 200)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> SearchFhirCoverage(
+        [FromServices] ICoverageFhirSearchRepository search,
+        [FromServices] IFhirCoverageProjector projector,
+        [FromQuery][StringLength(100)] string? coverageId = null,
+        [FromQuery][StringLength(100)] string? memberId = null,
+        [FromQuery] string[]? status = null,
+        [FromQuery] LineOfBusiness[]? lineOfBusiness = null,
+        [FromQuery] DateTime? lastUpdatedFrom = null,
+        [FromQuery] DateTime? lastUpdatedTo = null,
+        [FromQuery][Range(0, CoverageFhirSearchQuery.MaxOffset)] int offset = 0,
+        [FromQuery][Range(0, CoverageFhirSearchQuery.MaxLimit)] int limit = 20)
+    {
+        var statuses = new List<CoverageStatus>();
+        var requestedStatuses = (status ?? [])
+            .SelectMany(s => s.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Select(s => s.ToLowerInvariant())
+            .Distinct()
+            .ToList();
+        foreach (var fhirStatus in requestedStatuses)
+        {
+            if (fhirStatus is not ("active" or "cancelled" or "draft" or "entered-in-error"))
+            {
+                ModelState.AddModelError(nameof(status), "status must be active, cancelled, draft or entered-in-error.");
+                return ValidationProblem(ModelState);
+            }
+            statuses.AddRange(FhirCoverageProjector.ChoStatuses(fhirStatus));
+        }
+
+        // Asked only for statuses no CHO record ever has (entered-in-error):
+        // nothing can match, so answer empty rather than dropping the filter.
+        if (requestedStatuses.Count > 0 && statuses.Count == 0)
+            return Ok(new CoverageFhirSearchResponse(0, []));
+
+        var query = new CoverageFhirSearchQuery
+        {
+            CoverageId = coverageId,
+            MemberId = memberId,
+            Statuses = statuses.Distinct().ToList(),
+            LinesOfBusiness = (lineOfBusiness ?? []).Distinct().ToList(),
+            LastUpdatedFrom = lastUpdatedFrom,
+            LastUpdatedTo = lastUpdatedTo,
+            Offset = offset,
+            Limit = limit,
+        };
+
+        var (items, total) = await search.SearchAsync(TenantId, query, HttpContext.RequestAborted);
+        return Ok(new CoverageFhirSearchResponse(
+            total,
+            items.Select(c => new CoverageFhirSearchEntry(c.Id, c.MemberId, projector.Project(c))).ToList()));
     }
 
     /// <summary>

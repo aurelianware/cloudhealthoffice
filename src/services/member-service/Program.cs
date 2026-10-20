@@ -56,6 +56,7 @@ var eventsCollectionName = builder.Configuration["MongoDb:EventsCollectionName"]
 // Repositories are constructed without I/O side effects; indexes are provisioned
 // by the hosted services below, which lets us register these as singletons.
 builder.Services.AddSingleton<IMemberRepository, MemberRepositoryMongo>();
+builder.Services.AddSingleton<IMemberFhirSearchRepository, MemberFhirSearchRepository>();
 builder.Services.AddSingleton<IMemberEventRepository>(sp =>
     new MemberEventRepositoryMongo(
         sp.GetRequiredService<MongoDB.Driver.IMongoDatabase>(),

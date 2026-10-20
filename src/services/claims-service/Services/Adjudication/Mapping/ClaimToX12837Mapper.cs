@@ -225,6 +225,7 @@ public static class ClaimToX12837Mapper
             : line.ServiceDateTo.ToString("yyyyMMdd"),
         ChargeAmount = line.ChargeAmount,
         Units = line.Units,
+        UnitType = line.UnitType,
         PlaceOfService = line.PlaceOfServiceCode,
         RevenueCode = line.RevenueCode,
         DiagnosisPointers = line.DiagnosisPointers?.Where(p => p > 0).ToList(),

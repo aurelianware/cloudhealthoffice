@@ -308,6 +308,7 @@ public class AuthorizationsController : ControllerBase
         var ambiguousProcedure = false;
         var procedureApproved = true;
         decimal? approvedUnits = null;
+        RequestedService? matchedService = null;
 
         if (!string.IsNullOrEmpty(procedureCode))
         {
@@ -323,6 +324,7 @@ public class AuthorizationsController : ControllerBase
                 procedureApproved = service.ServiceStatus == "A1" || // Approved
                                    service.ServiceStatus == "A2";    // Modified
                 approvedUnits = service.ApprovedUnits ?? service.RequestedUnits;
+                matchedService = service;
             }
             else
             {
@@ -340,6 +342,9 @@ public class AuthorizationsController : ControllerBase
             ApprovedServiceDateTo = authorization.ApprovedServiceDateTo,
             ExpirationDate = authorization.ExpirationDate,
             ApprovedUnits = approvedUnits,
+            ApprovedUnitType = matchedService?.UnitType,
+            ApprovedUnitCode = matchedService?.UnitCode,
+            ApprovedUnitSystem = matchedService?.UnitSystem,
             ValidatedMemberId = requestedMember,
             MemberMatches = memberMatches,
             ValidationCode = !memberConfirmed ? (memberMatches == false ? "MemberMismatch" : "MemberIdentityUnavailable")
