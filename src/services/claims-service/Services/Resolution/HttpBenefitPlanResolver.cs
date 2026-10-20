@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -52,7 +53,10 @@ public class HttpBenefitPlanResolver : IBenefitPlanResolver
             var client = _httpClientFactory.CreateClient(HttpClientName);
             var url = $"/api/v1/plans/{Uri.EscapeDataString(planId)}";
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            // Adjudication, including examiner approval re-runs, is a service
+            // pipeline operation. Keep the caller tenant guard in the real
+            // outbound handler; do not require downstream reads on user roles.
+            using var request = new HttpRequestMessage(HttpMethod.Get, url).UseChoServiceIdentity();
             request.Headers.Add("X-Tenant-ID", tenantId);
 
             using var response = await client.SendAsync(request, ct).ConfigureAwait(false);

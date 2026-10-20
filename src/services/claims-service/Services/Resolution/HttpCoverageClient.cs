@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using ClaimsService.Services;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace ClaimsService.Services.Resolution;
 
@@ -71,7 +72,10 @@ public class HttpCoverageClient : ICoverageClient
             var url = $"/api/v1/coverage/member/{encodedId}/cob" +
                       $"?asOfDate={Uri.EscapeDataString(asOfQuery)}";
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            // Adjudication, including examiner approval re-runs, is a service
+            // pipeline operation. Keep the caller tenant guard in the real
+            // outbound handler; do not require downstream reads on user roles.
+            using var request = new HttpRequestMessage(HttpMethod.Get, url).UseChoServiceIdentity();
             request.Headers.Add("X-Tenant-ID", tenantId);
 
             using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
