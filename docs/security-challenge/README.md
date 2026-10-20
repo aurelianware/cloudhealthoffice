@@ -113,8 +113,9 @@ outside this campaign.
 - `state-assertions.json`: scenario-linked before/after collection digests,
   document count and final cancellation predicate.
 - `audit-assertions.json`: synthetic actor/tenant/record and matching-entry count.
-- `coverage.json`: planned and executed denominators, PASS/FAIL/ERROR/INCONCLUSIVE counts and
-  explicit unsupported tracks. A prerequisite error is not an executed scenario.
+- `coverage.json`: planned, reported and executed denominators, PASS/FAIL/ERROR/INCONCLUSIVE counts and
+  explicit unsupported tracks. A prerequisite error, blocked INCONCLUSIVE case or UNSUPPORTED case is not an
+  executed scenario; reported counts include blocked case records.
 - `findings-summary.json`: unreviewed failed/error/inconclusive scenario IDs;
   confirmed findings are null until private review, never inferred as zero.
 - `knowledge-base-draft.md`: result summary with limitations; always a draft.

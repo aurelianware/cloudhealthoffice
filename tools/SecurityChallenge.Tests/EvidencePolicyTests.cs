@@ -25,4 +25,14 @@ public sealed class EvidencePolicyTests
     }
     [Fact] public void IncompleteLabNeverPasses() => Assert.False(EvidencePolicy.IsCompletePass(false, Passing()));
     [Fact] public void EmptyRunNeverPasses() => Assert.False(EvidencePolicy.IsCompletePass(true, []));
+    [Fact] public void BlockedAndUnsupportedCasesDoNotInflateExecutedCount()
+    {
+        CaseResult[] results =
+        [
+            new("control", "PASS", "test"), new("failure", "FAIL", "test"),
+            new("execution-error", "ERROR", "test"), new("blocked", "INCONCLUSIVE", "test"),
+            new("unavailable", "UNSUPPORTED", "test"), new("lab.prerequisites", "ERROR", "test")
+        ];
+        Assert.Equal(3, EvidencePolicy.ExecutedCount(results));
+    }
 }
