@@ -204,6 +204,22 @@ public class PayerToPayerConsentTests
     [Fact]
     [Trait("Scenario", "P2P-03")]
     [Trait("Backend", "Replace")]
+    public async Task P2P03_Replace_AConsentForOneMemberCannotBeReplayedForAnother()
+    {
+        // The consent names pat-001; sent with an export for pat-002 it opens nothing.
+        var (service, store) = Inbound();
+
+        var result = await service.RespondAsync(InboundRequest(
+            AcceptanceContext.PdexConsent(RequestingPayer, memberId: "pat-001"), member: "pat-002"));
+
+        result.Outcome.Should().BeOneOf(PayerToPayerOutcome.NotAuthorized, PayerToPayerOutcome.NoMatch);
+        result.Bundle.Should().BeNull();
+        store.Records.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-03")]
+    [Trait("Backend", "Replace")]
     public async Task P2P03_Replace_OneMembersConsentDoesNotOpenAnother()
     {
         var (service, _) = Inbound();

@@ -19,12 +19,17 @@ public static class P2PTestConsent
     {
         var node = JsonSerializer.SerializeToNode(body) as JsonObject ?? new JsonObject();
         if (!node.ContainsKey("consent") && PayerOf(token) is { } payer)
-            node["consent"] = For(payer);
+            node["consent"] = For(payer, Str(node["memberId"]),
+                Str(node["familyName"]) ?? Str(node["lastName"]), Str(node["birthDate"]) ?? Str(node["dob"]));
         return node.ToJsonString();
     }
 
-    public static JsonObject For(string payer) =>
-        PdexConsentBuilder.Build("Patient/member", payer, LocalPayerId, DateTime.UtcNow.AddDays(-1), null);
+    /// <summary>The consent, naming the member the body identifies.</summary>
+    public static JsonObject For(string payer, string? memberId, string? family = null, string? birthDate = null) =>
+        PdexConsentBuilder.Build(memberId, payer, LocalPayerId, DateTime.UtcNow.AddDays(-1), null, family, birthDate);
+
+    private static string? Str(JsonNode? node) =>
+        node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
 
     private static string? PayerOf(string token)
     {

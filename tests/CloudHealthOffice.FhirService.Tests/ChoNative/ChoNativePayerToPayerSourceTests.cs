@@ -93,7 +93,7 @@ public class ChoNativePayerToPayerSourceTests
     private const string RequestingPayer = "requesting-payer";
 
     private static System.Text.Json.Nodes.JsonObject ConsentFor(string payer) =>
-        PdexConsentBuilder.Build("Patient/x", payer, "THIS-PLAN", DateTime.UtcNow.AddDays(-1), null);
+        PdexConsentBuilder.Build(null, payer, "THIS-PLAN", DateTime.UtcNow.AddDays(-1), null, "Jones", "1962-03-22");
 
     private static PayerToPayerMemberMatchService MatchService(IPayerToPayerMemberMatchSource source) =>
         new(source, new InMemoryPayerToPayerConsentAttestationStore(),

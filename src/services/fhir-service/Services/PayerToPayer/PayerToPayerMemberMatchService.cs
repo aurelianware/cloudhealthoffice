@@ -124,6 +124,14 @@ public sealed class PayerToPayerMemberMatchService : IPayerToPayerMemberMatchSer
         if (selection.Outcome == CoverageSelectionOutcome.Ambiguous)
             return Failed(request, MemberMatchOutcome.AmbiguousCoverage, matched.MemberId);
 
+        // The consent must be this member's: its patient bears one of the member's
+        // identifiers, or agrees on family name and birth date. Otherwise one
+        // consent could be replayed for any member. Answered as no match, so a
+        // match that a mismatched consent spoiled reveals nothing more.
+        if (!consent.NamesMember(
+                matchedCoverages.Select(c => c.SubscriberId).Append(matched.MemberId), matched.LastName, matched.Dob))
+            return Failed(request, MemberMatchOutcome.NoMatch, consentFailure: PdexConsentFailure.PatientNotBound);
+
         // Bound to the requesting payer: the export it asks for next is served
         // to that payer, for this member, while the consent is in force.
         await _attestations.RecordAsync(new PayerToPayerConsentAttestation

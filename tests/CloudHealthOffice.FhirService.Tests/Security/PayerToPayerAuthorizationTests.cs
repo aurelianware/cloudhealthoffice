@@ -196,7 +196,7 @@ public class PayerToPayerAuthorizationTests : IClassFixture<PayerToPayerWebAppFa
     }
 
     [Fact]
-    public async Task Export_BackendTokenWithTheExplicitP2PScope_ExportsTheOptedInMember()
+    public async Task Export_BackendTokenWithTheExplicitP2PScope_ExportsTheConsentedMember()
     {
         // Positive control: the legitimate backend flow still works.
         var response = await PostAsync(ExportPath, BackendToken(P2PScope), ExportBody("pat-002"));

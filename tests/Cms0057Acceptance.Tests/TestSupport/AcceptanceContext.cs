@@ -53,10 +53,13 @@ internal static class AcceptanceContext
     /// as source, in force from a day ago unless told otherwise.
     /// </summary>
     public static System.Text.Json.Nodes.JsonObject PdexConsent(
-        string requestingPayerId, DateTime? startUtc = null, DateTime? endUtc = null, string? policy = null)
+        string requestingPayerId, DateTime? startUtc = null, DateTime? endUtc = null, string? policy = null,
+        string? memberId = "pat-001", string? family = null, string? birthDate = null)
     {
         var consent = FhirService.Services.PayerToPayer.PdexConsentBuilder.Build(
-            "Patient/member", requestingPayerId, LocalPayerId, startUtc ?? DateTime.UtcNow.AddDays(-1), endUtc);
+            memberId, requestingPayerId, LocalPayerId,
+            (startUtc ?? DateTime.UtcNow.AddDays(-1)) + FhirService.Services.PayerToPayer.PdexConsentValidator.StartSkew,
+            endUtc, family, birthDate);
         if (policy is not null)
             consent["policy"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["uri"] = policy });
         return consent;
