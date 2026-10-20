@@ -577,7 +577,8 @@ public class MembersController : ControllerBase
     public async Task<IActionResult> GetFhirPatient([FromRoute] string memberId)
     {
         var member = await _memberRepository.GetByMemberIdAsync(TenantId, memberId);
-        if (member == null) return NotFound();
+        // Drafts are hidden from every read path, the FHIR projection included.
+        if (member == null || member.IsDraft) return NotFound();
 
         // Best-effort PCP fetch so Patient.generalPractitioner is populated when
         // available. Failures (downstream unavailable, no PCP yet) silently
@@ -600,6 +601,59 @@ public class MembersController : ControllerBase
             Content = patient.ToJsonString(),
             StatusCode = 200
         };
+    }
+
+    /// <summary>
+    /// FHIR R4 Patient projections of the members matching structured filters
+    /// (ADR 018). fhir-service parses FHIR search syntax and calls this with
+    /// resolved filters; this endpoint never parses FHIR. Drafts are excluded,
+    /// results are ordered by member id, and the total counts every match.
+    /// Results omit <c>generalPractitioner</c>, which only the read fetches.
+    /// </summary>
+    [AuditRecordAccess("Member", RecordAccessActions.Search, ResultIdProperty = "MemberId", MemberQueryParameters = ["memberId"])]
+    [HttpGet("fhir/Patient")]
+    [ProducesResponseType(typeof(MemberFhirSearchResponse), 200)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> SearchFhirPatients(
+        [FromServices] IMemberFhirSearchRepository search,
+        [FromQuery][StringLength(MaxNameSearchLength)] string? memberId = null,
+        [FromQuery][StringLength(MaxNameSearchLength)] string? family = null,
+        [FromQuery][StringLength(MaxNameSearchLength)] string? given = null,
+        [FromQuery][StringLength(MaxNameSearchLength)] string? name = null,
+        [FromQuery] DateTime? birthDateFrom = null,
+        [FromQuery] DateTime? birthDateTo = null,
+        [FromQuery] string? gender = null,
+        [FromQuery] DateTime? lastUpdatedFrom = null,
+        [FromQuery] DateTime? lastUpdatedTo = null,
+        [FromQuery][Range(0, MemberFhirSearchQuery.MaxOffset)] int offset = 0,
+        [FromQuery][Range(0, MemberFhirSearchQuery.MaxLimit)] int limit = 20)
+    {
+        if (gender is not null && !FhirGenderCodes.IsValid(gender.Trim().ToLowerInvariant()))
+        {
+            ModelState.AddModelError(nameof(gender), "gender must be male, female, other or unknown.");
+            return ValidationProblem(ModelState);
+        }
+
+        var query = new MemberFhirSearchQuery
+        {
+            MemberId = memberId,
+            Family = family,
+            Given = given,
+            Name = name,
+            BirthDateFrom = birthDateFrom,
+            BirthDateTo = birthDateTo,
+            Gender = gender,
+            LastUpdatedFrom = lastUpdatedFrom,
+            LastUpdatedTo = lastUpdatedTo,
+            Offset = offset,
+            Limit = limit,
+        };
+
+        var (members, total) = await search.SearchAsync(TenantId, query, HttpContext.RequestAborted);
+        var items = members
+            .Select(m => new MemberFhirSearchEntry(m.MemberId, _fhirProjector.Project(m)))
+            .ToList();
+        return Ok(new MemberFhirSearchResponse(total, items));
     }
 
     // ── Event stream ─────────────────────────────────────────────────

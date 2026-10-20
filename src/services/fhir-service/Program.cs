@@ -4,6 +4,7 @@ using FhirService.Middleware;
 using FhirService.Models;
 using FhirService.Services;
 using FhirService.Services.Identity;
+using FhirService.Services.ChoNative;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Caching;
@@ -119,7 +120,46 @@ builder.Services.AddPriorAuthRuleEngine(builder.Configuration)
 builder.Services.Configure<FhirAdapterOptions>(
     builder.Configuration.GetSection(FhirAdapterOptions.SectionName));
 builder.Services.AddSingleton<IFhirAdapterStatusService, FhirAdapterStatusService>();
-builder.Services.AddSingleton<IFhirDataAdapter, MockFhirDataAdapter>();
+// Patient and Coverage may be served from CHO's own member-service and
+// coverage-service (FhirAdapters:Sources:<Resource>=ChoNative) instead of the
+// synthetic mock, which stays the default (ADR 018). The bindings are resolved
+// and validated here, so an invalid or unsatisfiable configuration stops
+// start-up instead of serving something other than what it says.
+var fhirDataBindings = FhirDataBindings.From(
+    builder.Configuration.GetSection(FhirAdapterOptions.SectionName).Get<FhirAdapterOptions>()
+    ?? new FhirAdapterOptions());
+builder.Services.AddSingleton(fhirDataBindings);
+builder.Services.AddSingleton<MockFhirDataAdapter>();
+if (fhirDataBindings.AnyNative)
+{
+    void AddChoNativeClient(string name, string urlKey, string resource)
+    {
+        var url = builder.Configuration[urlKey];
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var baseUri))
+        {
+            throw new InvalidOperationException(
+                $"FhirAdapters:Sources:{resource}=ChoNative needs {urlKey} set to the service's absolute URL.");
+        }
+        builder.Services.AddHttpClient(name, client =>
+            {
+                client.BaseAddress = baseUri;
+                client.DefaultRequestHeaders.Add("Accept", "application/json");
+                client.Timeout = TimeSpan.FromSeconds(15);
+            })
+            .AddHttpMessageHandler<TenantHeaderPropagationHandler>()
+            .AddHttpMessageHandler<CorrelationIdPropagationHandler>();
+    }
+
+    if (fhirDataBindings.Patient == FhirAdapterSources.ChoNative)
+        AddChoNativeClient(ChoNativeFhirDataAdapter.MemberServiceClient, "Services:MemberServiceUrl", "Patient");
+    if (fhirDataBindings.Coverage == FhirAdapterSources.ChoNative)
+        AddChoNativeClient(ChoNativeFhirDataAdapter.CoverageServiceClient, "Services:CoverageServiceUrl", "Coverage");
+    builder.Services.AddSingleton<ChoNativeFhirDataAdapter>();
+}
+builder.Services.AddSingleton<IFhirDataAdapter>(sp => new RoutingFhirDataAdapter(
+    sp.GetRequiredService<FhirDataBindings>(),
+    sp.GetRequiredService<MockFhirDataAdapter>(),
+    sp.GetService<ChoNativeFhirDataAdapter>()));
 builder.Services.AddSingleton<FhirBundleBuilder>();
 builder.Services.AddSingleton<MockPatientAccessDataProvider>();
 builder.Services.AddSingleton<IPatientAccessDataProvider>(sp =>
@@ -544,6 +584,8 @@ builder.Services.AddControllers(options =>
     // which requests it governs (member-scoped resource + provider-shaped
     // token), so non-Provider-Access traffic passes straight through.
     options.Filters.Add<FhirService.Services.ProviderAccess.ProviderAccessAuthorizationFilter>();
+    // Adapter failures answer as FHIR: unsupported search 400, upstream outage 502 (ADR 018).
+    options.Filters.Add<FhirAdapterExceptionFilter>();
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

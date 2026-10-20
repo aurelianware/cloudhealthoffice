@@ -114,6 +114,7 @@ healthcare payer systems.
 - [cms-0057-f.com as a companion educational property](adr/013-cms-0057-f-com-companion-property.md)
 - [One contract model feeding one pricing engine](adr/016-unified-contract-pricing.md)
 - [MongoDB API is the only document persistence path](adr/017-mongodb-api-only-persistence.md)
+- [FHIR Patient and Coverage served from CHO's own member and coverage services](adr/018-fhir-patient-coverage-from-cho-services.md)
 
 ## Roadmap
 
