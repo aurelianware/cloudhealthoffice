@@ -77,6 +77,7 @@ public sealed class PayerToPayerMemberMatchController : FhirControllerBase
             RequestedPayerId = body.RequestedPayerId,
             RequestedSubscriberId = body.RequestedSubscriberId,
             AsOfDate = body.AsOfDate,
+            Consent = body.Consent,
         };
 
         var result = await _matcher.MatchAsync(request, ct);
@@ -84,6 +85,10 @@ public sealed class PayerToPayerMemberMatchController : FhirControllerBase
         {
             MemberMatchOutcome.Matched =>
                 Ok(PayerToPayerMemberMatchResponseBuilder.Build(result.Member!, result.Coverage)),
+
+            // Decided before any member is looked at, so it reveals nothing
+            // about membership (PDex answers an unusable consent with 422).
+            MemberMatchOutcome.ConsentNotAccepted => FhirUnprocessable(ConsentNotAcceptedMessage),
 
             MemberMatchOutcome.InsufficientCriteria => FhirBadRequest(
                 "Insufficient identifying criteria: supply a member or subscriber id, or a family name with a birth date."),
@@ -96,6 +101,12 @@ public sealed class PayerToPayerMemberMatchController : FhirControllerBase
                 "The supplied identifiers did not resolve to a single member and coverage; no data returned."),
         };
     }
+
+    internal const string ConsentNotAcceptedMessage =
+        "A Payer-to-Payer member-match requires the member's consent: an active HRex Consent (scope patient-privacy, "
+        + "category IDSCL, policy #sensitive, provision permit in force) naming the requesting payer as information "
+        + "recipient and no party other than that payer and this plan. Data segmentation for the #regular policy is "
+        + "not supported.";
 }
 
 /// <summary>
@@ -105,6 +116,12 @@ public sealed class PayerToPayerMemberMatchController : FhirControllerBase
 /// </summary>
 public sealed class MemberMatchRequestDto
 {
+    /// <summary>
+    /// The member's HRex consent (a FHIR Consent resource) naming the requesting
+    /// payer as information recipient. Required (D-13, ADR 022).
+    /// </summary>
+    public System.Text.Json.Nodes.JsonObject? Consent { get; set; }
+
     public string? ReceivingPayerId { get; set; }
 
     public string? FamilyName { get; set; }

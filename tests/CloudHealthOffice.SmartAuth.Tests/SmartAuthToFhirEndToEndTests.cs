@@ -102,9 +102,12 @@ public class SmartAuthToFhirEndToEndTests
         using var fhir = await FhirTrustingSmartAuthAsync(confineTo: null);
         var client = Bearer(fhir, body.GetProperty("access_token").GetString()!);
 
+        // The member's consent naming the registered payer (ADR 022).
+        var consent = FhirService.Services.PayerToPayer.PdexConsentBuilder.Build(
+            "Patient/pat-001", "PAYER-E2E", "cloud-health-office", DateTime.UtcNow.AddDays(-1), null);
         var same = await PostJson(client, "/fhir/r4/Patient/$member-match",
-            new { receivingPayerId = "PAYER-E2E", memberId = "pat-001" });
-        var omitted = await PostJson(client, "/fhir/r4/Patient/$member-match", new { memberId = "pat-001" });
+            new { receivingPayerId = "PAYER-E2E", memberId = "pat-001", consent });
+        var omitted = await PostJson(client, "/fhir/r4/Patient/$member-match", new { memberId = "pat-001", consent });
         var other = await PostJson(client, "/fhir/r4/Patient/$member-match",
             new { receivingPayerId = "PAYER-OTHER", memberId = "pat-001" });
 

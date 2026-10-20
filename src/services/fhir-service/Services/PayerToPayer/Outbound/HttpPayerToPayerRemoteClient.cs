@@ -65,6 +65,7 @@ public sealed class HttpPayerToPayerRemoteClient : IPayerToPayerRemoteClient
             birthDate = request.BirthDate,
             requestedPayerId = request.RequestedPayerId,
             asOfDate = request.AsOfDate,
+            consent = request.Consent,
         }, ct);
 
     public Task<RemoteCallResponse> RequestMemberDataAsync(
@@ -74,6 +75,7 @@ public sealed class HttpPayerToPayerRemoteClient : IPayerToPayerRemoteClient
             receivingPayerId = request.ReceivingPayerId,
             memberId = request.MemberId,
             lookbackYears = request.LookbackYears,
+            consent = request.Consent,
         }, ct);
 
     private async Task<RemoteCallResponse> PostAsync(

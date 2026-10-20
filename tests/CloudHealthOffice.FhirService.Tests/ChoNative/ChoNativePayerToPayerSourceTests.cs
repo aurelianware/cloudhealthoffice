@@ -90,6 +90,16 @@ public class ChoNativePayerToPayerSourceTests
             NullLogger<ChoNativeMemberDirectory>.Instance), upstream);
     }
 
+    private const string RequestingPayer = "requesting-payer";
+
+    private static System.Text.Json.Nodes.JsonObject ConsentFor(string payer) =>
+        PdexConsentBuilder.Build("Patient/x", payer, "THIS-PLAN", DateTime.UtcNow.AddDays(-1), null);
+
+    private static PayerToPayerMemberMatchService MatchService(IPayerToPayerMemberMatchSource source) =>
+        new(source, new InMemoryPayerToPayerConsentAttestationStore(),
+            Options.Create(new PayerToPayerDirectoryOptions { LocalPayerId = "THIS-PLAN" }), TimeProvider.System,
+            NullLogger<PayerToPayerMemberMatchService>.Instance);
+
     private static ChoNativePayerToPayerMemberMatchSource MatchSource(ChoNativeMemberDirectory directory) =>
         new(directory, Options.Create(new FhirAdapterOptions { TenantId = Tenant }),
             Options.Create(new PayerToPayerDirectoryOptions { LocalPayerId = "THIS-PLAN" }));
@@ -245,11 +255,9 @@ public class ChoNativePayerToPayerSourceTests
     [Fact]
     public async Task The_match_service_answers_insufficient_or_ambiguous_from_what_the_source_can_prove()
     {
-        var notSearchable = new PayerToPayerMemberMatchService(new FixedCandidates(MemberMatchCandidates.NotSearchable),
-            NullLogger<PayerToPayerMemberMatchService>.Instance);
-        var incomplete = new PayerToPayerMemberMatchService(new FixedCandidates(new MemberMatchCandidates([], Complete: false)),
-            NullLogger<PayerToPayerMemberMatchService>.Instance);
-        var request = new MemberMatchRequest { TenantId = Tenant, FamilyName = "Jones", BirthDate = "1962-03-22", Ssn = "123456789" };
+        var notSearchable = MatchService(new FixedCandidates(MemberMatchCandidates.NotSearchable));
+        var incomplete = MatchService(new FixedCandidates(new MemberMatchCandidates([], Complete: false)));
+        var request = new MemberMatchRequest { TenantId = Tenant, ReceivingPayerId = RequestingPayer, Consent = ConsentFor(RequestingPayer), FamilyName = "Jones", BirthDate = "1962-03-22", Ssn = "123456789" };
 
         (await notSearchable.MatchAsync(request)).Outcome.Should().Be(MemberMatchOutcome.InsufficientCriteria);
         (await incomplete.MatchAsync(request)).Outcome.Should().Be(MemberMatchOutcome.AmbiguousMatch);
@@ -259,11 +267,9 @@ public class ChoNativePayerToPayerSourceTests
     public async Task A_supplied_SSN_the_candidates_cannot_verify_is_never_ignored()
     {
         var jones = new ChoMember { MemberId = "M-1", FirstName = "Pat", LastName = "Jones", Dob = "1962-03-22", Gender = "F" };
-        var unverifiable = new PayerToPayerMemberMatchService(
-            new FixedCandidates(new MemberMatchCandidates([jones], SsnVerifiable: false)),
-            NullLogger<PayerToPayerMemberMatchService>.Instance);
-        var withSsn = new MemberMatchRequest { TenantId = Tenant, FamilyName = "Jones", BirthDate = "1962-03-22", Ssn = "123456789" };
-        var withoutSsn = new MemberMatchRequest { TenantId = Tenant, FamilyName = "Jones", BirthDate = "1962-03-22" };
+        var unverifiable = MatchService(new FixedCandidates(new MemberMatchCandidates([jones], SsnVerifiable: false)));
+        var withSsn = new MemberMatchRequest { TenantId = Tenant, ReceivingPayerId = RequestingPayer, Consent = ConsentFor(RequestingPayer), FamilyName = "Jones", BirthDate = "1962-03-22", Ssn = "123456789" };
+        var withoutSsn = new MemberMatchRequest { TenantId = Tenant, ReceivingPayerId = RequestingPayer, Consent = ConsentFor(RequestingPayer), FamilyName = "Jones", BirthDate = "1962-03-22" };
 
         // The SSN may belong to someone else who shares the name and birth date.
         (await unverifiable.MatchAsync(withSsn)).Outcome.Should().Be(MemberMatchOutcome.AmbiguousMatch);

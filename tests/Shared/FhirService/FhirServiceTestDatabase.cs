@@ -71,6 +71,11 @@ public static class FhirServiceTestDatabase
             // DtrService seeds the default questionnaire library through it.
             services.RemoveAll<IDtrResourceStore>();
             services.AddSingleton<IDtrResourceStore, InMemoryDtrResourceStore>();
+
+            // Payer-to-Payer consents accepted from requesting payers (ADR 022).
+            services.RemoveAll<global::FhirService.Services.PayerToPayer.IPayerToPayerConsentAttestationStore>();
+            services.AddSingleton<global::FhirService.Services.PayerToPayer.IPayerToPayerConsentAttestationStore,
+                global::FhirService.Services.PayerToPayer.InMemoryPayerToPayerConsentAttestationStore>();
         });
 
         return builder;
