@@ -119,9 +119,9 @@ try
                 payerACanary = text.Contains("CANARY-a"), payerBCanary = text.Contains("CANARY-b") });
             return ((int)response.StatusCode, text);
         }
-        object Fixture(string payer) => new
+        object Fixture(string payer, string number = "SYNTHETIC-SHARED-NUMBER") => new
         {
-            authorizationNumber = "SYNTHETIC-SHARED-NUMBER", memberId = "synthetic-dependent",
+            authorizationNumber = number, memberId = "synthetic-dependent",
             patientFirstName = "Synthetic", patientLastName = "CANARY-" + payer,
             patientDateOfBirth = "2000-01-01T00:00:00Z", requestingProviderNPI = "1234567890",
             serviceTypeCode = "1", requestedServiceDateFrom = "2099-01-01T00:00:00Z",
@@ -179,7 +179,7 @@ try
             {
                 var document = await collection.Find(new BsonDocument("_id", ids[payer])).SingleAsync();
                 return document["TenantId"] == "synthetic-payer-" + payer
-                    && document["CreatedBy"] != "injected-actor"
+                    && document["CreatedBy"] == "dev-user-synthetic-payer-" + payer
                     && document["ApprovedUnits"].IsBsonNull
                     && document["Status"].AsInt32 == 1;
             });
@@ -233,6 +233,76 @@ try
             stateProofs.Add(new { scenarioId = activeCase, statusIsCancelled = cancelled });
             return r.Status == 200 && cancelled;
         });
+        foreach (var payer in new[] { "a", "b" })
+            await Case($"isolation.{payer}.foreign-decision", async () =>
+            {
+                var before = await Snapshot();
+                var other = payer == "a" ? "b" : "a";
+                var r = await Request("PUT", $"api/authorizations/{ids[other]}/status", tokens[payer], new { status = "Cancelled" });
+                return r.Status == 404 && !r.Body.Contains("CANARY-") && before == await Snapshot();
+            });
+        await Case("identity.bad-signature", async () =>
+        {
+            var token = ChoTokenIssuer.FromKeys(ChoDevelopmentAuth.UserIssuer, ChoDevelopmentAuth.Audience,
+                null, new string('Q', 64), TimeSpan.FromMinutes(5))
+                .IssueUserToken("synthetic-untrusted", "synthetic-payer-a", [ChoRolePermissions.TenantAdmin]);
+            var before = await Snapshot();
+            var r = await Request("GET", "api/authorizations/" + ids["b"], token);
+            return r.Status == 401 && !r.Body.Contains("CANARY-") && before == await Snapshot();
+        });
+        const string memberNumber = "SYNTHETIC-MEMBER-CONTROL";
+        await Case("member.approval-control", async () =>
+        {
+            var created = await Request("POST", "api/authorizations", tokens["a"], Fixture("a", memberNumber));
+            if (created.Status != 201) return false;
+            using var body = JsonDocument.Parse(created.Body);
+            var id = body.RootElement.GetProperty("id").GetString()!;
+            var r = await Request("POST", $"api/authorizations/{id}/response", tokens["a"], new
+            {
+                controlNumber = "SYNTHETIC-REVIEW", reviewDecision = "A1", approvedUnits = 1,
+                approvedServiceDateFrom = "2099-01-01T00:00:00Z", approvedServiceDateTo = "2099-12-31T00:00:00Z"
+            });
+            var document = await collection.Find(new BsonDocument("_id", id)).SingleAsync();
+            var approved = document["Status"].AsInt32 == 4;
+            stateProofs.Add(new { scenarioId = activeCase, statusIsApproved = approved });
+            return r.Status == 200 && approved;
+        });
+        var memberReady = results[^1].Outcome == "PASS";
+        async Task MemberCase(string name, string member, string procedure, int line, string provider, int status, bool valid, bool? match, string? code = null)
+        {
+            var id = "member." + name;
+            if (!memberReady)
+            {
+                results.Add(new(id, "INCONCLUSIVE", "Approved authorization positive control failed"));
+                return;
+            }
+            await Case(id, async () =>
+            {
+                var before = await Snapshot();
+                var path = $"api/authorizations/{memberNumber}/validate?serviceDate=2099-06-01&procedureCode={procedure}&lineNumber={line}&providerNpi={provider}&memberId={Uri.EscapeDataString(member)}";
+                var r = await Request("GET", path, tokens["a"]);
+                if (r.Status != status || before != await Snapshot()) return false;
+                if (status == 400) return !r.Body.Contains("synthetic-dependent");
+                using var body = JsonDocument.Parse(r.Body);
+                var root = body.RootElement;
+                return root.GetProperty("isValid").GetBoolean() == valid
+                    && root.GetProperty("memberMatches").GetBoolean() == match
+                    && root.GetProperty("validatedMemberId").GetString() == member.Trim()
+                    && (code == null || root.GetProperty("validationCode").GetString() == code)
+                    && (match != false || !r.Body.Contains("synthetic-dependent", StringComparison.Ordinal));
+            });
+        }
+        await MemberCase("own-positive-control", "synthetic-dependent", "99213", 1, "1234567890", 200, true, true);
+        // A broken positive validation makes every negative result inconclusive.
+        memberReady = memberReady && results[^1].Outcome == "PASS";
+        await MemberCase("foreign-member", "synthetic-other-member", "99213", 1, "1234567890", 200, false, false, "MemberMismatch");
+        await MemberCase("subscriber-substitution", "synthetic-subscriber", "99213", 1, "1234567890", 200, false, false, "MemberMismatch");
+        await MemberCase("case-sensitive-id", "SYNTHETIC-DEPENDENT", "99213", 1, "1234567890", 200, false, false, "MemberMismatch");
+        await MemberCase("blank-id", "", "99213", 1, "1234567890", 400, false, null);
+        await MemberCase("wrong-line", "synthetic-dependent", "99213", 2, "1234567890", 200, false, true);
+        await MemberCase("wrong-procedure", "synthetic-dependent", "99214", 1, "1234567890", 200, false, true);
+        await MemberCase("wrong-provider", "synthetic-dependent", "99213", 1, "0000000000", 200, false, true);
+        await MemberCase("trimmed-id-control", " synthetic-dependent ", "99213", 1, "1234567890", 200, true, true);
         completed = true;
     }
     finally
@@ -246,7 +316,7 @@ catch (Exception exception)
     Console.Error.WriteLine($"Lab ERROR in {phase} ({exception.GetType().Name}).");
     results.Add(new("lab.prerequisites", "ERROR", $"Lab failed in {phase}; no assurance claim. Check build, Mongo availability and service configuration."));
 }
-var unsupported = new[] { "production-oidc", "member-binding", "claims", "appeals", "payments", "fhir-interop", "ingress", "resilience", "mutation-sensitivity" };
+var unsupported = new[] { "production-oidc", "claims", "appeals", "payments", "fhir-interop", "ingress", "resilience", "mutation-sensitivity" };
 await File.WriteAllTextAsync(Path.Combine(output, "manifest.json"), JsonSerializer.Serialize(new
 {
     schemaVersion = "1.0", runId, started, finished = DateTimeOffset.UtcNow, completed,
@@ -259,16 +329,23 @@ await File.WriteAllTextAsync(Path.Combine(output, "coverage.json"), JsonSerializ
 {
     planned = EvidencePolicy.ScenarioIds.Count, executed = results.Count(x => x.Id != "lab.prerequisites"),
     pass = results.Count(x => x.Outcome == "PASS"), fail = results.Count(x => x.Outcome == "FAIL"),
-    error = results.Count(x => x.Outcome == "ERROR"), unsupported
+    error = results.Count(x => x.Outcome == "ERROR"), inconclusive = results.Count(x => x.Outcome == "INCONCLUSIVE"), unsupported
 }, json));
 await File.WriteAllTextAsync(Path.Combine(output, "http-observations.json"), JsonSerializer.Serialize(observations, json));
 await File.WriteAllTextAsync(Path.Combine(output, "state-assertions.json"), JsonSerializer.Serialize(stateProofs, json));
 await File.WriteAllTextAsync(Path.Combine(output, "audit-assertions.json"), JsonSerializer.Serialize(auditProofs, json));
+await File.WriteAllTextAsync(Path.Combine(output, "findings-summary.json"), JsonSerializer.Serialize(new
+{
+    reviewState = "REQUIRES_PRIVATE_TRIAGE", confirmedFindings = (int?)null,
+    failedScenarios = results.Where(x => x.Outcome == "FAIL").Select(x => x.Id),
+    errors = results.Where(x => x.Outcome == "ERROR").Select(x => x.Id),
+    inconclusive = results.Where(x => x.Outcome == "INCONCLUSIVE").Select(x => x.Id)
+}, json));
 // No bodies, credentials, connection strings or raw service logs enter this review packet.
 await File.WriteAllTextAsync(Path.Combine(output, "knowledge-base-draft.md"),
     $"# Security challenge review draft\n\nRun `{runId}`; binary SHA-256 `{serviceHash}`.\n\n" +
     string.Join("\n", results.Select(x => $"- `{x.Id}`: **{x.Outcome}**")) +
-    "\n\nUnsupported: " + string.Join(", ", unsupported) +
+    "\n\nEvidence: [manifest](manifest.json), [scenario results](scenario-results.jsonl), [coverage](coverage.json), [state](state-assertions.json), [audit](audit-assertions.json), [checksums](artifact-checksums.txt).\n\nUnsupported: " + string.Join(", ", unsupported) +
     ".\n\nRequires private security review before publication. This local profile does not establish production identity, healthcare compliance or whole-platform security.\n");
 await File.WriteAllTextAsync(Path.Combine(output, "reproduce.md"),
     "# Reproduction\n\nSee docs/security-challenge/README.md at source commit `" + sourceCommit +
@@ -278,7 +355,7 @@ await File.WriteAllTextAsync(Path.Combine(output, "reproduce.md"),
 var checksums = Directory.GetFiles(output).OrderBy(Path.GetFileName)
     .Select(path => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant() + "  " + Path.GetFileName(path));
 await File.WriteAllLinesAsync(Path.Combine(output, "artifact-checksums.txt"), checksums);
-Console.WriteLine($"Evidence: {output}; PASS={results.Count(x => x.Outcome == "PASS")}, FAIL={results.Count(x => x.Outcome == "FAIL")}, ERROR={results.Count(x => x.Outcome == "ERROR")}");
+Console.WriteLine($"Evidence: {output}; PASS={results.Count(x => x.Outcome == "PASS")}, FAIL={results.Count(x => x.Outcome == "FAIL")}, ERROR={results.Count(x => x.Outcome == "ERROR")}, INCONCLUSIVE={results.Count(x => x.Outcome == "INCONCLUSIVE")}");
 return EvidencePolicy.IsCompletePass(completed, results) ? 0 : 1;
 
 static string ReadGit(params string[] arguments)

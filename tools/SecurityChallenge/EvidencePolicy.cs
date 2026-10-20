@@ -10,7 +10,11 @@ public static class EvidencePolicy
         "isolation.b.own-id", "isolation.b.foreign-id", "isolation.b.overlapping-number", "isolation.b.search", "integrity.b.create-overposting",
         "identity.write.anonymous", "identity.write.malformed", "identity.write.reader", "privilege.reader-decision",
         "identity.reader-positive-control", "identity.tenant-header-conflict", "identity.wrong-issuer", "identity.wrong-audience",
-        "audit.authorized-read-attribution", "privilege.admin-decision-control"
+        "audit.authorized-read-attribution", "privilege.admin-decision-control",
+        "isolation.a.foreign-decision", "isolation.b.foreign-decision", "identity.bad-signature",
+        "member.approval-control", "member.own-positive-control", "member.foreign-member",
+        "member.subscriber-substitution", "member.case-sensitive-id", "member.blank-id",
+        "member.wrong-line", "member.wrong-procedure", "member.wrong-provider", "member.trimmed-id-control"
     });
 
     // Never infer assurance from a successful setup or a count padded with duplicates.
