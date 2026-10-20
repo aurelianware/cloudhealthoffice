@@ -74,6 +74,13 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
             pendDetails.DuplicateFindings = context.DuplicateFindings.ToList();
         }
 
+        // The same for the plan's own edits (PlanEditsStage).
+        if (context.PlanEditFindings.Count > 0
+            && context.PendDetails is { PlanEditFindings.Count: 0 } planPend)
+        {
+            planPend.PlanEditFindings = context.PlanEditFindings.ToList();
+        }
+
         // Accumulator outbox: a passing claim's prepared commit is written in
         // the same conditional status write that makes it Approved, then
         // driven by the outbox (immediately after this run, else by the

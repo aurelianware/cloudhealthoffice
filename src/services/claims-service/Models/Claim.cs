@@ -1386,7 +1386,7 @@ public class PendDetails
 {
     /// <summary>
     /// Short pend reason code consumed by the work queue categorizer.
-    /// Recognized values: NCCI, MUE, AUTH, NOAUTH, OON, NOCONTRACT, COB, MEDREVIEW, CLINICAL, RETROELIG, SUBRO, SPENDDOWN, PRICING, DUPLICATE, SVCUNAVAIL (a check could not run; transient).
+    /// Recognized values: NCCI, MUE, AUTH, NOAUTH, OON, NOCONTRACT, COB, MEDREVIEW, CLINICAL, RETROELIG, SUBRO, SPENDDOWN, PRICING, DUPLICATE, PLANEDIT (the plan's own edit service, ADR 019), SVCUNAVAIL (a check could not run; transient).
     /// </summary>
     [Required]
     [StringLength(20)]
@@ -1416,6 +1416,13 @@ public class PendDetails
     /// Empty when no duplicate was found.
     /// </summary>
     public List<DuplicateFindingSnapshot> DuplicateFindings { get; set; } = new();
+
+    /// <summary>
+    /// Edits the health plan's own edit service returned (ADR 019), kept apart
+    /// from <see cref="EditFailures"/> because they are the plan's rules, not
+    /// NCCI's. Empty when the plan has no edit service or none of its edits fired.
+    /// </summary>
+    public List<PlanEditFindingSnapshot> PlanEditFindings { get; set; } = new();
 
     /// <summary>
     /// Further pend reasons ("{code}: {reason}") a later stage found while
@@ -1466,6 +1473,9 @@ public class PendDetails
             .Concat((pend.DuplicateFindings ?? [])
                 .Select(d => string.Join('|', "DUP", d.DuplicateType, d.RuleId, d.LineNumber,
                     d.MatchedClaimId, d.MatchedLineNumber)))
+            .Concat((pend.PlanEditFindings ?? [])
+                .Select(p => string.Join('|', "PLAN", p.RuleId,
+                    string.Join(',', (p.LineNumbers ?? []).Order()), p.SuggestedCarc, p.SuggestedRarc)))
             .ToList();
         findings.Sort(StringComparer.Ordinal);
 
@@ -1726,6 +1736,44 @@ public class ExaminerResolutionLock
     public string Token { get; set; } = string.Empty;
     public string? LockedBy { get; set; }
     public DateTime ExpiresAt { get; set; }
+}
+
+/// <summary>
+/// One edit the health plan's own edit service returned for the claim
+/// (<see cref="Services.Adjudication.Stages.PlanEditsStage"/>, ADR 019). With a
+/// <see cref="SuggestedCarc"/> it is a denial edit: upheld, it denies
+/// <see cref="LineNumbers"/> (group CO). Without one it is a review edit:
+/// upheld, it records the review and changes no payment.
+/// </summary>
+[BsonIgnoreExtraElements]
+public class PlanEditFindingSnapshot
+{
+    /// <summary>The plan's rule identifier.</summary>
+    [StringLength(40)]
+    public string RuleId { get; set; } = string.Empty;
+
+    /// <summary>What the plan's rule says, for the examiner.</summary>
+    [StringLength(500)]
+    public string? Message { get; set; }
+
+    /// <summary>The claim lines the edit is about; empty for the whole claim.</summary>
+    public List<int> LineNumbers { get; set; } = new();
+
+    /// <summary>The CARC an upheld denial edit applies; null for a review edit.</summary>
+    [StringLength(3)]
+    public string? SuggestedCarc { get; set; }
+
+    [StringLength(6)]
+    public string? SuggestedRarc { get; set; }
+
+    /// <summary>Stable identity of this edit; see <see cref="Services.Adjudication.EditIdentity"/>.</summary>
+    [StringLength(200)]
+    public string? EditKey { get; set; }
+
+    /// <summary>A denial edit: upholding it denies its lines.</summary>
+    [BsonIgnore]
+    [JsonIgnore]
+    public bool IsDenialEdit => !string.IsNullOrEmpty(SuggestedCarc) && LineNumbers.Count > 0;
 }
 
 /// <summary>

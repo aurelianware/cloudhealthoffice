@@ -14,9 +14,12 @@ public sealed record ClaimEdit(
     string? SuggestedCarc,
     string? SuggestedRarc);
 
-/// <summary>The decidable edits on a claim's pend: NCCI pair and MUE failures, and duplicate findings.</summary>
+/// <summary>The decidable edits on a claim's pend: NCCI pair and MUE failures, duplicate findings, and the plan's own edits.</summary>
 public static class ClaimEditCatalog
 {
+    /// <summary><see cref="ClaimEdit.EditType"/> of an edit from the plan's edit service (ADR 019).</summary>
+    public const string PlanEditType = "PlanEdit";
+
     public static IReadOnlyList<ClaimEdit> Edits(PendDetails? pend)
     {
         if (pend is null) return [];
@@ -32,6 +35,12 @@ public static class ClaimEditCatalog
         {
             edits.Add(new(d.EditKey ?? EditIdentity.Key(d), "Duplicate", d.RuleId,
                 EditOverridePolicy.Category(d), d.Message, [d.LineNumber], d.SuggestedCarc, null));
+        }
+
+        foreach (var p in pend.PlanEditFindings ?? [])
+        {
+            edits.Add(new(p.EditKey ?? EditIdentity.Key(p), PlanEditType, p.RuleId,
+                EditOverridePolicy.Category(p), p.Message, p.LineNumbers, p.SuggestedCarc, p.SuggestedRarc));
         }
 
         return edits
