@@ -72,3 +72,10 @@ HIPAA and CMS-0057-F documentation in this repository is implementation and
 readiness guidance, not legal advice. Production deployment requires
 organization-specific review, controls, contracts, monitoring, and incident
 response procedures.
+
+## Reproducible security challenge
+
+The [Open Security Challenge](docs/security-challenge/README.md) documents the
+synthetic local harness, scenario inventory, evidence contract and reviewed
+knowledge-base feed. Its published coverage limits apply to every result;
+actual findings follow the private reporting policy above.

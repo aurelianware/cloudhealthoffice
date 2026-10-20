@@ -128,7 +128,45 @@ public class ExplanationOfBenefitController : FhirControllerBase
         }
 
         var path = "fhir/ExplanationOfBenefit" + BuildUpstreamQueryString(query, effectivePatient);
-        return ProxyClaimsServiceAsync("ExplanationOfBenefit", path, ct);
+        return ProxyClaimsServiceAsync("ExplanationOfBenefit", path, ct,
+            leavesConfinement: AuthorizedMemberId is null
+                ? null
+                : body => BundlePatientReferences(body) is not { } patients || patients.Any(IsOutsidePatientContext));
+    }
+
+    /// <summary>
+    /// The <c>patient.reference</c> of every entry in a search Bundle (null
+    /// for an entry without one); null when the body is not a Bundle, which a
+    /// confined search treats as leaving its scope.
+    /// </summary>
+    internal static IReadOnlyList<string?>? BundlePatientReferences(string body)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.ValueKind != System.Text.Json.JsonValueKind.Object
+                || !root.TryGetProperty("resourceType", out var type) || type.GetString() != "Bundle")
+                return null;
+            if (!root.TryGetProperty("entry", out var entries))
+                return [];
+            if (entries.ValueKind != System.Text.Json.JsonValueKind.Array)
+                return null;
+
+            var references = new List<string?>();
+            foreach (var entry in entries.EnumerateArray())
+            {
+                references.Add(entry.ValueKind == System.Text.Json.JsonValueKind.Object
+                               && entry.TryGetProperty("resource", out var resource)
+                    ? EobPatientReference(resource.GetRawText())
+                    : null);
+            }
+            return references;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 
     private static string? StripPatientPrefix(string? value)
@@ -195,7 +233,8 @@ public class ExplanationOfBenefitController : FhirControllerBase
         string resourceLabel,
         string path,
         CancellationToken ct,
-        Func<string, bool>? successBodyAllowed = null)
+        Func<string, bool>? successBodyAllowed = null,
+        Func<string, bool>? leavesConfinement = null)
         => ProxyUpstreamServiceAsync(
             _claimsServiceClient,
             "claims-service",
@@ -203,5 +242,6 @@ public class ExplanationOfBenefitController : FhirControllerBase
             path,
             _logger,
             ct,
-            successBodyAllowed);
+            successBodyAllowed,
+            leavesConfinement);
 }

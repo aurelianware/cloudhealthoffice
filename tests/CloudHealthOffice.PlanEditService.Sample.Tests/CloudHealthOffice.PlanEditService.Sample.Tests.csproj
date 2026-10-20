@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The sample plan service and the claims-service side of the contract:
+         the end-to-end tests run CHO's real client and stage against it. -->
+    <ProjectReference Include="../../src/samples/CloudHealthOffice.PlanEditService.Sample/CloudHealthOffice.PlanEditService.Sample.csproj" />
+    <ProjectReference Include="../../src/services/claims-service/claims-service.csproj" />
+  </ItemGroup>
+
+</Project>
