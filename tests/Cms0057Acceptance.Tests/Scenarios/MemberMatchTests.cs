@@ -60,7 +60,9 @@ public class MemberMatchTests
         TenantId = tenant,
         ReceivingPayerId = RequestingPayer,
         // The member's consent, as the requesting payer collected it (ADR 022).
-        Consent = withConsent ? consent ?? AcceptanceContext.PdexConsent(RequestingPayer) : null,
+        Consent = withConsent
+            ? consent ?? AcceptanceContext.PdexConsent(RequestingPayer, memberId: memberId, family: family, birthDate: dob)
+            : null,
         MemberId = memberId,
         FamilyName = family,
         GivenName = given,
@@ -436,6 +438,23 @@ public class MemberMatchTests
         store.Records.Should().ContainSingle().Which.Should().Match<PayerToPayerConsentAttestation>(a =>
             a.MemberId == "pat-001" && a.ReceivingPayerId == RequestingPayer
             && a.Policy == PdexConsentValidator.SensitivePolicy);
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-04")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P04_Replace_AConsentForAnotherMemberSpoilsTheMatchAndRecordsNothing()
+    {
+        // Replay: a consent naming someone else matches no one, and the answer
+        // is the ordinary no-match, so it says nothing about the member.
+        var store = new InMemoryPayerToPayerConsentAttestationStore();
+
+        var match = await Service(store).MatchAsync(Req(family: "Smith", dob: "1955-07-14", memberId: "pat-001",
+            consent: AcceptanceContext.PdexConsent(RequestingPayer, memberId: "pat-002")));
+
+        match.Outcome.Should().Be(MemberMatchOutcome.NoMatch);
+        match.Audit.ConsentFailure.Should().Be(nameof(PdexConsentFailure.PatientNotBound));
+        store.Records.Should().BeEmpty();
     }
 
     [Fact]

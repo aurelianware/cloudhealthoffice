@@ -162,8 +162,8 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         //    peer can bind it to CHO (ADR 022).
         var priorPayerMemberId = coverage.Coverage?.SubscriberId;
         var consent = PdexConsentBuilder.Build(
-            $"Patient/{priorPayerMemberId ?? member.MemberId}", _directory.Value.LocalPayerId, endpoint.PayerId,
-            authorization.EvaluatedAtUtc, endUtc: null);
+            priorPayerMemberId, _directory.Value.LocalPayerId, endpoint.PayerId,
+            authorization.EvaluatedAtUtc, endUtc: null, family: member.LastName, birthDate: member.Dob);
         var matched = await MatchWithRemoteAsync(request, exchange, endpoint, member, priorPayerMemberId, consent, ct);
         if (matched.Failure is { } matchFailure)
             return await FailAsync(request, exchange, matchFailure.Status, matchFailure.Failure, ct);

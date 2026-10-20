@@ -33,7 +33,9 @@ The request carries a `consent`: a FHIR Consent following HRex `hrex-consent`.
 Before any member is looked at, CHO accepts it only when it:
 
 - is `active`, with scope `patient-privacy` and category `IDSCL`, for a patient;
-- carries the HRex `#sensitive` policy;
+- carries the HRex `#sensitive` policy and not `#regular`;
+- restricts nothing CHO would have to segment out of an export: no nested
+  provision, `class`, `code`, `data`, `dataPeriod` or `securityLabel`;
 - has `provision.type` `permit`, and its `provision.period` is in force now;
 - names the **requesting payer** as an information recipient (an `IRCP`
   actor). The requesting payer is the payer the authenticated client is
@@ -43,10 +45,23 @@ Before any member is looked at, CHO accepts it only when it:
 
 Parties are compared by identifier value. The identifier comes from the
 actor's logical reference or from a contained Organization the actor points
-to. Case, spaces and hyphens are ignored.
+to. Case, spaces and hyphens are ignored. Codes are read only when their
+system is the HL7 one or not given. Period bounds must be FHIR dates or
+zoned dateTimes. A partial date as an end runs through the end of its span.
+The start may be up to five minutes ahead, to allow for clock skew between
+payers.
 
-An unacceptable consent answers 422, decided before any member lookup, so it
-reveals nothing about membership.
+**The Consent must be the member's.** Its patient, an identifier or a contained
+Patient, must name the member who is matched (or exported). That means one of
+the member's identifiers (their member id, or a subscriber id on their
+coverage), or the contained Patient's family name and birth date both agreeing
+with theirs. A bare reference CHO cannot resolve names no one. Otherwise one
+Consent could be replayed for any member. A match the Consent does not name is
+answered as an ordinary no-match.
+
+An unacceptable consent answers 422. That decision is made before any member
+lookup, so it reveals nothing about membership. A malformed Consent (a repeated
+property, say) is refused the same way and never errors.
 
 **`#regular` is refused.** That policy asks the plan to withhold sensitive
 data, and CHO cannot segment sensitive data out of an export. Refusing is
@@ -59,7 +74,7 @@ A successful match stores an attestation for the requesting payer, keyed by
 
 - the policy;
 - the consent period;
-- a SHA-256 fingerprint of the Consent as received;
+- a SHA-256 fingerprint of the Consent as parsed;
 - when it was recorded, and which client recorded it.
 
 It holds no consent content. A newer consent from the same payer replaces the
@@ -81,31 +96,39 @@ own registry no longer decides inbound requests.
 When CHO is the new payer, the member's opt-in is still read from CHO's
 registry. Both outbound calls now carry it as an HRex Consent:
 
+- the member as a contained Patient (their id at the prior payer when known,
+  family name and birth date), so the peer can bind it;
 - CHO is the information recipient;
 - the prior payer is the source;
-- the period starts at the consent decision;
+- the period starts at the consent decision, backdated by the skew allowance;
 - the policy is `#sensitive`.
 
 ## Consequences
 
 Positive:
 
-- A registered payer client can neither match nor export a member without the
-  member's consent naming that payer.
+- A registered payer client can neither match nor export a member without
+  attesting the member's consent: a Consent naming both that payer and that
+  member. CHO relies on the requesting payer's attestation, as PDex intends.
+  It cannot verify that the member actually signed.
 - One payer's consent never opens the member to another payer.
 - Inbound requests no longer depend on members having opted in with the plan
   they are leaving.
 
 Tradeoffs:
 
-- Requesting payers that send `#regular` consents are refused until CHO can
-  segment sensitive data.
+- Requesting payers that send `#regular` or otherwise restricted consents are
+  refused until CHO can segment sensitive data.
 - CHO's `$member-match` input is still CHO's JSON shape, carrying the Consent
   as a field, not the PDex `Parameters` resource (P2P-04 conformance).
 - A recorded consent stays usable until its period ends. If the member revokes
   with the requesting payer, that payer must stop asking. CHO is not told.
-- An opt-out recorded in CHO's registry does not, on this branch, refuse
-  inbound requests a requesting payer's consent permits.
+- An opt-out recorded in CHO's registry does not refuse inbound requests that a
+  requesting payer's consent permits. **This needs sign-off from the plan's
+  compliance owner.** A follow-up can make an in-force CHO opt-out refuse
+  inbound exchange as well.
+- A payer with no consent can still tell a known member (403) from an unknown
+  one (404) on the export. That predates this change.
 
 ## Scope boundaries
 

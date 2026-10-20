@@ -80,11 +80,14 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
         if (request.Consent is not null)
         {
             var supplied = PdexConsentValidator.Validate(request.Consent, request.ReceivingPayerId, _localPayerId, now);
-            if (!supplied.Valid)
+            var failure = !supplied.Valid ? supplied.Failure
+                : !supplied.NamesMember([member.MemberId], member.LastName, member.Dob) ? PdexConsentFailure.PatientNotBound
+                : (PdexConsentFailure?)null;
+            if (failure is not null)
                 return Failed(request, PayerToPayerOutcome.NotAuthorized, member.MemberId,
                     ConsentDecision.Deny(ConsentPurposeOfUse.PayerToPayerExchange,
                         ConsentAuthorizationReason.NoConsentForPurpose, now),
-                    supplied.Failure);
+                    failure);
             attestation = new PayerToPayerConsentAttestation
             {
                 TenantId = request.TenantId,

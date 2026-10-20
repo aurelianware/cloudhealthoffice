@@ -81,7 +81,16 @@ public sealed class MongoPayerToPayerConsentAttestationStore : IPayerToPayerCons
             ["recordedAt"] = a.RecordedAtUtc,
             ["recordedBy"] = a.RecordedBy,
         };
-        await _collection.ReplaceOneAsync(filter, document, new ReplaceOptions { IsUpsert = true }, ct);
+        try
+        {
+            await _collection.ReplaceOneAsync(filter, document, new ReplaceOptions { IsUpsert = true }, ct);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            // Two upserts raced to insert the same key; the document now exists,
+            // so the retry replaces it.
+            await _collection.ReplaceOneAsync(filter, document, new ReplaceOptions { IsUpsert = true }, ct);
+        }
     }
 
     public async Task<PayerToPayerConsentAttestation?> FindInForceAsync(
