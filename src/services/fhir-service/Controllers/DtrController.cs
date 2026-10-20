@@ -203,7 +203,7 @@ public class DtrController : FhirControllerBase
         if (string.IsNullOrEmpty(response.Questionnaire))
             return FhirBadRequest("QuestionnaireResponse.questionnaire reference is required");
 
-        if (!_dtrService.QuestionnaireExists(response.Questionnaire, TenantId))
+        if (!await _dtrService.QuestionnaireExistsAsync(response.Questionnaire, TenantId, ct))
             return FhirBadRequest(
                 $"Referenced Questionnaire '{response.Questionnaire}' does not exist");
 

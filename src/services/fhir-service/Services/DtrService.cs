@@ -1,4 +1,5 @@
-using System.Collections.Concurrent;
+using CloudHealthOffice.Infrastructure.Data;
+using CloudHealthOffice.Infrastructure.Logging;
 using FhirService.Models;
 using Hl7.Fhir.Model;
 using Microsoft.Extensions.Options;
@@ -9,14 +10,11 @@ namespace FhirService.Services;
 /// <summary>
 /// DTR Questionnaire library and QuestionnaireResponse intake. Persistence goes
 /// through <see cref="IDtrResourceStore"/>, which the host supplies (MongoDB;
-/// ADR 017). The service also keeps an in-process index of the questionnaires
-/// and responses written through it, which search, update and the existence
-/// check read.
+/// ADR 017). Reads, searches, existence checks and updates all use the durable
+/// store; no per-pod resource index is retained.
 /// </summary>
 public class DtrService : IDtrService
 {
-    private readonly ConcurrentDictionary<string, Questionnaire> _questionnaires = new();
-    private readonly ConcurrentDictionary<string, QuestionnaireResponse> _responses = new();
     private readonly IDtrResourceStore _store;
     private readonly DtrConfig _config;
     private readonly ILogger<DtrService> _logger;
@@ -43,10 +41,10 @@ public class DtrService : IDtrService
                ?? await _store.FindQuestionnaireAsync(DefaultLibraryTenant, id, ct);
     }
 
-    public Task<(IReadOnlyList<Questionnaire> Items, int Total)> SearchQuestionnairesAsync(
+    public async Task<(IReadOnlyList<Questionnaire> Items, int Total)> SearchQuestionnairesAsync(
         QuestionnaireSearchParams search, string tenantId, CancellationToken ct = default)
     {
-        var query = VisibleQuestionnaires(tenantId);
+        var query = (await _store.ListVisibleQuestionnairesAsync(tenantId, ct)).AsEnumerable();
 
         if (!string.IsNullOrEmpty(search.Id))
             query = query.Where(q => q.Id == search.Id);
@@ -60,14 +58,14 @@ public class DtrService : IDtrService
             Enum.TryParse<PublicationStatus>(search.Status, true, out var status))
             query = query.Where(q => q.Status == status);
 
-        var all = query.ToList();
+        var all = query.OrderBy(q => q.Id, StringComparer.Ordinal).ToList();
         var total = all.Count;
         var items = all
             .Skip((search.Page - 1) * search.Count)
             .Take(search.Count)
             .ToList();
 
-        return Task.FromResult<(IReadOnlyList<Questionnaire>, int)>((items, total));
+        return (items, total);
     }
 
     public async Task<Questionnaire> CreateQuestionnaireAsync(
@@ -75,8 +73,8 @@ public class DtrService : IDtrService
     {
         EnsureNotDefaultLibrary(tenantId);
         var id = questionnaire.Id;
-        if (string.IsNullOrEmpty(id) || _questionnaires.ContainsKey($"{tenantId}:{id}"))
-            id = $"q-{Guid.NewGuid().ToString("N")[..8]}";
+        if (string.IsNullOrEmpty(id))
+            id = $"q-{Guid.NewGuid():N}";
 
         questionnaire.Id = id;
         questionnaire.Meta = new Meta
@@ -86,24 +84,34 @@ public class DtrService : IDtrService
             Profile = new[] { DtrProfile },
         };
 
-        await _store.UpsertQuestionnaireAsync(questionnaire, tenantId, ct);
-
-        _questionnaires[$"{tenantId}:{id}"] = questionnaire;
-        _logger.LogInformation("Created Questionnaire {Id} for tenant {TenantId}", id, tenantId);
+        // Preserve create's existing duplicate-id behavior, but arbitrate it in
+        // the store so a second pod cannot overwrite the original resource.
+        var inserted = false;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            if (await _store.TryInsertQuestionnaireAsync(questionnaire, tenantId, ct))
+            {
+                inserted = true;
+                break;
+            }
+            questionnaire.Id = $"q-{Guid.NewGuid():N}";
+        }
+        if (!inserted) throw new ConcurrencyConflictException("Questionnaire creation conflicted; retry the request.");
+        id = questionnaire.Id;
+        _logger.LogInformation("Created Questionnaire {Id} for tenant {TenantId}", LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(tenantId));
         return questionnaire;
     }
 
-    public Task<Questionnaire?> UpdateQuestionnaireAsync(
+    public async Task<Questionnaire?> UpdateQuestionnaireAsync(
         string id, Questionnaire questionnaire, string tenantId, CancellationToken ct = default)
     {
         EnsureNotDefaultLibrary(tenantId);
-        var key = $"{tenantId}:{id}";
-        if (!_questionnaires.ContainsKey(key) && !_questionnaires.ContainsKey($"default:{id}"))
-            return Task.FromResult<Questionnaire?>(null);
+        var previous = await _store.FindQuestionnaireAsync(tenantId, id, ct);
+        if (previous == null && await _store.FindQuestionnaireAsync(DefaultLibraryTenant, id, ct) == null)
+            return null;
 
         questionnaire.Id = id;
-        var prevVersion = _questionnaires.TryGetValue(key, out var prev)
-            ? prev.Meta?.VersionId : "0";
+        var prevVersion = previous?.Meta?.VersionId;
         var nextVersion = int.TryParse(prevVersion, out var v) ? (v + 1).ToString() : "1";
 
         questionnaire.Meta = new Meta
@@ -113,10 +121,13 @@ public class DtrService : IDtrService
             Profile = new[] { DtrProfile },
         };
 
-        _questionnaires[key] = questionnaire;
+        var saved = previous == null
+            ? await _store.TryInsertQuestionnaireAsync(questionnaire, tenantId, ct)
+            : await _store.TryReplaceQuestionnaireAsync(questionnaire, tenantId, prevVersion, ct);
+        if (!saved) throw new ConcurrencyConflictException("Questionnaire changed during update; reload and retry.");
         _logger.LogInformation("Updated Questionnaire {Id} v{Version} for tenant {TenantId}",
-            id, nextVersion, tenantId);
-        return Task.FromResult<Questionnaire?>(questionnaire);
+            LogSanitizer.Sanitize(id), nextVersion, LogSanitizer.Sanitize(tenantId));
+        return questionnaire;
     }
 
     // ── QuestionnaireResponse ────────────────────────────────────────────────
@@ -124,28 +135,19 @@ public class DtrService : IDtrService
     public async Task<QuestionnaireResponse?> GetResponseAsync(
         string id, string tenantId, CancellationToken ct = default)
     {
-        var stored = await _store.FindResponseAsync(tenantId, id, ct);
-        if (stored != null)
-            return stored;
-
-        _responses.TryGetValue($"{tenantId}:{id}", out var qr);
-        return qr;
+        return await _store.FindResponseAsync(tenantId, id, ct);
     }
 
-    public Task<(IReadOnlyList<QuestionnaireResponse> Items, int Total)> SearchResponsesAsync(
+    public async Task<(IReadOnlyList<QuestionnaireResponse> Items, int Total)> SearchResponsesAsync(
         QuestionnaireResponseSearchParams search, string tenantId, CancellationToken ct = default)
     {
-        var query = _responses
-            .Where(kv => kv.Key.StartsWith($"{tenantId}:", StringComparison.Ordinal))
-            .Select(kv => kv.Value);
-
+        var query = (await _store.ListResponsesAsync(tenantId, ct)).AsEnumerable();
         if (!string.IsNullOrEmpty(search.Id))
             query = query.Where(r => r.Id == search.Id);
         if (!string.IsNullOrEmpty(search.QuestionnaireRef))
             query = query.Where(r => r.Questionnaire == search.QuestionnaireRef);
         if (!string.IsNullOrEmpty(search.Patient))
         {
-            // `patient=pat-1` and `patient=Patient/pat-1` name the same member.
             var wanted = StripPatient(search.Patient);
             query = query.Where(r => StripPatient(r.Subject?.Reference) == wanted);
         }
@@ -153,14 +155,8 @@ public class DtrService : IDtrService
             Enum.TryParse<QuestionnaireResponse.QuestionnaireResponseStatus>(search.Status, true, out var status))
             query = query.Where(r => r.Status == status);
 
-        var all = query.ToList();
-        var total = all.Count;
-        var items = all
-            .Skip((search.Page - 1) * search.Count)
-            .Take(search.Count)
-            .ToList();
-
-        return Task.FromResult<(IReadOnlyList<QuestionnaireResponse>, int)>((items, total));
+        var all = query.OrderBy(r => r.Id, StringComparer.Ordinal).ToList();
+        return (all.Skip((search.Page - 1) * search.Count).Take(search.Count).ToList(), all.Count);
     }
 
     private static string? StripPatient(string? reference)
@@ -171,7 +167,7 @@ public class DtrService : IDtrService
     public async Task<QuestionnaireResponse> SubmitResponseAsync(
         QuestionnaireResponse response, string tenantId, CancellationToken ct = default)
     {
-        var id = $"qr-{Guid.NewGuid().ToString("N")[..8]}";
+        var id = $"qr-{Guid.NewGuid():N}";
         response.Id = id;
         response.Meta = new Meta
         {
@@ -182,8 +178,7 @@ public class DtrService : IDtrService
 
         await _store.InsertResponseAsync(response, tenantId, ct);
 
-        _responses[$"{tenantId}:{id}"] = response;
-        _logger.LogInformation("Submitted QuestionnaireResponse {Id} for tenant {TenantId}", id, tenantId);
+        _logger.LogInformation("Submitted QuestionnaireResponse {Id} for tenant {TenantId}", LogSanitizer.Sanitize(id), LogSanitizer.Sanitize(tenantId));
         return response;
     }
 
@@ -215,15 +210,13 @@ public class DtrService : IDtrService
 
     // ── Validation helpers (called by controller) ────────────────────────────
 
-    public bool QuestionnaireExists(string questionnaireRef, string tenantId)
+    public async Task<bool> QuestionnaireExistsAsync(string questionnaireRef, string tenantId, CancellationToken ct = default)
     {
-        // questionnaireRef may be a canonical URL or "Questionnaire/{id}"
-        var id = questionnaireRef;
-        if (id.StartsWith("Questionnaire/", StringComparison.Ordinal))
-            id = id["Questionnaire/".Length..];
-
-        return _questionnaires.ContainsKey($"{tenantId}:{id}") ||
-               _questionnaires.ContainsKey($"default:{id}");
+        // Retain local-id/Questionnaire/{id} semantics. General canonical URL and
+        // version resolution remain separate DTR conformance work (G-53).
+        var id = questionnaireRef.StartsWith("Questionnaire/", StringComparison.Ordinal)
+            ? questionnaireRef["Questionnaire/".Length..] : questionnaireRef;
+        return await GetQuestionnaireAsync(id, tenantId, ct) != null;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -245,39 +238,6 @@ public class DtrService : IDtrService
                 "The default questionnaire library is read-only; tenant id 'default' is reserved.");
     }
 
-    /// <summary>
-    /// The questionnaires one tenant may see: its own, plus each entry of the
-    /// read-only default library it has not overridden with its own copy of
-    /// the same id. Selected by the STORE KEY's tenant, never by the
-    /// questionnaire's id: the search used to iterate every tenant's entries
-    /// and keep any whose id the caller could also resolve, so a colliding id
-    /// (another tenant's override of a default, or two tenants choosing the
-    /// same id) served the other tenant's copy (D-14).
-    /// </summary>
-    private IEnumerable<Questionnaire> VisibleQuestionnaires(string tenantId)
-    {
-        var ownPrefix = tenantId + ":";
-        var defaultPrefix = DefaultLibraryTenant + ":";
-        // A FHIR id never contains ':', so requiring a colon-free remainder
-        // also keeps tenant "a" from matching keys of a tenant named "a:b".
-        static bool InScope(string key, string prefix)
-            => key.StartsWith(prefix, StringComparison.Ordinal) && key.IndexOf(':', prefix.Length) < 0;
-
-        var own = _questionnaires
-            .Where(kv => InScope(kv.Key, ownPrefix))
-            .ToDictionary(kv => kv.Key[ownPrefix.Length..], kv => kv.Value, StringComparer.Ordinal);
-
-        if (string.Equals(tenantId, DefaultLibraryTenant, StringComparison.Ordinal))
-            return own.Values;
-
-        var defaults = _questionnaires
-            .Where(kv => InScope(kv.Key, defaultPrefix)
-                         && !own.ContainsKey(kv.Key[defaultPrefix.Length..]))
-            .Select(kv => kv.Value);
-
-        return own.Values.Concat(defaults);
-    }
-
     // ── Seed Data ────────────────────────────────────────────────────────────
 
     private void LoadSeedData()
@@ -293,8 +253,6 @@ public class DtrService : IDtrService
 
         foreach (var q in seeds)
         {
-            _questionnaires[$"default:{q.Id}"] = q;
-
             try
             {
                 _store.SeedDefaultQuestionnaire(q);
