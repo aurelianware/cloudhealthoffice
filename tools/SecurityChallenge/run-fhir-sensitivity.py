@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build known-broken FHIR variants from HEAD in disposable source copies.
+"""Build known-broken service variants from HEAD in disposable source copies.
 
 No production mutation flags, checkout edits, remote targets, or raw token capture.
 Requires a clean committed checkout and already-built baseline runner/member service.
@@ -60,7 +60,23 @@ PROVIDER_MUTATIONS = {
 }
 
 
-def run(member, output, coverage=None, claims=None, consent=None):
+DOCUMENT_MUTATIONS = {
+    "catalog-sensitivity-bypass": (
+        "src/services/document-service/Services/SubjectAccess.cs",
+        "return actor.HasPermission(ChoRolePermissions.DocumentsReadSensitive)",
+        "return actor.IsAuthenticated",
+        ["sensitive.reader-denial", "sensitive.wildcard-denial", "sensitive.list-withholding", "sensitive.hidden-dedup", "attachment.sensitive-denial"],
+    ),
+    "attachment-document-permission-bypass": (
+        "src/services/attachment-service/Controllers/AttachmentsController.cs",
+        "if (!_actor.HasPermission(ChoRolePermissions.DocumentsRead)",
+        "if (false && !_actor.HasPermission(ChoRolePermissions.DocumentsRead)",
+        ["attachment.document-permission"],
+    ),
+}
+
+
+def run(member, output, coverage=None, claims=None, consent=None, documents=False):
     profile = "p2p-consent" if coverage is not None else "fhir-smart"
     service_args = [str(member)] if coverage is None else [str(member), str(coverage), str(claims)]
     count = 55 if coverage is not None else 42
@@ -71,6 +87,11 @@ def run(member, output, coverage=None, claims=None, consent=None):
         profile, count, mutations = "provider-access", 30, PROVIDER_MUTATIONS
         service_args = [str(member), str(consent)]
         controls = ["provider.control", "provider.system-control", "tenant.b.control", "consent.patient-self-control", "consent.other-member-control", "consent.other-tenant-control", "consent.revoked-optout-control", "consent.repermit-control", "registry.pre-outage-control", "registry.patient-self-control"]
+    primary_service = "fhir-service"
+    if documents:
+        profile, count, mutations = "documents", 39, DOCUMENT_MUTATIONS
+        primary_service, service_args = "document-service", [str(member)]
+        controls = ["catalog.download-control", "catalog.tenant-b-control", "catalog.clean-restoration", "sensitive.exact-control", "sensitive.part2-denial", "attachment.download-control", "attachment.audit-identity", "audit.recovery-control"]
     if subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip():
         raise RuntimeError("Sensitivity requires a clean committed checkout")
     source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
@@ -80,7 +101,7 @@ def run(member, output, coverage=None, claims=None, consent=None):
     runner = ROOT / "tools/SecurityChallenge/bin/Release/net8.0/SecurityChallenge.dll"
     baseline = output / "baseline"
     subprocess.run(["dotnet", str(runner), profile,
-                    str(ROOT / "src/services/fhir-service/bin/Release/net8.0/fhir-service.dll"),
+                    str(ROOT / f"src/services/{primary_service}/bin/Release/net8.0/{primary_service}.dll"),
                     *service_args, str(baseline)], cwd=ROOT, check=True)
     baseline_results = [json.loads(line) for line in (baseline / "scenario-results.jsonl").read_text().splitlines()]
     baseline_manifest = json.loads((baseline / "manifest.json").read_text())
@@ -106,13 +127,17 @@ def run(member, output, coverage=None, claims=None, consent=None):
                 raise RuntimeError("Mutation anchor must match exactly once: " + name)
             mutated = content.replace(before, after)
             target.write_text(mutated)
+            mutated_service = ("attachment-service" if file.startswith("src/services/attachment-service/") else primary_service)
             # Build failures are setup errors, never evidence that a mutant was detected.
             with (output / (name + "-build.log")).open("w") as log:
-                subprocess.run(["dotnet", "build", "src/services/fhir-service", "--configuration", "Release",
+                subprocess.run(["dotnet", "build", "src/services/" + mutated_service, "--configuration", "Release",
                                 "--disable-build-servers", "-m:1", "-p:UseSharedCompilation=false", "--verbosity", "quiet"],
                                cwd=checkout, stdout=log, stderr=subprocess.STDOUT, check=True)
-            mutant = checkout / "src/services/fhir-service/bin/Release/net8.0/fhir-service.dll"
-            process = subprocess.run(["dotnet", str(runner), profile, str(mutant), *service_args, str(packet)], cwd=ROOT)
+            mutant = checkout / f"src/services/{mutated_service}/bin/Release/net8.0/{mutated_service}.dll"
+            mutant_args = [str(mutant), *service_args]
+            if documents and mutated_service == "attachment-service":
+                mutant_args = [str(ROOT / "src/services/document-service/bin/Release/net8.0/document-service.dll"), str(mutant)]
+            process = subprocess.run(["dotnet", str(runner), profile, *mutant_args, str(packet)], cwd=ROOT)
             manifest = json.loads((packet / "manifest.json").read_text())
             results = [json.loads(line) for line in (packet / "scenario-results.jsonl").read_text().splitlines()]
             by_id = {r["id"]: r["outcome"] for r in results}
@@ -141,7 +166,11 @@ def run(member, output, coverage=None, claims=None, consent=None):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 5 and sys.argv[1] == "provider-access":
+    if len(sys.argv) == 4 and sys.argv[1] == "documents":
+        if not Path(sys.argv[2]).is_file() or Path(sys.argv[3]).exists():
+            sys.exit("Provide built attachment assembly and a new evidence directory")
+        run(Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve(), documents=True)
+    elif len(sys.argv) == 5 and sys.argv[1] == "provider-access":
         if not all(Path(p).is_file() for p in sys.argv[2:4]) or Path(sys.argv[4]).exists():
             sys.exit("Provide built member and consent assemblies and a new evidence directory")
         run(Path(sys.argv[2]).resolve(), Path(sys.argv[4]).resolve(), consent=Path(sys.argv[3]).resolve())
@@ -152,4 +181,4 @@ if __name__ == "__main__":
     elif len(sys.argv) == 3 and Path(sys.argv[1]).is_file() and not Path(sys.argv[2]).exists():
         run(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve())
     else:
-        sys.exit("Usage: run-fhir-sensitivity.py [p2p-consent] <member-service.dll> [<coverage-service.dll> <claims-service.dll>] <new-evidence-directory>")
+        sys.exit("Usage: run-fhir-sensitivity.py documents <attachment-service.dll> <new-evidence-directory> OR [p2p-consent] <member-service.dll> [<coverage-service.dll> <claims-service.dll>] <new-evidence-directory>")

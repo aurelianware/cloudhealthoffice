@@ -189,3 +189,11 @@ following a successful read. Two additional controlled defects prove attribution
 and consent denials are detected. The five profiles total 207 baseline scenarios
 and six specified mutation experiments; these counts describe scoped local
 coverage, not production certification. Evidence remains review-only.
+
+
+The [document catalog and attachment extension](DOCUMENT-ISOLATION.md) aligns
+with document-store steps 2 and 3 (PRs #1439/#1440). It adds 39 real-process
+catalog/gateway scenarios and two controlled defects, bringing the six profiles
+to 246 baseline cases and eight mutation experiments. Development in-memory
+storage holds real synthetic bytes; audit/catalog use real MongoDB. Cloud signed
+URLs and FHIR bulk-file delivery remain explicit gaps.
