@@ -31,6 +31,13 @@ public interface IClaimRepository
 {
     Task<Claim?> GetByIdAsync(string id);
     Task<Claim?> GetByClaimNumberAsync(string claimNumber);
+
+    /// <summary>
+    /// Claims in the request's tenant with a PWK attachment control number
+    /// equal to <paramref name="controlNumber"/> (case-sensitive, as sent):
+    /// the latest version of each claim, at most <paramref name="limit"/>.
+    /// </summary>
+    Task<IReadOnlyList<Claim>> FindByAttachmentControlNumberAsync(string controlNumber, int limit, CancellationToken ct = default);
     Task<IEnumerable<Claim>> SearchAsync(
         string? memberId,
         string? providerNPI,

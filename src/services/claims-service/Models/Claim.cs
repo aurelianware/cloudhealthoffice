@@ -238,6 +238,14 @@ public class Claim
     public List<ClaimOtherPayer> OtherPayers { get; set; } = new();
 
     /// <summary>
+    /// 837 2300/2400 PWK: paperwork the provider is sending separately. A 275
+    /// whose TRN02 equals a report's <see cref="ClaimAttachmentReport.ControlNumber"/>
+    /// is this claim's attachment (attachment-service matches them through
+    /// <c>GET api/claims/attachment-control-numbers/{controlNumber}</c>).
+    /// </summary>
+    public List<ClaimAttachmentReport> AttachmentReports { get; set; } = new();
+
+    /// <summary>
     /// 837 2430 loops whose SVD01 matches none of the claim's other payers
     /// (2330B NM109, REF*2U, REF*FY) while there are several: they cannot be
     /// placed in the payer order, so the COB stage pends the claim instead of
@@ -1974,4 +1982,33 @@ public class AiExamination
     /// </summary>
     [StringLength(200)]
     public string? ExaminerUserId { get; set; }
+}
+
+/// <summary>One 837 PWK segment: paperwork sent separately for the claim or one of its lines.</summary>
+public class ClaimAttachmentReport
+{
+    /// <summary>PWK01 attachment report type code (e.g. 03 report of tests, 09 progress report).</summary>
+    public string ReportTypeCode { get; set; } = string.Empty;
+
+    /// <summary>PWK02 transmission code: EL electronic (275), FX fax, BM mail, FT file transfer, EM e-mail, AA available on request.</summary>
+    public string TransmissionCode { get; set; } = string.Empty;
+
+    /// <summary>PWK06 attachment control number; the 275's TRN02 repeats it. Absent for AA.</summary>
+    public string? ControlNumber { get; set; }
+
+    /// <summary>The line (2400 LX) the report is for; null for the whole claim (2300).</summary>
+    public int? LineNumber { get; set; }
+}
+
+/// <summary>A claim that announced an attachment control number (see <c>GET api/claims/attachment-control-numbers/{controlNumber}</c>).</summary>
+public class AttachmentControlNumberMatch
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public string ClaimNumber { get; set; } = string.Empty;
+    public string BillingProviderNPI { get; set; } = string.Empty;
+    public string MemberId { get; set; } = string.Empty;
+    public DateTime SubmittedDate { get; set; }
+
+    /// <summary>The claim's PWK reports with this control number (claim level, or which lines).</summary>
+    public List<ClaimAttachmentReport> Reports { get; set; } = new();
 }

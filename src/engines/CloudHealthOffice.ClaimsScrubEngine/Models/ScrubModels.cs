@@ -79,6 +79,29 @@ public record X12837Claim
     /// Line-level adjudication (2430) is on <see cref="ServiceLine.OtherPayerAdjudications"/>.
     /// </summary>
     public List<OtherPayer>? OtherPayers { get; init; }
+
+    /// <summary>
+    /// 2300 and 2400 PWK — paperwork the provider is sending separately (a
+    /// 275, fax or mail), each with the attachment control number (PWK06)
+    /// that the 275's TRN02 repeats. Null when the claim has none.
+    /// </summary>
+    public List<AttachmentReport>? AttachmentReports { get; init; }
+}
+
+/// <summary>One PWK segment: claim level (2300) or for one service line (2400).</summary>
+public record AttachmentReport
+{
+    /// <summary>PWK01 attachment report type code (e.g. 03 report of tests, 09 progress report, OZ support data).</summary>
+    public string ReportTypeCode { get; init; } = default!;
+
+    /// <summary>PWK02 transmission code: EL electronically (275), FX fax, BM mail, FT file transfer, EM e-mail, AA available on request.</summary>
+    public string TransmissionCode { get; init; } = default!;
+
+    /// <summary>PWK06 attachment control number (with PWK05 = AC). Absent when the code is AA.</summary>
+    public string? ControlNumber { get; init; }
+
+    /// <summary>The 2400 LX line the report belongs to; null for the claim (2300).</summary>
+    public int? LineNumber { get; init; }
 }
 
 /// <summary>An adjustment (CAS) a payer reported: group code, CARC, amount.</summary>

@@ -34,6 +34,8 @@ public sealed class AttachmentServiceFactory : WebApplicationFactory<Attachments
         // setting while registering services, so it goes in as a host setting.
         // Nothing reaches this server: the repository is replaced below.
         builder.UseSetting("MongoDb:ConnectionString", UnreachableMongo);
+        // The background matcher is driven by tests (RunOnceAsync), never on a timer.
+        builder.UseSetting("AttachmentMatching:Enabled", "false");
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<IAttachmentRepository>();
@@ -77,6 +79,14 @@ public sealed class FakeDocumentCatalog : IDocumentCatalog
         string Title, string ContentType, string FileName, string Channel, IReadOnlyDictionary<string, string> ExternalIds, byte[] Bytes);
 
     private readonly ConcurrentDictionary<string, Stored> _files = new();
+    private readonly ConcurrentDictionary<string, ConcurrentBag<(AttachmentParentType Type, string Id)>> _links = new();
+
+    /// <summary>Subjects a document was linked to after it was filed (AddLinkAsync).</summary>
+    public IReadOnlyList<(AttachmentParentType Type, string Id)> LinksOf(string documentId) =>
+        _links.TryGetValue(documentId, out var links) ? links.ToList() : [];
+
+    private bool IsOn(string documentId, Stored f, AttachmentParentType type, string id) =>
+        (f.SubjectType == type && f.SubjectId == id) || LinksOf(documentId).Contains((type, id));
 
     /// <summary>Make every call fail, as an unreachable document-service would.</summary>
     public bool Fail { get; set; }
@@ -91,6 +101,7 @@ public sealed class FakeDocumentCatalog : IDocumentCatalog
     public void Clear()
     {
         _files.Clear();
+        _links.Clear();
         Fail = false;
         RefuseWith = null;
     }
@@ -122,9 +133,20 @@ public sealed class FakeDocumentCatalog : IDocumentCatalog
         if (Fail) throw new DocumentCatalogException("document-service unreachable");
         if (RefuseWith is { } downStatus) throw new DocumentCatalogException("refused", statusCode: downStatus);
         return Task.FromResult<Stream?>(
-            _files.TryGetValue(documentId, out var f) && f.TenantId == tenantId && f.SubjectType == subjectType && f.SubjectId == subjectId
+            _files.TryGetValue(documentId, out var f) && f.TenantId == tenantId && IsOn(documentId, f, subjectType, subjectId)
                 ? new MemoryStream(f.Bytes)
                 : null);
+    }
+
+    public Task<bool> AddLinkAsync(string tenantId, string? onBehalfOf, string documentId,
+        AttachmentParentType fromType, string fromId, AttachmentParentType toType, string toId, CancellationToken ct = default)
+    {
+        if (Fail) throw new DocumentCatalogException("document-service unreachable");
+        if (RefuseWith is { } status) throw new DocumentCatalogException("refused", statusCode: status);
+        if (!_files.TryGetValue(documentId, out var f) || f.TenantId != tenantId || !IsOn(documentId, f, fromType, fromId))
+            return Task.FromResult(false);
+        _links.GetOrAdd(documentId, _ => new()).Add((toType, toId));
+        return Task.FromResult(true);
     }
 }
 
@@ -137,6 +159,14 @@ public sealed class FakeDocumentCatalog : IDocumentCatalog
 public sealed class StubParentServices : HttpMessageHandler
 {
     private readonly ConcurrentDictionary<string, byte> _records = new();
+    private readonly ConcurrentDictionary<string, ConcurrentBag<(string ClaimId, string Npi)>> _controlNumbers = new();
+
+    /// <summary>A claim in <paramref name="tenantId"/> whose 837 PWK06 is <paramref name="controlNumber"/>.</summary>
+    public void AddControlNumber(string tenantId, string controlNumber, string claimId, string billingNpi = "1234567893")
+    {
+        _controlNumbers.GetOrAdd($"{tenantId}|{controlNumber}", _ => new()).Add((claimId, billingNpi));
+        Add(tenantId, AttachmentParentType.Claim, claimId);
+    }
 
     public ConcurrentQueue<HttpRequestMessage> Requests { get; } = new();
     public HttpStatusCode? FailWith { get; set; }
@@ -146,6 +176,7 @@ public sealed class StubParentServices : HttpMessageHandler
     public void Reset()
     {
         _records.Clear();
+        _controlNumbers.Clear();
         Requests.Clear();
         FailWith = null;
     }
@@ -166,6 +197,16 @@ public sealed class StubParentServices : HttpMessageHandler
 
         var tenant = request.Headers.TryGetValues("X-Tenant-ID", out var values) ? values.Single() : "";
         var segments = request.RequestUri!.AbsolutePath.Trim('/').Split('/');
+        if (segments is ["api", "claims", "attachment-control-numbers", var acn])
+        {
+            var matches = _controlNumbers.TryGetValue($"{tenant}|{Uri.UnescapeDataString(acn)}", out var bag)
+                ? bag.Select(m => new { claimId = m.ClaimId, claimNumber = m.ClaimId, billingProviderNPI = m.Npi }).ToArray()
+                : [];
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(matches), System.Text.Encoding.UTF8, "application/json"),
+            });
+        }
         var found = segments.Length == 3 && segments[0] == "api"
             && _records.ContainsKey(Key(tenant, segments[1], Uri.UnescapeDataString(segments[2])));
         return Task.FromResult(new HttpResponseMessage(found ? HttpStatusCode.OK : HttpStatusCode.NotFound)
@@ -231,6 +272,14 @@ public sealed class InMemoryAttachmentRepository : IAttachmentRepository
         Items[attachment.Id] = attachment;
         return Task.FromResult(attachment);
     }
+
+    public Task<IReadOnlyList<Attachment>> GetUnmatchedAsync(string tenantId, int limit = 200)
+        => Task.FromResult<IReadOnlyList<Attachment>>(Items.Values
+            .Where(a => a.TenantId == tenantId && a.Status == "Unmatched").OrderBy(a => a.CreatedDate).Take(limit).ToList());
+
+    public Task<IReadOnlyList<Attachment>> ListUnmatchedAsync(int limit)
+        => Task.FromResult<IReadOnlyList<Attachment>>(Items.Values
+            .Where(a => a.Status == "Unmatched").OrderBy(a => a.CreatedDate).Take(limit).ToList());
 
     public Task DeleteAsync(string id, string tenantId)
     {

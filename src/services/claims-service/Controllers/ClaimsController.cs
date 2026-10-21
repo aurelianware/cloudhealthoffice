@@ -457,6 +457,36 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
+    /// Claims whose 837 PWK named this attachment control number (PWK06): how
+    /// a 275 (TRN02) finds its claim. Tenant-scoped like every claim read;
+    /// answers only identifiers and the billing provider, so the caller can
+    /// tell two providers' claims apart. An empty list when nothing matches.
+    /// </summary>
+    [HttpGet("attachment-control-numbers/{controlNumber}")]
+    [ProducesResponseType(typeof(IReadOnlyList<AttachmentControlNumberMatch>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IReadOnlyList<AttachmentControlNumberMatch>>> FindByAttachmentControlNumber(
+        string controlNumber, CancellationToken ct)
+    {
+        var trimmed = controlNumber?.Trim() ?? string.Empty;
+        if (trimmed.Length is 0 or > 80 || trimmed.Any(char.IsControl))
+        {
+            return BadRequest("An attachment control number is 1-80 characters.");
+        }
+
+        var claims = await _claimRepository.FindByAttachmentControlNumberAsync(trimmed, limit: 20, ct);
+        return Ok(claims.Select(c => new AttachmentControlNumberMatch
+        {
+            ClaimId = c.Id,
+            ClaimNumber = c.ClaimNumber,
+            BillingProviderNPI = c.BillingProviderNPI,
+            MemberId = c.MemberId,
+            SubmittedDate = c.SubmittedDate,
+            Reports = c.AttachmentReports.Where(r => r.ControlNumber == trimmed).ToList(),
+        }).ToList());
+    }
+
+    /// <summary>
     /// Search claims (by member, provider, date range, status)
     /// </summary>
     [HttpGet("search")]

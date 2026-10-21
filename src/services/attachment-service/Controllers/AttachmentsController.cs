@@ -22,6 +22,7 @@ public class AttachmentsController : ControllerBase
     private readonly IDocumentCatalog _catalog;
     private readonly ICurrentActor _actor;
     private readonly IAttachmentParentLookup _parents;
+    private readonly IClaimAttachmentMatcher _matcher;
     private readonly AttachmentUploadOptions _uploadOptions;
     private readonly ILogger<AttachmentsController> _logger;
 
@@ -31,6 +32,7 @@ public class AttachmentsController : ControllerBase
         IDocumentCatalog catalog,
         ICurrentActor actor,
         IAttachmentParentLookup parents,
+        IClaimAttachmentMatcher matcher,
         IOptions<AttachmentUploadOptions> uploadOptions,
         ILogger<AttachmentsController> logger)
     {
@@ -39,6 +41,7 @@ public class AttachmentsController : ControllerBase
         _catalog = catalog;
         _actor = actor;
         _parents = parents;
+        _matcher = matcher;
         _uploadOptions = uploadOptions.Value;
         _logger = logger;
     }
@@ -64,6 +67,7 @@ public class AttachmentsController : ControllerBase
                 AuthorizationId = request.AuthorizationId,
                 AppealId = request.AppealId,
                 RFAIReference = request.RFAIReference,
+                AttachmentControlNumber = string.IsNullOrWhiteSpace(request.AttachmentControlNumber) ? null : request.AttachmentControlNumber.Trim(),
                 AttachmentType = string.IsNullOrWhiteSpace(request.RFAIReference) ? "Unsolicited" : "Solicited",
                 PayerId = request.PayerId,
                 PayerName = request.PayerName,
@@ -89,20 +93,71 @@ public class AttachmentsController : ControllerBase
                 .Where(p => !string.IsNullOrWhiteSpace(p.Id))
                 .ToList();
 
-            if (parents.Count == 0)
-            {
-                return BadRequest("Must specify one of: ClaimId, AuthorizationId, or AppealId");
-            }
-
             if (parents.Count > 1)
             {
                 return BadRequest("Cannot specify multiple parent entities (ClaimId, AuthorizationId, AppealId)");
             }
 
-            var (parentType, parentId) = (parents[0].Type, parents[0].Id!);
+            if (attachment.AttachmentControlNumber is { } acn && !AttachmentUploadRules.IsValidControlNumber(acn))
+            {
+                return BadRequest("AttachmentControlNumber (TRN02) must be 1-80 letters, digits, '.', ':', '-' or '_'");
+            }
+
+            AttachmentParentType parentType;
+            string parentId;
+            // Set when the parent came from claims-service (matched) or from the
+            // 275 itself (held): either way there is nothing more to look up.
+            var parentConfirmed = false;
+            if (parents.Count == 1)
+            {
+                (parentType, parentId) = (parents[0].Type, parents[0].Id!);
+            }
+            else if (attachment.AttachmentControlNumber is { } controlNumber)
+            {
+                // The 275 names no record: find the claim whose 837 PWK06 is its TRN02.
+                IReadOnlyList<ClaimControlNumberMatch> matches;
+                try
+                {
+                    matches = await _matcher.FindAsync(attachment.TenantId, controlNumber, HttpContext.RequestAborted);
+                }
+                catch (AttachmentParentLookupException ex)
+                {
+                    _logger.LogError(ex, "Could not match an attachment control number (trace id {TraceId})",
+                        ChoProblemResults.TraceId(HttpContext));
+                    return this.ServerError("Could not look for the claim this attachment belongs to; nothing was stored. Retry later.",
+                        StatusCodes.Status502BadGateway);
+                }
+
+                parentConfirmed = true;
+                if (IClaimAttachmentMatcher.Choose(matches, attachment.ProviderId) is { } claimId)
+                {
+                    attachment.ClaimId = claimId;
+                    attachment.Status = "Linked";
+                    attachment.Notes = $"Matched to claim {claimId} by attachment control number {controlNumber}";
+                    (parentType, parentId) = (AttachmentParentType.Claim, claimId);
+                }
+                else
+                {
+                    // Held under its provider until a claim announcing this
+                    // number arrives (UnmatchedAttachmentMatcher links it then).
+                    attachment.Status = "Unmatched";
+                    attachment.Notes = matches.Count > 1
+                        ? $"{matches.Count} claims announced attachment control number {controlNumber} and none is from provider {attachment.ProviderId}; held for review"
+                        : $"No claim has announced attachment control number {controlNumber} yet; held until one does";
+                    (parentType, parentId) = (AttachmentParentType.Provider, attachment.ProviderId.Trim());
+                    attachment.ProviderId = parentId;
+                }
+            }
+            else
+            {
+                return BadRequest("Must specify one of: ClaimId, AuthorizationId, AppealId, or AttachmentControlNumber");
+            }
+
             if (!AttachmentUploadRules.IsValidParentId(parentId))
             {
-                return BadRequest($"{parentType}Id must be 1-128 letters, digits, '-' or '_'");
+                return BadRequest(parentType == AttachmentParentType.Provider
+                    ? "ProviderId must be 1-128 letters, digits, '-' or '_' to hold an unmatched attachment"
+                    : $"{parentType}Id must be 1-128 letters, digits, '-' or '_'");
             }
 
             // Check the file before calling another service about it.
@@ -129,10 +184,11 @@ public class AttachmentsController : ControllerBase
 
             // The parent must exist for the caller's tenant. The owning service answers
             // 404 for another tenant's record, so this also refuses cross-tenant ids.
-            bool parentExists;
+            bool parentExists = parentConfirmed;
             try
             {
-                parentExists = await _parents.ExistsAsync(attachment.TenantId, parentType, parentId, HttpContext.RequestAborted);
+                if (!parentConfirmed)
+                    parentExists = await _parents.ExistsAsync(attachment.TenantId, parentType, parentId, HttpContext.RequestAborted);
             }
             catch (AttachmentParentLookupException ex)
             {
@@ -197,6 +253,8 @@ public class AttachmentsController : ControllerBase
                 var externalIds = new Dictionary<string, string> { ["AttachmentId"] = created.Id };
                 if (AttachmentUploadRules.IsValidParentId(created.RFAIReference ?? string.Empty))
                     externalIds["RfaiReference"] = created.RFAIReference!;
+                if (created.AttachmentControlNumber is { } acnId && AttachmentUploadRules.IsValidControlNumber(acnId))
+                    externalIds["AttachmentControlNumber"] = acnId;
 
                 try
                 {
@@ -302,6 +360,17 @@ public class AttachmentsController : ControllerBase
     /// <summary>
     /// Get attachment by RFAI reference (solicited attachments)
     /// </summary>
+    /// <summary>
+    /// 275s held because no claim has announced their attachment control
+    /// number (TRN02) yet, oldest first. They are linked automatically when the
+    /// claim arrives, and rejected after the hold period.
+    /// </summary>
+    [HttpGet("unmatched")]
+    public async Task<ActionResult<IEnumerable<Attachment>>> GetUnmatched()
+    {
+        return Ok(await _repository.GetUnmatchedAsync(_actor.TenantId));
+    }
+
     [HttpGet("rfai/{rfaiReference}")]
     public async Task<ActionResult<Attachment>> GetByRFAIReference(string rfaiReference)
     {
@@ -336,6 +405,9 @@ public class AttachmentsController : ControllerBase
             !string.IsNullOrWhiteSpace(attachment.ClaimId) ? (AttachmentParentType.Claim, attachment.ClaimId!)
             : !string.IsNullOrWhiteSpace(attachment.AuthorizationId) ? (AttachmentParentType.Authorization, attachment.AuthorizationId!)
             : !string.IsNullOrWhiteSpace(attachment.AppealId) ? (AttachmentParentType.Appeal, attachment.AppealId!)
+            // Held, not yet matched: filed under its provider.
+            : attachment.Status == "Unmatched" && !string.IsNullOrWhiteSpace(attachment.ProviderId)
+                ? (AttachmentParentType.Provider, attachment.ProviderId)
             : null;
         if (parent is not { } p)
         {
@@ -521,6 +593,13 @@ public class AttachmentRequest
     public string? AuthorizationId { get; set; }
     public string? AppealId { get; set; }
     public string? RFAIReference { get; set; }
+
+    /// <summary>
+    /// The 275's TRN02: the attachment control number from the claim's PWK06.
+    /// With no ClaimId, AuthorizationId or AppealId, the attachment is filed on
+    /// the claim that announced it, or held until one does.
+    /// </summary>
+    public string? AttachmentControlNumber { get; set; }
     public string PayerId { get; set; } = string.Empty;
     public string PayerName { get; set; } = string.Empty;
     public string ProviderId { get; set; } = string.Empty;

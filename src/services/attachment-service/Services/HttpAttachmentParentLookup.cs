@@ -12,6 +12,13 @@ public enum AttachmentParentType
     Claim,
     Authorization,
     Appeal,
+
+    /// <summary>
+    /// A 275 not yet matched to its claim is held under its provider (the
+    /// 275's NPI) until a claim announcing its control number arrives.
+    /// Never looked up: it comes from the transaction itself.
+    /// </summary>
+    Provider,
 }
 
 /// <summary>
