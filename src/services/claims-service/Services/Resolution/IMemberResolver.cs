@@ -11,9 +11,10 @@ namespace ClaimsService.Services.Resolution;
 public interface IMemberResolver
 {
     /// <summary>
-    /// Returns the member summary, or <c>null</c> when the member is
-    /// missing or the call fails. Failure is non-throwing — adjudication
-    /// degrades cleanly.
+    /// Returns the member summary, or <c>null</c> when the member does not
+    /// exist (a definitive not-found). Throws <see cref="MemberUnavailableException"/>
+    /// when member-service gave no definitive answer: adjudication must not
+    /// treat an outage as "eligible" or as "unknown member".
     /// </summary>
     Task<ResolvedMember?> GetMemberAsync(string tenantId, string memberId, CancellationToken ct = default);
 }

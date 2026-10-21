@@ -42,6 +42,14 @@ public class ClaimAdjudicationContext
     /// <summary>Member resolved by <see cref="IMemberResolver"/> at orchestrator entry.</summary>
     public ResolvedMember? ResolvedMember { get; set; }
 
+    /// <summary>
+    /// What the member lookup at orchestrator entry found. <see cref="MemberLookupOutcome.NotFound"/>
+    /// denies (the patient is not the plan's insured); <see cref="MemberLookupOutcome.Unavailable"/>
+    /// pends (an outage is never "eligible"). <see cref="MemberLookupOutcome.NotLookedUp"/> only
+    /// for a context built without the orchestrator.
+    /// </summary>
+    public MemberLookupOutcome MemberLookup { get; set; } = MemberLookupOutcome.NotLookedUp;
+
     /// <summary>Populated by <see cref="Stages.BenefitCalculationStage"/>.</summary>
     public BenefitEngineModels.BenefitResolutionResult? BenefitResolutionResult { get; set; }
 
@@ -240,4 +248,17 @@ public class ClaimAdjudicationContext
     /// recommendation itself.
     /// </summary>
     public AiExaminationOutcome? AiExaminationResult { get; set; }
+}
+
+/// <summary>What the member lookup at the start of adjudication found.</summary>
+public enum MemberLookupOutcome
+{
+    NotLookedUp,
+    Found,
+
+    /// <summary>member-service answered 404, or the claim names no member.</summary>
+    NotFound,
+
+    /// <summary>member-service gave no definitive answer.</summary>
+    Unavailable,
 }

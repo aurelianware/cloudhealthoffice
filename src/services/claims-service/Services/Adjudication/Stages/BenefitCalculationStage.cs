@@ -47,6 +47,10 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 {
     public const string StageName = "BenefitCalculation";
     public const string MemberNotEligibleCarc = "27";
+
+    /// <summary>CARC 31: patient cannot be identified as our insured (member-service has no such member).</summary>
+    public const string MemberNotFoundCarc = "31";
+    public const string MemberNotFoundReason = "Patient cannot be identified as a member of this plan";
     public const string PriorAuthorizationRequiredCode = "197";
     public const string PriorAuthorizationRequiredReason = "Prior authorization required but not provided";
     public const string PriorAuthorizationInvalidReason = "Prior authorization is not valid for this claim";
@@ -158,6 +162,28 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         {
             return RejectUnprocessable(context,
                 $"BenefitPlanId '{claim.BenefitPlanId}' is not a GUID and benefit-plan-service did not resolve a Guid id.");
+        }
+
+        // Eligibility fails closed. An outage is not "eligible": pend so the
+        // check is retried. A definitive not-found is not "eligible" either:
+        // deny (CARC 31). Only a context built without the orchestrator
+        // (NotLookedUp) skips this.
+        if (context.MemberLookup == MemberLookupOutcome.Unavailable)
+        {
+            _logger.LogWarning(
+                "Member unavailable for claim {ClaimVersionId}; pending {PendCode}",
+                LogSanitizer.Sanitize(context.ClaimVersionId), ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode);
+            var memberReason = $"{ClaimAdjudicationOrchestrator.ServiceUnavailableReason}: member-service gave no answer, " +
+                               $"so eligibility is unknown; {TransientPendClearedByApproval}";
+            ClaimAdjudicationOrchestrator.RecordServiceUnavailablePend(context, memberReason);
+            return ClaimAdjudicationStageResult.Pend(StageName, memberReason).AsCheckUnavailable(context);
+        }
+
+        if (context.MemberLookup == MemberLookupOutcome.NotFound)
+        {
+            context.AdjudicationResult.DenialReasonCode = MemberNotFoundCarc;
+            context.AdjudicationResult.DenialReason = MemberNotFoundReason;
+            return ClaimAdjudicationStageResult.Deny(StageName, MemberNotFoundReason);
         }
 
         if (!IsMemberEligibleForServiceDate(context.ResolvedMember, claim.ServiceDateFrom, out var eligibilityReason))
@@ -707,9 +733,17 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 ?? (already.IsSubscriber ? already.MemberId : context.Claim.MemberId);
         }
 
-        var resolved = await _memberResolver
-            .GetMemberAsync(context.TenantId, context.Claim.MemberId, ct)
-            .ConfigureAwait(false);
+        ResolvedMember? resolved;
+        try
+        {
+            resolved = await _memberResolver
+                .GetMemberAsync(context.TenantId, context.Claim.MemberId, ct)
+                .ConfigureAwait(false);
+        }
+        catch (MemberUnavailableException)
+        {
+            resolved = null; // the subscriber falls back to the claim's member id
+        }
         if (resolved is not null)
         {
             context.ResolvedMember = resolved;

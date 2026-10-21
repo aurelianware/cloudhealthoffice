@@ -199,11 +199,28 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                 context.PlanResolutionFailed = true;
             }
         }
-        if (!string.IsNullOrWhiteSpace(claim.MemberId))
+        if (string.IsNullOrWhiteSpace(claim.MemberId))
         {
-            context.ResolvedMember = await _memberResolver
-                .GetMemberAsync(tenantId, claim.MemberId, ct)
-                .ConfigureAwait(false);
+            context.MemberLookup = MemberLookupOutcome.NotFound;
+        }
+        else
+        {
+            try
+            {
+                context.ResolvedMember = await _memberResolver
+                    .GetMemberAsync(tenantId, claim.MemberId, ct)
+                    .ConfigureAwait(false);
+                context.MemberLookup = context.ResolvedMember is null
+                    ? MemberLookupOutcome.NotFound
+                    : MemberLookupOutcome.Found;
+            }
+            catch (MemberUnavailableException ex)
+            {
+                // An outage, not a missing member: the claim pends (never "eligible").
+                _logger.LogWarning(ex,
+                    "Member unavailable for claim {ClaimVersionId}", LogSanitizer.Sanitize(claimVersionId));
+                context.MemberLookup = MemberLookupOutcome.Unavailable;
+            }
         }
 
         return context;
