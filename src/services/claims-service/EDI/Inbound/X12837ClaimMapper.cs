@@ -117,6 +117,10 @@ public static class X12837ClaimMapper
             PriorAuthorizationNumber = string.IsNullOrWhiteSpace(source.ClaimHeader.PriorAuthorizationNumber)
                 ? null
                 : source.ClaimHeader.PriorAuthorizationNumber.Trim(),
+            // 2300 REF*F8 — the claim a replacement (7) or void (8) amends.
+            OriginalClaimReference = string.IsNullOrWhiteSpace(source.ClaimHeader.OriginalClaimReference)
+                ? null
+                : source.ClaimHeader.OriginalClaimReference.Trim(),
             EDI837ControlNumber = source.TransactionControlNumber,
         };
     }

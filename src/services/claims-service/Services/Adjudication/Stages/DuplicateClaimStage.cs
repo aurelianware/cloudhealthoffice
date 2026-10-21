@@ -77,7 +77,6 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
     public const string ExactDuplicateType = "Exact";
     public const string SuspectDuplicateType = "Suspect";
 
-    private const string ReplacementFrequencyCode = "7";
     private const string VoidFrequencyCode = "8";
 
     private static readonly ActivitySource ActivitySource = new("ClaimsService.Adjudication");
@@ -256,23 +255,17 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
     }
 
     /// <summary>
-    /// Replacements (freq 7), voids (freq 8) and adjustment versions that
-    /// reference the version they amend are expected to mirror an original
-    /// claim and must never be flagged as duplicates of it.
+    /// An adjustment version that references the version it amends mirrors
+    /// that claim and must never be flagged as its duplicate. A replacement
+    /// (freq 7) or void (freq 8) is exempt only that way, once linked to its
+    /// original: inbound 837 corrections are linked by REF*F8
+    /// (InboundClaimCorrectionService) and never adjudicated as new claims.
+    /// One that reaches adjudication unlinked (e.g. submitted as JSON) is
+    /// checked like any claim, so it pends as a duplicate of its original
+    /// instead of paying twice.
     /// </summary>
     internal static bool IsExemptFromDuplicateCheck(AdapterClaim claim, out string reason)
     {
-        var frequency = claim.ClaimFrequencyCode?.Trim();
-        if (frequency == ReplacementFrequencyCode)
-        {
-            reason = "replacement";
-            return true;
-        }
-        if (frequency == VoidFrequencyCode)
-        {
-            reason = "void";
-            return true;
-        }
         if (!string.IsNullOrWhiteSpace(claim.PredecessorVersionId))
         {
             reason = "references_original";

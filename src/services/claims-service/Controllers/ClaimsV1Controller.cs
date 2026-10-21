@@ -49,6 +49,7 @@ public class ClaimsV1Controller : ControllerBase
 {
     private readonly ClaimAdapterFactory _adapterFactory;
     private readonly IClaimSubmissionService _submissionService;
+    private readonly IInboundClaimCorrectionService? _corrections;
     private readonly IExplanationOfBenefitProjector _eobProjector;
     private readonly IClaimImportTransactionRepository _importTransactions;
     private readonly ICurrentActor _actor;
@@ -76,8 +77,10 @@ public class ClaimsV1Controller : ControllerBase
         Snip.ISnip837Validator? snipValidator = null,
         Microsoft.Extensions.Options.IOptions<Snip.Snip837ValidationOptions>? snipOptions = null,
         IX12InterchangeIntake? interchangeIntake = null,
-        Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null)
+        Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null,
+        IInboundClaimCorrectionService? corrections = null)
     {
+        _corrections = corrections;
         _interchangeIntake = interchangeOptions?.Value.Enabled == false ? null : interchangeIntake;
         _snipOptions = snipOptions?.Value ?? new Snip.Snip837ValidationOptions();
         _snipValidator = snipValidator ?? new Snip.X12837SnipValidator(_snipOptions);
@@ -292,7 +295,23 @@ public class ClaimsV1Controller : ControllerBase
             var (parsed, snipErrors, snipSet, snipGroup) = parsedClaims[index];
             var adapterClaim = ClaimsService.EDI.Inbound.X12837ClaimMapper.Map(parsed, tenantId);
             ClaimSubmissionResult? result = null;
-            if (snipErrors is null)
+            if (snipErrors is null && IInboundClaimCorrectionService.IsCorrection(adapterClaim.ClaimFrequencyCode))
+            {
+                // A replacement (7) or void (8) amends the claim REF*F8 names;
+                // it is never submitted as a new claim (that would pay twice).
+                Interlocked.Exchange(ref _raw837SubmissionStarted, 1);
+                var correction = _corrections is null
+                    ? InboundCorrectionOutcome.Failed("Replacement and void claims are not accepted by this deployment.")
+                    : await _corrections.ApplyAsync(
+                        adapterClaim,
+                        $"{parsed.InterchangeControlNumber}|{parsed.TransactionControlNumber}|{parsed.ClaimId}|{adapterClaim.OriginalClaimReference}",
+                        tenantId, actorId, correlationId, cancellationToken);
+                snipErrors = correction.Success ? null : correction.Errors.ToList();
+                result = correction.Success
+                    ? ClaimSubmissionResult.Ok(new AdapterClaim { Id = correction.ClaimId ?? string.Empty, TenantId = tenantId })
+                    : null;
+            }
+            else if (snipErrors is null)
             {
                 Interlocked.Exchange(ref _raw837SubmissionStarted, 1);
                 result = await _submissionService.SubmitAsync(

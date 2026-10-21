@@ -130,6 +130,8 @@ builder.Services.AddScoped<IClaimResolutionService>(sp => ActivatorUtilities.Cre
 // 5.12b's payment-service ReversalRunService consumes the resulting
 // PendingReversal rows.
 builder.Services.AddScoped<IClaimAdjustmentService, ClaimAdjustmentService>();
+// Inbound 837 replacements (7) and voids (8) amend the claim named in REF*F8.
+builder.Services.AddScoped<IInboundClaimCorrectionService, InboundClaimCorrectionService>();
 
 // Inter-service HTTP clients
 builder.Services.AddHttpClient("ProviderService", client =>
