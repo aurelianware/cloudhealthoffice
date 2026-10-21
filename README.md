@@ -9,6 +9,8 @@ Current capability status and dated implementation/test evidence: [Capability Re
 [![Kubernetes](https://img.shields.io/badge/kubernetes-first-326CE5.svg)](docs/deployment/DEPLOYMENT.md)
 [![FHIR R4](https://img.shields.io/badge/FHIR-R4-0F766E.svg)](docs/features/FHIR-INTEGRATION.md)
 [![CMS-0057-F](https://img.shields.io/badge/CMS--0057--F-readiness-0EA5E9.svg)](docs/compliance/CMS-0057-F-READINESS-MATRIX.md)
+[![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Ftests.json)](.github/workflows/test-metrics.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Faurelianware%2Fcloudhealthoffice%2Fci-evidence%2Fbadges%2Fcoverage.json)](.github/workflows/test-metrics.yml)
 
 CloudHealthOffice is a source-available, Kubernetes-first healthcare payer
 administration platform. It is built for teams modernizing claims, benefits,

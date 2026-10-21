@@ -231,6 +231,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule')
     permissions:
       contents: write
+      actions: write
 
     steps:
       - uses: actions/checkout@v7
@@ -250,27 +251,24 @@ jobs:
       - name: Project the public snapshot
         run: node scripts/interop/publish-public-evidence.mjs --run artifacts/interop/run.json
 
-      - name: Commit the snapshot if it changed
+      # main only takes reviewed pull requests: the snapshot goes to the
+      # ci-evidence branch, and the site deploys overlay it onto src/site.
+      # Publish only when something a reader would care about changed:
+      # generatedAtUtc moves every run.
+      - name: Publish the snapshot to ci-evidence
+        id: publish
+        env:
+          IGNORE_FIELD: generatedAtUtc
+        run: >-
+          bash scripts/ci/publish-evidence.sh "interop: Da Vinci evidence from ${{ github.sha }}"
+          src/site/insights/cms-0057-f/davinci-interop-public-evidence.json:evidence/davinci-interop-public-evidence.json
+
+      # A push made with GITHUB_TOKEN starts no workflows, so redeploy the
+      # site explicitly.
+      - name: Redeploy the site
+        if: steps.publish.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          DEST=src/site/insights/cms-0057-f/davinci-interop-public-evidence.json
-          # generatedAtUtc moves every run. Publish only when something a reader
-          # would care about changed, so main does not collect a daily no-op
-          # commit from the nightly schedule.
-          if git diff --quiet -- "$DEST"; then
-            echo "Interoperability snapshot unchanged; nothing to publish."
-            exit 0
-          fi
-          SUBSTANTIVE=$(git diff --unified=0 -- "$DEST" \
-            | sed -n 's/^[+-]\([^+-]\)/\1/p' \
-            | grep -vc '"generatedAtUtc"' || true)
-          if [ "$SUBSTANTIVE" = "0" ]; then
-            echo "Only the generation timestamp changed; nothing to publish."
-            git checkout -- "$DEST"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$DEST"
-          git commit -m "chore: publish latest Da Vinci interoperability evidence"
-          git push origin HEAD:main
+          gh workflow run deploy-pages.yml --ref main
+          gh workflow run deploy-cloudflare-pages.yml --ref main

@@ -308,10 +308,16 @@ jobs:
           name: dotnet-test-results
           path: ./TestResults
 
-      - name: Skip missing coverage inputs
+      # Passing tests with no coverage report would silently skip the floor
+      # below, so that fails too. (Failed tests already fail the build.)
+      - name: Require coverage inputs
         if: ${{ hashFiles('TestResults/**/coverage.cobertura.xml') == '' }}
         run: |
-          echo "::warning::No .NET coverage reports were produced by the test job; skipping coverage summary."
+          if [ "${{ needs.test-dotnet.result }}" = "success" ]; then
+            echo "::error::The .NET tests passed but produced no coverage report, so the coverage floor could not be checked."
+            exit 1
+          fi
+          echo "::warning::No .NET coverage reports (the test job did not succeed); skipping coverage summary."
 
       - name: Merge coverage reports
         if: ${{ hashFiles('TestResults/**/coverage.cobertura.xml') != '' }}
@@ -329,13 +335,16 @@ jobs:
         with:
           filename: 'MergedCoverage/Cobertura.xml'
           badge: true
-          fail_below_min: false
+          # Coverage floor: overall line coverage below the first threshold
+          # fails the build. Set just under the October 2026 level (77%) to
+          # catch regressions; raise it as coverage grows.
+          fail_below_min: true
           format: markdown
           hide_branch_rate: false
           hide_complexity: true
           indicators: true
           output: both
-          thresholds: '60 80'
+          thresholds: '75 85'
 
       - name: Add Coverage PR Comment
         if: ${{ github.event_name == 'pull_request' && hashFiles('code-coverage-results.md') != '' }}

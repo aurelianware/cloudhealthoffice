@@ -1,0 +1,28 @@
+name: Dependency Review
+
+# Fails a pull request that adds or upgrades to a package with a known High or
+# Critical vulnerability, or under a strong copyleft licence (GPL/AGPL) that
+# CHO's BSL 1.1 distribution can't carry. Covers NuGet, npm and GitHub Actions
+# through the dependency graph. Packages already on main are covered by the
+# Security Scan workflow (Trivy, NuGet and npm audits).
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high
+          deny-licenses: AGPL-1.0-only, AGPL-1.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later, GPL-2.0-only, GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later

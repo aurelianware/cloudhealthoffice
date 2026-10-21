@@ -18,6 +18,17 @@ This directory contains GitHub Actions workflow files for CI/CD automation of th
 - **sanity.yml**: Basic health checks
 - **debug-oidc.yml**: OIDC authentication debugging
 
+### Blocking quality gates
+- **security-scan.yml**: Trivy fails on a fixable High/Critical finding; the NuGet scan fails on a High/Critical vulnerable package (whole solution, transitive included); npm audit gates through `.audit-ci.json`.
+- **test-dotnet.yml**: overall .NET line coverage below 75% fails the Coverage Summary job, as does a passing test run that produced no coverage.
+- **dependency-review.yml**: a PR that adds a High/Critical-vulnerable package or a GPL/AGPL-licensed one fails.
+
+### main takes reviewed PRs only
+No workflow commits to main. Generated output (test metrics, badges, published interoperability and acceptance evidence) goes to the `ci-evidence` branch through `scripts/ci/publish-evidence.sh`; the site deploys overlay the evidence from there and README badges read it. A push made with `GITHUB_TOKEN` starts no workflows, so publishers redeploy the site with `gh workflow run`.
+
+### Pin third-party actions that run with secrets or write access by commit SHA
+`aquasecurity/trivy-action` tags were force-pushed to malicious commits in March 2026 (CVE-2026-33634); it and `actions/dependency-review-action` are pinned by SHA with the version in a comment, which Dependabot keeps current.
+
 ## Best Practices
 
 ### Authentication
