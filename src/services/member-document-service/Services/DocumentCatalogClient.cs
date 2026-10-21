@@ -100,12 +100,13 @@ public sealed class HttpDocumentCatalog : IDocumentCatalog
 
     public async Task<CatalogDocumentInfo> UploadAsync(CatalogUpload upload, CancellationToken ct = default)
     {
-        // Free text (the title) is HTML-encoded on the way out: a no-op for
-        // ordinary titles, and it keeps markup out of a field the portal shows.
-        // Member ids, type and state were validated by the controller.
+        // Values that come from the caller are HTML-encoded on the way out: a
+        // no-op for the validated ids and the type (one identifier, derived from
+        // the category) and for ordinary titles, and it keeps markup out of
+        // fields the portal shows.
         using var form = new MultipartFormDataContent
         {
-            { new StringContent(upload.Type), "Type" },
+            { new StringContent(WebUtility.HtmlEncode(upload.Type)), "Type" },
             { new StringContent(WebUtility.HtmlEncode(upload.Title)), "Title" },
             { new StringContent(upload.Channel), "SourceChannel" },
         };
@@ -142,7 +143,7 @@ public sealed class HttpDocumentCatalog : IDocumentCatalog
     {
         var body = new StartUploadBody
         {
-            Type = upload.Type,
+            Type = WebUtility.HtmlEncode(upload.Type),
             Title = WebUtility.HtmlEncode(upload.Title),
             ContentType = upload.ContentType,
             FileName = upload.FileName,
