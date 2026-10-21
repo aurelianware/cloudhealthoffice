@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production Reference Architecture on Google Cloud | Cloud Health Office Blueprints</title>
+<meta name="description" content="A production reference architecture for running Cloud Health Office on Google Cloud: environments, network, identity, data, runtime, operations and compliance, with what exists today and what is scoped per engagement.">
+<link rel="canonical" href="https://cloudhealthoffice.com/blueprints/google-cloud" />
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://cloudhealthoffice.com/blueprints/google-cloud">
+<meta property="og:title" content="Cloud Health Office on Google Cloud: production reference architecture">
+<meta property="og:description" content="Environments, network, identity, data, runtime, operations and compliance for a production Cloud Health Office deployment on Google Cloud.">
+<meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/claims-evidence-pipeline.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Cloud Health Office on Google Cloud: production reference architecture">
+<meta name="twitter:description" content="Environments, network, identity, data, runtime, operations and compliance for a production Cloud Health Office deployment on Google Cloud.">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Cloud Health Office on Google Cloud: production reference architecture", "description": "A production reference architecture for running Cloud Health Office on Google Cloud.", "url": "https://cloudhealthoffice.com/blueprints/google-cloud", "dateModified": "2026-10-21", "publisher": {"@type": "Organization", "name": "Aurelianware, Inc."}}</script>
+<script defer src="/js/mobile-nav.js"></script>
+<style>
+  body.ent .bp-table { width: 100%; border-collapse: collapse; margin-top: 24px; font-size: 15px; }
+  body.ent .bp-wrap-table { overflow-x: auto; }
+  body.ent .bp-table th { text-align: left; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--cho-muted); padding: 10px 12px; border-bottom: 2px solid var(--cho-line); background: var(--cho-surface); }
+  body.ent .bp-table td { padding: 12px; border-bottom: 1px solid var(--cho-line); vertical-align: top; color: var(--cho-body); }
+  body.ent .bp-table td:first-child { color: var(--cho-ink); font-weight: 600; }
+  body.ent .st { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  body.ent .st-in { background: #E6F4EA; color: #14532D; }
+  body.ent .st-cfg { background: #E0F2F7; color: #0B5A70; }
+  body.ent .st-need { background: #FEF3C7; color: #7C2D12; }
+  body.ent .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 18px; font-size: 14px; color: var(--cho-muted); }
+  /* Architecture diagram */
+  body.ent .arch { margin-top: 40px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; font-size: 14px; }
+  body.ent .zone { border: 1.5px solid var(--cho-line-strong); border-radius: 10px; padding: 16px; background: #FFFFFF; }
+  body.ent .zone > .zt { font-family: var(--cho-mono); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--cho-muted); margin-bottom: 10px; }
+  body.ent .zone.project { border-color: var(--cho-navy); border-width: 2px; background: var(--cho-surface); }
+  body.ent .zone.cluster { border-style: solid; border-color: var(--cho-accent); }
+  body.ent .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  body.ent .node { padding: 10px 12px; border-radius: 6px; background: var(--cho-surface-2); color: var(--cho-ink); }
+  body.ent .node small { display: block; margin-top: 2px; color: var(--cho-muted); font-size: 12px; }
+  body.ent .node.dark { background: var(--cho-navy); color: #FFFFFF; }
+  body.ent .node.dark small { color: #C9D6E3; }
+  body.ent .flow { text-align: center; color: var(--cho-muted); font-family: var(--cho-mono); font-size: 12px; }
+  body.ent .inner-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  body.ent .note { margin-top: 24px; padding: 16px 18px; border-left: 4px solid var(--cho-accent); background: var(--cho-surface); font-size: 15px; color: var(--cho-body); }
+  body.ent ol.plain, body.ent ul.plain { margin: 16px 0 0; padding-left: 22px; color: var(--cho-body); }
+  body.ent ol.plain li, body.ent ul.plain li { margin-top: 8px; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body class="ent">
+<a href="#main-content" class="skip-to-main">Skip to main content</a>
+<nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/blueprints/google-cloud" aria-current="page">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+<main id="main-content" tabindex="-1">
+
+<header class="hero">
+<div class="wrap">
+<p class="eyebrow">Blueprint · Reference architecture</p>
+<h1>Cloud Health Office on Google Cloud: production reference architecture</h1>
+<p class="lede">How a production deployment holding real member data should be built on Google Cloud: environments, network, identity, data, runtime, operations and compliance. Each component is marked with what exists in the repository today and what is scoped per engagement.</p>
+<p class="byline">Reference design, last reviewed October 21, 2026. The same shape applies on Azure and AWS with each cloud's equivalent services. Production use requires a commercial license.</p>
+<div class="actions">
+<a class="btn btn-primary" href="/contact?interest=cms0057-assessment" data-ga-event="readiness_review_cta_click">Review this with an architect</a>
+<a class="btn btn-secondary" href="/docs/deployment">Deployment guide</a>
+</div>
+</div>
+</header>
+
+<section id="environments">
+<div class="wrap">
+<p class="eyebrow">Environments</p>
+<h2>Three environments, never shared</h2>
+<p class="lede">Demonstration, sandbox and production are separate deployments with separate keys and data. Nothing in production trusts anything from the other two.</p>
+<div class="bp-wrap-table">
+<table class="bp-table">
+<thead><tr><th>Environment</th><th>Purpose</th><th>Data</th><th>Token signing</th><th>Who can reach it</th></tr></thead>
+<tbody>
+<tr><td>Demonstration</td><td>Guided demos</td><td>Synthetic only</td><td>Development key (refused on Production hosts)</td><td>Approved people, through Cloudflare Access</td></tr>
+<tr><td>Sandbox</td><td>Hands-on evaluation</td><td>Synthetic only</td><td>Real keys; Production hosts</td><td>Registered evaluators, rate-limited</td></tr>
+<tr><td>Production</td><td>A health plan's operations</td><td>Real member data</td><td>Real keys in a key management service; Production hosts</td><td>The plan's staff, partners and FHIR apps, over private and authenticated paths</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+
+<section id="architecture" class="tint">
+<div class="wrap">
+<p class="eyebrow">Architecture</p>
+<h2>One project per plan, private by default</h2>
+<p class="lede">Each health plan's production runs in its own Google Cloud project, whether the plan operates it or Aurelianware does. That keeps the tenant dedicated in fact, not only in configuration.</p>
+
+<div class="arch" role="img" aria-label="Architecture: internet clients and partners reach a production Google Cloud project only through an HTTPS load balancer with a web application firewall, a VPN to the plan's network, or managed SFTP. Inside the project, a private regional GKE cluster runs the Cloud Health Office services and token-service, and reaches managed MongoDB, Kafka, Redis, Cloud Storage, Cloud KMS and the secret store over private connections. Logs go to a separate logging project.">
+<div class="zone">
+<div class="zt">Outside the project</div>
+<div class="row">
+<div class="node">Plan staff<small>Plan's identity provider (Entra ID, Okta, Google)</small></div>
+<div class="node">Members, providers, other payers<small>SMART on FHIR apps · CMS-0057-F APIs</small></div>
+<div class="node">Clearinghouses and portals<small>X12 over SFTP or API</small></div>
+<div class="node">Plan's data center or core<small>QNXT, Facets or HealthEdge</small></div>
+</div>
+</div>
+<div class="flow">HTTPS + WAF · site-to-site VPN or Interconnect · managed SFTP · controlled egress</div>
+<div class="zone project">
+<div class="zt">Production project (one per plan) · BAA-covered services only · CMEK required · no public IPs</div>
+<div class="inner-grid">
+<div class="zone">
+<div class="zt">Edge</div>
+<div class="row">
+<div class="node">HTTPS load balancer<small>Cloud Armor WAF, managed certificates</small></div>
+<div class="node">Cloud NAT<small>Egress allowlist</small></div>
+<div class="node">VPN or Interconnect<small>To the plan's network</small></div>
+</div>
+</div>
+<div class="zone cluster">
+<div class="zt">Private regional GKE cluster (3 zones)</div>
+<div class="row">
+<div class="node dark">token-service<small>Signs with Cloud KMS</small></div>
+<div class="node dark">~36 services + portal<small>Production hosts, 2+ replicas</small></div>
+<div class="node">Service mesh<small>mTLS between services</small></div>
+<div class="node">Network policies<small>Deny by default</small></div>
+</div>
+</div>
+<div class="zone">
+<div class="zt">Managed data (private connections)</div>
+<div class="row">
+<div class="node">MongoDB-compatible database<small>Point-in-time backup, CMEK</small></div>
+<div class="node">Managed Kafka</div>
+<div class="node">Memorystore for Redis</div>
+<div class="node">Cloud Storage<small>Documents, retention, legal hold</small></div>
+</div>
+</div>
+<div class="zone">
+<div class="zt">Keys and secrets</div>
+<div class="row">
+<div class="node">Cloud KMS<small>Token signing, CMEK</small></div>
+<div class="node">Secret store<small>HashiCorp Vault or Secret Manager</small></div>
+<div class="node">Workload Identity<small>No static cloud keys</small></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flow">audit, application and security logs</div>
+<div class="zone">
+<div class="zt">Separate logging project</div>
+<div class="row">
+<div class="node">Locked log buckets<small>Retention policies</small></div>
+<div class="node">Monitoring and alerting</div>
+<div class="node">Security monitoring export<small>The plan's SIEM</small></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<section id="components">
+<div class="wrap">
+<p class="eyebrow">Components</p>
+<h2>What each layer uses, and its status today</h2>
+<div class="legend">
+<span><span class="st st-in">In repository</span> implemented in code or infrastructure code</span>
+<span><span class="st st-cfg">Configuration</span> supported; set at deployment</span>
+<span><span class="st st-need">Scoped work</span> built per engagement</span>
+</div>
+
+<h3 style="margin-top:40px">Foundation and network</h3>
+<div class="bp-wrap-table"><table class="bp-table">
+<thead><tr><th>Component</th><th>Production design</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>Project and policies</td><td>One project per plan; organization policies for no public IPs, approved regions and required CMEK; signed Google Cloud BAA</td><td><span class="st st-need">Scoped work</span> Terraform today builds the demonstration project</td></tr>
+<tr><td>Cluster</td><td>Private regional GKE cluster across three zones, private control plane, signed images only</td><td><span class="st st-need">Scoped work</span> demonstration uses a single-zone cluster</td></tr>
+<tr><td>Inbound</td><td>HTTPS load balancer with Cloud Armor (or Cloudflare in front) as the only public entry</td><td><span class="st st-need">Scoped work</span></td></tr>
+<tr><td>Partner connectivity</td><td>Site-to-site VPN or Interconnect to the plan's core; managed SFTP for X12; NAT egress allowlist</td><td><span class="st st-need">Scoped work</span> per plan</td></tr>
+<tr><td>Container images</td><td>Artifact Registry, keyless publishing from GitHub Actions</td><td><span class="st st-in">In repository</span></td></tr>
+</tbody></table></div>
+
+<h3 style="margin-top:40px">Identity and access</h3>
+<div class="bp-wrap-table"><table class="bp-table">
+<thead><tr><th>Component</th><th>Production design</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>Tenant isolation</td><td>Tenant taken only from the validated token; conflicting tenant headers refused; queries filtered by tenant</td><td><span class="st st-in">In repository</span></td></tr>
+<tr><td>Token signing</td><td>token-service issues asymmetrically signed tokens with the key held in a key management service; symmetric and file keys refused in Production</td><td><span class="st st-in">In repository</span> for Azure Key Vault · <span class="st st-need">Scoped work</span> Cloud KMS signing source</td></tr>
+<tr><td>Service identity</td><td>Each service proves its Kubernetes identity to token-service to obtain its token</td><td><span class="st st-in">In repository</span> Kubernetes token validation for workloads · <span class="st st-need">Scoped work</span> extend to all service tokens on GKE</td></tr>
+<tr><td>Staff sign-in</td><td>The plan's identity provider, exchanged for platform tokens with tenant membership and invitations</td><td><span class="st st-in">In repository</span> for Entra ID · <span class="st st-need">Scoped work</span> other providers</td></tr>
+<tr><td>External applications</td><td>SMART on FHIR for member and provider apps under CMS-0057-F</td><td><span class="st st-in">In repository</span> see the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CAPABILITY_RECONCILIATION.md">capability ledger</a> for scope</td></tr>
+<tr><td>Cloud access</td><td>Workload Identity for Cloud Storage, KMS and secrets; no static cloud keys</td><td><span class="st st-in">In repository</span> for Cloud Storage · <span class="st st-cfg">Configuration</span> elsewhere</td></tr>
+</tbody></table></div>
+
+<h3 style="margin-top:40px">Data</h3>
+<div class="bp-wrap-table"><table class="bp-table">
+<thead><tr><th>Component</th><th>Production design</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>Database</td><td>Managed MongoDB-compatible service under a BAA, on a private connection, with point-in-time backup and CMEK</td><td><span class="st st-cfg">Configuration</span> the platform uses the MongoDB driver only</td></tr>
+<tr><td>Event streaming</td><td>Google Managed Service for Apache Kafka</td><td><span class="st st-cfg">Configuration</span></td></tr>
+<tr><td>Cache</td><td>Memorystore for Redis</td><td><span class="st st-cfg">Configuration</span></td></tr>
+<tr><td>Documents</td><td>Cloud Storage with CMEK, retention policies and legal hold through the document catalog</td><td><span class="st st-in">In repository</span> Cloud Storage provider · <span class="st st-need">Scoped work</span> CMEK and retention in Terraform</td></tr>
+<tr><td>Secrets</td><td>HashiCorp Vault, or Google Secret Manager behind the same secret-provider interface</td><td><span class="st st-in">In repository</span> Vault · <span class="st st-need">Scoped work</span> Secret Manager provider</td></tr>
+</tbody></table></div>
+
+<h3 style="margin-top:40px">Runtime and operations</h3>
+<div class="bp-wrap-table"><table class="bp-table">
+<thead><tr><th>Component</th><th>Production design</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>Services</td><td>Production hosts, two or more replicas, autoscaling, disruption budgets, non-root and read-only containers</td><td><span class="st st-in">In repository</span> health endpoints and manifests · <span class="st st-cfg">Configuration</span> replicas and budgets</td></tr>
+<tr><td>Traffic between services</td><td>Network policies deny by default; a service mesh encrypts service-to-service traffic</td><td><span class="st st-need">Scoped work</span></td></tr>
+<tr><td>Observability</td><td>PHI-safe logs, metrics and alerts; audit logs to a separate logging project; export to the plan's SIEM</td><td><span class="st st-in">In repository</span> PHI-safe logging and runbook · <span class="st st-cfg">Configuration</span> sinks and alerts</td></tr>
+<tr><td>Releases</td><td>Development, staging and production; keyless GitHub Actions deploys with approval gates; blue-green rollout</td><td><span class="st st-in">In repository</span> keyless deploys · <span class="st st-cfg">Configuration</span> gates</td></tr>
+<tr><td>Backup and recovery</td><td>Written RPO and RTO; backups copied to a second region; a restore drill before go-live</td><td><span class="st st-in">In repository</span> <a href="/docs/backup-restore-disaster-recovery">runbook</a> · <span class="st st-cfg">Configuration</span> backups</td></tr>
+</tbody></table></div>
+</div>
+</section>
+
+<section id="compliance" class="tint">
+<div class="wrap">
+<p class="eyebrow">Compliance</p>
+<h2>What has to be true before real member data</h2>
+<ul class="plain">
+<li><strong>A BAA chain:</strong> Google Cloud, the managed database provider, and every other service that touches member data.</li>
+<li><strong>The AI claims examiner:</strong> it calls an external model API. It stays off in production unless that data flow is covered by a BAA and approved by the plan.</li>
+<li><strong>A HIPAA risk analysis</strong> and documented administrative, physical and technical safeguards.</li>
+<li><strong>A penetration test</strong> before go-live, an incident response plan and on-call coverage.</li>
+<li><strong>The <a href="/docs/production-readiness-checklist">production readiness checklist</a></strong> completed, including a tested restore.</li>
+<li><strong>SOC 2 Type II</strong> as the attestation payer procurement will eventually ask for.</li>
+</ul>
+</div>
+</section>
+
+<section id="path">
+<div class="wrap">
+<p class="eyebrow">Getting there</p>
+<h2>The scoped work, in order</h2>
+<ol class="steps">
+<li><h3>Identity on Google Cloud</h3><p>Cloud KMS signing for token-service and Kubernetes-identity service tokens on GKE, so every service runs as a Production host.</p></li>
+<li><h3>Production foundation</h3><p>Terraform for the per-plan project, organization policies, private regional cluster, load balancer and WAF, CMEK and the logging project.</p></li>
+<li><h3>Managed state and hardening</h3><p>Managed database, Kafka and Redis on private connections; secret store; network policies and service mesh; restore drill and penetration test.</p></li>
+</ol>
+<p class="lede">The repository's Google Cloud notes estimate the production additions at about five to seven engineer-weeks, before plan-specific connectivity and compliance work. Hosting real member data is a decision to make with a committed health plan, not ahead of one.</p>
+<div class="actions">
+<a class="btn btn-primary" href="/contact?interest=cms0057-assessment" data-ga-event="readiness_review_cta_click">Review this with an architect</a>
+<a class="btn btn-secondary" href="/contact?interest=business-case-kit" data-ga-event="business_case_kit_cta_click">Request the business case kit</a>
+</div>
+</div>
+</section>
+
+</main>
+<footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+</body>
+</html>
