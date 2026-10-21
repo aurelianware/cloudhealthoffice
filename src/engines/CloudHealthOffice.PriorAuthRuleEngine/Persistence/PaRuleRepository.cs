@@ -106,8 +106,19 @@ public sealed class PaRuleRepositoryMongo : IPaRuleRepository
     {
         rule.Id        = MakeId(rule);
         rule.UpdatedAt = DateTime.UtcNow;
-        await _collection.ReplaceOneAsync(OwnDocument(rule), rule,
-            new ReplaceOptions { IsUpsert = true }, ct);
+        var filter = OwnDocument(rule);
+        try
+        {
+            await _collection.ReplaceOneAsync(filter, rule, new ReplaceOptions { IsUpsert = true }, ct);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            // Another replica may have inserted this rule after our first lookup.
+            // Replace only that same owned row, once, without another insert.
+            // An _id collision belonging to another tenant must remain an error.
+            var retry = await _collection.ReplaceOneAsync(filter, rule, new ReplaceOptions { IsUpsert = false }, ct);
+            if (retry.MatchedCount != 1) throw;
+        }
     }
 
     /// <summary>

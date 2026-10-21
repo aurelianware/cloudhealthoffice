@@ -120,6 +120,24 @@ are not comprehensive mutation coverage; no weakened code is installed in the
 working checkout or production services. The original FHIR/SMART audience/scope
 mode of the sensitivity runner remains available and is independently checked.
 
+## Bootstrap regression discovered by the lab
+
+Simultaneously starting the two FHIR hosts against a fresh shared database exposed
+an existing rule-seeding race on Linux: concurrent first upserts could both try
+to insert the same platform-rule `_id`, and a duplicate-key exception stopped
+startup. A real-Mongo regression reproduced the failure before the fix. The
+single-rule repository upsert now retries once as a non-upsert replacement using
+the original `_id` AND tenant filter. If no owned row matches, the duplicate-key
+error remains an error. Bulk upserts are outside this fix.
+
+The regression runs 864 concurrent first-upsert writes across platform and two
+tenant scopes, verifies one rule per scoped key, and separately verifies that a
+foreign-tenant `_id` collision still fails without overwriting it. CI also runs
+the full rule-engine test project. The campaign retains simultaneous FHIR startup;
+it does not skip the real startup path or weaken its authorization guards.
+This is a bootstrap reliability fix, not a confirmed consent-disclosure finding
+or a complete replica-availability assessment.
+
 ## Evidence and knowledge-base feed
 
 The existing packet schema records the source commit/dirty flag, fingerprints of
