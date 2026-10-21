@@ -365,6 +365,49 @@ public partial class BenefitCalculationStageTests
     }
 
     [Fact]
+    public async Task Execute_MemberServiceUnavailable_PendsAsACheckThatCouldNotRun_NeverEligible()
+    {
+        // Eligibility fails closed: an outage is not "eligible".
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+            MemberLookup = MemberLookupOutcome.Unavailable,
+        };
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.True(result.CheckUnavailable);
+        Assert.Equal(ClaimAdjudicationOrchestrator.ServiceUnavailablePendCode, ctx.PendDetails!.PendCode);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task Execute_MemberNotFound_DeniesWithCarc31WithoutEngineCall()
+    {
+        // An unknown member is not "eligible" either.
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+            MemberLookup = MemberLookupOutcome.NotFound,
+        };
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Deny, result.Outcome);
+        Assert.Equal(BenefitCalculationStage.MemberNotFoundCarc, ctx.AdjudicationResult.DenialReasonCode);
+        await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+    }
+
+    [Fact]
     public async Task Execute_ServiceDateAfterMemberTermination_DeniesWithCarc27WithoutEngineCall()
     {
         var claim = BuildClaim(Guid.NewGuid().ToString());

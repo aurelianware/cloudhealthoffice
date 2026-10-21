@@ -12,10 +12,11 @@ namespace ClaimsService.Services.Resolution;
 /// remains the system-of-record for full member documents.
 ///
 /// <para>
-/// Mirrors <see cref="ClaimsService.EDI.Florida.HttpProviderService"/>:
-/// <see cref="IHttpClientFactory"/> with a named client, non-throwing
-/// failure (returns <c>null</c>), <c>X-Tenant-ID</c> header for tenant
-/// scoping.
+/// <see cref="IHttpClientFactory"/> with a named client and the
+/// <c>X-Tenant-ID</c> header for tenant scoping. A 404 is a definitive
+/// "no such member" (<c>null</c>); any other failure (status, transport,
+/// timeout, unreadable body) throws <see cref="MemberUnavailableException"/>,
+/// like <see cref="HttpBenefitPlanResolver"/>: eligibility fails closed.
 /// </para>
 /// </summary>
 public class HttpMemberResolver : IMemberResolver
@@ -64,13 +65,13 @@ public class HttpMemberResolver : IMemberResolver
                 _logger.LogWarning(
                     "Member-service returned {StatusCode} resolving member {MemberId}",
                     response.StatusCode, LogSanitizer.MaskId(memberId));
-                return null;
+                throw new MemberUnavailableException($"member-service answered {(int)response.StatusCode}");
             }
 
             var dto = await response.Content
                 .ReadFromJsonAsync<MemberDto>(JsonOptions, ct)
                 .ConfigureAwait(false);
-            if (dto is null) return null;
+            if (dto is null) throw new MemberUnavailableException("member-service answered an empty body");
 
             return new ResolvedMember
             {
@@ -88,13 +89,13 @@ public class HttpMemberResolver : IMemberResolver
             };
         }
         catch (Exception ex) when (ex is HttpRequestException
-                                    or TaskCanceledException
-                                    or JsonException)
+                                    or JsonException
+                                    || (ex is TaskCanceledException && !ct.IsCancellationRequested))
         {
             _logger.LogWarning(ex,
                 "Failed to resolve member {MemberId} for tenant {TenantId}",
                 LogSanitizer.MaskId(memberId), LogSanitizer.Sanitize(tenantId));
-            return null;
+            throw new MemberUnavailableException("member-service unreachable", ex);
         }
     }
 
