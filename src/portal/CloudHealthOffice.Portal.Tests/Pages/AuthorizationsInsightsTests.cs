@@ -27,7 +27,6 @@ public class AuthorizationsInsightsTests : TestContext
         user.Setup(u => u.GetCurrentUserAsync()).ReturnsAsync(new UserContext { UserId = "u1", Roles = ["UMCoordinator"] });
         user.Setup(u => u.HasPermission(It.IsAny<string>())).Returns(true);
         Services.AddSingleton(user.Object);
-        Services.AddSingleton(Mock.Of<ISearchCriteriaPolicy>(p => p.RequiresCriteriaAsync() == Task.FromResult(true)));
     }
 
     private static AuthorizationInsightsView Sample() => new()

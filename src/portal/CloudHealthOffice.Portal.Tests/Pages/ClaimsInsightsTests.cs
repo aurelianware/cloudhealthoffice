@@ -28,7 +28,6 @@ public class ClaimsInsightsTests : TestContext
         Services.AddSingleton(_user.Object);
         Services.AddSingleton(Mock.Of<IProviderService>());
         Services.AddSingleton(Mock.Of<IMemberService>());
-        Services.AddSingleton(Mock.Of<ISearchCriteriaPolicy>(p => p.RequiresCriteriaAsync() == Task.FromResult(true)));
         _user.Setup(u => u.GetCurrentUserAsync()).ReturnsAsync(new UserContext { UserId = "u1", Roles = ["ClaimsSupervisor"] });
         _user.Setup(u => u.HasPermission(It.IsAny<string>())).Returns(true);
         _claims.Setup(c => c.SearchClaimsAsync(It.IsAny<ClaimSearchRequest>())).ReturnsAsync(new ClaimSearchResult());
