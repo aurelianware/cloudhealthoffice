@@ -79,6 +79,7 @@ BUILT_IMAGES = {
     "claims-service": "src/services/claims-service/Dockerfile",
     "consent-service": "src/services/consent-service/Dockerfile",
     "coverage-service": "src/services/coverage-service/Dockerfile",
+    "document-service": "src/services/document-service/Dockerfile",
     "eligibility-service": "src/services/eligibility-service/Dockerfile",
     "encounter-service": "src/services/encounter-service/Dockerfile",
     "encounter-submission-service": "src/services/encounter-submission-service/Dockerfile",
@@ -123,7 +124,7 @@ MANAGED_SECRETS = {
 # Services that store document bytes through IDocumentStore. Keep in step with
 # var.document_service_accounts in infrastructure/gcp: each name is both the
 # Deployment and the Kubernetes service account Workload Identity trusts.
-DOCUMENT_SERVICES = ("attachment-service", "member-document-service")
+DOCUMENT_SERVICES = ("attachment-service", "document-service", "member-document-service")
 WORKLOAD_IDENTITY_ANNOTATION = "iam.gke.io/gcp-service-account"
 
 # Probe paths scripts/deploy-local.sh patches to /health/live.
@@ -325,6 +326,9 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
                 set_env(container, key, value)
         if name == "portal":
             set_env(container, "XDG_DATA_HOME", "/tmp")
+        if name == "document-service":
+            # Synthetic data only and no malware scanner wired yet: let the demo open documents.
+            set_env(container, "Documents__AllowUnscannedContent", "true")
         if name in DOCUMENT_SERVICES and args.documents_bucket:
             spec["serviceAccountName"] = name
             set_env(container, "DocumentStore__Provider", "Gcs")

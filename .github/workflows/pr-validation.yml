@@ -165,8 +165,8 @@ jobs:
           # The canonical 37-service list. MUST stay in sync with
           # .github/paths-filter.yml (per-service filter names) and with
           # deploy-azure-aks.yml's matrix (34 entries; this list adds
-          # idcard-service and provider-verification-service which are
-          # PR-validated but not yet deploy-targeted, and
+          # document-service, idcard-service and provider-verification-service
+          # which are PR-validated but not yet AKS deploy-targeted, and
           # provider-eligibility-api, which deploys to Container Apps via
           # its own bicep rather than AKS). ffs-service is
           # intentionally absent — see paths-filter.yml header.
@@ -191,6 +191,7 @@ jobs:
             {"service":"CloudHealthOffice.PricingApi","image_name":"cloudhealthoffice-pricing-api"},
             {"service":"consent-service"},
             {"service":"coverage-service"},
+            {"service":"document-service"},
             {"service":"eligibility-service"},
             {"service":"encounter-service"},
             {"service":"encounter-submission-service"},

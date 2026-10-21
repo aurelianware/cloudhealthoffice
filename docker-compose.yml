@@ -424,6 +424,23 @@ services:
         condition: service_healthy
     profiles: [core]
 
+  document-service:
+    build:
+      context: .
+      dockerfile: src/services/document-service/Dockerfile
+    ports:
+      - "5032:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://mongo:27017
+      - MongoDb__DatabaseName=DocumentDB
+      - BlobStorage__ConnectionString=UseDevelopmentStorage=true
+      - DocumentStore__Provider=InMemory
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles: [core]
+
   enrollment-import-service:
     build:
       context: .

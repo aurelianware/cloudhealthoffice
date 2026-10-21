@@ -60,13 +60,34 @@ public static class ChoRolePermissions
     /// <summary>Post, edit and withdraw plan notices. TenantAdmin holds it through <c>*:*</c>.</summary>
     public const string NoticesWrite = "notices:write";
 
+    /// <summary>
+    /// The document catalog (document-service). Reading a document also needs
+    /// the read permission of the subject it is opened from (a claim's
+    /// documents need <c>claims:read</c>), and the document must be linked to
+    /// that subject. <c>documents:write</c> uploads and links.
+    /// </summary>
+    public const string DocumentsRead = "documents:read";
+
+    /// <inheritdoc cref="DocumentsRead"/>
+    public const string DocumentsWrite = "documents:write";
+
+    /// <summary>
+    /// Opens documents carrying a sensitivity tag (behavioral health, HIV,
+    /// reproductive, genetic, minor-confidential). Exact-only
+    /// (<see cref="ExactOnlyPermissions"/>): no wildcard grants it, TenantAdmin
+    /// included. 42 CFR Part 2 records additionally need a consent check and
+    /// stay withheld until that check exists.
+    /// </summary>
+    public const string DocumentsReadSensitive = "documents:read-sensitive";
+
     private static readonly string[] ExaminerPermissions =
     [
         "claims:read", "claims:work", "claims:override-request", "claims:note",
         "workqueue:read", "workqueue:work", WorkspaceUse,
         "members:read", "accumulators:read", "providers:read",
         "terminology:read", "reference-data:read",
-        "attachments:read", "attachments:write", "benefits:read"
+        "attachments:read", "attachments:write", "benefits:read",
+        DocumentsRead, DocumentsWrite
     ];
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> Map =
@@ -91,6 +112,8 @@ public static class ChoRolePermissions
                 "authorizations:read", "reference-data:read",
                 "attachments:read", "benefits:read", "consent:read", "consent:write",
                 "providers:read",
+                // Member correspondence and forms taken on calls.
+                DocumentsRead, DocumentsWrite,
                 // Members ask for a Payer-to-Payer transfer through member services.
                 "payer-to-payer:initiate"
             ],
@@ -117,6 +140,9 @@ public static class ChoRolePermissions
                 "members:read", "claims:read",
                 "terminology:read", "reference-data:read",
                 "attachments:read", "attachments:write", "benefits:read", "consent:read",
+                // Clinical review reads records the sensitive tags cover
+                // (behavioral health in particular).
+                DocumentsRead, DocumentsWrite, DocumentsReadSensitive,
                 // USCDI clinical data (Condition, Observation, MedicationRequest...)
                 // for clinical review. Not granted to MemberServices.
                 "clinical:read"
@@ -165,7 +191,10 @@ public static class ChoRolePermissions
             [
                 WorkspaceUse,
                 "*:read", "audit:read", "compliance:read", "reports:compliance",
-                LegalHold
+                LegalHold,
+                // Investigations and HIPAA accounting reach sensitive records;
+                // *:read alone does not.
+                DocumentsReadSensitive
             ],
             [ComplianceViewer] =
             [
@@ -210,6 +239,20 @@ public static class ChoRolePermissions
     public static readonly IReadOnlySet<string> ReservedResources =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "platform" };
 
+    /// <summary>
+    /// Permissions only an exact grant satisfies: no wildcard (<c>*:read</c>,
+    /// <c>*:*</c>, <c>documents:*</c>) reaches them, and a service token does
+    /// not hold them by default. Each opens records a broad role should not
+    /// see without being given them by name: sensitive documents (behavioral
+    /// health, HIV, reproductive, genetic, minor-confidential) and call
+    /// records, which have no defined access yet.
+    /// </summary>
+    public static readonly IReadOnlySet<string> ExactOnlyPermissions =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { DocumentsReadSensitive, "calls:read" };
+
+    /// <summary>Whether <paramref name="permission"/> is satisfied only by an exact grant (<see cref="ExactOnlyPermissions"/>).</summary>
+    public static bool IsExactOnly(string permission) => ExactOnlyPermissions.Contains(permission.Trim());
+
     /// <summary>Whether <paramref name="permission"/> names a <see cref="ReservedResources">reserved resource</see>.</summary>
     public static bool IsReserved(string permission)
     {
@@ -238,6 +281,8 @@ public static class ChoRolePermissions
     {
         if (string.Equals(granted, required, StringComparison.OrdinalIgnoreCase))
             return true;
+        if (IsExactOnly(required))
+            return false;
 
         var g = granted.Split(':');
         var r = required.Split(':');

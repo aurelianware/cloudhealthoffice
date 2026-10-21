@@ -331,6 +331,20 @@ services:
         condition: service_healthy
     healthcheck: *service-healthcheck
 
+  document-service:
+    build:
+      context: .
+      dockerfile: src/services/document-service/Dockerfile
+    ports:
+      - "5032:8080"
+    environment:
+      <<: *common-env
+      DocumentStore__Provider: InMemory
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+
   sponsor-service:
     build:
       context: .

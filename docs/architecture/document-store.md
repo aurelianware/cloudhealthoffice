@@ -1,6 +1,6 @@
 # Document store: one home for every document plan operations touch
 
-**Status:** Draft for review (2026-10-15). Step 1 of the build order (storage providers) is built (2026-10-20); the catalog is next. Decided: the catalog is its own service (§10, question 1).
+**Status:** Draft for review (2026-10-15). Steps 1 (storage providers) and 2 (the catalog, document-service) are built (2026-10-20); see §11 for what step 2 includes and leaves for later. Decided: the catalog is its own service (§10, question 1).
 **Scope:** Where documents live, how they get in, how they link to the work they support, and who may see them:
 - claim attachments and claim RFAI responses;
 - authorization clinicals and CMS-0057-F prior-auth documents (CRD/DTR/PAS);
@@ -124,7 +124,7 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 ## 9. Build order
 
 1. **Storage providers:** GCS and S3 for `IDocumentStore`; member-document-service moves onto `IDocumentStore`. *Built (2026-10-20).*
-2. **Catalog:** the document record and service (evolved from member-document-service), with many-to-many links, sensitivity tags, access audit, and the documents API.
+2. **Catalog:** the document record and service (evolved from member-document-service), with many-to-many links, sensitivity tags, access audit, and the documents API. *Built (2026-10-20) as a new document-service; member-document-service moves onto it later.*
 3. **Move attachment-service onto the catalog:** existing `Attachment` rows migrate to documents with links. Keep the PWK attachment control number on the claim for 275 matching.
 4. **Correspondence** ([correspondence.md](correspondence.md)), starting with appeal notices. Generated letters are the first new producer on the catalog, and ID cards move onto it in the same phase.
 5. **Documents panel** on claim, authorization and appeal screens.
@@ -137,3 +137,23 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 1. **One service or a library?** *Decided 2026-10-20: its own service* (document-service) that others call, so the access audit and retention live in one place. Generated correspondence ([correspondence.md](correspondence.md)) adds another producer, which strengthens that case.
 2. **Virus scanning:** ClamAV in-cluster, or the cloud's malware scanning (Defender for Storage, GCS + Security Command Center)? It may need to be configurable per deployment.
 3. **OCR:** cloud OCR (Document AI / Azure Document Intelligence / Textract) or Claude vision for paper claims? This ties to the AI-assisted keying in the workbench design.
+
+## 11. What step 2 built
+
+**document-service** (`src/services/document-service`), a new service; member-document-service is unchanged and moves onto it in a later step.
+
+- **Record** as in §3: type, title, content type, size, SHA-256, source channel, links, sensitivity tags, retention policy and date, legal hold with history, scan status, `receivedAt`. Stored in MongoDB (`CatalogDocuments`); bytes through `IDocumentStore` (container `documents`, path `tenants/{tenant}/documents/{id}{ext}`).
+- **API** (`/api/v1/documents`):
+  - `GET ?subjectKind=&subjectId=`: a subject's documents the caller may see, plus a count of those withheld.
+  - `GET /{id}?subject…` and `GET /{id}/content?subject…`: metadata and content, always opened from a linked subject.
+  - `POST` multipart (upload) or JSON (pre-signed upload, then `POST /{id}/finalize` by the uploader).
+  - `POST /{id}/links?subject…` and `DELETE /{id}/links/{kind}/{id}?subject…`: a document keeps at least one link.
+  - `PUT /{id}/legal-hold` (`records:legal-hold`) and `GET /{id}/access-log` (`audit:read`).
+- **Access (§5):** `documents:read` / `documents:write`, plus the subject's own read permission (`claims:read` for a claim, `appeals:read` for an appeal or grievance, ...). Not linked to that subject, or another tenant: 404. Call documents need `calls:read`, which no operational role holds until CHO Service defines it.
+- **Sensitivity:** any tag needs `documents:read-sensitive`, granted by name to UM coordinators and compliance officers. It is *exact-only*: no wildcard (`*:read`, `*:*`, so not TenantAdmin) and no service token implies it; `calls:read` is exact-only too. **42 CFR Part 2 records are withheld from everyone** until the consent-service check exists. A refusal says only "This document is restricted."; which tag caused it goes to the audit, not the caller.
+- **Access audit:** every list (with the ids shown), view, download, upload (including refused and pre-signed ones), link change and legal-hold attempt, allowed or refused, with actor, subject and the `X-CHO-Screen` header. Written before the response or the change; if it can't be written, nothing is served or changed. The access log needs `audit:read`, plus `documents:read-sensitive` for a sensitive document. Legal hold answers only the hold state.
+- **Duplicates:** identical content is stored once when the uploader can already open the existing document and it isn't on legal hold; the upload then adds its links and tags to it. Otherwise it becomes its own document, answered like a first upload, so identical bytes never attach anyone to a record they can't see. Two identical uploads at the same moment can still create two records (no unique index, since separate copies are allowed).
+- **Scanning:** an `IDocumentScanner` seam with no scanner wired, so documents stay `Pending`. Content is served only when `Documents:AllowUnscannedContent` is on (Development and the GKE demo); `Infected` and `Failed` never.
+
+**Left for later:** the consent check for Part 2; a real scanner; checking that a linked subject exists in its owning service; new versions of a document; the nightly retention-expiry job with tombstones; moving member-document-service and attachment-service onto the catalog (step 3); and the portal's Documents panel (step 5).
+
