@@ -372,10 +372,10 @@ Cloud Health Office enables compliance achievement in 90 days or less:
 - Unit, integration, and end-to-end testing
 - CMS-0057-F compliance validation
 - Performance and load testing
-- Security penetration testing
+- Independent third-party penetration test of the payer's deployed environment (engaged by the payer or scoped as a pilot deliverable)
 - User acceptance testing
 
-**Deliverables:** Test reports, compliance validation certificate, UAT sign-off
+**Deliverables:** Test reports, compliance validation report, UAT sign-off
 
 #### Phase 4: Deployment and Go-Live (Week 12)
 
@@ -530,7 +530,7 @@ Cloud Health Office implementation follows a structured 12-16 week timeline desi
 | Phase | Timeline | Key Deliverables | Responsibilities |
 |-------|----------|------------------|------------------|
 | **Discovery** | Weeks 1-2 | Gap analysis, architecture design, integration specification | Payer IT (40%) / Cloud Health Office (60%) |
-| **Pilot** | Weeks 3-6 | Eligibility microservice deploy, FHIR API certification, sandbox environment | Payer IT (30%) / Cloud Health Office (70%) |
+| **Pilot** | Weeks 3-6 | Eligibility microservice deploy, FHIR API conformance testing, sandbox environment | Payer IT (30%) / Cloud Health Office (70%) |
 | **Scale** | Weeks 7-10 | Prior auth workflows, production deployment, 20% traffic routing | Payer IT (50%) / Cloud Health Office (50%) |
 | **Optimize** | Weeks 11-16 | Full traffic cutover, performance tuning, compliance audit | Payer IT (60%) / Cloud Health Office (40%) |
 
@@ -559,18 +559,18 @@ Cloud Health Office implementation follows a structured 12-16 week timeline desi
 **Objectives:**
 - Deploy Cloud Health Office sandbox environment
 - Implement eligibility microservice (270/271 processing)
-- Achieve FHIR API certification for Patient Access API
+- Pass FHIR conformance testing (Inferno test kits) for the Patient Access API
 - Validate Da Vinci PDex conformance
 
 **Key Milestones:**
 - **Week 3:** Azure infrastructure deployed via Bicep templates
-- **Week 4:** FHIR API certification achieved (Patient Access API)
+- **Week 4:** Patient Access API conformance tests passing (Inferno)
 - **Week 5:** Eligibility microservice operational
 - **Week 6:** Sandbox UAT complete
 
 **Deliverables:**
 - Deployed Sandbox Environment
-- FHIR API Certification Documentation
+- FHIR API conformance test results
 - Eligibility Service Integration (validated)
 - UAT Sign-off
 
@@ -585,7 +585,7 @@ Cloud Health Office implementation follows a structured 12-16 week timeline desi
 **Key Milestones:**
 - **Week 7:** Prior auth service deployed (Da Vinci PAS conformance)
 - **Week 8:** Production environment provisioned
-- **Week 9:** Security penetration testing complete
+- **Week 9:** Independent penetration test of the deployed environment complete; findings triaged
 - **Week 10:** 20% traffic routing active
 
 **Deliverables:**
@@ -616,7 +616,7 @@ Cloud Health Office implementation follows a structured 12-16 week timeline desi
 
 ### Implementation Gantt Chart
 
-<!-- Alt text: Gantt chart showing 16-week implementation timeline with four phases: Discovery (Weeks 1-2), Pilot (Weeks 3-6), Scale (Weeks 7-10), and Optimize (Weeks 11-16), including key milestones like FHIR API Certification and Go-Live -->
+<!-- Alt text: Gantt chart showing 16-week implementation timeline with four phases: Discovery (Weeks 1-2), Pilot (Weeks 3-6), Scale (Weeks 7-10), and Optimize (Weeks 11-16), including key milestones like FHIR API conformance testing and Go-Live -->
 ```mermaid
 %%{init: {'theme': 'neutral', 'themeVariables': { 'primaryColor': '#3498db' }}}%%
 gantt
@@ -633,7 +633,7 @@ gantt
     
     section Pilot
     Azure Infrastructure      :b1, after a5, 5d
-    FHIR API Certification    :milestone, m2, after b1, 0d
+    FHIR API Conformance      :milestone, m2, after b1, 0d
     Eligibility Service       :b2, after b1, 10d
     Da Vinci PDex Validation  :b3, after b2, 3d
     Sandbox UAT               :b4, after b3, 5d
@@ -661,7 +661,7 @@ gantt
 | Risk | Impact | Mitigation Strategy |
 |------|--------|---------------------|
 | **claims adjudication systems API Instability** | High | Hybrid EDI/FHIR mode for rollback; maintain legacy pathways for 90 days post-go-live |
-| **FHIR Certification Delays** | Medium | Pre-certified components; early engagement with ONC-ACB testing labs |
+| **FHIR Conformance Delays** | Medium | Run Inferno test kits from the first sandbox build; fix failures before scale-out |
 | **Staff Skill Gaps** | Medium | Comprehensive training program; Cloud Health Office managed services option |
 | **Data Migration Issues** | High | Incremental migration with validation gates; parallel processing during transition |
 | **Performance Degradation** | Medium | Auto-scaling Azure infrastructure; pre-production load testing at 2x expected volume |

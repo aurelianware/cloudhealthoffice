@@ -1,7 +1,12 @@
+> **Archived (November 2025 plan, not current state).** This plan was not carried
+> out as written: no third-party penetration test has been performed, and the
+> scores below are unreviewed self-assessments. See [README.md](README.md) for
+> current sources.
+
 # Security Hardening and HIPAA Audit - Executive Summary
 
 **Report Date:** November 23, 2025  
-**Status:** Complete ✅  
+**Status:** Archived plan (documentation set delivered; the plan was not executed)  
 **Overall Security Posture:** 8.3/10 → Target: 9.5/10 (12 months)
 
 ---

@@ -164,7 +164,7 @@ Complete X12 transaction support: 270/271, 276/277, 278, 834, 835, 837 (P/I enco
 
 ### 3D. Security Hardening Pass *(P2)*
 
-- [ ] Audit against `docs/security/SECURITY-HARDENING-ROADMAP.md`
+- [ ] Close the open items in `docs/diligence/SECURITY-ONE-PAGER.md` and the unsupported tracks in `docs/security-challenge/` (the November 2025 roadmap is archived in `docs/archive/security-plans-2025/`)
 - [ ] Validate Vault integration for all secrets
 - [ ] RBAC on all service endpoints
 - [ ] Port `hipaaLogger.ts` to C# (PHI audit logging)

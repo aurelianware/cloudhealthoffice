@@ -1,5 +1,11 @@
 # Third-Party Security Audit Process
 
+> **Status: process plan. No third-party audit, penetration test or SOC 2 examination
+> has been performed yet.** This document describes how one will be scoped and run.
+> Current state is in the [security one-pager](../diligence/SECURITY-ONE-PAGER.md);
+> the automated, scoped security tests are in the
+> [Open Security Challenge](../security-challenge/README.md).
+
 **Document Version:** 1.0  
 **Last Updated:** November 23, 2025  
 **Owner:** Cloud Health Office Compliance Team
