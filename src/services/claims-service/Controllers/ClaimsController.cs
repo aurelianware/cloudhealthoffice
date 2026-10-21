@@ -460,7 +460,9 @@ public class ClaimsController : ControllerBase
     /// Claims whose 837 PWK named this attachment control number (PWK06): how
     /// a 275 (TRN02) finds its claim. Tenant-scoped like every claim read;
     /// answers only identifiers and the billing provider, so the caller can
-    /// tell two providers' claims apart. An empty list when nothing matches.
+    /// tell two providers' claims apart. The id is the claim's stable version
+    /// chain id (its first version's id), so an attachment stays with the
+    /// claim through later adjustments. An empty list when nothing matches.
     /// </summary>
     [HttpGet("attachment-control-numbers/{controlNumber}")]
     [ProducesResponseType(typeof(IReadOnlyList<AttachmentControlNumberMatch>), StatusCodes.Status200OK)]
@@ -477,10 +479,9 @@ public class ClaimsController : ControllerBase
         var claims = await _claimRepository.FindByAttachmentControlNumberAsync(trimmed, limit: 20, ct);
         return Ok(claims.Select(c => new AttachmentControlNumberMatch
         {
-            ClaimId = c.Id,
+            ClaimId = string.IsNullOrWhiteSpace(c.ClaimVersionId) ? c.Id : c.ClaimVersionId,
             ClaimNumber = c.ClaimNumber,
             BillingProviderNPI = c.BillingProviderNPI,
-            MemberId = c.MemberId,
             SubmittedDate = c.SubmittedDate,
             Reports = c.AttachmentReports.Where(r => r.ControlNumber == trimmed).ToList(),
         }).ToList());

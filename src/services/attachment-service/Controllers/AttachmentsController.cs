@@ -23,6 +23,8 @@ public class AttachmentsController : ControllerBase
     private readonly ICurrentActor _actor;
     private readonly IAttachmentParentLookup _parents;
     private readonly IClaimAttachmentMatcher _matcher;
+
+    private const string ClaimsRead = "claims:read";
     private readonly AttachmentUploadOptions _uploadOptions;
     private readonly ILogger<AttachmentsController> _logger;
 
@@ -115,10 +117,15 @@ public class AttachmentsController : ControllerBase
             else if (attachment.AttachmentControlNumber is { } controlNumber)
             {
                 // The 275 names no record: find the claim whose 837 PWK06 is its TRN02.
-                IReadOnlyList<ClaimControlNumberMatch> matches;
+                // The lookup runs with this service's token and the answer names a
+                // claim, so it is done inline only for a caller who may read claims;
+                // anyone else's 275 is held and the background matcher links it, so
+                // probing control numbers reveals no claim ids.
+                IReadOnlyList<ClaimControlNumberMatch> matches = [];
                 try
                 {
-                    matches = await _matcher.FindAsync(attachment.TenantId, controlNumber, HttpContext.RequestAborted);
+                    if (_actor.HasPermission(ClaimsRead))
+                        matches = await _matcher.FindAsync(attachment.TenantId, controlNumber, HttpContext.RequestAborted);
                 }
                 catch (AttachmentParentLookupException ex)
                 {
@@ -140,10 +147,9 @@ public class AttachmentsController : ControllerBase
                 {
                     // Held under its provider until a claim announcing this
                     // number arrives (UnmatchedAttachmentMatcher links it then).
+                    // The note says nothing about other providers' claims.
                     attachment.Status = "Unmatched";
-                    attachment.Notes = matches.Count > 1
-                        ? $"{matches.Count} claims announced attachment control number {controlNumber} and none is from provider {attachment.ProviderId}; held for review"
-                        : $"No claim has announced attachment control number {controlNumber} yet; held until one does";
+                    attachment.Notes = $"Held until a claim from provider {attachment.ProviderId.Trim()} announces attachment control number {controlNumber}";
                     (parentType, parentId) = (AttachmentParentType.Provider, attachment.ProviderId.Trim());
                     attachment.ProviderId = parentId;
                 }
@@ -358,9 +364,6 @@ public class AttachmentsController : ControllerBase
     }
 
     /// <summary>
-    /// Get attachment by RFAI reference (solicited attachments)
-    /// </summary>
-    /// <summary>
     /// 275s held because no claim has announced their attachment control
     /// number (TRN02) yet, oldest first. They are linked automatically when the
     /// claim arrives, and rejected after the hold period.
@@ -371,6 +374,9 @@ public class AttachmentsController : ControllerBase
         return Ok(await _repository.GetUnmatchedAsync(_actor.TenantId));
     }
 
+    /// <summary>
+    /// Get attachment by RFAI reference (solicited attachments)
+    /// </summary>
     [HttpGet("rfai/{rfaiReference}")]
     public async Task<ActionResult<Attachment>> GetByRFAIReference(string rfaiReference)
     {

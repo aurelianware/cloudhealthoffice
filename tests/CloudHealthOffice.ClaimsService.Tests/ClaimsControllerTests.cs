@@ -244,7 +244,9 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
     public async Task FindByAttachmentControlNumber_AnswersTheClaimsThatAnnouncedIt()
     {
         var claim = CreateValidClaim();
-        claim.Id = "claim-pwk";
+        // An adjusted claim: version 2 of the chain that started as "claim-pwk".
+        claim.Id = "claim-pwk-v2";
+        claim.ClaimVersionId = "claim-pwk";
         claim.BillingProviderNPI = "1234567893";
         claim.AttachmentReports =
         [
@@ -259,7 +261,10 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var matches = await response.Content.ReadFromJsonAsync<List<AttachmentControlNumberMatch>>();
         var match = Assert.Single(matches!);
+        // The stable chain id, so the attachment follows the claim through adjustments.
         Assert.Equal("claim-pwk", match.ClaimId);
+        // Identifiers and billing provider only: no member.
+        Assert.DoesNotContain("memberId", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
         Assert.Equal("1234567893", match.BillingProviderNPI);
         Assert.Equal("ACN-77", Assert.Single(match.Reports).ControlNumber);
     }
