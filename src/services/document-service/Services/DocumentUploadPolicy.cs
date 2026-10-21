@@ -9,7 +9,7 @@ namespace DocumentService.Services;
 /// <item>Only allow-listed content types; for the built-in types the first
 /// bytes must match the declared type, so a script or HTML page cannot be
 /// stored (and later served) as a "PDF".</item>
-/// <item>A size cap (default 25 MB, below Kestrel's 30 MB request limit).</item>
+/// <item>A size cap (default 64 MiB; the upload endpoint raises Kestrel's request limit to match).</item>
 /// <item>Storage paths start with the token's tenant and are built from
 /// generated ids only, so no caller-supplied value reaches a path.</item>
 /// </list>
@@ -18,7 +18,8 @@ namespace DocumentService.Services;
 /// </summary>
 public sealed class DocumentUploadPolicy
 {
-    public const long DefaultMaxUploadBytes = 25L * 1024 * 1024;
+    /// <summary>64 MiB: what clearinghouses accept for an X12 275 attachment (Stedi's recommended maximum).</summary>
+    public const long DefaultMaxUploadBytes = 64L * 1024 * 1024;
 
     private static readonly Regex PathSegment = new("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$", RegexOptions.Compiled);
 

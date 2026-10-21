@@ -81,6 +81,9 @@ public sealed class FakeDocumentCatalog : IDocumentCatalog
     /// <summary>Make every call fail, as an unreachable document-service would.</summary>
     public bool Fail { get; set; }
 
+    /// <summary>Make every call fail as a refusal with this status.</summary>
+    public System.Net.HttpStatusCode? RefuseWith { get; set; }
+
     public IReadOnlyDictionary<string, Stored> Files => _files;
 
     public int Count => _files.Count;
@@ -89,6 +92,7 @@ public sealed class FakeDocumentCatalog : IDocumentCatalog
     {
         _files.Clear();
         Fail = false;
+        RefuseWith = null;
     }
 
     /// <summary>Test helper: a file already in the catalog.</summary>
@@ -103,6 +107,7 @@ public sealed class FakeDocumentCatalog : IDocumentCatalog
     public Task<CatalogUploadResult> UploadAsync(CatalogUpload upload, CancellationToken ct = default)
     {
         if (Fail) throw new DocumentCatalogException("document-service unreachable");
+        if (RefuseWith is { } upStatus) throw new DocumentCatalogException("refused", statusCode: upStatus);
         using var copy = new MemoryStream();
         upload.Content.CopyTo(copy);
         var id = Guid.NewGuid().ToString("N");
@@ -115,6 +120,7 @@ public sealed class FakeDocumentCatalog : IDocumentCatalog
         string subjectId, CancellationToken ct = default)
     {
         if (Fail) throw new DocumentCatalogException("document-service unreachable");
+        if (RefuseWith is { } downStatus) throw new DocumentCatalogException("refused", statusCode: downStatus);
         return Task.FromResult<Stream?>(
             _files.TryGetValue(documentId, out var f) && f.TenantId == tenantId && f.SubjectType == subjectType && f.SubjectId == subjectId
                 ? new MemoryStream(f.Bytes)

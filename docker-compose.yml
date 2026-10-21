@@ -407,6 +407,8 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+      document-service:
+        condition: service_started
     profiles: [core]
 
   member-document-service:

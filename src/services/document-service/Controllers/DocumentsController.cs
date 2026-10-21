@@ -28,7 +28,7 @@ namespace DocumentService.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/documents")]
-public sealed class DocumentsController : ControllerBase
+public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.Mvc.Filters.IActionFilter
 {
     public const string Container = "documents";
     public const string ScreenHeader = "X-CHO-Screen";
@@ -85,6 +85,24 @@ public sealed class DocumentsController : ControllerBase
 
     private string TenantId => _actor.TenantId;
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
+
+    /// <summary>
+    /// A service that names a user must name a usable one: an unreadable value
+    /// would otherwise drop out of the audit silently.
+    /// </summary>
+    [NonAction]
+    public void OnActionExecuting(Microsoft.AspNetCore.Mvc.Filters.ActionExecutingContext context)
+    {
+        if (!_actor.IsService || !Request.Headers.TryGetValue(OnBehalfOfHeader, out var value))
+            return;
+        if (!SafeToken.IsMatch(value.ToString().Trim()))
+            context.Result = BadRequest($"{OnBehalfOfHeader} must be one user id (letters, digits, '_', '.', ':', '@', '-').");
+    }
+
+    [NonAction]
+    public void OnActionExecuted(Microsoft.AspNetCore.Mvc.Filters.ActionExecutedContext context)
+    {
+    }
 
     private string? OnBehalfOf
     {
@@ -212,7 +230,7 @@ public sealed class DocumentsController : ControllerBase
     /// </summary>
     [HttpPost]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(30L * 1024 * 1024)]
+    [RequestSizeLimit(DocumentUploadPolicy.DefaultMaxUploadBytes + 6L * 1024 * 1024)]
     public async Task<IActionResult> Upload([FromForm] UploadDocumentForm form, IFormFile? file, CancellationToken ct)
     {
         var metadata = await ValidateMetadataAsync(form.Type, form.Links, form.Sensitivity, form.SourceChannel, form.ReceivedAt, ct);
@@ -232,12 +250,12 @@ public sealed class DocumentsController : ControllerBase
         if (contentType is null || !_uploadPolicy.IsAllowedContentType(contentType))
             return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status415UnsupportedMediaType, UnsupportedTypeMessage(file.ContentType), ct);
 
-        using var buffer = new MemoryStream();
+        await using var buffer = TempBuffer();
         await file.CopyToAsync(buffer, ct);
-        if (!DocumentUploadPolicy.MatchesSignature(contentType, buffer.GetBuffer().AsSpan(0, (int)Math.Min(buffer.Length, 16))))
+        if (!DocumentUploadPolicy.MatchesSignature(contentType, await PrefixAsync(buffer, ct)))
             return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status415UnsupportedMediaType, $"The file content is not {contentType}.", ct);
 
-        var sha256 = Sha256Hex(buffer);
+        var sha256 = await Sha256HexAsync(buffer, ct);
 
         var duplicate = (await _documents.FindByHashAsync(TenantId, sha256, ct)).FirstOrDefault(CanMergeInto);
         if (duplicate != null)
@@ -354,7 +372,7 @@ public sealed class DocumentsController : ControllerBase
                 $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.", ct);
         }
 
-        using var buffer = new MemoryStream();
+        await using var buffer = TempBuffer();
         await using (var content = await _store.DownloadAsync(Container, staging, ct))
         {
             var chunk = new byte[81920];
@@ -367,19 +385,19 @@ public sealed class DocumentsController : ControllerBase
                     return await RefuseUploadAsync(auditSubject, id, StatusCodes.Status413PayloadTooLarge,
                         $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.", ct);
                 }
-                buffer.Write(chunk, 0, read);
+                await buffer.WriteAsync(chunk.AsMemory(0, read), ct);
             }
         }
 
         if (buffer.Length == 0
-            || !DocumentUploadPolicy.MatchesSignature(document.ContentType, buffer.GetBuffer().AsSpan(0, (int)Math.Min(buffer.Length, 16))))
+            || !DocumentUploadPolicy.MatchesSignature(document.ContentType, await PrefixAsync(buffer, ct)))
         {
             await _store.DeleteAsync(Container, staging, ct);
             return await RefuseUploadAsync(auditSubject, id, StatusCodes.Status415UnsupportedMediaType,
                 $"The uploaded content is not {document.ContentType}; the upload was discarded.", ct);
         }
 
-        var sha256 = Sha256Hex(buffer);
+        var sha256 = await Sha256HexAsync(buffer, ct);
         var duplicate = (await _documents.FindByHashAsync(TenantId, sha256, ct)).FirstOrDefault(CanMergeInto);
         if (duplicate != null)
         {
@@ -778,8 +796,34 @@ public sealed class DocumentsController : ControllerBase
         ["legalHold"] = d.Retention.LegalHold.Set ? "true" : "false"
     };
 
-    private static string Sha256Hex(MemoryStream buffer) =>
-        Convert.ToHexString(SHA256.HashData(buffer.GetBuffer().AsSpan(0, (int)buffer.Length))).ToLowerInvariant();
+    /// <summary>
+    /// Uploads are staged on local disk (deleted on close) rather than in
+    /// memory: documents run to tens of megabytes and several can arrive at once.
+    /// </summary>
+    private static FileStream TempBuffer() => new(
+        Path.GetTempFileName(), FileMode.Create, FileAccess.ReadWrite, FileShare.None,
+        bufferSize: 81920, FileOptions.DeleteOnClose | FileOptions.Asynchronous);
+
+    /// <summary>The first bytes of the staged content (for the signature check); leaves the stream at the start.</summary>
+    private static async Task<byte[]> PrefixAsync(Stream buffer, CancellationToken ct)
+    {
+        buffer.Position = 0;
+        var prefix = new byte[16];
+        var total = 0;
+        int read;
+        while (total < prefix.Length && (read = await buffer.ReadAsync(prefix.AsMemory(total), ct)) > 0)
+            total += read;
+        buffer.Position = 0;
+        return prefix[..total];
+    }
+
+    private static async Task<string> Sha256HexAsync(Stream buffer, CancellationToken ct)
+    {
+        buffer.Position = 0;
+        var hash = await SHA256.HashDataAsync(buffer, ct);
+        buffer.Position = 0;
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
 
     private static string SubjectPermissionMessage(DocumentLinkKind kind) =>
         $"needs {SubjectAccess.ReadPermissionFor(kind)} for {kind} documents";

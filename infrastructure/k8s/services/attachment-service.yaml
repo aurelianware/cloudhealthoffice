@@ -28,9 +28,16 @@ spec:
       containers:
       - name: attachment-service
         image: ghcr.io/aurelianware/cloudhealthoffice-attachment-service:latest
+        envFrom:
+        # Source=TokenService, token-service URL and Entra scope (shared by all
+        # services): this service calls document-service with its own token.
+        - configMapRef:
+            name: cho-service-tokens
         ports:
         - containerPort: 8080
         env:
+        - name: ChoAuth__ServiceToken__ClientId
+          value: "attachment-service"
         - name: ASPNETCORE_URLS
           value: "http://+:8080"
         - name: ASPNETCORE_ENVIRONMENT

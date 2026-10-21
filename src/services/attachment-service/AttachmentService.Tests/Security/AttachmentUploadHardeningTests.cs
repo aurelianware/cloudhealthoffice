@@ -113,6 +113,55 @@ public class AttachmentUploadHardeningTests
     }
 
     [Fact]
+    public async Task ARefusedFiling_RemovesTheRecord_AndPassesTheRefusalOn()
+    {
+        _factory.Documents.RefuseWith = HttpStatusCode.RequestEntityTooLarge;
+
+        var response = await NewClient().PostAsync("/api/attachments", Form());
+
+        response.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+        _factory.Attachments.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Download_ThatTheCatalogCantServeYet_Is409_NotARetry()
+    {
+        var stored = _factory.Attachments.Seed(Tenant);
+        stored.DocumentId = _factory.Documents.Seed(Tenant, AttachmentParentType.Claim, "CLM-1", Pdf);
+        _factory.Documents.RefuseWith = HttpStatusCode.Conflict;
+
+        var response = await NewClient().GetAsync($"/api/attachments/{stored.Id}/download");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Download_OfAnAppealAttachment_NeedsAppealsRead_AsTheCatalogWould()
+    {
+        // MemberServices holds attachments:read and documents:read but not appeals:read.
+        var stored = _factory.Attachments.Seed(Tenant, claimId: null);
+        stored.AppealId = "A-1";
+        stored.DocumentId = _factory.Documents.Seed(Tenant, AttachmentParentType.Appeal, "A-1", Pdf);
+        var client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler("rep-1", ChoRolePermissions.MemberServices));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
+
+        var response = await client.GetAsync($"/api/attachments/{stored.Id}/download");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Download_OfARecordWithNoParent_IsNotFound()
+    {
+        var stored = _factory.Attachments.Seed(Tenant, claimId: null);
+        stored.DocumentId = "doc-x";
+
+        var response = await NewClient().GetAsync($"/api/attachments/{stored.Id}/download");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task BlankClaimId_DoesNotHideTheAuthorizationId()
     {
         _factory.Parents.Add(Tenant, AttachmentParentType.Authorization, "AUTH-7");

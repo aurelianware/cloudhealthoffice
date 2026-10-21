@@ -561,6 +561,18 @@ public sealed class DocumentPipelineTests : IClassFixture<DocumentServiceFactory
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    [Fact]
+    public async Task AServiceNamingAnUnreadableUser_IsRefused()
+    {
+        var client = Service();
+        client.DefaultRequestHeaders.TryAddWithoutValidation(DocumentsController.OnBehalfOfHeader, "bad user!");
+
+        var response = await client.PostAsync("/api/v1/documents", Form(Pdf));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(_factory.Documents.All);
+    }
+
     [Theory]
     [InlineData("no-equals-sign")]
     [InlineData("1bad=x")]
