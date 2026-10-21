@@ -80,8 +80,8 @@ public sealed class DocumentPipelineTests : IClassFixture<DocumentServiceFactory
     [Fact]
     public async Task ARoleWithoutDocumentsRead_IsRefused()
     {
-        // EnrollmentSpecialist can read members but holds no documents permission.
-        var response = await Client(ChoRolePermissions.EnrollmentSpecialist).GetAsync($"/api/v1/documents?{On("Member", "M-1")}");
+        // FinanceApprover holds no documents permission.
+        var response = await Client(ChoRolePermissions.FinanceApprover).GetAsync($"/api/v1/documents?{On("Member", "M-1")}");
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
@@ -588,6 +588,100 @@ public sealed class DocumentPipelineTests : IClassFixture<DocumentServiceFactory
         Assert.Empty(_factory.Documents.All);
     }
 
+    // ── Hold at upload, retention inputs ────────────────────────────
+
+    private static MultipartFormDataContent HeldForm(byte[] bytes, string reason = "litigation 2026-17")
+    {
+        var form = Form(bytes, links: ["Member:M-1"]);
+        form.Add(new StringContent("true"), "LegalHold");
+        form.Add(new StringContent(reason), "LegalHoldReason");
+        return form;
+    }
+
+    [Fact]
+    public async Task UploadUnderALegalHold_NeedsTheLegalHoldPermission_AndIsAudited()
+    {
+        var response = await Client(ChoRolePermissions.MemberServices).PostAsync("/api/v1/documents", HeldForm(Pdf));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Empty(_factory.Documents.All);
+        Assert.Contains(_factory.Audit.Entries, e => e.Action == DocumentAccessAction.Upload && !e.Allowed);
+    }
+
+    [Fact]
+    public async Task UploadUnderALegalHold_IsHeldFromTheStart_RecordedAgainstTheUserAServiceActsFor()
+    {
+        var client = Service("member-document-service");
+        client.DefaultRequestHeaders.Add(DocumentsController.OnBehalfOfHeader, "compliance-7");
+
+        var response = await client.PostAsync("/api/v1/documents", HeldForm(Pdf));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var stored = _factory.Documents.All.Single();
+        Assert.True(stored.Retention.LegalHold.Set);
+        Assert.Equal("compliance-7", stored.Retention.LegalHold.By);
+        Assert.Equal("litigation 2026-17", stored.Retention.LegalHold.Reason);
+        var placed = Assert.Single(stored.Retention.LegalHold.History);
+        Assert.Equal("compliance-7", placed.Actor);
+        Assert.Equal("true", _factory.Storage.Inner.GetTags(DocumentsController.Container, stored.StoragePath)!["legalHold"]);
+    }
+
+    [Fact]
+    public async Task AHeldUpload_IsNeverMergedIntoAnExistingCopy()
+    {
+        // Merging would put someone else's document under this hold.
+        await UploadAsync(Client(ChoRolePermissions.MemberServices), Pdf, links: ["Member:M-1"]);
+
+        // TenantAdmin can open the existing copy, so without the hold it would merge.
+        var response = await Client(ChoRolePermissions.TenantAdmin, "admin-1").PostAsync("/api/v1/documents", HeldForm(Pdf));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(2, _factory.Documents.All.Count);
+        Assert.Single(_factory.Documents.All, d => d.Retention.LegalHold.Set);
+    }
+
+    [Fact]
+    public async Task Retention_RunsFromTheCoverageTerminationDate_WhenGiven()
+    {
+        var form = Form(Pdf, links: ["Member:M-1"]);
+        form.Add(new StringContent("TX"), "StateCode");
+        form.Add(new StringContent("2024-06-30"), "CoverageTerminationDate");
+
+        var response = await Client(ChoRolePermissions.MemberServices).PostAsync("/api/v1/documents", form);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var stored = _factory.Documents.All.Single();
+        Assert.Equal("TX-10Y", stored.Retention.PolicyId);
+        Assert.Equal(new DateTime(2034, 6, 30), stored.Retention.RetainUntil);
+    }
+
+    [Fact]
+    public async Task ALegalHoldChangeByAService_IsRecordedAgainstTheUserItActsFor()
+    {
+        var doc = await UploadAsync(Examiner(), Pdf);
+        var client = Service("member-document-service");
+        client.DefaultRequestHeaders.Add(DocumentsController.OnBehalfOfHeader, "compliance-7");
+
+        var hold = await client.PutAsJsonAsync($"/api/v1/documents/{doc.Id}/legal-hold", new { legalHold = true, reason = "subpoena" });
+
+        Assert.Equal(HttpStatusCode.OK, hold.StatusCode);
+        var stored = _factory.Documents.All.Single();
+        Assert.Equal("compliance-7", stored.Retention.LegalHold.By);
+        Assert.Equal("compliance-7", stored.Retention.LegalHold.History.Single().Actor);
+    }
+
+    [Fact]
+    public async Task ALegalHoldReason_IsLimitedInLength()
+    {
+        var doc = await UploadAsync(Examiner(), Pdf);
+
+        var response = await Compliance().PutAsJsonAsync($"/api/v1/documents/{doc.Id}/legal-hold",
+            new { legalHold = true, reason = new string('x', LegalHoldRequest.MaxReasonLength + 1) });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.False(_factory.Documents.All.Single().Retention.LegalHold.Set);
+    }
+
     // ── Pre-signed upload ───────────────────────────────────────────
 
     private async Task<PresignedUploadResponse> StartAsync(HttpClient client)
@@ -633,6 +727,26 @@ public sealed class DocumentPipelineTests : IClassFixture<DocumentServiceFactory
         var response = await Client(ChoRolePermissions.ClaimsExaminer, "someone-else").PostAsync($"/api/v1/documents/{start.DocumentId}/finalize", null);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Finalize_ByAServiceForAnotherUser_IsNotFound()
+    {
+        // A service started the upload for one user; the same service acting
+        // for someone else can't finish it.
+        var started = Service("member-document-service");
+        started.DefaultRequestHeaders.Add(DocumentsController.OnBehalfOfHeader, "uploader-1");
+        var start = await StartAsync(started);
+        var pending = _factory.Documents.All.Single();
+        await _factory.Storage.Inner.UploadAsync(DocumentsController.Container, pending.PendingUploadPath!, new MemoryStream(Pdf), "application/pdf");
+
+        var other = Service("member-document-service");
+        other.DefaultRequestHeaders.Add(DocumentsController.OnBehalfOfHeader, "someone-else");
+        var refused = await other.PostAsync($"/api/v1/documents/{start.DocumentId}/finalize", null);
+        var finished = await started.PostAsync($"/api/v1/documents/{start.DocumentId}/finalize", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, refused.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, finished.StatusCode);
     }
 
     [Fact]

@@ -134,7 +134,8 @@ public sealed class MemberDocumentProofOfAuthorityDocuments : IProofOfAuthorityD
         if (!string.Equals(GetString(root, "id"), documentId, StringComparison.Ordinal))
             return new(ProofOfAuthorityDocumentStatus.NotFound);
 
-        if (!string.IsNullOrEmpty(GetString(root, "pendingUploadBlobPath")))
+        // A pre-signed upload not yet finalized (checked in the document catalog) proves nothing.
+        if (!TryGet(root, "uploadPending", out var pending) || pending.ValueKind != JsonValueKind.False)
             return new(ProofOfAuthorityDocumentStatus.NotFinalized);
 
         var linked = new HashSet<string>(StringComparer.Ordinal);

@@ -284,7 +284,7 @@ public class PersonalRepActivationControlsTests : IClassFixture<PersonalRepLifec
         var tenant = NewTenant();
         var repId = await DraftAsync(tenant, PersonalRepCredentialType.LegalGuardian, "M1");
         var order = _factory.MemberDocuments.Add(tenant, "M1");
-        _factory.MemberDocuments.Get(tenant, order)["pendingUploadBlobPath"] = $"{tenant}/staging/{order}";
+        _factory.MemberDocuments.Get(tenant, order)["uploadPending"] = true;
 
         var response = await ActivateAsync(User(Reviewer, tenant), repId, order);
 

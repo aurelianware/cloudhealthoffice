@@ -1,4 +1,3 @@
-using CloudHealthOffice.DocumentStore;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -7,6 +6,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using MemberDocumentService.Models;
 using MemberDocumentService.Repositories;
 using MemberDocumentService.Services;
+using MemberDocumentService.Tests.Support;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -17,11 +17,12 @@ using Microsoft.Extensions.Logging;
 namespace MemberDocumentService.Tests.Security;
 
 /// <summary>
-/// The real member-document-service pipeline with storage replaced. Member
-/// documents are PHI: every caller needs a CHO token, the tenant and the
-/// uploader come from it, reads need members:read and writes members:write.
-/// Uploads are limited by content type, signature and size, and blob paths
-/// carry the token tenant.
+/// The real member-document-service pipeline with the document catalog
+/// replaced. Member documents are PHI: every caller needs a CHO token, the
+/// tenant and the uploader come from it, reads need members:read and
+/// documents:read, writes members:write and documents:write. Uploads are
+/// limited by content type, signature and size before anything reaches the
+/// catalog, and files are filed there under the member, for the token user.
 /// </summary>
 public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipelineAuthTests.Factory>
 {
@@ -30,7 +31,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     public sealed class Factory : WebApplicationFactory<Program>
     {
         public Mock<IMemberDocumentRepository> Repository { get; } = new();
-        public Mock<IDocumentStore> Blobs { get; } = new();
+        public FakeDocumentCatalog Catalog { get; } = new();
         public AuditCapture Audit { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -41,15 +42,14 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
             builder.UseSetting("MongoDb:ConnectionString", "mongodb://fake-host:27017");
             builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["BlobStorage:ConnectionString"] = "UseDevelopmentStorage=true",
                 ["MemberDocuments:MaxUploadBytes"] = MaxBytes.ToString(),
             }));
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IMemberDocumentRepository>();
-                services.RemoveAll<IDocumentStore>();
+                services.RemoveAll<IDocumentCatalog>();
                 services.AddSingleton(Repository.Object);
-                services.AddSingleton(Blobs.Object);
+                services.AddSingleton<IDocumentCatalog>(Catalog);
                 services.AddSingleton<ILoggerProvider>(Audit);
             });
         }
@@ -91,13 +91,12 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     private static readonly byte[] Html = Encoding.ASCII.GetBytes("<html><script>alert(document.cookie)</script></html>");
 
     private readonly Factory _factory;
-    private readonly List<(string Path, byte[] Bytes)> _uploads = new();
 
     public MemberDocumentPipelineAuthTests(Factory factory)
     {
         _factory = factory;
         _factory.Repository.Reset();
-        _factory.Blobs.Reset();
+        _factory.Catalog.Reset();
         _factory.Audit.Clear();
 
         _factory.Repository.Setup(r => r.CreateAsync(It.IsAny<MemberDocument>()))
@@ -109,44 +108,19 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         _factory.Repository.Setup(r => r.ListByMemberIdAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>()))
             .ReturnsAsync(new List<MemberDocument>());
 
-        _factory.Blobs.Setup(b => b.UploadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(),
-                It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Returns((string c, string path, Stream s, string _, IReadOnlyDictionary<string, string>? _, CancellationToken _) =>
-            {
-                using var copy = new MemoryStream();
-                s.CopyTo(copy);
-                _uploads.Add((path, copy.ToArray()));
-                return Task.FromResult(new DocumentUploadResult
-                {
-                    Uri = new Uri($"memory://{c}/{path}"),
-                    Container = c,
-                    BlobName = path,
-                    SizeBytes = copy.Length
-                });
-            });
-        _factory.Blobs.Setup(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new MemoryStream(Pdf));
-        _factory.Blobs.Setup(b => b.GetPropertiesAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DocumentProperties { SizeBytes = Pdf.Length });
-        _factory.Blobs.Setup(b => b.CreateUploadLinkAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string c, string p, string type, DateTimeOffset expires, CancellationToken _) => new DocumentUploadLink
-            {
-                Url = new Uri($"https://blob.example/{c}/{p}?sig=x"),
-                Headers = new Dictionary<string, string> { ["x-ms-blob-type"] = "BlockBlob", ["Content-Type"] = type },
-                ExpiresAtUtc = expires
-            });
     }
 
-    private static MemberDocument StoredDocument(string? pendingPath = null, bool legalHold = false) => new()
+    private const string CatalogId = "cat-doc-1";
+
+    private static MemberDocument StoredDocument(bool pending = false, bool legalHold = false) => new()
     {
         Id = DocId,
         TenantId = Tenant,
         MemberId = "mem-1",
         Category = "EOB",
-        BlobContainer = "member-documents",
-        BlobPath = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf",
+        DocumentId = CatalogId,
         ContentType = "application/pdf",
-        PendingUploadBlobPath = pendingPath,
+        UploadPending = pending,
         LegalHold = legalHold,
         LegalHoldSetBy = legalHold ? "compliance-9" : null,
         LegalHoldHistory = legalHold
@@ -162,13 +136,14 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     }
 
     private static MultipartFormDataContent Upload(byte[] bytes, string contentType, string memberId = "mem-1",
-        string fileName = "eob.pdf", string fileField = "file", bool legalHold = false)
+        string fileName = "eob.pdf", string fileField = "file", bool legalHold = false,
+        string category = "EOB", string source = "Uploaded")
     {
         var form = new MultipartFormDataContent
         {
             { new StringContent(memberId), "MemberId" },
-            { new StringContent("EOB"), "Category" },
-            { new StringContent("Uploaded"), "Source" },
+            { new StringContent(category), "Category" },
+            { new StringContent(source), "Source" },
             { new StringContent("someone-else"), "UploadedBy" },
         };
         if (legalHold)
@@ -185,7 +160,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     private void NothingStored()
     {
         _factory.Repository.Verify(r => r.CreateAsync(It.IsAny<MemberDocument>()), Times.Never);
-        Assert.Empty(_uploads);
+        Assert.True(_factory.Catalog.NothingCalled);
     }
 
     // ── Authentication and tenant ───────────────────────────────────
@@ -196,7 +171,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         var response = await _factory.CreateClient().GetAsync($"/api/v1/member-documents/{DocId}/content");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        _factory.Blobs.Verify(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(_factory.Catalog.Downloads);
     }
 
     [Fact]
@@ -254,7 +229,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         // doc-1 belongs to tenant-1; a tenant-2 token cannot reach it.
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         _factory.Repository.Verify(r => r.GetByIdAsync(OtherTenant, DocId), Times.Once);
-        _factory.Blobs.Verify(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(_factory.Catalog.Downloads);
     }
 
     // ── Permissions ─────────────────────────────────────────────────
@@ -306,8 +281,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     private void NoHoldChange()
     {
         _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
-        _factory.Blobs.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(_factory.Catalog.Holds);
         Assert.Empty(_factory.Audit.Lines);
     }
 
@@ -354,8 +328,8 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
             && d.LegalHoldHistory.Count == 1
             && d.LegalHoldHistory[0].Action == LegalHoldAction.Set
             && d.LegalHoldHistory[0].Actor == User)), Times.Once);
-        _factory.Blobs.Verify(b => b.SetTagsAsync("member-documents", $"tenants/{Tenant}/members/mem-1/{DocId}.pdf",
-            It.Is<IReadOnlyDictionary<string, string>>(t => t["legalHold"] == "true"), It.IsAny<CancellationToken>()), Times.Once);
+        // The catalog's hold is the one enforced; it records the user, not this service.
+        Assert.Equal((Tenant, User, CatalogId, true, (string?)"subpoena 44"), Assert.Single(_factory.Catalog.Holds));
         var audit = Assert.Single(_factory.Audit.Lines);
         Assert.Contains("legal hold Set", audit);
         Assert.Contains($"{Tenant}/{DocId}", audit);
@@ -419,7 +393,6 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         Assert.Equal(HttpStatusCode.Forbidden, multipart.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, presigned.StatusCode);
         NothingStored();
-        _factory.Blobs.Verify(b => b.CreateUploadLinkAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -433,6 +406,10 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
             d.LegalHold && d.LegalHoldSetBy == User && d.LegalHoldReason == "litigation 2026-17"
             && d.LegalHoldHistory.Count == 1)), Times.Once);
         Assert.Contains("legal hold Set", Assert.Single(_factory.Audit.Lines));
+        // Held from the start in the catalog, too.
+        var filed = Assert.Single(_factory.Catalog.Uploads).Upload;
+        Assert.True(filed.LegalHold);
+        Assert.Equal("litigation 2026-17", filed.LegalHoldReason);
     }
 
     [Theory]
@@ -452,13 +429,10 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         Assert.Equal(HttpStatusCode.MethodNotAllowed, delete.StatusCode);
         Assert.Equal(HttpStatusCode.MethodNotAllowed, put.StatusCode);
         Assert.Equal(HttpStatusCode.MethodNotAllowed, patch.StatusCode);
-        // Before: finalize of a finalized document rewrote its size from the blob.
+        // Before: finalize of a finalized document rewrote its size from storage.
         Assert.Equal(HttpStatusCode.Conflict, refinalize.StatusCode);
         _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
-        _factory.Blobs.Verify(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        _factory.Blobs.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
-        Assert.Empty(_uploads);
+        Assert.True(_factory.Catalog.NothingCalled);
     }
 
     // ── Uploads ─────────────────────────────────────────────────────
@@ -476,16 +450,90 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     }
 
     [Fact]
-    public async Task Upload_StoresTheBlobUnderTheTokenTenant()
+    public async Task Upload_FilesTheDocumentInTheCatalog_UnderTheMember_ForTheTokenUser()
     {
-        // Before: blobs were stored at members/{memberId}/..., shared by every tenant.
-        var response = await Client().PostAsync("/api/v1/member-documents", Upload(Pdf, "application/pdf"));
+        // The record is mutated after it is saved, so note its state at the time.
+        (bool Pending, string? DocumentId)? savedAs = null;
+        _factory.Repository.Setup(r => r.CreateAsync(It.IsAny<MemberDocument>()))
+            .Callback((MemberDocument d) => savedAs = (d.UploadPending, d.DocumentId))
+            .ReturnsAsync((MemberDocument d) => d);
+        var form = Upload(Pdf, "application/pdf");
+        form.Add(new StringContent("mem-2"), "RelatedMemberIds");
+        form.Add(new StringContent("TX"), "StateCode");
+
+        var response = await Client().PostAsync("/api/v1/member-documents", form);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var upload = Assert.Single(_uploads);
-        Assert.StartsWith($"tenants/{Tenant}/members/mem-1/", upload.Path);
-        Assert.EndsWith(".pdf", upload.Path);
-        Assert.Equal(Pdf, upload.Bytes);
+        var (filed, bytes) = Assert.Single(_factory.Catalog.Uploads);
+        Assert.Equal(Tenant, filed.TenantId);
+        Assert.Equal(User, filed.OnBehalfOf);
+        Assert.Equal(["mem-1", "mem-2"], filed.MemberIds);
+        Assert.Equal("EOB", filed.Type);
+        Assert.Equal("Upload", filed.Channel);
+        Assert.Equal("TX", filed.StateCode);
+        Assert.Equal(Pdf, bytes);
+        // The record is saved first, then pointed at the catalog document.
+        Assert.Equal((true, (string?)null), savedAs);
+        _factory.Repository.Verify(r => r.UpdateAsync(It.Is<MemberDocument>(d =>
+            !d.UploadPending && d.DocumentId == "cat-1" && d.SizeBytes == Pdf.Length && d.ContentHashSha256.Length == 64)), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(null, HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.InternalServerError, HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.Forbidden, HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.RequestEntityTooLarge, HttpStatusCode.RequestEntityTooLarge)]
+    public async Task Upload_TheCatalogRefuses_RemovesTheRecord(HttpStatusCode? catalogStatus, HttpStatusCode expected)
+    {
+        _factory.Catalog.Failures["upload"] = catalogStatus;
+
+        var response = await Client().PostAsync("/api/v1/member-documents", Upload(Pdf, "application/pdf"));
+
+        Assert.Equal(expected, response.StatusCode);
+        _factory.Repository.Verify(r => r.DeleteUnfiledAsync(Tenant, It.IsAny<string>()), Times.Once);
+        _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Upload_ARelatedMemberIdThatIsNotOneToken_IsRejected()
+    {
+        var form = Upload(Pdf, "application/pdf");
+        form.Add(new StringContent("Claim:CLM-1"), "RelatedMemberIds");
+
+        var response = await Client().PostAsync("/api/v1/member-documents", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        NothingStored();
+    }
+
+    [Fact]
+    public async Task EnrollmentSpecialist_CanUploadAndOpenMemberDocuments()
+    {
+        // Enrollment forms and proof of coverage: enrollment holds documents:* too.
+        var client = Client(Tenant, ChoRolePermissions.EnrollmentSpecialist);
+
+        var upload = await client.PostAsync("/api/v1/member-documents", Upload(Pdf, "application/pdf"));
+        var content = await client.GetAsync($"/api/v1/member-documents/{DocId}/content");
+
+        Assert.Equal(HttpStatusCode.Created, upload.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, content.StatusCode);
+    }
+
+    [Fact]
+    public async Task MembersPermissionsWithoutDocuments_CannotReadOrUpload()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer",
+            ChoDevelopmentAuth.UserTokenIssuer().IssueUserToken(User, Tenant, [], ["members:read", "members:write"]));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
+
+        var content = await client.GetAsync($"/api/v1/member-documents/{DocId}/content");
+        var upload = await client.PostAsync("/api/v1/member-documents", Upload(Pdf, "application/pdf"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, content.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, upload.StatusCode);
+        _factory.Repository.VerifyNoOtherCalls();
+        Assert.True(_factory.Catalog.NothingCalled);
     }
 
     [Theory]
@@ -494,7 +542,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     [InlineData("..")]
     public async Task Upload_MemberIdThatIsNotOnePathSegment_IsRejected(string memberId)
     {
-        // Before: the member id went into the blob path verbatim.
+        // Before: the member id went into the storage path verbatim.
         var response = await Client().PostAsync("/api/v1/member-documents", Upload(Pdf, "application/pdf", memberId));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -546,7 +594,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer",
             ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("idcard-service", Tenant));
         client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
-        var form = Upload(Png, "image/png", fileName: "card.png", fileField: "File");
+        var form = Upload(Png, "image/png", fileName: "card.png", fileField: "File", category: "IdCard", source: "Generated");
         form.Add(new StringContent("idcard"), "Subcategory");
 
         var response = await client.PostAsync("/api/v1/member-documents", form);
@@ -557,6 +605,10 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         Assert.False(string.IsNullOrEmpty(created.RootElement.GetProperty("id").GetString()));
         _factory.Repository.Verify(r => r.CreateAsync(It.Is<MemberDocument>(d =>
             d.UploadedBy == "idcard-service" && d.TenantId == Tenant && d.ContentType == "image/png")), Times.Once);
+        var filed = Assert.Single(_factory.Catalog.Uploads).Upload;
+        Assert.Equal("IdCard", filed.Type);
+        Assert.Equal("Generated", filed.Channel);
+        Assert.Equal("idcard-service", filed.OnBehalfOf);
     }
 
     // ── Downloads ───────────────────────────────────────────────────
@@ -571,161 +623,35 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         Assert.Contains("nosniff", response.Headers.GetValues("X-Content-Type-Options"));
     }
 
-    // ── Pre-signed uploads ──────────────────────────────────────────
 
     [Fact]
-    public async Task PresignedUpload_SasCoversOnlyAStagingBlobUnderTheTokenTenant()
+    public async Task Download_ComesFromTheCatalog_OpenedFromTheDocumentsMember()
     {
-        var response = await Client().PostAsJsonAsync("/api/v1/member-documents", new
-        {
-            memberId = "mem-1",
-            category = "Letter",
-            fileName = "letter.pdf",
-            contentType = "application/pdf",
-            uploadedBy = "someone-else",
-        });
+        var response = await Client(Tenant, ChoRolePermissions.MemberServices).GetAsync($"/api/v1/member-documents/{DocId}/content");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<PresignedUploadResponse>();
-        Assert.StartsWith($"tenants/{Tenant}/members/mem-1/", body!.BlobPath);
-        Assert.EndsWith(".upload", body.BlobPath);
-        Assert.True(body.ExpiresAtUtc <= DateTime.UtcNow.AddMinutes(15).AddSeconds(5));
-        _factory.Blobs.Verify(b => b.CreateUploadLinkAsync("member-documents", body.BlobPath, "application/pdf", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
-        // The client is told how to PUT, whatever storage is behind the link.
-        Assert.Equal("PUT", body.UploadMethod);
-        Assert.Equal("application/pdf", body.UploadHeaders["Content-Type"]);
-        Assert.Equal("BlockBlob", body.UploadHeaders["x-ms-blob-type"]);
-        _factory.Repository.Verify(r => r.CreateAsync(It.Is<MemberDocument>(d =>
-            d.UploadedBy == User
-            && d.PendingUploadBlobPath == body.BlobPath
-            && d.BlobPath != body.BlobPath)), Times.Once);
+        Assert.Equal(Pdf, await response.Content.ReadAsByteArrayAsync());
+        Assert.Equal((Tenant, User, CatalogId, "mem-1"), Assert.Single(_factory.Catalog.Downloads));
     }
 
-    [Fact]
-    public async Task PresignedUpload_ContentTypeNotAllowed_IsRejected()
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden, HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.Conflict, HttpStatusCode.Conflict)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, HttpStatusCode.BadGateway)]
+    public async Task Download_PassesOnWhatTheCatalogRefused(HttpStatusCode catalogStatus, HttpStatusCode expected)
     {
-        var response = await Client().PostAsJsonAsync("/api/v1/member-documents", new
-        {
-            memberId = "mem-1",
-            category = "Letter",
-            fileName = "letter.html",
-            contentType = "text/html",
-        });
-
-        Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
-        _factory.Blobs.Verify(b => b.CreateUploadLinkAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
-        NothingStored();
-    }
-
-    [Fact]
-    public async Task PresignedUpload_WhenTheStoreCannotSignLinks_Is501_AndNothingIsRecorded()
-    {
-        // A store whose credentials cannot sign (an emulator, a user login) says so;
-        // the caller falls back to a multipart upload.
-        _factory.Blobs.Setup(b => b.CreateUploadLinkAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((DocumentUploadLink?)null);
-
-        var response = await Client().PostAsJsonAsync("/api/v1/member-documents", new
-        {
-            memberId = "mem-1",
-            category = "Letter",
-            fileName = "letter.pdf",
-            contentType = "application/pdf",
-        });
-
-        Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
-        NothingStored();
-    }
-
-    [Fact]
-    public async Task Finalize_BeforeAnythingWasUploaded_Is409()
-    {
-        // Every store reports a missing staging object the same way, whatever cloud it is.
-        var staging = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload";
-        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(staging));
-        _factory.Blobs.Setup(b => b.GetPropertiesAsync("member-documents", staging, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new DocumentNotFoundException("member-documents", staging));
-
-        var response = await Client().PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
-
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Empty(_uploads);
-        _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task PendingUpload_CannotBeDownloaded()
-    {
-        // Before: whatever the SAS holder wrote was served before anyone checked it.
-        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId))
-            .ReturnsAsync(StoredDocument(pendingPath: $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload"));
+        // 409: e.g. not cleared by scanning yet.
+        _factory.Catalog.Failures["download"] = catalogStatus;
 
         var response = await Client().GetAsync($"/api/v1/member-documents/{DocId}/content");
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        _factory.Blobs.Verify(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(expected, response.StatusCode);
     }
 
     [Fact]
-    public async Task Finalize_RejectsAndDiscardsContentThatIsNotTheDeclaredType()
+    public async Task Content_WhoseCatalogDocumentIsMissing_Is404_Not500()
     {
-        // Before: finalize only tagged the blob, so HTML uploaded through the SAS
-        // as "application/pdf" became a downloadable document.
-        var staging = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload";
-        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(staging));
-        _factory.Blobs.Setup(b => b.DownloadAsync("member-documents", staging, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new MemoryStream(Html));
-
-        var response = await Client().PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
-
-        Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
-        Assert.Empty(_uploads);
-        _factory.Blobs.Verify(b => b.DeleteAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
-        _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task Finalize_RejectsAndDiscardsOversizeContent()
-    {
-        var staging = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload";
-        var big = new byte[MaxBytes + 1];
-        Pdf.CopyTo(big, 0);
-        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(staging));
-        _factory.Blobs.Setup(b => b.DownloadAsync("member-documents", staging, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new MemoryStream(big));
-
-        var response = await Client().PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
-
-        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
-        Assert.Empty(_uploads);
-        _factory.Blobs.Verify(b => b.DeleteAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task Finalize_RefusesAnOversizeUpload_WithoutReadingIt()
-    {
-        // An upload link can't cap size on every cloud; the stored size is
-        // checked first, so an oversize upload never reaches the pod.
-        var staging = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload";
-        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(staging));
-        _factory.Blobs.Setup(b => b.GetPropertiesAsync("member-documents", staging, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DocumentProperties { SizeBytes = 5L * 1024 * 1024 * 1024 });
-
-        var response = await Client().PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
-
-        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
-        _factory.Blobs.Verify(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        _factory.Blobs.Verify(b => b.DeleteAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
-        _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task Content_WhoseStoredFileIsMissing_Is404_Not500()
-    {
-        var stored = StoredDocument(pendingPath: null);
-        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(stored);
-        _factory.Blobs.Setup(b => b.DownloadAsync("member-documents", stored.BlobPath, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new DocumentNotFoundException("member-documents", stored.BlobPath));
+        _factory.Catalog.Content = () => null;
 
         var response = await Client().GetAsync($"/api/v1/member-documents/{DocId}/content");
 
@@ -733,32 +659,108 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     }
 
     [Fact]
-    public async Task Finalize_CopiesValidContentOutOfReachOfTheSas()
+    public async Task PendingUpload_CannotBeDownloaded()
     {
-        var staging = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload";
-        var stored = StoredDocument(staging);
-        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(stored);
-        _factory.Blobs.Setup(b => b.DownloadAsync("member-documents", staging, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new MemoryStream(Pdf));
+        // Before: whatever the upload link holder wrote was served before anyone checked it.
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(pending: true));
+
+        var response = await Client().GetAsync($"/api/v1/member-documents/{DocId}/content");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(_factory.Catalog.Downloads);
+    }
+
+    // ── Pre-signed uploads ──────────────────────────────────────────
+
+    private static object Presigned(string contentType = "application/pdf", bool legalHold = false) => new
+    {
+        memberId = "mem-1",
+        category = "Letter",
+        fileName = "letter.pdf",
+        contentType,
+        uploadedBy = "someone-else",
+        legalHold,
+    };
+
+    [Fact]
+    public async Task PresignedUpload_StartsTheUploadInTheCatalog_ForTheTokenUser()
+    {
+        var response = await Client().PostAsJsonAsync("/api/v1/member-documents", Presigned());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<PresignedUploadResponse>();
+        var started = Assert.Single(_factory.Catalog.StartedUploads);
+        Assert.Equal(User, started.OnBehalfOf);
+        Assert.Equal(["mem-1"], started.MemberIds);
+        Assert.Equal("application/pdf", started.ContentType);
+        // The client is told how to PUT, whatever storage is behind the link.
+        Assert.Equal("PUT", body!.UploadMethod);
+        Assert.Equal("application/pdf", body.UploadHeaders["Content-Type"]);
+        Assert.Equal("BlockBlob", body.UploadHeaders["x-ms-blob-type"]);
+        // The client finalizes the member record, which points at the catalog's pending document.
+        _factory.Repository.Verify(r => r.CreateAsync(It.Is<MemberDocument>(d =>
+            d.UploadedBy == User && d.UploadPending && d.Id == body.DocumentId)), Times.Once);
+        _factory.Repository.Verify(r => r.UpdateAsync(It.Is<MemberDocument>(d =>
+            d.UploadPending && d.DocumentId == "cat-1")), Times.Once);
+    }
+
+    [Fact]
+    public async Task PresignedUpload_ContentTypeNotAllowed_IsRejected()
+    {
+        var response = await Client().PostAsJsonAsync("/api/v1/member-documents", Presigned("text/html"));
+
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
+        NothingStored();
+    }
+
+    [Fact]
+    public async Task PresignedUpload_WhenTheCatalogCannotSignLinks_Is502_AndNothingIsRecorded()
+    {
+        // The catalog answers 501 when its storage can't sign; the caller uploads multipart instead.
+        _factory.Catalog.Failures["start"] = HttpStatusCode.NotImplemented;
+
+        var response = await Client().PostAsJsonAsync("/api/v1/member-documents", Presigned());
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        _factory.Repository.Verify(r => r.DeleteUnfiledAsync(Tenant, It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Finalize_FinishesTheCatalogUpload_AsTheTokenUser()
+    {
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(pending: true));
 
         var response = await Client().PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var upload = Assert.Single(_uploads);
-        Assert.Equal(stored.BlobPath, upload.Path);
-        Assert.Equal(Pdf, upload.Bytes);
-        _factory.Blobs.Verify(b => b.DeleteAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal((Tenant, User, CatalogId), Assert.Single(_factory.Catalog.Finalized));
         _factory.Repository.Verify(r => r.UpdateAsync(It.Is<MemberDocument>(d =>
-            d.PendingUploadBlobPath == null
-            && d.SizeBytes == Pdf.Length
-            && d.ContentHashSha256.Length == 64)), Times.Once);
+            !d.UploadPending && d.SizeBytes == Pdf.Length && d.ContentHashSha256.Length == 64)), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Conflict, HttpStatusCode.Conflict)]
+    [InlineData(HttpStatusCode.UnsupportedMediaType, HttpStatusCode.UnsupportedMediaType)]
+    [InlineData(HttpStatusCode.RequestEntityTooLarge, HttpStatusCode.RequestEntityTooLarge)]
+    public async Task Finalize_WhatTheCatalogRejects_IsPassedOn_AndTheRecordStaysPending(HttpStatusCode catalogStatus, HttpStatusCode expected)
+    {
+        // Nothing uploaded yet (409), not the declared type (415), too large
+        // (413): the catalog checks the staged object and discards a bad one.
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(pending: true));
+        _factory.Catalog.Failures["finalize"] = catalogStatus;
+
+        var response = await Client().PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
+
+        Assert.Equal(expected, response.StatusCode);
+        _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
     }
 
     [Fact]
-    public async Task LegalHold_WhenTheDocumentChangedSinceItWasRead_Is409_AndNothingIsAuditedOrTagged()
+    public async Task LegalHold_WhenTheDocumentChangedSinceItWasRead_Is409_AndNothingIsAudited()
     {
         // Another write saved the document between this request's read and its
-        // save (the repository's conditional replace refused it).
+        // save (the repository's conditional replace refused it). The catalog's
+        // hold is already set; retrying finds it set and saves this record.
         _factory.Repository.Setup(r => r.UpdateAsync(It.IsAny<MemberDocument>()))
             .ThrowsAsync(new MemberDocumentConcurrencyException(DocId));
 
@@ -767,15 +769,12 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Empty(_factory.Audit.Lines);
-        _factory.Blobs.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task Finalize_WhenTheDocumentChangedSinceItWasRead_Is409()
     {
-        var staging = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload";
-        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(staging));
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(pending: true));
         _factory.Repository.Setup(r => r.UpdateAsync(It.IsAny<MemberDocument>()))
             .ThrowsAsync(new MemberDocumentConcurrencyException(DocId));
 

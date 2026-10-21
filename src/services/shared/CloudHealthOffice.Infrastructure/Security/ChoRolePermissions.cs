@@ -126,6 +126,8 @@ public static class ChoRolePermissions
                 // Imports resolve plan codes in benefit-plan-service and
                 // providers by NPI in provider-service.
                 "benefits:read", "providers:read",
+                // Member documents: enrollment forms, proof of coverage, ID cards.
+                DocumentsRead, DocumentsWrite,
                 // Coverage transitions are enrollment work; a member's request
                 // for a Payer-to-Payer transfer can also arrive here.
                 "payer-to-payer:initiate"

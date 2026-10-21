@@ -10,7 +10,8 @@ namespace CloudHealthOffice.Portal.Infrastructure;
 /// and holds no CHO token, so the portal fetches the document for the signed-in
 /// user (cookie authentication) through <see cref="IMemberDocumentService"/>, whose
 /// HttpClient attaches that user's CHO token. member-document-service then enforces
-/// <c>members:read</c> and the token's tenant; its 401/403/404/409 are passed on.
+/// <c>members:read</c>, <c>documents:read</c> and the token's tenant, and reads the
+/// file from the document catalog; its 401/403/404/409 are passed on.
 ///
 /// The response is always an attachment, with <c>X-Content-Type-Options: nosniff</c>
 /// and <c>Cache-Control: no-store</c>. It is a GET with no side effects, so it needs

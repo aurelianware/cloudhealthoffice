@@ -191,7 +191,7 @@ def test_document_services_keep_their_manifest_storage_without_a_bucket():
     docs = render()
     names = {d["metadata"]["name"] for d in docs if d["kind"] == "ServiceAccount"}
     assert not names & {"document-service", "member-document-service"}
-    for name in ("document-service", "member-document-service"):
+    for name in ("document-service",):
         dep = deployments(docs)[name]
         assert dep["spec"]["template"]["spec"].get("serviceAccountName") != name
         assert "DocumentStore__Provider" not in env(dep)
@@ -202,17 +202,22 @@ def test_document_services_use_the_bucket_through_workload_identity():
     docs = render("--documents-bucket", "demo-project-cho-documents",
                   "--documents-service-account", gsa)
     accounts = [d for d in docs if d["kind"] == "ServiceAccount"]
-    document_accounts = {"document-service", "member-document-service"}
+    document_accounts = {"document-service"}
     # One account each: no manifest already defines one with these names.
     assert sorted(a["metadata"]["name"] for a in accounts if a["metadata"]["name"] in document_accounts) \
         == sorted(document_accounts)
     accounts = {a["metadata"]["name"]: a for a in accounts if a["metadata"]["name"] in document_accounts}
     deps = deployments(docs)
-    for name in ("document-service", "member-document-service"):
+    for name in ("document-service",):
         assert accounts[name]["metadata"]["annotations"]["iam.gke.io/gcp-service-account"] == gsa
         assert deps[name]["spec"]["template"]["spec"]["serviceAccountName"] == name
         assert env(deps[name])["DocumentStore__Provider"] == "Gcs"
         assert env(deps[name])["DocumentStore__Gcs__Bucket"] == "demo-project-cho-documents"
+    # member-document-service and attachment-service file through the catalog:
+    # no bucket settings and no document identity.
+    for name in ("member-document-service", "attachment-service"):
+        assert "DocumentStore__Provider" not in env(deps[name])
+        assert deps[name]["spec"]["template"]["spec"].get("serviceAccountName") != "document-service"
     # No other service gets the document identity.
     others = [n for n, d in deps.items()
               if n not in document_accounts
