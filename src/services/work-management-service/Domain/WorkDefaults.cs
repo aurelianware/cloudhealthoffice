@@ -22,6 +22,7 @@ public static class DefaultClaimQueues
         new("claim.medreview", "Medical Review", "Clinical / medical review required.", 50, ["MEDREVIEW", "CLINICAL"], 30),
         new("claim.svcunavail", "Service Unavailable", "A check could not run (a dependency was down); usually retried, else worked.", 60, ["SVCUNAVAIL", "PLANUNAVAIL"], 30),
         new("claim.duplicate", "Possible Duplicate", "Matches a prior claim; confirm or deny as duplicate.", 70, ["DUPLICATE"], 30),
+        new("claim.timely", "Timely Filing", "Received past the filing limit; deny the late lines (CARC 29) or override with proof of timely filing.", 72, ["TIMELY"], 30),
         new("claim.planedit", "Plan Edits", "Pended by the plan's own edit service (ADR 019); uphold or override each edit.", 75, ["PLANEDIT"], 30),
         new("claim.pricing", "Pricing", "Pricing could not be completed.", 80, ["PRICING"], 30),
         new("claim.other", "Other / Pending Review", "Every pended claim no other queue matched.", 1000, [], 30, Fallback: true),
