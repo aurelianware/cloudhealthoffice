@@ -41,6 +41,7 @@ const NAV_GROUPS = [
   ['Developers', [
     ['/developers', 'Developer hub'],
     ['/docs', 'Documentation'],
+    ['/blueprints/google-cloud', 'Reference architecture'],
     ['/docs/quickstart', 'Quickstart'],
     ['/docs/api', 'API reference'],
     ['/api-explorer', 'API explorer'],

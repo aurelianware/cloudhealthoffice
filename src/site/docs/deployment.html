@@ -63,6 +63,7 @@
 <div>
 <a href="/developers">Developer hub</a>
 <a href="/docs" aria-current="page">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
 <a href="/docs/quickstart">Quickstart</a>
 <a href="/docs/api">API reference</a>
 <a href="/api-explorer">API explorer</a>
@@ -172,6 +173,11 @@ az deployment group create \
   --resource-group YOUR_RESOURCE_GROUP \
   --template-file infrastructure/azure/main.bicep \
   --parameters @main.parameters.json</code></pre>
+
+        <div class="callout callout-info">
+          <div class="callout-title">Production reference architecture</div>
+          <p>For the full production design on Google Cloud, including network, identity, data, operations and compliance, with the status of each component, see the <a href="/blueprints/google-cloud">reference architecture blueprint</a>.</p>
+        </div>
 
         <h2 id="other-clouds">Other clouds and on-premises Kubernetes</h2>
         <p>The services depend on Kubernetes and the components above, not on one cloud's proprietary services. AWS (EKS) and on-premises clusters use the same manifests; infrastructure code and managed-service bindings for them are scoped per engagement. <a href="/contact?interest=payer-cloud">Talk to us about your environment</a>.</p>
