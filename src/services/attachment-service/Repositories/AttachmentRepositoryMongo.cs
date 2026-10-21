@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using AttachmentService.Models;
 using AttachmentService.Services;
 using MongoDB.Driver;
@@ -39,6 +40,7 @@ public class AttachmentRepositoryMongo : IAttachmentRepository
         return await _collection.Find(filter).SortBy(x => x.CreatedDate).Limit(limit).ToListAsync();
     }
 
+    [CrossTenantQuery("UnmatchedAttachmentMatcher (background): finds held 275s across tenants, then matches and links each under its own TenantId.")]
     public async Task<IReadOnlyList<Attachment>> ListUnmatchedAsync(int limit)
     {
         var filter = Builders<Attachment>.Filter.Eq(x => x.Status, "Unmatched");

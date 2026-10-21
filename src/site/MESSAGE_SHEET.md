@@ -22,12 +22,13 @@ Use the [canonical capability ledger](../../docs/CAPABILITY_RECONCILIATION.md) f
 These implementation statements do not assert full PAS/CRD/DTR/SMART conformance, universal compliance, production readiness or customer deployments. Unverified is not equivalent to missing. Preserve precise remaining limitations and reverify changed paths before stronger claims.
 
 ## Canonical one-liner
-Cloud Health Office is a source-available, FHIR-native health plan administration platform that runs in the plan's own cloud, so plans keep control of their data and integrations while connecting to every partner they choose.
+Cloud Health Office is a source-available, FHIR-native health plan administration platform that runs in a tenant dedicated to each plan, in the plan's own cloud or operated for it, so plans keep control of their data and integrations while connecting to every partner they choose.
 
 ## Executive positioning — approved implementation, October 21, 2026
 **Category:** Payer data sovereignty. Interoperable, source-available administration.
 **Primary:** Sovereign, interoperable health plan administration.
-**Supporting:** Your data, in your cloud, connected to every partner you choose.
+**Supporting:** Your data, under your control, connected to every partner you choose.
+**Deployment line:** Your cloud or ours. Your data either way. In your cloud is available; operated in your cloud by Aurelianware is by engagement; hosted by Cloud Health Office (a dedicated tenant for plans without cloud infrastructure or engineering teams) is under evaluation and not offered today. Both run the same source-available software, so a plan's choice need not be permanent; never promise migration terms.
 **Thesis line:** Plans pay to modernize. Too often, the vendor keeps what gets built.
 **Promise:** Your data. Your infrastructure. Your business rules. Your future.
 This promise expresses an aspiration for customer control; it grants no additional ownership, portability or licensing rights.

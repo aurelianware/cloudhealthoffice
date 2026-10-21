@@ -248,7 +248,7 @@ mongorestore \
         <p>Use a dedicated recovery identity, rotate any credential exposed during the exercise, and retain only sanitized command output as evidence.</p>
 
         <h2 id="cosmos">5. Recover Azure Cosmos DB</h2>
-        <p>Cloud Health Office supports both the Cosmos DB native SDK and Cosmos DB for MongoDB through the MongoDB driver. Recovery is an account capability, not a driver behavior. Query the deployed account rather than assuming its backup mode from the application connection string.</p>
+        <p>Cloud Health Office uses the MongoDB driver only (ADR 017); Cosmos DB accounts appear here because benchmark and older environments use Cosmos DB for MongoDB. Recovery is an account capability, not a driver behavior. Query the deployed account rather than assuming its backup mode from the application connection string.</p>
 
         <div class="code-block-header"><span>Shell</span><span>Azure CLI inventory</span></div>
         <pre><code>az cosmosdb show \

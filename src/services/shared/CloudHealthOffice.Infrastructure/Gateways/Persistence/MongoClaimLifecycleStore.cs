@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Responders;
 using MongoDB.Bson.Serialization.Attributes;
@@ -176,6 +177,7 @@ internal sealed class MongoClaimLifecycleStore :
         return doc?.ToModel();
     }
 
+    [CrossTenantQuery("Clearinghouse ingress (277CA/835) resolves the tenant from the transmission it matches, by server-generated id; request paths use GetByTenantAndIdAsync or compare TenantId after the read.")]
     async Task<ClaimTransmissionRecord?> IClaimTransmissionStore.GetByIdAsync(
         string transmissionId, CancellationToken ct)
     {
@@ -414,6 +416,7 @@ internal sealed class MongoClaimLifecycleStore :
         return doc?.ToModel();
     }
 
+    [CrossTenantQuery("Server-generated GUID key; no request path calls it (internal and test use only). Callers must check TenantId.")]
     async Task<ClaimAttachmentTransmissionRecord?> IClaimAttachmentTransmissionStore.GetByIdAsync(
         string attachmentTransmissionId, CancellationToken ct)
     {
@@ -422,6 +425,7 @@ internal sealed class MongoClaimLifecycleStore :
         return doc?.ToModel();
     }
 
+    [CrossTenantQuery("Keyed by a claim transmission id that callers first read within the tenant (GetByTenantAndIdAsync / FindByTenantAndClaimIdAsync).")]
     public async Task<IReadOnlyList<ClaimAttachmentTransmissionRecord>> ListByClaimTransmissionIdAsync(
         string claimTransmissionId, CancellationToken ct = default)
     {
@@ -440,6 +444,7 @@ internal sealed class MongoClaimLifecycleStore :
         return docs.Select(d => d.ToModel()).ToList();
     }
 
+    [CrossTenantQuery("Upsert of a record read within the tenant or newly created with a server-generated GUID; the record carries its TenantId.")]
     public Task SaveAsync(ClaimAttachmentTransmissionRecord record, CancellationToken ct = default) =>
         _attachments.ReplaceOneAsync(
             d => d.Id == record.AttachmentTransmissionId,
@@ -466,6 +471,7 @@ internal sealed class MongoClaimLifecycleStore :
         }
     }
 
+    [CrossTenantQuery("Idempotency key embeds the tenant ({tenantId}|{payer}|...), resolved server-side from the payer route.")]
     async Task<InboundClaimAttachmentReceipt?> IInboundClaimAttachmentReceiptStore.GetByIdempotencyKeyAsync(
         string idempotencyKey, CancellationToken ct)
     {
@@ -474,6 +480,7 @@ internal sealed class MongoClaimLifecycleStore :
         return doc?.ToModel();
     }
 
+    [CrossTenantQuery("Reload of a receipt already held, by its server-generated GUID.")]
     async Task<InboundClaimAttachmentReceipt?> IInboundClaimAttachmentReceiptStore.GetByIdAsync(
         string receiptId, CancellationToken ct)
     {
@@ -491,6 +498,7 @@ internal sealed class MongoClaimLifecycleStore :
         return docs.Select(d => d.ToModel()).ToList();
     }
 
+    [CrossTenantQuery("Inbound attachment outbox publisher (background): drains pending receipts across tenants.")]
     async Task<IReadOnlyList<InboundClaimAttachmentReceipt>> IInboundClaimAttachmentReceiptStore.ListPendingOutboxAsync(
         int take, CancellationToken ct)
     {
@@ -529,6 +537,7 @@ internal sealed class MongoClaimLifecycleStore :
         }
     }
 
+    [CrossTenantQuery("Fallback read inside TryCreate, by the server-generated GUID of a record that carries the request's TenantId.")]
     async Task<ClaimStatusInquiryRecord?> IClaimStatusInquiryStore.GetByIdAsync(
         string inquiryId, CancellationToken ct)
     {
@@ -553,6 +562,7 @@ internal sealed class MongoClaimLifecycleStore :
         return doc?.ToModel();
     }
 
+    [CrossTenantQuery("Keyed by a transmission id the caller first loaded for its tenant.")]
     async Task<IReadOnlyList<ClaimStatusInquiryRecord>> IClaimStatusInquiryStore.ListByTransmissionIdAsync(
         string transmissionId, CancellationToken ct)
     {
@@ -573,6 +583,7 @@ internal sealed class MongoClaimLifecycleStore :
         return docs.Select(d => d.ToModel()).ToList();
     }
 
+    [CrossTenantQuery("Upsert by server-generated GUID; no request path calls it. The record carries its TenantId.")]
     public Task SaveAsync(ClaimStatusInquiryRecord record, CancellationToken ct = default) =>
         _statusInquiries.ReplaceOneAsync(
             d => d.Id == record.InquiryId,
@@ -603,6 +614,7 @@ internal sealed class MongoClaimLifecycleStore :
         }
     }
 
+    [CrossTenantQuery("835 ingest idempotency by clearinghouse remittance id; the tenant is set from the matched transmissions. Dev injection namespaces ids by tenant.")]
     async Task<RemittanceReceipt?> IRemittanceStore.GetByIdempotencyKeyAsync(
         string gateway, string remittanceId, CancellationToken ct)
     {
@@ -612,6 +624,7 @@ internal sealed class MongoClaimLifecycleStore :
         return doc?.ToModel();
     }
 
+    [CrossTenantQuery("835 ingest idempotency by clearinghouse event id; the tenant is set from the matched transmissions. Dev injection namespaces ids by tenant.")]
     async Task<RemittanceReceipt?> IRemittanceStore.GetByEventIdAsync(
         string gateway, string eventId, CancellationToken ct)
     {
@@ -626,6 +639,7 @@ internal sealed class MongoClaimLifecycleStore :
         return doc?.ToModel();
     }
 
+    [CrossTenantQuery("Read by server-generated receipt id; RemittancePoster compares receipt.TenantId with the request's tenant right after.")]
     async Task<RemittanceReceipt?> IRemittanceStore.GetByIdAsync(string receiptId, CancellationToken ct)
     {
         var doc = await _remittances.Find(d => d.Id == receiptId)
@@ -633,6 +647,7 @@ internal sealed class MongoClaimLifecycleStore :
         return doc?.ToModel();
     }
 
+    [CrossTenantQuery("Keyed by a transmission id the caller first loaded for its tenant (FindByTenantAndClaimIdAsync or the dev tenant check).")]
     async Task<IReadOnlyList<RemittanceReceipt>> IRemittanceStore.ListByTransmissionIdAsync(
         string transmissionId, CancellationToken ct)
     {
@@ -686,6 +701,7 @@ internal sealed class MongoClaimLifecycleStore :
         }
     }
 
+    [CrossTenantQuery("Remittance outbox publisher (background): drains pending receipts across tenants.")]
     async Task<IReadOnlyList<RemittanceReceipt>> IRemittanceStore.ListPendingOutboxAsync(
         int take, CancellationToken ct)
     {
@@ -712,6 +728,7 @@ internal sealed class MongoClaimLifecycleStore :
         return docs.Select(d => d.ToModel()).ToList();
     }
 
+    [CrossTenantQuery("277CA/835 ingress matches by gateway identifiers across tenants by design: the match decides the tenant and a mixed-tenant match fails. Request lookups go through FindByTenantAndClaimIdAsync.")]
     private async Task<IReadOnlyList<ClaimTransmissionRecord>> FindTransmissionsAsync(
         System.Linq.Expressions.Expression<Func<ClaimTransmissionDocument, bool>> filter,
         CancellationToken ct)

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using ClaimsService.Exceptions;
 using ClaimsService.Models;
 using ClaimsService.Services.Adjudication;
@@ -1051,6 +1052,7 @@ public class ClaimRepositoryMongo : IClaimRepository
             ? Builders<Claim>.Filter.Eq(c => c.PendingAccumulatorCommit!.Id, itemId)
             : Builders<Claim>.Filter.Eq(c => c.PendingAccumulatorReversal!.Id, itemId);
 
+    [CrossTenantQuery("AccumulatorOutboxDispatcher (background): finds due entries across tenants; each is processed in its own scope with claim.TenantId.")]
     public async Task<IReadOnlyList<Claim>> FindDueAccumulatorOutboxAsync(long nowMs, int limit, CancellationToken ct = default)
     {
         var b = Builders<Claim>.Filter;
@@ -1060,6 +1062,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         return await _collection.Find(filter).Limit(limit).ToListAsync(ct);
     }
 
+    [CrossTenantQuery("AccumulatorOutboxDispatcher metric: age of the oldest pending entry across tenants; returns no claim data.")]
     public async Task<long?> OldestAccumulatorOutboxAsync(CancellationToken ct = default)
     {
         var b = Builders<Claim>.Filter;
@@ -1135,6 +1138,7 @@ public class ClaimRepositoryMongo : IClaimRepository
             b.ElemMatch(c => c.PendingClaimEvents, e => e.Id == eventId));
     }
 
+    [CrossTenantQuery("ClaimEventOutboxDispatcher (background): finds due events across tenants; completion and rescheduling filter on the claim's TenantId.")]
     public async Task<IReadOnlyList<Claim>> FindDueClaimEventsAsync(long nowMs, int limit, CancellationToken ct = default)
     {
         var filter = Builders<Claim>.Filter.ElemMatch(c => c.PendingClaimEvents, e => e.DueAtMs <= nowMs);
@@ -1142,6 +1146,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         return claims.Select(Hydrate).ToList();
     }
 
+    [CrossTenantQuery("ClaimEventOutboxDispatcher metric: age of the oldest pending event across tenants; returns no claim data.")]
     public async Task<long?> OldestClaimEventAsync(CancellationToken ct = default)
     {
         // $exists on the indexed path, so the sparse claim_event_outbox_created

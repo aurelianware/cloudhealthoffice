@@ -286,7 +286,7 @@
           <div class="tmppm-flow-step">
             <div class="tmppm-flow-icon blue">&#x25C9;</div>
             <div class="tmppm-flow-body">
-              <h4>4. Persist to Cosmos DB</h4>
+              <h4>4. Persist to MongoDB</h4>
               <p>Rules stored as <code>ConceptMapEntry</code> overrides with <code>State=TX</code>, <code>IsOverride=true</code>, and optional <code>TenantId</code> for plan-specific scoping. Same collection the TerminologyService queries at runtime.</p>
             </div>
           </div>
@@ -294,7 +294,7 @@
             <div class="tmppm-flow-icon green">&#x25C6;</div>
             <div class="tmppm-flow-body">
               <h4>5. CRD server responds</h4>
-              <p>Provider submits a CRD check &rarr; Cloud Health Office queries Cosmos &rarr; returns Texas-correct &ldquo;auth required&rdquo; or &ldquo;no auth&rdquo; with the TMPPM section reference and clinical criteria through an auditable automated lookup.</p>
+              <p>Provider submits a CRD check &rarr; Cloud Health Office queries MongoDB &rarr; returns Texas-correct &ldquo;auth required&rdquo; or &ldquo;no auth&rdquo; with the TMPPM section reference and clinical criteria through an auditable automated lookup.</p>
             </div>
           </div>
         </div>
@@ -359,7 +359,7 @@
               <tr><td>SNOMED&#x2194;CPT translation</td><td class="tmppm-cross">&#x2717; &ldquo;Go buy from a vendor&rdquo;</td><td class="tmppm-check">&#x2713; Built-in TerminologyService</td></tr>
               <tr><td>Clinical criteria extraction</td><td class="tmppm-cross">&#x2717; Not digitized</td><td class="tmppm-check">&#x2713; LLM-assisted structured extraction</td></tr>
               <tr><td>Tenant scoping</td><td>Single-tenant</td><td class="tmppm-check">&#x2713; Per-plan overrides (tenant-scoped)</td></tr>
-              <tr><td>Completed implementations</td><td class="tmppm-cross">&#x2717; Zero as of March 2024</td><td class="tmppm-check">&#x2713; Pipeline running, data in Cosmos</td></tr>
+              <tr><td>Completed implementations</td><td class="tmppm-cross">&#x2717; Zero as of March 2024</td><td class="tmppm-check">&#x2713; Pipeline running, data in MongoDB</td></tr>
             </tbody>
           </table>
         </div>
@@ -382,7 +382,7 @@
         <h2 id="architecture">Technical Architecture</h2>
 
         <h3>Data Model</h3>
-        <p>Extracted rules are stored in three Cosmos DB (MongoDB API) collections in the <code>cho_terminology</code> database:</p>
+        <p>Extracted rules are stored in three MongoDB collections in the <code>cho_terminology</code> database:</p>
 
         <div class="docs-table-wrapper" style="margin-top: 16px;">
           <table>

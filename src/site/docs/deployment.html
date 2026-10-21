@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Deployment Guide — Cloud Health Office Documentation</title>
-  <meta name="description" content="Deploy Cloud Health Office into a customer-owned environment for validation. Run locally or deploy on AKS, EKS, or GKE with gated releases, Bicep IaC, Helm charts, and GitHub Actions CI/CD." />
-  <meta name="keywords" content="healthcare platform deployment, Kubernetes healthcare deployment, AKS EKS GKE health plan, healthcare payer infrastructure, Bicep IaC healthcare, Helm chart healthcare" />
+  <meta name="description" content="Deploy Cloud Health Office on any conformant Kubernetes: local evaluation, Google Cloud (GKE) and Azure (AKS) with Terraform, Bicep and keyless GitHub Actions, or operated by Aurelianware in your cloud." />
+  <meta name="keywords" content="healthcare platform deployment, Kubernetes healthcare deployment, GKE AKS EKS health plan, healthcare payer infrastructure, Terraform Bicep healthcare, cloud-native payer platform" />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/deployment" />
   <meta property="og:type" content="article" />
   <meta property="og:url" content="https://cloudhealthoffice.com/docs/deployment" />
   <meta property="og:title" content="Deployment Guide — Cloud Health Office" />
-  <meta property="og:description" content="Customer-owned deployment guidance for AKS, EKS, and GKE with gated releases and security controls for payer validation." />
+  <meta property="og:description" content="Deploy Cloud Health Office on any conformant Kubernetes: local evaluation, Google Cloud (GKE) and Azure (AKS) with Terraform, Bicep and keyless GitHub Actions, or operated by Aurelianware in your cloud." />
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"TechArticle","headline":"Cloud Health Office Deployment Guide","description":"Deploy Cloud Health Office locally or into a customer-owned Kubernetes environment for validation.","url":"https://cloudhealthoffice.com/docs/deployment","author":{"@type":"Organization","name":"Aurelianware, Inc."},"datePublished":"2026-03-24","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://cloudhealthoffice.com"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://cloudhealthoffice.com/docs"},{"@type":"ListItem","position":3,"name":"Deployment","item":"https://cloudhealthoffice.com/docs/deployment"}]}}
   </script>
@@ -97,229 +97,115 @@
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture">Architecture</a></li><li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment" class="active">Deployment</a></li><li><a href="/docs/production-readiness-checklist">Production Readiness</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">User Guides</div><ul><li><a href="/docs/finance-guide">Finance Guide</a></li><li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li><li><a href="/docs/claims-guide">Claims Adjudication</a></li><li><a href="/docs/prior-auth-guide">Prior Authorization</a></li><li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li><li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li><li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li><li><a href="/docs/provider-verification-guide">Provider Verification</a></li><li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li></ul></div>
         <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">State Compliance</div><ul><li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li><li><a href="/docs/florida-compliance">Florida AHCA (SMMC 3.0)</a></li></ul></div>
-        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#saas">Option A: SaaS</a></li><li><a href="#self-hosted">Option B: Self-Hosted</a></li><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#local-dev">Local Development</a></li><li><a href="#cicd">CI/CD Pipeline</a></li><li><a href="#production">Production Deployment</a></li><li><a href="#secrets">Secret Management</a></li><li><a href="#verification">Verification</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#operating-models">Operating models</a></li><li><a href="#components">What you deploy</a></li><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#local">Local evaluation</a></li><li><a href="#gcp">Google Cloud</a></li><li><a href="#azure">Azure</a></li><li><a href="#other-clouds">Other clouds</a></li><li><a href="#secrets">Secrets</a></li><li><a href="#cicd">CI/CD</a></li><li><a href="#verification">Verification</a></li></ul></div>
       </div></aside>
 
       <div class="docs-content">
         <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Deployment</span></div>
 
         <h1>Deployment Guide</h1>
-        <p class="docs-subtitle">Two deployment paths: managed SaaS or self-hosted on your own Kubernetes cluster with full infrastructure control. Both paths are designed for HIPAA-oriented infrastructure, security review, and controlled rollout.</p>
+        <p class="docs-subtitle">Cloud Health Office is cloud-native: containerized .NET services on Kubernetes, with MongoDB-compatible storage, Kafka and Redis. The same manifests run on a laptop, on Azure (AKS) and on Google Cloud (GKE), so a plan chooses where it runs and who operates it.</p>
 
-        <figure class="docs-diagram">
-          <img src="/graphics/docs-deployment-pipeline.svg" alt="Deployment pipeline showing SaaS signup flow and self-hosted DEV → UAT → PROD gated release strategy with multi-cloud support" />
-          <figcaption>SaaS auto-provisioning or self-hosted gated release pipeline — AKS, EKS, or GKE</figcaption>
-        </figure>
+        <h2 id="operating-models">Choose an operating model</h2>
+        <p>Every model runs the same source-available software in a tenant dedicated to one plan. The right choice depends on your cloud standards, security requirements, engineering capacity and desired level of operational control. <a href="/deploy">Compare the operating models in detail</a>.</p>
+        <table>
+          <thead><tr><th>Model</th><th>Status</th><th>Who operates it</th><th>Next step</th></tr></thead>
+          <tbody>
+            <tr><td><strong>In your cloud</strong></td><td>Available</td><td>Your team, on your Kubernetes and cloud account</td><td>Follow this guide</td></tr>
+            <tr><td><strong>In your cloud, operated by Aurelianware</strong></td><td>By engagement</td><td>Aurelianware, to the scope the engagement defines</td><td><a href="/contact?interest=managed">Discuss managed operation</a></td></tr>
+            <tr><td><strong>Hosted by Cloud Health Office</strong></td><td>Under evaluation &mdash; not offered today</td><td>Aurelianware</td><td><a href="/contact?interest=saas">Register interest</a></td></tr>
+            <tr><td><strong>Local evaluation</strong></td><td>Available</td><td>You, on a workstation, with synthetic data</td><td><a href="#local">Run it locally</a></td></tr>
+          </tbody>
+        </table>
 
-        <h2 id="saas">Option A: SaaS (Recommended)</h2>
-        <p>The fastest path to production. <a href="/contact">Contact Sales</a> to request a pilot deployment — your tenant is provisioned with Cosmos DB, SFTP credentials, Azure AD, and full onboarding support.</p>
-
-        <div class="step">
-          <span class="step-number green">1</span>
-          <div class="step-body">
-            <h3>Request access and start onboarding</h3>
-<pre><code><span class="code-comment"># Contact Sales to initiate pilot provisioning</span>
-<span class="code-comment"># https://cloudhealthoffice.com/contact</span>
-
-<span class="code-comment"># Select tier: Starter | Professional | Enterprise (contact sales for pricing)</span>
-<span class="code-comment"># Tenant is provisioned and welcome email with credentials is sent within 1 business day</span></code></pre>
-            <p>What gets auto-provisioned: Cosmos DB tenant partition, SFTP credentials for clearinghouse integration, Azure AD application, and welcome email with credentials.</p>
-          </div>
-        </div>
-
-        <h2 id="self-hosted">Option B: Self-Hosted</h2>
-        <p>For customers requiring on-premise or own-subscription deployment with full infrastructure ownership.</p>
+        <h2 id="components">What you deploy</h2>
+        <table>
+          <thead><tr><th>Component</th><th>What it is</th><th>Choices</th></tr></thead>
+          <tbody>
+            <tr><td>Application services</td><td>About 36 .NET 8 services (claims, benefit plans, FHIR, eligibility, providers, appeals and more) and a Blazor operations portal, one container each</td><td>Any conformant Kubernetes</td></tr>
+            <tr><td>Database</td><td>MongoDB wire protocol only (<a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/adr/017-mongodb-api-only-persistence.md" target="_blank" rel="noopener noreferrer">ADR 017</a>)</td><td>MongoDB in-cluster, or a managed MongoDB-compatible service (on Azure: Azure DocumentDB)</td></tr>
+            <tr><td>Event streaming</td><td>Kafka topics for claims, remittance, RFAI and dead-letter flows</td><td>In-cluster (Strimzi) or a managed Kafka service, by configuration</td></tr>
+            <tr><td>Cache and key ring</td><td>Redis</td><td>In-cluster or managed Redis</td></tr>
+            <tr><td>Documents</td><td>Attachments and generated documents behind a document-store interface</td><td>Azure Blob Storage or Google Cloud Storage</td></tr>
+            <tr><td>Secrets</td><td>A secret-provider interface in every service</td><td>Kubernetes Secrets, Azure Key Vault or HashiCorp Vault today; other cloud secret managers per engagement</td></tr>
+          </tbody>
+        </table>
 
         <h2 id="prerequisites">Prerequisites</h2>
-
         <table>
-          <thead><tr><th>Tool</th><th>Minimum Version</th></tr></thead>
+          <thead><tr><th>Tool</th><th>Used for</th></tr></thead>
           <tbody>
-            <tr><td><code>Azure CLI</code></td><td>2.77.0+</td></tr>
-            <tr><td><code>Bicep CLI</code></td><td>0.37.0+</td></tr>
-            <tr><td><code>kubectl</code></td><td>1.28+</td></tr>
-            <tr><td><code>Helm</code></td><td>3.14+</td></tr>
-            <tr><td><code>Docker</code></td><td>24+</td></tr>
-            <tr><td><code>Node.js</code></td><td>18+</td></tr>
+            <tr><td><code>kubectl</code> 1.28+</td><td>Every environment</td></tr>
+            <tr><td><code>Docker</code> 24+</td><td>Building images; local evaluation</td></tr>
+            <tr><td><code>Terraform</code> 1.6+ and <code>gcloud</code></td><td>Google Cloud</td></tr>
+            <tr><td><code>Azure CLI</code> and <code>Bicep</code></td><td>Azure</td></tr>
           </tbody>
         </table>
 
-<pre><code><span class="code-comment"># Verify all tools</span>
-az --version
-az bicep version
-kubectl version --client
-helm version
-docker --version
-node --version</code></pre>
+        <h2 id="local">Path 1: Local evaluation</h2>
+        <p>Runs the full platform on Docker Desktop Kubernetes, with MongoDB, Redis and Kafka in the same namespace and service-DNS layout used in the cloud. Synthetic data only. See the <a href="/docs/quickstart-kubernetes">Kubernetes quickstart</a> for the walkthrough.</p>
+<pre><code><span class="code-comment"># Build and deploy everything to Docker Desktop Kubernetes</span>
+./scripts/deploy-local.sh
 
-        <h2 id="local-dev">Local Development</h2>
-        <p>Start with local Kubernetes for development and testing. This runs MongoDB, Redis, the portal, FHIR, claims, payment, enrollment, provider, and supporting services in the same namespace and service-DNS shape used by production. See the <a href="/docs/quickstart">Quick Start</a> for a complete walkthrough.</p>
-
-<pre><code><span class="code-comment"># Start local Kubernetes platform</span>
-bash ./scripts/deploy-local.sh
-
-<span class="code-comment"># Verify health</span>
+<span class="code-comment"># Check the services</span>
 kubectl get deployments -n cloudhealthoffice</code></pre>
 
-        <h2 id="cicd">CI/CD Pipeline</h2>
-        <p>The deployment pipeline uses GitHub Actions with OIDC authentication (no stored secrets) and environment protection rules for approval gates between stages.</p>
+        <h2 id="gcp">Path 2: Google Cloud (GKE) reference deployment</h2>
+        <p>Terraform in <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/infrastructure/gcp/README.md" target="_blank" rel="noopener noreferrer"><code>infrastructure/gcp/</code></a> creates a GKE cluster, an Artifact Registry repository, a documents bucket and keyless GitHub Actions access through Workload Identity Federation. The <code>deploy-gcp-gke.yml</code> workflow builds the images and applies the same service manifests used locally.</p>
+<pre><code><span class="code-comment"># Create the environment</span>
+cd infrastructure/gcp
+terraform init
+terraform apply -var="project_id=YOUR_PROJECT_ID"
 
-        <h3>Pipeline Stages</h3>
-        <table>
-          <thead><tr><th>Stage</th><th>Trigger</th><th>What Happens</th></tr></thead>
-          <tbody>
-            <tr><td><strong>CI</strong></td><td>Push to <code>main</code></td><td>Build, automated test suite, security scan, Docker image build</td></tr>
-            <tr><td><strong>DEV</strong></td><td>CI pass</td><td>Auto-deploy to DEV AKS, run E2E tests</td></tr>
-            <tr><td><strong>UAT</strong></td><td>DEV pass + approval</td><td>Deploy to UAT, run integration tests, security validation</td></tr>
-            <tr><td><strong>PROD</strong></td><td>UAT pass + approval</td><td>Blue-green deploy to PROD AKS, smoke tests, rollback-ready</td></tr>
-          </tbody>
-        </table>
+<span class="code-comment"># Then run the "Deploy demo to GKE" workflow, or scripts/deploy-gke.sh</span></code></pre>
+        <div class="callout callout-info">
+          <div class="callout-title">Reference deployment, not a production environment</div>
+          <p>As shipped, this environment is for evaluation with synthetic data. A production deployment on Google Cloud adds a Google BAA, customer-managed encryption keys, a private cluster with Private Service Connect, production token signing, and managed services for state (Managed Service for Apache Kafka, Cloud Storage, and Secret Manager or HashiCorp Vault). See <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/deploy/GCP-DEMO.md" target="_blank" rel="noopener noreferrer">GCP-DEMO.md</a> for the full list.</p>
+        </div>
 
-        <h3>GitHub Actions Setup</h3>
-<pre><code><span class="code-comment"># Configure OIDC federated credentials (no stored secrets)</span>
-az ad app federated-credential create \
-  --id {app-id} \
-  --parameters '{
-    "name": "github-actions-main",
-    "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repo:aurelianware/cloudhealthoffice:ref:refs/heads/main",
-    "audiences": ["api://AzureADTokenExchange"]
-  }'</code></pre>
+        <h2 id="azure">Path 3: Azure (AKS)</h2>
+        <p>Bicep templates in <code>infrastructure/azure/</code> provision the Azure environment, and the <code>deploy-azure-aks.yml</code> workflow deploys the services to AKS with keyless OIDC authentication from GitHub Actions.</p>
+<pre><code><span class="code-comment"># Copy and fill in the parameters (base name, SFTP and messaging settings)</span>
+cp infrastructure/azure/main.parameters.example.json main.parameters.json
 
-        <h2 id="production">Production Deployment</h2>
-
-        <h3>Infrastructure (Bicep)</h3>
-        <p>All Azure infrastructure is defined in Bicep templates under <code>infrastructure/azure/</code>. A single deployment command provisions the complete environment:</p>
-
-<pre><code><span class="code-comment"># Deploy infrastructure</span>
-az deployment sub create \
-  --location eastus2 \
+<span class="code-comment"># Provision infrastructure into a resource group</span>
+az deployment group create \
+  --resource-group YOUR_RESOURCE_GROUP \
   --template-file infrastructure/azure/main.bicep \
-  --parameters environment=prod tenantId={tenant}</code></pre>
+  --parameters @main.parameters.json</code></pre>
 
-        <h3>Kubernetes (Helm)</h3>
-        <p>Deploy all services to AKS (or EKS/GKE) using the Helm chart:</p>
+        <h2 id="other-clouds">Other clouds and on-premises Kubernetes</h2>
+        <p>The services depend on Kubernetes and the components above, not on one cloud's proprietary services. AWS (EKS) and on-premises clusters use the same manifests; infrastructure code and managed-service bindings for them are scoped per engagement. <a href="/contact?interest=payer-cloud">Talk to us about your environment</a>.</p>
 
-<pre><code><span class="code-comment"># Add Helm repos</span>
-helm repo add argo https://argoproj.github.io/argo-helm
-
-<span class="code-comment"># Deploy Cloud Health Office</span>
-helm install cloudhealthoffice ./infrastructure/helm/cloudhealthoffice \
-  --namespace cloudhealthoffice \
-  --create-namespace \
-  --values infrastructure/helm/values-prod.yaml</code></pre>
-
-        <h2 id="secrets">Secret Management</h2>
-        <p>Production secrets are stored in <strong>Azure Key Vault</strong> (Premium SKU with HSM-backed keys). Secrets flow to services through two mechanisms — a CI/CD bridge for immediate adoption, and CSI direct mount for zero-secrets-in-Kubernetes.</p>
-
-        <h3>Architecture</h3>
+        <h2 id="secrets">Secret management</h2>
+        <p>Services read secrets through one secret-provider interface, so the backing store is a configuration choice rather than a code change.</p>
         <table>
-          <thead><tr><th>Phase</th><th>Flow</th><th>Secrets in K8s?</th><th>When to Use</th></tr></thead>
+          <thead><tr><th>Provider</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td><strong>A: CI/CD Bridge</strong></td><td>Key Vault &rarr; GitHub Actions &rarr; K8s Secrets &rarr; Pod env vars</td><td>Yes (etcd)</td><td>Initial migration, simpler setup</td></tr>
-            <tr><td><strong>B: CSI Direct</strong></td><td>Key Vault &rarr; CSI Driver &rarr; Pod volume mount (future: file-based provider)</td><td>No</td><td>Planned &mdash; requires file-based ISecretProvider implementation</td></tr>
+            <tr><td>Kubernetes Secrets</td><td>Default</td></tr>
+            <tr><td>Azure Key Vault (Workload Identity)</td><td>Implemented &mdash; see <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/AZURE-KEYVAULT-INSTALLATION.md" target="_blank" rel="noopener noreferrer">AZURE-KEYVAULT-INSTALLATION.md</a></td></tr>
+            <tr><td>HashiCorp Vault (Kubernetes auth)</td><td>Implemented</td></tr>
+            <tr><td>Google Secret Manager, AWS Secrets Manager</td><td>Per engagement, behind the same interface</td></tr>
           </tbody>
         </table>
+        <p>Configuration keys use the .NET hierarchy, for example <code>MongoDb__ConnectionString</code> as an environment variable or <code>MongoDb--ConnectionString</code> as a Key Vault secret name.</p>
 
-        <h3>Setup (Phase A &mdash; CI/CD Bridge)</h3>
-<pre><code><span class="code-comment"># 1. Provision Key Vault with RBAC, purge protection, and AKS network rules</span>
-./scripts/setup-azure-keyvault.sh \
-  --resource-group rg-cloudhealthoffice-prod \
-  --vault-name cho-app-kv \
-  --aks-cluster cho-aks \
-  --location eastus \
-  --log-analytics cho-logs
+        <h2 id="cicd">CI/CD</h2>
+        <p>Deployments run from GitHub Actions without stored cloud credentials: OIDC federation on Azure and Workload Identity Federation on Google Cloud. Environment protection rules gate promotion between environments.</p>
 
-<span class="code-comment"># 2. Populate secrets from manifest</span>
-cp scripts/secrets-manifest.example.env scripts/secrets-manifest.env
-<span class="code-comment"># Edit with real values &mdash; NEVER commit this file</span>
-./scripts/populate-keyvault-secrets.sh --vault-name cho-app-kv --file scripts/secrets-manifest.env
-
-<span class="code-comment"># 3. Enable in GitHub Actions (workflow falls back to GitHub Secrets if unset)</span>
-gh variable set KEY_VAULT_NAME -b 'cho-app-kv'
-
-<span class="code-comment"># 4. Validate access</span>
-./scripts/validate-keyvault-access.sh --vault-name cho-app-kv --verbose</code></pre>
-
-        <h3>Setup (Phase B &mdash; CSI Direct Mount)</h3>
-<pre><code><span class="code-comment"># 1. Install CSI driver add-on</span>
-az aks enable-addons --addons azure-keyvault-secrets-provider \
-  --name cho-aks --resource-group rg-cloudhealthoffice-prod
-
-<span class="code-comment"># 2. Enable OIDC issuer and Workload Identity</span>
-az aks update --name cho-aks --resource-group rg-cloudhealthoffice-prod \
-  --enable-oidc-issuer --enable-workload-identity
-
-<span class="code-comment"># 3. Per-service: create managed identity, federated credential, and RBAC</span>
-<span class="code-comment"># See docs/AZURE-KEYVAULT-INSTALLATION.md for the full 30-service checklist</span></code></pre>
-
-        <h3>Service Inventory</h3>
-        <p>Each service requires its own Managed Identity for per-service RBAC scoping to Key Vault.</p>
-        <table>
-          <thead><tr><th>Category</th><th>Count</th><th>Secret Source</th></tr></thead>
-          <tbody>
-            <tr><td>.NET Microservices</td><td>29</td><td>ISecretProvider (Phase B) or K8s Secret env vars (Phase A)</td></tr>
-            <tr><td>Blazor Portal</td><td>1</td><td>ISecretProvider (Phase B) or K8s Secret env vars (Phase A)</td></tr>
-            <tr><td>Non-.NET Containers</td><td>8</td><td>K8s Secret env vars only (Phase A &mdash; no code changes needed)</td></tr>
-          </tbody>
-        </table>
-
-        <h3>Secret Naming Convention</h3>
-        <p>Key Vault does not allow <code>:</code> in secret names. Use <code>--</code> (double-dash) as the hierarchy delimiter. The <code>ISecretProvider</code> configuration layer maps <code>--</code> &rarr; <code>:</code> automatically.</p>
-        <table>
-          <thead><tr><th>Key Vault Name</th><th>.NET Configuration Key</th></tr></thead>
-          <tbody>
-            <tr><td><code>CosmosDb--ConnectionString</code></td><td><code>CosmosDb:ConnectionString</code></td></tr>
-            <tr><td><code>Stripe--SecretKey</code></td><td><code>Stripe:SecretKey</code></td></tr>
-            <tr><td><code>AzureAd--ClientSecret</code></td><td><code>AzureAd:ClientSecret</code></td></tr>
-          </tbody>
-        </table>
-
-        <h3>Key Vault Security Configuration</h3>
-        <table>
-          <thead><tr><th>Setting</th><th>Value</th><th>Rationale</th></tr></thead>
-          <tbody>
-            <tr><td>SKU</td><td>Premium</td><td>HSM-backed keys for HIPAA</td></tr>
-            <tr><td>RBAC Authorization</td><td>Enabled</td><td>Per-identity scoping (not vault-level access policies)</td></tr>
-            <tr><td>Purge Protection</td><td>Enabled</td><td>Cannot be disabled once enabled &mdash; prevents accidental deletion</td></tr>
-            <tr><td>Soft Delete</td><td>90 days</td><td>Recovery window for accidental deletions</td></tr>
-            <tr><td>Network Default</td><td>Deny</td><td>Only AKS subnet and Azure trusted services allowed</td></tr>
-            <tr><td>Diagnostics</td><td>AuditEvent &rarr; Log Analytics</td><td>365-day retention for HIPAA audit trail</td></tr>
-            <tr><td>Rotation Policy</td><td>90 days</td><td>Automated expiration alerts via <code>rotate-keyvault-secrets.sh</code></td></tr>
-          </tbody>
-        </table>
-
-        <h3>Rotation &amp; Alerting</h3>
-<pre><code><span class="code-comment"># Check for secrets expiring within 14 days</span>
-./scripts/rotate-keyvault-secrets.sh --vault-name cho-app-kv --days 14
-
-<span class="code-comment"># JSON output for CI/CD alerting (scheduled GitHub Action)</span>
-./scripts/rotate-keyvault-secrets.sh --vault-name cho-app-kv --days 30 --format json</code></pre>
-
-        <div class="callout callout-info">
-          <div class="callout-title">Full installation guide</div>
-          <p>For the complete per-service Workload Identity checklist with step-by-step commands for all 30 services, see <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/AZURE-KEYVAULT-INSTALLATION.md" target="_blank" rel="noopener noreferrer">AZURE-KEYVAULT-INSTALLATION.md</a> on GitHub.</p>
-        </div>
-
-        <h2 id="verification">Post-Deployment Verification</h2>
-<pre><code><span class="code-comment"># Health check all services</span>
+        <h2 id="verification">Post-deployment verification</h2>
+<pre><code><span class="code-comment"># All pods running</span>
 kubectl get pods -n cloudhealthoffice
-kubectl exec -it deploy/claims-service -n cloudhealthoffice -- curl -s localhost:5001/health
 
-<span class="code-comment"># Run E2E test suite</span>
-npm run test:e2e -- --environment=prod
+<span class="code-comment"># Service health</span>
+kubectl exec -it deploy/claims-service -n cloudhealthoffice -- curl -s localhost:5001/health/live
 
-<span class="code-comment"># Verify FHIR endpoints</span>
+<span class="code-comment"># FHIR capability statement</span>
 curl https://api.your-domain.example/fhir/r4/metadata | jq .status</code></pre>
-
-        <div class="callout callout-info">
-          <div class="callout-title">Full deployment reference</div>
-          <p>For the complete 3,000+ line deployment guide including secrets management, rollback procedures, and troubleshooting, see <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/deployment/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer">DEPLOYMENT.md</a> on GitHub.</p>
-        </div>
 
         <div class="callout callout-success">
           <div class="callout-title">Before production traffic</div>
-          <p>Complete the <a href="/docs/production-readiness-checklist">Production Readiness Checklist</a>, run an isolated restore using the <a href="/docs/backup-restore-disaster-recovery">Backup &amp; Disaster Recovery Runbook</a>, and test paging with the <a href="/docs/observability-alerting-incident-response">Observability &amp; Incident Response Runbook</a> before routing production traffic.</p>
+          <p>Complete the <a href="/docs/production-readiness-checklist">Production Readiness Checklist</a>, run an isolated restore using the <a href="/docs/backup-restore-disaster-recovery">Backup &amp; Disaster Recovery Runbook</a>, and test paging with the <a href="/docs/observability-alerting-incident-response">Observability &amp; Incident Response Runbook</a> before routing production traffic. Production use requires a commercial license.</p>
         </div>
 
         <div class="docs-pager">
