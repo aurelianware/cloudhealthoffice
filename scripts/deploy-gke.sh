@@ -3,7 +3,16 @@
 # (the single-node Standard cluster infrastructure/gcp creates by default, or Autopilot).
 #
 # Demo-grade. Synthetic data only. No public ingress: reach it with
-# scripts/demo/gcp/port-forward.sh. See docs/deploy/GCP-DEMO.md.
+# scripts/demo/gcp/port-forward.sh, or through a Cloudflare Tunnel protected by
+# Cloudflare Access. See docs/deploy/GCP-DEMO.md.
+#
+# Two security modes (docs/deploy/GCP-DEMO.md, "Production security"):
+#   demo        (default) development hosts with the public development key and
+#               the portal's built-in demo sign-in
+#   production  when every setting below is present: services are Staging hosts
+#               that refuse development keys, token-service signs with Cloud KMS,
+#               each service proves its Kubernetes identity, and the portal signs
+#               people in through Cloudflare Access (no second sign-in)
 #
 # Images must already be in Artifact Registry (the deploy-gcp-gke workflow
 # builds and pushes them). This script installs Kafka (Strimzi), MongoDB and
@@ -27,6 +36,14 @@
 #                            replica each); default keeps the manifests' requests
 #   CLAIMS_REPLICAS  BENEFIT_PLAN_REPLICAS   (1 with the small profile, else 2)
 #   ROLLOUT_TIMEOUT=900s
+#   Production security (all five, or none):
+#   TOKEN_SIGNING_KEY_VERSION     terraform output token_signing_key_version
+#   TOKEN_SERVICE_GOOGLE_ACCOUNT  terraform output token_service_google_account
+#   KUBERNETES_SA_ISSUER          terraform output kubernetes_service_account_issuer
+#   CF_ACCESS_TEAM_DOMAIN         Cloudflare Zero Trust team domain (yourteam.cloudflareaccess.com)
+#   CF_ACCESS_AUD                 the Access application's AUD tag (the demo hostname's application)
+#   DEMO_ADMIN_EMAILS             comma-separated addresses made TenantAdmin of the demo tenant,
+#                                 so they can sign in through Access and add other users
 #   DOCUMENTS_BUCKET  DOCUMENTS_SERVICE_ACCOUNT
 #                            Google Cloud Storage for document-service (attachment- and
 #                            member-document-service file through it)
@@ -73,6 +90,22 @@ log "Preflight checks"
 if [[ "${REQUIRE_AI_EXAMINER:-false}" == "true" && -z "${ANTHROPIC_API_KEY:-}" ]]; then
   err "The AI claims examiner is required but ANTHROPIC_API_KEY is empty (set the repository secret, or untick ai_examiner to deploy without it)"
 fi
+SECURITY_SETTINGS=(TOKEN_SIGNING_KEY_VERSION TOKEN_SERVICE_GOOGLE_ACCOUNT KUBERNETES_SA_ISSUER CF_ACCESS_TEAM_DOMAIN CF_ACCESS_AUD)
+security_set=(); security_missing=()
+for setting in "${SECURITY_SETTINGS[@]}"; do
+  if [[ -n "${!setting:-}" ]]; then security_set+=("$setting"); else security_missing+=("$setting"); fi
+done
+if (( ${#security_set[@]} == ${#SECURITY_SETTINGS[@]} )); then
+  SECURITY=production
+elif (( ${#security_set[@]} == 0 )); then
+  SECURITY=demo
+else
+  err "Production security needs all of ${SECURITY_SETTINGS[*]}; missing: ${security_missing[*]}"
+fi
+if [[ "$SECURITY" == production ]]; then
+  command -v gcloud >/dev/null || err "gcloud is required to read the token signing public key"
+fi
+
 for tool in kubectl python3 openssl; do
   command -v "$tool" >/dev/null || err "$tool is required"
 done
@@ -84,6 +117,11 @@ context="$(kubectl config current-context)"
 [[ "$context" == gke_* ]] || warn "kubectl context is '$context', not a GKE context — continuing anyway"
 kubectl cluster-info >/dev/null || err "cluster not reachable"
 ok "context $context, images ${GAR_REPOSITORY}:${IMAGE_TAG}"
+if [[ "$SECURITY" == production ]]; then
+  ok "security: production (Cloud KMS signing, Kubernetes service identity, Cloudflare Access sign-in)"
+else
+  warn "security: demo (public development key, built-in demo sign-in). Set ${SECURITY_SETTINGS[*]} for production security."
+fi
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 ok "namespace $NAMESPACE"
@@ -161,8 +199,23 @@ upsert_secret smart-auth-service-secrets MongoDb__ConnectionString="$MONGO_CONN"
 upsert_secret provider-verification-service-secrets MongoDb__ConnectionString="$MONGO_CONN" \
   ProviderVerification__SamGovApiKey=not-configured
 
-kubectl apply -f deploy/gcp/cho-service-tokens.demo.yaml >/dev/null
-ok "cho-service-tokens (demo development issuers)"
+if [[ "$SECURITY" == production ]]; then
+  # Every service trusts exactly this key; render_manifests.py writes it into
+  # the cho-service-tokens ConfigMap, replacing the demo development issuers.
+  TOKEN_PUBLIC_KEY_FILE="$(mktemp)"
+  kms_pattern='^projects/([^/]+)/locations/([^/]+)/keyRings/([^/]+)/cryptoKeys/([^/]+)/cryptoKeyVersions/([0-9]+)$'
+  [[ "$TOKEN_SIGNING_KEY_VERSION" =~ $kms_pattern ]] \
+    || err "TOKEN_SIGNING_KEY_VERSION must be projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>/cryptoKeyVersions/<n> (check for stray spaces or newlines)"
+  kms_project="${BASH_REMATCH[1]}" kms_location="${BASH_REMATCH[2]}" kms_ring="${BASH_REMATCH[3]}"
+  kms_key="${BASH_REMATCH[4]}" kms_version="${BASH_REMATCH[5]}"
+  gcloud kms keys versions get-public-key "$kms_version" --key "$kms_key" --keyring "$kms_ring" \
+    --location "$kms_location" --project "$kms_project" --output-file "$TOKEN_PUBLIC_KEY_FILE" \
+    || err "Could not read the public key of $TOKEN_SIGNING_KEY_VERSION (the deployer needs roles/cloudkms.publicKeyViewer; terraform apply with enable_token_signing_kms = true grants it)"
+  ok "token signing public key ($kms_key version $kms_version)"
+else
+  kubectl apply -f deploy/gcp/cho-service-tokens.demo.yaml >/dev/null
+  ok "cho-service-tokens (demo development issuers)"
+fi
 
 # ── Kafka (Strimzi) ──────────────────────────────────────────────────────────
 if [[ "$ENABLE_KAFKA" == "true" ]]; then
@@ -228,6 +281,36 @@ kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh --username "$MONGO_USER" --pas
     db.prior_auth_rules.deleteMany({ _id: "" });
   ' >/dev/null && ok "demo tenant and member" || warn "demo seed failed; rerun this script to retry"
 
+if [[ "$SECURITY" == production ]]; then
+  # tenant-service's identity read model: the demo tenant, and an Active
+  # TenantAdmin for each DEMO_ADMIN_EMAILS address. Cloudflare Access decides
+  # who reaches the portal; these records decide who gets a token in the tenant.
+  # Existing users keep their roles and status (insert only).
+  [[ -n "${DEMO_ADMIN_EMAILS:-}" ]] \
+    || warn "DEMO_ADMIN_EMAILS is empty: no one has a user in the demo tenant, so no one can sign in until a user is added"
+  kubectl exec -n "$NAMESPACE" mongodb-0 -- \
+    env DEMO_ADMIN_EMAILS="${DEMO_ADMIN_EMAILS:-}" mongosh --username "$MONGO_USER" --password "$MONGO_PASS" \
+    --authenticationDatabase admin --quiet --eval '
+      db = db.getSiblingDB("CloudHealthOffice");
+      db.Tenants.updateOne({ tenantId: "demo", azureTenantId: "demo" }, { $set: {
+        tenantId: "demo", azureTenantId: "demo", organizationName: "Demo Health Plan", tier: "enterprise",
+        isDemo: true, subscriptionStatus: "Active", updatedAt: new Date() },
+        $setOnInsert: { createdAt: new Date() } }, { upsert: true });
+      const roles = ["TenantAdmin", "ClaimsSupervisor", "MemberServices", "ProviderRelations", "Finance"];
+      for (const raw of (process.env.DEMO_ADMIN_EMAILS || "").split(",")) {
+        const email = raw.trim();
+        if (!email) continue;
+        const normalized = email.toLowerCase();
+        db.TenantUsers.updateOne({ tenantId: "demo", emailNormalized: normalized }, { $setOnInsert: {
+          _id: "demo-admin-" + require("crypto").createHash("sha256").update(normalized).digest("hex").slice(0, 32),
+          tenantId: "demo", email: email,
+          emailNormalized: normalized, azureAdObjectId: "", azureAdTenantId: "", displayName: email,
+          firstName: "", lastName: "", roles: roles, department: "Administration", status: "Active",
+          createdAt: new Date(), updatedAt: new Date(), createdBy: "deploy-gke.sh" } }, { upsert: true });
+      }
+    ' >/dev/null && ok "demo tenant users (${DEMO_ADMIN_EMAILS:-none})" || warn "demo tenant user seed failed; rerun this script to retry"
+fi
+
 # ── Services ─────────────────────────────────────────────────────────────────
 log "Rendering and applying service manifests"
 render_args=(--registry "$GAR_REPOSITORY" --tag "$IMAGE_TAG"
@@ -235,6 +318,17 @@ render_args=(--registry "$GAR_REPOSITORY" --tag "$IMAGE_TAG"
   --storage-class "$STORAGE_CLASS" --resource-profile "$RESOURCE_PROFILE")
 [[ -n "$KAFKA_VALUE" ]] && render_args+=(--kafka-bootstrap "$KAFKA_VALUE")
 [[ "$AI_EXAMINER" == true ]] && render_args+=(--ai-examiner)
+if [[ "$SECURITY" == production ]]; then
+  render_args+=(--security production
+    --token-signing-key-version "$TOKEN_SIGNING_KEY_VERSION"
+    --token-service-google-account "$TOKEN_SERVICE_GOOGLE_ACCOUNT"
+    --kubernetes-issuer "$KUBERNETES_SA_ISSUER"
+    --token-public-key-file "$TOKEN_PUBLIC_KEY_FILE"
+    --access-team-domain "$CF_ACCESS_TEAM_DOMAIN"
+    --access-audience "$CF_ACCESS_AUD")
+  [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]] \
+    || warn "CLOUDFLARE_TUNNEL_TOKEN is not set: with Cloudflare Access sign-in the portal is reachable only through the tunnel"
+fi
 if [[ -n "${DOCUMENTS_BUCKET:-}" && -n "${DOCUMENTS_SERVICE_ACCOUNT:-}" ]]; then
   render_args+=(--documents-bucket "$DOCUMENTS_BUCKET" --documents-service-account "$DOCUMENTS_SERVICE_ACCOUNT")
 else
@@ -355,5 +449,9 @@ print(json.dumps({
 fi
 
 echo
-echo "Cloud Health Office demo deployed to $context."
-echo "Reach it with: scripts/demo/gcp/port-forward.sh"
+echo "Cloud Health Office demo deployed to $context (security: $SECURITY)."
+if [[ "$SECURITY" == production ]]; then
+  echo "Sign in at the Cloudflare Access hostname of the portal; port-forwarded requests are not signed in."
+else
+  echo "Reach it with: scripts/demo/gcp/port-forward.sh"
+fi

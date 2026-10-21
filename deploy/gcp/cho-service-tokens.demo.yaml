@@ -12,7 +12,10 @@
 #     The demo cluster therefore has no public ingress; it is reached through
 #     kubectl port-forward only, and it holds synthetic data only.
 #   - Production deployments use asymmetric keys from token-service instead
-#     (docs/security/portal-token-service.md).
+#     (docs/security/portal-token-service.md). With production security
+#     configured (docs/deploy/GCP-DEMO.md), scripts/deploy-gke.sh does not
+#     apply this file: render_manifests.py generates a cho-service-tokens
+#     ConfigMap that trusts only the Cloud KMS key.
 apiVersion: v1
 kind: ConfigMap
 metadata:

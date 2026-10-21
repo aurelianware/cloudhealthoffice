@@ -23,9 +23,11 @@
             return;
         }
 
-        if (IsLocalDemoUser(user))
+        if (IsLocalDemoUser(user) || user.HasClaim(CloudHealthOffice.Portal.Services.CloudflareAccessAuthenticationHandler.MarkerClaim, "true"))
         {
-            Logger.LogInformation("Local demo user detected, redirecting to home");
+            // No Entra directory to look a subscription up by: the token service
+            // decides the tenant when the portal first needs a token.
+            Logger.LogInformation("Local demo or Cloudflare Access user, redirecting to home");
             Navigation.NavigateTo("/home");
             return;
         }

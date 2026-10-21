@@ -10,9 +10,7 @@
                     <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
                         <NotAuthorized>
                             @{
-                                var signInPath = IsLocalDemoAuth()
-                                    ? "/local-demo/sign-in"
-                                    : "/MicrosoftIdentity/Account/SignIn";
+                                var signInPath = PortalAuthMode.SignInPath(Configuration);
                                 Navigation.NavigateTo($"{signInPath}?redirectUri={Uri.EscapeDataString(Navigation.Uri)}", forceLoad: true);
                             }
                         </NotAuthorized>
@@ -46,10 +44,4 @@
     [Parameter] public string? InitialTheme { get; set; }
 
     protected override void OnInitialized() => ThemeState.Initialize(InitialTheme);
-
-    private bool IsLocalDemoAuth()
-        => string.Equals(
-            Configuration["Authentication:Mode"],
-            "LocalDemo",
-            StringComparison.OrdinalIgnoreCase);
 }

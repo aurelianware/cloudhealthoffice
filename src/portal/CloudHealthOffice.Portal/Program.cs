@@ -59,7 +59,15 @@ var authMode = builder.Configuration["Authentication:Mode"] ?? "Entra";
 var useLocalDemoAuth = builder.Environment.IsDevelopment()
     && string.Equals(authMode, "LocalDemo", StringComparison.OrdinalIgnoreCase);
 
-if (useLocalDemoAuth)
+// Behind Cloudflare Access: the person Access signed in is the portal user
+// (no second sign-in); the token service turns their Access token into a CHO token.
+var useCloudflareAccessAuth = PortalAuthMode.IsCloudflareAccess(builder.Configuration);
+
+if (useCloudflareAccessAuth)
+{
+    builder.Services.AddPortalCloudflareAccess(builder.Configuration);
+}
+else if (useLocalDemoAuth)
 {
     builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
         .AddCookie(options =>
@@ -422,6 +430,11 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseSession();
+
+if (useCloudflareAccessAuth)
+{
+    app.MapCloudflareAccessSignIn();
+}
 
 if (useLocalDemoAuth)
 {

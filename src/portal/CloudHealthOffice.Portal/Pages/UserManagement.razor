@@ -3,6 +3,7 @@
 @using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
 @inject IUserContextService UserContextService
+@inject IConfiguration Configuration
 @inject ITenantContextService TenantContextService
 @inject HttpClient Http
 @inject IConfiguration Configuration
@@ -26,6 +27,16 @@
             </MudText>
         </div>
         <MudStack Row="true" Spacing="2">
+            @if (_cloudflareAccess)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.PersonAdd"
+                           OnClick="ShowAddUserDialog" data-testid="add-access-user">
+                    Add User
+                </MudButton>
+            }
+            else
+            {
             <MudButton Variant="Variant.Filled" Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.ForwardToInbox"
                        OnClick="ShowInviteDialog" data-testid="invite-user">
@@ -38,13 +49,25 @@
                     Add User From Your Directory
                 </MudButton>
             </MudTooltip>
+            }
         </MudStack>
     </MudStack>
+    @if (_cloudflareAccess)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+            People sign in through Cloudflare Access. Someone gets in when the Access policy allows their
+            address and they are an Active user here with the same address; their roles come from this page.
+            Disable a user, or remove them from the Access policy, to end their access.
+        </MudText>
+    }
+    else
+    {
     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
         "Add user" is only for people in your organization's own Microsoft Entra directory, who are linked
         when they first sign in. To bring in someone from another organization, use "Invite user": they
         accept a one-time link while signed in as the invited address.
     </MudText>
+    }
 
     @if (_serviceError != null)
     {
@@ -201,6 +224,8 @@
 </PermissionGate>
 
 @code {
+    private bool _cloudflareAccess => PortalAuthMode.IsCloudflareAccess(Configuration);
+
     private List<UserListItem> _users = new();
     private List<InvitationItem> _invitations = new();
     private bool _loading = true;

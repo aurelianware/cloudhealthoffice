@@ -1,13 +1,17 @@
-# Token signing and service identity for a Production-host deployment on GKE.
+# Token signing and service identity for production security on GKE.
 #
-# Off by default (enable_token_signing_kms = false), so the demo cluster is
-# unchanged. When enabled, this creates:
+# Off by default (enable_token_signing_kms = false): the demo then runs with the
+# public development key. Enabled, together with the Cloudflare Access settings
+# in the deploy workflow, the demo runs with production security
+# (docs/deploy/GCP-DEMO.md, "Production security"). This creates:
 #   - a Cloud KMS key ring and an asymmetric signing key (EC P-256 / ES256)
 #     that token-service signs CHO tokens with (TokenSigning:CloudKmsKeyVersion);
 #     the private key never leaves Cloud KMS
 #   - a Google service account for token-service, bound to its Kubernetes
 #     service account through Workload Identity, allowed to sign with that key
 #     and read its public key, and nothing else
+#   - read access to the public key for the deployer service account, so the
+#     deploy can give every service the key to verify tokens with
 #
 # Services prove their own identity to token-service with projected
 # Kubernetes service-account tokens (ServiceTokens:IdentityProvider=Kubernetes),
@@ -16,7 +20,7 @@
 # /docs/configure-tenant-security on cloudhealthoffice.com.
 
 variable "enable_token_signing_kms" {
-  description = "Create the Cloud KMS token-signing key and token-service's Workload Identity. Off for the demo, which uses the development key."
+  description = "Create the Cloud KMS token-signing key and token-service's Workload Identity. Off: the demo uses the public development key."
   type        = bool
   default     = false
 }
@@ -33,9 +37,9 @@ variable "token_signing_protection_level" {
 }
 
 variable "token_service_kubernetes_account" {
-  description = "token-service's Kubernetes service account (in kubernetes_namespace)."
+  description = "token-service's Kubernetes service account (in kubernetes_namespace), as its manifest names it."
   type        = string
-  default     = "token-service"
+  default     = "token-service-sa"
 }
 
 resource "google_project_service" "kms" {
@@ -93,6 +97,15 @@ resource "google_kms_crypto_key_iam_member" "token_service_public_key" {
   crypto_key_id = google_kms_crypto_key.token_signing[0].id
   role          = "roles/cloudkms.publicKeyViewer"
   member        = "serviceAccount:${google_service_account.token_service[0].email}"
+}
+
+# The deploy reads the public key to configure every service's trust in it.
+resource "google_kms_crypto_key_iam_member" "deployer_public_key" {
+  count = var.enable_token_signing_kms ? 1 : 0
+
+  crypto_key_id = google_kms_crypto_key.token_signing[0].id
+  role          = "roles/cloudkms.publicKeyViewer"
+  member        = "serviceAccount:${google_service_account.deployer.email}"
 }
 
 resource "google_service_account_iam_member" "token_service_workload_identity" {

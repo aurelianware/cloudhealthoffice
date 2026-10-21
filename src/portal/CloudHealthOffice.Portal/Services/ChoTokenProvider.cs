@@ -285,14 +285,15 @@ public sealed class ChoTokenProvider : IChoTokenProvider
         if (baseUrl == null)
             return null;
 
-        var entraToken = await AcquireEntraTokenAsync(user);
-        if (entraToken.Token == null)
+        var proof = await AcquireUserProofAsync(user);
+        if (proof.Token == null)
             return null;
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/v1/token/tenants");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", entraToken.Token);
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"{baseUrl}{(IsCloudflareAccess(user) ? CloudflareAccessTenantsPath : "/v1/token/tenants")}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", proof.Token);
             using var response = await TokenServiceClient().SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
@@ -376,6 +377,13 @@ public sealed class ChoTokenProvider : IChoTokenProvider
         {
             // LocalDemo has no Entra identity to link.
             _logger.LogWarning("Invitation redemption is not available in LocalDemo mode");
+            return ChoInvitationResult.Failure(ChoInvitationStatus.Unavailable);
+        }
+
+        if (IsCloudflareAccess(user))
+        {
+            // Access sign-in has no Entra identity to link; access is by user record.
+            _logger.LogWarning("Invitation redemption is not available with Cloudflare Access sign-in");
             return ChoInvitationResult.Failure(ChoInvitationStatus.Unavailable);
         }
 
@@ -486,7 +494,7 @@ public sealed class ChoTokenProvider : IChoTokenProvider
     public async Task<ChoSignupResult> SignupAsync(ChoSignupRequest signup, CancellationToken cancellationToken = default)
     {
         var user = await GetUserAsync();
-        if (user == null || IsLocalDemo(user))
+        if (user == null || IsLocalDemo(user) || IsCloudflareAccess(user))
             return new ChoSignupResult(ChoSignupStatus.NotAuthenticated, null);
 
         var baseUrl = TokenServiceBaseUrl();
@@ -589,17 +597,18 @@ public sealed class ChoTokenProvider : IChoTokenProvider
         if (baseUrl == null)
             return ChoTokenResult.Failure(ChoTokenStatus.Unavailable);
 
-        var entraToken = await AcquireEntraTokenAsync(user);
-        if (entraToken.Token == null)
-            return ChoTokenResult.Failure(entraToken.Failure);
+        var proof = await AcquireUserProofAsync(user);
+        if (proof.Token == null)
+            return ChoTokenResult.Failure(proof.Failure);
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/token/exchange")
+            var path = IsCloudflareAccess(user) ? CloudflareAccessExchangePath : "/v1/token/exchange";
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}{path}")
             {
                 Content = JsonContent.Create(new ExchangeRequest { TenantId = tenantId }),
             };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", entraToken.Token);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", proof.Token);
 
             using var response = await TokenServiceClient().SendAsync(request, cancellationToken);
 
@@ -644,6 +653,32 @@ public sealed class ChoTokenProvider : IChoTokenProvider
             _logger.LogWarning(ex, "Token service could not be reached for the token exchange");
             return ChoTokenResult.Failure(ChoTokenStatus.Unavailable);
         }
+    }
+
+    /// <summary>
+    /// What the token service is shown to prove who the user is: their Entra
+    /// token, or (Cloudflare Access sign-in) the Access token the portal
+    /// validated when the circuit or request started.
+    /// </summary>
+    private Task<(string? Token, ChoTokenStatus Failure)> AcquireUserProofAsync(ClaimsPrincipal user)
+    {
+        if (!IsCloudflareAccess(user))
+            return AcquireEntraTokenAsync(user);
+
+        // A plain request carries a fresh header; a circuit keeps the token it
+        // started with. The fresh one is used only when it is the same person:
+        // results are cached under this user's key.
+        var subject = user.FindFirst("sub")?.Value;
+        var fresh = _httpContextAccessor?.HttpContext?.User is { } requestUser
+                    && IsCloudflareAccess(requestUser)
+                    && !string.IsNullOrEmpty(subject)
+                    && string.Equals(requestUser.FindFirst("sub")?.Value, subject, StringComparison.Ordinal)
+            ? requestUser.FindFirst(CloudflareAccessAuthenticationHandler.AssertionClaim)?.Value
+            : null;
+        var assertion = fresh ?? user.FindFirst(CloudflareAccessAuthenticationHandler.AssertionClaim)?.Value;
+        return Task.FromResult<(string?, ChoTokenStatus)>(string.IsNullOrEmpty(assertion)
+            ? (null, ChoTokenStatus.NotAuthenticated)
+            : (assertion, ChoTokenStatus.Success));
     }
 
     private async Task<(string? Token, ChoTokenStatus Failure)> AcquireEntraTokenAsync(ClaimsPrincipal user)
@@ -736,6 +771,13 @@ public sealed class ChoTokenProvider : IChoTokenProvider
         });
     }
 
+    private const string CloudflareAccessExchangePath = "/v1/token/exchange/cloudflare-access";
+    private const string CloudflareAccessTenantsPath = "/v1/token/tenants/cloudflare-access";
+
+    private bool IsCloudflareAccess(ClaimsPrincipal user)
+        => PortalAuthMode.IsCloudflareAccess(_configuration)
+           && user.HasClaim(CloudflareAccessAuthenticationHandler.MarkerClaim, "true");
+
     private bool IsLocalDemoMode()
         => string.Equals(_configuration["Authentication:Mode"], "LocalDemo", StringComparison.OrdinalIgnoreCase);
 
@@ -768,8 +810,15 @@ public sealed class ChoTokenProvider : IChoTokenProvider
     /// The cache partition for one signed-in person: Entra tenant + object id.
     /// Without both, nothing is cached for the user.
     /// </summary>
-    internal static string? UserCacheKey(ClaimsPrincipal user)
+    public static string? UserCacheKey(ClaimsPrincipal user)
     {
+        if (user.HasClaim(CloudflareAccessAuthenticationHandler.MarkerClaim, "true"))
+        {
+            // Cloudflare Access: one person per Access user id (sub).
+            var sub = user.FindFirst("sub")?.Value;
+            return string.IsNullOrEmpty(sub) ? null : $"cloudflare-access|{sub}";
+        }
+
         var tid = user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
                   ?? user.FindFirst("tid")?.Value;
         var oid = user.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value

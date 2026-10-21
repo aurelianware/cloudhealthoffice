@@ -31,6 +31,23 @@ What it changes:
     still burst; use the default profile for benchmark runs on a larger cluster.
   - Kafka and messaging settings, probe paths and per-service settings that
     scripts/deploy-local.sh patches after applying are set here up front.
+  - With --security production (deploy-gke.sh chooses it when the token
+    signing key and Cloudflare Access settings are configured), the demo runs
+    with production security instead of development keys:
+      * every service is a --host-environment host (default Staging): no
+        development key, LocalDemo sign-in or Testing override is accepted;
+      * token-service runs, signs with the Cloud KMS key
+        (--token-signing-key-version) as its Google service account
+        (--token-service-google-account, Workload Identity), and issues service
+        tokens to Kubernetes service accounts (--kubernetes-issuer);
+      * each service runs as its own Kubernetes service account and proves
+        its identity with a projected token (audience cho-token-service);
+      * every service trusts only token-service's public key
+        (--token-public-key-file), in a generated cho-service-tokens ConfigMap;
+      * the portal signs people in through Cloudflare Access
+        (--access-team-domain, --access-audience), and token-service gives
+        Access users tokens for --access-tenant only.
+    The default, --security demo, is the development-key demo described above.
   - With --documents-bucket and --documents-service-account, the services
     that store documents (DOCUMENT_SERVICES) use Google Cloud Storage: each
     gets its own Kubernetes service account bound to the Google service
@@ -44,11 +61,18 @@ Usage:
       [--ai-examiner] [--claims-replicas 2] [--benefit-plan-replicas 2] \
       [--storage-class cho-pd-standard] [--resource-profile small] \
       [--documents-bucket BUCKET --documents-service-account GSA_EMAIL] [--list-images]
+      [--security production --token-signing-key-version projects/.../cryptoKeyVersions/1
+       --token-service-google-account GSA_EMAIL --kubernetes-issuer URL
+       --token-public-key-file token-service.pub.pem
+       --access-team-domain TEAM.cloudflareaccess.com --access-audience AUD_TAG
+       [--access-tenant demo] [--host-environment Staging] [--platform-tenant-id ENTRA_TID]]
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import sys
 from pathlib import Path
 
@@ -163,6 +187,38 @@ DEMO_ENV = {
 }
 
 
+# ── Production security (--security production) ─────────────────────────────
+
+NAMESPACE = "cloudhealthoffice"
+
+# The projected service-account token each service presents to token-service.
+TOKEN_SERVICE_AUDIENCE = "cho-token-service"
+PROJECTED_TOKEN_VOLUME = "cho-token-service"
+PROJECTED_TOKEN_DIR = "/var/run/secrets/cho/token-service"
+PROJECTED_TOKEN_SECONDS = 3600
+
+# Deployments that never ask token-service for a service token: the portal
+# (user tokens only) and token-service itself (signs its own).
+NO_SERVICE_IDENTITY = {"portal", "token-service"}
+
+# Issuers token-service signs under, all with the one Cloud KMS key.
+USER_ISSUER = "cho-token-service"
+SERVICE_ISSUER = "cho-token-service-svc"
+WORKLOAD_ISSUER = "cho-workload"
+
+# Azure workload identity markers the source manifests carry; meaningless on GKE.
+AZURE_WORKLOAD_IDENTITY_PREFIX = "azure.workload.identity/"
+
+PRODUCTION_ENV = {
+    "SecretProvider__Provider": "None",
+    # The demo cluster holds synthetic data only: mock and synthetic-data
+    # components (ChoSyntheticData) may run on these non-Development hosts.
+    "SyntheticData__Allowed": "true",
+}
+
+KMS_VERSION_PATTERN = re.compile(r"^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+/cryptoKeyVersions/[0-9]+$")
+
+
 # --resource-profile small: CPU request per container, in millicores.
 SMALL_CPU_REQUEST_M = 50
 SMALL_CPU_REQUEST_OVERRIDES_M = {"claims-service": 250}
@@ -176,7 +232,13 @@ def cpu_millicores(value) -> int:
     return int(float(text[:-1])) if text.endswith("m") else int(float(text) * 1000)
 
 
-def host_environment(service: str) -> str:
+def production(args: argparse.Namespace) -> bool:
+    return getattr(args, "security", "demo") == "production"
+
+
+def host_environment(service: str, args: argparse.Namespace | None = None) -> str:
+    if args is not None and production(args):
+        return args.host_environment
     return "Testing" if service in TESTING_HOSTS else "Development"
 
 
@@ -237,13 +299,29 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
         return None
     if kind == "Secret" and name in MANAGED_SECRETS:
         return None
+    if kind == "ServiceAccount" and production(args):
+        annotations = doc.get("metadata", {}).get("annotations") or {}
+        for key in [k for k in annotations if k.startswith(AZURE_WORKLOAD_IDENTITY_PREFIX)]:
+            del annotations[key]
+        if name == args.token_service_account_name:
+            annotations[WORKLOAD_IDENTITY_ANNOTATION] = args.token_service_google_account
+        if annotations:
+            doc["metadata"]["annotations"] = annotations
+        else:
+            doc["metadata"].pop("annotations", None)
+        return doc
 
     fix_storage(doc, args.storage_class)
 
     if kind == "ConfigMap":
         data = doc.get("data") or {}
         if "ASPNETCORE_ENVIRONMENT" in data:
-            data["ASPNETCORE_ENVIRONMENT"] = host_environment(name.removesuffix("-config"))
+            data["ASPNETCORE_ENVIRONMENT"] = host_environment(name.removesuffix("-config"), args)
+        if production(args):
+            if name == "token-service-service-clients":
+                return None  # generated from the rendered Deployments (service_clients_config)
+            if name == "token-service-config":
+                token_service_config(data, args)
         for key, value in list(data.items()):
             if key == "Messaging__Backend" and value == "Auto":
                 data[key] = "InMemory"
@@ -252,7 +330,10 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             # holds synthetic members only, and its FHIR responses must say so.
             data["FhirAdapters__DataClassification"] = "synthetic"
         if name == "smart-auth-service-config":
-            data["SmartAuth__DevMode"] = "true"
+            if production(args):
+                data.pop("SmartAuth__DevMode", None)
+            else:
+                data["SmartAuth__DevMode"] = "true"
             # Placeholder CIDRs fail parsing at startup; there is no ingress proxy in the demo.
             for key in [k for k in data if k.startswith("SmartAuth__TrustedProxyNetworks__")]:
                 del data[key]
@@ -270,7 +351,7 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             replicas = args.benefit_plan_replicas
         elif name == "claims-examiner-service":
             replicas = 1 if args.ai_examiner else 0
-        elif name in SCALED_TO_ZERO:
+        elif name in SCALED_TO_ZERO and not production(args):
             replicas = 0
         doc["spec"]["replicas"] = replicas
 
@@ -293,9 +374,14 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
     if kind != "Deployment":
         return doc
 
+    if production(args):
+        labels = doc["spec"]["template"].setdefault("metadata", {}).setdefault("labels", {})
+        for key in [k for k in labels if k.startswith(AZURE_WORKLOAD_IDENTITY_PREFIX)]:
+            del labels[key]
+
     for container in spec.get("containers", []):
-        set_env(container, "ASPNETCORE_ENVIRONMENT", host_environment(name))
-        for key, value in DEMO_ENV.items():
+        set_env(container, "ASPNETCORE_ENVIRONMENT", host_environment(name, args))
+        for key, value in (PRODUCTION_ENV if production(args) else DEMO_ENV).items():
             set_env(container, key, value)
         if name != "portal":
             env_from = container.setdefault("envFrom", [])
@@ -324,7 +410,9 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             set_env(container, "Adjudication__Enforcement__AiMode", "BestEffort" if args.ai_examiner else "Disabled")
         if name == "work-management-service":
             for key, value in WORK_MANAGEMENT_DEMO_ENV.items():
-                set_env(container, key, value)
+                # The LocalDemo user does not exist with production security.
+                if not (production(args) and key.startswith("WorkManagement__SeedMemberUserIds")):
+                    set_env(container, key, value)
         if name == "portal":
             set_env(container, "XDG_DATA_HOME", "/tmp")
         if name == "document-service":
@@ -338,8 +426,182 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
             # The only service whose manifest and Development settings name no
             # service-token client id; the demo token config requires one.
             set_env(container, "ChoAuth__ServiceToken__ClientId", "smart-auth-service")
+        if name == "portal" and production(args):
+            portal_access_settings(container, args)
+
+    if production(args) and name not in NO_SERVICE_IDENTITY:
+        add_service_identity(doc, spec, name, args)
 
     return doc
+
+
+def env_value(container: dict, name: str) -> str | None:
+    for entry in container.get("env", []) or []:
+        if entry.get("name") == name and "value" in entry:
+            return str(entry["value"])
+    return None
+
+
+def token_service_config(data: dict, args: argparse.Namespace) -> None:
+    """token-service with production security on GKE (Cloud KMS, Kubernetes identity, Cloudflare Access)."""
+    for key in [k for k in data if k.startswith(("TokenSigning__KeyVaultKeyId", "ServiceTokens__", "WorkloadTokens__"))]:
+        del data[key]
+    data.update({
+        "ASPNETCORE_ENVIRONMENT": args.host_environment,
+        "TokenSigning__CloudKmsKeyVersion": args.token_signing_key_version,
+        "TokenSigning__Issuer": USER_ISSUER,
+        "TokenSigning__Audience": "cho-api",
+        # Empty turns platform administration off (no Entra directory in the demo).
+        "TokenService__PlatformTenantId": args.platform_tenant_id,
+        # No Argo workflows in the demo.
+        "WorkloadTokens__Enabled": "false",
+        "ServiceTokens__Enabled": "true",
+        "ServiceTokens__IdentityProvider": "Kubernetes",
+        "ServiceTokens__Kubernetes__KubernetesIssuer": args.kubernetes_issuer,
+        "ServiceTokens__Kubernetes__Audience": TOKEN_SERVICE_AUDIENCE,
+        "ServiceTokens__Issuer": SERVICE_ISSUER,
+        "ServiceTokens__TokenLifetime": "00:05:00",
+        "ServiceTokens__ServiceClientsFile": "/etc/cho/service-clients/service-clients.json",
+        "CloudflareAccess__Enabled": "true",
+        "CloudflareAccess__TeamDomain": args.access_team_domain,
+        "CloudflareAccess__Audiences__0": args.access_audience,
+    })
+    for i, tenant in enumerate(args.access_tenant):
+        data[f"CloudflareAccess__Tenants__{i}"] = tenant
+
+
+def portal_access_settings(container: dict, args: argparse.Namespace) -> None:
+    """The portal signs people in from the Cloudflare Access header; no Entra, no LocalDemo."""
+    set_env(container, "Authentication__Mode", "CloudflareAccess")
+    set_env(container, "Authentication__CloudflareAccess__TeamDomain", args.access_team_domain)
+    set_env(container, "Authentication__CloudflareAccess__Audiences__0", args.access_audience)
+    set_env(container, "Services__TokenService", "http://token-service")
+    # Synthetic claims for benefit plan validation (demo data only).
+    set_env(container, "Features__BenefitPlanSyntheticValidationEnabled", "true")
+
+
+def add_service_identity(doc: dict, spec: dict, name: str, args: argparse.Namespace) -> None:
+    """
+    The service runs as its own Kubernetes service account and presents the
+    projected token for token-service to obtain its service tokens. The
+    registration (namespace/service account -> client id) is collected for
+    token-service's registry.
+    """
+    account = spec.get("serviceAccountName") or f"{name}-sa"
+    spec["serviceAccountName"] = account
+
+    containers = spec.get("containers", [])
+    client_id = next((v for c in containers if (v := env_value(c, "ChoAuth__ServiceToken__ClientId"))), None) or name
+    for container in containers:
+        set_env(container, "ChoAuth__ServiceToken__ClientId", client_id)
+        set_env(container, "ChoAuth__ServiceToken__Credential", "KubernetesServiceAccount")
+        set_env(container, "ChoAuth__ServiceToken__ServiceAccountTokenFile", f"{PROJECTED_TOKEN_DIR}/token")
+        mounts = container.setdefault("volumeMounts", [])
+        if not any(m.get("name") == PROJECTED_TOKEN_VOLUME for m in mounts):
+            mounts.append({"name": PROJECTED_TOKEN_VOLUME, "mountPath": PROJECTED_TOKEN_DIR, "readOnly": True})
+
+    volumes = spec.setdefault("volumes", [])
+    if not any(v.get("name") == PROJECTED_TOKEN_VOLUME for v in volumes):
+        volumes.append({
+            "name": PROJECTED_TOKEN_VOLUME,
+            "projected": {"sources": [{"serviceAccountToken": {
+                "audience": TOKEN_SERVICE_AUDIENCE,
+                "expirationSeconds": PROJECTED_TOKEN_SECONDS,
+                "path": "token",
+            }}]},
+        })
+
+    args.service_clients.append({"clientId": client_id, "namespace": NAMESPACE, "serviceAccount": account})
+
+
+def service_clients_config(args: argparse.Namespace) -> dict:
+    """token-service's registry: which service account is which service. One account per client id."""
+    clients, seen_accounts, seen_ids = [], set(), set()
+    for entry in args.service_clients:
+        if entry["serviceAccount"] in seen_accounts or entry["clientId"] in seen_ids:
+            raise SystemExit(
+                f"error: service account {entry['serviceAccount']} or client id {entry['clientId']} "
+                "is used by two Deployments; token-service requires one account per service")
+        seen_accounts.add(entry["serviceAccount"])
+        seen_ids.add(entry["clientId"])
+        clients.append(entry)
+    return {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": "token-service-service-clients", "namespace": NAMESPACE},
+        "data": {"service-clients.json": json.dumps(clients, indent=2) + "\n"},
+    }
+
+
+def service_tokens_config(args: argparse.Namespace) -> dict:
+    """
+    Replaces deploy/gcp/cho-service-tokens.demo.yaml: services trust only
+    token-service's key (one key, three issuers by kind) and obtain their
+    service tokens from token-service with their projected token.
+    """
+    pem = args.token_public_key_pem
+    return {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": "cho-service-tokens", "namespace": NAMESPACE},
+        "data": {
+            "ChoAuth__Audience": "cho-api",
+            "ChoAuth__Issuers__0__Issuer": USER_ISSUER,
+            "ChoAuth__Issuers__0__Kind": "User",
+            "ChoAuth__Issuers__0__PublicKeyPem": pem,
+            "ChoAuth__Issuers__1__Issuer": SERVICE_ISSUER,
+            "ChoAuth__Issuers__1__Kind": "Service",
+            "ChoAuth__Issuers__1__PublicKeyPem": pem,
+            "ChoAuth__Issuers__2__Issuer": WORKLOAD_ISSUER,
+            "ChoAuth__Issuers__2__Kind": "Workload",
+            "ChoAuth__Issuers__2__PublicKeyPem": pem,
+            "ChoAuth__ServiceToken__Source": "TokenService",
+            "ChoAuth__ServiceToken__TokenServiceUrl": "http://token-service",
+            "ChoAuth__ServiceToken__Credential": "KubernetesServiceAccount",
+            "ChoAuth__ServiceToken__ServiceAccountTokenFile": f"{PROJECTED_TOKEN_DIR}/token",
+        },
+    }
+
+
+def missing_service_accounts(rendered: list[dict]) -> list[dict]:
+    """Service accounts the Deployments run as that no manifest defines."""
+    defined = {d["metadata"]["name"] for d in rendered if d.get("kind") == "ServiceAccount"}
+    needed = []
+    for d in rendered:
+        if d.get("kind") != "Deployment":
+            continue
+        account = (pod_spec(d) or {}).get("serviceAccountName")
+        if account and account not in defined:
+            defined.add(account)
+            needed.append({"apiVersion": "v1", "kind": "ServiceAccount",
+                           "metadata": {"name": account, "namespace": NAMESPACE}})
+    return needed
+
+
+def validate_production_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    required = {
+        "--token-signing-key-version": args.token_signing_key_version,
+        "--token-service-google-account": args.token_service_google_account,
+        "--kubernetes-issuer": args.kubernetes_issuer,
+        "--token-public-key-file": args.token_public_key_file,
+        "--access-team-domain": args.access_team_domain,
+        "--access-audience": args.access_audience,
+    }
+    missing = [flag for flag, value in required.items() if not value]
+    if missing:
+        parser.error("--security production requires " + ", ".join(missing))
+    if not KMS_VERSION_PATTERN.match(args.token_signing_key_version):
+        parser.error("--token-signing-key-version must be a full Cloud KMS key version name ending in /cryptoKeyVersions/<n>")
+    if not args.kubernetes_issuer.startswith("https://"):
+        parser.error("--kubernetes-issuer must be the cluster's https service-account issuer")
+    if args.host_environment in ("Development", "Testing"):
+        parser.error("--host-environment must not be Development or Testing: those hosts accept development keys")
+    if not args.access_tenant or any(not t or "*" in t for t in args.access_tenant):
+        parser.error("--access-tenant must name each CHO tenant explicitly")
+    pem = Path(args.token_public_key_file).read_text().strip()
+    if not pem.startswith("-----BEGIN PUBLIC KEY-----") or not pem.endswith("-----END PUBLIC KEY-----"):
+        parser.error("--token-public-key-file must hold one PEM public key (gcloud kms keys versions get-public-key)")
+    args.token_public_key_pem = pem + "\n"
 
 
 def document_service_accounts(args: argparse.Namespace) -> list[dict]:
@@ -375,7 +637,25 @@ def main() -> int:
     parser.add_argument("--documents-service-account", default="",
                         help="Google service account the document services act as (terraform output documents_service_account)")
     parser.add_argument("--list-images", action="store_true", help="Print 'name dockerfile' for each image to build, then exit")
+    parser.add_argument("--security", choices=("demo", "production"), default="demo",
+                        help="demo: development keys and LocalDemo sign-in; production: Cloud KMS, Kubernetes identity, Cloudflare Access")
+    parser.add_argument("--host-environment", default="Staging",
+                        help="ASPNETCORE_ENVIRONMENT for --security production (default: %(default)s)")
+    parser.add_argument("--token-signing-key-version", default="", help="terraform output token_signing_key_version")
+    parser.add_argument("--token-service-google-account", default="", help="terraform output token_service_google_account")
+    parser.add_argument("--token-service-account-name", default="token-service-sa",
+                        help="Kubernetes service account token-service runs as (default: %(default)s)")
+    parser.add_argument("--kubernetes-issuer", default="", help="terraform output kubernetes_service_account_issuer")
+    parser.add_argument("--token-public-key-file", default="", help="PEM public key of the token signing key version")
+    parser.add_argument("--access-team-domain", default="", help="Cloudflare Zero Trust team domain")
+    parser.add_argument("--access-audience", default="", help="Cloudflare Access application AUD tag")
+    parser.add_argument("--access-tenant", action="append", default=None,
+                        help="CHO tenant that accepts Cloudflare Access sign-in (repeatable; default demo)")
+    parser.add_argument("--platform-tenant-id", default="", help="Entra directory of platform administrators (default: none)")
     args = parser.parse_args()
+    args.service_clients = []
+    if args.access_tenant is None:
+        args.access_tenant = ["demo"]
 
     if args.list_images:
         for name, dockerfile in sorted(BUILT_IMAGES.items()):
@@ -385,6 +665,8 @@ def main() -> int:
         parser.error("--registry is required")
     if bool(args.documents_bucket) != bool(args.documents_service_account):
         parser.error("--documents-bucket and --documents-service-account go together")
+    if production(args):
+        validate_production_args(parser, args)
 
     rendered = document_service_accounts(args) if args.documents_bucket else []
     for path in manifest_paths():
@@ -397,6 +679,11 @@ def main() -> int:
             out = transform(doc, args)
             if out is not None:
                 rendered.append(out)
+
+    if production(args):
+        rendered.extend(missing_service_accounts(rendered))
+        rendered.append(service_clients_config(args))
+        rendered.append(service_tokens_config(args))
 
     yaml.safe_dump_all(rendered, sys.stdout, sort_keys=False)
     return 0

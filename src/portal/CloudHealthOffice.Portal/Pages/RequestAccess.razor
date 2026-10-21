@@ -4,6 +4,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 @inject ILogger<RequestAccess> Logger
+@inject IConfiguration Configuration
 
 <PageTitle>Request Access - Cloud Health Office</PageTitle>
 
@@ -89,7 +90,7 @@
                 <MudButton Variant="Variant.Outlined" 
                            Color="Color.Secondary" 
                            StartIcon="@Icons.Material.Filled.Logout"
-                           Href="/MicrosoftIdentity/Account/SignOut">
+                           Href="@PortalAuthMode.SignOutPath(Configuration)">
                     Sign Out
                 </MudButton>
             </MudStack>
