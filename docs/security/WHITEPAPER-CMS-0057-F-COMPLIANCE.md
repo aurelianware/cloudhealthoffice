@@ -237,12 +237,9 @@ Cloud Health Office connects to existing CAPS platforms via:
 
 The Migration Wizard automates data extraction with 95%+ auto-match capability for members, providers, and benefit plans.
 
-![Cloud Health Office Architecture](images/architecture-cloudhealthoffice-cms0057f.png)
-*Figure: Cloud Health Office integration architecture showing X12-to-FHIR transformation layer connecting legacy CAPS to modern APIs.*
-
 <!-- Architecture diagram in PlantUML format - generate PNG using: plantuml generated/architecture-diagram.puml -->
 <details>
-<summary>View Architecture Diagram (PlantUML Source)</summary>
+<summary>Architecture diagram (PlantUML source): X12-to-FHIR transformation layer connecting legacy CAPS to modern APIs</summary>
 
 ```plantuml
 @startuml architecture-cloudhealthoffice-cms0057f
@@ -523,7 +520,7 @@ Beyond direct cost savings, Cloud Health Office delivers[^AHIP2024]:
 
 ### Phased Implementation Timeline
 
-Cloud Health Office implementation follows a structured 12-16 week timeline designed for minimal disruption and maximum compliance assurance. This roadmap draws from the strategic initiatives outlined in the [2026 Product Roadmap](../ROADMAP-2026.md) and adapts them for payer-specific deployment scenarios.
+Cloud Health Office implementation follows a structured 12-16 week timeline designed for minimal disruption and maximum compliance assurance. This roadmap draws from the strategic initiatives outlined in the [2026 Product Roadmap](../features/ROADMAP-2026.md) and adapts them for payer-specific deployment scenarios.
 
 #### Implementation Phases Overview
 
@@ -765,7 +762,7 @@ Take the next step toward CMS-0057-F compliance today:
 - **🔗 Fork the Repository:** Start exploring at [github.com/aurelianware/cloudhealthoffice](https://github.com/aurelianware/cloudhealthoffice)
 - **🚀 Join Our Early Adopter Program:** Priority support, dedicated implementation assistance, and influence on roadmap priorities. Contact: [contact@aurelianware.com](mailto:contact@aurelianware.com)
 - **📅 Schedule a Demo:** See Cloud Health Office in action with your specific claims adjudication systems environment. [Book via Calendly](https://calendly.com/aurelianware/cloudhealthoffice-demo)
-- **🤝 Contribute to Governance:** Shape custom features, propose enhancements, and participate in community roadmap decisions. See [CONTRIBUTING.md](../CONTRIBUTING.md)
+- **🤝 Contribute to Governance:** Shape custom features, propose enhancements, and participate in community roadmap decisions. See [CONTRIBUTING.md](../../CONTRIBUTING.md)
 
 ### Final Thought
 

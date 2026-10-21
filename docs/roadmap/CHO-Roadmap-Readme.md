@@ -241,5 +241,4 @@ Complete X12 transaction support: 270/271, 276/277, 278, 834, 835, 837 (P/I enco
 
 - [Enhancement Checklist](CHO-ENHANCEMENT-CHECKLIST.md) — Sprint 1–2 execution tracker
 - [Enhancement Status](CHO-ENHANCEMENT-STATUS.md) — Sprint 1–2 detailed status
-- [Copilot Prompts](CHO-COPILOT-PROMPTS.md) — AI-assisted development prompts for each roadmap item
-- [Assessment](../../CHO-Comprehensive-Assessment-and-Roadmap.md) — Full codebase assessment
+- [Capability ledger](../CAPABILITY_RECONCILIATION.md) — Reconciled status of every capability
