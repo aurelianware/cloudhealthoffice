@@ -64,7 +64,7 @@
 
       <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-bottom: 40px;">
         <a href="#quickstart" class="button-primary">Get Started in 15 Minutes</a>
-        <a href="https://sandbox.cloudhealthoffice.com" class="button-secondary" target="_blank">Try Sandbox</a>
+        <a href="/api-explorer" class="button-secondary" target="_blank">Explore the APIs</a>
       </div>
 
       <div style="display: flex; gap: 30px; justify-content: center; flex-wrap: wrap; font-size: 0.9rem; color: var(--text-secondary);">
@@ -281,16 +281,16 @@ docker compose up -d
           
           <pre style="background: #000; padding: 20px; border-radius: 8px; overflow-x: auto;"><code style="color: var(--neon-green);"># Test Patient Access API
 curl -H "Authorization: Bearer test-token" \
-  https://sandbox.cloudhealthoffice.com/fhir/r4/Patient/PAT001
+  /api-explorer/fhir/r4/Patient/PAT001
 
 # Test Payer-to-Payer $member-match
-curl -X POST https://sandbox.cloudhealthoffice.com/fhir/$member-match \
+curl -X POST /api-explorer/fhir/$member-match \
   -H "Authorization: Bearer test-token" \
   -H "Content-Type: application/fhir+json" \
   -d @member-match-request.json
 
 # Test Claims Scrubbing
-curl -X POST https://sandbox.cloudhealthoffice.com/scrubbing/v1/claims/validate \
+curl -X POST /api-explorer/scrubbing/v1/claims/validate \
   -H "X-API-Key: test_key" \
   -H "Content-Type: application/fhir+json" \
   -d @claim.json</code></pre>
@@ -402,8 +402,8 @@ Console.WriteLine(patient.Name[0].Given.First());</code></pre>
         <a href="https://github.com/aurelianware/cloudhealthoffice" class="button-secondary" target="_blank">
           📖 Documentation
         </a>
-        <a href="https://sandbox.cloudhealthoffice.com" class="button-secondary" target="_blank">
-          🧪 Try Sandbox
+        <a href="/api-explorer" class="button-secondary" target="_blank">
+          Explore the APIs
         </a>
         <a href="https://github.com/aurelianware/cloudhealthoffice/issues" class="button-secondary" target="_blank">
           🐛 Report Issues

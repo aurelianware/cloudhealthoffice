@@ -168,6 +168,13 @@ for (const entry of readdirSync(siteRoot, { withFileTypes: true })) {
 
 processHtmlFiles(outputDir);
 
+// Publish the OpenAPI specifications from api/openapi for /api-explorer.
+const openapiSource = join(siteRoot, '..', '..', 'api', 'openapi');
+mkdirSync(join(outputDir, 'openapi'), { recursive: true });
+for (const spec of readdirSync(openapiSource)) {
+  if (/\.ya?ml$/.test(spec)) cpSync(join(openapiSource, spec), join(outputDir, 'openapi', spec));
+}
+
 writeFileSync(join(outputDir, '.nojekyll'), '');
 
 if (googleAnalyticsId) {

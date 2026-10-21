@@ -33,7 +33,8 @@ Cloud Health Office is a source-available, FHIR-native health plan administratio
 This promise expresses an aspiration for customer control; it grants no additional ownership, portability or licensing rights.
 **Interoperability line:** Interoperability without giving up control. Connect once, in an environment you own.
 **Primary CTA:** Book a readiness review (→ /contact?interest=cms0057-assessment).
-**Secondary CTA:** Try the API sandbox.
+**Secondary CTA:** Explore the APIs (→ /api-explorer, read-only OpenAPI specifications).
+**Developer CTA:** Request a sandbox (→ /contact?interest=sandbox-access). Sandboxes are provisioned per request with synthetic data; never describe a self-serve or always-on sandbox until one exists.
 **Audience paths:** Health plans · Technology vendors · Channel and service partners · Investors · Payer architects and engineers (developer hub at /developers).
 **License disclosure:** Source-available under BSL 1.1. Production use requires a commercial license.
 **Progression:** Foothold → Domain Cutover → Core Modernization. Each expansion requires evidence, acceptance criteria, reconciliation and rollback planning.

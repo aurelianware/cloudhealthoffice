@@ -43,7 +43,7 @@ const NAV_GROUPS = [
     ['/docs', 'Documentation'],
     ['/docs/quickstart', 'Quickstart'],
     ['/docs/api', 'API reference'],
-    ['https://sandbox.cloudhealthoffice.com', 'API sandbox'],
+    ['/api-explorer', 'API explorer'],
     ['https://github.com/aurelianware/cloudhealthoffice', 'Source on GitHub']
   ]],
   ['/evidence', 'Evidence'],

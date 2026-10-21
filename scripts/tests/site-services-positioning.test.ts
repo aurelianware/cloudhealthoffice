@@ -365,6 +365,7 @@ describe('Services & deployment positioning', () => {
       'channel-partner',
       'investor',
       'business-case-kit',
+      'sandbox-access',
       'support',
       'other'
     ];
