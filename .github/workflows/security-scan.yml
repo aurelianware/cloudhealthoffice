@@ -64,15 +64,22 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore the solution
-        run: dotnet restore cloudhealthoffice-main.sln
+      # Every tracked project, not just the ones in cloudhealthoffice-main.sln
+      # (tools, benchmark and some services are outside it): a scratch
+      # solution of all of them.
+      - name: Restore every project
+        run: |
+          set -euo pipefail
+          dotnet new sln --name vuln-scan --output "$RUNNER_TEMP/vuln-scan" --force
+          git ls-files '*.csproj' | xargs dotnet sln "$RUNNER_TEMP/vuln-scan/vuln-scan.sln" add
+          dotnet restore "$RUNNER_TEMP/vuln-scan/vuln-scan.sln"
 
-      # Every project, including transitive packages. A High or Critical
-      # advisory fails the build; Moderate and Low are reported only.
+      # Including transitive packages. A High or Critical advisory fails the
+      # build; Moderate and Low are reported only.
       - name: Check for vulnerable packages
         run: |
           set -euo pipefail
-          dotnet list cloudhealthoffice-main.sln package --vulnerable --include-transitive 2>&1 | tee vuln-check.txt
+          dotnet list "$RUNNER_TEMP/vuln-scan/vuln-scan.sln" package --vulnerable --include-transitive 2>&1 | tee vuln-check.txt
           {
             echo "## .NET vulnerable packages"
             echo '```'
