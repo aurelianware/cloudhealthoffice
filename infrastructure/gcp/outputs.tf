@@ -27,3 +27,13 @@ output "project_id" {
   description = "GitHub variable GCP_PROJECT_ID."
   value       = var.project_id
 }
+
+output "documents_bucket" {
+  description = "GitHub variable DOCUMENTS_BUCKET (the services' DocumentStore:Gcs:Bucket)."
+  value       = google_storage_bucket.documents.name
+}
+
+output "documents_service_account" {
+  description = "GitHub variable DOCUMENTS_SERVICE_ACCOUNT (the Google identity of the document services)."
+  value       = google_service_account.documents.email
+}

@@ -1,3 +1,4 @@
+using CloudHealthOffice.DocumentStore;
 using CloudHealthOffice.Infrastructure.Security;
 using MemberDocumentService.Models;
 using MemberDocumentService.Repositories;
@@ -14,7 +15,7 @@ namespace MemberDocumentService.Tests.Controllers;
 public class MemberDocumentsControllerTests
 {
     private readonly Mock<IMemberDocumentRepository> _repositoryMock = new();
-    private readonly Mock<IMemberDocumentBlobService> _blobServiceMock = new();
+    private readonly Mock<IDocumentStore> _documentsMock = new();
     private readonly IRetentionPolicyService _retentionPolicyService = new RetentionPolicyService();
 
     private MemberDocumentsController CreateController(string tenantId = "test-tenant")
@@ -28,7 +29,7 @@ public class MemberDocumentsControllerTests
 
         var controller = new MemberDocumentsController(
             _repositoryMock.Object,
-            _blobServiceMock.Object,
+            _documentsMock.Object,
             _retentionPolicyService,
             new HttpContextCurrentActor(new HttpContextAccessor { HttpContext = context }),
             MemberDocumentUploadPolicy.Default,
@@ -118,9 +119,9 @@ public class MemberDocumentsControllerTests
         };
         _repositoryMock.Setup(r => r.GetByIdAsync("test-tenant", "doc1")).ReturnsAsync(doc);
         _repositoryMock.Setup(r => r.UpdateAsync(It.IsAny<MemberDocument>())).ReturnsAsync((MemberDocument d) => d);
-        _blobServiceMock.Setup(b => b.SetTagsAsync(
+        _documentsMock.Setup(b => b.SetTagsAsync(
             It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var controller = CreateController();
@@ -130,10 +131,10 @@ public class MemberDocumentsControllerTests
         var updated = ok.Value.Should().BeOfType<MemberDocument>().Subject;
         updated.LegalHold.Should().BeTrue();
 
-        _blobServiceMock.Verify(b => b.SetTagsAsync(
+        _documentsMock.Verify(b => b.SetTagsAsync(
             "member-documents",
             "members/m1/doc1.pdf",
-            It.Is<IDictionary<string, string>>(tags => tags["legalHold"] == "true"),
+            It.Is<IReadOnlyDictionary<string, string>>(tags => tags["legalHold"] == "true"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -166,12 +167,12 @@ public class MemberDocumentsControllerTests
         };
         _repositoryMock.Setup(r => r.GetByIdAsync("test-tenant", "doc2")).ReturnsAsync(doc);
         _repositoryMock.Setup(r => r.UpdateAsync(It.IsAny<MemberDocument>())).ReturnsAsync((MemberDocument d) => d);
-        _blobServiceMock.Setup(b => b.SetTagsAsync(
+        _documentsMock.Setup(b => b.SetTagsAsync(
             It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        _blobServiceMock.Setup(b => b.GetBlobSizeAsync("member-documents", "members/m2/doc2.pdf", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(4096L);
+        _documentsMock.Setup(b => b.GetPropertiesAsync("member-documents", "members/m2/doc2.pdf", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DocumentProperties { SizeBytes = 4096L });
 
         var controller = CreateController();
         var result = await controller.FinalizeUpload("doc2", CancellationToken.None);
@@ -180,10 +181,10 @@ public class MemberDocumentsControllerTests
         var updated = ok.Value.Should().BeOfType<MemberDocument>().Subject;
         updated.SizeBytes.Should().Be(4096L);
 
-        _blobServiceMock.Verify(b => b.SetTagsAsync(
+        _documentsMock.Verify(b => b.SetTagsAsync(
             "member-documents",
             "members/m2/doc2.pdf",
-            It.Is<IDictionary<string, string>>(tags =>
+            It.Is<IReadOnlyDictionary<string, string>>(tags =>
                 tags.ContainsKey("retentionPolicyId") && tags.ContainsKey("legalHold")),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -235,8 +236,8 @@ public class MemberDocumentsControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
         _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
-        _blobServiceMock.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _documentsMock.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -254,8 +255,8 @@ public class MemberDocumentsControllerTests
         updated.LegalHoldHistory.Should().HaveCount(2);
         updated.LegalHoldHistory[^1].Should().Match<LegalHoldEvent>(e =>
             e.Action == LegalHoldAction.Released && e.Actor == "compliance-1" && e.Reason == "case dismissed");
-        _blobServiceMock.Verify(b => b.SetTagsAsync("member-documents", "tenants/test-tenant/members/m3/doc3.pdf",
-            It.Is<IDictionary<string, string>>(tags => tags["legalHold"] == "false"), It.IsAny<CancellationToken>()), Times.Once);
+        _documentsMock.Verify(b => b.SetTagsAsync("member-documents", "tenants/test-tenant/members/m3/doc3.pdf",
+            It.Is<IReadOnlyDictionary<string, string>>(tags => tags["legalHold"] == "false"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -267,6 +268,6 @@ public class MemberDocumentsControllerTests
 
         result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status409Conflict);
         _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
-        _blobServiceMock.VerifyNoOtherCalls();
+        _documentsMock.VerifyNoOtherCalls();
     }
 }
