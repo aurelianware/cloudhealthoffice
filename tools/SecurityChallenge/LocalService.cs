@@ -12,6 +12,7 @@ internal sealed class LocalService : IAsyncDisposable
     private readonly string? _contentRoot;
     private readonly string _name;
     private string _startupCategory = "UNCLASSIFIED";
+    private string _startupException = "NONE";
     public HttpClient Http { get; }
 
     public LocalService(string assembly, string mongoConnection, string database, bool development, IReadOnlyDictionary<string, string?>? overrides = null)
@@ -67,6 +68,12 @@ internal sealed class LocalService : IAsyncDisposable
 
     private void Log(object sender, DataReceivedEventArgs args)
     {
+        if (args.Data?.StartsWith("Unhandled exception. ", StringComparison.Ordinal) == true)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(args.Data,
+                @"Unhandled exception\. (?<type>[A-Za-z_][A-Za-z0-9_.]*Exception)\b");
+            if (match.Success) _startupException = match.Groups["type"].Value;
+        }
         // Safe mechanism categories only: never expose raw startup messages in CI.
         foreach (var (marker, category) in new[]
         {
@@ -74,7 +81,8 @@ internal sealed class LocalService : IAsyncDisposable
             ("Out of memory", "OUT_OF_MEMORY"), ("Failed to create CoreCLR", "RUNTIME_INITIALIZATION"),
             ("SmartTrustValidationException", "SMART_TRUST_CONFIGURATION"),
             ("Unable to resolve service for type", "DEPENDENCY_RESOLUTION"),
-            ("MongoCommandException", "MONGO_COMMAND"), ("MongoConnectionException", "MONGO_CONNECTION")
+            ("MongoWriteException", "MONGO_WRITE"), ("MongoBulkWriteException", "MONGO_WRITE"),
+            ("E11000 duplicate key", "MONGO_DUPLICATE_KEY"), ("MongoCommandException", "MONGO_COMMAND"), ("MongoConnectionException", "MONGO_CONNECTION")
         })
             if (args.Data?.Contains(marker, StringComparison.OrdinalIgnoreCase) == true) _startupCategory = category;
         if (Environment.GetEnvironmentVariable("CHO_SECURITY_LAB_DEBUG") == "1") Console.Error.WriteLine(args.Data);
@@ -94,7 +102,7 @@ internal sealed class LocalService : IAsyncDisposable
             await Task.Delay(200, deadline.Token);
         }
         await _process.WaitForExitAsync();
-        Console.Error.WriteLine($"Owned host startup failed: {_name}; exit={_process.ExitCode}; category={_startupCategory}");
+        Console.Error.WriteLine($"Owned host startup failed: {_name}; exit={_process.ExitCode}; category={_startupCategory}; exception={_startupException}");
         throw new InvalidOperationException("Local process exited before readiness");
     }
 
