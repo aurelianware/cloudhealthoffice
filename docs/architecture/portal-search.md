@@ -134,7 +134,7 @@ Work-list permissions can lift the limit. A role with `claims:worklist` can run 
 **Rule:**
 - **Non-PHI criteria go in the query string,** e.g. `/claims?status=pended&pend=P123&received=last30`.
 - **PHI criteria go in a saved search handle,** e.g. `/claims?s=7Kq2…`. The portal stores the criteria server-side, per user, and the handle resolves only for users with that module's read permission in the same tenant. Unsaved handles expire after 24 hours.
-- **Portal-to-service calls carry criteria in a POST body,** never a query string. Today Members, Providers and several finance pages send names and IDs as unescaped query parameters.
+- **Portal-to-service calls carry criteria in a POST body,** never a query string. Today Members sends names and IDs in the query string (escaped), and Providers, Sponsors and Capitation send them unescaped.
 
 **Saved searches:**
 - They are personal, or shared with a team (a work-management group).
@@ -211,7 +211,7 @@ Work-list permissions can lift the limit. A role with `claims:worklist` can run 
 **Backend today → needed** (claims-service)
 - **Exists:**
   - claim # (exact); auth # (header or line); pend and denial codes; received and adjudicated ranges; LOB;
-  - member and NPI (billing or rendering), on GET only;
+  - member and provider (NPI, billing or rendering);
   - real total count on POST.
 - **Fix:** POST ignores `MemberName`, `ProviderName`, `ClaimType`, `SortBy` and `SortOrder`. DOS filtering is containment, not overlap.
 - **Add:**
@@ -282,7 +282,7 @@ Work-list permissions can lift the limit. A role with `claims:worklist` can run 
   - coverage-as-of joined from coverage-service; PCP.
 
   coverage-service ignores `lineOfBusiness` and `asOfDate` today.
-- **Indexes:** none exist on `Members`. Add tenant + LastNameKey + FirstNameKey + DOB; tenant + DOB; tenant + Identifiers.Hash; tenant + SubscriberMemberId; tenant + GroupNumber; tenant + Phone; tenant + LastNamePhonetic.
+- **Indexes:** tenant + member ID, tenant + DOB and tenant + subscriber ID exist (`MemberIndexInitializer`). Add tenant + LastNameKey + FirstNameKey + DOB; tenant + Identifiers.Hash; tenant + GroupNumber; tenant + Phone; tenant + LastNamePhonetic.
 
 ### 4.3 Providers — `/providers`
 
@@ -422,7 +422,7 @@ Covered briefly because it shares the pattern. The case model is in `appeals-cas
 - **Selective criteria:** none (not PHI).
 
 **Backend today → needed** (benefit-plan-service)
-- **Exists:** payer, plan type and active filters, but the service loads the first 500 plans and filters in memory. No paging parameters.
+- **Exists:** payer, plan type and active filters. Plan type is filtered in the database; payer and active-only are applied in memory after a 500-row fetch. No paging parameters.
 - **Fix:** page and filter in the database; tenant-scoped indexes (today's two indexes lack the tenant).
 - **Add:** external IDs; plan year; status; service area; network; sponsor (joined); name tokens.
 
@@ -454,7 +454,9 @@ Two jobs, which need two different tools.
 - **Results** are benefit rows grouped by plan: Plan · Benefit · Tier · Cost share · Limit · PA · Effective. Each row opens the plan on that benefit.
 - **Bulk action:** "change in all selected plans" goes through plan versioning (`plan-versioning.md`) as a draft, never a live edit.
 
-**Backend today → needed:** only per-plan `GET {id}/benefits` exists. Add a cross-plan benefit query, and a benefit-answer endpoint (member + service + DOS + network status).
+**Backend today → needed:**
+- **Exists:** per-plan `GET {id}/benefits`; `GET {planId}/member-view?serviceDate=`, a categorized benefit view as of a date; and `POST estimate`, a cost estimate.
+- **Add:** a cross-plan benefit query. The benefit answer should build on `member-view` and `estimate` rather than a new endpoint, adding member + service code + network status as inputs.
 
 ### 5.3 Sponsors / groups — `/sponsors`
 
@@ -466,7 +468,7 @@ Two jobs, which need two different tools.
 
 - **ID box:** group number; TIN/EIN.
 - **Filters:** name (word prefix); LOB; status; renewal/anniversary month; broker; state; size band; plan offered; billing method (list bill, self bill).
-- **Backend:** today there is no name or group search, only an exact group lookup, and the portal filters everything client-side. Add name tokens, TIN, renewal month and indexes; the collection has none today.
+- **Backend:** the list filters by status, LOB and active-only; there is no name or group search, only an exact group lookup. The portal sends `?search=`, which the server ignores, and filters everything client-side. Add name tokens, TIN, renewal month and indexes; the collection has none today.
 
 ## 6. Finance
 
@@ -586,11 +588,10 @@ Premium billing covers groups (list bills) and individuals (ACA, Medicare Advant
 - **ID box:** statement #; run #; contract #; disbursement trace #.
 - **Filters:** provider (NPI, TIN, name); contract; period; LOB; statement status; has retro adjustments; amount range; member count change over N%.
 - **Backend:**
-  - statements need npi + period, or status;
-  - a period-only query returns 400;
+  - statements filter by NPI (optionally with a period) or by status; a period-only query returns 400, and no filters returns Generated statements;
   - no paging on statements;
-  - contracts ignore `planId`.
-- **Portal:** rows link to `/capitation/statements/{id}`, which no page serves.
+  - with `planId`, contracts ignore every other filter and paging.
+- **Portal:** rows link to `/capitation/statements/{id}`, but the statement page is served at `/finance/contracts/statements/{id}`.
 
 ### 6.5 Provider contracts — `/finance/contracts`
 
@@ -602,7 +603,7 @@ Premium billing covers groups (list bills) and individuals (ACA, Medicare Advant
 
 - **ID box:** contract #; TIN; NPI.
 - **Filters:** provider/group name (word prefix); LOB; network; payment methodology (FFS, % of Medicare, case rate, capitation, VBC); fee schedule; status; effective/end range; ends within N days; auto-renew.
-- **Backend:** contract # lookup and exact NPI, LOB, status, methodology and network filters exist. Add TIN, name, fee schedule, end-date range and totals.
+- **Backend:** contract # lookup and exact NPI, LOB, status, methodology and network filters exist. Add TIN, name, fee schedule, end-date range and a total count (the repository returns none today).
 
 ## 7. How it's built
 
