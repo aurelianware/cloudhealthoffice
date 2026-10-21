@@ -1,4 +1,4 @@
-using Azure;
+using CloudHealthOffice.DocumentStore;
 using CloudHealthOffice.Infrastructure.Security;
 using MemberDocumentService.Models;
 using MemberDocumentService.Repositories;
@@ -29,12 +29,12 @@ namespace MemberDocumentService.Controllers;
 public class MemberDocumentsController : ControllerBase
 {
     private const string DefaultContainer = "member-documents";
-    private static readonly TimeSpan UploadSasLifetime = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan UploadLinkLifetime = TimeSpan.FromMinutes(15);
 
     private string TenantId => _actor.TenantId;
 
     private readonly IMemberDocumentRepository _repository;
-    private readonly IMemberDocumentBlobService _blobService;
+    private readonly IDocumentStore _documents;
     private readonly IRetentionPolicyService _retentionPolicyService;
     private readonly ICurrentActor _actor;
     private readonly MemberDocumentUploadPolicy _uploadPolicy;
@@ -42,14 +42,14 @@ public class MemberDocumentsController : ControllerBase
 
     public MemberDocumentsController(
         IMemberDocumentRepository repository,
-        IMemberDocumentBlobService blobService,
+        IDocumentStore documents,
         IRetentionPolicyService retentionPolicyService,
         ICurrentActor actor,
         MemberDocumentUploadPolicy uploadPolicy,
         ILogger<MemberDocumentsController> logger)
     {
         _repository = repository;
-        _blobService = blobService;
+        _documents = documents;
         _retentionPolicyService = retentionPolicyService;
         _actor = actor;
         _uploadPolicy = uploadPolicy;
@@ -57,7 +57,8 @@ public class MemberDocumentsController : ControllerBase
     }
 
     /// <summary>
-    /// Pre-signed upload: returns a write-only SAS URL for one staging blob.
+    /// Pre-signed upload: returns a write-only upload link for one staging blob.
+    /// The client PUTs the bytes to UploadUrl with every UploadHeaders entry.
     /// Its own action because a JSON body never reached the old shared
     /// [FromForm] action (form binding rejected it with 400).
     /// </summary>
@@ -126,7 +127,7 @@ public class MemberDocumentsController : ControllerBase
 
         var tags = BuildLifecycleTags(retention.PolicyId, retention.RetentionUntilDate, formRequest.LegalHold);
 
-        var sizeBytes = await _blobService.UploadAsync(
+        var uploaded = await _documents.UploadAsync(
             DefaultContainer,
             blobPath,
             stream,
@@ -151,7 +152,7 @@ public class MemberDocumentsController : ControllerBase
             BlobContainer = DefaultContainer,
             BlobPath = blobPath,
             ContentType = contentType,
-            SizeBytes = sizeBytes,
+            SizeBytes = uploaded.SizeBytes,
             ContentHashSha256 = hash,
             UploadedBy = _actor.UserId,
             UploadedDate = DateTime.UtcNow,
@@ -197,7 +198,17 @@ public class MemberDocumentsController : ControllerBase
             return Conflict("The upload for this document has not been finalized.");
         }
 
-        var stream = await _blobService.DownloadAsync(doc.BlobContainer, doc.BlobPath, ct);
+        Stream stream;
+        try
+        {
+            stream = await _documents.DownloadAsync(doc.BlobContainer, doc.BlobPath, ct);
+        }
+        catch (DocumentNotFoundException)
+        {
+            _logger.LogWarning("Member document {TenantId}/{DocumentId} has a record but no stored content",
+                LogSanitizer.Sanitize(doc.TenantId), LogSanitizer.Sanitize(doc.Id));
+            return NotFound();
+        }
         var fileName = $"{doc.Id}{Path.GetExtension(doc.BlobPath)}";
         // Always an attachment, never sniffed into something the browser renders.
         Response.Headers["X-Content-Type-Options"] = "nosniff";
@@ -267,7 +278,7 @@ public class MemberDocumentsController : ControllerBase
 
         var retention = _retentionPolicyService.ResolvePolicy(doc.StateCode, doc.CoverageTerminationDate, doc.RetentionPolicyId);
         var tags = BuildLifecycleTags(retention.PolicyId, retention.RetentionUntilDate, request.LegalHold);
-        await _blobService.SetTagsAsync(doc.BlobContainer, doc.BlobPath, tags, ct);
+        await _documents.SetTagsAsync(doc.BlobContainer, doc.BlobPath, tags, ct);
 
         return Ok(updated);
     }
@@ -275,9 +286,9 @@ public class MemberDocumentsController : ControllerBase
     /// <summary>
     /// Finalizes a pre-signed upload by applying blob lifecycle tags (retention/legalHold)
     /// and updating the DB record with the actual blob size.  Call this endpoint after the
-    /// client has completed the direct-to-blob PUT using the SAS URL returned by the
+    /// client has completed the direct-to-storage PUT using the upload link returned by the
     /// pre-signed upload flow.
-    /// The SAS URL only reaches a staging blob. Finalize reads it, checks the
+    /// The upload link only reaches a staging blob. Finalize reads it, checks the
     /// size limit and that the bytes match the declared content type, hashes it,
     /// writes it to the document's real path and deletes the staging blob. A
     /// rejected upload is deleted and the document stays undownloadable.
@@ -308,10 +319,10 @@ public class MemberDocumentsController : ControllerBase
         // Apply lifecycle tags that were deferred because the blob didn't exist yet.
         var retention = _retentionPolicyService.ResolvePolicy(doc.StateCode, doc.CoverageTerminationDate, doc.RetentionPolicyId);
         var tags = BuildLifecycleTags(retention.PolicyId, retention.RetentionUntilDate, doc.LegalHold);
-        await _blobService.SetTagsAsync(doc.BlobContainer, doc.BlobPath, tags, ct);
+        await _documents.SetTagsAsync(doc.BlobContainer, doc.BlobPath, tags, ct);
 
         // Sync the blob size into the metadata record.
-        doc.SizeBytes = await _blobService.GetBlobSizeAsync(doc.BlobContainer, doc.BlobPath, ct);
+        doc.SizeBytes = (await _documents.GetPropertiesAsync(doc.BlobContainer, doc.BlobPath, ct)).SizeBytes;
         MemberDocument updated;
         try
         {
@@ -383,24 +394,44 @@ public class MemberDocumentsController : ControllerBase
     private async Task<IActionResult> FinalizePendingUploadAsync(MemberDocument doc, CancellationToken ct)
     {
         var stagingPath = doc.PendingUploadBlobPath!;
+
+        // Check the stored size before reading anything: an upload link cannot
+        // cap the size on every cloud, so an oversize upload is refused here
+        // without pulling it into the pod.
+        DocumentProperties stagedProperties;
+        try
+        {
+            stagedProperties = await _documents.GetPropertiesAsync(doc.BlobContainer, stagingPath, ct);
+        }
+        catch (DocumentNotFoundException)
+        {
+            return Conflict("Nothing has been uploaded for this document yet.");
+        }
+        if (stagedProperties.SizeBytes > _uploadPolicy.MaxUploadBytes)
+        {
+            await _documents.DeleteAsync(doc.BlobContainer, stagingPath, ct);
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.");
+        }
+
         using var buffer = new MemoryStream();
         try
         {
-            await using var staged = await _blobService.DownloadAsync(doc.BlobContainer, stagingPath, ct);
+            await using var staged = await _documents.DownloadAsync(doc.BlobContainer, stagingPath, ct);
             var chunk = new byte[81920];
             int read;
             while ((read = await staged.ReadAsync(chunk, ct)) > 0)
             {
                 if (buffer.Length + read > _uploadPolicy.MaxUploadBytes)
                 {
-                    await _blobService.DeleteIfExistsAsync(doc.BlobContainer, stagingPath, ct);
+                    await _documents.DeleteAsync(doc.BlobContainer, stagingPath, ct);
                     return StatusCode(StatusCodes.Status413PayloadTooLarge,
                         $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.");
                 }
                 buffer.Write(chunk, 0, read);
             }
         }
-        catch (RequestFailedException ex) when (ex.Status == StatusCodes.Status404NotFound)
+        catch (DocumentNotFoundException)
         {
             return Conflict("Nothing has been uploaded for this document yet.");
         }
@@ -408,7 +439,7 @@ public class MemberDocumentsController : ControllerBase
         if (buffer.Length == 0
             || !MemberDocumentUploadPolicy.MatchesSignature(doc.ContentType, buffer.GetBuffer().AsSpan(0, (int)Math.Min(buffer.Length, 16))))
         {
-            await _blobService.DeleteIfExistsAsync(doc.BlobContainer, stagingPath, ct);
+            await _documents.DeleteAsync(doc.BlobContainer, stagingPath, ct);
             return StatusCode(StatusCodes.Status415UnsupportedMediaType,
                 $"The uploaded content is not {doc.ContentType}; the upload was discarded.");
         }
@@ -419,7 +450,7 @@ public class MemberDocumentsController : ControllerBase
 
         var retention = _retentionPolicyService.ResolvePolicy(doc.StateCode, doc.CoverageTerminationDate, doc.RetentionPolicyId);
         var tags = BuildLifecycleTags(retention.PolicyId, retention.RetentionUntilDate, doc.LegalHold);
-        doc.SizeBytes = await _blobService.UploadAsync(doc.BlobContainer, doc.BlobPath, buffer, doc.ContentType, tags, ct);
+        doc.SizeBytes = (await _documents.UploadAsync(doc.BlobContainer, doc.BlobPath, buffer, doc.ContentType, tags, ct)).SizeBytes;
         doc.ContentHashSha256 = hash;
         doc.PendingUploadBlobPath = null;
         MemberDocument updated;
@@ -432,7 +463,7 @@ public class MemberDocumentsController : ControllerBase
             return ConcurrencyConflict();
         }
 
-        await _blobService.DeleteIfExistsAsync(doc.BlobContainer, stagingPath, ct);
+        await _documents.DeleteAsync(doc.BlobContainer, stagingPath, ct);
         return Ok(updated);
     }
 
@@ -468,13 +499,13 @@ public class MemberDocumentsController : ControllerBase
         var documentId = Guid.NewGuid().ToString();
         var blobPath = MemberDocumentUploadPolicy.BuildBlobPath(TenantId, request.MemberId, documentId, contentType, request.FileName);
         var stagingPath = $"{blobPath}.upload";
-        var expires = DateTimeOffset.UtcNow.Add(UploadSasLifetime);
+        var expires = DateTimeOffset.UtcNow.Add(UploadLinkLifetime);
 
-        var uploadUri = _blobService.GenerateUploadSasUri(DefaultContainer, stagingPath, contentType, expires);
-        if (uploadUri == null)
+        var uploadLink = await _documents.CreateUploadLinkAsync(DefaultContainer, stagingPath, contentType, expires, ct);
+        if (uploadLink == null)
         {
             return StatusCode(StatusCodes.Status501NotImplemented,
-                "Pre-signed URL flow requires account-key-backed blob credentials.");
+                "Pre-signed uploads need storage credentials that can sign upload links; upload the file with multipart/form-data instead.");
         }
 
         var document = new MemberDocument
@@ -510,7 +541,9 @@ public class MemberDocumentsController : ControllerBase
         return Ok(new PresignedUploadResponse
         {
             DocumentId = documentId,
-            UploadUrl = uploadUri.ToString(),
+            UploadUrl = uploadLink.Url.ToString(),
+            UploadMethod = uploadLink.Method,
+            UploadHeaders = new Dictionary<string, string>(uploadLink.Headers),
             BlobPath = stagingPath,
             ExpiresAtUtc = expires.UtcDateTime
         });
@@ -580,7 +613,7 @@ public class MemberDocumentsController : ControllerBase
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
-    private static IDictionary<string, string> BuildLifecycleTags(string retentionPolicyId, DateTime retentionUntilDate, bool legalHold)
+    private static IReadOnlyDictionary<string, string> BuildLifecycleTags(string retentionPolicyId, DateTime retentionUntilDate, bool legalHold)
     {
         return new Dictionary<string, string>
         {

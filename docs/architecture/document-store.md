@@ -1,6 +1,6 @@
 # Document store: one home for every document plan operations touch
 
-**Status:** Draft for review (2026-10-15)
+**Status:** Draft for review (2026-10-15). Step 1 of the build order (storage providers) is built (2026-10-20); the catalog is next. Decided: the catalog is its own service (§10, question 1).
 **Scope:** Where documents live, how they get in, how they link to the work they support, and who may see them:
 - claim attachments and claim RFAI responses;
 - authorization clinicals and CMS-0057-F prior-auth documents (CRD/DTR/PAS);
@@ -28,9 +28,9 @@ CHO already has four document paths, each built for one use:
 
 | Piece | What it does | Gaps |
 |---|---|---|
-| `CloudHealthOffice.DocumentStore` (`IDocumentStore`) | Upload / download / exists / delete against a container and blob name. | **Azure Blob and in-memory only**, so a GKE or AWS deployment has no durable provider. No catalog, versioning or access control. |
+| `CloudHealthOffice.DocumentStore` (`IDocumentStore`) | Upload (with tags) / download / exists / delete / tags / properties / pre-signed upload links against a container and blob name. Azure Blob, Google Cloud Storage, S3 and in-memory providers, chosen by `DocumentStore:Provider` (`AddChoDocumentStore`); one contract test suite runs every provider against its emulator. | No catalog, versioning or access control. |
 | **attachment-service** (`Attachment`) | X12 275 and portal uploads. One optional `ClaimId`, `AuthorizationId` and `AppealId` each, plus an `RFAIReference`. Generates 999/824 acknowledgments. Stores through `IDocumentStore`. | One link per kind, so a document can't support two claims. No retention, legal hold, sensitivity or access audit. Download streams to any caller in the tenant. |
-| **member-document-service** (`MemberDocument`) | Member documents. Has the most mature model: retention policy (`DEFAULT-10Y`), legal hold with history, SHA-256 hash, content sniffing, two-phase upload (pending → finalize), and a FHIR `DocumentReference` endpoint. | Uses its own `BlobServiceClient`, not `IDocumentStore`, so it's Azure-only. Member-scoped only. |
+| **member-document-service** (`MemberDocument`) | Member documents. Has the most mature model: retention policy (`DEFAULT-10Y`), legal hold with history, SHA-256 hash, content sniffing, two-phase upload (pending → finalize), and a FHIR `DocumentReference` endpoint. | Member-scoped only. (Stores through `IDocumentStore` since step 1, so it runs on any of the three clouds.) |
 | **rfai-service** (`RfaiCase`) | Authorization RFAIs (CDex Task, PAS-07). Received attachments carry an attachment control number, storage key and hash. | **Authorization only:** there's no claim RFAI. Attachment metadata lives inside the case rather than in a shared catalog. |
 | Claims gateway (`IClaimAttachmentContentStore`) | Attachments that arrive through the clearinghouse gateway, with a scan status. | A separate store, not linked to the others. |
 
@@ -110,12 +110,20 @@ One **Documents panel** component appears on claim, authorization, appeal, membe
 ## 8. Storage providers
 
 Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers alongside Azure Blob, chosen by configuration. The GKE demo then has durable storage, and AWS deployments work.
+
+*Built in step 1:*
+- **Configuration:** `DocumentStore:Provider` is `Azure`, `Gcs`, `S3` or `InMemory` (Development only). With no provider set, a deployment that has `BlobStorage:ConnectionString` stays on Azure; otherwise the service refuses to start.
+- **Layout:** Azure keeps one container per CHO container. Google Cloud Storage and S3 use one bucket per deployment, with each CHO container as a prefix, because bucket names are global.
+- **Tags** (retention policy, retention date, legal hold) are Azure blob index tags, GCS object metadata and S3 object tags (10 per object). Azure and S3 lifecycle rules can filter on them; GCS lifecycle rules cannot match custom metadata, so on GCS the tags are a record only. Storage-level enforcement of holds (GCS object holds, S3 Object Lock, Azure immutability) comes with write-once, below.
+- **Uploads:** finalize checks the staged object's size before reading it, since no cloud's upload link caps size the same way. A staging object left by an abandoned upload is deleted after a day on GCS (bucket lifecycle rule); Azure and S3 deployments need the same rule on the `.upload` suffix.
+- **Pre-signed uploads:** Azure SAS, GCS V4 signed URLs (on GKE, signed by IAM as the Workload Identity service account) and S3 presigned PUTs. The link carries the headers the client must send, so clients never need to know which cloud is behind it.
+- **GKE demo:** Terraform creates a private, versioned documents bucket and a `cho-documents` service account that only attachment-service and member-document-service can act as (Workload Identity, no keys).
 - **Encryption:** each tenant gets its own key-encryption key (cloud KMS).
 - **Write-once:** where the provider supports it (Azure immutable blobs, GCS bucket lock, S3 Object Lock), it backs up the write-once rule. The catalog enforces it either way.
 
 ## 9. Build order
 
-1. **Storage providers:** GCS and S3 for `IDocumentStore`; member-document-service moves onto `IDocumentStore`.
+1. **Storage providers:** GCS and S3 for `IDocumentStore`; member-document-service moves onto `IDocumentStore`. *Built (2026-10-20).*
 2. **Catalog:** the document record and service (evolved from member-document-service), with many-to-many links, sensitivity tags, access audit, and the documents API.
 3. **Move attachment-service onto the catalog:** existing `Attachment` rows migrate to documents with links. Keep the PWK attachment control number on the claim for 275 matching.
 4. **Correspondence** ([correspondence.md](correspondence.md)), starting with appeal notices. Generated letters are the first new producer on the catalog, and ID cards move onto it in the same phase.
@@ -126,6 +134,6 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 
 ## 10. Open questions
 
-1. **One service or a library?** Should the catalog be its own service (document-service) that others call, or a shared library each service hosts against one shared store? I'd recommend a service: one place for the access audit and retention. Generated correspondence ([correspondence.md](correspondence.md)) adds another producer and strengthens that case.
+1. **One service or a library?** *Decided 2026-10-20: its own service* (document-service) that others call, so the access audit and retention live in one place. Generated correspondence ([correspondence.md](correspondence.md)) adds another producer, which strengthens that case.
 2. **Virus scanning:** ClamAV in-cluster, or the cloud's malware scanning (Defender for Storage, GCS + Security Command Center)? It may need to be configurable per deployment.
 3. **OCR:** cloud OCR (Document AI / Azure Document Intelligence / Textract) or Claude vision for paper claims? This ties to the AI-assisted keying in the workbench design.

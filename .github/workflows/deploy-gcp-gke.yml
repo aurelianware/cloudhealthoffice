@@ -170,6 +170,9 @@ jobs:
           REQUIRE_AI_EXAMINER: ${{ github.event_name == 'workflow_dispatch' && inputs.ai_examiner || github.event_name != 'workflow_dispatch' }}
           ANTHROPIC_API_KEY: ${{ (github.event_name != 'workflow_dispatch' || inputs.ai_examiner) && secrets.ANTHROPIC_API_KEY || '' }}
           CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          # Document storage (terraform outputs in infrastructure/gcp); optional.
+          DOCUMENTS_BUCKET: ${{ vars.DOCUMENTS_BUCKET }}
+          DOCUMENTS_SERVICE_ACCOUNT: ${{ vars.DOCUMENTS_SERVICE_ACCOUNT }}
         run: ./scripts/deploy-gke.sh
 
       - name: Pod status

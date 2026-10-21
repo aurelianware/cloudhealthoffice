@@ -74,3 +74,33 @@ variable "monthly_budget_usd" {
   type        = number
   default     = 300
 }
+
+variable "kubernetes_namespace" {
+  description = "Namespace the CHO services run in (scripts/deploy-gke.sh)."
+  type        = string
+  default     = "cloudhealthoffice"
+}
+
+variable "document_service_accounts" {
+  description = "Kubernetes service accounts allowed to act as the document storage identity."
+  type        = list(string)
+  default     = ["attachment-service", "member-document-service"]
+}
+
+variable "documents_bucket_name" {
+  description = "Name of the documents bucket. Empty uses <project_id>-cho-documents (bucket names are global)."
+  type        = string
+  default     = ""
+}
+
+variable "documents_force_destroy" {
+  description = "Let terraform destroy delete the documents bucket with objects in it. Off by default, so tearing down the demo never silently deletes stored documents."
+  type        = bool
+  default     = false
+}
+
+variable "documents_noncurrent_days" {
+  description = "Days a replaced or deleted document version is kept before removal."
+  type        = number
+  default     = 30
+}

@@ -1,3 +1,4 @@
+using CloudHealthOffice.DocumentStore;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -29,7 +30,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     public sealed class Factory : WebApplicationFactory<Program>
     {
         public Mock<IMemberDocumentRepository> Repository { get; } = new();
-        public Mock<IMemberDocumentBlobService> Blobs { get; } = new();
+        public Mock<IDocumentStore> Blobs { get; } = new();
         public AuditCapture Audit { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -46,7 +47,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IMemberDocumentRepository>();
-                services.RemoveAll<IMemberDocumentBlobService>();
+                services.RemoveAll<IDocumentStore>();
                 services.AddSingleton(Repository.Object);
                 services.AddSingleton(Blobs.Object);
                 services.AddSingleton<ILoggerProvider>(Audit);
@@ -109,18 +110,31 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
             .ReturnsAsync(new List<MemberDocument>());
 
         _factory.Blobs.Setup(b => b.UploadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(),
-                It.IsAny<string>(), It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Returns((string _, string path, Stream s, string _, IDictionary<string, string> _, CancellationToken _) =>
+                It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Returns((string c, string path, Stream s, string _, IReadOnlyDictionary<string, string>? _, CancellationToken _) =>
             {
                 using var copy = new MemoryStream();
                 s.CopyTo(copy);
                 _uploads.Add((path, copy.ToArray()));
-                return Task.FromResult(copy.Length);
+                return Task.FromResult(new DocumentUploadResult
+                {
+                    Uri = new Uri($"memory://{c}/{path}"),
+                    Container = c,
+                    BlobName = path,
+                    SizeBytes = copy.Length
+                });
             });
         _factory.Blobs.Setup(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new MemoryStream(Pdf));
-        _factory.Blobs.Setup(b => b.GenerateUploadSasUri(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>()))
-            .Returns((string c, string p, string _, DateTimeOffset _) => new Uri($"https://blob.example/{c}/{p}?sig=x"));
+        _factory.Blobs.Setup(b => b.GetPropertiesAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DocumentProperties { SizeBytes = Pdf.Length });
+        _factory.Blobs.Setup(b => b.CreateUploadLinkAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string c, string p, string type, DateTimeOffset expires, CancellationToken _) => new DocumentUploadLink
+            {
+                Url = new Uri($"https://blob.example/{c}/{p}?sig=x"),
+                Headers = new Dictionary<string, string> { ["x-ms-blob-type"] = "BlockBlob", ["Content-Type"] = type },
+                ExpiresAtUtc = expires
+            });
     }
 
     private static MemberDocument StoredDocument(string? pendingPath = null, bool legalHold = false) => new()
@@ -293,7 +307,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     {
         _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
         _factory.Blobs.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Empty(_factory.Audit.Lines);
     }
 
@@ -341,7 +355,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
             && d.LegalHoldHistory[0].Action == LegalHoldAction.Set
             && d.LegalHoldHistory[0].Actor == User)), Times.Once);
         _factory.Blobs.Verify(b => b.SetTagsAsync("member-documents", $"tenants/{Tenant}/members/mem-1/{DocId}.pdf",
-            It.Is<IDictionary<string, string>>(t => t["legalHold"] == "true"), It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<IReadOnlyDictionary<string, string>>(t => t["legalHold"] == "true"), It.IsAny<CancellationToken>()), Times.Once);
         var audit = Assert.Single(_factory.Audit.Lines);
         Assert.Contains("legal hold Set", audit);
         Assert.Contains($"{Tenant}/{DocId}", audit);
@@ -405,7 +419,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         Assert.Equal(HttpStatusCode.Forbidden, multipart.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, presigned.StatusCode);
         NothingStored();
-        _factory.Blobs.Verify(b => b.GenerateUploadSasUri(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>()), Times.Never);
+        _factory.Blobs.Verify(b => b.CreateUploadLinkAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -441,9 +455,9 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         // Before: finalize of a finalized document rewrote its size from the blob.
         Assert.Equal(HttpStatusCode.Conflict, refinalize.StatusCode);
         _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
-        _factory.Blobs.Verify(b => b.DeleteIfExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _factory.Blobs.Verify(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _factory.Blobs.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Empty(_uploads);
     }
 
@@ -576,7 +590,11 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         Assert.StartsWith($"tenants/{Tenant}/members/mem-1/", body!.BlobPath);
         Assert.EndsWith(".upload", body.BlobPath);
         Assert.True(body.ExpiresAtUtc <= DateTime.UtcNow.AddMinutes(15).AddSeconds(5));
-        _factory.Blobs.Verify(b => b.GenerateUploadSasUri("member-documents", body.BlobPath, "application/pdf", It.IsAny<DateTimeOffset>()), Times.Once);
+        _factory.Blobs.Verify(b => b.CreateUploadLinkAsync("member-documents", body.BlobPath, "application/pdf", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        // The client is told how to PUT, whatever storage is behind the link.
+        Assert.Equal("PUT", body.UploadMethod);
+        Assert.Equal("application/pdf", body.UploadHeaders["Content-Type"]);
+        Assert.Equal("BlockBlob", body.UploadHeaders["x-ms-blob-type"]);
         _factory.Repository.Verify(r => r.CreateAsync(It.Is<MemberDocument>(d =>
             d.UploadedBy == User
             && d.PendingUploadBlobPath == body.BlobPath
@@ -595,8 +613,44 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         });
 
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
-        _factory.Blobs.Verify(b => b.GenerateUploadSasUri(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>()), Times.Never);
+        _factory.Blobs.Verify(b => b.CreateUploadLinkAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
         NothingStored();
+    }
+
+    [Fact]
+    public async Task PresignedUpload_WhenTheStoreCannotSignLinks_Is501_AndNothingIsRecorded()
+    {
+        // A store whose credentials cannot sign (an emulator, a user login) says so;
+        // the caller falls back to a multipart upload.
+        _factory.Blobs.Setup(b => b.CreateUploadLinkAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DocumentUploadLink?)null);
+
+        var response = await Client().PostAsJsonAsync("/api/v1/member-documents", new
+        {
+            memberId = "mem-1",
+            category = "Letter",
+            fileName = "letter.pdf",
+            contentType = "application/pdf",
+        });
+
+        Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
+        NothingStored();
+    }
+
+    [Fact]
+    public async Task Finalize_BeforeAnythingWasUploaded_Is409()
+    {
+        // Every store reports a missing staging object the same way, whatever cloud it is.
+        var staging = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload";
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(staging));
+        _factory.Blobs.Setup(b => b.GetPropertiesAsync("member-documents", staging, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DocumentNotFoundException("member-documents", staging));
+
+        var response = await Client().PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(_uploads);
+        _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
     }
 
     [Fact]
@@ -626,7 +680,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
 
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
         Assert.Empty(_uploads);
-        _factory.Blobs.Verify(b => b.DeleteIfExistsAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
+        _factory.Blobs.Verify(b => b.DeleteAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
         _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
     }
 
@@ -644,7 +698,38 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
 
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
         Assert.Empty(_uploads);
-        _factory.Blobs.Verify(b => b.DeleteIfExistsAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
+        _factory.Blobs.Verify(b => b.DeleteAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Finalize_RefusesAnOversizeUpload_WithoutReadingIt()
+    {
+        // An upload link can't cap size on every cloud; the stored size is
+        // checked first, so an oversize upload never reaches the pod.
+        var staging = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload";
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(staging));
+        _factory.Blobs.Setup(b => b.GetPropertiesAsync("member-documents", staging, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DocumentProperties { SizeBytes = 5L * 1024 * 1024 * 1024 });
+
+        var response = await Client().PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+        _factory.Blobs.Verify(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _factory.Blobs.Verify(b => b.DeleteAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
+        _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Content_WhoseStoredFileIsMissing_Is404_Not500()
+    {
+        var stored = StoredDocument(pendingPath: null);
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(stored);
+        _factory.Blobs.Setup(b => b.DownloadAsync("member-documents", stored.BlobPath, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DocumentNotFoundException("member-documents", stored.BlobPath));
+
+        var response = await Client().GetAsync($"/api/v1/member-documents/{DocId}/content");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -662,7 +747,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         var upload = Assert.Single(_uploads);
         Assert.Equal(stored.BlobPath, upload.Path);
         Assert.Equal(Pdf, upload.Bytes);
-        _factory.Blobs.Verify(b => b.DeleteIfExistsAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
+        _factory.Blobs.Verify(b => b.DeleteAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
         _factory.Repository.Verify(r => r.UpdateAsync(It.Is<MemberDocument>(d =>
             d.PendingUploadBlobPath == null
             && d.SizeBytes == Pdf.Length
@@ -683,7 +768,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Empty(_factory.Audit.Lines);
         _factory.Blobs.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

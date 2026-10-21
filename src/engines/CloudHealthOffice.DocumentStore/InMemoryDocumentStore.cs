@@ -6,7 +6,9 @@ namespace CloudHealthOffice.DocumentStore;
 /// In-memory <see cref="IDocumentStore"/> for unit tests and local development.
 ///
 /// Thread-safe. Documents are stored as byte arrays keyed by
-/// "{container}/{blobName}". URIs use the scheme "memory://".
+/// "{container}/{blobName}". URIs use the scheme "memory://". It cannot sign
+/// upload links (<see cref="CreateUploadLinkAsync"/> returns null), like a
+/// real store whose credentials cannot sign.
 ///
 /// Usage in tests:
 /// <code>
@@ -17,21 +19,31 @@ namespace CloudHealthOffice.DocumentStore;
 /// </summary>
 public class InMemoryDocumentStore : IDocumentStore
 {
-    private readonly ConcurrentDictionary<string, byte[]> _blobs = new();
+    private sealed record Entry(byte[] Bytes, string ContentType, IReadOnlyDictionary<string, string> Tags);
 
+    private readonly ConcurrentDictionary<string, Entry> _blobs = new();
+
+    // Same naming rules as the real providers, so a test catches a bad name.
     private static string Key(string container, string blobName) =>
-        $"{container}/{blobName}";
+        DocumentKeys.ObjectName(container, blobName);
 
     public Task<DocumentUploadResult> UploadAsync(
         string container, string blobName,
         Stream content, string contentType,
+        CancellationToken ct = default) =>
+        UploadAsync(container, blobName, content, contentType, null, ct);
+
+    public Task<DocumentUploadResult> UploadAsync(
+        string container, string blobName,
+        Stream content, string contentType,
+        IReadOnlyDictionary<string, string>? tags,
         CancellationToken ct = default)
     {
         using var ms = new MemoryStream();
         content.CopyTo(ms);
         var bytes = ms.ToArray();
 
-        _blobs[Key(container, blobName)] = bytes;
+        _blobs[Key(container, blobName)] = new Entry(bytes, contentType, DocumentKeys.Copy(tags));
 
         return Task.FromResult(new DocumentUploadResult
         {
@@ -46,10 +58,10 @@ public class InMemoryDocumentStore : IDocumentStore
         string container, string blobName,
         CancellationToken ct = default)
     {
-        if (!_blobs.TryGetValue(Key(container, blobName), out var bytes))
+        if (!_blobs.TryGetValue(Key(container, blobName), out var entry))
             throw new DocumentNotFoundException(container, blobName);
 
-        return Task.FromResult<Stream>(new MemoryStream(bytes));
+        return Task.FromResult<Stream>(new MemoryStream(entry.Bytes, writable: false));
     }
 
     public Task<bool> ExistsAsync(
@@ -65,6 +77,41 @@ public class InMemoryDocumentStore : IDocumentStore
         return Task.CompletedTask;
     }
 
+    public Task SetTagsAsync(
+        string container, string blobName,
+        IReadOnlyDictionary<string, string> tags,
+        CancellationToken ct = default)
+    {
+        var key = Key(container, blobName);
+        while (true)
+        {
+            if (!_blobs.TryGetValue(key, out var entry))
+                throw new DocumentNotFoundException(container, blobName);
+            if (_blobs.TryUpdate(key, entry with { Tags = DocumentKeys.Copy(tags) }, entry))
+                return Task.CompletedTask;
+        }
+    }
+
+    public Task<DocumentProperties> GetPropertiesAsync(
+        string container, string blobName,
+        CancellationToken ct = default)
+    {
+        if (!_blobs.TryGetValue(Key(container, blobName), out var entry))
+            throw new DocumentNotFoundException(container, blobName);
+
+        return Task.FromResult(new DocumentProperties
+        {
+            SizeBytes   = entry.Bytes.Length,
+            ContentType = entry.ContentType,
+            Tags        = DocumentKeys.Copy(entry.Tags)
+        });
+    }
+
+    public Task<DocumentUploadLink?> CreateUploadLinkAsync(
+        string container, string blobName, string contentType,
+        DateTimeOffset expiresAtUtc, CancellationToken ct = default) =>
+        Task.FromResult<DocumentUploadLink?>(null);
+
     public Uri GetUri(string container, string blobName) =>
         new($"memory://{container}/{blobName}");
 
@@ -72,7 +119,11 @@ public class InMemoryDocumentStore : IDocumentStore
 
     /// <summary>Return the raw bytes stored for a blob, or null if not found.</summary>
     public byte[]? GetBytes(string container, string blobName) =>
-        _blobs.TryGetValue(Key(container, blobName), out var bytes) ? bytes : null;
+        _blobs.TryGetValue(Key(container, blobName), out var entry) ? entry.Bytes : null;
+
+    /// <summary>Return the tags stored for a blob, or null if not found.</summary>
+    public IReadOnlyDictionary<string, string>? GetTags(string container, string blobName) =>
+        _blobs.TryGetValue(Key(container, blobName), out var entry) ? entry.Tags : null;
 
     /// <summary>Number of blobs currently stored.</summary>
     public int Count => _blobs.Count;
