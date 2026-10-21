@@ -6,6 +6,11 @@ name: Build Portal / Utility Containers
 # via pr-validation.yml. This workflow now covers only the non-service
 # concerns: the Blazor portal and the utility containers under containers/.
 #
+# Images are pushed to Azure Container Registry only while Azure deploys are
+# active (vars.AZURE_DEPLOYMENTS_ENABLED == 'true'); otherwise the portal and
+# utility containers are built (proving they build) but not pushed, and no
+# Azure login is attempted. GKE builds its own images (deploy-gcp-gke.yml).
+#
 # The static marketing site is NOT built or deployed here. cloudhealthoffice.com
 # is served by GitHub Pages via deploy-pages.yml; the site's Azure Container Apps
 # deploy was removed once 'cho-site' ceased to exist. Do not reintroduce a site
@@ -54,7 +59,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Azure Login (OIDC)
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
         uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -62,7 +67,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
         run: az acr login --name ${{ vars.ACR_NAME || 'clouhealthoffice' }}
 
       # PR builds cannot use OIDC (no push), but should use ACR mirrored .NET
@@ -137,7 +142,7 @@ jobs:
         with:
           context: .
           file: ./src/portal/CloudHealthOffice.Portal/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: REGISTRY=${{ env.BUILD_REGISTRY }}
@@ -173,7 +178,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Azure Login (OIDC)
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
         uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -181,7 +186,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true'
         run: az acr login --name ${{ vars.ACR_NAME || 'clouhealthoffice' }}
 
       - name: Extract metadata
@@ -211,7 +216,7 @@ jobs:
         with:
           context: ./containers/${{ matrix.container }}
           file: ./containers/${{ matrix.container }}/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' && vars.AZURE_DEPLOYMENTS_ENABLED == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

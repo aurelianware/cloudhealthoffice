@@ -9,9 +9,9 @@ This directory contains GitHub Actions workflow files for CI/CD automation of th
 ## Workflow Files
 
 ### Deployment Workflows
-- **deploy.yml**: Production deployment (manual trigger only)
-- **deploy-dev.yml**: DEV environment auto-deployment
-- **deploy-uat.yml**: UAT environment auto-deployment (triggers on `release/*` branches)
+- **deploy-gcp-gke.yml**: the GKE demo (synthetic data only; manual trigger)
+- **deploy-azure-aks.yml**: AKS deployment (paused while Azure is not in use)
+- **deploy-dev.yml.disabled / deploy-uat.yml.disabled**: retired; kept for reference only
 
 ### Validation Workflows
 - **pr-lint.yml**: Comprehensive pull request validation (syntax, security, compliance, and site checks)
