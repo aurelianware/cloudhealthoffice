@@ -73,9 +73,10 @@ public static class ChoRolePermissions
 
     /// <summary>
     /// Opens documents carrying a sensitivity tag (behavioral health, HIV,
-    /// reproductive, genetic, minor-confidential). Its own action, so
-    /// <c>*:read</c> does not grant it. 42 CFR Part 2 records additionally
-    /// need a consent check and stay withheld until that check exists.
+    /// reproductive, genetic, minor-confidential). Exact-only
+    /// (<see cref="ExactOnlyPermissions"/>): no wildcard grants it, TenantAdmin
+    /// included. 42 CFR Part 2 records additionally need a consent check and
+    /// stay withheld until that check exists.
     /// </summary>
     public const string DocumentsReadSensitive = "documents:read-sensitive";
 
@@ -238,6 +239,20 @@ public static class ChoRolePermissions
     public static readonly IReadOnlySet<string> ReservedResources =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "platform" };
 
+    /// <summary>
+    /// Permissions only an exact grant satisfies: no wildcard (<c>*:read</c>,
+    /// <c>*:*</c>, <c>documents:*</c>) reaches them, and a service token does
+    /// not hold them by default. Each opens records a broad role should not
+    /// see without being given them by name: sensitive documents (behavioral
+    /// health, HIV, reproductive, genetic, minor-confidential) and call
+    /// records, which have no defined access yet.
+    /// </summary>
+    public static readonly IReadOnlySet<string> ExactOnlyPermissions =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { DocumentsReadSensitive, "calls:read" };
+
+    /// <summary>Whether <paramref name="permission"/> is satisfied only by an exact grant (<see cref="ExactOnlyPermissions"/>).</summary>
+    public static bool IsExactOnly(string permission) => ExactOnlyPermissions.Contains(permission.Trim());
+
     /// <summary>Whether <paramref name="permission"/> names a <see cref="ReservedResources">reserved resource</see>.</summary>
     public static bool IsReserved(string permission)
     {
@@ -266,6 +281,8 @@ public static class ChoRolePermissions
     {
         if (string.Equals(granted, required, StringComparison.OrdinalIgnoreCase))
             return true;
+        if (IsExactOnly(required))
+            return false;
 
         var g = granted.Split(':');
         var r = required.Split(':');

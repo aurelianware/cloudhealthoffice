@@ -295,9 +295,25 @@ public sealed class DocumentPipelineTests : IClassFixture<DocumentServiceFactory
         {
             var response = await client.GetAsync($"/api/v1/documents/{doc.Id}?{On("Claim", "CLM-1")}");
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            // The refusal says nothing about why: naming Part 2 would itself disclose it.
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.Contains(DocumentsController.RestrictedMessage, body);
+            Assert.DoesNotContain("Part 2", body);
         }
         Assert.All(_factory.Audit.Entries.Where(e => e.Action == DocumentAccessAction.View),
             e => Assert.Contains("Part 2", e.Detail));
+    }
+
+    [Fact]
+    public async Task ASensitiveDocument_RefusesWithoutNamingTheTag_EvenForATenantAdmin()
+    {
+        var doc = await UploadAsync(UmCoordinator(), Pdf, links: ["Claim:CLM-1"], sensitivity: ["HIV"]);
+
+        var response = await Client(ChoRolePermissions.TenantAdmin, "admin-1").GetAsync($"/api/v1/documents/{doc.Id}?{On("Claim", "CLM-1")}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.DoesNotContain("HIV", await response.Content.ReadAsStringAsync());
+        Assert.Contains(_factory.Audit.Entries, e => e.Action == DocumentAccessAction.View && !e.Allowed && e.Detail!.Contains("HIV"));
     }
 
     [Fact]
@@ -322,6 +338,52 @@ public sealed class DocumentPipelineTests : IClassFixture<DocumentServiceFactory
         Assert.Equal(2, second.Links.Count);
         Assert.Single(_factory.Documents.All);
         Assert.Equal(1, _factory.Storage.Inner.Count);
+    }
+
+    [Fact]
+    public async Task IdenticalBytes_NeverAttachTheUploaderToADocumentTheyCantSee()
+    {
+        var hidden = await UploadAsync(UmCoordinator(), Pdf, links: ["Claim:CLM-1"], sensitivity: ["BEHAVIORAL_HEALTH"]);
+
+        var response = await Examiner().PostAsync("/api/v1/documents", Form(Pdf, links: ["Claim:CLM-2"]));
+
+        // A fresh document, answered exactly like a first upload.
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var mine = (await response.Content.ReadFromJsonAsync<DocumentView>(Json))!;
+        Assert.NotEqual(hidden.Id, mine.Id);
+        Assert.Single(_factory.Documents.All.Single(d => d.Id == hidden.Id).Links);
+    }
+
+    [Fact]
+    public async Task IdenticalBytes_DontMergeIntoAHeldDocument_OrRevealTheHold()
+    {
+        var held = await UploadAsync(Examiner(), Pdf, links: ["Claim:CLM-1"]);
+        await Compliance().PutAsJsonAsync($"/api/v1/documents/{held.Id}/legal-hold", new { legalHold = true, reason = "litigation" });
+
+        var response = await Examiner().PostAsync("/api/v1/documents", Form(Pdf, links: ["Claim:CLM-2"]));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(2, _factory.Documents.All.Count);
+    }
+
+    [Fact]
+    public async Task List_AuditsWhichDocumentsWereShown()
+    {
+        var doc = await UploadAsync(Examiner(), Pdf, links: ["Claim:CLM-1"]);
+
+        await Examiner().GetAsync($"/api/v1/documents?{On("Claim", "CLM-1")}");
+
+        Assert.Contains(_factory.Audit.Entries, e => e.Action == DocumentAccessAction.List && e.Detail!.Contains(doc.Id));
+    }
+
+    [Fact]
+    public async Task RefusedUploads_AreAudited()
+    {
+        await Examiner().PostAsync("/api/v1/documents", Form(Pdf, links: ["Appeal:A-1"]));
+        await Examiner().PostAsync("/api/v1/documents", Form(Html, contentType: "application/pdf"));
+
+        Assert.Contains(_factory.Audit.Entries, e => e.Action == DocumentAccessAction.Upload && !e.Allowed && e.SubjectKind == "Appeal");
+        Assert.Contains(_factory.Audit.Entries, e => e.Action == DocumentAccessAction.Upload && !e.Allowed && e.Detail!.Contains("not application/pdf"));
     }
 
     // ── Links ───────────────────────────────────────────────────────
@@ -349,6 +411,9 @@ public sealed class DocumentPipelineTests : IClassFixture<DocumentServiceFactory
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Single(_factory.Documents.All.Single().Links);
+        // Refused, and recorded as refused.
+        Assert.Contains(_factory.Audit.Entries, e => e.Action == DocumentAccessAction.Link && !e.Allowed);
+        Assert.DoesNotContain(_factory.Audit.Entries, e => e.Action == DocumentAccessAction.Link && e.Allowed);
     }
 
     [Fact]
@@ -410,6 +475,37 @@ public sealed class DocumentPipelineTests : IClassFixture<DocumentServiceFactory
         Assert.Equal(HttpStatusCode.Forbidden, forExaminer.StatusCode);
         Assert.Contains(log!, e => e.Action == DocumentAccessAction.View && e.Allowed);
         Assert.Contains(log!, e => e.Action == DocumentAccessAction.View && !e.Allowed && e.SubjectId == "CLM-404");
+    }
+
+    [Fact]
+    public async Task AccessLog_OfASensitiveDocument_NeedsTheSensitivePermissionToo()
+    {
+        var doc = await UploadAsync(UmCoordinator(), Pdf, links: ["Claim:CLM-1"], sensitivity: ["GENETIC"]);
+
+        // ComplianceViewer holds audit:read but not documents:read-sensitive.
+        var viewer = await Client(ChoRolePermissions.ComplianceViewer, "viewer-1").GetAsync($"/api/v1/documents/{doc.Id}/access-log");
+        var officer = await Compliance().GetAsync($"/api/v1/documents/{doc.Id}/access-log");
+
+        Assert.Equal(HttpStatusCode.Forbidden, viewer.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, officer.StatusCode);
+    }
+
+    [Fact]
+    public async Task LegalHold_AnswersOnlyTheHoldState_AndAuditsEveryAttempt()
+    {
+        var doc = await UploadAsync(UmCoordinator(), Pdf, links: ["Claim:CLM-1"], sensitivity: ["PART2_SUD"]);
+
+        var set = await Compliance().PutAsJsonAsync($"/api/v1/documents/{doc.Id}/legal-hold", new { legalHold = true, reason = "litigation" });
+        var again = await Compliance().PutAsJsonAsync($"/api/v1/documents/{doc.Id}/legal-hold", new { legalHold = true, reason = "litigation" });
+        var missing = await Compliance().PutAsJsonAsync("/api/v1/documents/nope/legal-hold", new { legalHold = true, reason = "x" });
+
+        var body = await set.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, set.StatusCode);
+        Assert.DoesNotContain("Claim", body);
+        Assert.DoesNotContain("PART2", body);
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        Assert.Equal(3, _factory.Audit.Entries.Count(e => e.Action == DocumentAccessAction.LegalHold));
     }
 
     // ── Pre-signed upload ───────────────────────────────────────────

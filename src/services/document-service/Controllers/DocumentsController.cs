@@ -11,18 +11,20 @@ using Microsoft.Extensions.Options;
 namespace DocumentService.Controllers;
 
 /// <summary>
-/// The document catalog API (docs/architecture/document-store.md §3–§6).
+/// The document catalog API (docs/architecture/document-store.md §3–§6, §11).
 ///
 /// Every read names the subject it works from (<c>subjectKind</c> and
 /// <c>subjectId</c>): "documents for claim X", never "document Y". The caller
 /// needs documents:read, the subject's own read permission, a link from the
 /// document to that subject, and for sensitive documents
 /// documents:read-sensitive (see <see cref="SubjectAccess"/>). A document the
-/// caller can't reach through that subject answers 404, so ids reveal nothing.
+/// caller can't reach through that subject answers 404, so ids reveal nothing,
+/// and a restricted one answers a 403 that says nothing about why (the reason,
+/// e.g. which sensitivity tag, goes only to the audit).
 ///
-/// Every list, view, download and change is written to the append-only access
-/// audit before it is answered, denied attempts included. If the audit can't
-/// be written, nothing is served.
+/// Every attempt (list, view, download, upload, link change, legal hold),
+/// allowed or refused, is written to the append-only access audit before it
+/// is answered. If the audit can't be written, nothing is served or changed.
 /// </summary>
 [ApiController]
 [Route("api/v1/documents")]
@@ -30,6 +32,9 @@ public sealed class DocumentsController : ControllerBase
 {
     public const string Container = "documents";
     public const string ScreenHeader = "X-CHO-Screen";
+
+    /// <summary>The only thing a refused caller learns about a restricted document.</summary>
+    public const string RestrictedMessage = "This document is restricted.";
 
     private readonly IDocumentRepository _documents;
     private readonly IDocumentAccessAudit _audit;
@@ -80,30 +85,36 @@ public sealed class DocumentsController : ControllerBase
 
         if (!SubjectAccess.CanReadSubject(_actor, subject.Kind))
         {
-            var reason = $"needs {SubjectAccess.ReadPermissionFor(subject.Kind)} for {subject.Kind} documents";
+            var reason = SubjectPermissionMessage(subject.Kind);
             await AuditAsync(DocumentAccessAction.List, null, subject, allowed: false, reason, ct);
             return Forbidden(reason);
         }
 
         var all = await _documents.ListBySubjectAsync(TenantId, subject, ct);
         var visible = all.Where(d => SubjectAccess.DecideSensitivity(_actor, d).Allowed).ToList();
-        var withheld = all.Count - visible.Count;
+        var withheld = all.Where(d => !visible.Contains(d)).Select(d => d.Id).ToList();
 
+        // Which documents were shown, by id, so the audit answers "who saw this record".
         await AuditAsync(DocumentAccessAction.List, null, subject, allowed: true,
-            $"returned {visible.Count}" + (withheld > 0 ? $", withheld {withheld}" : string.Empty), ct);
+            $"returned [{string.Join(",", visible.Select(d => d.Id))}]"
+            + (withheld.Count > 0 ? $"; withheld [{string.Join(",", withheld)}]" : string.Empty), ct);
 
         return Ok(new DocumentListResponse
         {
             Documents = visible.Select(d => SubjectAccess.Project(_actor, d)).ToList(),
-            Withheld = withheld
+            Withheld = withheld.Count
         });
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> Get(string id, [FromQuery] string? subjectKind, [FromQuery] string? subjectId, CancellationToken ct)
     {
-        var (document, denied) = await OpenAsync(id, subjectKind, subjectId, DocumentAccessAction.View, ct);
-        return denied ?? Ok(SubjectAccess.Project(_actor, document!));
+        if (!SubjectAccess.TryCreate(subjectKind, subjectId, out var subject))
+            return BadRequest("subjectKind and subjectId name the subject the document is opened from.");
+
+        var (document, decision) = await LoadAsync(id, subject, ct);
+        await AuditAsync(DocumentAccessAction.View, id, subject, decision.Allowed, decision.Reason, ct);
+        return decision.Allowed ? Ok(SubjectAccess.Project(_actor, document!)) : DeniedResult(document, subject);
     }
 
     /// <summary>
@@ -117,11 +128,7 @@ public sealed class DocumentsController : ControllerBase
         if (!SubjectAccess.TryCreate(subjectKind, subjectId, out var subject))
             return BadRequest("subjectKind and subjectId name the subject the document is opened from.");
 
-        var document = await _documents.GetAsync(TenantId, id, ct);
-        var decision = document is null
-            ? AccessDecision.Deny("no such document in tenant")
-            : SubjectAccess.Decide(_actor, document, subject);
-
+        var (document, decision) = await LoadAsync(id, subject, ct);
         if (decision.Allowed && document!.PendingUploadPath != null)
             decision = AccessDecision.Deny("upload not finalized");
         if (decision.Allowed && !ScanAllowsServing(document!.Scan.Status))
@@ -129,7 +136,7 @@ public sealed class DocumentsController : ControllerBase
 
         await AuditAsync(DocumentAccessAction.Download, id, subject, decision.Allowed, decision.Reason, ct);
         if (!decision.Allowed)
-            return DeniedResult(document, subject, decision);
+            return DeniedResult(document, subject);
 
         Stream stream;
         try
@@ -147,11 +154,21 @@ public sealed class DocumentsController : ControllerBase
         return File(stream, document.ContentType, $"{document.Id}{Path.GetExtension(document.StoragePath)}");
     }
 
-    /// <summary>Who opened this document, when, from where, and whether it was allowed.</summary>
+    /// <summary>
+    /// Who opened this document, when, from where, and whether it was allowed.
+    /// Needs audit:read, and for a sensitive document documents:read-sensitive
+    /// too: the log names the subjects (members) it was opened for.
+    /// </summary>
     [HttpGet("{id}/access-log")]
     [RequirePermission("audit:read")]
     public async Task<IActionResult> AccessLog(string id, [FromQuery] int limit = 200, CancellationToken ct = default)
     {
+        var document = await _documents.GetAsync(TenantId, id, ct);
+        if (document is null)
+            return NotFound();
+        if (document.Sensitivity.Count > 0 && !_actor.HasPermission(ChoRolePermissions.DocumentsReadSensitive))
+            return Forbidden(RestrictedMessage);
+
         var entries = await _audit.ForDocumentAsync(TenantId, id, Math.Clamp(limit, 1, 1000), ct);
         return Ok(entries);
     }
@@ -160,36 +177,41 @@ public sealed class DocumentsController : ControllerBase
 
     /// <summary>
     /// Uploads a file with its metadata. Identical content already in the
-    /// tenant is not stored again: the existing document gains this upload's
-    /// links and tags, and comes back with 200 instead of 201.
+    /// tenant, in a document the caller can already open and that is not on
+    /// legal hold, is not stored again: that document gains this upload's
+    /// links and tags (200). Otherwise the upload is a new document (201),
+    /// whether or not other copies exist, so an upload reveals nothing about
+    /// documents the caller can't see.
     /// </summary>
     [HttpPost]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(30L * 1024 * 1024)]
     public async Task<IActionResult> Upload([FromForm] UploadDocumentForm form, IFormFile? file, CancellationToken ct)
     {
-        var metadata = ValidateMetadata(form.Type, form.Links, form.Sensitivity, form.SourceChannel, form.ReceivedAt);
+        var metadata = await ValidateMetadataAsync(form.Type, form.Links, form.Sensitivity, form.SourceChannel, form.ReceivedAt, ct);
         if (metadata.Error is { } error)
             return error;
+        var auditSubject = metadata.Links[0];
 
         if (file is null || file.Length == 0)
             return BadRequest("A file is required.");
         if (file.Length > _uploadPolicy.MaxUploadBytes)
-            return StatusCode(StatusCodes.Status413PayloadTooLarge, $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes.");
+            return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status413PayloadTooLarge,
+                $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes.", ct);
 
         var contentType = DocumentUploadPolicy.NormalizeContentType(file.ContentType);
         if (contentType is null || !_uploadPolicy.IsAllowedContentType(contentType))
-            return UnsupportedType(file.ContentType);
+            return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status415UnsupportedMediaType, UnsupportedTypeMessage(file.ContentType), ct);
 
         using var buffer = new MemoryStream();
         await file.CopyToAsync(buffer, ct);
         if (!DocumentUploadPolicy.MatchesSignature(contentType, buffer.GetBuffer().AsSpan(0, (int)Math.Min(buffer.Length, 16))))
-            return StatusCode(StatusCodes.Status415UnsupportedMediaType, $"The file content is not {contentType}.");
+            return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status415UnsupportedMediaType, $"The file content is not {contentType}.", ct);
 
         var sha256 = Sha256Hex(buffer);
 
         var duplicate = await _documents.FindByHashAsync(TenantId, sha256, ct);
-        if (duplicate != null)
+        if (duplicate != null && CanMergeInto(duplicate))
             return await MergeDuplicateAsync(duplicate, metadata, ct);
 
         var id = Guid.NewGuid().ToString("N");
@@ -200,11 +222,22 @@ public sealed class DocumentsController : ControllerBase
         buffer.Position = 0;
         document.Scan = await _scanner.ScanAsync(buffer, contentType, ct);
         buffer.Position = 0;
-        await _store.UploadAsync(Container, document.StoragePath, buffer, contentType, StorageTags(document), ct);
 
-        await _documents.CreateAsync(document, ct);
-        await AuditAsync(DocumentAccessAction.Upload, id, document.Links[0], allowed: true,
-            $"{document.Type}, {document.Links.Count} link(s)", ct);
+        // Audited before anything is written: a failed audit stores nothing.
+        await AuditAsync(DocumentAccessAction.Upload, id, auditSubject, allowed: true,
+            $"{document.Type}, links [{string.Join(",", document.Links)}]", ct);
+
+        await _store.UploadAsync(Container, document.StoragePath, buffer, contentType, StorageTags(document), ct);
+        try
+        {
+            await _documents.CreateAsync(document, ct);
+        }
+        catch
+        {
+            // No record means nothing can reach the bytes; don't leave them behind.
+            await _store.DeleteAsync(Container, document.StoragePath, CancellationToken.None);
+            throw;
+        }
 
         return StatusCode(StatusCodes.Status201Created, SubjectAccess.Project(_actor, document));
     }
@@ -218,13 +251,14 @@ public sealed class DocumentsController : ControllerBase
     [Consumes("application/json")]
     public async Task<IActionResult> StartUpload([FromBody] PresignedUploadRequest request, CancellationToken ct)
     {
-        var metadata = ValidateMetadata(request.Type, request.Links, request.Sensitivity, request.SourceChannel, request.ReceivedAt);
+        var metadata = await ValidateMetadataAsync(request.Type, request.Links, request.Sensitivity, request.SourceChannel, request.ReceivedAt, ct);
         if (metadata.Error is { } error)
             return error;
+        var auditSubject = metadata.Links[0];
 
         var contentType = DocumentUploadPolicy.NormalizeContentType(request.ContentType);
         if (contentType is null || !_uploadPolicy.IsAllowedContentType(contentType))
-            return UnsupportedType(request.ContentType);
+            return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status415UnsupportedMediaType, UnsupportedTypeMessage(request.ContentType), ct);
 
         var id = Guid.NewGuid().ToString("N");
         var document = NewDocument(id, request.Type, request.Title, contentType, request.FileName, metadata, request.StateCode, request.RetentionPolicyId);
@@ -238,6 +272,8 @@ public sealed class DocumentsController : ControllerBase
                 "Pre-signed uploads need storage credentials that can sign upload links; upload the file with multipart/form-data instead.");
         }
 
+        await AuditAsync(DocumentAccessAction.Upload, id, auditSubject, allowed: true,
+            $"pre-signed upload started: {document.Type}, links [{string.Join(",", document.Links)}]", ct);
         await _documents.CreateAsync(document, ct);
 
         return Ok(new PresignedUploadResponse
@@ -254,16 +290,21 @@ public sealed class DocumentsController : ControllerBase
     /// Finishes a pre-signed upload. Only the uploader may finalize. The staged
     /// object is size-checked before it is read, then checked against the
     /// declared type, hashed and scanned, and copied to the document's path,
-    /// which no upload link covers. A duplicate of an existing document merges
-    /// into it.
+    /// which no upload link covers. A duplicate the caller may merge into is
+    /// merged; the staged upload is kept until that succeeds.
     /// </summary>
     [HttpPost("{id}/finalize")]
     public async Task<IActionResult> Finalize(string id, CancellationToken ct)
     {
         var document = await _documents.GetAsync(TenantId, id, ct);
         if (document is null || document.PendingUploadPath is null || document.CreatedBy != _actor.UserId)
+        {
+            await AuditAsync(DocumentAccessAction.Upload, id, null, allowed: false,
+                document is null ? "finalize: no such document" : "finalize: not a pending upload by this caller", ct);
             return NotFound();
+        }
 
+        var auditSubject = document.Links[0];
         var staging = document.PendingUploadPath;
 
         DocumentProperties staged;
@@ -278,8 +319,8 @@ public sealed class DocumentsController : ControllerBase
         if (staged.SizeBytes > _uploadPolicy.MaxUploadBytes)
         {
             await _store.DeleteAsync(Container, staging, ct);
-            return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.");
+            return await RefuseUploadAsync(auditSubject, id, StatusCodes.Status413PayloadTooLarge,
+                $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.", ct);
         }
 
         using var buffer = new MemoryStream();
@@ -292,8 +333,8 @@ public sealed class DocumentsController : ControllerBase
                 if (buffer.Length + read > _uploadPolicy.MaxUploadBytes)
                 {
                     await _store.DeleteAsync(Container, staging, ct);
-                    return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                        $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.");
+                    return await RefuseUploadAsync(auditSubject, id, StatusCodes.Status413PayloadTooLarge,
+                        $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.", ct);
                 }
                 buffer.Write(chunk, 0, read);
             }
@@ -303,18 +344,21 @@ public sealed class DocumentsController : ControllerBase
             || !DocumentUploadPolicy.MatchesSignature(document.ContentType, buffer.GetBuffer().AsSpan(0, (int)Math.Min(buffer.Length, 16))))
         {
             await _store.DeleteAsync(Container, staging, ct);
-            return StatusCode(StatusCodes.Status415UnsupportedMediaType,
-                $"The uploaded content is not {document.ContentType}; the upload was discarded.");
+            return await RefuseUploadAsync(auditSubject, id, StatusCodes.Status415UnsupportedMediaType,
+                $"The uploaded content is not {document.ContentType}; the upload was discarded.", ct);
         }
 
         var sha256 = Sha256Hex(buffer);
         var duplicate = await _documents.FindByHashAsync(TenantId, sha256, ct);
-        if (duplicate != null)
+        if (duplicate != null && CanMergeInto(duplicate))
         {
             var merged = await MergeDuplicateAsync(duplicate,
                 new UploadMetadata(document.Links, document.Sensitivity, document.Source.Channel, document.ReceivedAt, null), ct);
-            await _store.DeleteAsync(Container, staging, ct);
-            await _documents.DeletePendingAsync(TenantId, document.Id, ct);
+            if (merged is OkObjectResult)
+            {
+                await _store.DeleteAsync(Container, staging, ct);
+                await _documents.DeletePendingAsync(TenantId, document.Id, ct);
+            }
             return merged;
         }
 
@@ -323,8 +367,11 @@ public sealed class DocumentsController : ControllerBase
         buffer.Position = 0;
         document.Sha256 = sha256;
         document.SizeBytes = buffer.Length;
-        await _store.UploadAsync(Container, document.StoragePath, buffer, document.ContentType, StorageTags(document), ct);
         document.PendingUploadPath = null;
+
+        await AuditAsync(DocumentAccessAction.Upload, id, auditSubject, allowed: true,
+            $"pre-signed upload finalized: {document.Type}", ct);
+        await _store.UploadAsync(Container, document.StoragePath, buffer, document.ContentType, StorageTags(document), ct);
 
         try
         {
@@ -332,12 +379,12 @@ public sealed class DocumentsController : ControllerBase
         }
         catch (DocumentConcurrencyException)
         {
+            // The record is still pending; its final path must stay empty.
+            await _store.DeleteAsync(Container, document.StoragePath, CancellationToken.None);
             return ConcurrencyConflict();
         }
 
         await _store.DeleteAsync(Container, staging, ct);
-        await AuditAsync(DocumentAccessAction.Upload, id, document.Links[0], allowed: true,
-            $"{document.Type}, {document.Links.Count} link(s), pre-signed", ct);
         return Ok(SubjectAccess.Project(_actor, document));
     }
 
@@ -348,18 +395,26 @@ public sealed class DocumentsController : ControllerBase
     public async Task<IActionResult> AddLink(string id, [FromQuery] string? subjectKind, [FromQuery] string? subjectId,
         [FromBody] LinkRequest request, CancellationToken ct)
     {
+        if (!SubjectAccess.TryCreate(subjectKind, subjectId, out var subject))
+            return BadRequest("subjectKind and subjectId name the subject the document is opened from.");
         if (!SubjectAccess.TryParseLink(request.Link, out var link))
             return BadRequest("Link is \"Kind:Id\", e.g. \"Appeal:A-123\".");
 
-        var (document, denied) = await OpenAsync(id, subjectKind, subjectId, DocumentAccessAction.Link, ct, detail: $"add {link}");
-        if (denied != null)
-            return denied;
+        var (document, decision) = await LoadAsync(id, subject, ct);
+        IActionResult? refusal = null;
+        if (!decision.Allowed)
+            refusal = DeniedResult(document, subject);
+        else if (!SubjectAccess.CanReadSubject(_actor, link.Kind))
+            (decision, refusal) = (AccessDecision.Deny(SubjectPermissionMessage(link.Kind)), Forbidden(SubjectPermissionMessage(link.Kind)));
+        else if (document!.Retention.LegalHold.Set)
+            (decision, refusal) = (AccessDecision.Deny("legal hold"), LegalHoldConflict());
 
-        if (!SubjectAccess.CanReadSubject(_actor, link.Kind))
-            return Forbidden($"needs {SubjectAccess.ReadPermissionFor(link.Kind)} to link a document to a {link.Kind}");
-        if (document!.Retention.LegalHold.Set)
-            return LegalHoldConflict();
-        if (document.Links.Contains(link))
+        await AuditAsync(DocumentAccessAction.Link, id, subject, decision.Allowed,
+            decision.Allowed ? $"add {link}" : $"add {link}: {decision.Reason}", ct);
+        if (refusal != null)
+            return refusal;
+
+        if (document!.Links.Contains(link))
             return Ok(SubjectAccess.Project(_actor, document));
 
         document.Links.Add(link);
@@ -371,23 +426,30 @@ public sealed class DocumentsController : ControllerBase
     public async Task<IActionResult> RemoveLink(string id, string kind, string linkId,
         [FromQuery] string? subjectKind, [FromQuery] string? subjectId, CancellationToken ct)
     {
+        if (!SubjectAccess.TryCreate(subjectKind, subjectId, out var subject))
+            return BadRequest("subjectKind and subjectId name the subject the document is opened from.");
         if (!SubjectAccess.TryCreate(kind, linkId, out var link))
             return BadRequest("Unknown link.");
 
-        var (document, denied) = await OpenAsync(id, subjectKind, subjectId, DocumentAccessAction.Unlink, ct, detail: $"remove {link}");
-        if (denied != null)
-            return denied;
+        var (document, decision) = await LoadAsync(id, subject, ct);
+        IActionResult? refusal = null;
+        if (!decision.Allowed)
+            refusal = DeniedResult(document, subject);
+        else if (!SubjectAccess.CanReadSubject(_actor, link.Kind))
+            (decision, refusal) = (AccessDecision.Deny(SubjectPermissionMessage(link.Kind)), Forbidden(SubjectPermissionMessage(link.Kind)));
+        else if (document!.Retention.LegalHold.Set)
+            (decision, refusal) = (AccessDecision.Deny("legal hold"), LegalHoldConflict());
+        else if (!document.Links.Contains(link))
+            (decision, refusal) = (AccessDecision.Deny("no such link"), NotFound());
+        else if (document.Links.Count == 1)
+            (decision, refusal) = (AccessDecision.Deny("last link"), Conflict("A document keeps at least one link. Link it elsewhere first."));
 
-        if (!SubjectAccess.CanReadSubject(_actor, link.Kind))
-            return Forbidden($"needs {SubjectAccess.ReadPermissionFor(link.Kind)} to unlink a {link.Kind}");
-        if (document!.Retention.LegalHold.Set)
-            return LegalHoldConflict();
-        if (!document.Links.Contains(link))
-            return NotFound();
-        if (document.Links.Count == 1)
-            return Conflict("A document keeps at least one link. Link it elsewhere first.");
+        await AuditAsync(DocumentAccessAction.Unlink, id, subject, decision.Allowed,
+            decision.Allowed ? $"remove {link}" : $"remove {link}: {decision.Reason}", ct);
+        if (refusal != null)
+            return refusal;
 
-        document.Links.Remove(link);
+        document!.Links.Remove(link);
         return await SaveAsync(document, ct);
     }
 
@@ -396,24 +458,35 @@ public sealed class DocumentsController : ControllerBase
     /// <summary>
     /// Places or releases a legal hold (records:legal-hold). A held document's
     /// links can't change; deletion (the retention job, a later step) skips
-    /// it. A release needs a reason. Both are kept in the document's history
-    /// and the access audit.
+    /// it. A release needs a reason. Every attempt is audited. The answer is
+    /// only the hold state: placing a hold does not open the document.
     /// </summary>
     [HttpPut("{id}/legal-hold")]
     [RequirePermission(ChoRolePermissions.LegalHold)]
     public async Task<IActionResult> UpdateLegalHold(string id, [FromBody] LegalHoldRequest request, CancellationToken ct)
     {
         var reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim();
+        var verb = request.LegalHold ? "set" : "release";
+
         if (!request.LegalHold && reason is null)
+        {
+            await AuditAsync(DocumentAccessAction.LegalHold, id, null, allowed: false, $"{verb}: no reason given", ct);
             return BadRequest("A reason is required to release a legal hold.");
+        }
 
         var document = await _documents.GetAsync(TenantId, id, ct);
         if (document is null)
+        {
+            await AuditAsync(DocumentAccessAction.LegalHold, id, null, allowed: false, $"{verb}: no such document", ct);
             return NotFound();
+        }
 
         var hold = document.Retention.LegalHold;
         if (hold.Set == request.LegalHold)
-            return Ok(SubjectAccess.Project(_actor, document));
+        {
+            await AuditAsync(DocumentAccessAction.LegalHold, id, null, allowed: true, $"{verb}: already in that state", ct);
+            return Ok(HoldState(document));
+        }
 
         var now = Now;
         hold.Set = request.LegalHold;
@@ -428,6 +501,7 @@ public sealed class DocumentsController : ControllerBase
             At = now
         });
 
+        await AuditAsync(DocumentAccessAction.LegalHold, id, null, allowed: true, $"{verb}: {reason ?? "(no reason)"}", ct);
         try
         {
             document = await _documents.UpdateAsync(document, ct);
@@ -437,13 +511,22 @@ public sealed class DocumentsController : ControllerBase
             return ConcurrencyConflict();
         }
 
-        await AuditAsync(DocumentAccessAction.LegalHold, id, null, allowed: true,
-            $"{(request.LegalHold ? "set" : "released")}: {reason ?? "(no reason)"}", ct);
-
         if (document.PendingUploadPath is null)
-            await _store.SetTagsAsync(document.StorageContainer, document.StoragePath, StorageTags(document), ct);
+        {
+            try
+            {
+                await _store.SetTagsAsync(document.StorageContainer, document.StoragePath, StorageTags(document), ct);
+            }
+            catch (Exception ex)
+            {
+                // The catalog is the record of the hold and is already saved;
+                // storage tags back it up for lifecycle rules. Say so loudly.
+                _logger.LogError(ex, "Legal hold on {TenantId}/{DocumentId} saved, but its storage tags could not be updated",
+                    LogSanitizer.Sanitize(TenantId), LogSanitizer.Sanitize(id));
+            }
+        }
 
-        return Ok(SubjectAccess.Project(_actor, document));
+        return Ok(HoldState(document));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -451,7 +534,8 @@ public sealed class DocumentsController : ControllerBase
     private sealed record UploadMetadata(
         List<DocumentLink> Links, List<string> Sensitivity, string Channel, DateTime ReceivedAt, IActionResult? Error);
 
-    private UploadMetadata ValidateMetadata(string? type, List<string>? links, List<string>? sensitivity, string? channel, DateTime? receivedAt)
+    private async Task<UploadMetadata> ValidateMetadataAsync(
+        string? type, List<string>? links, List<string>? sensitivity, string? channel, DateTime? receivedAt, CancellationToken ct)
     {
         UploadMetadata Fail(IActionResult error) => new([], [], string.Empty, default, error);
 
@@ -472,10 +556,18 @@ public sealed class DocumentsController : ControllerBase
         foreach (var link in parsed)
         {
             if (!SubjectAccess.CanReadSubject(_actor, link.Kind))
-                return Fail(Forbidden($"needs {SubjectAccess.ReadPermissionFor(link.Kind)} to file a document on a {link.Kind}"));
+            {
+                var reason = SubjectPermissionMessage(link.Kind);
+                await AuditAsync(DocumentAccessAction.Upload, null, link, allowed: false, reason, ct);
+                return Fail(Forbidden(reason));
+            }
         }
 
-        var tags = (sensitivity ?? []).Select(t => t.Trim().ToUpperInvariant()).Distinct().ToList();
+        var tags = (sensitivity ?? [])
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim().ToUpperInvariant())
+            .Distinct()
+            .ToList();
         if (tags.FirstOrDefault(t => !SensitivityTags.All.Contains(t)) is { } unknown)
             return Fail(BadRequest($"Unknown sensitivity tag '{LogSanitizer.Sanitize(unknown)}'."));
 
@@ -485,8 +577,8 @@ public sealed class DocumentsController : ControllerBase
 
         var now = Now;
         var received = receivedAt?.ToUniversalTime() ?? now;
-        if (received > now.AddMinutes(5))
-            return Fail(BadRequest("ReceivedAt is when the document arrived; it can't be in the future."));
+        if (received > now.AddMinutes(5) || received < now.AddYears(-30))
+            return Fail(BadRequest("ReceivedAt is when the document arrived: not in the future, and within the last 30 years."));
 
         return new UploadMetadata(parsed, tags, sourceChannel, received, null);
     }
@@ -517,17 +609,27 @@ public sealed class DocumentsController : ControllerBase
         };
     }
 
-    /// <summary>Identical content already stored: link the existing document to this upload's subjects and tags instead of storing it again.</summary>
+    /// <summary>
+    /// A duplicate is merged only into a document this caller can already open
+    /// (through one of its links, sensitivity included) and that is not on
+    /// legal hold. Anything else becomes its own document, so identical bytes
+    /// never attach anyone to a record they couldn't see, and the answer looks
+    /// the same as for a first upload.
+    /// </summary>
+    private bool CanMergeInto(CatalogDocument existing) =>
+        !existing.Retention.LegalHold.Set
+        && existing.Links.Any(l => SubjectAccess.Decide(_actor, existing, l).Allowed);
+
     private async Task<IActionResult> MergeDuplicateAsync(CatalogDocument existing, UploadMetadata metadata, CancellationToken ct)
     {
-        if (existing.Retention.LegalHold.Set && metadata.Links.Any(l => !existing.Links.Contains(l)))
-            return LegalHoldConflict();
-
-        foreach (var link in metadata.Links.Where(l => !existing.Links.Contains(l)))
+        var added = metadata.Links.Where(l => !existing.Links.Contains(l)).ToList();
+        foreach (var link in added)
             existing.Links.Add(link);
         foreach (var tag in metadata.Sensitivity.Where(t => !existing.Sensitivity.Contains(t)))
             existing.Sensitivity.Add(tag);
 
+        await AuditAsync(DocumentAccessAction.Upload, existing.Id, metadata.Links[0], allowed: true,
+            $"duplicate content: linked the existing document to [{string.Join(",", added)}]", ct);
         try
         {
             existing = await _documents.UpdateAsync(existing, ct);
@@ -537,50 +639,40 @@ public sealed class DocumentsController : ControllerBase
             return ConcurrencyConflict();
         }
 
-        await AuditAsync(DocumentAccessAction.Upload, existing.Id, metadata.Links[0], allowed: true,
-            "duplicate content: linked to the existing document", ct);
-
-        // The uploader holds the bytes, but may still lack the sensitivity
-        // permission for what they just tagged: answer with the record only if
-        // they may see it.
+        // Adding a sensitivity tag can make the merged document restricted for
+        // this very caller; then they get only its id.
         return SubjectAccess.DecideSensitivity(_actor, existing).Allowed
             ? Ok(SubjectAccess.Project(_actor, existing))
-            : Ok(new { id = existing.Id, duplicate = true });
+            : Ok(new { id = existing.Id });
     }
 
-    /// <summary>Loads a document through a subject, auditing the attempt either way. Returns the document or the response to send.</summary>
-    private async Task<(CatalogDocument? Document, IActionResult? Denied)> OpenAsync(
-        string id, string? subjectKind, string? subjectId, DocumentAccessAction action, CancellationToken ct, string? detail = null)
+    /// <summary>The document and whether this caller may open it from <paramref name="subject"/>. Does not audit.</summary>
+    private async Task<(CatalogDocument? Document, AccessDecision Decision)> LoadAsync(string id, DocumentLink subject, CancellationToken ct)
     {
-        if (!SubjectAccess.TryCreate(subjectKind, subjectId, out var subject))
-            return (null, BadRequest("subjectKind and subjectId name the subject the document is opened from."));
-
         var document = await _documents.GetAsync(TenantId, id, ct);
         var decision = document is null
             ? AccessDecision.Deny("no such document in tenant")
             : SubjectAccess.Decide(_actor, document, subject);
-
-        await AuditAsync(action, id, subject, decision.Allowed,
-            decision.Allowed ? detail : decision.Reason, ct);
-
-        return decision.Allowed ? (document, null) : (null, DeniedResult(document, subject, decision));
+        return (document, decision);
     }
 
     /// <summary>
-    /// 403 when the caller lacks a permission it could be granted; 404 when the
-    /// document is missing or not on that subject, so ids reveal nothing.
+    /// 403 naming the permission when the caller lacks a subject permission it
+    /// could be granted; 404 when the document is missing or not on that
+    /// subject; otherwise (sensitivity) a 403 that says nothing more than
+    /// "restricted". The reason itself is only in the audit.
     /// </summary>
-    private IActionResult DeniedResult(CatalogDocument? document, DocumentLink subject, AccessDecision decision)
+    private IActionResult DeniedResult(CatalogDocument? document, DocumentLink subject)
     {
         if (!SubjectAccess.CanReadSubject(_actor, subject.Kind))
-            return Forbidden(decision.Reason!);
+            return Forbidden(SubjectPermissionMessage(subject.Kind));
         if (document is null || !document.Links.Contains(subject))
             return NotFound();
+        if (!SubjectAccess.DecideSensitivity(_actor, document).Allowed)
+            return Forbidden(RestrictedMessage);
         if (document.PendingUploadPath != null)
             return Conflict("The upload for this document has not been finalized.");
-        if (!ScanAllowsServing(document.Scan.Status) && SubjectAccess.DecideSensitivity(_actor, document).Allowed)
-            return Conflict($"The document can't be opened: scan status {document.Scan.Status}.");
-        return Forbidden(decision.Reason!);
+        return Conflict($"The document can't be opened: scan status {document.Scan.Status}.");
     }
 
     private bool ScanAllowsServing(ScanStatus status) =>
@@ -599,7 +691,13 @@ public sealed class DocumentsController : ControllerBase
         return Ok(SubjectAccess.Project(_actor, document));
     }
 
-    /// <summary>Written before the response; a failure here fails the request, so nothing is served unaudited.</summary>
+    private async Task<IActionResult> RefuseUploadAsync(DocumentLink subject, string? documentId, int status, string message, CancellationToken ct)
+    {
+        await AuditAsync(DocumentAccessAction.Upload, documentId, subject, allowed: false, message, ct);
+        return StatusCode(status, message);
+    }
+
+    /// <summary>Written before the response; a failure here fails the request, so nothing is served or changed unaudited.</summary>
     private Task AuditAsync(DocumentAccessAction action, string? documentId, DocumentLink? subject, bool allowed, string? detail, CancellationToken ct)
     {
         var screen = Request.Headers[ScreenHeader].ToString();
@@ -618,6 +716,8 @@ public sealed class DocumentsController : ControllerBase
         }, ct);
     }
 
+    private static object HoldState(CatalogDocument d) => new { id = d.Id, legalHold = d.Retention.LegalHold.Set };
+
     private static IReadOnlyDictionary<string, string> StorageTags(CatalogDocument d) => new Dictionary<string, string>
     {
         ["retentionPolicyId"] = d.Retention.PolicyId,
@@ -628,10 +728,13 @@ public sealed class DocumentsController : ControllerBase
     private static string Sha256Hex(MemoryStream buffer) =>
         Convert.ToHexString(SHA256.HashData(buffer.GetBuffer().AsSpan(0, (int)buffer.Length))).ToLowerInvariant();
 
+    private static string SubjectPermissionMessage(DocumentLinkKind kind) =>
+        $"needs {SubjectAccess.ReadPermissionFor(kind)} for {kind} documents";
+
     private ObjectResult Forbidden(string reason) => StatusCode(StatusCodes.Status403Forbidden, reason);
 
-    private ObjectResult UnsupportedType(string? given) => StatusCode(StatusCodes.Status415UnsupportedMediaType,
-        $"Content type '{LogSanitizer.Sanitize(given)}' is not accepted. Allowed: {string.Join(", ", _uploadPolicy.AllowedContentTypes)}.");
+    private string UnsupportedTypeMessage(string? given) =>
+        $"Content type '{LogSanitizer.Sanitize(given)}' is not accepted. Allowed: {string.Join(", ", _uploadPolicy.AllowedContentTypes)}.";
 
     private ObjectResult ConcurrencyConflict() => StatusCode(StatusCodes.Status409Conflict,
         "The document was changed by another request. Reload it and try again.");

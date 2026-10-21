@@ -60,12 +60,21 @@ public class SubjectAccessTests
     }
 
     [Fact]
-    public void CallDocuments_AreClosedToOperationalRolesUntilCallsDefineAccess()
+    public void CallDocuments_AreClosedToEveryRole_UntilCallsDefineAccess()
     {
-        // Only roles that read everything (*:read, *:*) reach calls:read today.
-        var wildcard = new[] { ChoRolePermissions.TenantAdmin, ChoRolePermissions.PlatformAdmin, ChoRolePermissions.ComplianceOfficer };
-        foreach (var role in ChoRolePermissions.BuiltInRoles.Except(wildcard))
+        // calls:read is exact-only: *:read and *:* don't reach it.
+        foreach (var role in ChoRolePermissions.BuiltInRoles)
             Assert.False(SubjectAccess.CanReadSubject(new Actor(role), DocumentLinkKind.Call), role);
+    }
+
+    [Theory]
+    [InlineData("TenantAdmin")]
+    [InlineData("PlatformAdmin")]
+    [InlineData("ClaimsSupervisor")]
+    public void SensitiveDocuments_AreNotOpenedByWildcardsOrBroadRoles(string role)
+    {
+        var doc = Doc(SensitivityTags.BehavioralHealth);
+        Assert.False(SubjectAccess.DecideSensitivity(new Actor(role), doc).Allowed, role);
     }
 
     [Fact]
@@ -84,8 +93,11 @@ public class SubjectAccessTests
         Assert.False(SubjectAccess.Decide(new Actor(ChoRolePermissions.ClaimsExaminer), doc, Claim1).Allowed);
         Assert.True(SubjectAccess.Decide(new Actor(ChoRolePermissions.UMCoordinator), doc, Claim1).Allowed);
 
-        // *:read must not reach documents:read-sensitive by itself.
+        // No wildcard reaches documents:read-sensitive; only the exact grant.
         Assert.False(ChoRolePermissions.Matches("*:read", ChoRolePermissions.DocumentsReadSensitive));
+        Assert.False(ChoRolePermissions.Matches("*:*", ChoRolePermissions.DocumentsReadSensitive));
+        Assert.False(ChoRolePermissions.Matches("documents:*", ChoRolePermissions.DocumentsReadSensitive));
+        Assert.True(ChoRolePermissions.Matches(ChoRolePermissions.DocumentsReadSensitive, ChoRolePermissions.DocumentsReadSensitive));
     }
 
     [Fact]

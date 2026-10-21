@@ -168,9 +168,11 @@ public static class ChoPrincipal
         // permissions only: platform:* permissions act across tenants and are
         // granted only by name to a user, so a service token never satisfies
         // them. A cross-service call that must be allowed names its caller with
-        // [RequireServiceClient] instead.
+        // [RequireServiceClient] instead. Exact-only permissions (sensitive
+        // documents) are not implied for services either.
         if (IsService(principal))
-            return !ChoRolePermissions.IsReserved(permission);
+            return !ChoRolePermissions.IsReserved(permission)
+                   && !ChoRolePermissions.IsExactOnly(permission);
 
         var explicitPermissions = principal.FindAll(ChoClaimTypes.Permission).Select(c => c.Value).ToList();
         var granted = explicitPermissions.Count > 0
