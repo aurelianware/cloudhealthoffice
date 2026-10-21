@@ -183,11 +183,11 @@
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{
-      --cyan:#00ffff;--green:#00ff88;--blue:#00b4ff;
-      --bg:#000;--surface:rgba(8,8,8,.92);--surface-alt:rgba(0,255,255,.03);
-      --border:rgba(0,255,255,.12);--border-green:rgba(0,255,136,.12);
-      --border-bright:rgba(0,255,255,.3);
-      --text:#e0e0e0;--text-muted:#a0a0a0;--text-dim:#606060;
+      --cyan:#0E7490;--green:#0F766E;--blue:#0E7490;
+      --bg:#FFFFFF;--surface:rgba(245, 247, 250, 0.92);--surface-alt:rgba(14, 116, 144, 0.03);
+      --border:rgba(14, 116, 144, 0.12);--border-green:rgba(15, 118, 110, 0.12);
+      --border-bright:rgba(14, 116, 144, 0.3);
+      --text:#334155;--text-muted:#334155;--text-dim:#475569;
       --font:'Outfit',system-ui,sans-serif;
       --mono:'JetBrains Mono',monospace;
       --max:1140px;
@@ -196,45 +196,45 @@
     body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.7;overflow-x:hidden}
 
     /* ── NAV ── */
-    nav{position:sticky;top:0;z-index:100;background:rgba(0,0,0,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem}
+    nav{position:sticky;top:0;z-index:100;background:rgba(255, 255, 255, 0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem}
     .nav-inner{max-width:var(--max);margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
-    .nav-brand{font-weight:800;font-size:1.05rem;color:#fff;text-decoration:none;display:flex;align-items:center;gap:.6rem}
+    .nav-brand{font-weight:800;font-size:1.05rem;color:#0B1F33;text-decoration:none;display:flex;align-items:center;gap:.6rem}
     .nav-brand span{opacity:.5;font-weight:400;font-size:.8rem}
     .nav-links{display:flex;gap:1.8rem;align-items:center}
     .nav-links a{color:var(--text-muted);text-decoration:none;font-size:.82rem;font-weight:500;transition:color .2s}
     .nav-links a:hover{color:var(--cyan)}
-    .nav-cta{background:rgba(0,255,255,.08);border:1px solid rgba(0,255,255,.25);color:var(--cyan);padding:.35rem .9rem;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none;transition:all .25s}
-    .nav-cta:hover{background:rgba(0,255,255,.15);box-shadow:0 0 20px rgba(0,255,255,.1)}
+    .nav-cta{background:rgba(14, 116, 144, 0.08);border:1px solid rgba(14, 116, 144, 0.25);color:var(--cyan);padding:.35rem .9rem;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none;transition:all .25s}
+    .nav-cta:hover{background:rgba(14, 116, 144, 0.15);box-shadow:0 0 20px rgba(14, 116, 144, 0.1)}
 
     /* ── HERO ── */
     .hero{padding:5rem 2rem 4rem;text-align:center;position:relative;overflow:hidden}
-    .hero::before{content:'';position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:800px;height:800px;background:radial-gradient(circle,rgba(0,255,255,.04) 0%,transparent 70%);pointer-events:none}
+    .hero::before{content:'';position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:800px;height:800px;background:radial-gradient(circle,rgba(14, 116, 144, 0.04) 0%,transparent 70%);pointer-events:none}
     .hero-eyebrow{font-family:var(--mono);font-size:.72rem;font-weight:500;color:var(--cyan);text-transform:uppercase;letter-spacing:3px;margin-bottom:1rem;opacity:.8}
-    .hero h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:900;color:#fff;line-height:1.15;max-width:800px;margin:0 auto 1.2rem}
+    .hero h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:900;color:#0B1F33;line-height:1.15;max-width:800px;margin:0 auto 1.2rem}
     .hero h1 em{font-style:normal;background:linear-gradient(90deg,var(--cyan),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
     .hero-sub{font-size:1.05rem;color:var(--text-muted);max-width:680px;margin:0 auto 2rem;line-height:1.8}
     .hero-badges{display:flex;flex-wrap:wrap;justify-content:center;gap:.6rem;margin-bottom:2.5rem}
     .badge{font-family:var(--mono);font-size:.68rem;font-weight:500;padding:.3rem .7rem;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted)}
-    .badge.cyan{border-color:rgba(0,255,255,.25);color:var(--cyan)}
-    .badge.green{border-color:rgba(0,255,136,.25);color:var(--green)}
+    .badge.cyan{border-color:rgba(14, 116, 144, 0.25);color:var(--cyan)}
+    .badge.green{border-color:rgba(15, 118, 110, 0.25);color:var(--green)}
     .hero-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:.8rem}
     .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.7rem 1.4rem;border-radius:8px;font-size:.85rem;font-weight:600;text-decoration:none;transition:all .25s}
-    .btn-primary{background:rgba(0,255,255,.1);border:1px solid rgba(0,255,255,.3);color:var(--cyan)}
-    .btn-primary:hover{background:rgba(0,255,255,.18);box-shadow:0 0 30px rgba(0,255,255,.1)}
-    .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--text-muted)}
-    .btn-ghost:hover{border-color:rgba(255,255,255,.2);color:#fff}
+    .btn-primary{background:rgba(14, 116, 144, 0.1);border:1px solid rgba(14, 116, 144, 0.3);color:var(--cyan)}
+    .btn-primary:hover{background:rgba(14, 116, 144, 0.18);box-shadow:0 0 30px rgba(14, 116, 144, 0.1)}
+    .btn-ghost{background:transparent;border:1px solid rgba(11, 31, 51, 0.14);color:var(--text-muted)}
+    .btn-ghost:hover{border-color:rgba(11, 31, 51, 0.14);color:#0B1F33}
 
     /* ── SECTIONS ── */
     section{padding:4.5rem 2rem}
     .container{max-width:var(--max);margin:0 auto}
     .section-label{font-family:var(--mono);font-size:.65rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:3px;margin-bottom:.6rem;opacity:.7}
-    .section-title{font-size:clamp(1.5rem,3.5vw,2.2rem);font-weight:800;color:#fff;margin-bottom:.6rem;line-height:1.2}
+    .section-title{font-size:clamp(1.5rem,3.5vw,2.2rem);font-weight:800;color:#0B1F33;margin-bottom:.6rem;line-height:1.2}
     .section-desc{font-size:.95rem;color:var(--text-muted);max-width:640px;line-height:1.8;margin-bottom:2.5rem}
 
     /* ── STATS ROW ── */
     .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:3rem auto 0;max-width:900px}
     .stat{background:var(--surface);padding:1.8rem 1rem;text-align:center}
-    .stat-num{font-size:2rem;font-weight:800;color:#fff;line-height:1}
+    .stat-num{font-size:2rem;font-weight:800;color:#0B1F33;line-height:1}
     .stat-num.cyan{color:var(--cyan)}
     .stat-num.green{color:var(--green)}
     .stat-label{font-size:.72rem;color:var(--text-dim);margin-top:.4rem;line-height:1.4}
@@ -246,8 +246,8 @@
     /* ── API GRID ── */
     .api-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.2rem}
     .api-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.6rem;position:relative;transition:border-color .3s,box-shadow .3s}
-    .api-card:hover{border-color:var(--border-bright);box-shadow:0 0 30px rgba(0,255,255,.05)}
-    .api-card h3{font-size:1rem;font-weight:700;color:#fff;margin-bottom:.3rem}
+    .api-card:hover{border-color:var(--border-bright);box-shadow:0 0 30px rgba(14, 116, 144, 0.05)}
+    .api-card h3{font-size:1rem;font-weight:700;color:#0B1F33;margin-bottom:.3rem}
     .api-card .api-tag{font-family:var(--mono);font-size:.62rem;color:var(--cyan);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:.8rem;display:block}
     .api-card p{font-size:.82rem;color:var(--text-muted);line-height:1.7}
     .api-card .status{position:absolute;top:1.2rem;right:1.2rem;font-size:.65rem;font-weight:600;color:var(--green);display:flex;align-items:center;gap:.3rem}
@@ -256,24 +256,24 @@
     /* ── COMPLIANCE TABLE ── */
     .compliance-table{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:1.5rem}
     .compliance-table th{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-dim);text-align:left;padding:.8rem 1rem;border-bottom:1px solid var(--border);font-weight:600}
-    .compliance-table td{padding:.75rem 1rem;border-bottom:1px solid rgba(255,255,255,.03);color:var(--text-muted);vertical-align:middle}
-    .compliance-table tr:hover td{background:rgba(0,255,255,.02)}
+    .compliance-table td{padding:.75rem 1rem;border-bottom:1px solid rgba(11, 31, 51, 0.045);color:var(--text-muted);vertical-align:middle}
+    .compliance-table tr:hover td{background:rgba(14, 116, 144, 0.02)}
     .compliance-table .status-badge{font-family:var(--mono);font-size:.65rem;font-weight:600;padding:.2rem .5rem;border-radius:3px}
-    .compliance-table .done{color:var(--green);background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.15)}
-    .compliance-table .prod{color:var(--cyan);background:rgba(0,255,255,.06);border:1px solid rgba(0,255,255,.12)}
-    .compliance-table .partial{color:#ffc857;background:rgba(255,200,87,.08);border:1px solid rgba(255,200,87,.2)}
-    .compliance-table td:first-child{color:#fff;font-weight:600}
+    .compliance-table .done{color:var(--green);background:rgba(15, 118, 110, 0.08);border:1px solid rgba(15, 118, 110, 0.15)}
+    .compliance-table .prod{color:var(--cyan);background:rgba(14, 116, 144, 0.06);border:1px solid rgba(14, 116, 144, 0.12)}
+    .compliance-table .partial{color:#B45309;background:rgba(180, 83, 9, 0.08);border:1px solid rgba(180, 83, 9, 0.2)}
+    .compliance-table td:first-child{color:#0B1F33;font-weight:600}
 
     /* ── TIMELINE ── */
     .timeline{position:relative;padding:2rem 0}
     .timeline-track{position:absolute;left:20px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,var(--cyan),var(--green))}
     .timeline-item{position:relative;padding-left:52px;margin-bottom:2.5rem}
     .timeline-dot{position:absolute;left:13px;top:4px;width:16px;height:16px;border-radius:50%;border:2px solid var(--cyan);background:var(--bg)}
-    .timeline-dot.active{background:var(--cyan);box-shadow:0 0 12px rgba(0,255,255,.4)}
+    .timeline-dot.active{background:var(--cyan);box-shadow:0 0 12px rgba(14, 116, 144, 0.4)}
     .timeline-dot.green{border-color:var(--green)}
-    .timeline-dot.green.active{background:var(--green);box-shadow:0 0 12px rgba(0,255,136,.4)}
+    .timeline-dot.green.active{background:var(--green);box-shadow:0 0 12px rgba(15, 118, 110, 0.4)}
     .timeline-date{font-family:var(--mono);font-size:.7rem;color:var(--cyan);font-weight:600;margin-bottom:.2rem}
-    .timeline-title{font-size:.95rem;font-weight:700;color:#fff;margin-bottom:.2rem}
+    .timeline-title{font-size:.95rem;font-weight:700;color:#0B1F33;margin-bottom:.2rem}
     .timeline-desc{font-size:.8rem;color:var(--text-muted);line-height:1.6}
 
     /* ── X12 FHIR FLOW DIAGRAM ── */
@@ -290,10 +290,10 @@
     /* ── PRICING ── */
     .pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem}
     .price-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:2rem;position:relative}
-    .price-card.featured{border-color:rgba(0,255,255,.3);box-shadow:0 0 40px rgba(0,255,255,.05)}
+    .price-card.featured{border-color:rgba(14, 116, 144, 0.3);box-shadow:0 0 40px rgba(14, 116, 144, 0.05)}
     .price-card.featured::before{content:'Most Popular';position:absolute;top:-10px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:.6rem;font-weight:600;color:var(--bg);background:var(--cyan);padding:.15rem .6rem;border-radius:3px;text-transform:uppercase;letter-spacing:1px}
     .price-tier{font-size:.75rem;font-weight:700;color:var(--cyan);text-transform:uppercase;letter-spacing:2px;margin-bottom:.3rem}
-    .price-amount{font-size:2.2rem;font-weight:900;color:#fff}
+    .price-amount{font-size:2.2rem;font-weight:900;color:#0B1F33}
     .price-amount span{font-size:.8rem;font-weight:400;color:var(--text-dim)}
     .price-desc{font-size:.78rem;color:var(--text-muted);margin:.6rem 0 1.2rem;line-height:1.6}
     .price-features{list-style:none;font-size:.75rem;color:var(--text-muted)}
@@ -301,12 +301,12 @@
     .price-features li::before{content:'✓';color:var(--green);font-weight:700;font-size:.7rem}
 
     /* ── CTA ── */
-    .cta-section{text-align:center;padding:5rem 2rem;background:linear-gradient(180deg,transparent,rgba(0,255,255,.02),transparent)}
-    .cta-section h2{font-size:clamp(1.4rem,3vw,2rem);font-weight:800;color:#fff;margin-bottom:.6rem}
+    .cta-section{text-align:center;padding:5rem 2rem;background:linear-gradient(180deg,transparent,rgba(14, 116, 144, 0.02),transparent)}
+    .cta-section h2{font-size:clamp(1.4rem,3vw,2rem);font-weight:800;color:#0B1F33;margin-bottom:.6rem}
     .cta-section p{color:var(--text-muted);font-size:.9rem;max-width:500px;margin:0 auto 2rem}
 
     /* ── FOOTER ── */
-    footer{border-top:1px solid rgba(255,255,255,.04);padding:2rem;text-align:center;font-size:.7rem;color:var(--text-dim)}
+    footer{border-top:1px solid rgba(11, 31, 51, 0.06);padding:2rem;text-align:center;font-size:.7rem;color:var(--text-dim)}
     footer a{color:var(--text-muted);text-decoration:none}
     footer a:hover{color:var(--cyan)}
 
@@ -316,22 +316,22 @@
     /* ── QUICK ANSWERS (AI-extractable Q&A) ── */
     .qa-list{display:grid;gap:1rem;margin-top:1rem}
     .qa{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.4rem 1.6rem}
-    .qa h3{font-size:1.02rem;font-weight:700;color:#fff;margin-bottom:.5rem;line-height:1.3}
+    .qa h3{font-size:1.02rem;font-weight:700;color:#0B1F33;margin-bottom:.5rem;line-height:1.3}
     .qa p{font-size:.88rem;color:var(--text-muted);line-height:1.75}
     .qa p + p{margin-top:.6rem}
-    .qa a{color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(0,255,255,.25)}
+    .qa a{color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(14, 116, 144, 0.25)}
     .qa a:hover{border-bottom-color:var(--cyan)}
 
     /* ── CAPABILITY DEEP-DIVE (Quick answer / How it works / CHO / Evidence) ── */
     .cap-list{display:grid;gap:1.4rem;margin-top:1rem}
     .cap{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.6rem 1.8rem}
-    .cap > h3{font-size:1.1rem;font-weight:700;color:#fff;margin-bottom:1rem;padding-bottom:.7rem;border-bottom:1px solid var(--border)}
+    .cap > h3{font-size:1.1rem;font-weight:700;color:#0B1F33;margin-bottom:1rem;padding-bottom:.7rem;border-bottom:1px solid var(--border)}
     .cap-row{margin-bottom:.9rem}
     .cap-row:last-child{margin-bottom:0}
     .cap-row .cap-label{font-family:var(--mono);font-size:.6rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:2px;display:block;margin-bottom:.25rem;opacity:.85}
     .cap-row p{font-size:.85rem;color:var(--text-muted);line-height:1.7}
     .cap-row.evidence .cap-label{color:var(--green)}
-    .cap-row a{color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(0,255,255,.25)}
+    .cap-row a{color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(14, 116, 144, 0.25)}
     .cap-row a:hover{border-bottom-color:var(--cyan)}
 
     /* ── RESPONSIVE ── */
@@ -387,7 +387,7 @@
   <p class="hero-sub">A path to CMS Interoperability and Prior Authorization compliance without replacing your core admin system. FHIR R4 APIs, Da Vinci IGs, and X12 EDI on a Kubernetes-native compliance layer.</p>
   <p class="hero-pillar-link" style="margin:.1rem 0 .2rem;font-size:.95rem">CMS-0057-F conformance in progress &mdash; see the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/epa-gap-matrix.md" target="_blank" rel="noopener noreferrer" style="color:var(--cyan)">ePA gap matrix</a> for requirement-by-requirement status.</p>
   <p class="hero-pillar-link" style="margin:.1rem 0 .2rem;font-size:.95rem">
-    <a href="/cms-0057-f/implementation-architecture/" style="color:var(--cyan);text-decoration:none;font-weight:600;border-bottom:1px solid rgba(0,255,255,.35)">See how the pieces fit together: CMS-0057-F implementation architecture for QNXT, Facets, HealthEdge, and Cloud Health Office →</a>
+    <a href="/cms-0057-f/implementation-architecture/" style="color:var(--cyan);text-decoration:none;font-weight:600;border-bottom:1px solid rgba(14, 116, 144, 0.35)">See how the pieces fit together: CMS-0057-F implementation architecture for QNXT, Facets, HealthEdge, and Cloud Health Office →</a>
   </p>
   <div class="hero-badges">
     <span class="badge cyan">FHIR R4</span>
@@ -452,85 +452,85 @@
 <div class="flow-diagram" data-reveal>
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" width="960" height="320" role="img" aria-label="CMS-0057-F required APIs diagram showing four API categories">
     <defs>
-      <linearGradient id="cg1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00ffff"/><stop offset="100%" stop-color="#00ff88"/></linearGradient>
+      <linearGradient id="cg1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#0E7490"/><stop offset="100%" stop-color="#0F766E"/></linearGradient>
       <filter id="g1"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     </defs>
-    <rect width="960" height="320" fill="#080808" rx="8"/>
+    <rect width="960" height="320" fill="#F5F7FA" rx="8"/>
 
     <!-- Title -->
-    <text x="480" y="36" font-family="Outfit,sans-serif" font-size="15" font-weight="800" fill="#fff" text-anchor="middle">CMS-0057-F — Four Required FHIR R4 APIs</text>
-    <text x="480" y="54" font-family="JetBrains Mono,monospace" font-size="9" fill="#606060" text-anchor="middle">ALL REQUIRED BY JANUARY 1, 2027 — CLOUD HEALTH OFFICE: IMPLEMENTED</text>
+    <text x="480" y="36" font-family="Outfit,sans-serif" font-size="15" font-weight="800" fill="#0B1F33" text-anchor="middle">CMS-0057-F — Four Required FHIR R4 APIs</text>
+    <text x="480" y="54" font-family="JetBrains Mono,monospace" font-size="9" fill="#475569" text-anchor="middle">ALL REQUIRED BY JANUARY 1, 2027 — CLOUD HEALTH OFFICE: IMPLEMENTED</text>
 
     <!-- API 1: Patient Access -->
     <g transform="translate(30,80)">
-      <rect width="210" height="220" rx="8" fill="rgba(0,255,255,.04)" stroke="rgba(0,255,255,.2)" stroke-width="1"/>
-      <rect width="210" height="32" rx="8" fill="rgba(0,255,255,.08)"/>
-      <rect width="210" height="1" y="32" fill="rgba(0,255,255,.15)"/>
-      <text x="105" y="22" font-family="Outfit,sans-serif" font-size="11" font-weight="700" fill="#00ffff" text-anchor="middle" filter="url(#g1)">Patient Access API</text>
-      <text x="14" y="56" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">Claims &amp; encounters data</text>
-      <text x="14" y="74" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">Clinical info via USCDI</text>
-      <text x="14" y="92" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">1 business day of adjudication</text>
-      <line x1="14" y1="108" x2="196" y2="108" stroke="rgba(255,255,255,.05)"/>
-      <text x="14" y="126" font-family="JetBrains Mono,monospace" font-size="8" fill="#606060">FHIR RESOURCES</text>
-      <text x="14" y="144" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Patient</text>
-      <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Coverage</text>
-      <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Claim / EOB</text>
-      <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Encounter</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#ffc857" text-anchor="end">In progress</text>
+      <rect width="210" height="220" rx="8" fill="#0E7490" stroke="#0E7490" stroke-width="1"/>
+      <rect width="210" height="32" rx="8" fill="#0E7490"/>
+      <rect width="210" height="1" y="32" fill="#0E7490"/>
+      <text x="105" y="22" font-family="Outfit,sans-serif" font-size="11" font-weight="700" fill="#0E7490" text-anchor="middle" filter="url(#g1)">Patient Access API</text>
+      <text x="14" y="56" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">Claims &amp; encounters data</text>
+      <text x="14" y="74" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">Clinical info via USCDI</text>
+      <text x="14" y="92" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">1 business day of adjudication</text>
+      <line x1="14" y1="108" x2="196" y2="108" stroke="#0B1F33"/>
+      <text x="14" y="126" font-family="JetBrains Mono,monospace" font-size="8" fill="#475569">FHIR RESOURCES</text>
+      <text x="14" y="144" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0E7490">Patient</text>
+      <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0E7490">Coverage</text>
+      <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0E7490">Claim / EOB</text>
+      <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0E7490">Encounter</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#B45309" text-anchor="end">In progress</text>
     </g>
 
     <!-- API 2: Provider Access -->
     <g transform="translate(260,80)">
-      <rect width="210" height="220" rx="8" fill="rgba(0,255,255,.04)" stroke="rgba(0,255,255,.2)" stroke-width="1"/>
-      <rect width="210" height="32" rx="8" fill="rgba(0,255,255,.08)"/>
-      <rect width="210" height="1" y="32" fill="rgba(0,255,255,.15)"/>
-      <text x="105" y="22" font-family="Outfit,sans-serif" font-size="11" font-weight="700" fill="#00ffff" text-anchor="middle" filter="url(#g1)">Provider Access API</text>
-      <text x="14" y="56" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">Authorized patient data</text>
-      <text x="14" y="74" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">Real-time / near-real-time</text>
-      <text x="14" y="92" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">NPI-based authorization</text>
-      <line x1="14" y1="108" x2="196" y2="108" stroke="rgba(255,255,255,.05)"/>
-      <text x="14" y="126" font-family="JetBrains Mono,monospace" font-size="8" fill="#606060">FHIR RESOURCES</text>
-      <text x="14" y="144" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">ServiceRequest</text>
-      <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">DocumentReference</text>
-      <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Claim / EOB</text>
-      <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ffff">Condition / Procedure</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#ffc857" text-anchor="end">In progress</text>
+      <rect width="210" height="220" rx="8" fill="#0E7490" stroke="#0E7490" stroke-width="1"/>
+      <rect width="210" height="32" rx="8" fill="#0E7490"/>
+      <rect width="210" height="1" y="32" fill="#0E7490"/>
+      <text x="105" y="22" font-family="Outfit,sans-serif" font-size="11" font-weight="700" fill="#0E7490" text-anchor="middle" filter="url(#g1)">Provider Access API</text>
+      <text x="14" y="56" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">Authorized patient data</text>
+      <text x="14" y="74" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">Real-time / near-real-time</text>
+      <text x="14" y="92" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">NPI-based authorization</text>
+      <line x1="14" y1="108" x2="196" y2="108" stroke="#0B1F33"/>
+      <text x="14" y="126" font-family="JetBrains Mono,monospace" font-size="8" fill="#475569">FHIR RESOURCES</text>
+      <text x="14" y="144" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0E7490">ServiceRequest</text>
+      <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0E7490">DocumentReference</text>
+      <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0E7490">Claim / EOB</text>
+      <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0E7490">Condition / Procedure</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#B45309" text-anchor="end">In progress</text>
     </g>
 
     <!-- API 3: Payer-to-Payer -->
     <g transform="translate(490,80)">
-      <rect width="210" height="220" rx="8" fill="rgba(0,255,136,.04)" stroke="rgba(0,255,136,.2)" stroke-width="1"/>
-      <rect width="210" height="32" rx="8" fill="rgba(0,255,136,.08)"/>
-      <rect width="210" height="1" y="32" fill="rgba(0,255,136,.15)"/>
-      <text x="105" y="22" font-family="Outfit,sans-serif" font-size="11" font-weight="700" fill="#00ff88" text-anchor="middle" filter="url(#g1)">Payer-to-Payer API</text>
-      <text x="14" y="56" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">Data exchange on enrollment</text>
-      <text x="14" y="74" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">5-year historical data</text>
-      <text x="14" y="92" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">Bulk FHIR $export</text>
-      <line x1="14" y1="108" x2="196" y2="108" stroke="rgba(255,255,255,.05)"/>
-      <text x="14" y="126" font-family="JetBrains Mono,monospace" font-size="8" fill="#606060">CAPABILITIES</text>
-      <text x="14" y="144" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">Bulk Data Export</text>
-      <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">Enrollment Trigger</text>
-      <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">Lifecycle Retention</text>
-      <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">OAuth 2.0 Consent</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#ffc857" text-anchor="end">In progress</text>
+      <rect width="210" height="220" rx="8" fill="#0F766E" stroke="#0F766E" stroke-width="1"/>
+      <rect width="210" height="32" rx="8" fill="#0F766E"/>
+      <rect width="210" height="1" y="32" fill="#0F766E"/>
+      <text x="105" y="22" font-family="Outfit,sans-serif" font-size="11" font-weight="700" fill="#0F766E" text-anchor="middle" filter="url(#g1)">Payer-to-Payer API</text>
+      <text x="14" y="56" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">Data exchange on enrollment</text>
+      <text x="14" y="74" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">5-year historical data</text>
+      <text x="14" y="92" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">Bulk FHIR $export</text>
+      <line x1="14" y1="108" x2="196" y2="108" stroke="#0B1F33"/>
+      <text x="14" y="126" font-family="JetBrains Mono,monospace" font-size="8" fill="#475569">CAPABILITIES</text>
+      <text x="14" y="144" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0F766E">Bulk Data Export</text>
+      <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0F766E">Enrollment Trigger</text>
+      <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0F766E">Lifecycle Retention</text>
+      <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0F766E">OAuth 2.0 Consent</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#B45309" text-anchor="end">In progress</text>
     </g>
 
     <!-- API 4: Prior Auth -->
     <g transform="translate(720,80)">
-      <rect width="210" height="220" rx="8" fill="rgba(0,255,136,.04)" stroke="rgba(0,255,136,.2)" stroke-width="1"/>
-      <rect width="210" height="32" rx="8" fill="rgba(0,255,136,.08)"/>
-      <rect width="210" height="1" y="32" fill="rgba(0,255,136,.15)"/>
-      <text x="105" y="22" font-family="Outfit,sans-serif" font-size="11" font-weight="700" fill="#00ff88" text-anchor="middle" filter="url(#g1)">Prior Authorization API</text>
-      <text x="14" y="56" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">Real-time auth status</text>
-      <text x="14" y="74" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">72hr urgent / 7-day standard</text>
-      <text x="14" y="92" font-family="Outfit,sans-serif" font-size="9.5" fill="#a0a0a0">Decision rationale required</text>
-      <line x1="14" y1="108" x2="196" y2="108" stroke="rgba(255,255,255,.05)"/>
-      <text x="14" y="126" font-family="JetBrains Mono,monospace" font-size="8" fill="#606060">DA VINCI PAS</text>
-      <text x="14" y="144" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">ServiceRequest</text>
-      <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">ClaimResponse</text>
-      <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">DocumentReference</text>
-      <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#00ff88">X12 278 (planned)</text>
-      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#ffc857" text-anchor="end">In progress</text>
+      <rect width="210" height="220" rx="8" fill="#0F766E" stroke="#0F766E" stroke-width="1"/>
+      <rect width="210" height="32" rx="8" fill="#0F766E"/>
+      <rect width="210" height="1" y="32" fill="#0F766E"/>
+      <text x="105" y="22" font-family="Outfit,sans-serif" font-size="11" font-weight="700" fill="#0F766E" text-anchor="middle" filter="url(#g1)">Prior Authorization API</text>
+      <text x="14" y="56" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">Real-time auth status</text>
+      <text x="14" y="74" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">72hr urgent / 7-day standard</text>
+      <text x="14" y="92" font-family="Outfit,sans-serif" font-size="9.5" fill="#334155">Decision rationale required</text>
+      <line x1="14" y1="108" x2="196" y2="108" stroke="#0B1F33"/>
+      <text x="14" y="126" font-family="JetBrains Mono,monospace" font-size="8" fill="#475569">DA VINCI PAS</text>
+      <text x="14" y="144" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0F766E">ServiceRequest</text>
+      <text x="14" y="160" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0F766E">ClaimResponse</text>
+      <text x="14" y="176" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0F766E">DocumentReference</text>
+      <text x="14" y="192" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#0F766E">X12 278 (planned)</text>
+      <text x="170" y="210" font-family="Outfit,sans-serif" font-size="9" font-weight="700" fill="#B45309" text-anchor="end">In progress</text>
     </g>
   </svg>
 </div>
@@ -632,13 +632,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1280" viewBox="0 0 1360 1280">
 <style>
   text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
-  .title { font-size: 28px; font-weight: 700; fill: #ffffff; }
-  .subtitle { font-size: 20px; font-weight: 400; fill: rgba(255,255,255,0.6); }
-  .section-label { font-size: 16px; font-weight: 500; fill: rgba(255,255,255,0.35); letter-spacing: 1px; text-transform: uppercase; }
+  .title { font-size: 28px; font-weight: 700; fill: #0B1F33; }
+  .subtitle { font-size: 20px; font-weight: 400; fill: #0B1F33; }
+  .section-label { font-size: 16px; font-weight: 500; fill: #0B1F33; letter-spacing: 1px; text-transform: uppercase; }
   .box-title { font-size: 18px; font-weight: 600; }
   .box-sub { font-size: 14px; font-weight: 400; }
-  .label { font-size: 14px; fill: rgba(255,255,255,0.5); }
-  .legend { font-size: 13px; fill: rgba(255,255,255,0.4); }
+  .label { font-size: 14px; fill: #0B1F33; }
+  .legend { font-size: 13px; fill: #0B1F33; }
   .arr { stroke-width: 1.5; }
   .leader { stroke-dasharray: 4 3; stroke-width: 1; }
 </style>
@@ -649,32 +649,32 @@
 </defs>
 
 <!-- Background -->
-<rect width="1360" height="1280" rx="16" fill="#0b1120"/>
+<rect width="1360" height="1280" rx="16" fill="#EEF3F8"/>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
 <!-- EXTERNAL: Provider EHRs                                    -->
 <!-- ═══════════════════════════════════════════════════════════ -->
-<rect x="60" y="40" width="560" height="90" rx="12" fill="rgba(255,120,80,0.06)" stroke="rgba(255,120,80,0.25)" stroke-width="1"/>
+<rect x="60" y="40" width="560" height="90" rx="12" fill="#B91C1C" stroke="#B91C1C" stroke-width="1"/>
 <text class="box-title" x="340" y="72" text-anchor="middle" fill="#ff9070">Provider EHRs</text>
 <text class="box-sub" x="340" y="96" text-anchor="middle" fill="rgba(255,144,112,0.6)">Epic · Meditech · Cerner · SMART on FHIR apps</text>
 
 <!-- EXTERNAL: Members -->
-<rect x="740" y="40" width="560" height="90" rx="12" fill="rgba(255,120,80,0.06)" stroke="rgba(255,120,80,0.25)" stroke-width="1"/>
+<rect x="740" y="40" width="560" height="90" rx="12" fill="#B91C1C" stroke="#B91C1C" stroke-width="1"/>
 <text class="box-title" x="1020" y="72" text-anchor="middle" fill="#ff9070">Members / patients</text>
 <text class="box-sub" x="1020" y="96" text-anchor="middle" fill="rgba(255,144,112,0.6)">Third-party SMART on FHIR patient apps</text>
 
 <!-- Arrows: providers → CHO -->
-<line x1="340" y1="130" x2="340" y2="185" stroke="rgba(255,255,255,0.25)" class="arr" marker-end="url(#ah)"/>
+<line x1="340" y1="130" x2="340" y2="185" stroke="#0B1F33" class="arr" marker-end="url(#ah)"/>
 <text class="label" x="355" y="166">CDS Hooks</text>
 
 <!-- Arrow: members → CHO -->
-<line x1="1020" y1="130" x2="1020" y2="185" stroke="rgba(255,255,255,0.25)" class="arr" marker-end="url(#ah)"/>
+<line x1="1020" y1="130" x2="1020" y2="185" stroke="#0B1F33" class="arr" marker-end="url(#ah)"/>
 <text class="label" x="1035" y="166">FHIR R4</text>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
 <!-- CHO CONTAINER                                              -->
 <!-- ═══════════════════════════════════════════════════════════ -->
-<rect x="30" y="190" width="1300" height="760" rx="20" fill="rgba(0,255,255,0.02)" stroke="rgba(0,255,255,0.12)" stroke-width="1" stroke-dasharray="8 4"/>
+<rect x="30" y="190" width="1300" height="760" rx="20" fill="#0E7490" stroke="#0E7490" stroke-width="1" stroke-dasharray="8 4"/>
 
 <!-- Container title -->
 <text class="title" x="680" y="232" text-anchor="middle">Cloud Health Office</text>
@@ -686,26 +686,26 @@
 <text class="section-label" x="75" y="302">Da Vinci burden reduction</text>
 
 <!-- CRD Server -->
-<rect x="65" y="318" width="380" height="100" rx="10" fill="rgba(0,200,160,0.08)" stroke="rgba(0,200,160,0.3)" stroke-width="1"/>
-<text class="box-title" x="255" y="355" text-anchor="middle" fill="#00e8a0">CRD server</text>
-<text class="box-sub" x="255" y="380" text-anchor="middle" fill="rgba(0,232,160,0.55)">Coverage Requirements Discovery</text>
-<text class="box-sub" x="255" y="400" text-anchor="middle" fill="rgba(0,232,160,0.55)">order-select · order-sign · CDS Hooks</text>
+<rect x="65" y="318" width="380" height="100" rx="10" fill="#0F766E" stroke="#0F766E" stroke-width="1"/>
+<text class="box-title" x="255" y="355" text-anchor="middle" fill="#0F766E">CRD server</text>
+<text class="box-sub" x="255" y="380" text-anchor="middle" fill="#0F766E">Coverage Requirements Discovery</text>
+<text class="box-sub" x="255" y="400" text-anchor="middle" fill="#0F766E">order-select · order-sign · CDS Hooks</text>
 
 <!-- DTR Engine -->
-<rect x="490" y="318" width="380" height="100" rx="10" fill="rgba(0,200,160,0.08)" stroke="rgba(0,200,160,0.3)" stroke-width="1"/>
-<text class="box-title" x="680" y="355" text-anchor="middle" fill="#00e8a0">DTR engine</text>
-<text class="box-sub" x="680" y="380" text-anchor="middle" fill="rgba(0,232,160,0.55)">Documentation Templates &amp; Rules</text>
-<text class="box-sub" x="680" y="400" text-anchor="middle" fill="rgba(0,232,160,0.55)">FHIR Questionnaire · QuestionnaireResponse</text>
+<rect x="490" y="318" width="380" height="100" rx="10" fill="#0F766E" stroke="#0F766E" stroke-width="1"/>
+<text class="box-title" x="680" y="355" text-anchor="middle" fill="#0F766E">DTR engine</text>
+<text class="box-sub" x="680" y="380" text-anchor="middle" fill="#0F766E">Documentation Templates &amp; Rules</text>
+<text class="box-sub" x="680" y="400" text-anchor="middle" fill="#0F766E">FHIR Questionnaire · QuestionnaireResponse</text>
 
 <!-- PAS Server -->
-<rect x="915" y="318" width="380" height="100" rx="10" fill="rgba(0,200,160,0.08)" stroke="rgba(0,200,160,0.3)" stroke-width="1"/>
-<text class="box-title" x="1105" y="355" text-anchor="middle" fill="#00e8a0">PAS server</text>
-<text class="box-sub" x="1105" y="380" text-anchor="middle" fill="rgba(0,232,160,0.55)">Prior Authorization Support</text>
-<text class="box-sub" x="1105" y="400" text-anchor="middle" fill="rgba(0,232,160,0.55)">Claim/$submit · 15-second SLA (validate per deployment)</text>
+<rect x="915" y="318" width="380" height="100" rx="10" fill="#0F766E" stroke="#0F766E" stroke-width="1"/>
+<text class="box-title" x="1105" y="355" text-anchor="middle" fill="#0F766E">PAS server</text>
+<text class="box-sub" x="1105" y="380" text-anchor="middle" fill="#0F766E">Prior Authorization Support</text>
+<text class="box-sub" x="1105" y="400" text-anchor="middle" fill="#0F766E">Claim/$submit · 15-second SLA (validate per deployment)</text>
 
 <!-- Arrows: CRD → DTR → PAS -->
-<line x1="445" y1="368" x2="488" y2="368" stroke="#00ccaa" class="arr" marker-end="url(#ah)"/>
-<line x1="870" y1="368" x2="913" y2="368" stroke="#00ccaa" class="arr" marker-end="url(#ah)"/>
+<line x1="445" y1="368" x2="488" y2="368" stroke="#0F766E" class="arr" marker-end="url(#ah)"/>
+<line x1="870" y1="368" x2="913" y2="368" stroke="#0F766E" class="arr" marker-end="url(#ah)"/>
 
 <!-- ─────────────────────────────────────────────────────────── -->
 <!-- ROW 2: Compliance Intelligence                             -->
@@ -741,73 +741,73 @@
 
 <!-- FHIR APIs -->
 <rect x="65" y="618" width="380" height="100" rx="10" fill="rgba(0,160,255,0.06)" stroke="rgba(0,160,255,0.2)" stroke-width="1"/>
-<text class="box-title" x="255" y="655" text-anchor="middle" fill="#50b0ff">FHIR R4 APIs</text>
-<text class="box-sub" x="255" y="680" text-anchor="middle" fill="rgba(80,176,255,0.55)">Patient Access · Provider Access</text>
-<text class="box-sub" x="255" y="700" text-anchor="middle" fill="rgba(80,176,255,0.55)">Payer-to-Payer · Provider Directory</text>
+<text class="box-title" x="255" y="655" text-anchor="middle" fill="#0E7490">FHIR R4 APIs</text>
+<text class="box-sub" x="255" y="680" text-anchor="middle" fill="#0E7490">Patient Access · Provider Access</text>
+<text class="box-sub" x="255" y="700" text-anchor="middle" fill="#0E7490">Payer-to-Payer · Provider Directory</text>
 
 <!-- X12 Parsers -->
 <rect x="490" y="618" width="380" height="100" rx="10" fill="rgba(0,160,255,0.06)" stroke="rgba(0,160,255,0.2)" stroke-width="1"/>
-<text class="box-title" x="680" y="655" text-anchor="middle" fill="#50b0ff">X12 EDI parsers</text>
-<text class="box-sub" x="680" y="680" text-anchor="middle" fill="rgba(80,176,255,0.55)">837 · 835 · 834 · 276/277 · encoder · 278 planned</text>
-<text class="box-sub" x="680" y="700" text-anchor="middle" fill="rgba(80,176,255,0.55)">6 parsers · zero dependencies · bidirectional</text>
+<text class="box-title" x="680" y="655" text-anchor="middle" fill="#0E7490">X12 EDI parsers</text>
+<text class="box-sub" x="680" y="680" text-anchor="middle" fill="#0E7490">837 · 835 · 834 · 276/277 · encoder · 278 planned</text>
+<text class="box-sub" x="680" y="700" text-anchor="middle" fill="#0E7490">6 parsers · zero dependencies · bidirectional</text>
 
 <!-- Claims + Benefit -->
 <rect x="915" y="618" width="380" height="100" rx="10" fill="rgba(0,160,255,0.06)" stroke="rgba(0,160,255,0.2)" stroke-width="1"/>
-<text class="box-title" x="1105" y="655" text-anchor="middle" fill="#50b0ff">Claims + benefit engine</text>
-<text class="box-sub" x="1105" y="680" text-anchor="middle" fill="rgba(80,176,255,0.55)">10-step adjudication pipeline · sub-second target (validate per deployment)</text>
-<text class="box-sub" x="1105" y="700" text-anchor="middle" fill="rgba(80,176,255,0.55)">9 engines · NCCI · COB · DRG · HDHP/HSA</text>
+<text class="box-title" x="1105" y="655" text-anchor="middle" fill="#0E7490">Claims + benefit engine</text>
+<text class="box-sub" x="1105" y="680" text-anchor="middle" fill="#0E7490">10-step adjudication pipeline · sub-second target (validate per deployment)</text>
+<text class="box-sub" x="1105" y="700" text-anchor="middle" fill="#0E7490">9 engines · NCCI · COB · DRG · HDHP/HSA</text>
 
 <!-- ─── ICoreAdminAdapter bar ─── -->
-<rect x="65" y="745" width="1230" height="70" rx="10" fill="rgba(255,200,0,0.05)" stroke="rgba(255,200,0,0.2)" stroke-width="1"/>
-<text class="box-title" x="680" y="776" text-anchor="middle" fill="#ffcc40">ICoreAdminAdapter</text>
-<text class="box-sub" x="680" y="798" text-anchor="middle" fill="rgba(255,204,64,0.5)">Vendor-neutral CAPS integration · augment mode (read-only) or replace mode · QNXT · Facets · HealthEdge · Amisys</text>
+<rect x="65" y="745" width="1230" height="70" rx="10" fill="#B45309" stroke="#B45309" stroke-width="1"/>
+<text class="box-title" x="680" y="776" text-anchor="middle" fill="#B45309">ICoreAdminAdapter</text>
+<text class="box-sub" x="680" y="798" text-anchor="middle" fill="#B45309">Vendor-neutral CAPS integration · augment mode (read-only) or replace mode · QNXT · Facets · HealthEdge · Amisys</text>
 
 <!-- ─── Infrastructure bar ─── -->
-<rect x="65" y="835" width="1230" height="56" rx="10" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-<text class="box-sub" x="680" y="868" text-anchor="middle" fill="rgba(255,255,255,0.3)">Kubernetes (AKS / EKS / GKE) · Argo Workflows · MongoDB / Cosmos DB · Redis · Azure Key Vault · KEDA scale-to-zero</text>
+<rect x="65" y="835" width="1230" height="56" rx="10" fill="#0B1F33" stroke="#0B1F33" stroke-width="1"/>
+<text class="box-sub" x="680" y="868" text-anchor="middle" fill="#0B1F33">Kubernetes (AKS / EKS / GKE) · Argo Workflows · MongoDB / Cosmos DB · Redis · Azure Key Vault · KEDA scale-to-zero</text>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
 <!-- EXTERNAL: Your CAPS                                        -->
 <!-- ═══════════════════════════════════════════════════════════ -->
-<rect x="60" y="1040" width="560" height="100" rx="12" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
-<text class="box-title" x="340" y="1078" text-anchor="middle" fill="rgba(255,255,255,0.7)">Your core admin system</text>
-<text class="box-sub" x="340" y="1104" text-anchor="middle" fill="rgba(255,255,255,0.35)">QNXT · Facets · HealthEdge · Amisys · custom</text>
-<text class="box-sub" x="340" y="1124" text-anchor="middle" fill="rgba(255,255,255,0.35)">Members · coverage · claims · benefits · provider contracts</text>
+<rect x="60" y="1040" width="560" height="100" rx="12" fill="#0B1F33" stroke="#0B1F33" stroke-width="1"/>
+<text class="box-title" x="340" y="1078" text-anchor="middle" fill="#0B1F33">Your core admin system</text>
+<text class="box-sub" x="340" y="1104" text-anchor="middle" fill="#0B1F33">QNXT · Facets · HealthEdge · Amisys · custom</text>
+<text class="box-sub" x="340" y="1124" text-anchor="middle" fill="#0B1F33">Members · coverage · claims · benefits · provider contracts</text>
 
 <!-- EXTERNAL: Clearinghouse -->
-<rect x="740" y="1040" width="560" height="100" rx="12" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
-<text class="box-title" x="1020" y="1078" text-anchor="middle" fill="rgba(255,255,255,0.7)">Clearinghouse</text>
-<text class="box-sub" x="1020" y="1104" text-anchor="middle" fill="rgba(255,255,255,0.35)">Stedi (outbound) · Availity and Change Healthcare (scaffolds)</text>
-<text class="box-sub" x="1020" y="1124" text-anchor="middle" fill="rgba(255,255,255,0.35)">X12 278 prior auth · 837 claims · 835 remittance</text>
+<rect x="740" y="1040" width="560" height="100" rx="12" fill="#0B1F33" stroke="#0B1F33" stroke-width="1"/>
+<text class="box-title" x="1020" y="1078" text-anchor="middle" fill="#0B1F33">Clearinghouse</text>
+<text class="box-sub" x="1020" y="1104" text-anchor="middle" fill="#0B1F33">Stedi (outbound) · Availity and Change Healthcare (scaffolds)</text>
+<text class="box-sub" x="1020" y="1124" text-anchor="middle" fill="#0B1F33">X12 278 prior auth · 837 claims · 835 remittance</text>
 
 <!-- Arrows: Adapter → CAPS -->
-<line x1="340" y1="815" x2="340" y2="1038" stroke="rgba(255,200,0,0.3)" class="arr" marker-end="url(#ah)"/>
+<line x1="340" y1="815" x2="340" y2="1038" stroke="#B45309" class="arr" marker-end="url(#ah)"/>
 <text class="label" x="355" y="950">Members, coverage,</text>
 <text class="label" x="355" y="970">claims, benefits</text>
-<rect x="290" y="978" width="100" height="22" rx="4" fill="rgba(0,255,136,0.08)" stroke="rgba(0,255,136,0.2)" stroke-width="0.5"/>
-<text x="340" y="993" text-anchor="middle" font-size="11" font-weight="600" fill="#00ff88" font-family="-apple-system, sans-serif">READ ONLY</text>
+<rect x="290" y="978" width="100" height="22" rx="4" fill="#0F766E" stroke="#0F766E" stroke-width="0.5"/>
+<text x="340" y="993" text-anchor="middle" font-size="11" font-weight="600" fill="#0F766E" font-family="-apple-system, sans-serif">READ ONLY</text>
 
 <!-- Arrow: X12 → Clearinghouse -->
-<line x1="1020" y1="815" x2="1020" y2="1038" stroke="rgba(255,255,255,0.2)" class="arr" marker-end="url(#ah)"/>
+<line x1="1020" y1="815" x2="1020" y2="1038" stroke="#0B1F33" class="arr" marker-end="url(#ah)"/>
 <text class="label" x="1035" y="950">EDI transactions</text>
 <text class="label" x="1035" y="970">+ auth write-back</text>
 
 <!-- ═══ Metrics bar ═══ -->
-<rect x="60" y="1185" width="250" height="56" rx="8" fill="rgba(0,255,255,0.04)" stroke="rgba(0,255,255,0.12)" stroke-width="0.5"/>
-<text x="185" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#00ffff" font-family="-apple-system, sans-serif">automated tests</text>
-<text x="185" y="1228" text-anchor="middle" font-size="12" fill="rgba(0,255,255,0.5)" font-family="-apple-system, sans-serif">57% coverage</text>
+<rect x="60" y="1185" width="250" height="56" rx="8" fill="#0E7490" stroke="#0E7490" stroke-width="0.5"/>
+<text x="185" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#0E7490" font-family="-apple-system, sans-serif">automated tests</text>
+<text x="185" y="1228" text-anchor="middle" font-size="12" fill="#0E7490" font-family="-apple-system, sans-serif">57% coverage</text>
 
-<rect x="340" y="1185" width="250" height="56" rx="8" fill="rgba(0,255,136,0.04)" stroke="rgba(0,255,136,0.12)" stroke-width="0.5"/>
-<text x="465" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#00ff88" font-family="-apple-system, sans-serif">36 microservices</text>
-<text x="465" y="1228" text-anchor="middle" font-size="12" fill="rgba(0,255,136,0.5)" font-family="-apple-system, sans-serif">9 engines · 6 parsers</text>
+<rect x="340" y="1185" width="250" height="56" rx="8" fill="#0F766E" stroke="#0F766E" stroke-width="0.5"/>
+<text x="465" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#0F766E" font-family="-apple-system, sans-serif">36 microservices</text>
+<text x="465" y="1228" text-anchor="middle" font-size="12" fill="#0F766E" font-family="-apple-system, sans-serif">9 engines · 6 parsers</text>
 
-<rect x="620" y="1185" width="250" height="56" rx="8" fill="rgba(0,255,255,0.04)" stroke="rgba(0,255,255,0.12)" stroke-width="0.5"/>
-<text x="745" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#00ffff" font-family="-apple-system, sans-serif">0 dependencies</text>
-<text x="745" y="1228" text-anchor="middle" font-size="12" fill="rgba(0,255,255,0.5)" font-family="-apple-system, sans-serif">Zero third-party runtime</text>
+<rect x="620" y="1185" width="250" height="56" rx="8" fill="#0E7490" stroke="#0E7490" stroke-width="0.5"/>
+<text x="745" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#0E7490" font-family="-apple-system, sans-serif">0 dependencies</text>
+<text x="745" y="1228" text-anchor="middle" font-size="12" fill="#0E7490" font-family="-apple-system, sans-serif">Zero third-party runtime</text>
 
-<rect x="900" y="1185" width="250" height="56" rx="8" fill="rgba(0,255,136,0.04)" stroke="rgba(0,255,136,0.12)" stroke-width="0.5"/>
-<text x="1025" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#00ff88" font-family="-apple-system, sans-serif">&lt;1 hour deploy</text>
-<text x="1025" y="1228" text-anchor="middle" font-size="12" fill="rgba(0,255,136,0.5)" font-family="-apple-system, sans-serif">Helm + interactive wizard</text>
+<rect x="900" y="1185" width="250" height="56" rx="8" fill="#0F766E" stroke="#0F766E" stroke-width="0.5"/>
+<text x="1025" y="1208" text-anchor="middle" font-size="18" font-weight="700" fill="#0F766E" font-family="-apple-system, sans-serif">&lt;1 hour deploy</text>
+<text x="1025" y="1228" text-anchor="middle" font-size="12" fill="#0F766E" font-family="-apple-system, sans-serif">Helm + interactive wizard</text>
 
 <!-- Legend -->
 <text class="legend" x="60" y="1268">Teal = Da Vinci workflow · Purple = compliance intelligence · Blue = platform · Amber = CAPS bridge · Gray = external systems</text>
@@ -835,7 +835,7 @@
           font-size: 0.7rem;
           letter-spacing: 0.2em;
           text-transform: uppercase;
-          color: rgba(0, 240, 255, 0.6);
+          color: #0E7490;
           margin: 0 0 0.75rem;
         ">Compliance in Action</p>
 
@@ -843,7 +843,7 @@
           font-family: 'Inter', -apple-system, sans-serif;
           font-size: clamp(1.5rem, 3vw, 2.2rem);
           font-weight: 700;
-          color: #e5e7eb;
+          color: #334155;
           margin: 0 0 1rem;
           line-height: 1.2;
         ">CMS-0057-F Isn't a Feature. It's How the Platform Works.</h2>
@@ -851,7 +851,7 @@
         <p style="
           font-family: 'Inter', -apple-system, sans-serif;
           font-size: 1rem;
-          color: rgba(255, 255, 255, 0.45);
+          color: #0B1F33;
           max-width: 700px;
           margin: 0 auto;
           line-height: 1.6;
@@ -875,38 +875,38 @@
           border-radius: 10px;
           overflow: hidden;
           box-shadow:
-            0 0 0 1px rgba(0, 240, 255, 0.06),
-            0 20px 60px rgba(0, 0, 0, 0.5),
-            0 0 40px rgba(0, 240, 255, 0.03);
+            0 0 0 1px rgba(14, 116, 144, 0.06),
+            0 20px 60px rgba(11, 31, 51, 0.12),
+            0 0 40px rgba(14, 116, 144, 0.03);
         ">
           <!-- Mini browser bar -->
           <div style="
-            background: #0d1117;
+            background: #EEF3F8;
             padding: 10px 14px;
             display: flex;
             align-items: center;
             gap: 6px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(11, 31, 51, 0.075);
           ">
             <div style="display: flex; gap: 5px;">
-              <div style="width: 8px; height: 8px; border-radius: 50%; background: #ff5f57;"></div>
-              <div style="width: 8px; height: 8px; border-radius: 50%; background: #febc2e;"></div>
-              <div style="width: 8px; height: 8px; border-radius: 50%; background: #28c840;"></div>
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: #B91C1C;"></div>
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: #B45309;"></div>
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: #0F766E;"></div>
             </div>
             <div style="
               flex: 1;
-              background: rgba(255, 255, 255, 0.04);
+              background: rgba(11, 31, 51, 0.04);
               border-radius: 4px;
               padding: 4px 10px;
               font-family: 'JetBrains Mono', monospace;
               font-size: 0.6rem;
-              color: rgba(255, 255, 255, 0.3);
+              color: #0B1F33;
             ">local-demo/operations/work-queues</div>
           </div>
           <img
             src="/graphics/platform-work-queues.png"
             alt="Cloud Health Office Claims Work Queues showing compliance-driven queue routing"
-            style="width: 100%; display: block; background: #080c14;"
+            style="width: 100%; display: block; background: #EEF3F8;"
             loading="lazy"
           />
         </div>
@@ -915,28 +915,28 @@
         <div style="display: flex; flex-direction: column; gap: 16px; padding-top: 8px;">
 
           <div style="
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(0, 240, 255, 0.1);
+            background: rgba(11, 31, 51, 0.02);
+            border: 1px solid rgba(14, 116, 144, 0.1);
             border-radius: 8px;
             padding: 16px 20px;
           ">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
               <div style="
                 width: 8px; height: 8px; border-radius: 50%;
-                background: #f87171;
-                box-shadow: 0 0 8px rgba(248, 113, 113, 0.4);
+                background: #B91C1C;
+                box-shadow: 0 0 8px rgba(185, 28, 28, 0.4);
               "></div>
               <span style="
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 0.75rem;
                 font-weight: 600;
-                color: #e5e7eb;
+                color: #334155;
               ">NCCI/MUE Edit Failures</span>
             </div>
             <p style="
               font-family: 'Inter', sans-serif;
               font-size: 0.8rem;
-              color: rgba(255, 255, 255, 0.4);
+              color: #0B1F33;
               margin: 0;
               line-height: 1.5;
             ">
@@ -946,28 +946,28 @@
           </div>
 
           <div style="
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(0, 240, 255, 0.1);
+            background: rgba(11, 31, 51, 0.02);
+            border: 1px solid rgba(14, 116, 144, 0.1);
             border-radius: 8px;
             padding: 16px 20px;
           ">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
               <div style="
                 width: 8px; height: 8px; border-radius: 50%;
-                background: #fbbf24;
-                box-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+                background: #B45309;
+                box-shadow: 0 0 8px rgba(180, 83, 9, 0.4);
               "></div>
               <span style="
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 0.75rem;
                 font-weight: 600;
-                color: #e5e7eb;
+                color: #334155;
               ">Missing Prior Authorization</span>
             </div>
             <p style="
               font-family: 'Inter', sans-serif;
               font-size: 0.8rem;
-              color: rgba(255, 255, 255, 0.4);
+              color: #0B1F33;
               margin: 0;
               line-height: 1.5;
             ">
@@ -978,28 +978,28 @@
           </div>
 
           <div style="
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(0, 240, 255, 0.1);
+            background: rgba(11, 31, 51, 0.02);
+            border: 1px solid rgba(14, 116, 144, 0.1);
             border-radius: 8px;
             padding: 16px 20px;
           ">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
               <div style="
                 width: 8px; height: 8px; border-radius: 50%;
-                background: #00f0ff;
-                box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+                background: #0E7490;
+                box-shadow: 0 0 8px rgba(14, 116, 144, 0.4);
               "></div>
               <span style="
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 0.75rem;
                 font-weight: 600;
-                color: #e5e7eb;
+                color: #334155;
               ">COB / Other Payer</span>
             </div>
             <p style="
               font-family: 'Inter', sans-serif;
               font-size: 0.8rem;
-              color: rgba(255, 255, 255, 0.4);
+              color: #0B1F33;
               margin: 0;
               line-height: 1.5;
             ">
@@ -1010,8 +1010,8 @@
           </div>
 
           <div style="
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(0, 240, 255, 0.1);
+            background: rgba(11, 31, 51, 0.02);
+            border: 1px solid rgba(14, 116, 144, 0.1);
             border-radius: 8px;
             padding: 16px 20px;
           ">
@@ -1025,13 +1025,13 @@
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 0.75rem;
                 font-weight: 600;
-                color: #e5e7eb;
+                color: #334155;
               ">Provider Not Contracted</span>
             </div>
             <p style="
               font-family: 'Inter', sans-serif;
               font-size: 0.8rem;
-              color: rgba(255, 255, 255, 0.4);
+              color: #0B1F33;
               margin: 0;
               line-height: 1.5;
             ">
@@ -1042,28 +1042,28 @@
           </div>
 
           <div style="
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(0, 240, 255, 0.1);
+            background: rgba(11, 31, 51, 0.02);
+            border: 1px solid rgba(14, 116, 144, 0.1);
             border-radius: 8px;
             padding: 16px 20px;
           ">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
               <div style="
                 width: 8px; height: 8px; border-radius: 50%;
-                background: #34d399;
-                box-shadow: 0 0 8px rgba(52, 211, 153, 0.4);
+                background: #0F766E;
+                box-shadow: 0 0 8px rgba(15, 118, 110, 0.4);
               "></div>
               <span style="
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 0.75rem;
                 font-weight: 600;
-                color: #e5e7eb;
+                color: #334155;
               ">Medical Review</span>
             </div>
             <p style="
               font-family: 'Inter', sans-serif;
               font-size: 0.8rem;
-              color: rgba(255, 255, 255, 0.4);
+              color: #0B1F33;
               margin: 0;
               line-height: 1.5;
             ">
@@ -1108,49 +1108,49 @@
 <div class="flow-diagram" data-reveal>
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 260" width="960" height="260" role="img" aria-label="X12 EDI to FHIR R4 transformation flow diagram">
     <defs>
-      <marker id="fh" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#00ffff" opacity=".6"/></marker>
+      <marker id="fh" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#0E7490" opacity=".6"/></marker>
       <filter id="fg"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     </defs>
-    <rect width="960" height="260" fill="#080808" rx="8"/>
+    <rect width="960" height="260" fill="#F5F7FA" rx="8"/>
 
     <!-- X12 Column -->
-    <text x="120" y="28" font-family="JetBrains Mono,monospace" font-size="9" font-weight="600" fill="#606060" text-anchor="middle" letter-spacing="2">X12 EDI</text>
-    <g transform="translate(120,55)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ffff" text-anchor="middle">270 Eligibility</text></g>
-    <g transform="translate(120,95)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ffff" text-anchor="middle">837 Claims</text></g>
-    <g transform="translate(120,135)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ffff" text-anchor="middle">278 Prior Auth (planned)</text></g>
-    <g transform="translate(120,175)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ffff" text-anchor="middle">835 Remittance</text></g>
-    <g transform="translate(120,215)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="rgba(0,255,255,.05)" stroke="rgba(0,255,255,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ffff" text-anchor="middle">275 Attachments</text></g>
+    <text x="120" y="28" font-family="JetBrains Mono,monospace" font-size="9" font-weight="600" fill="#475569" text-anchor="middle" letter-spacing="2">X12 EDI</text>
+    <g transform="translate(120,55)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="#0E7490" stroke="#0E7490"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#0E7490" text-anchor="middle">270 Eligibility</text></g>
+    <g transform="translate(120,95)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="#0E7490" stroke="#0E7490"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#0E7490" text-anchor="middle">837 Claims</text></g>
+    <g transform="translate(120,135)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="#0E7490" stroke="#0E7490"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#0E7490" text-anchor="middle">278 Prior Auth (planned)</text></g>
+    <g transform="translate(120,175)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="#0E7490" stroke="#0E7490"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#0E7490" text-anchor="middle">835 Remittance</text></g>
+    <g transform="translate(120,215)"><rect x="-85" y="-14" width="170" height="28" rx="4" fill="#0E7490" stroke="#0E7490"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#0E7490" text-anchor="middle">275 Attachments</text></g>
 
     <!-- Arrows -->
-    <line x1="210" y1="55" x2="370" y2="55" stroke="#00ffff" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
-    <line x1="210" y1="95" x2="370" y2="95" stroke="#00ffff" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
-    <line x1="210" y1="135" x2="370" y2="135" stroke="#00ffff" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
-    <line x1="210" y1="175" x2="370" y2="175" stroke="#00ffff" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
-    <line x1="210" y1="215" x2="370" y2="215" stroke="#00ffff" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
+    <line x1="210" y1="55" x2="370" y2="55" stroke="#0E7490" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
+    <line x1="210" y1="95" x2="370" y2="95" stroke="#0E7490" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
+    <line x1="210" y1="135" x2="370" y2="135" stroke="#0E7490" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
+    <line x1="210" y1="175" x2="370" y2="175" stroke="#0E7490" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
+    <line x1="210" y1="215" x2="370" y2="215" stroke="#0E7490" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
 
     <!-- CHO Mapper Column -->
-    <text x="480" y="28" font-family="JetBrains Mono,monospace" font-size="9" font-weight="600" fill="#606060" text-anchor="middle" letter-spacing="2">CHO FHIR MAPPER</text>
-    <rect x="380" y="38" width="200" height="204" rx="6" fill="rgba(0,255,255,.02)" stroke="rgba(0,255,255,.08)" stroke-dasharray="4,4"/>
-    <text x="480" y="76" font-family="JetBrains Mono,monospace" font-size="9" fill="#00ffff" text-anchor="middle" filter="url(#fg)">mapX12270ToFhir</text>
-    <text x="480" y="110" font-family="JetBrains Mono,monospace" font-size="9" fill="#00ffff" text-anchor="middle" filter="url(#fg)">mapX12837ToFhirClaim</text>
-    <text x="480" y="144" font-family="JetBrains Mono,monospace" font-size="9" fill="#00ffff" text-anchor="middle" filter="url(#fg)">mapX12278ToFhirPriorAuth</text>
-    <text x="480" y="178" font-family="JetBrains Mono,monospace" font-size="9" fill="#00ffff" text-anchor="middle" filter="url(#fg)">mapX12835ToFhirEOB</text>
-    <text x="480" y="212" font-family="JetBrains Mono,monospace" font-size="9" fill="#00ffff" text-anchor="middle" filter="url(#fg)">ingest275Workflow</text>
+    <text x="480" y="28" font-family="JetBrains Mono,monospace" font-size="9" font-weight="600" fill="#475569" text-anchor="middle" letter-spacing="2">CHO FHIR MAPPER</text>
+    <rect x="380" y="38" width="200" height="204" rx="6" fill="#0E7490" stroke="#0E7490" stroke-dasharray="4,4"/>
+    <text x="480" y="76" font-family="JetBrains Mono,monospace" font-size="9" fill="#0E7490" text-anchor="middle" filter="url(#fg)">mapX12270ToFhir</text>
+    <text x="480" y="110" font-family="JetBrains Mono,monospace" font-size="9" fill="#0E7490" text-anchor="middle" filter="url(#fg)">mapX12837ToFhirClaim</text>
+    <text x="480" y="144" font-family="JetBrains Mono,monospace" font-size="9" fill="#0E7490" text-anchor="middle" filter="url(#fg)">mapX12278ToFhirPriorAuth</text>
+    <text x="480" y="178" font-family="JetBrains Mono,monospace" font-size="9" fill="#0E7490" text-anchor="middle" filter="url(#fg)">mapX12835ToFhirEOB</text>
+    <text x="480" y="212" font-family="JetBrains Mono,monospace" font-size="9" fill="#0E7490" text-anchor="middle" filter="url(#fg)">ingest275Workflow</text>
 
     <!-- Arrows to FHIR -->
-    <line x1="585" y1="55" x2="740" y2="55" stroke="#00ff88" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
-    <line x1="585" y1="95" x2="740" y2="95" stroke="#00ff88" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
-    <line x1="585" y1="135" x2="740" y2="135" stroke="#00ff88" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
-    <line x1="585" y1="175" x2="740" y2="175" stroke="#00ff88" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
-    <line x1="585" y1="215" x2="740" y2="215" stroke="#00ff88" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
+    <line x1="585" y1="55" x2="740" y2="55" stroke="#0F766E" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
+    <line x1="585" y1="95" x2="740" y2="95" stroke="#0F766E" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
+    <line x1="585" y1="135" x2="740" y2="135" stroke="#0F766E" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
+    <line x1="585" y1="175" x2="740" y2="175" stroke="#0F766E" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
+    <line x1="585" y1="215" x2="740" y2="215" stroke="#0F766E" stroke-width="1.5" opacity=".3" marker-end="url(#fh)"/>
 
     <!-- FHIR Column -->
-    <text x="845" y="28" font-family="JetBrains Mono,monospace" font-size="9" font-weight="600" fill="#606060" text-anchor="middle" letter-spacing="2">FHIR R4 / DA VINCI</text>
-    <g transform="translate(845,55)"><rect x="-95" y="-14" width="190" height="28" rx="4" fill="rgba(0,255,136,.05)" stroke="rgba(0,255,136,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ff88" text-anchor="middle">Patient + Coverage</text></g>
-    <g transform="translate(845,95)"><rect x="-95" y="-14" width="190" height="28" rx="4" fill="rgba(0,255,136,.05)" stroke="rgba(0,255,136,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ff88" text-anchor="middle">Claim (PDex)</text></g>
-    <g transform="translate(845,135)"><rect x="-95" y="-14" width="190" height="28" rx="4" fill="rgba(0,255,136,.05)" stroke="rgba(0,255,136,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ff88" text-anchor="middle">ServiceRequest (PAS)</text></g>
-    <g transform="translate(845,175)"><rect x="-95" y="-14" width="190" height="28" rx="4" fill="rgba(0,255,136,.05)" stroke="rgba(0,255,136,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ff88" text-anchor="middle">ExplanationOfBenefit</text></g>
-    <g transform="translate(845,215)"><rect x="-95" y="-14" width="190" height="28" rx="4" fill="rgba(0,255,136,.05)" stroke="rgba(0,255,136,.2)"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#00ff88" text-anchor="middle">DocumentReference</text></g>
+    <text x="845" y="28" font-family="JetBrains Mono,monospace" font-size="9" font-weight="600" fill="#475569" text-anchor="middle" letter-spacing="2">FHIR R4 / DA VINCI</text>
+    <g transform="translate(845,55)"><rect x="-95" y="-14" width="190" height="28" rx="4" fill="#0F766E" stroke="#0F766E"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#0F766E" text-anchor="middle">Patient + Coverage</text></g>
+    <g transform="translate(845,95)"><rect x="-95" y="-14" width="190" height="28" rx="4" fill="#0F766E" stroke="#0F766E"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#0F766E" text-anchor="middle">Claim (PDex)</text></g>
+    <g transform="translate(845,135)"><rect x="-95" y="-14" width="190" height="28" rx="4" fill="#0F766E" stroke="#0F766E"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#0F766E" text-anchor="middle">ServiceRequest (PAS)</text></g>
+    <g transform="translate(845,175)"><rect x="-95" y="-14" width="190" height="28" rx="4" fill="#0F766E" stroke="#0F766E"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#0F766E" text-anchor="middle">ExplanationOfBenefit</text></g>
+    <g transform="translate(845,215)"><rect x="-95" y="-14" width="190" height="28" rx="4" fill="#0F766E" stroke="#0F766E"/><text x="0" y="4" font-family="JetBrains Mono,monospace" font-size="10" fill="#0F766E" text-anchor="middle">DocumentReference</text></g>
   </svg>
 </div>
 
@@ -1181,7 +1181,7 @@
     <p>When SNOMED maps to multiple ICD-10-CM codes, the context rule engine uses patient age, gender, state, co-morbidities, and plan coding policy to select the best match — not just the first match.</p>
   </article>
   <article class="api-card">
-    <span class="status" style="color:#ffc857">Partial</span>
+    <span class="status" style="color:#B45309">Partial</span>
     <span class="api-tag">CRD + PAS + DTR</span>
     <h3>Da Vinci Integration</h3>
     <p>The CRD server and PAS server (both in development) can consume the crosswalk at runtime, so SNOMED codes from EHRs are translated to payer code space for coverage rules and prior auth decisions. Questionnaire pre-population for DTR is not yet built.</p>
@@ -1400,8 +1400,8 @@
   </div>
 
   <div class="timeline-item">
-    <div class="timeline-dot" style="border-color:#ff4444"></div>
-    <div class="timeline-date" style="color:#ff4444">January 1, 2027 — CMS Deadline</div>
+    <div class="timeline-dot" style="border-color:#B91C1C"></div>
+    <div class="timeline-date" style="color:#B91C1C">January 1, 2027 — CMS Deadline</div>
     <div class="timeline-title">CMS-0057-F Enforcement Begins</div>
     <div class="timeline-desc">All impacted payers must be operational. Medicare Advantage, Medicaid managed care, CHIP, and QHP issuers on federal Marketplaces.</div>
   </div>
@@ -1422,25 +1422,25 @@
 
 <div class="api-grid">
   <article class="api-card">
-    <span class="status" style="color:#ffc857">Partial</span>
+    <span class="status" style="color:#B45309">Partial</span>
     <span class="api-tag">Da Vinci PDex 2.0+</span>
     <h3>Payer Data Exchange</h3>
     <p>Standardized FHIR profiles for payer-sourced data. US Core Patient v3.1.1+, PDex Claim, ExplanationOfBenefit, Coverage. USCDI v1 &amp; v2 data class mapping. Reads are served from a mock data adapter today.</p>
   </article>
   <article class="api-card">
-    <span class="status" style="color:#ffc857">In development</span>
+    <span class="status" style="color:#B45309">In development</span>
     <span class="api-tag">Da Vinci PAS 2.0.1+</span>
     <h3>Prior Authorization Support</h3>
     <p>ServiceRequest for authorization requests. ClaimResponse for decisions. DocumentReference for attachments. 72-hour urgent and 7-day standard timeline tracking is in progress. Not yet conformant.</p>
   </article>
   <article class="api-card">
-    <span class="status" style="color:#ffc857">In development</span>
+    <span class="status" style="color:#B45309">In development</span>
     <span class="api-tag">Da Vinci CRD 2.0+</span>
     <h3>Coverage Requirements Discovery</h3>
     <p>Real-time coverage rules discovery. Documentation requirements identification during provider workflow. CDS Hooks <code>order-select</code> and <code>order-sign</code>. Not yet conformant.</p>
   </article>
   <article class="api-card">
-    <span class="status" style="color:#ffc857">In development</span>
+    <span class="status" style="color:#B45309">In development</span>
     <span class="api-tag">Da Vinci DTR 2.0+</span>
     <h3>Documentation Templates &amp; Rules</h3>
     <p>FHIR Questionnaire and QuestionnaireResponse. CQL and pre-population for automated documentation collection are not yet built. Not yet conformant.</p>
@@ -1618,7 +1618,7 @@
   <article class="api-card">
     <span class="api-tag">Cloud Health Office</span>
     <h3>CHO Documentation</h3>
-    <p>The <a href="/docs/api" style="color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(0,255,255,.25)">FHIR APIs for health plans</a> reference, plus the Security Hardening, HIPAA Compliance Matrix, Deployment Guide, and Config-to-Workflow Generator docs.</p>
+    <p>The <a href="/docs/api" style="color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(14, 116, 144, 0.25)">FHIR APIs for health plans</a> reference, plus the Security Hardening, HIPAA Compliance Matrix, Deployment Guide, and Config-to-Workflow Generator docs.</p>
   </article>
 </div>
 
@@ -1635,7 +1635,7 @@
     <h2 class="section-title">From requirements to a modern payer backend</h2>
     <p class="section-desc">Go past the readiness checklist and into the architecture: how CRD, DTR, PAS, terminology, prior authorization, and payer-specific adapters actually connect to an existing core.</p>
 
-    <article class="api-card" style="border-color:var(--border-bright);background:linear-gradient(135deg,rgba(0,255,255,.05),rgba(0,255,136,.03))">
+    <article class="api-card" style="border-color:var(--border-bright);background:linear-gradient(135deg,rgba(14, 116, 144, 0.05),rgba(15, 118, 110, 0.03))">
       <span class="api-tag">Implementation Pillar · CMS-0057-F Architecture</span>
       <h3 style="font-size:1.25rem">CMS-0057-F Implementation Architecture for Health Plans</h3>
       <p style="margin:.6rem 0 1.2rem">The end-to-end reference architecture: how a health plan implements CMS-0057-F across FHIR APIs, prior authorization (CRD, DTR, PAS), terminology and reference data, identity and security, observability, and integration with existing core platforms like QNXT, Facets, and HealthEdge&mdash;or with Cloud Health Office as the core backend.</p>
@@ -1674,7 +1674,7 @@
 <!-- ═══════════════ FOOTER ═══════════════ -->
 
 <footer>
-  <p>&copy; 2026 Cloud Health Office — <a href="https://github.com/aurelianware">Aurelianware, Inc.</a> &nbsp;·&nbsp; Source-available platform (BSL 1.1) &nbsp;·&nbsp; Free for non-production use &nbsp;·&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+  <p>&copy; 2026 Cloud Health Office — <a href="https://github.com/aurelianware">Aurelianware, Inc.</a> &nbsp;·&nbsp; Source-available platform (BSL 1.1) &nbsp;·&nbsp; Free for non-production use &nbsp;·&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:#0E7490;">Commercial licensing</a></p>
   <p style="margin-top:.4rem"><a href="https://cloudhealthoffice.com/pricing">Pricing</a> &nbsp;·&nbsp; <a href="https://cloudhealthoffice.com/platform">Platform</a> &nbsp;·&nbsp; <a href="https://cloudhealthoffice.com/trust">Trust</a> &nbsp;·&nbsp; <a href="https://cloudhealthoffice.com/docs">Docs</a> &nbsp;·&nbsp; <a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></p>
     <p style="margin-top:18px;"><a href="/founder">Meet the founder &rarr;</a></p>
   </footer>

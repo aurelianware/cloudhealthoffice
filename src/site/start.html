@@ -16,32 +16,73 @@
   <link rel="stylesheet" href="/css/conversion.css" />
   <script src="/js/auth.js"></script>
   <script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
 </head>
 <body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
-  <nav>
-    <div class="nav-inner">
-      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
-        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
-        <span class="nav-logo-lockup">
-          <span class="nav-logo-text">Cloud Health Office</span>
-          <span class="nav-logo-tagline">Payer claims platform. Compliance first. Core replacement optional.</span>
-        </span>
-      </a>
-      <div class="nav-right">
-        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
-        <ul id="mainNav">
-<li><a href="/health-plan-independence">Why Independence</a></li>
-          <li><a href="/platform">Product</a></li>
-          <li><a href="/cms-0057f-compliance">CMS-0057-F</a></li>
-          <li><a href="/evidence">Evidence</a></li>
-          <li><a href="/docs">Docs</a></li>
-          <li><a href="/pricing">Pricing</a></li>
-          <li><a href="/services">Services</a></li><li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact</a></li>
-        </ul>
-      </div>
-    </div>
-  </nav>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="https://sandbox.cloudhealthoffice.com">API sandbox</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
@@ -61,14 +102,14 @@
       </div>
     </section>
 
-    <section aria-label="Registration offers" style="padding:10px 24px 80px; background:#000;">
+    <section aria-label="Registration offers" style="padding:10px 24px 80px; background:#FFFFFF;">
       <div class="section-wrapper">
         <div class="feature-grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); align-items:start;">
 
         <div class="feature-card" id="checklist" style="display:flex; flex-direction:column;">
-          <span class="section-eyebrow" style="color:#00ff88;">Checklist</span>
+          <span class="section-eyebrow" style="color:#0F766E;">Checklist</span>
           <h3 style="margin:6px 0 8px;">CMS-0057-F readiness checklist</h3>
-          <p style="color:rgba(200,200,200,0.82); line-height:1.65;">A 2&ndash;3 page PDF: what the five APIs require, what &ldquo;beside the core&rdquo; means, and the questions to ask a vendor.</p>
+          <p style="color:#334155; line-height:1.65;">A 2&ndash;3 page PDF: what the five APIs require, what &ldquo;beside the core&rdquo; means, and the questions to ask a vendor.</p>
           <form data-lead-form data-lead-interest="cms-0057f-checklist" action="__FORMSPREE_LEADS_ENDPOINT__" method="POST"
                 id="checklistForm" class="cho-leadform" style="margin-top:14px;" aria-label="CMS-0057-F readiness checklist">
             <input type="hidden" name="_subject" value="CMS-0057-F readiness checklist request" />
@@ -100,14 +141,14 @@
             <p class="cho-leadform__note">We reply within one business day. Work email preferred. No PHI, ever.</p>
           </form>
           <div data-lead-thankyou data-for="checklistForm" class="cho-leadform__thanks" hidden style="margin-top:14px;">
-            <h3 style="color:#00ff88;">Thank you.</h3>
-            <p>We reply within one business day. <a href="/cms-0057f-compliance" data-asset-download="cms-0057f-checklist" style="color:#00ffff;">Read the CMS-0057-F summary &rarr;</a></p>
+            <h3 style="color:#0F766E;">Thank you.</h3>
+            <p>We reply within one business day. <a href="/cms-0057f-compliance" data-asset-download="cms-0057f-checklist" style="color:#0E7490;">Read the CMS-0057-F summary &rarr;</a></p>
           </div>
         </div>
         <div class="feature-card" id="evaluator" style="display:flex; flex-direction:column;">
-          <span class="section-eyebrow" style="color:#00ff88;">Evaluator pack</span>
+          <span class="section-eyebrow" style="color:#0F766E;">Evaluator pack</span>
           <h3 style="margin:6px 0 8px;">Evaluator pack</h3>
-          <p style="color:rgba(200,200,200,0.82); line-height:1.65;">Local quickstart link, the First Claim journey, the 1M evidence summary, and the license one-pager.</p>
+          <p style="color:#334155; line-height:1.65;">Local quickstart link, the First Claim journey, the 1M evidence summary, and the license one-pager.</p>
           <form data-lead-form data-lead-interest="evaluator-pack" action="__FORMSPREE_LEADS_ENDPOINT__" method="POST"
                 id="evaluatorForm" class="cho-leadform" style="margin-top:14px;" aria-label="Evaluator pack">
             <input type="hidden" name="_subject" value="Evaluator pack request" />
@@ -139,14 +180,14 @@
             <p class="cho-leadform__note">We reply within one business day. Work email preferred. No PHI, ever.</p>
           </form>
           <div data-lead-thankyou data-for="evaluatorForm" class="cho-leadform__thanks" hidden style="margin-top:14px;">
-            <h3 style="color:#00ff88;">Thank you.</h3>
-            <p>We reply within one business day. The local quickstart is ready now: <a href="/docs/quickstart" data-asset-download="evaluator-pack" style="color:#00ffff;">Open the local quickstart &rarr;</a></p>
+            <h3 style="color:#0F766E;">Thank you.</h3>
+            <p>We reply within one business day. The local quickstart is ready now: <a href="/docs/quickstart" data-asset-download="evaluator-pack" style="color:#0E7490;">Open the local quickstart &rarr;</a></p>
           </div>
         </div>
         <div class="feature-card" id="architecture" style="display:flex; flex-direction:column;">
-          <span class="section-eyebrow" style="color:#00ff88;">Architecture</span>
+          <span class="section-eyebrow" style="color:#0F766E;">Architecture</span>
           <h3 style="margin:6px 0 8px;">Architecture one-pager</h3>
-          <p style="color:rgba(200,200,200,0.82); line-height:1.65;">How Cloud Health Office sits next to QNXT, Facets, or HealthEdge &mdash; and what stays your system of record.</p>
+          <p style="color:#334155; line-height:1.65;">How Cloud Health Office sits next to QNXT, Facets, or HealthEdge &mdash; and what stays your system of record.</p>
           <form data-lead-form data-lead-interest="architecture-one-pager" action="__FORMSPREE_LEADS_ENDPOINT__" method="POST"
                 id="architectureForm" class="cho-leadform" style="margin-top:14px;" aria-label="Architecture one-pager">
             <input type="hidden" name="_subject" value="Architecture one-pager request" />
@@ -178,14 +219,14 @@
             <p class="cho-leadform__note">We reply within one business day. Work email preferred. No PHI, ever.</p>
           </form>
           <div data-lead-thankyou data-for="architectureForm" class="cho-leadform__thanks" hidden style="margin-top:14px;">
-            <h3 style="color:#00ff88;">Thank you.</h3>
-            <p>We reply within one business day. <a href="/platform" data-asset-download="architecture-one-pager" style="color:#00ffff;">See the platform &rarr;</a></p>
+            <h3 style="color:#0F766E;">Thank you.</h3>
+            <p>We reply within one business day. <a href="/platform" data-asset-download="architecture-one-pager" style="color:#0E7490;">See the platform &rarr;</a></p>
           </div>
         </div>
         <div class="feature-card" id="book" style="display:flex; flex-direction:column;">
-          <span class="section-eyebrow" style="color:#00ff88;">Book time</span>
+          <span class="section-eyebrow" style="color:#0F766E;">Book time</span>
           <h3 style="margin:6px 0 8px;">Book 30 minutes</h3>
-          <p style="color:rgba(200,200,200,0.82); line-height:1.65;">Prefer to talk? Book a 30-minute call. Tell us what you want to cover and we will come prepared.</p>
+          <p style="color:#334155; line-height:1.65;">Prefer to talk? Book a 30-minute call. Tell us what you want to cover and we will come prepared.</p>
           <form data-lead-form data-lead-interest="book-30" action="__FORMSPREE_LEADS_ENDPOINT__" method="POST"
                 id="bookForm" class="cho-leadform" style="margin-top:14px;" aria-label="Book 30 minutes">
             <input type="hidden" name="_subject" value="Book 30 minutes request" />
@@ -217,20 +258,20 @@
             <p class="cho-leadform__note">We reply within one business day. Work email preferred. No PHI, ever.</p>
           </form>
           <div data-lead-thankyou data-for="bookForm" class="cho-leadform__thanks" hidden style="margin-top:14px;">
-            <h3 style="color:#00ff88;">Thank you.</h3>
-            <p>We reply within one business day. Or book directly on the calendar below. <a href="/contact" data-asset-download="book-30" style="color:#00ffff;">Contact the team &rarr;</a></p>
+            <h3 style="color:#0F766E;">Thank you.</h3>
+            <p>We reply within one business day. Or book directly on the calendar below. <a href="/contact" data-asset-download="book-30" style="color:#0E7490;">Contact the team &rarr;</a></p>
           </div>
         </div>
         </div>
 
         <div style="max-width:820px; margin:56px auto 0; text-align:center;">
           <div class="section-header" style="margin-bottom:18px;">
-            <span class="section-eyebrow" style="color:#00ffff;">Or book directly</span>
+            <span class="section-eyebrow" style="color:#0E7490;">Or book directly</span>
             <h2 class="section-title" style="font-size:clamp(1.3rem,3vw,1.9rem);">Book 30 minutes on the calendar</h2>
           </div>
           <a href="https://calendar.google.com/calendar/appointments/schedules/AcZssZ0MrsUuPmb7Nw-ND9IOA7GvDo4fSxjy71pnegt4LLaFr7EpFs5zWT0J8_4hyC-rhMDt53DkbKAx?gv=true" target="_blank" rel="noopener noreferrer" class="button" data-ga-event="calendar_open_click" data-booking-popup>Open the booking calendar &rarr;</a>
-          <p style="margin-top:14px; font-size:0.85rem; color:rgba(160,160,160,0.7);">
-            Engineers: you can skip all of this and <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">clone the repo</a>. The evaluator pack above emails you the notes.
+          <p style="margin-top:14px; font-size:0.85rem; color:#334155;">
+            Engineers: you can skip all of this and <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:#0E7490;">clone the repo</a>. The evaluator pack above emails you the notes.
           </p>
         </div>
       </div>
@@ -238,53 +279,47 @@
 
   </main>
 
-  <footer class="site-footer">
-    <div class="footer-inner">
-      <div class="footer-grid">
-        <div class="footer-brand">
-          <h4>Cloud Health Office</h4>
-          <p>Payer claims platform. Compliance first. Core replacement optional. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
-          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
-        </div>
-        <div class="footer-col">
-          <h5>Product</h5>
-          <ul>
-            <li><a href="/what-is">What is Cloud Health Office?</a></li>
-            <li><a href="/platform">Platform</a></li>
-            <li><a href="/solutions-payers">Solutions</a></li>
-            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
-            <li><a href="/evidence">Evidence</a></li>
-            <li><a href="/deploy">Deploy</a></li>
-            <li><a href="/pricing">Pricing</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h5>Documentation</h5>
-          <ul>
-            <li><a href="/docs/quickstart">Quick Start</a></li>
-            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
-            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
-            <li><a href="/docs/architecture">Architecture</a></li>
-            <li><a href="/trust">Trust &amp; Security</a></li>
-            <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h5>Company &amp; Contact</h5>
-          <ul>
-            <li><a href="/founder">Founder</a></li>
-            <li><a href="/contact">Contact</a></li><li><a href="/services">Professional Services</a></li>
-            <li><a href="/start">Get the evaluator pack</a></li>
-            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
-          </ul>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
-        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
-      </div>
-    </div>
-  </footer>
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
   <dialog id="bookingDialog" class="booking-dialog" aria-label="Book a Cloud Health Office demo">
     <div class="booking-dialog-bar">
       <span>Book a demo</span>
@@ -297,27 +332,27 @@
       width: min(920px, calc(100vw - 32px));
       height: min(760px, calc(100vh - 32px));
       padding: 0;
-      border: 1px solid rgba(0, 255, 255, 0.3);
+      border: 1px solid rgba(14, 116, 144, 0.3);
       border-radius: 8px;
-      background: #fff;
+      background: #FFFFFF;
       overflow: hidden;
     }
     .booking-dialog:not([open]) { display: none; }
     .booking-dialog[open] { display: flex; flex-direction: column; }
-    .booking-dialog::backdrop { background: rgba(0, 0, 0, 0.75); }
+    .booking-dialog::backdrop { background: rgba(255, 255, 255, 0.75); }
     .booking-dialog-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 10px 16px;
-      background: #050606;
-      color: #fff;
+      background: #F5F7FA;
+      color: #0B1F33;
       font-weight: 700;
     }
     .booking-dialog-close {
       border: 0;
       background: none;
-      color: #00ffff;
+      color: #0E7490;
       font-size: 1.8rem;
       line-height: 1;
       cursor: pointer;

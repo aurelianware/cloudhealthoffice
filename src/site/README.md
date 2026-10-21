@@ -6,6 +6,14 @@ Current capability status and dated implementation/test evidence: [Capability Re
 
 This directory contains the Cloud Health Office marketing website with platform assessment, insights, and documentation.
 
+## Shared navigation and footer
+
+Every page carries one primary nav and one footer, defined in
+`scripts/sync-site-chrome.mjs`. Change them there, then run
+`node scripts/sync-site-chrome.mjs` to rewrite every page (`--check` reports
+drift; `tests/enterprise-chrome.test.cjs` fails on it). Never hand-edit a
+page's nav or footer.
+
 ## Analytics
 
 The site build injects the Google Analytics tag for measurement ID `G-H1HCD5EYPN` into generated HTML artifacts.
@@ -33,8 +41,10 @@ site/
 ├── insights.html           # Market and engineering insights
 ├── assessment.html         # Generated from assets/cho-assessment.md
 ├── MESSAGE_SHEET.md        # Locked marketing sentences — update before any copy change
+├── developers.html         # Developer hub: quickstarts, configuration guides, business case kit
 ├── css/
-│   ├── sentinel.css        # Sentinel theme styling (Absolute black, neon cyan/green)
+│   ├── enterprise.css      # Loaded last on every page: typography, shared nav/footer, homepage sections
+│   ├── sentinel.css        # Base component styles (re-mapped to the light enterprise palette)
 │   ├── evidence-hub.css    # Long-form reading treatment, scoped to body.ev
 │   └── services.css        # /services and /deploy components, scoped to body.ev
 ├── js/

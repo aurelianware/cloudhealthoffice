@@ -48,7 +48,7 @@
 
     .legal-toc {
       background: var(--surface);
-      border: 1px solid rgba(0,255,136,0.2);
+      border: 1px solid rgba(15, 118, 110, 0.2);
       border-radius: 8px;
       padding: 24px 28px;
       margin-bottom: 48px;
@@ -92,7 +92,7 @@
       color: var(--accent);
       margin-bottom: 16px;
       padding-bottom: 8px;
-      border-bottom: 1px solid rgba(0,255,136,0.2);
+      border-bottom: 1px solid rgba(15, 118, 110, 0.2);
     }
 
     .legal-section h3 {
@@ -135,23 +135,23 @@
       color: var(--accent);
       text-align: left;
       padding: 10px 14px;
-      border: 1px solid rgba(0,255,136,0.2);
+      border: 1px solid rgba(15, 118, 110, 0.2);
       font-weight: 600;
     }
 
     .legal-table td {
       padding: 9px 14px;
-      border: 1px solid rgba(255,255,255,0.06);
+      border: 1px solid rgba(11, 31, 51, 0.09);
       color: var(--muted);
       vertical-align: top;
     }
 
     .legal-table tr:nth-child(even) td {
-      background: rgba(255,255,255,0.02);
+      background: rgba(11, 31, 51, 0.02);
     }
 
     .legal-highlight {
-      background: rgba(0,255,136,0.05);
+      background: rgba(15, 118, 110, 0.05);
       border-left: 3px solid var(--accent);
       padding: 14px 18px;
       margin: 16px 0;
@@ -168,29 +168,74 @@
       }
     }
   </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
 </head>
 <body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
-  <nav>
-    <div class="nav-inner">
-      <a href="../index.html" class="nav-logo" aria-label="Cloud Health Office Home">
-        <img src="../graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
-        <span class="nav-logo-text">Cloud Health Office</span>
-      </a>
-      <div class="nav-right">
-        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
-        <ul id="mainNav">
-          <li><a href="../solutions-payers.html">Solutions</a></li>
-          <li><a href="../pricing.html">Pricing</a></li>
-          <li><a href="../platform.html">Platform</a></li>
-          <li><a href="/docs">Docs</a></li>
-          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
-          <li><a href="/founder">Founder</a></li><li><a href="/services">Services</a></li><li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
-        </ul>
-      </div>
-    </div>
-  </nav>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="https://sandbox.cloudhealthoffice.com">API sandbox</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       updateNavigation('#mainNav');
@@ -654,50 +699,47 @@
     </div><!-- end .legal-container -->
   </main>
 
-  <footer class="site-footer">
-    <div class="footer-inner">
-      <div class="footer-grid">
-        <div class="footer-brand">
-          <h4>Cloud Health Office</h4>
-          <p>The modern integration layer for health plan core administration systems. CMS-0057-F readiness, multi-clearinghouse EDI, FHIR R4 APIs.</p>
-          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
-        </div>
-        <div class="footer-col">
-          <h5>Product</h5>
-          <ul>
-            <li><a href="/founder">Founder</a></li>
-            <li><a href="/services">Professional Services</a></li>
-            <li><a href="../solutions-payers.html">Solutions</a></li>
-            <li><a href="../platform.html">Platform</a></li>
-            <li><a href="../pricing.html">Pricing</a></li>
-            <li><a href="../pricing-api.html">Repricing API</a></li>
-            <li><a href="../release-notes.html">Release Notes</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h5>Documentation</h5>
-          <ul>
-            <li><a href="/docs/quickstart">Quick Start</a></li>
-            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
-            <li><a href="/docs/api">API Reference</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h5>Legal</h5>
-          <ul>
-            <li><a href="privacy-policy.html" aria-current="page">Privacy Policy</a></li>
-            <li><a href="mailto:privacy@cloudhealthoffice.com">Privacy Contact</a></li>
-            <li><a href="mailto:hipaa-privacy@cloudhealthoffice.com">HIPAA Privacy</a></li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="footer-bottom">
-        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
-        <p><a href="../pricing.html" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="mailto:contact@cloudhealthoffice.com" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="privacy-policy.html" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
-      </div>
-    </div>
-  </footer>
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
 
 </body>
 </html>

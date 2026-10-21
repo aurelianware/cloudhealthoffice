@@ -120,11 +120,16 @@ test("executive text and focus colors meet contrast requirements on their actual
       y = lum(b);
     return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
   }
-  for (const bg of ["0b1218", "131f28"])
-    for (const fg of ["f0f5f5", "b7c8ce", "77e4d0", "ffb7ae"])
+  // Enterprise palette (css/enterprise.css, css/independence.css variables).
+  for (const bg of ["ffffff", "f5f7fa", "eef3f8"])
+    for (const fg of ["0b1f33", "334155", "475569", "0e7490", "b91c1c"])
       assert(ratio(fg, bg) >= 4.5, fg + " on " + bg);
-  assert(ratio("0b1218", "77e4d0") >= 4.5);
-  assert(ratio("a8f5df", "131f28") >= 3);
+  // Light text on the navy and ink bands.
+  for (const bg of ["0b2545", "0b1f33"])
+    for (const fg of ["ffffff", "d5e2ee", "c9d6e3", "a9c4dd"])
+      assert(ratio(fg, bg) >= 4.5, fg + " on " + bg);
+  assert(ratio("ffffff", "0e7490") >= 4.5); // button label on accent
+  assert(ratio("0e7490", "ffffff") >= 3); // focus ring
 });
 
 test("calculator has no native submission surface and starts unavailable", () => {

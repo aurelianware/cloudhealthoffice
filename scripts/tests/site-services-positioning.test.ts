@@ -361,6 +361,10 @@ describe('Services & deployment positioning', () => {
       'fee-schedule',
       'repricing-validation',
       'core-admin-support',
+      'vendor-integration',
+      'channel-partner',
+      'investor',
+      'business-case-kit',
       'support',
       'other'
     ];
@@ -783,8 +787,8 @@ describe('Services & deployment positioning', () => {
     });
 
     it('keeps small dim text legible and the breadcrumb out of the sticky-nav styles across the series', () => {
-      // #606060 on the series' near-black background is ~3.2:1, below WCAG AA
-      // 4.5:1 for the small metadata, breadcrumb, footer and PHI-warning text.
+      // Small metadata, breadcrumb, footer and PHI-warning text uses --text-dim;
+      // #475569 on the enterprise white background is ~7.6:1 (WCAG AA needs 4.5:1).
       // An unscoped `nav{position:sticky…}` also styles the breadcrumb <nav>,
       // rendering it as a second sticky bar inside the article header.
       for (const article of [
@@ -794,7 +798,7 @@ describe('Services & deployment positioning', () => {
         'insights/cms-0057-f/acceptance-scenarios.html'
       ]) {
         const html = read(article);
-        expect(html).toContain('--text-dim:#8a8a8a');
+        expect(html).toContain('--text-dim:#475569');
         expect(html).not.toMatch(/^\s*nav\{/m);
         expect(html).toMatch(/body>nav\{position:sticky/);
       }
@@ -914,9 +918,9 @@ describe('Services & deployment positioning', () => {
     });
 
     it('keeps small dim text legible and the breadcrumb out of the sticky-nav styles', () => {
-      // #606060 on #05070a is 3.21:1, below WCAG AA 4.5:1 for the small metadata,
-      // breadcrumb, footer and PHI-warning text that uses --text-dim.
-      expect(ownership).toContain('--text-dim:#8a8a8a');
+      // --text-dim (#475569 on white, ~7.6:1) carries the small metadata,
+      // breadcrumb, footer and PHI-warning text; WCAG AA needs 4.5:1.
+      expect(ownership).toContain('--text-dim:#475569');
       // An unscoped `nav{position:sticky…}` also styles the breadcrumb <nav>.
       expect(ownership).not.toMatch(/^\s*nav\{/m);
       expect(ownership).toMatch(/body>nav\{position:sticky/);
@@ -1015,7 +1019,7 @@ describe('Services & deployment positioning', () => {
     });
 
     it('adds Services to the documented information architecture', () => {
-      expect(messageSheet).toMatch(/Primary executive nav:.*Services.*Contact/);
+      expect(messageSheet).toMatch(/Primary nav .*Services.*Contact/);
       expect(messageSheet).toContain('/services');
     });
 

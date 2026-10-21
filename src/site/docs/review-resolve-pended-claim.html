@@ -40,44 +40,87 @@
   <link rel="stylesheet" href="/css/docs.css" />
   <style>
     .exception-chain { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:9px; margin:24px 0; }
-    .exception-step { position:relative; min-height:106px; padding:15px 11px; border:1px solid rgba(0,255,255,.22); border-radius:8px; background:rgba(0,255,255,.035); }
-    .exception-step::after { content:"\2192"; position:absolute; right:-10px; top:42px; z-index:1; color:#00ffff; background:#000; padding:0 2px; }
+    .exception-step { position:relative; min-height:106px; padding:15px 11px; border:1px solid rgba(14, 116, 144, 0.22); border-radius:8px; background:rgba(14, 116, 144, 0.035); }
+    .exception-step::after { content:"\2192"; position:absolute; right:-10px; top:42px; z-index:1; color:#0E7490; background:#FFFFFF; padding:0 2px; }
     .exception-step:last-child::after { content:none; }
-    .exception-step strong { display:block; color:#00ffff; margin-bottom:7px; font-size:.9rem; }
-    .exception-step span { color:rgba(255,255,255,.68); font-size:.8rem; line-height:1.35; }
-    .exception-step.optional { border-style:dashed; border-color:rgba(255,200,0,.5); background:rgba(255,200,0,.04); }
-    .exception-step.optional strong { color:#ffc800; }
-    .exception-step.human, .exception-step.audit { border-color:rgba(0,255,136,.42); background:rgba(0,255,136,.05); }
-    .exception-step.human strong, .exception-step.audit strong { color:#00ff88; }
+    .exception-step strong { display:block; color:#0E7490; margin-bottom:7px; font-size:.9rem; }
+    .exception-step span { color:#0B1F33; font-size:.8rem; line-height:1.35; }
+    .exception-step.optional { border-style:dashed; border-color:rgba(180, 83, 9, 0.5); background:rgba(180, 83, 9, 0.04); }
+    .exception-step.optional strong { color:#B45309; }
+    .exception-step.human, .exception-step.audit { border-color:rgba(15, 118, 110, 0.42); background:rgba(15, 118, 110, 0.05); }
+    .exception-step.human strong, .exception-step.audit strong { color:#0F766E; }
     @media (max-width:1000px) { .exception-chain { grid-template-columns:repeat(3,minmax(0,1fr)); } .exception-step:nth-child(3)::after { content:none; } }
     @media (max-width:650px) { .exception-chain { grid-template-columns:1fr; } .exception-step { min-height:0; } .exception-step::after, .exception-step:nth-child(3)::after { content:"\2193"; right:50%; top:auto; bottom:-16px; } }
   </style>
   <script src="/js/auth.js"></script>
   <script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
 </head>
 <body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
-  <nav>
-    <div class="nav-inner">
-      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
-        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
-        <span class="nav-logo-text">Cloud Health Office</span>
-      </a>
-      <div class="nav-right">
-        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
-        <ul id="mainNav">
-          <li><a href="/solutions-payers">Solutions</a></li>
-          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
-          <li><a href="/pricing">Pricing</a></li>
-          <li><a href="/platform">Platform</a></li>
-          <li><a href="/docs" style="color:#00ffff; font-weight:bold;">Docs</a></li>
-          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
-          <li><a href="/founder">Founder</a></li>
-          <li><a href="/services">Services</a></li><li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
-        </ul>
-      </div>
-    </div>
-  </nav>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs" aria-current="page">Documentation</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="https://sandbox.cloudhealthoffice.com">API sandbox</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
   <script>document.addEventListener('DOMContentLoaded', () => { updateNavigation('#mainNav'); });</script>
 
   <main id="main-content">
@@ -332,24 +375,47 @@ GUIDE_CLAIM_ID=&lt;synthetic-pended-claim-id&gt; GUIDE_RESOLVED_CLAIM_ID=&lt;syn
 
   <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
   <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
-  <footer class="site-footer">
-    <div class="footer-inner">
-      <div class="footer-grid">
-        <div class="footer-brand">
-          <h4>Cloud Health Office</h4>
-          <p>The modern integration layer for health plan core administration systems. CMS-0057-F readiness, multi-clearinghouse EDI, FHIR R4 APIs.</p>
-          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
-        </div>
-        <div class="footer-col"><h5>Product</h5><ul><li><a href="/solutions-payers">Solutions</a></li><li><a href="/platform">Platform</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/release-notes">Release Notes</a></li></ul></div>
-        <div class="footer-col"><h5>Documentation</h5><ul><li><a href="/docs/quickstart">Quick Start</a></li><li><a href="/docs/claims-guide">Claims Guide</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li></ul></div>
-        <div class="footer-col"><h5>Contact</h5><ul><li><a href="/contact">Contact Sales</a></li><li><a href="/services">Professional Services</a></li><li><a href="mailto:enterprise@cloudhealthoffice.com">Enterprise Support</a></li><li><a href="mailto:partners@cloudhealthoffice.com">Partner Program</a></li></ul></div>
-      </div>
-      <div class="footer-bottom">
-        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use</p>
-        <p><a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
-      </div>
-    </div>
-  </footer>
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
   <script>
     const toggle = document.getElementById('docsMobileToggle');
     const sidebar = document.getElementById('docsSidebar');

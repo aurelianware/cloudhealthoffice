@@ -3,8 +3,71 @@
   <title>Publish and Version a Benefit Plan — Cloud Health Office</title>
   <meta name="description" content="Create drafts, publish immutable benefit-plan versions, amend active plans, and verify lifecycle history in Cloud Health Office." />
   <link rel="canonical" href="https://cloudhealthoffice.com/docs/publish-version-benefit-plan" /><link rel="stylesheet" href="/css/sentinel.css" /><link rel="stylesheet" href="/css/docs.css" /><script src="/js/auth.js"></script><script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
 </head><body><a href="#main-content" class="skip-to-main">Skip to main content</a>
-<nav><div class="nav-inner"><a href="/" class="nav-logo"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" /><span class="nav-logo-text">Cloud Health Office</span></a><div class="nav-right"><button class="mobile-menu-toggle" aria-label="Toggle navigation menu" id="mobileMenuToggle">&#9776;</button><ul id="mainNav"><li><a href="/solutions-payers">Solutions</a></li><li><a href="/platform">Platform</a></li><li><a href="/docs" style="color:#00ffff;font-weight:bold;">Docs</a></li><li><a href="/services">Services</a></li><li><a href="/contact">Contact Sales</a></li></ul></div></div></nav>
+<nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs" aria-current="page">Documentation</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="https://sandbox.cloudhealthoffice.com">API sandbox</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
 <main id="main-content"><div class="docs-wrapper"><aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner"><div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Benefit Plan Tutorials</div><ul><li><a href="/docs/create-verify-benefit-plan">1. Create &amp; Verify</a></li><li><a href="/docs/configure-benefits-cost-sharing">2. Benefits &amp; Cost Sharing</a></li><li><a class="active" href="/docs/publish-version-benefit-plan">3. Publish &amp; Version</a></li><li><a href="/docs/validate-benefit-plan">4. Validate the Plan</a></li><li><a href="/docs/configure-plan-networks">5. Networks</a></li></ul></div><div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#draft">Create a Draft</a></li><li><a href="#publish">Publish</a></li><li><a href="#amend">Amend</a></li><li><a href="#history">Verify History</a></li></ul></div></div></aside>
 <div class="docs-content"><div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Publish and Version a Benefit Plan</span></div>
 <h1>Publish and Version a Benefit Plan</h1><p class="docs-subtitle">Use immutable published versions so claims can be reproduced against the configuration effective on the date of service.</p>
@@ -56,4 +119,44 @@ echo "$amendment" |
   }'</code></pre>
 <div class="callout callout-success"><div class="callout-title">Completion check</div><p>The chain has monotonic version numbers, a predecessor link on the amendment, one current published version, and retained superseded history.</p></div>
 <div class="docs-pager"><a href="/docs/configure-benefits-cost-sharing"><div class="pager-label">&larr; Previous</div><div class="pager-title">Benefits &amp; Cost Sharing</div></a><a href="/docs/validate-benefit-plan" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Validate the Plan</div></a></div>
-</div></div></main><button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button><div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div><footer class="site-footer"><div class="footer-inner"><div class="footer-bottom"><p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc.</p></div></div></footer><script>const toggle=document.getElementById('docsMobileToggle'),sidebar=document.getElementById('docsSidebar'),overlay=document.getElementById('docsSidebarOverlay');if(toggle&&sidebar){toggle.onclick=()=>{sidebar.classList.toggle('open');overlay.classList.toggle('open');};overlay.onclick=()=>{sidebar.classList.remove('open');overlay.classList.remove('open');};}</script></body></html>
+</div></div></main><button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button><div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div><footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer><script>const toggle=document.getElementById('docsMobileToggle'),sidebar=document.getElementById('docsSidebar'),overlay=document.getElementById('docsSidebarOverlay');if(toggle&&sidebar){toggle.onclick=()=>{sidebar.classList.toggle('open');overlay.classList.toggle('open');};overlay.onclick=()=>{sidebar.classList.remove('open');overlay.classList.remove('open');};}</script></body></html>

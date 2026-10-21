@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Developer Hub — Quickstarts, Configuration Guides &amp; FHIR APIs | Cloud Health Office</title>
+<meta name="description" content="Quickstarts, configuration guides, API reference and a business case kit for payer architects and engineers evaluating Cloud Health Office beside QNXT, Facets or HealthEdge.">
+<link rel="canonical" href="https://cloudhealthoffice.com/developers" />
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://cloudhealthoffice.com/developers">
+<meta property="og:title" content="Cloud Health Office Developer Hub">
+<meta property="og:description" content="Quickstarts, configuration guides, API reference and a business case kit for payer architects and engineers.">
+<meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/claims-evidence-pipeline.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Cloud Health Office Developer Hub">
+<meta name="twitter:description" content="Quickstarts, configuration guides, API reference and a business case kit for payer architects and engineers.">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "CollectionPage", "name": "Cloud Health Office Developer Hub", "description": "Quickstarts, configuration guides, API reference and a business case kit for payer architects and engineers.", "url": "https://cloudhealthoffice.com/developers", "publisher": {"@type": "Organization", "name": "Aurelianware, Inc."}}</script>
+<script defer src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body class="ent">
+<a href="#main-content" class="skip-to-main">Skip to main content</a>
+<nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers" aria-current="page">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="https://sandbox.cloudhealthoffice.com">API sandbox</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+<main id="main-content" tabindex="-1">
+<header class="hero">
+<div class="wrap split">
+<div class="grow">
+<p class="eyebrow">Developer hub</p>
+<h1>Build on Cloud Health Office.</h1>
+<p class="lede">Quickstarts, configuration guides and API reference for payer architects and engineers, plus what you need to take a business case to your leadership.</p>
+<div class="actions">
+<a class="btn btn-primary" href="/docs/quickstart" data-ga-event="developer_quickstart_click">Start the quickstart</a>
+<a class="btn btn-secondary" href="https://sandbox.cloudhealthoffice.com/?spec=patient-access" data-ga-event="sandbox_cta_click">Try the API sandbox</a>
+</div>
+</div>
+<div class="side">
+<pre class="code" aria-label="Example commands"><span class="c"># 1. Get the public source</span>
+git clone https://github.com/aurelianware/cloudhealthoffice
+
+<span class="c"># 2. Explore the FHIR APIs without installing anything</span>
+https://sandbox.cloudhealthoffice.com/?spec=patient-access
+
+<span class="c"># 3. Deploy to Kubernetes in your own cloud</span>
+https://cloudhealthoffice.com/docs/quickstart-kubernetes</pre>
+</div>
+</div>
+</header>
+
+<section id="quickstarts">
+<div class="wrap">
+<p class="eyebrow">Quickstarts</p>
+<h2>From zero to a working result.</h2>
+<div class="grid">
+<a class="card" href="/docs/quickstart">
+<span class="meta">Platform</span>
+<h3>Run it locally</h3>
+<p>Bring up the services with Docker and explore the operations portal.</p>
+</a>
+<a class="card" href="/docs/quickstart-kubernetes">
+<span class="meta">Platform</span>
+<h3>Deploy on Kubernetes</h3>
+<p>Stand up Cloud Health Office in a test subscription in your own cloud.</p>
+</a>
+<a class="card" href="/docs/submit-837-follow-claim">
+<span class="meta">Claims</span>
+<h3>Submit and follow an 837</h3>
+<p>Send a synthetic claim through intake and adjudication and follow it to its outcome.</p>
+</a>
+<a class="card" href="/docs/million-claim-challenge">
+<span class="meta">Evidence</span>
+<h3>Run the Million Claim Challenge</h3>
+<p>Reproduce the public synthetic-claims benchmark on your own infrastructure.</p>
+</a>
+</div>
+</div>
+</section>
+
+<section id="guides" class="tint">
+<div class="wrap">
+<p class="eyebrow">Configuration guides</p>
+<h2>Set up each part of the platform.</h2>
+<p class="lede">Written for the people who configure core administration systems.</p>
+<div class="link-groups">
+<div>
+<h3>Benefits &amp; enrollment</h3>
+<ul>
+<li><a href="/docs/benefit-plan-guide">Benefit plan configuration</a></li>
+<li><a href="/docs/configure-benefits-cost-sharing">Benefits and cost sharing</a></li>
+<li><a href="/docs/configure-plan-networks">Plan networks</a></li>
+<li><a href="/docs/eligibility-guide">Eligibility &amp; enrollment</a></li>
+</ul>
+</div>
+<div>
+<h3>Claims operations</h3>
+<ul>
+<li><a href="/docs/claims-guide">Claims adjudication</a></li>
+<li><a href="/docs/837-intake-adjudication-operations">837 operations runbook</a></li>
+<li><a href="/docs/review-resolve-pended-claim">Pended claims operations</a></li>
+<li><a href="/docs/finance-guide">Finance guide</a></li>
+</ul>
+</div>
+<div>
+<h3>Pricing &amp; reimbursement</h3>
+<ul>
+<li><a href="/docs/fee-schedule-guide">Fee schedules</a></li>
+<li><a href="/docs/fee-schedule-engine">Fee schedule engine</a></li>
+<li><a href="/docs/terminology-guide">Terminology crosswalk</a></li>
+</ul>
+</div>
+<div>
+<h3>Utilization &amp; providers</h3>
+<ul>
+<li><a href="/docs/prior-auth-guide">Prior authorization</a></li>
+<li><a href="/docs/provider-enrollment-guide">Provider enrollment</a></li>
+<li><a href="/docs/provider-verification-guide">Provider verification</a></li>
+</ul>
+</div>
+<div>
+<h3>State compliance</h3>
+<ul>
+<li><a href="/docs/texas-compliance">Texas STAR / STAR+PLUS</a></li>
+<li><a href="/docs/texas-tmppm-pa-rules">Texas TMPPM prior authorization rules</a></li>
+<li><a href="/docs/florida-compliance">Florida AHCA SMMC</a></li>
+</ul>
+</div>
+<div>
+<h3>Beside your existing core</h3>
+<ul>
+<li><a href="https://cms-0057-f.com/guides/cms-0057-f-qnxt">CMS-0057-F with QNXT</a></li>
+<li><a href="https://cms-0057-f.com/guides/cms-0057-f-facets">CMS-0057-F with Facets</a></li>
+<li><a href="https://cms-0057-f.com/guides/cms-0057-f-healthedge">CMS-0057-F with HealthEdge</a></li>
+</ul>
+</div>
+<div>
+<h3>Operate in production</h3>
+<ul>
+<li><a href="/docs/production-readiness-checklist">Production readiness checklist</a></li>
+<li><a href="/docs/observability-alerting-incident-response">Observability &amp; incident response</a></li>
+<li><a href="/docs/backup-restore-disaster-recovery">Backup, restore &amp; disaster recovery</a></li>
+<li><a href="/docs/deployment">Deployment</a></li>
+</ul>
+</div>
+<div>
+<h3>Reference</h3>
+<ul>
+<li><a href="/docs/api">API reference</a></li>
+<li><a href="/docs/architecture">Architecture</a></li>
+<li><a href="/release-notes">Release notes</a></li>
+<li><a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a></li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+
+<section id="business-case">
+<div class="wrap">
+<p class="eyebrow">Make the case</p>
+<h2>Convinced? Here's what to bring to your leadership.</h2>
+<p class="lede">Leadership will ask about cost, risk, security and architecture. Start with these, then ask us for the business case kit to adapt for your plan.</p>
+<div class="grid">
+<div class="pillar">
+<h3>Cost</h3>
+<p>Model what dependency costs your plan, with your own assumptions.</p>
+<a href="/economics-of-vendor-lock-in">Economics model →</a>
+</div>
+<div class="pillar">
+<h3>Risk</h3>
+<p>A phased path that starts beside your core, with acceptance criteria and rollback at each step.</p>
+<a href="/incremental-modernization">Incremental modernization →</a>
+</div>
+<div class="pillar">
+<h3>Security</h3>
+<p>Shared responsibilities, HIPAA roles and how a BAA is handled where required.</p>
+<a href="/trust">Trust &amp; security →</a>
+</div>
+<div class="pillar">
+<h3>Architecture</h3>
+<p>Services, data and tenancy, with published evidence and stated limitations.</p>
+<a href="/docs/architecture">Architecture →</a>
+</div>
+</div>
+<div class="signup">
+<div>
+<h3>Get the business case kit</h3>
+<p>Tell us about your plan and we'll send the kit. If it helps, we'll join your architecture review to answer questions directly.</p>
+</div>
+<div class="actions">
+<a class="btn btn-primary" href="/contact?interest=business-case-kit" data-ga-event="business_case_kit_cta_click">Request the kit</a>
+</div>
+</div>
+</div>
+</section>
+
+<section id="talk" class="navy">
+<div class="wrap split">
+<div class="grow">
+<h2>Want an architect on the call?</h2>
+<p class="lede">Talk through your core system, integrations and deployment model with someone who has built payer core platforms.</p>
+</div>
+<div class="actions">
+<a class="btn btn-light" href="/contact?interest=cms0057-assessment" data-ga-event="readiness_review_cta_click">Book a readiness review</a>
+<a class="btn btn-ghost" href="https://sandbox.cloudhealthoffice.com/?spec=patient-access">Try the API sandbox</a>
+</div>
+</div>
+</section>
+</main>
+<footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+</body>
+</html>

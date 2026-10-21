@@ -33,27 +33,90 @@
   <link rel="stylesheet" href="/css/docs.css" />
   <style>
     /* Payer FHIR API page — scoped additions */
-    .badge-phase2 { background: rgba(255,120,80,0.14); color: #ff9070; border: 1px solid rgba(255,120,80,0.32); }
+    .badge-phase2 { background: rgba(185, 28, 28, 0.14); color: #ff9070; border: 1px solid rgba(185, 28, 28, 0.32); }
     .cap-card .cap-status { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
     .cap-card h3 { display: flex; align-items: center; gap: 8px; }
     .qa-block { margin: 0 0 22px; }
-    .qa-block h3 { color: #fff; font-size: 1.05rem; margin: 0 0 6px; }
-    .qa-block p { color: rgba(176,176,176,0.85); line-height: 1.65; margin: 0; }
+    .qa-block h3 { color: #0B1F33; font-size: 1.05rem; margin: 0 0 6px; }
+    .qa-block p { color: #334155; line-height: 1.65; margin: 0; }
     .flow-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 18px 0; padding: 0; list-style: none; }
-    .flow-steps li { background: #0a0a0a; border: 1px solid rgba(0,255,255,0.18); border-radius: 8px; padding: 8px 12px; font-size: 0.82rem; color: #e0e0e0; }
-    .flow-steps .flow-arrow { background: none; border: none; color: rgba(0,255,255,0.55); padding: 0; font-weight: 700; }
+    .flow-steps li { background: #F5F7FA; border: 1px solid rgba(14, 116, 144, 0.18); border-radius: 8px; padding: 8px 12px; font-size: 0.82rem; color: #334155; }
+    .flow-steps .flow-arrow { background: none; border: none; color: #0E7490; padding: 0; font-weight: 700; }
     .model-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin: 20px 0; }
-    .model-cols .model-col { background: #0a0a0a; border: 1px solid rgba(0,255,255,0.15); border-radius: 10px; padding: 20px 22px; }
-    .model-cols .model-col h4 { color: #00ffff; margin: 0 0 10px; font-size: 0.98rem; }
-    .model-flow { font-family: var(--mono, 'JetBrains Mono', monospace); font-size: 0.8rem; color: rgba(176,176,176,0.9); line-height: 1.9; }
-    .model-flow strong { color: #00ff88; font-weight: 600; }
+    .model-cols .model-col { background: #F5F7FA; border: 1px solid rgba(14, 116, 144, 0.15); border-radius: 10px; padding: 20px 22px; }
+    .model-cols .model-col h4 { color: #0E7490; margin: 0 0 10px; font-size: 0.98rem; }
+    .model-flow { font-family: var(--mono, 'JetBrains Mono', monospace); font-size: 0.8rem; color: #334155; line-height: 1.9; }
+    .model-flow strong { color: #0F766E; font-weight: 600; }
   </style>
   <script src="/js/auth.js"></script>
   <script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
 </head>
 <body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
-  <nav><div class="nav-inner"><a href="/" class="nav-logo" aria-label="Home"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" /><span class="nav-logo-text">Cloud Health Office</span></a><div class="nav-right"><button class="mobile-menu-toggle" aria-label="Toggle menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button><ul id="mainNav"><li><a href="/solutions-payers">Solutions</a></li><li><a href="/cms-0057f-compliance">CMS Compliance</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/platform">Platform</a></li><li><a href="/docs" style="color:#00ffff;font-weight:bold;">Docs</a></li><li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li><li><a href="/founder">Founder</a></li><li><a href="/services">Services</a></li><li><a href="/contact" style="color:#00ffff;font-weight:bold;">Contact Sales</a></li></ul></div></div></nav>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api" aria-current="page">API reference</a>
+<a href="https://sandbox.cloudhealthoffice.com">API sandbox</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
   <script>document.addEventListener('DOMContentLoaded',()=>{updateNavigation('#mainNav')});</script>
 
   <main id="main-content">
@@ -183,12 +246,12 @@
           <div class="model-col">
             <h4>Cloud Health Office alongside an existing core</h4>
             <div class="model-flow">FHIR<br/>&darr;<br/><strong>Cloud Health Office</strong><br/>&darr;<br/>QNXT / Facets / HealthEdge / UM / enterprise systems</div>
-            <p style="margin-top:12px;color:rgba(176,176,176,0.8);font-size:0.86rem;line-height:1.6;">The core stays the system of record. Cloud Health Office is the FHIR, SMART/OAuth, prior authorization, terminology, and audit layer on top of it.</p>
+            <p style="margin-top:12px;color:#334155;font-size:0.86rem;line-height:1.6;">The core stays the system of record. Cloud Health Office is the FHIR, SMART/OAuth, prior authorization, terminology, and audit layer on top of it.</p>
           </div>
           <div class="model-col">
             <h4>Cloud Health Office as the payer backend</h4>
             <div class="model-flow">FHIR<br/>&darr;<br/><strong>Cloud Health Office</strong><br/>&darr;<br/>Membership / eligibility / benefits / providers / prior authorization / claims / accumulators</div>
-            <p style="margin-top:12px;color:rgba(176,176,176,0.8);font-size:0.86rem;line-height:1.6;">Cloud Health Office owns the administration domains directly, either from day one or progressively as domains migrate off a legacy core.</p>
+            <p style="margin-top:12px;color:#334155;font-size:0.86rem;line-height:1.6;">Cloud Health Office owns the administration domains directly, either from day one or progressively as domains migrate off a legacy core.</p>
           </div>
         </div>
 
@@ -351,8 +414,47 @@ curl -X POST https://api.your-domain.example/fhir/r4/Group/{groupId}/\$export \
 
   <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
   <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
-  <footer class="site-footer"><div class="footer-inner"><div class="footer-bottom"><p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc.</p></div></div>    <p style="margin-top:18px;"><a href="/founder">Meet the founder &rarr;</a> &nbsp;&middot;&nbsp; <a href="/services">Professional Services &rarr;</a></p>
-  </footer>
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
   <script>const t=document.getElementById('docsMobileToggle'),s=document.getElementById('docsSidebar'),o=document.getElementById('docsSidebarOverlay');if(t&&s){t.addEventListener('click',()=>{s.classList.toggle('open');o.classList.toggle('open')});o.addEventListener('click',()=>{s.classList.remove('open');o.classList.remove('open')})}</script>
 </body>
 </html>

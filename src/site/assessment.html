@@ -47,31 +47,75 @@
   <link rel="stylesheet" href="css/sentinel.css">
   <script src="js/auth.js"></script>
   <script src="js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<script defer src="/js/mobile-nav.js"></script>
+<link rel="stylesheet" href="/css/enterprise.css">
 </head>
 <body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
-  <nav>
-    <div class="nav-inner">
-      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
-        <img src="graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
-        <span class="nav-logo-text">Cloud Health Office</span>
-      </a>
-      <div class="nav-right">
-        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
-        <ul id="mainNav">
-          <li><a href="/">Home</a></li>
-          <li><a href="/solutions-payers">Solutions</a></li>
-          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
-          <li><a href="/pricing">Pricing</a></li>
-          <li><a href="/platform">Platform</a></li>
-          <li><a href="/docs">Docs</a></li>
-          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
-          <li><a href="/founder">Founder</a></li><li><a href="/services">Services</a></li><li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
-        </ul>
-      </div>
-    </div>
-  </nav>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="https://sandbox.cloudhealthoffice.com">API sandbox</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
   <script>
     // Update navigation with auth status on page load
     document.addEventListener('DOMContentLoaded', () => {
@@ -95,9 +139,9 @@
   <em>A capability assessment of the Cloud Health Office platform &mdash; September 2026</em>
 </div>
 
-<div style="border-left:3px solid #00ffff; padding:14px 18px; margin:0 0 28px; background:rgba(0,255,255,0.04);">
+<div style="border-left:3px solid #0E7490; padding:14px 18px; margin:0 0 28px; background:rgba(14, 116, 144, 0.04);">
   <p style="margin:0 0 8px;"><strong>How to read this page.</strong> Every capability below is labelled <strong>Available today</strong> or <strong>On the roadmap</strong>. "Available today" means the code exists, is exercised by tests or by the published benchmark, and can be inspected in the public repository. "On the roadmap" means designed, partially built, or deliberately left as engagement work &mdash; not shipping.</p>
-  <p style="margin:0;">Where this page and <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">POSITIONING.md</a> differ, POSITIONING.md is the source of truth. Where either differs from the code, the code is.</p>
+  <p style="margin:0;">Where this page and <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#0E7490;">POSITIONING.md</a> differ, POSITIONING.md is the source of truth. Where either differs from the code, the code is.</p>
 </div>
 
 <hr>
@@ -115,7 +159,7 @@
 <li><strong>Managed Data Services</strong> &mdash; subscriptions for data that changes constantly (state Medicaid compliance updates, CMS fee schedule updates, provider verification, terminology).</li>
 <li><strong>Platform Engagement</strong> &mdash; payer-scale relationships priced per member per month, across three layers: <strong>Layer 1 &mdash; Compliance Accelerator</strong>, <strong>Layer 2 &mdash; Progressive Modernization</strong>, <strong>Layer 3 &mdash; Full CAPS Platform</strong>.</li>
 </ul>
-<p style="font-size:0.95rem; color:#888;"><a href="/pricing" style="color:#00ffff;">See full pricing &rarr;</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Canonical positioning (POSITIONING.md) &rarr;</a></p>
+<p style="font-size:0.95rem; color:#475569;"><a href="/pricing" style="color:#0E7490;">See full pricing &rarr;</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#0E7490;">Canonical positioning (POSITIONING.md) &rarr;</a></p>
 
 <hr>
 <h2>Available Today</h2>
@@ -187,12 +231,12 @@
 </table>
 <p>Those 122 are an observation deadline, not lost claims: post-run verification found all 1,000,000 claims terminal, 2,000,000 lifecycle events, zero dead letters and zero pod restarts. Because they left 20 workflow checks unreconciled inside the run artifact, <strong>episode 15 &mdash; not 16 &mdash; is cited as the strict zero-failure baseline.</strong></p>
 
-<div style="border-left:3px solid #ffaa00; padding:14px 18px; margin:22px 0; background:rgba(255,170,0,0.05);">
+<div style="border-left:3px solid #B45309; padding:14px 18px; margin:22px 0; background:rgba(180, 83, 9, 0.05);">
   <p style="margin:0;"><strong>Environment, stated plainly.</strong> These are <strong>local Docker Desktop Kubernetes</strong> runs on a developer workstation. They are engineering benchmarks, <strong>not production cloud capacity claims</strong>. Correctness gates are seed-reproducible; throughput figures are hardware-dependent and will not reproduce exactly elsewhere. The platform has not been run against a top-tier payer's production volume.</p>
 </div>
 
 <p>Every published run carries its commit SHA, seed, exact command line, environment description and raw validator output, so the result can be audited rather than taken on trust. The generator, validator and runner are all in the repository.</p>
-<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/benchmarks/README.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Benchmark methodology and reproducibility checklist &rarr;</a></p>
+<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/benchmarks/README.md" target="_blank" rel="noopener noreferrer" style="color:#0E7490;">Benchmark methodology and reproducibility checklist &rarr;</a></p>
 
 <hr>
 <h2 id="roadmap">On the Roadmap</h2>
@@ -225,7 +269,7 @@
 <p>Cloud Health Office runs as containerised .NET microservices on Kubernetes &mdash; local Docker Desktop, AKS, EKS, GKE, or customer-managed clusters. Services communicate over an event bus (Kafka or Azure Service Bus). Document persistence is MongoDB or Cosmos DB; PostgreSQL backs reference data; Redis accelerates cache and accumulators.</p>
 <p><strong>Argo Workflows</strong> orchestrates X12 file-transport and ingest pipelines &mdash; SFTP pickup, envelope handling, batch routing. <strong>Claims adjudication itself does not run on Argo</strong>: it runs as event-driven .NET services, which is the path the Million Claim Challenge measures. Both are current architecture; they do different jobs.</p>
 <p>Secrets resolve through a pluggable provider &mdash; Kubernetes Secrets and environment variables by default, with Azure Key Vault and HashiCorp Vault available. No secret store is required to run the platform locally or to reproduce the benchmark.</p>
-<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Full architecture reference &rarr;</a></p>
+<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer" style="color:#0E7490;">Full architecture reference &rarr;</a></p>
 
 <hr>
 <h2>Security Posture</h2>
@@ -258,7 +302,7 @@
 <li>We do <strong>not</strong> claim CMS-0057-F compliance. We provide implemented technical surfaces against the rule; compliance requires your integration, configuration and legal review.</li>
 </ul>
 <p>What we do provide is a readiness matrix that distinguishes "implemented" from "integration required" from "phase 2", so you can scope the gap honestly.</p>
-<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/compliance/CMS-0057-F-READINESS-MATRIX.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">CMS-0057-F readiness matrix &rarr;</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/features/HIPAA-COMPLIANCE-MATRIX.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">HIPAA technical safeguards matrix &rarr;</a></p>
+<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/compliance/CMS-0057-F-READINESS-MATRIX.md" target="_blank" rel="noopener noreferrer" style="color:#0E7490;">CMS-0057-F readiness matrix &rarr;</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/features/HIPAA-COMPLIANCE-MATRIX.md" target="_blank" rel="noopener noreferrer" style="color:#0E7490;">HIPAA technical safeguards matrix &rarr;</a></p>
 
 <hr>
 <h2>Evaluating It Yourself</h2>
@@ -278,7 +322,7 @@ CLAIMS=1000 MAX_CLAIMS=1000 PARALLELISM=10 PROGRESS_EVERY=100 \
 kubectl port-forward -n cloudhealthoffice svc/portal 8080:80
 # http://localhost:8080/mass-adjudication-runs</code></pre>
 <p>Scale up deliberately &mdash; 10K as a confidence gate, then 100K, then the full corpus. No secret store, cloud subscription or licence key is required for any of this.</p>
-<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/guides/QUICKSTART.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Full quickstart &rarr;</a></p>
+<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/guides/QUICKSTART.md" target="_blank" rel="noopener noreferrer" style="color:#0E7490;">Full quickstart &rarr;</a></p>
 
 <hr>
 <h2>Commercial Model</h2>
@@ -291,16 +335,16 @@ kubectl port-forward -n cloudhealthoffice svc/portal 8080:80
 <li><strong>Professional services:</strong> available for connector implementation and migration work.</li>
 </ul>
 <p>Core administration connectors are scoped as engagement work, for the reasons given above. That is a real cost line in any Platform Engagement and we would rather price it honestly than imply it is free.</p>
-<p style="font-size:0.95rem;"><a href="/pricing" style="color:#00ffff;">Full pricing &rarr;</a> &middot; <a href="/services" style="color:#00ffff;">Professional services &rarr;</a></p>
+<p style="font-size:0.95rem;"><a href="/pricing" style="color:#0E7490;">Full pricing &rarr;</a> &middot; <a href="/services" style="color:#0E7490;">Professional services &rarr;</a></p>
 
 <hr>
 <h2>Next Steps</h2>
 <ul>
 <li><strong>Run the benchmark</strong> &mdash; the repository is public and the instructions above are the whole path.</li>
-<li><strong>Read the positioning document</strong> &mdash; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">POSITIONING.md</a> is the canonical statement of what each product line is and is not.</li>
-<li><strong>Scope a pilot</strong> &mdash; <a href="/contact" style="color:#00ffff;">contact sales</a> for a technical walkthrough against your environment.</li>
+<li><strong>Read the positioning document</strong> &mdash; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#0E7490;">POSITIONING.md</a> is the canonical statement of what each product line is and is not.</li>
+<li><strong>Scope a pilot</strong> &mdash; <a href="/contact" style="color:#0E7490;">contact sales</a> for a technical walkthrough against your environment.</li>
 </ul>
-<p style="color:#888; font-size:0.95rem; margin-top:28px;">If any statement on this page is contradicted by the code, treat the code as the source of truth and <a href="https://github.com/aurelianware/cloudhealthoffice/issues" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">open an issue</a>. We would rather fix the copy than defend it.</p>
+<p style="color:#475569; font-size:0.95rem; margin-top:28px;">If any statement on this page is contradicted by the code, treat the code as the source of truth and <a href="https://github.com/aurelianware/cloudhealthoffice/issues" target="_blank" rel="noopener noreferrer" style="color:#0E7490;">open an issue</a>. We would rather fix the copy than defend it.</p>
       </article>
 
       <section class="cta-section">
@@ -315,18 +359,46 @@ kubectl port-forward -n cloudhealthoffice svc/portal 8080:80
     </div>
   </main>
 
-  <footer>
-    <p>
-      <strong>Cloud Health Office — The Sentinel</strong><br>
-      Source-available healthcare payer infrastructure.
-    </p>
-    <p>
-      BSL 1.1 • Free for non-production use • <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a> • © 2026 Aurelianware<br>
-      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> • 
-      <a href="/docs">Docs</a> • 
-      <a href="mailto:mark@aurelianware.com">Contact</a>
-    </p>
-      <p style="margin-top:18px;"><a href="/founder">Meet the founder &rarr;</a> &nbsp;&middot;&nbsp; <a href="/services">Professional Services &rarr;</a></p>
-  </footer>
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
 </body>
 </html>

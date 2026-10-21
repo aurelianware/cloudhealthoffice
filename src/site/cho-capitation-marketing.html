@@ -12,23 +12,23 @@
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg-primary: #080c14;
-      --bg-card: #0d1219;
-      --bg-nav: #0a0e16;
-      --cyan: #00f0ff;
-      --cyan-dim: rgba(0, 240, 255, 0.12);
-      --green: #10b981;
-      --green-light: #34d399;
-      --red: #ef4444;
-      --red-light: #f87171;
-      --yellow: #f59e0b;
-      --yellow-light: #fbbf24;
+      --bg-primary: #EEF3F8;
+      --bg-card: #EEF3F8;
+      --bg-nav: #EEF3F8;
+      --cyan: #0E7490;
+      --cyan-dim: #0E7490;
+      --green: #0F766E;
+      --green-light: #0F766E;
+      --red: #B91C1C;
+      --red-light: #B91C1C;
+      --yellow: #B45309;
+      --yellow-light: #B45309;
       --purple: #a78bfa;
-      --text-primary: #e2e8f0;
-      --text-secondary: #94a3b8;
-      --text-dim: #64748b;
-      --border: #1e293b;
-      --border-hover: #334155;
+      --text-primary: #334155;
+      --text-secondary: #334155;
+      --text-dim: #475569;
+      --border: #D9E1EA;
+      --border-hover: #D9E1EA;
     }
 
     body {
@@ -71,9 +71,9 @@
     .topbar-badge {
       font-family: 'JetBrains Mono', monospace;
       font-size: 10px; font-weight: 500;
-      background: rgba(0, 240, 255, 0.1);
+      background: rgba(14, 116, 144, 0.1);
       color: var(--cyan);
-      border: 1px solid rgba(0, 240, 255, 0.25);
+      border: 1px solid rgba(14, 116, 144, 0.25);
       padding: 3px 8px; border-radius: 4px;
     }
     .topbar-bell {
@@ -128,7 +128,7 @@
       text-decoration: none;
     }
     .sidebar-item:hover {
-      background: rgba(255, 255, 255, 0.04);
+      background: rgba(11, 31, 51, 0.04);
       color: var(--text-primary);
     }
     .sidebar-item.active {
@@ -218,9 +218,9 @@
     .section-badge {
       font-family: 'JetBrains Mono', monospace;
       font-size: 10px; font-weight: 500;
-      background: rgba(245, 158, 11, 0.12);
+      background: rgba(180, 83, 9, 0.12);
       color: var(--yellow-light);
-      border: 1px solid rgba(245, 158, 11, 0.25);
+      border: 1px solid rgba(180, 83, 9, 0.25);
       padding: 3px 10px; border-radius: 4px;
     }
 
@@ -244,12 +244,12 @@
     }
     .pipeline-step.done .pipeline-dot {
       background: var(--green);
-      color: #fff;
+      color: #0B1F33;
     }
     .pipeline-step.current .pipeline-dot {
       background: var(--yellow);
       color: var(--bg-primary);
-      box-shadow: 0 0 16px rgba(245, 158, 11, 0.5);
+      box-shadow: 0 0 16px rgba(180, 83, 9, 0.5);
     }
     .pipeline-step.pending .pipeline-dot {
       background: var(--border);
@@ -292,11 +292,11 @@
     tbody td {
       padding: 12px 16px;
       font-size: 13px;
-      border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+      border-bottom: 1px solid rgba(217, 225, 234, 0.5);
       white-space: nowrap;
     }
     tbody tr:hover {
-      background: rgba(255, 255, 255, 0.02);
+      background: rgba(11, 31, 51, 0.02);
     }
     .cell-provider {
       font-weight: 600; color: var(--text-primary);
@@ -316,7 +316,7 @@
     .cell-method {
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
-      background: rgba(255, 255, 255, 0.04);
+      background: rgba(11, 31, 51, 0.04);
       padding: 3px 8px; border-radius: 4px;
       color: var(--text-secondary);
       display: inline-block;
@@ -324,9 +324,9 @@
     .badge-active {
       font-family: 'JetBrains Mono', monospace;
       font-size: 10px; font-weight: 500;
-      background: rgba(16, 185, 129, 0.12);
+      background: rgba(15, 118, 110, 0.12);
       color: var(--green-light);
-      border: 1px solid rgba(16, 185, 129, 0.25);
+      border: 1px solid rgba(15, 118, 110, 0.25);
       padding: 3px 10px; border-radius: 4px;
       display: inline-block;
     }

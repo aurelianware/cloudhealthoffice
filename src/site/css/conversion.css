@@ -24,9 +24,9 @@
 
 /* === TRUST SIGNALS STRIP === */
 .trust-strip {
-  border-top: 1px solid rgba(0, 255, 136, 0.18);
-  border-bottom: 1px solid rgba(0, 255, 136, 0.18);
-  background: linear-gradient(90deg, #00110a 0%, #00060f 50%, #00110a 100%);
+  border-top: 1px solid rgba(15, 118, 110, 0.18);
+  border-bottom: 1px solid rgba(15, 118, 110, 0.18);
+  background: linear-gradient(90deg, #EEF3F8 0%, #EEF3F8 50%, #EEF3F8 100%);
   padding: 34px 24px;
 }
 
@@ -58,13 +58,13 @@
 
 .trust-item strong {
   display: block;
-  color: #fff;
+  color: #0B1F33;
   font-size: 0.95rem;
   margin-bottom: 3px;
 }
 
 .trust-item span {
-  color: rgba(176, 176, 176, 0.72);
+  color: #334155;
   font-size: 0.84rem;
   line-height: 1.5;
 }
@@ -95,11 +95,11 @@
   gap: 16px;
   flex-wrap: wrap;
   padding: 12px 20px;
-  background: rgba(3, 6, 12, 0.96);
+  background: rgba(238, 243, 248, 0.96);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border-top: 1px solid rgba(0, 255, 136, 0.28);
-  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55);
+  border-top: 1px solid rgba(15, 118, 110, 0.28);
+  box-shadow: 0 -12px 40px rgba(11, 31, 51, 0.12);
   transform: translateY(130%);
   transition: transform 0.35s ease;
 }
@@ -109,7 +109,7 @@
 }
 
 .sticky-cta__text {
-  color: rgba(225, 225, 225, 0.92);
+  color: #334155;
   font-size: 0.92rem;
   font-weight: 600;
   margin: 0;
@@ -122,14 +122,14 @@
 }
 
 .sticky-cta__primary {
-  background: linear-gradient(90deg, #00c060, #00ff88);
-  border-color: #00ff88;
-  color: #000;
+  background: linear-gradient(90deg, #0F766E, #0F766E);
+  border-color: #0F766E;
+  color: #FFFFFF;
 }
 
 .sticky-cta__primary:hover {
-  background: #000;
-  color: #00ff88;
+  background: #FFFFFF;
+  color: #0F766E;
 }
 
 .sticky-cta__secondary {
@@ -161,8 +161,8 @@
 .cho-leadform {
   display: grid;
   gap: 14px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(0, 255, 255, 0.15);
+  background: rgba(11, 31, 51, 0.02);
+  border: 1px solid rgba(14, 116, 144, 0.15);
   border-radius: 14px;
   padding: 24px;
 }
@@ -183,7 +183,7 @@
   display: block;
   font-size: 0.82rem;
   font-weight: 600;
-  color: rgba(0, 255, 255, 0.8);
+  color: #0E7490;
   margin-bottom: 6px;
 }
 
@@ -192,10 +192,10 @@
 .cho-leadform textarea {
   width: 100%;
   padding: 11px 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(0, 255, 255, 0.2);
+  background: rgba(11, 31, 51, 0.04);
+  border: 1px solid rgba(14, 116, 144, 0.2);
   border-radius: 8px;
-  color: #fff;
+  color: #0B1F33;
   font-size: 0.93rem;
   font-family: inherit;
   box-sizing: border-box;
@@ -205,37 +205,37 @@
 .cho-leadform select:focus,
 .cho-leadform textarea:focus {
   outline: none;
-  border-color: rgba(0, 255, 255, 0.6);
+  border-color: rgba(14, 116, 144, 0.6);
 }
 
 .cho-leadform select option {
-  background: #0a0a0a;
+  background: #F5F7FA;
 }
 
 .cho-leadform__error {
-  background: rgba(255, 60, 60, 0.1);
-  border: 1px solid rgba(255, 60, 60, 0.3);
+  background: rgba(185, 28, 28, 0.1);
+  border: 1px solid rgba(185, 28, 28, 0.3);
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 0.86rem;
-  color: rgba(255, 120, 120, 0.9);
+  color: #B91C1C;
 }
 
 .cho-leadform__note {
   margin: 4px 0 0;
   font-size: 0.78rem;
-  color: rgba(128, 128, 128, 0.6);
+  color: #475569;
   text-align: center;
 }
 
 .cho-leadform__thanks {
-  background: rgba(0, 255, 136, 0.06);
-  border: 1px solid rgba(0, 255, 136, 0.3);
+  background: rgba(15, 118, 110, 0.06);
+  border: 1px solid rgba(15, 118, 110, 0.3);
   border-radius: 14px;
   padding: 32px 26px;
   text-align: center;
   line-height: 1.7;
-  color: rgba(210, 210, 210, 0.9);
+  color: #334155;
 }
 
 @media (max-width: 520px) {
