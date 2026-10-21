@@ -21,3 +21,6 @@
 *.jpg   -text
 *.jpeg  -text
 *.gif   -text
+
+# Fonts
+*.ttf   binary

@@ -167,7 +167,7 @@ Cloud Health Office v4.0 represents the evolution from source-available infrastr
 - [ ] Analytics Service (claims trends, denial analysis, payer scorecards)
 - [ ] Grafana dashboards embedded in portals
 - [ ] ML fraud detection (Isolation Forest, >80% precision)
-- [ ] PDF/CSV report generation (QuestPDF)
+- [ ] PDF/CSV report generation (SkiaSharp PDF backend, CsvHelper)
 - [ ] Stripe metering for premium report exports
 - [ ] PHI anonymization in aggregates (HIPAA compliant)
 

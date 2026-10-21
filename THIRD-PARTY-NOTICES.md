@@ -11,7 +11,7 @@ adding or upgrading a dependency.
 
 ## Summary
 
-- **Shipped .NET packages** (production projects, transitive included): 367
+- **Shipped .NET packages** (production projects, transitive included): 366
 - **Shipped npm packages** (production dependencies): 183
 - **Test and build tooling** (not shipped): 172 NuGet, 447 npm
 
@@ -27,16 +27,13 @@ adding or upgrading a dependency.
 | 0BSD | 1 |
 | MS-PL | 1 |
 | MS-PL OR Apache-2.0 | 1 |
-| QuestPDF License (Community/Professional/Enterprise) | 1 |
 
 ## Needs attention
 
 Shipped components whose licence is not a standard permissive one (MIT, Apache-2.0,
 BSD, ISC, MS-PL and similar), or could not be determined automatically:
 
-| Package | Version | Licence | Project |
-|---|---|---|---|
-| QuestPDF | 2024.12.3 | QuestPDF License (Community/Professional/Enterprise) | [link](https://www.questpdf.com/) |
+None.
 
 ## Services CHO uses but does not distribute
 
@@ -50,6 +47,14 @@ whoever runs CHO and are not part of this repository or its images:
 | Apache Kafka / Azure Service Bus | Apache-2.0 / commercial service | Messaging transport, either one. |
 | Redis (benefit-plan-service accumulator store) | RSALv2 / SSPLv1 / AGPLv3 (7.4+); BSD-3-Clause (7.2 and earlier) | Run unmodified as a cache/store; check the version you deploy. |
 | MinIO / S3-compatible object storage | AGPL-3.0 (MinIO) | Development emulator and optional storage backend; production can use any S3-compatible or cloud blob store. |
+
+## Bundled assets
+
+Files shipped inside CHO's own assemblies rather than as packages:
+
+| Asset | Licence | Where | Note |
+|---|---|---|---|
+| Noto Sans Regular and SemiBold 2.015 (subset), © 2022 The Noto Project Authors | SIL OFL 1.1 | idcard-service (`src/services/idcard-service/Fonts/`, licence in `OFL.txt`) | Embedded so ID card PDFs render without system fonts; Latin subset built by `scripts/fonts/subset-idcard-fonts.sh`. |
 
 ## .NET packages (shipped)
 
@@ -325,7 +330,6 @@ whoever runs CHO and are not part of this repository or its images:
 | Polly.Extensions.Http | 3.0.0 | BSD-3-Clause | [link](https://github.com/App-vNext/Polly.Extensions.Http) |
 | Polly.RateLimiting | 8.4.2 | BSD-3-Clause | [link](https://github.com/App-vNext/Polly) |
 | QRCoder | 1.6.0 | MIT | [link](https://github.com/codebude/QRCoder/) |
-| QuestPDF | 2024.12.3 | QuestPDF License (Community/Professional/Enterprise) | [link](https://www.questpdf.com/) |
 | Serilog | 4.0.0 | Apache-2.0 | [link](https://serilog.net/) |
 | Serilog.AspNetCore | 8.0.3 | Apache-2.0 | [link](https://github.com/serilog/serilog-aspnetcore) |
 | Serilog.Extensions.Hosting | 8.0.0 | Apache-2.0 | [link](https://github.com/serilog/serilog-extensions-hosting) |

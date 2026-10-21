@@ -18,11 +18,17 @@
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="Microsoft.Extensions.Http" VersionOverride="9.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
-    <PackageReference Include="QuestPDF" />
     <PackageReference Include="QRCoder" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
     <PackageReference Include="Svg.Skia" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Noto Sans, SIL OFL 1.1 (Fonts/OFL.txt): embedded so ID card PDFs render the same without system fonts. -->
+    <EmbeddedResource Include="Fonts\NotoSans-Regular.ttf" LogicalName="IdCardService.Fonts.NotoSans-Regular.ttf" />
+    <EmbeddedResource Include="Fonts\NotoSans-SemiBold.ttf" LogicalName="IdCardService.Fonts.NotoSans-SemiBold.ttf" />
+    <None Include="Fonts\OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

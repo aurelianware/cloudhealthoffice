@@ -132,7 +132,6 @@
     <PackageVersion Include="PdfPig" Version="0.1.14" />
     <PackageVersion Include="Polly.Extensions" Version="8.5.0" />
     <PackageVersion Include="QRCoder" Version="1.6.0" />
-    <PackageVersion Include="QuestPDF" Version="2024.12.3" />
     <PackageVersion Include="Serilog.AspNetCore" Version="8.0.3" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageVersion Include="Serilog.Sinks.Seq" Version="8.0.0" />

@@ -53,7 +53,8 @@ registered at `ChoIdCardAdapter`, `QnxtIdCardAdapter`, `FulfillmentVendorAdapter
    global-default).
 4. Generate QR (`QrCodeService.GenerateAsync`) — HMAC-signed payload with
    the current key version.
-5. Render card: QuestPDF for the PDF, SkiaSharp (Svg.Skia) for the PNG preview.
+5. Render card: SkiaSharp for both, its PDF backend for the PDF (`IdCardPdfRenderer`,
+   embedded Noto Sans subset, SIL OFL 1.1) and Svg.Skia for the PNG preview.
 6. Upload PDF + PNG to `member-document-service` with `Category=IdCard`.
 7. Persist `IdCardRecord`, update order → `Issued`.
 

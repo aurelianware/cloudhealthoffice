@@ -40,7 +40,7 @@ This is **not** a print shop and not a replacement for a customer communications
 
 ## 2. Decisions (approved 2026-10-17)
 
-1. **Template format:** templates are structured blocks (letterhead, address block, body paragraphs, required regulatory blocks, tables). Text inside blocks uses Liquid merge fields (Fluid in .NET). QuestPDF renders the PDF. This keeps print-exact layout (envelope window, barcode zone) and deterministic output, and gives plan staff an editor built around the parts they change.
+1. **Template format:** templates are structured blocks (letterhead, address block, body paragraphs, required regulatory blocks, tables). Text inside blocks uses Liquid merge fields (Fluid in .NET). SkiaSharp's PDF backend renders the PDF, as in idcard-service (QuestPDF was ruled out: its Community licence excludes organisations over USD 1M revenue, which every deploying plan is). This keeps print-exact layout (envelope window, barcode zone) and deterministic output, and gives plan staff an editor built around the parts they change.
 2. **Delivery order:** the member portal inbox and one print-and-mail API adapter come first, for demos and smaller plans. The batch adapter for a plan's existing fulfillment center is designed around the first pilot plan's actual vendor file format, not a guessed generic one.
 3. **Electronic delivery:** paper is the default for adverse determinations and appeal and grievance resolutions. Electronic delivery is allowed only where the rule pack permits it for that letter type and the member's consent is on file, and it supplements paper unless the rule pack says otherwise.
 4. **Postal tracking:** only events that affect clocks or follow-up (left the plan's control, returned) become case events. The full mail-scan history stays on the letter record.
@@ -504,7 +504,7 @@ Depends on [document-store.md](document-store.md) §9 steps 1–2 (storage provi
 
 **Independent, can start now:** ID card request history in the portal (§10.1): the order-list endpoint, request reason and requester, the tab's request history, the Overview status line, and work items for failed orders.
 
-1. **Model, template registry and rendering:** letter types, the four template kinds with locked text, required blocks and attachments, QuestPDF rendering with Fluid merge fields, pre-release checks, write-once storage in the document store.
+1. **Model, template registry and rendering:** letter types, the four template kinds with locked text, required blocks and attachments, SkiaSharp PDF rendering with Fluid merge fields, pre-release checks, write-once storage in the document store.
 2. **Appeal notices:** acknowledgment, extension and resolution letters for the Texas Medicaid and Medicare Advantage packs, including the IDN and the HHSC Notice 1 and 2 templates; triggers from appeals-service; rule pack `notices` entries.
 3. **Approval gate** through work management.
 4. **Portal inbox and the first print-and-mail API adapter,** with IMb serials, USPS events and `LeftPlanControl`.

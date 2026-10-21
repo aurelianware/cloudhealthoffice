@@ -124,8 +124,6 @@ def guess_license_file(path: Path) -> str:
         head = path.read_text(errors="ignore")[:4000]
     except OSError:
         return "see package licence file"
-    if "QuestPDF" in head and ("Community" in head or "Professional" in head):
-        return "QuestPDF License (Community/Professional/Enterprise)"
     if re.search(r"Permission is hereby granted, free of charge", head):
         return "MIT"
     if re.search(r"Apache License,?\s+Version 2\.0", head):
@@ -248,6 +246,14 @@ def main() -> int:
         "| Apache Kafka / Azure Service Bus | Apache-2.0 / commercial service | Messaging transport, either one. |",
         "| Redis (benefit-plan-service accumulator store) | RSALv2 / SSPLv1 / AGPLv3 (7.4+); BSD-3-Clause (7.2 and earlier) | Run unmodified as a cache/store; check the version you deploy. |",
         "| MinIO / S3-compatible object storage | AGPL-3.0 (MinIO) | Development emulator and optional storage backend; production can use any S3-compatible or cloud blob store. |",
+        "",
+        "## Bundled assets",
+        "",
+        "Files shipped inside CHO's own assemblies rather than as packages:",
+        "",
+        "| Asset | Licence | Where | Note |",
+        "|---|---|---|---|",
+        "| Noto Sans Regular and SemiBold 2.015 (subset), © 2022 The Noto Project Authors | SIL OFL 1.1 | idcard-service (`src/services/idcard-service/Fonts/`, licence in `OFL.txt`) | Embedded so ID card PDFs render without system fonts; Latin subset built by `scripts/fonts/subset-idcard-fonts.sh`. |",
         "",
         "## .NET packages (shipped)",
         "",

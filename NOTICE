@@ -12,8 +12,6 @@ For commercial licensing inquiries: licensing@cloudhealthoffice.com
 Third-party components are listed, with their licences, in
 THIRD-PARTY-NOTICES.md. Each remains under its own licence.
 
-QuestPDF (used by idcard-service to lay out member ID card PDFs) is not open
-source: it is free under its Community License only for organisations with
-under USD 1,000,000 in annual gross revenue and other qualifying users. An
-organisation that deploys idcard-service and does not qualify needs a QuestPDF
-Professional or Enterprise licence (https://www.questpdf.com/license/).
+idcard-service embeds Noto Sans (Copyright 2022 The Noto Project Authors),
+licensed under the SIL Open Font License 1.1; the licence text ships with the
+font in src/services/idcard-service/Fonts/OFL.txt.
