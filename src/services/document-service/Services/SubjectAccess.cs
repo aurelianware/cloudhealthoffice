@@ -122,7 +122,8 @@ public static class SubjectAccess
             UploadPending = d.PendingUploadPath != null,
             ReceivedAt = d.ReceivedAt,
             CreatedAt = d.CreatedAt,
-            CreatedBy = d.CreatedBy
+            CreatedBy = d.CreatedBy,
+            CreatedOnBehalfOf = d.CreatedOnBehalfOf
         };
     }
 }

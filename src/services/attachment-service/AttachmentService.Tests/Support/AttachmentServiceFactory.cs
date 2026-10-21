@@ -4,7 +4,6 @@ using AttachmentService.Controllers;
 using AttachmentService.Models;
 using AttachmentService.Repositories;
 using AttachmentService.Services;
-using CloudHealthOffice.DocumentStore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,7 +19,7 @@ namespace AttachmentService.Tests.Support;
 public sealed class AttachmentServiceFactory : WebApplicationFactory<AttachmentsController>
 {
     public InMemoryAttachmentRepository Attachments { get; } = new();
-    public InMemoryDocumentStore Documents { get; } = new();
+    public FakeDocumentCatalog Documents { get; } = new();
     public Mock<ITradingPartnerLookup> TradingPartners { get; } = new();
     public StubParentServices Parents { get; } = new();
 
@@ -39,8 +38,8 @@ public sealed class AttachmentServiceFactory : WebApplicationFactory<Attachments
         {
             services.RemoveAll<IAttachmentRepository>();
             services.AddSingleton<IAttachmentRepository>(Attachments);
-            services.RemoveAll<IDocumentStore>();
-            services.AddSingleton<IDocumentStore>(Documents);
+            services.RemoveAll<IDocumentCatalog>();
+            services.AddSingleton<IDocumentCatalog>(Documents);
             services.RemoveAll<ITradingPartnerLookup>();
             services.AddSingleton(TradingPartners.Object);
             // The real HttpAttachmentParentLookup, talking to stand-ins for the owning services.
@@ -64,6 +63,68 @@ public sealed class AttachmentServiceFactory : WebApplicationFactory<Attachments
         Documents.Clear();
         TradingPartners.Reset();
         Parents.Reset();
+    }
+}
+
+/// <summary>
+/// Stands in for document-service: keeps each uploaded file with its tenant,
+/// subject and the user it was filed for, and serves it back only for the
+/// same tenant and subject, as the catalog does.
+/// </summary>
+public sealed class FakeDocumentCatalog : IDocumentCatalog
+{
+    public sealed record Stored(string TenantId, string OnBehalfOf, AttachmentParentType SubjectType, string SubjectId,
+        string Title, string ContentType, string FileName, string Channel, IReadOnlyDictionary<string, string> ExternalIds, byte[] Bytes);
+
+    private readonly ConcurrentDictionary<string, Stored> _files = new();
+
+    /// <summary>Make every call fail, as an unreachable document-service would.</summary>
+    public bool Fail { get; set; }
+
+    /// <summary>Make every call fail as a refusal with this status.</summary>
+    public System.Net.HttpStatusCode? RefuseWith { get; set; }
+
+    public IReadOnlyDictionary<string, Stored> Files => _files;
+
+    public int Count => _files.Count;
+
+    public void Clear()
+    {
+        _files.Clear();
+        Fail = false;
+        RefuseWith = null;
+    }
+
+    /// <summary>Test helper: a file already in the catalog.</summary>
+    public string Seed(string tenantId, AttachmentParentType type, string subjectId, byte[] bytes)
+    {
+        var id = Guid.NewGuid().ToString("N");
+        _files[id] = new Stored(tenantId, "seed", type, subjectId, "seed", "application/pdf", "seed.pdf", "Upload",
+            new Dictionary<string, string>(), bytes);
+        return id;
+    }
+
+    public Task<CatalogUploadResult> UploadAsync(CatalogUpload upload, CancellationToken ct = default)
+    {
+        if (Fail) throw new DocumentCatalogException("document-service unreachable");
+        if (RefuseWith is { } upStatus) throw new DocumentCatalogException("refused", statusCode: upStatus);
+        using var copy = new MemoryStream();
+        upload.Content.CopyTo(copy);
+        var id = Guid.NewGuid().ToString("N");
+        _files[id] = new Stored(upload.TenantId, upload.OnBehalfOf, upload.SubjectType, upload.SubjectId, upload.Title,
+            upload.ContentType, upload.FileName, upload.Channel, upload.ExternalIds, copy.ToArray());
+        return Task.FromResult(new CatalogUploadResult(id));
+    }
+
+    public Task<Stream?> DownloadAsync(string tenantId, string onBehalfOf, string documentId, AttachmentParentType subjectType,
+        string subjectId, CancellationToken ct = default)
+    {
+        if (Fail) throw new DocumentCatalogException("document-service unreachable");
+        if (RefuseWith is { } downStatus) throw new DocumentCatalogException("refused", statusCode: downStatus);
+        return Task.FromResult<Stream?>(
+            _files.TryGetValue(documentId, out var f) && f.TenantId == tenantId && f.SubjectType == subjectType && f.SubjectId == subjectId
+                ? new MemoryStream(f.Bytes)
+                : null);
     }
 }
 

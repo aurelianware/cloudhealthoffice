@@ -85,13 +85,80 @@ public class AttachmentUploadHardeningTests
     }
 
     [Fact]
-    public async Task StoredBlobName_IsTenantTypeParentAndServerId_WithTheFormatsExtension()
+    public async Task TheFile_IsFiledInTheCatalog_OnItsParent_ForTheTokenUser()
     {
         var response = await NewClient().PostAsync("/api/attachments", Form(fileName: "Scan.PDF"));
 
         response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         var stored = _factory.Attachments.Items.Values.Should().ContainSingle().Subject;
-        stored.BlobName.Should().Be($"{Tenant}/claims/CLM-1/{stored.Id}.pdf");
+        var file = _factory.Documents.Files.Should().ContainSingle().Subject;
+        stored.DocumentId.Should().Be(file.Key);
+        file.Value.TenantId.Should().Be(Tenant);
+        file.Value.SubjectType.Should().Be(AttachmentParentType.Claim);
+        file.Value.SubjectId.Should().Be("CLM-1");
+        file.Value.FileName.Should().Be($"{stored.Id}.pdf");
+        file.Value.ExternalIds["AttachmentId"].Should().Be(stored.Id);
+        stored.FileHash.Should().HaveLength(64);
+    }
+
+    [Fact]
+    public async Task WhenTheCatalogIsUnreachable_NothingIsStored()
+    {
+        _factory.Documents.Fail = true;
+
+        var response = await NewClient().PostAsync("/api/attachments", Form());
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadGateway);
+        _factory.Attachments.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ARefusedFiling_RemovesTheRecord_AndPassesTheRefusalOn()
+    {
+        _factory.Documents.RefuseWith = HttpStatusCode.RequestEntityTooLarge;
+
+        var response = await NewClient().PostAsync("/api/attachments", Form());
+
+        response.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+        _factory.Attachments.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Download_ThatTheCatalogCantServeYet_Is409_NotARetry()
+    {
+        var stored = _factory.Attachments.Seed(Tenant);
+        stored.DocumentId = _factory.Documents.Seed(Tenant, AttachmentParentType.Claim, "CLM-1", Pdf);
+        _factory.Documents.RefuseWith = HttpStatusCode.Conflict;
+
+        var response = await NewClient().GetAsync($"/api/attachments/{stored.Id}/download");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Download_OfAnAppealAttachment_NeedsAppealsRead_AsTheCatalogWould()
+    {
+        // MemberServices holds attachments:read and documents:read but not appeals:read.
+        var stored = _factory.Attachments.Seed(Tenant, claimId: null);
+        stored.AppealId = "A-1";
+        stored.DocumentId = _factory.Documents.Seed(Tenant, AttachmentParentType.Appeal, "A-1", Pdf);
+        var client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler("rep-1", ChoRolePermissions.MemberServices));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
+
+        var response = await client.GetAsync($"/api/attachments/{stored.Id}/download");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Download_OfARecordWithNoParent_IsNotFound()
+    {
+        var stored = _factory.Attachments.Seed(Tenant, claimId: null);
+        stored.DocumentId = "doc-x";
+
+        var response = await NewClient().GetAsync($"/api/attachments/{stored.Id}/download");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -103,8 +170,11 @@ public class AttachmentUploadHardeningTests
             Form(claimId: "", authorizationId: "AUTH-7", format: "png", fileName: "x.png", content: Png));
 
         response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
-        var stored = _factory.Attachments.Items.Values.Should().ContainSingle().Subject;
-        stored.BlobName.Should().Be($"{Tenant}/authorizations/AUTH-7/{stored.Id}.png");
+        _factory.Attachments.Items.Values.Should().ContainSingle();
+        var file = _factory.Documents.Files.Values.Should().ContainSingle().Subject;
+        file.SubjectType.Should().Be(AttachmentParentType.Authorization);
+        file.SubjectId.Should().Be("AUTH-7");
+        file.FileName.Should().EndWith(".png");
     }
 
     // ── Extensions and content types ────────────────────────────────────
@@ -155,9 +225,7 @@ public class AttachmentUploadHardeningTests
     {
         var legacy = _factory.Attachments.Seed(Tenant);
         legacy.DocumentFormat = "html";
-        legacy.BlobContainerName = "attachments";
-        legacy.BlobName = $"{Tenant}/claims/CLM-1/{legacy.Id}.html";
-        await _factory.Documents.UploadAsync("attachments", legacy.BlobName, new MemoryStream("<html>"u8.ToArray()), "text/html");
+        legacy.DocumentId = _factory.Documents.Seed(Tenant, AttachmentParentType.Claim, "CLM-1", "<html>"u8.ToArray());
 
         var response = await NewClient().GetAsync($"/api/attachments/{legacy.Id}/download");
 

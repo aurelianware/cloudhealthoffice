@@ -15,10 +15,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\engines\CloudHealthOffice.DocumentStore\CloudHealthOffice.DocumentStore.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Azure.Core" VersionOverride="1.55.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" />

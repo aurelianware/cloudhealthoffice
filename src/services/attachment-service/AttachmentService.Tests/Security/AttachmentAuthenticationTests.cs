@@ -168,9 +168,7 @@ public class AttachmentAuthenticationTests
     public async Task Download_OtherTenantsAttachment_ViaQueryTenantId_IsNotFound()
     {
         var theirs = _factory.Attachments.Seed(OtherTenant);
-        theirs.BlobContainerName = "attachments";
-        theirs.BlobName = $"{OtherTenant}/claims/CLM-1/{theirs.Id}.pdf";
-        await _factory.Documents.UploadAsync("attachments", theirs.BlobName, new MemoryStream("phi"u8.ToArray()), "application/pdf");
+        theirs.DocumentId = _factory.Documents.Seed(OtherTenant, AttachmentParentType.Claim, "CLM-1", "phi"u8.ToArray());
         var client = NewClient(Tenant);
 
         var response = await client.GetAsync($"/api/attachments/{theirs.Id}/download?tenantId={OtherTenant}");
@@ -204,8 +202,9 @@ public class AttachmentAuthenticationTests
         var stored = _factory.Attachments.Items.Values.Should().ContainSingle().Subject;
         stored.TenantId.Should().Be(Tenant);
         stored.CreatedBy.Should().Be(TokenUser);
-        stored.BlobName.Should().StartWith(Tenant + "/");
-        _factory.Documents.GetBytes("attachments", stored.BlobName!).Should().NotBeNull();
+        var file = _factory.Documents.Files[stored.DocumentId!];
+        file.TenantId.Should().Be(Tenant);
+        file.OnBehalfOf.Should().Be(TokenUser);
     }
 
     [Fact]

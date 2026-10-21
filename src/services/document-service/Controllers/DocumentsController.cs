@@ -28,10 +28,22 @@ namespace DocumentService.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/documents")]
-public sealed class DocumentsController : ControllerBase
+public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.Mvc.Filters.IActionFilter
 {
     public const string Container = "documents";
     public const string ScreenHeader = "X-CHO-Screen";
+
+    /// <summary>
+    /// The user a CHO service is acting for. Honored only from a service token
+    /// (a user can't claim to act for someone else); recorded in the document
+    /// and the audit, never used for access decisions.
+    /// </summary>
+    public const string OnBehalfOfHeader = "X-CHO-On-Behalf-Of";
+
+    private static readonly System.Text.RegularExpressions.Regex ExternalIdKey =
+        new("^[A-Za-z][A-Za-z0-9_-]{0,39}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex SafeToken =
+        new("^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// <summary>The only thing a refused caller learns about a restricted document.</summary>
     public const string RestrictedMessage = "This document is restricted.";
@@ -73,6 +85,34 @@ public sealed class DocumentsController : ControllerBase
 
     private string TenantId => _actor.TenantId;
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
+
+    /// <summary>
+    /// A service that names a user must name a usable one: an unreadable value
+    /// would otherwise drop out of the audit silently.
+    /// </summary>
+    [NonAction]
+    public void OnActionExecuting(Microsoft.AspNetCore.Mvc.Filters.ActionExecutingContext context)
+    {
+        if (!_actor.IsService || !Request.Headers.TryGetValue(OnBehalfOfHeader, out var value))
+            return;
+        if (!SafeToken.IsMatch(value.ToString().Trim()))
+            context.Result = BadRequest($"{OnBehalfOfHeader} must be one user id (letters, digits, '_', '.', ':', '@', '-').");
+    }
+
+    [NonAction]
+    public void OnActionExecuted(Microsoft.AspNetCore.Mvc.Filters.ActionExecutedContext context)
+    {
+    }
+
+    private string? OnBehalfOf
+    {
+        get
+        {
+            if (!_actor.IsService) return null;
+            var value = Request.Headers[OnBehalfOfHeader].ToString().Trim();
+            return SafeToken.IsMatch(value) ? value : null;
+        }
+    }
 
     // ── Reading ──────────────────────────────────────────────────────────
 
@@ -190,13 +230,15 @@ public sealed class DocumentsController : ControllerBase
     /// </summary>
     [HttpPost]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(30L * 1024 * 1024)]
+    [RequestSizeLimit(DocumentUploadPolicy.DefaultMaxUploadBytes + 6L * 1024 * 1024)]
     public async Task<IActionResult> Upload([FromForm] UploadDocumentForm form, IFormFile? file, CancellationToken ct)
     {
         var metadata = await ValidateMetadataAsync(form.Type, form.Links, form.Sensitivity, form.SourceChannel, form.ReceivedAt, ct);
         if (metadata.Error is { } error)
             return error;
         var auditSubject = metadata.Links[0];
+        if (ParseExternalIds(form.ExternalIds) is not { } externalIds)
+            return BadRequest("ExternalIds are \"key=value\" (key: a letter then letters, digits, '-' or '_'; value: one token), at most 10.");
 
         if (file is null || file.Length == 0)
             return BadRequest("A file is required.");
@@ -208,12 +250,12 @@ public sealed class DocumentsController : ControllerBase
         if (contentType is null || !_uploadPolicy.IsAllowedContentType(contentType))
             return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status415UnsupportedMediaType, UnsupportedTypeMessage(file.ContentType), ct);
 
-        using var buffer = new MemoryStream();
+        await using var buffer = TempBuffer();
         await file.CopyToAsync(buffer, ct);
-        if (!DocumentUploadPolicy.MatchesSignature(contentType, buffer.GetBuffer().AsSpan(0, (int)Math.Min(buffer.Length, 16))))
+        if (!DocumentUploadPolicy.MatchesSignature(contentType, await PrefixAsync(buffer, ct)))
             return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status415UnsupportedMediaType, $"The file content is not {contentType}.", ct);
 
-        var sha256 = Sha256Hex(buffer);
+        var sha256 = await Sha256HexAsync(buffer, ct);
 
         var duplicate = (await _documents.FindByHashAsync(TenantId, sha256, ct)).FirstOrDefault(CanMergeInto);
         if (duplicate != null)
@@ -221,6 +263,7 @@ public sealed class DocumentsController : ControllerBase
 
         var id = Guid.NewGuid().ToString("N");
         var document = NewDocument(id, form.Type, form.Title, contentType, file.FileName, metadata, form.StateCode, form.RetentionPolicyId);
+        document.Source.ExternalIds = externalIds;
         document.Sha256 = sha256;
         document.SizeBytes = buffer.Length;
 
@@ -329,7 +372,7 @@ public sealed class DocumentsController : ControllerBase
                 $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.", ct);
         }
 
-        using var buffer = new MemoryStream();
+        await using var buffer = TempBuffer();
         await using (var content = await _store.DownloadAsync(Container, staging, ct))
         {
             var chunk = new byte[81920];
@@ -342,19 +385,19 @@ public sealed class DocumentsController : ControllerBase
                     return await RefuseUploadAsync(auditSubject, id, StatusCodes.Status413PayloadTooLarge,
                         $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.", ct);
                 }
-                buffer.Write(chunk, 0, read);
+                await buffer.WriteAsync(chunk.AsMemory(0, read), ct);
             }
         }
 
         if (buffer.Length == 0
-            || !DocumentUploadPolicy.MatchesSignature(document.ContentType, buffer.GetBuffer().AsSpan(0, (int)Math.Min(buffer.Length, 16))))
+            || !DocumentUploadPolicy.MatchesSignature(document.ContentType, await PrefixAsync(buffer, ct)))
         {
             await _store.DeleteAsync(Container, staging, ct);
             return await RefuseUploadAsync(auditSubject, id, StatusCodes.Status415UnsupportedMediaType,
                 $"The uploaded content is not {document.ContentType}; the upload was discarded.", ct);
         }
 
-        var sha256 = Sha256Hex(buffer);
+        var sha256 = await Sha256HexAsync(buffer, ct);
         var duplicate = (await _documents.FindByHashAsync(TenantId, sha256, ct)).FirstOrDefault(CanMergeInto);
         if (duplicate != null)
         {
@@ -615,6 +658,7 @@ public sealed class DocumentsController : ControllerBase
             StorageContainer = Container,
             StoragePath = DocumentUploadPolicy.BuildStoragePath(TenantId, id, contentType, fileName),
             CreatedBy = _actor.UserId,
+            CreatedOnBehalfOf = OnBehalfOf,
             CreatedAt = Now,
             ReceivedAt = metadata.ReceivedAt
         };
@@ -717,6 +761,7 @@ public sealed class DocumentsController : ControllerBase
             TenantId = TenantId,
             DocumentId = documentId,
             Actor = _actor.UserId,
+            OnBehalfOf = OnBehalfOf,
             At = Now,
             Action = action,
             SubjectKind = subject?.Kind.ToString(),
@@ -725,6 +770,21 @@ public sealed class DocumentsController : ControllerBase
             Allowed = allowed,
             Detail = detail
         }, ct);
+    }
+
+    private static Dictionary<string, string>? ParseExternalIds(List<string>? values)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in (values ?? []).Where(v => !string.IsNullOrWhiteSpace(v)))
+        {
+            var eq = entry.IndexOf('=');
+            if (eq <= 0) return null;
+            var key = entry[..eq].Trim();
+            var value = entry[(eq + 1)..].Trim();
+            if (!ExternalIdKey.IsMatch(key) || !SafeToken.IsMatch(value)) return null;
+            result[key] = value;
+        }
+        return result.Count <= 10 ? result : null;
     }
 
     private static object HoldState(CatalogDocument d) => new { id = d.Id, legalHold = d.Retention.LegalHold.Set };
@@ -736,8 +796,34 @@ public sealed class DocumentsController : ControllerBase
         ["legalHold"] = d.Retention.LegalHold.Set ? "true" : "false"
     };
 
-    private static string Sha256Hex(MemoryStream buffer) =>
-        Convert.ToHexString(SHA256.HashData(buffer.GetBuffer().AsSpan(0, (int)buffer.Length))).ToLowerInvariant();
+    /// <summary>
+    /// Uploads are staged on local disk (deleted on close) rather than in
+    /// memory: documents run to tens of megabytes and several can arrive at once.
+    /// </summary>
+    private static FileStream TempBuffer() => new(
+        Path.GetTempFileName(), FileMode.Create, FileAccess.ReadWrite, FileShare.None,
+        bufferSize: 81920, FileOptions.DeleteOnClose | FileOptions.Asynchronous);
+
+    /// <summary>The first bytes of the staged content (for the signature check); leaves the stream at the start.</summary>
+    private static async Task<byte[]> PrefixAsync(Stream buffer, CancellationToken ct)
+    {
+        buffer.Position = 0;
+        var prefix = new byte[16];
+        var total = 0;
+        int read;
+        while (total < prefix.Length && (read = await buffer.ReadAsync(prefix.AsMemory(total), ct)) > 0)
+            total += read;
+        buffer.Position = 0;
+        return prefix[..total];
+    }
+
+    private static async Task<string> Sha256HexAsync(Stream buffer, CancellationToken ct)
+    {
+        buffer.Position = 0;
+        var hash = await SHA256.HashDataAsync(buffer, ct);
+        buffer.Position = 0;
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
 
     private static string SubjectPermissionMessage(DocumentLinkKind kind) =>
         $"needs {SubjectAccess.ReadPermissionFor(kind)} for {kind} documents";

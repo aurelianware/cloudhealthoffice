@@ -6,6 +6,7 @@ namespace AttachmentService.Models;
 /// <summary>
 /// Represents a 275 clinical attachment that can be linked to Claims, Authorizations, or Appeals
 /// </summary>
+[MongoDB.Bson.Serialization.Attributes.BsonIgnoreExtraElements]
 public class Attachment
 {
     /// <summary>
@@ -127,22 +128,11 @@ public class Attachment
     public string DocumentFormat { get; set; } = string.Empty;
 
     /// <summary>
-    /// Azure Blob Storage URL for the attachment file
-    /// </summary>
-    [StringLength(500)]
-    public string? BlobUrl { get; set; }
-
-    /// <summary>
-    /// Azure Blob Storage container name
+    /// The file's document in the catalog (document-service). Null when the
+    /// attachment was recorded without a file.
     /// </summary>
     [StringLength(100)]
-    public string? BlobContainerName { get; set; }
-
-    /// <summary>
-    /// Azure Blob Storage blob name (file path)
-    /// </summary>
-    [StringLength(200)]
-    public string? BlobName { get; set; }
+    public string? DocumentId { get; set; }
 
     /// <summary>
     /// File size in bytes

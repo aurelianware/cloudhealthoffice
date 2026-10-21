@@ -501,7 +501,6 @@ kubectl patch configmap smart-auth-service-config -n "$NAMESPACE" --type merge \
 kubectl create secret generic attachment-service-secret \
   --namespace "$NAMESPACE" \
   --from-literal=MongoDb__ConnectionString="$MONGO_CONN" \
-  --from-literal=BlobStorage__ConnectionString="$AZURE_STORAGE_CONNECTION_STRING" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl create secret generic sponsor-service-secrets \
   --namespace "$NAMESPACE" \
