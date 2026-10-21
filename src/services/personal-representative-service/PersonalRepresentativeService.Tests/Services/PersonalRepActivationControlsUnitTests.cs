@@ -43,8 +43,8 @@ public class PersonalRepActivationControlsUnitTests
     }
 
     private static string Doc(string tenant = "t1", string id = "d1", string member = "M1",
-        string related = "[]", string pending = "null")
-        => $$"""{"id":"{{id}}","tenantId":"{{tenant}}","memberId":"{{member}}","relatedMemberIds":{{related}},"pendingUploadBlobPath":{{pending}}}""";
+        string related = "[]", string pending = "false")
+        => $$"""{"id":"{{id}}","tenantId":"{{tenant}}","memberId":"{{member}}","relatedMemberIds":{{related}},"uploadPending":{{pending}}}""";
 
     [Fact]
     public void Evaluate_Verified_WhenOwnerOrRelatedCoversEveryMember()
@@ -76,6 +76,11 @@ public class PersonalRepActivationControlsUnitTests
 
     [Fact]
     public void Evaluate_PendingUpload_IsNotFinalized()
-        => MemberDocumentProofOfAuthorityDocuments.Evaluate(Doc(pending: "\"t1/staging/d1\""), "t1", "d1", new[] { "M1" })
+        => MemberDocumentProofOfAuthorityDocuments.Evaluate(Doc(pending: "true"), "t1", "d1", new[] { "M1" })
+            .Status.Should().Be(ProofOfAuthorityDocumentStatus.NotFinalized);
+
+    [Fact]
+    public void Evaluate_ABodyThatDoesNotSayItIsFinalized_IsNotFinalized()
+        => MemberDocumentProofOfAuthorityDocuments.Evaluate("""{"id":"d1","tenantId":"t1","memberId":"M1"}""", "t1", "d1", new[] { "M1" })
             .Status.Should().Be(ProofOfAuthorityDocumentStatus.NotFinalized);
 }

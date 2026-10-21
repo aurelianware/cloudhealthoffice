@@ -349,7 +349,15 @@ public sealed class UploadDocumentForm
 
     public string? StateCode { get; set; }
 
+    /// <summary>When retention runs from coverage end (member documents): the member's coverage termination date.</summary>
+    public DateTime? CoverageTerminationDate { get; set; }
+
     public string? RetentionPolicyId { get; set; }
+
+    /// <summary>Stores the document under a legal hold from the start. Needs records:legal-hold; never merged into an existing copy.</summary>
+    public bool LegalHold { get; set; }
+
+    public string? LegalHoldReason { get; set; }
 }
 
 public sealed class PresignedUploadRequest
@@ -374,7 +382,15 @@ public sealed class PresignedUploadRequest
 
     public string? StateCode { get; set; }
 
+    /// <summary>When retention runs from coverage end (member documents): the member's coverage termination date.</summary>
+    public DateTime? CoverageTerminationDate { get; set; }
+
     public string? RetentionPolicyId { get; set; }
+
+    /// <summary>Stores the document under a legal hold from the start. Needs records:legal-hold; never merged into an existing copy.</summary>
+    public bool LegalHold { get; set; }
+
+    public string? LegalHoldReason { get; set; }
 }
 
 public sealed class PresignedUploadResponse
@@ -394,6 +410,8 @@ public sealed class LinkRequest
 
 public sealed class LegalHoldRequest
 {
+    public const int MaxReasonLength = 500;
+
     public bool LegalHold { get; set; }
 
     public string? Reason { get; set; }

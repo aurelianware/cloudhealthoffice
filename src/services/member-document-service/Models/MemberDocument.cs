@@ -41,13 +41,13 @@ public class MemberDocument
     public List<string> RelatedMemberIds { get; set; } = new();
     public List<string> LinkedResources { get; set; } = new();
 
-    [Required]
+    /// <summary>
+    /// The file's id in the document catalog (document-service), where the
+    /// bytes, retention, legal hold and access audit live. Duplicate content
+    /// can share one catalog document between several member records.
+    /// </summary>
     [StringLength(100)]
-    public string BlobContainer { get; set; } = "member-documents";
-
-    [Required]
-    [StringLength(500)]
-    public string BlobPath { get; set; } = string.Empty;
+    public string? DocumentId { get; set; }
 
     [Required]
     [StringLength(120)]
@@ -66,7 +66,8 @@ public class MemberDocument
 
     /// <summary>
     /// While true the document cannot be deleted, modified or have its content
-    /// replaced by anyone. Set and released only with records:legal-hold.
+    /// replaced by anyone. Set and released only with records:legal-hold. The
+    /// catalog holds the hold that is enforced; this record mirrors it.
     /// </summary>
     public bool LegalHold { get; set; }
 
@@ -89,12 +90,10 @@ public class MemberDocument
     public DateTime? CoverageTerminationDate { get; set; }
 
     /// <summary>
-    /// Set while a pre-signed upload has not been finalized: the staging blob
-    /// the upload link writes to. The document's content cannot be downloaded until
-    /// finalize has validated the staging blob and copied it to <see cref="BlobPath"/>.
+    /// True while a pre-signed upload has not been finalized: the content
+    /// cannot be downloaded until finalize has validated it in the catalog.
     /// </summary>
-    [StringLength(500)]
-    public string? PendingUploadBlobPath { get; set; }
+    public bool UploadPending { get; set; }
 
     /// <summary>
     /// Incremented by every save. A save only replaces the version it read
@@ -185,7 +184,6 @@ public sealed class PresignedUploadResponse
     /// them rather than assuming a provider.
     /// </summary>
     public Dictionary<string, string> UploadHeaders { get; set; } = new();
-    public string BlobPath { get; set; } = string.Empty;
     public DateTime ExpiresAtUtc { get; set; }
 }
 

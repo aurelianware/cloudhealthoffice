@@ -1,40 +1,45 @@
-using CloudHealthOffice.DocumentStore;
+using System.Net;
+using System.Security.Cryptography;
+using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using MemberDocumentService.Models;
 using MemberDocumentService.Repositories;
 using MemberDocumentService.Services;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Cryptography;
-using CloudHealthOffice.Infrastructure.Logging;
 
 namespace MemberDocumentService.Controllers;
 
 /// <summary>
 /// Member documents are PHI. Every action runs under a CHO token: the tenant
-/// and the uploader come from the token, reads need members:read and writes
-/// need members:write (the defaults set in Program.cs). Documents are looked up
-/// by (token tenant, id), and blob paths start with the token tenant, so no id,
-/// path or link reaches another tenant's documents. Content is streamed through
-/// <c>/content</c>; this service issues no read links.
+/// and the uploader come from the token. Records are looked up by (token
+/// tenant, id), so no id reaches another tenant's documents.
+///
+/// The files live in the document catalog (document-service), linked to
+/// <c>Member:{memberId}</c> and to each related member. This service keeps the
+/// member-specific record (category, effective and expiration dates, state,
+/// related members and resources) and calls the catalog with its own service
+/// token, naming the user in <c>X-CHO-On-Behalf-Of</c>. The catalog trusts
+/// that token, so the catalog's rule is applied here in the user's name:
+/// reading needs members:read and documents:read, filing needs members:write,
+/// members:read and documents:write. Content is streamed through
+/// <c>/content</c>, from the catalog; this service issues no read links.
 ///
 /// Legal holds: placing or releasing one (including uploading a document
-/// already under hold) needs records:legal-hold, not members:write. A held
-/// document is immutable: no endpoint deletes it, modifies its record or
-/// replaces its content while the hold stands (finalize of an already
-/// finalized document answers 409). A release needs a reason. Every placement
-/// and release is kept in the document's LegalHoldHistory and written to the
-/// audit log with the actor and the reason.
+/// already under hold) needs records:legal-hold. The hold that is enforced is
+/// the catalog's; this record mirrors it, with its history. A held document is
+/// not changed: finalize of an already finalized held document answers 409. A
+/// release needs a reason.
 /// </summary>
 [ApiController]
 public class MemberDocumentsController : ControllerBase
 {
-    private const string DefaultContainer = "member-documents";
-    private static readonly TimeSpan UploadLinkLifetime = TimeSpan.FromMinutes(15);
+    private const string MemberRead = "members:read";
 
     private string TenantId => _actor.TenantId;
 
     private readonly IMemberDocumentRepository _repository;
-    private readonly IDocumentStore _documents;
+    private readonly IDocumentCatalog _catalog;
     private readonly IRetentionPolicyService _retentionPolicyService;
     private readonly ICurrentActor _actor;
     private readonly MemberDocumentUploadPolicy _uploadPolicy;
@@ -42,14 +47,14 @@ public class MemberDocumentsController : ControllerBase
 
     public MemberDocumentsController(
         IMemberDocumentRepository repository,
-        IDocumentStore documents,
+        IDocumentCatalog catalog,
         IRetentionPolicyService retentionPolicyService,
         ICurrentActor actor,
         MemberDocumentUploadPolicy uploadPolicy,
         ILogger<MemberDocumentsController> logger)
     {
         _repository = repository;
-        _documents = documents;
+        _catalog = catalog;
         _retentionPolicyService = retentionPolicyService;
         _actor = actor;
         _uploadPolicy = uploadPolicy;
@@ -57,10 +62,9 @@ public class MemberDocumentsController : ControllerBase
     }
 
     /// <summary>
-    /// Pre-signed upload: returns a write-only upload link for one staging blob.
-    /// The client PUTs the bytes to UploadUrl with every UploadHeaders entry.
-    /// Its own action because a JSON body never reached the old shared
-    /// [FromForm] action (form binding rejected it with 400).
+    /// Pre-signed upload: returns a write-only upload link for one staging
+    /// object in the catalog's storage. The client PUTs the bytes to UploadUrl
+    /// with every UploadHeaders entry, then calls finalize.
     /// </summary>
     [HttpPost("api/v1/member-documents")]
     [Consumes("application/json")]
@@ -84,9 +88,15 @@ public class MemberDocumentsController : ControllerBase
             return BadRequest("A file is required for multipart uploads.");
         }
 
-        if (!MemberDocumentUploadPolicy.IsSafePathSegment(formRequest.MemberId))
+        if (ValidateMetadata(formRequest.MemberId, formRequest.Category, formRequest.RelatedMemberIds,
+                formRequest.StateCode, formRequest.RetentionPolicyId) is { } invalid)
         {
-            return BadRequest("MemberId may contain only letters, digits, '.', '_' and '-'.");
+            return invalid;
+        }
+
+        if (MissingRights(write: true) is { } forbidden)
+        {
+            return forbidden;
         }
 
         if (formRequest.LegalHold && !CanManageLegalHolds())
@@ -104,16 +114,8 @@ public class MemberDocumentsController : ControllerBase
         if (contentType == null || !_uploadPolicy.IsAllowedContentType(contentType))
         {
             return StatusCode(StatusCodes.Status415UnsupportedMediaType,
-                $"Content type '{file.ContentType}' is not accepted. Allowed: {string.Join(", ", _uploadPolicy.AllowedContentTypes)}.");
+                $"Content type '{LogSanitizer.Sanitize(file.ContentType)}' is not accepted. Allowed: {string.Join(", ", _uploadPolicy.AllowedContentTypes)}.");
         }
-
-        var retention = _retentionPolicyService.ResolvePolicy(
-            formRequest.StateCode,
-            formRequest.CoverageTerminationDate,
-            formRequest.RetentionPolicyId);
-
-        var id = Guid.NewGuid().ToString();
-        var blobPath = MemberDocumentUploadPolicy.BuildBlobPath(TenantId, formRequest.MemberId, id, contentType, file.FileName);
 
         await using var stream = file.OpenReadStream();
         if (!await HasDeclaredSignatureAsync(stream, contentType, ct))
@@ -125,46 +127,76 @@ public class MemberDocumentsController : ControllerBase
         var hash = await ComputeSha256Async(stream, ct);
         stream.Position = 0;
 
-        var tags = BuildLifecycleTags(retention.PolicyId, retention.RetentionUntilDate, formRequest.LegalHold);
-
-        var uploaded = await _documents.UploadAsync(
-            DefaultContainer,
-            blobPath,
-            stream,
-            contentType,
-            tags,
-            ct);
+        var retention = _retentionPolicyService.ResolvePolicy(
+            formRequest.StateCode,
+            formRequest.CoverageTerminationDate,
+            formRequest.RetentionPolicyId);
 
         var document = new MemberDocument
         {
-            Id = id,
             TenantId = TenantId,
             MemberId = formRequest.MemberId,
-            Category = formRequest.Category,
+            Category = formRequest.Category.Trim(),
             Subcategory = formRequest.Subcategory,
             Source = formRequest.Source,
             EffectiveDate = formRequest.EffectiveDate,
             ExpirationDate = formRequest.ExpirationDate,
             RetentionPolicyId = retention.PolicyId,
             RetentionUntilDate = retention.RetentionUntilDate,
-            RelatedMemberIds = formRequest.RelatedMemberIds ?? new List<string>(),
+            RelatedMemberIds = RelatedMembers(formRequest.MemberId, formRequest.RelatedMemberIds),
             LinkedResources = formRequest.LinkedResources ?? new List<string>(),
-            BlobContainer = DefaultContainer,
-            BlobPath = blobPath,
             ContentType = contentType,
-            SizeBytes = uploaded.SizeBytes,
+            SizeBytes = file.Length,
             ContentHashSha256 = hash,
             UploadedBy = _actor.UserId,
             UploadedDate = DateTime.UtcNow,
-            StateCode = formRequest.StateCode,
-            CoverageTerminationDate = formRequest.CoverageTerminationDate
+            StateCode = NormalizeState(formRequest.StateCode),
+            CoverageTerminationDate = formRequest.CoverageTerminationDate,
+            // Until the catalog has the file, the record can't be opened.
+            UploadPending = true
         };
         if (formRequest.LegalHold)
         {
             PlaceHold(document, formRequest.LegalHoldReason);
         }
 
+        // The record is saved first, so a file in the catalog always has a
+        // record pointing at it; if filing fails, the record is removed.
         var created = await _repository.CreateAsync(document);
+
+        CatalogDocumentInfo stored;
+        try
+        {
+            stored = await _catalog.UploadAsync(new CatalogUpload(
+                TenantId,
+                _actor.UserId,
+                MemberLinks(created),
+                MemberDocumentUploadPolicy.CatalogTypeFor(created.Category),
+                Title(created),
+                stream,
+                contentType,
+                MemberDocumentUploadPolicy.FileNameFor(created.Id, contentType, file.FileName),
+                Channel(created.Source),
+                created.StateCode,
+                created.CoverageTerminationDate,
+                created.RetentionPolicyId,
+                created.LegalHold,
+                created.LegalHoldReason,
+                new Dictionary<string, string> { ["MemberDocumentId"] = created.Id }), ct);
+        }
+        catch (DocumentCatalogException ex)
+        {
+            await _repository.DeleteUnfiledAsync(TenantId, created.Id);
+            _logger.LogError(ex, "Could not file a member document in the document catalog");
+            return CatalogFailure(ex, "store the document; nothing was saved");
+        }
+
+        created.DocumentId = stored.DocumentId;
+        created.SizeBytes = stored.SizeBytes ?? created.SizeBytes;
+        created.ContentHashSha256 = stored.Sha256 ?? created.ContentHashSha256;
+        created.UploadPending = false;
+        created = await _repository.UpdateAsync(created);
+
         if (created.LegalHold)
         {
             AuditHold(created, LegalHoldAction.Set, created.LegalHoldReason);
@@ -175,6 +207,11 @@ public class MemberDocumentsController : ControllerBase
     [HttpGet("api/v1/member-documents/{id}")]
     public async Task<IActionResult> GetMemberDocument(string id)
     {
+        if (MissingRights(write: false) is { } forbidden)
+        {
+            return forbidden;
+        }
+
         var doc = await _repository.GetByIdAsync(TenantId, id);
         if (doc == null)
         {
@@ -187,37 +224,53 @@ public class MemberDocumentsController : ControllerBase
     [HttpGet("api/v1/member-documents/{id}/content")]
     public async Task<IActionResult> GetMemberDocumentContent(string id, CancellationToken ct)
     {
+        if (MissingRights(write: false) is { } forbidden)
+        {
+            return forbidden;
+        }
+
         var doc = await _repository.GetByIdAsync(TenantId, id);
         if (doc == null)
         {
             return NotFound();
         }
 
-        if (doc.PendingUploadBlobPath != null)
+        if (doc.UploadPending || doc.DocumentId == null)
         {
             return Conflict("The upload for this document has not been finalized.");
         }
 
-        Stream stream;
+        Stream? stream;
         try
         {
-            stream = await _documents.DownloadAsync(doc.BlobContainer, doc.BlobPath, ct);
+            stream = await _catalog.DownloadAsync(TenantId, _actor.UserId, doc.DocumentId, doc.MemberId, ct);
         }
-        catch (DocumentNotFoundException)
+        catch (DocumentCatalogException ex)
         {
-            _logger.LogWarning("Member document {TenantId}/{DocumentId} has a record but no stored content",
+            _logger.LogError(ex, "Could not read a member document from the document catalog");
+            return CatalogFailure(ex, "read the document");
+        }
+
+        if (stream == null)
+        {
+            _logger.LogWarning("Member document {TenantId}/{DocumentId} has a record but the catalog has no such document on its member",
                 LogSanitizer.Sanitize(doc.TenantId), LogSanitizer.Sanitize(doc.Id));
             return NotFound();
         }
-        var fileName = $"{doc.Id}{Path.GetExtension(doc.BlobPath)}";
+
         // Always an attachment, never sniffed into something the browser renders.
         Response.Headers["X-Content-Type-Options"] = "nosniff";
-        return File(stream, doc.ContentType, fileName);
+        return File(stream, doc.ContentType, MemberDocumentUploadPolicy.FileNameFor(doc.Id, doc.ContentType));
     }
 
     [HttpGet("api/v1/members/{memberId}/documents")]
     public async Task<IActionResult> ListMemberDocuments(string memberId, [FromQuery] string? category = null)
     {
+        if (MissingRights(write: false) is { } forbidden)
+        {
+            return forbidden;
+        }
+
         var documents = await _repository.ListByMemberIdAsync(TenantId, memberId, category);
         return Ok(documents);
     }
@@ -225,8 +278,10 @@ public class MemberDocumentsController : ControllerBase
     /// <summary>
     /// Places or releases a legal hold. Needs records:legal-hold (ComplianceOfficer,
     /// TenantAdmin, PlatformAdmin); members:write is not enough. A release must
-    /// give a reason. Asking for the state the document is already in changes
-    /// nothing and records nothing.
+    /// give a reason. The catalog's hold is changed first (it is the one that
+    /// is enforced), then this record; if saving the record then conflicts,
+    /// retrying finishes it. Asking for the state the document is already in
+    /// changes nothing.
     /// </summary>
     [HttpPut("api/v1/member-documents/{id}/legal-hold")]
     [RequirePermission(ChoRolePermissions.LegalHold)]
@@ -247,6 +302,26 @@ public class MemberDocumentsController : ControllerBase
         if (doc.LegalHold == request.LegalHold)
         {
             return Ok(doc);
+        }
+
+        if (doc.DocumentId == null)
+        {
+            return Conflict("The document's file has not reached the catalog yet. Try again shortly.");
+        }
+
+        try
+        {
+            if (!await _catalog.SetLegalHoldAsync(TenantId, _actor.UserId, doc.DocumentId, request.LegalHold, reason, ct))
+            {
+                _logger.LogError("Member document {TenantId}/{DocumentId} points at a catalog document that does not exist",
+                    LogSanitizer.Sanitize(doc.TenantId), LogSanitizer.Sanitize(doc.Id));
+                return this.ServerError("The document's file is missing from the catalog.", StatusCodes.Status502BadGateway);
+            }
+        }
+        catch (DocumentCatalogException ex)
+        {
+            _logger.LogError(ex, "Could not change a legal hold in the document catalog");
+            return CatalogFailure(ex, "change the legal hold");
         }
 
         var action = request.LegalHold ? LegalHoldAction.Set : LegalHoldAction.Released;
@@ -270,75 +345,79 @@ public class MemberDocumentsController : ControllerBase
         }
         AuditHold(updated, action, reason);
 
-        if (doc.PendingUploadBlobPath != null)
-        {
-            // No final blob yet; finalize applies the tags from the record.
-            return Ok(updated);
-        }
-
-        var retention = _retentionPolicyService.ResolvePolicy(doc.StateCode, doc.CoverageTerminationDate, doc.RetentionPolicyId);
-        var tags = BuildLifecycleTags(retention.PolicyId, retention.RetentionUntilDate, request.LegalHold);
-        await _documents.SetTagsAsync(doc.BlobContainer, doc.BlobPath, tags, ct);
-
         return Ok(updated);
     }
 
     /// <summary>
-    /// Finalizes a pre-signed upload by applying blob lifecycle tags (retention/legalHold)
-    /// and updating the DB record with the actual blob size.  Call this endpoint after the
-    /// client has completed the direct-to-storage PUT using the upload link returned by the
-    /// pre-signed upload flow.
-    /// The upload link only reaches a staging blob. Finalize reads it, checks the
-    /// size limit and that the bytes match the declared content type, hashes it,
-    /// writes it to the document's real path and deletes the staging blob. A
-    /// rejected upload is deleted and the document stays undownloadable.
+    /// Finalizes a pre-signed upload: the catalog reads the staged object,
+    /// checks its size and that the bytes match the declared content type,
+    /// hashes it and stores it; a rejected upload is discarded and the document
+    /// stays undownloadable. Only the user who started the upload can finish
+    /// it. Finalizing an already finalized document changes nothing (409 when
+    /// it is under legal hold).
     /// </summary>
     [HttpPost("api/v1/member-documents/{id}/finalize")]
     public async Task<IActionResult> FinalizeUpload(string id, CancellationToken ct)
     {
+        if (MissingRights(write: true) is { } forbidden)
+        {
+            return forbidden;
+        }
+
         var doc = await _repository.GetByIdAsync(TenantId, id);
         if (doc == null)
         {
             return NotFound();
         }
 
-        if (doc.PendingUploadBlobPath != null)
+        if (!doc.UploadPending)
         {
-            // The document's first content; a hold placed at creation still
-            // applies once it is written.
-            return await FinalizePendingUploadAsync(doc, ct);
+            return doc.LegalHold ? LegalHoldConflict() : Ok(doc);
         }
 
-        if (doc.LegalHold)
+        if (doc.DocumentId == null)
         {
-            // Already finalized: re-finalizing would rewrite its record from
-            // the blob. A held document is not changed.
-            return LegalHoldConflict();
+            return Conflict("The upload has not been started in the catalog.");
         }
 
-        // Apply lifecycle tags that were deferred because the blob didn't exist yet.
-        var retention = _retentionPolicyService.ResolvePolicy(doc.StateCode, doc.CoverageTerminationDate, doc.RetentionPolicyId);
-        var tags = BuildLifecycleTags(retention.PolicyId, retention.RetentionUntilDate, doc.LegalHold);
-        await _documents.SetTagsAsync(doc.BlobContainer, doc.BlobPath, tags, ct);
-
-        // Sync the blob size into the metadata record.
-        doc.SizeBytes = (await _documents.GetPropertiesAsync(doc.BlobContainer, doc.BlobPath, ct)).SizeBytes;
-        MemberDocument updated;
+        CatalogDocumentInfo stored;
         try
         {
-            updated = await _repository.UpdateAsync(doc);
+            stored = await _catalog.FinalizeAsync(TenantId, _actor.UserId, doc.DocumentId, ct);
+        }
+        catch (DocumentCatalogException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return NotFound("This upload can be finalized only by the user who started it.");
+        }
+        catch (DocumentCatalogException ex)
+        {
+            _logger.LogError(ex, "Could not finalize a member document upload in the document catalog");
+            return CatalogFailure(ex, "finalize the upload");
+        }
+
+        // Identical content already in the catalog comes back as that document.
+        doc.DocumentId = stored.DocumentId;
+        doc.SizeBytes = stored.SizeBytes ?? doc.SizeBytes;
+        doc.ContentHashSha256 = stored.Sha256 ?? doc.ContentHashSha256;
+        doc.UploadPending = false;
+        try
+        {
+            return Ok(await _repository.UpdateAsync(doc));
         }
         catch (MemberDocumentConcurrencyException)
         {
             return ConcurrencyConflict();
         }
-
-        return Ok(updated);
     }
 
     [HttpGet("api/v1/members/{memberId}/fhir/DocumentReference")]
     public async Task<IActionResult> GetDocumentReferences(string memberId, [FromQuery] string? category = null)
     {
+        if (MissingRights(write: false) is { } forbidden)
+        {
+            return forbidden;
+        }
+
         var docs = await _repository.ListByMemberIdAsync(TenantId, memberId, category);
 
         var entries = docs.Select(d => new
@@ -391,82 +470,6 @@ public class MemberDocumentsController : ControllerBase
         return Ok(bundle);
     }
 
-    private async Task<IActionResult> FinalizePendingUploadAsync(MemberDocument doc, CancellationToken ct)
-    {
-        var stagingPath = doc.PendingUploadBlobPath!;
-
-        // Check the stored size before reading anything: an upload link cannot
-        // cap the size on every cloud, so an oversize upload is refused here
-        // without pulling it into the pod.
-        DocumentProperties stagedProperties;
-        try
-        {
-            stagedProperties = await _documents.GetPropertiesAsync(doc.BlobContainer, stagingPath, ct);
-        }
-        catch (DocumentNotFoundException)
-        {
-            return Conflict("Nothing has been uploaded for this document yet.");
-        }
-        if (stagedProperties.SizeBytes > _uploadPolicy.MaxUploadBytes)
-        {
-            await _documents.DeleteAsync(doc.BlobContainer, stagingPath, ct);
-            return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.");
-        }
-
-        using var buffer = new MemoryStream();
-        try
-        {
-            await using var staged = await _documents.DownloadAsync(doc.BlobContainer, stagingPath, ct);
-            var chunk = new byte[81920];
-            int read;
-            while ((read = await staged.ReadAsync(chunk, ct)) > 0)
-            {
-                if (buffer.Length + read > _uploadPolicy.MaxUploadBytes)
-                {
-                    await _documents.DeleteAsync(doc.BlobContainer, stagingPath, ct);
-                    return StatusCode(StatusCodes.Status413PayloadTooLarge,
-                        $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.");
-                }
-                buffer.Write(chunk, 0, read);
-            }
-        }
-        catch (DocumentNotFoundException)
-        {
-            return Conflict("Nothing has been uploaded for this document yet.");
-        }
-
-        if (buffer.Length == 0
-            || !MemberDocumentUploadPolicy.MatchesSignature(doc.ContentType, buffer.GetBuffer().AsSpan(0, (int)Math.Min(buffer.Length, 16))))
-        {
-            await _documents.DeleteAsync(doc.BlobContainer, stagingPath, ct);
-            return StatusCode(StatusCodes.Status415UnsupportedMediaType,
-                $"The uploaded content is not {doc.ContentType}; the upload was discarded.");
-        }
-
-        buffer.Position = 0;
-        var hash = await ComputeSha256Async(buffer, ct);
-        buffer.Position = 0;
-
-        var retention = _retentionPolicyService.ResolvePolicy(doc.StateCode, doc.CoverageTerminationDate, doc.RetentionPolicyId);
-        var tags = BuildLifecycleTags(retention.PolicyId, retention.RetentionUntilDate, doc.LegalHold);
-        doc.SizeBytes = (await _documents.UploadAsync(doc.BlobContainer, doc.BlobPath, buffer, doc.ContentType, tags, ct)).SizeBytes;
-        doc.ContentHashSha256 = hash;
-        doc.PendingUploadBlobPath = null;
-        MemberDocument updated;
-        try
-        {
-            updated = await _repository.UpdateAsync(doc);
-        }
-        catch (MemberDocumentConcurrencyException)
-        {
-            return ConcurrencyConflict();
-        }
-
-        await _documents.DeleteAsync(doc.BlobContainer, stagingPath, ct);
-        return Ok(updated);
-    }
-
     private async Task<IActionResult> CreatePresignedUploadAsync(PresignedUploadRequest request, CancellationToken ct)
     {
         if (!TryValidateModel(request))
@@ -474,9 +477,14 @@ public class MemberDocumentsController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
-        if (!MemberDocumentUploadPolicy.IsSafePathSegment(request.MemberId))
+        if (ValidateMetadata(request.MemberId, request.Category, null, request.StateCode, request.RetentionPolicyId) is { } invalid)
         {
-            return BadRequest("MemberId may contain only letters, digits, '.', '_' and '-'.");
+            return invalid;
+        }
+
+        if (MissingRights(write: true) is { } forbidden)
+        {
+            return forbidden;
         }
 
         if (request.LegalHold && !CanManageLegalHolds())
@@ -488,7 +496,7 @@ public class MemberDocumentsController : ControllerBase
         if (contentType == null || !_uploadPolicy.IsAllowedContentType(contentType))
         {
             return StatusCode(StatusCodes.Status415UnsupportedMediaType,
-                $"Content type '{request.ContentType}' is not accepted. Allowed: {string.Join(", ", _uploadPolicy.AllowedContentTypes)}.");
+                $"Content type '{LogSanitizer.Sanitize(request.ContentType)}' is not accepted. Allowed: {string.Join(", ", _uploadPolicy.AllowedContentTypes)}.");
         }
 
         var retention = _retentionPolicyService.ResolvePolicy(
@@ -496,58 +504,160 @@ public class MemberDocumentsController : ControllerBase
             request.CoverageTerminationDate,
             request.RetentionPolicyId);
 
-        var documentId = Guid.NewGuid().ToString();
-        var blobPath = MemberDocumentUploadPolicy.BuildBlobPath(TenantId, request.MemberId, documentId, contentType, request.FileName);
-        var stagingPath = $"{blobPath}.upload";
-        var expires = DateTimeOffset.UtcNow.Add(UploadLinkLifetime);
-
-        var uploadLink = await _documents.CreateUploadLinkAsync(DefaultContainer, stagingPath, contentType, expires, ct);
-        if (uploadLink == null)
-        {
-            return StatusCode(StatusCodes.Status501NotImplemented,
-                "Pre-signed uploads need storage credentials that can sign upload links; upload the file with multipart/form-data instead.");
-        }
-
         var document = new MemberDocument
         {
-            Id = documentId,
             TenantId = TenantId,
             MemberId = request.MemberId,
-            Category = request.Category,
+            Category = request.Category.Trim(),
             Subcategory = request.Subcategory,
             Source = MemberDocumentSource.Uploaded,
             RetentionPolicyId = retention.PolicyId,
             RetentionUntilDate = retention.RetentionUntilDate,
-            BlobContainer = DefaultContainer,
-            BlobPath = blobPath,
-            PendingUploadBlobPath = stagingPath,
             ContentType = contentType,
             UploadedBy = _actor.UserId,
             UploadedDate = DateTime.UtcNow,
-            StateCode = request.StateCode,
-            CoverageTerminationDate = request.CoverageTerminationDate
+            StateCode = NormalizeState(request.StateCode),
+            CoverageTerminationDate = request.CoverageTerminationDate,
+            UploadPending = true
         };
         if (request.LegalHold)
         {
             PlaceHold(document, request.LegalHoldReason);
         }
 
-        await _repository.CreateAsync(document);
-        if (document.LegalHold)
+        var created = await _repository.CreateAsync(document);
+
+        CatalogUploadLink link;
+        try
         {
-            AuditHold(document, LegalHoldAction.Set, document.LegalHoldReason);
+            link = await _catalog.StartUploadAsync(new CatalogPresignedUpload(
+                TenantId,
+                _actor.UserId,
+                MemberLinks(created),
+                MemberDocumentUploadPolicy.CatalogTypeFor(created.Category),
+                Title(created),
+                contentType,
+                MemberDocumentUploadPolicy.FileNameFor(created.Id, contentType, request.FileName),
+                created.StateCode,
+                created.CoverageTerminationDate,
+                created.RetentionPolicyId,
+                created.LegalHold,
+                created.LegalHoldReason), ct);
+        }
+        catch (DocumentCatalogException ex)
+        {
+            await _repository.DeleteUnfiledAsync(TenantId, created.Id);
+            _logger.LogError(ex, "Could not start a pre-signed member document upload in the document catalog");
+            return CatalogFailure(ex, "start the upload; nothing was saved");
+        }
+
+        created.DocumentId = link.DocumentId;
+        created = await _repository.UpdateAsync(created);
+        if (created.LegalHold)
+        {
+            AuditHold(created, LegalHoldAction.Set, created.LegalHoldReason);
         }
 
         return Ok(new PresignedUploadResponse
         {
-            DocumentId = documentId,
-            UploadUrl = uploadLink.Url.ToString(),
-            UploadMethod = uploadLink.Method,
-            UploadHeaders = new Dictionary<string, string>(uploadLink.Headers),
-            BlobPath = stagingPath,
-            ExpiresAtUtc = expires.UtcDateTime
+            DocumentId = created.Id,
+            UploadUrl = link.UploadUrl,
+            UploadMethod = link.UploadMethod,
+            UploadHeaders = new Dictionary<string, string>(link.UploadHeaders),
+            ExpiresAtUtc = link.ExpiresAtUtc
         });
     }
+
+    /// <summary>
+    /// The catalog's rule, in the user's name: documents:read (or write) plus
+    /// members:read, the read permission of the subject these documents hang
+    /// off. members:read/members:write themselves are enforced by the pipeline.
+    /// </summary>
+    private ObjectResult? MissingRights(bool write)
+    {
+        var documents = write ? ChoRolePermissions.DocumentsWrite : ChoRolePermissions.DocumentsRead;
+        if (_actor.HasPermission(documents) && _actor.HasPermission(MemberRead))
+        {
+            return null;
+        }
+
+        return StatusCode(StatusCodes.Status403Forbidden,
+            $"Member documents need {documents} and {MemberRead}.");
+    }
+
+    private IActionResult? ValidateMetadata(string memberId, string category, IEnumerable<string>? relatedMemberIds,
+        string? stateCode, string? retentionPolicyId)
+    {
+        if (!MemberDocumentUploadPolicy.IsSafePathSegment(memberId))
+        {
+            return BadRequest("MemberId may contain only letters, digits, '.', '_' and '-'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(category) || category.Trim().Length > 80)
+        {
+            return BadRequest("Category is required (at most 80 characters).");
+        }
+
+        if (relatedMemberIds?.Any(r => !MemberDocumentUploadPolicy.IsSafePathSegment(r?.Trim())) == true)
+        {
+            return BadRequest("RelatedMemberIds may contain only letters, digits, '.', '_' and '-'.");
+        }
+
+        if (!MemberDocumentUploadPolicy.IsValidStateCode(stateCode))
+        {
+            return BadRequest("StateCode is a two-letter state code.");
+        }
+
+        if (!MemberDocumentUploadPolicy.IsValidRetentionPolicyId(retentionPolicyId))
+        {
+            return BadRequest("RetentionPolicyId is one identifier, e.g. \"TX-10Y\".");
+        }
+
+        return null;
+    }
+
+    private static List<string> RelatedMembers(string memberId, IEnumerable<string>? related) =>
+        (related ?? [])
+            .Select(r => r.Trim())
+            .Where(r => r.Length > 0 && r != memberId)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>The member and every related member: the catalog subjects the document is filed under.</summary>
+    private static List<string> MemberLinks(MemberDocument doc) =>
+        new[] { doc.MemberId }.Concat(doc.RelatedMemberIds).Distinct(StringComparer.Ordinal).ToList();
+
+    private static string Title(MemberDocument doc) =>
+        string.IsNullOrWhiteSpace(doc.Subcategory) ? doc.Category : $"{doc.Category}/{doc.Subcategory.Trim()}";
+
+    private static string Channel(MemberDocumentSource source) => source switch
+    {
+        MemberDocumentSource.Generated => "Generated",
+        MemberDocumentSource.Received => "Mail",
+        _ => "Upload"
+    };
+
+    private static string? NormalizeState(string? stateCode) =>
+        string.IsNullOrWhiteSpace(stateCode) ? null : stateCode.Trim().ToUpperInvariant();
+
+    /// <summary>
+    /// The catalog's answer, passed on where the caller can act on it: 403
+    /// (not allowed), 409 (not openable yet, e.g. not cleared by scanning, or
+    /// nothing uploaded), 413 (too large), 415 (content not accepted). Anything
+    /// else is the catalog being unavailable or refusing this service: 502.
+    /// </summary>
+    private ObjectResult CatalogFailure(DocumentCatalogException ex, string what) => ex.StatusCode switch
+    {
+        HttpStatusCode.Forbidden => StatusCode(StatusCodes.Status403Forbidden,
+            $"The document catalog did not allow this: could not {what}."),
+        HttpStatusCode.Conflict => StatusCode(StatusCodes.Status409Conflict,
+            $"The document catalog can't do this yet (for example, the file hasn't cleared scanning or hasn't been uploaded): could not {what}."),
+        HttpStatusCode.RequestEntityTooLarge => StatusCode(StatusCodes.Status413PayloadTooLarge,
+            $"The document catalog refused the file's size: could not {what}."),
+        HttpStatusCode.UnsupportedMediaType => StatusCode(StatusCodes.Status415UnsupportedMediaType,
+            $"The document catalog refused the file's content: could not {what}."),
+        _ => (ObjectResult)this.ServerError($"Could not {what}. Retry later.", StatusCodes.Status502BadGateway),
+    };
 
     private bool CanManageLegalHolds() => _actor.HasPermission(ChoRolePermissions.LegalHold);
 
@@ -613,16 +723,6 @@ public class MemberDocumentsController : ControllerBase
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
-    private static IReadOnlyDictionary<string, string> BuildLifecycleTags(string retentionPolicyId, DateTime retentionUntilDate, bool legalHold)
-    {
-        return new Dictionary<string, string>
-        {
-            ["retentionPolicyId"] = retentionPolicyId,
-            ["retentionUntilDate"] = retentionUntilDate.ToString("yyyy-MM-dd"),
-            ["legalHold"] = legalHold ? "true" : "false"
-        };
-    }
-
     private static async Task<bool> HasDeclaredSignatureAsync(Stream stream, string contentType, CancellationToken ct)
     {
         var prefix = new byte[16];
@@ -636,10 +736,9 @@ public class MemberDocumentsController : ControllerBase
         return MemberDocumentUploadPolicy.MatchesSignature(contentType, prefix.AsSpan(0, total));
     }
 
-    private async Task<string> ComputeSha256Async(Stream stream, CancellationToken ct)
+    private static async Task<string> ComputeSha256Async(Stream stream, CancellationToken ct)
     {
-        using var sha = SHA256.Create();
-        var hash = await sha.ComputeHashAsync(stream, ct);
+        var hash = await SHA256.HashDataAsync(stream, ct);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 

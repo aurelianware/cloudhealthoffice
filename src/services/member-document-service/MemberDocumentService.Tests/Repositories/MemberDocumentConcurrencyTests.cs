@@ -37,9 +37,9 @@ public sealed class MemberDocumentConcurrencyTests : IAsyncLifetime
         TenantId = Tenant,
         MemberId = "mem-1",
         Category = "EOB",
-        BlobPath = $"tenants/{Tenant}/members/mem-1/{id}.pdf",
+        DocumentId = $"cat-{id}",
         ContentType = "application/pdf",
-        PendingUploadBlobPath = $"tenants/{Tenant}/members/mem-1/{id}.pdf.upload",
+        UploadPending = true,
     };
 
     [Fact]
@@ -54,7 +54,7 @@ public sealed class MemberDocumentConcurrencyTests : IAsyncLifetime
         holdRequest.LegalHoldSetBy = "compliance-1";
         await _repository.UpdateAsync(holdRequest);
 
-        finalizeRequest.PendingUploadBlobPath = null;
+        finalizeRequest.UploadPending = false;
         finalizeRequest.SizeBytes = 1234;
         await FluentActions.Awaiting(() => _repository.UpdateAsync(finalizeRequest))
             .Should().ThrowAsync<MemberDocumentConcurrencyException>();
@@ -63,7 +63,7 @@ public sealed class MemberDocumentConcurrencyTests : IAsyncLifetime
         var stored = (await _repository.GetByIdAsync(Tenant, "doc-1"))!;
         stored.LegalHold.Should().BeTrue();
         stored.LegalHoldSetBy.Should().Be("compliance-1");
-        stored.PendingUploadBlobPath.Should().NotBeNull();
+        stored.UploadPending.Should().BeTrue();
         stored.Version.Should().Be(1);
     }
 
@@ -100,5 +100,23 @@ public sealed class MemberDocumentConcurrencyTests : IAsyncLifetime
         await FluentActions.Awaiting(() => _repository.UpdateAsync(stale))
             .Should().ThrowAsync<MemberDocumentConcurrencyException>();
         (await _repository.GetByIdAsync(Tenant, "doc-legacy"))!.LegalHold.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DeleteUnfiled_RemovesOnlyARecordWithNoCatalogDocument()
+    {
+        var filed = Document("doc-filed");
+        var unfiled = Document("doc-unfiled");
+        unfiled.DocumentId = null;
+        await _repository.CreateAsync(filed);
+        await _repository.CreateAsync(unfiled);
+
+        await _repository.DeleteUnfiledAsync(Tenant, "doc-filed");
+        await _repository.DeleteUnfiledAsync("other-tenant", "doc-unfiled");
+        (await _repository.GetByIdAsync(Tenant, "doc-filed")).Should().NotBeNull();
+        (await _repository.GetByIdAsync(Tenant, "doc-unfiled")).Should().NotBeNull();
+
+        await _repository.DeleteUnfiledAsync(Tenant, "doc-unfiled");
+        (await _repository.GetByIdAsync(Tenant, "doc-unfiled")).Should().BeNull();
     }
 }

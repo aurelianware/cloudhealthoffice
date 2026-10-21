@@ -125,6 +125,7 @@ public static class StandardRoles
             "members:read", "members:write",
             "enrollment:read", "enrollment:process",
             "coverage:read", "coverage:write", "benefits:read", "providers:read",
+            "documents:read", "documents:write",
             "payer-to-payer:initiate"
         }
     };

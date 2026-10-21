@@ -121,10 +121,11 @@ MANAGED_SECRETS = {
     "provider-verification-service-secrets",
 }
 
-# Services that store document bytes through IDocumentStore. Keep in step with
+# Services that store document bytes through IDocumentStore (the catalog; the
+# others file through it). Keep in step with
 # var.document_service_accounts in infrastructure/gcp: each name is both the
 # Deployment and the Kubernetes service account Workload Identity trusts.
-DOCUMENT_SERVICES = ("document-service", "member-document-service")
+DOCUMENT_SERVICES = ("document-service",)
 WORKLOAD_IDENTITY_ANNOTATION = "iam.gke.io/gcp-service-account"
 
 # Probe paths scripts/deploy-local.sh patches to /health/live.

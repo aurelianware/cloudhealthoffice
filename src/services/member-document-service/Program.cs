@@ -1,4 +1,3 @@
-using CloudHealthOffice.DocumentStore;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
@@ -19,9 +18,10 @@ builder.Services.AddControllers().AddCloudHealthOfficeJsonOptions();
 // ── Authentication ──────────────────────────────────────────────────
 // Every caller presents a CHO token; the tenant and the uploader come from that
 // token. Member documents (ID cards, letters, EOBs, uploads) are PHI: reads and
-// downloads need members:read, uploads and finalize need members:write.
-// Placing or releasing a legal hold (or uploading under one) needs
-// records:legal-hold instead. This service makes no outbound CHO calls.
+// downloads need members:read and documents:read, uploads and finalize need
+// members:write and documents:write (the catalog's own rule, checked here
+// because the catalog trusts this service's token). Placing or releasing a
+// legal hold (or uploading under one) needs records:legal-hold instead.
 builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
 {
     auth.DefaultReadPermission = "members:read";
@@ -38,9 +38,16 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Document bytes go to the configured store (Azure Blob, Google Cloud Storage
-// or S3; see AddChoDocumentStore). This service keeps the records in MongoDB.
-builder.Services.AddChoDocumentStore(builder.Environment.EnvironmentName);
+// Files live in the document catalog (document-service), which owns their
+// storage, retention, legal hold and access audit. This service keeps the
+// member-specific records in MongoDB and holds no storage credentials.
+builder.Services.AddHttpClient(HttpDocumentCatalog.ClientName, client =>
+{
+    client.BaseAddress = new Uri((builder.Configuration["Services:DocumentService"]
+        ?? HttpDocumentCatalog.DefaultBaseUrl).TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+builder.Services.AddScoped<IDocumentCatalog, HttpDocumentCatalog>();
 builder.Services.AddSingleton<IRetentionPolicyService, RetentionPolicyService>();
 builder.Services.AddSingleton(sp => MemberDocumentUploadPolicy.FromConfiguration(
     sp.GetRequiredService<IConfiguration>()));
@@ -72,9 +79,6 @@ builder.Services.AddChoHealthChecks(options =>
 builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();
-
-// Fail at startup, not on the first upload, when the document store is misconfigured.
-app.Services.GetRequiredService<IDocumentStore>();
 
 app.UseChoObservability();
 

@@ -114,6 +114,12 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
         }
     }
 
+    /// <summary>
+    /// Who a legal-hold action is recorded against: the user a service acts
+    /// for, else the caller. Recording only; access still comes from the token.
+    /// </summary>
+    private string ActingUser => OnBehalfOf ?? _actor.UserId;
+
     // ── Reading ──────────────────────────────────────────────────────────
 
     /// <summary>The documents on one subject that this caller may see, plus how many were withheld.</summary>
@@ -242,6 +248,8 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
 
         if (file is null || file.Length == 0)
             return BadRequest("A file is required.");
+        if (await RefuseCreationHoldAsync(form.LegalHold, form.LegalHoldReason, auditSubject, ct) is { } holdRefusal)
+            return holdRefusal;
         if (file.Length > _uploadPolicy.MaxUploadBytes)
             return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status413PayloadTooLarge,
                 $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes.", ct);
@@ -257,12 +265,20 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
 
         var sha256 = await Sha256HexAsync(buffer, ct);
 
-        var duplicate = (await _documents.FindByHashAsync(TenantId, sha256, ct)).FirstOrDefault(CanMergeInto);
-        if (duplicate != null)
-            return await MergeDuplicateAsync(duplicate, metadata, ct);
+        // A held upload is always its own document: merging would put someone
+        // else's copy under this hold.
+        if (!form.LegalHold)
+        {
+            var duplicate = (await _documents.FindByHashAsync(TenantId, sha256, ct)).FirstOrDefault(CanMergeInto);
+            if (duplicate != null)
+                return await MergeDuplicateAsync(duplicate, metadata, ct);
+        }
 
         var id = Guid.NewGuid().ToString("N");
-        var document = NewDocument(id, form.Type, form.Title, contentType, file.FileName, metadata, form.StateCode, form.RetentionPolicyId);
+        var document = NewDocument(id, form.Type, form.Title, contentType, file.FileName, metadata,
+            form.StateCode, form.CoverageTerminationDate, form.RetentionPolicyId);
+        if (form.LegalHold)
+            PlaceHold(document, form.LegalHoldReason);
         document.Source.ExternalIds = externalIds;
         document.Sha256 = sha256;
         document.SizeBytes = buffer.Length;
@@ -273,7 +289,7 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
 
         // Audited before anything is written: a failed audit stores nothing.
         await AuditAsync(DocumentAccessAction.Upload, id, auditSubject, allowed: true,
-            $"{document.Type}, links [{string.Join(",", document.Links)}]", ct);
+            $"{document.Type}, links [{string.Join(",", document.Links)}]{HoldNote(document)}", ct);
 
         await _store.UploadAsync(Container, document.StoragePath, buffer, contentType, StorageTags(document), ct);
         try
@@ -303,14 +319,19 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
         if (metadata.Error is { } error)
             return error;
         var auditSubject = metadata.Links[0];
+        if (await RefuseCreationHoldAsync(request.LegalHold, request.LegalHoldReason, auditSubject, ct) is { } holdRefusal)
+            return holdRefusal;
 
         var contentType = DocumentUploadPolicy.NormalizeContentType(request.ContentType);
         if (contentType is null || !_uploadPolicy.IsAllowedContentType(contentType))
             return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status415UnsupportedMediaType, UnsupportedTypeMessage(request.ContentType), ct);
 
         var id = Guid.NewGuid().ToString("N");
-        var document = NewDocument(id, request.Type, request.Title, contentType, request.FileName, metadata, request.StateCode, request.RetentionPolicyId);
+        var document = NewDocument(id, request.Type, request.Title, contentType, request.FileName, metadata,
+            request.StateCode, request.CoverageTerminationDate, request.RetentionPolicyId);
         document.PendingUploadPath = $"{document.StoragePath}.upload";
+        if (request.LegalHold)
+            PlaceHold(document, request.LegalHoldReason);
 
         var expires = _clock.GetUtcNow().Add(_options.UploadLinkLifetime);
         var link = await _store.CreateUploadLinkAsync(Container, document.PendingUploadPath, contentType, expires, ct);
@@ -321,7 +342,7 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
         }
 
         await AuditAsync(DocumentAccessAction.Upload, id, auditSubject, allowed: true,
-            $"pre-signed upload started: {document.Type}, links [{string.Join(",", document.Links)}]", ct);
+            $"pre-signed upload started: {document.Type}, links [{string.Join(",", document.Links)}]{HoldNote(document)}", ct);
         await _documents.CreateAsync(document, ct);
 
         return Ok(new PresignedUploadResponse
@@ -335,7 +356,8 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
     }
 
     /// <summary>
-    /// Finishes a pre-signed upload. Only the uploader may finalize. The staged
+    /// Finishes a pre-signed upload. Only the uploader may finalize: the same
+    /// caller, and for a service the same user it acted for. The staged
     /// object is size-checked before it is read, then checked against the
     /// declared type, hashed and scanned, and copied to the document's path,
     /// which no upload link covers. A duplicate the caller may merge into is
@@ -345,7 +367,8 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
     public async Task<IActionResult> Finalize(string id, CancellationToken ct)
     {
         var document = await _documents.GetAsync(TenantId, id, ct);
-        if (document is null || document.PendingUploadPath is null || document.CreatedBy != _actor.UserId)
+        if (document is null || document.PendingUploadPath is null
+            || document.CreatedBy != _actor.UserId || document.CreatedOnBehalfOf != OnBehalfOf)
         {
             await AuditAsync(DocumentAccessAction.Upload, id, null, allowed: false,
                 document is null ? "finalize: no such document" : "finalize: not a pending upload by this caller", ct);
@@ -398,7 +421,9 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
         }
 
         var sha256 = await Sha256HexAsync(buffer, ct);
-        var duplicate = (await _documents.FindByHashAsync(TenantId, sha256, ct)).FirstOrDefault(CanMergeInto);
+        var duplicate = document.Retention.LegalHold.Set
+            ? null
+            : (await _documents.FindByHashAsync(TenantId, sha256, ct)).FirstOrDefault(CanMergeInto);
         if (duplicate != null)
         {
             var merged = await MergeDuplicateAsync(duplicate,
@@ -527,6 +552,11 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
             await AuditAsync(DocumentAccessAction.LegalHold, id, null, allowed: false, $"{verb}: no reason given", ct);
             return BadRequest("A reason is required to release a legal hold.");
         }
+        if (reason?.Length > LegalHoldRequest.MaxReasonLength)
+        {
+            await AuditAsync(DocumentAccessAction.LegalHold, id, null, allowed: false, $"{verb}: reason too long", ct);
+            return BadRequest($"A legal hold reason is at most {LegalHoldRequest.MaxReasonLength} characters.");
+        }
 
         var document = await _documents.GetAsync(TenantId, id, ct);
         if (document is null)
@@ -542,18 +572,10 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
             return Ok(HoldState(document));
         }
 
-        var now = Now;
-        hold.Set = request.LegalHold;
-        hold.By = request.LegalHold ? _actor.UserId : null;
-        hold.At = request.LegalHold ? now : null;
-        hold.Reason = request.LegalHold ? reason : null;
-        hold.History.Add(new LegalHoldEvent
-        {
-            Action = request.LegalHold ? LegalHoldAction.Set : LegalHoldAction.Released,
-            Actor = _actor.UserId,
-            Reason = reason,
-            At = now
-        });
+        if (request.LegalHold)
+            PlaceHold(document, reason);
+        else
+            ReleaseHold(hold, reason!);
 
         await AuditAsync(DocumentAccessAction.LegalHold, id, null, allowed: true, $"{verb}: {reason ?? "(no reason)"}", ct);
         try
@@ -638,12 +660,12 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
     }
 
     private CatalogDocument NewDocument(string id, string type, string? title, string contentType, string? fileName,
-        UploadMetadata metadata, string? stateCode, string? retentionPolicyId)
+        UploadMetadata metadata, string? stateCode, DateTime? coverageTerminationDate, string? retentionPolicyId)
     {
         if (!DocumentUploadPolicy.IsSafePathSegment(TenantId))
             throw new InvalidOperationException("Tenant id cannot be used in a storage path.");
 
-        var policy = _retention.ResolvePolicy(stateCode, null, retentionPolicyId);
+        var policy = _retention.ResolvePolicy(stateCode, coverageTerminationDate, retentionPolicyId);
         return new CatalogDocument
         {
             Id = id,
@@ -786,6 +808,46 @@ public sealed class DocumentsController : ControllerBase, Microsoft.AspNetCore.M
         }
         return result.Count <= 10 ? result : null;
     }
+
+    /// <summary>
+    /// A hold asked for at upload: refused (403, audited) without
+    /// records:legal-hold, or (400) with an over-long reason. Null when fine.
+    /// </summary>
+    private async Task<IActionResult?> RefuseCreationHoldAsync(bool legalHold, string? reason, DocumentLink subject, CancellationToken ct)
+    {
+        if (!legalHold)
+            return null;
+        if (!_actor.HasPermission(ChoRolePermissions.LegalHold))
+            return await RefuseUploadAsync(subject, null, StatusCodes.Status403Forbidden,
+                $"Placing a legal hold requires {ChoRolePermissions.LegalHold}.", ct);
+        if (reason?.Trim().Length > LegalHoldRequest.MaxReasonLength)
+            return BadRequest($"A legal hold reason is at most {LegalHoldRequest.MaxReasonLength} characters.");
+        return null;
+    }
+
+    private void PlaceHold(CatalogDocument document, string? reason)
+    {
+        reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        var now = Now;
+        var hold = document.Retention.LegalHold;
+        hold.Set = true;
+        hold.By = ActingUser;
+        hold.At = now;
+        hold.Reason = reason;
+        hold.History.Add(new LegalHoldEvent { Action = LegalHoldAction.Set, Actor = ActingUser, Reason = reason, At = now });
+    }
+
+    private void ReleaseHold(LegalHold hold, string reason)
+    {
+        hold.Set = false;
+        hold.By = null;
+        hold.At = null;
+        hold.Reason = null;
+        hold.History.Add(new LegalHoldEvent { Action = LegalHoldAction.Released, Actor = ActingUser, Reason = reason, At = Now });
+    }
+
+    private static string HoldNote(CatalogDocument d) =>
+        d.Retention.LegalHold.Set ? $", under legal hold: {d.Retention.LegalHold.Reason ?? "(no reason)"}" : string.Empty;
 
     private static object HoldState(CatalogDocument d) => new { id = d.Id, legalHold = d.Retention.LegalHold.Set };
 

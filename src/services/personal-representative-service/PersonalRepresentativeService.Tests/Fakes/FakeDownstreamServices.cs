@@ -63,8 +63,8 @@ public sealed class FakeMemberDocumentService
             ["memberId"] = memberId,
             ["category"] = "proof-of-authority",
             ["relatedMemberIds"] = new JsonArray(relatedMemberIds.Select(m => (JsonNode?)m).ToArray()),
-            ["blobPath"] = $"{tenant}/{memberId}/{id}.pdf",
-            ["pendingUploadBlobPath"] = null
+            ["documentId"] = $"cat-{id}",
+            ["uploadPending"] = false
         };
         return id;
     }
