@@ -3,7 +3,6 @@
 @using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
 @inject IClaimsService ClaimsService
-@inject CloudHealthOffice.Portal.Infrastructure.ISearchCriteriaPolicy SearchPolicy
 @inject IProviderService ProviderService
 @inject IMemberService MemberService
 @inject NavigationManager NavigationManager
@@ -410,7 +409,6 @@
     private bool _loading = false;
     private bool _hasSearched = false;
     private bool _showValidationMessage = false;
-    private bool _requireCriteria = true;
     private bool _showAdvancedOptions = false;
     private int _currentPage = 1;
     private string? _serviceError;
@@ -476,7 +474,6 @@
     protected override async Task OnInitializedAsync()
     {
         _searchRequest.PageSize = 25;
-        _requireCriteria = await SearchPolicy.RequiresCriteriaAsync();
         ApplyDrillDown();
         if (_searchRequest.HasDrillDown)
         {
@@ -487,11 +484,6 @@
             _searchRequest.RunId = RunId;
             await PerformSearch(skipValidation: true);
         }
-        else if (!_requireCriteria)
-        {
-            // Demo tenants (synthetic data) open on the most recent claims.
-            await PerformSearch(skipValidation: true);
-        }
     }
 
     private async Task PerformSearch(bool skipValidation = false, bool resetPage = true)
@@ -500,7 +492,6 @@
 
         // Validate at least one search criterion
         if (!skipValidation
-            && _requireCriteria
             && string.IsNullOrWhiteSpace(_searchRequest.RunId)
             && string.IsNullOrWhiteSpace(_searchRequest.ClaimNumber)
             && _selectedMember == null

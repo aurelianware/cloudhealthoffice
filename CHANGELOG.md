@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Record search in the portal always needs criteria, in every tenant.**
+  Claims, Members, Providers and Authorizations no longer list records when
+  the page opens in a demo tenant, and the `Portal:Search:RequireCriteria`
+  setting is gone (its `NonDemoTenants` default and `Never` mode let a tenant
+  marked as demo browse freely). A privacy control with an off switch is one
+  wrong flag away from exposing real members, so there is no switch.
+  Drill-downs from Insights and batch-run links still open their lists,
+  because they arrive with their own filters. Demos will use work-list roles
+  and curated personas instead (`docs/architecture/portal-search.md` §3.5).
+
 - **The portal now matches the marketing site's Enterprise look by default,
   with Sentinel kept as a dark option and per-tenant branding.** Every portal
   color now comes from tokens in `wwwroot/css/theme-tokens.css`. The new

@@ -3,7 +3,6 @@
 @using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
 @inject IProviderService ProviderService
-@inject CloudHealthOffice.Portal.Infrastructure.ISearchCriteriaPolicy SearchPolicy
 
 <PageTitle>Providers - Cloud Health Office</PageTitle>
 
@@ -267,7 +266,6 @@
     private bool _loading = false;
     private bool _hasSearched = false;
     private bool _showValidationMessage = false;
-    private bool _requireCriteria = true;
 
     /// <summary>A search to run on arrival (/providers?q=…, from global search): an NPI or a name.</summary>
     [Parameter]
@@ -276,15 +274,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _requireCriteria = await SearchPolicy.RequiresCriteriaAsync();
         if (Query?.Trim() is { Length: > 0 } q)
         {
             if (q.Length == 10 && q.All(char.IsDigit)) _npiSearch = q; else _nameSearch = q;
-            await SearchProviders();
-        }
-        else if (!_requireCriteria)
-        {
-            // Demo tenants (synthetic data) open on a browsable list.
             await SearchProviders();
         }
     }
@@ -304,7 +296,7 @@
 
     private async Task SearchProviders()
     {
-        if (_requireCriteria && !HasCriteria)
+        if (!HasCriteria)
         {
             _showValidationMessage = true;
             return;

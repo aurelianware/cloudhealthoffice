@@ -3,7 +3,6 @@
 @using CloudHealthOffice.Portal.Services
 @attribute [Authorize]
 @inject IMemberService MemberService
-@inject CloudHealthOffice.Portal.Infrastructure.ISearchCriteriaPolicy SearchPolicy
 @inject ICoverageService CoverageService
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
@@ -169,17 +168,6 @@
     private bool _loading = false;
     private bool _hasSearched = false;
     private bool _showValidationMessage = false;
-    private bool _requireCriteria = true;
-
-    protected override async Task OnInitializedAsync()
-    {
-        _requireCriteria = await SearchPolicy.RequiresCriteriaAsync();
-        if (!_requireCriteria && string.IsNullOrWhiteSpace(RequestedMemberId))
-        {
-            // Demo tenants (synthetic data) open on a browsable list.
-            await SearchMembers();
-        }
-    }
     private string? _serviceError;
     private string? _handledMemberQuery;
 
@@ -209,7 +197,7 @@
 
     private async Task SearchMembers()
     {
-        if (_requireCriteria && !HasCriteria)
+        if (!HasCriteria)
         {
             _showValidationMessage = true;
             return;
