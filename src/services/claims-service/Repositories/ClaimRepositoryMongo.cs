@@ -97,6 +97,27 @@ public class ClaimRepositoryMongo : IClaimRepository
         return doc != null ? Hydrate(doc) : null;
     }
 
+    public async Task<IReadOnlyList<Claim>> FindByAttachmentControlNumberAsync(string controlNumber, int limit, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        var filter = Builders<Claim>.Filter.And(
+            Builders<Claim>.Filter.Eq(c => c.TenantId, tenantId),
+            Builders<Claim>.Filter.ElemMatch(c => c.AttachmentReports, r => r.ControlNumber == controlNumber));
+
+        // Every version of a claim keeps its PWK data; answer one per claim, its latest.
+        var docs = await _collection.Find(filter)
+            .SortByDescending(c => c.VersionNumber)
+            .Limit(Math.Max(1, limit) * 10)
+            .ToListAsync(ct);
+        return docs
+            .Select(Hydrate)
+            .GroupBy(c => c.ClaimVersionId)
+            .Select(g => g.OrderByDescending(c => c.VersionNumber).First())
+            .OrderByDescending(c => c.SubmittedDate)
+            .Take(Math.Max(1, limit))
+            .ToList();
+    }
+
     public async Task<IEnumerable<Claim>> SearchAsync(
         string? memberId,
         string? providerNPI,

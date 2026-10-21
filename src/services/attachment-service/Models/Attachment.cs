@@ -59,6 +59,15 @@ public class Attachment
     public string? RFAIReference { get; set; }
 
     /// <summary>
+    /// Attachment control number from the 275's TRN02: the PWK06 the provider
+    /// put on the 837. A 275 that names no claim is matched to the claim that
+    /// announced this number; until one has, the attachment is held as
+    /// <c>Unmatched</c> under its provider.
+    /// </summary>
+    [StringLength(80)]
+    public string? AttachmentControlNumber { get; set; }
+
+    /// <summary>
     /// Attachment type: 'Solicited' (responding to RFAI) or 'Unsolicited' (proactive submission)
     /// </summary>
     [Required]
@@ -175,7 +184,8 @@ public class Attachment
     public string? LastUpdatedBy { get; set; }
 
     /// <summary>
-    /// Processing status: 'Received', 'Validated', 'Linked', 'Failed'
+    /// Processing status: 'Received', 'Validated', 'Linked', 'Unmatched'
+    /// (waiting for the claim its control number names), 'Failed'
     /// </summary>
     [Required]
     [StringLength(20)]

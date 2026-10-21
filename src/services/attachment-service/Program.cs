@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Text.Json;
 using Microsoft.OpenApi.Models;
 using AttachmentService;
@@ -106,6 +107,14 @@ foreach (var (name, key, fallback) in new[]
     });
 }
 builder.Services.AddScoped<IAttachmentParentLookup, HttpAttachmentParentLookup>();
+
+// 275 matching: a 275 that names no record is matched to the claim whose 837
+// PWK06 is its TRN02 (claims-service), or held until that claim arrives.
+builder.Services.AddScoped<IClaimAttachmentMatcher, HttpClaimAttachmentMatcher>();
+builder.Services.Configure<AttachmentMatchingOptions>(builder.Configuration.GetSection(AttachmentMatchingOptions.SectionName));
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<UnmatchedAttachmentMatcher>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<UnmatchedAttachmentMatcher>());
 builder.Services.Configure<AttachmentUploadOptions>(builder.Configuration.GetSection(AttachmentUploadOptions.SectionName));
 builder.Services.AddSingleton<AcknowledgmentGeneratorService>();
 builder.Services.AddScoped<IAcknowledgmentService, AcknowledgmentService>();

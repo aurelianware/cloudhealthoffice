@@ -74,6 +74,15 @@ public static partial class AttachmentUploadRules
     [GeneratedRegex("^[A-Za-z0-9_-]{1,128}$", RegexOptions.CultureInvariant)]
     private static partial Regex ParentIdPattern();
 
+    /// <summary>
+    /// An attachment control number (275 TRN02 / 837 PWK06) is one token: it
+    /// is looked up, logged and kept as a catalog source id.
+    /// </summary>
+    public static bool IsValidControlNumber(string? value) => value is not null && ControlNumberPattern().IsMatch(value);
+
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$", RegexOptions.CultureInvariant)]
+    private static partial Regex ControlNumberPattern();
+
     /// <summary>True when the file name's extension belongs to <paramref name="format"/>.</summary>
     public static bool ExtensionMatches(string? fileName, AttachmentFormat format)
     {

@@ -103,6 +103,8 @@ public static class X12837Parser
         public string? FacilityTypeCode;
         // 2300 REF*G1 — prior authorization number for the claim.
         public string? PriorAuthorizationNumber;
+        // 2300 / 2400 PWK — paperwork sent separately, with its control number.
+        public List<AttachmentReport> AttachmentReports = [];
         public List<DiagnosisCode> DiagnosisCodes = [];
         // Institutional (837I) 2300 detail, reset on CLM/flush.
         public string? AdmissionDate;
@@ -164,6 +166,7 @@ public static class X12837Parser
             case "CLM": Parse2300Claim(s, seg); break;
             case "CL1": if (s.ClaimOpen) Parse2300InstitutionalClaimCode(s, seg); break;
             case "HI": if (s.ClaimOpen) Parse2300HealthCareCodes(s, seg); break;
+            case "PWK": if (s.ClaimOpen) ParsePaperwork(s, seg); break;
             case "LX": if (s.ClaimOpen) Parse2400LineNumber(s, seg); break;
             case "SV1": if (s.ClaimOpen) Parse2400ProfessionalService(s, seg); break;
             case "SV2": if (s.ClaimOpen) Parse2400InstitutionalService(s, seg); break;
@@ -670,6 +673,30 @@ public static class X12837Parser
     // 2400 service line
     // ------------------------------------------------------------------
 
+    /// <summary>
+    /// PWK in 2300 (before the first LX: the claim) or 2400 (the current
+    /// line). PWK01 report type and PWK02 transmission code are required;
+    /// PWK06 is the attachment control number a later 275 repeats in TRN02
+    /// (PWK05 = AC). A PWK without type or transmission code is dropped (the
+    /// SNIP validator reports it).
+    /// </summary>
+    private static void ParsePaperwork(ParseState s, X12Segment seg)
+    {
+        var reportType = seg.Element(0)?.Trim();
+        var transmission = seg.Element(1)?.Trim();
+        if (string.IsNullOrEmpty(reportType) || string.IsNullOrEmpty(transmission))
+            return;
+
+        var controlNumber = seg.Element(5)?.Trim();
+        s.AttachmentReports.Add(new AttachmentReport
+        {
+            ReportTypeCode = reportType,
+            TransmissionCode = transmission,
+            ControlNumber = string.IsNullOrEmpty(controlNumber) ? null : controlNumber,
+            LineNumber = s.CurrentLine?.LineNumber,
+        });
+    }
+
     private static void Parse2400LineNumber(ParseState s, X12Segment seg)
     {
         FlushLine(s);
@@ -909,6 +936,7 @@ public static class X12837Parser
         ParsedAt = DateTime.UtcNow.ToString("o"),
         PayerResponsibilityCode = s.ClaimPayerResponsibility,
         OtherPayers = s.OtherPayers.Count > 0 ? [.. s.OtherPayers] : null,
+        AttachmentReports = s.AttachmentReports.Count > 0 ? [.. s.AttachmentReports] : null,
     };
 
     // Per-claim state back to its initial values. Envelope, 1000A/B and
@@ -925,6 +953,7 @@ public static class X12837Parser
         s.FrequencyCode = null;
         s.FacilityTypeCode = null;
         s.PriorAuthorizationNumber = null;
+        s.AttachmentReports = [];
         s.DiagnosisCodes = [];
         s.AdmissionDate = null;
         s.AdmissionHour = null;

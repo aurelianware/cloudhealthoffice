@@ -35,7 +35,7 @@ CHO already has four document paths, each built for one use:
 | Claims gateway (`IClaimAttachmentContentStore`) | Attachments that arrive through the clearinghouse gateway, with a scan status. | A separate store, not linked to the others. |
 
 Also:
-- The 837 **PWK** segment (paperwork attachment indicator) is validated, but its attachment control number isn't kept on the claim, so a later 275 can't be matched to the claim that announced it.
+- The 837 **PWK** segment (paperwork attachment indicator) is kept on the claim since step 3 (§14), so a 275 is matched to the claim that announced its control number.
 - In the portal, only the member details dialog shows documents. Claim, authorization and appeal screens have none.
 
 The design below **consolidates these rather than adding a fifth path.** member-document-service's model is the starting point, because it already has retention, legal hold, hashing and FHIR.
@@ -125,7 +125,7 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 
 1. **Storage providers:** GCS and S3 for `IDocumentStore`; member-document-service moves onto `IDocumentStore`. *Built (2026-10-20).*
 2. **Catalog:** the document record and service (evolved from member-document-service), with many-to-many links, sensitivity tags, access audit, and the documents API. *Built (2026-10-20) as a new document-service; member-document-service moves onto it later.*
-3. **Move attachment-service onto the catalog:** existing `Attachment` rows migrate to documents with links. Keep the PWK attachment control number on the claim for 275 matching. *Attachments built (2026-10-20): attachment-service files through the catalog; there was no stored attachment data to migrate. Member documents built (2026-10-20, §13). PWK matching is a separate PR.*
+3. **Move attachment-service onto the catalog:** existing `Attachment` rows migrate to documents with links. Keep the PWK attachment control number on the claim for 275 matching. *Attachments built (2026-10-20): attachment-service files through the catalog; there was no stored attachment data to migrate. Member documents built (2026-10-20, §13). PWK matching built (2026-10-21, §14).*
 4. **Correspondence** ([correspondence.md](correspondence.md)), starting with appeal notices. Generated letters are the first new producer on the catalog, and ID cards move onto it in the same phase.
 5. **Documents panel** on claim, authorization and appeal screens.
 6. **Claim RFAI:** extend rfai-service from authorizations to claims, with 277 RFAI out, 275 / upload / fax in, matching, and clean-date events.
@@ -183,4 +183,11 @@ Next: member-document-service onto the catalog (§13), and keeping the 837 PWK a
 - **No migration:** there were no stored member documents to keep.
 - **Known limit:** when identical content is shared by two member records (a duplicate merge), a hold placed through one record shows on the catalog document but not on the other record's mirror. The catalog still enforces it.
 
+## 14. What step 3 built (PWK and 275 matching)
+
+- **The 837's PWK is kept on the claim.** The inbound 837 parser reads PWK in loop 2300 (the claim) and 2400 (a line): PWK01 report type, PWK02 transmission code (EL, FX, BM, FT, EM, AA) and PWK06, the attachment control number. The claim stores them as `AttachmentReports` (with the line number for 2400). Claims-service answers `GET api/claims/attachment-control-numbers/{controlNumber}`: the tenant's claims that announced it (latest version of each), with their billing NPI. Indexed on tenant + control number.
+- **A 275 can name its claim by TRN02.** attachment-service accepts `AttachmentControlNumber` (the 275's TRN02). With no ClaimId, AuthorizationId or AppealId, it asks claims-service for the claim. One match: the attachment is filed on that claim (`Linked`). Several: the one from the 275's provider (NPI) wins; if none or more than one is, nothing is guessed.
+- **A 275 that arrives first is held.** With no single match, the attachment is saved as `Unmatched` and its file filed in the catalog under `Provider:{npi}` (readable with `providers:read`, so examiners can open it). `GET api/attachments/unmatched` lists the tenant's held 275s. A background matcher (`AttachmentMatching:Interval`, default 5 minutes) looks again with attachment-service's own service token; once the claim exists, the catalog document gains the claim link and the attachment becomes `Linked`. After `AttachmentMatching:HoldDays` (default 30) it is rejected: `Failed` with `NO_MATCHING_CLAIM` (an 824 TR, TED01 2).
+- **Explicit parents still win.** A 275 that names its claim, authorization or appeal is filed there as before; its control number is kept on the attachment and as a catalog source id.
+- **Not in this step:** the claim does not pend for missing attachments (PWK02 EL/FX/BM without a 275 yet); that comes with claim RFAI (step 6). The matcher polls; claim events could replace the polling later.
 

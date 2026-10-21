@@ -94,6 +94,15 @@ public static class X12837ClaimMapper
                 : source.PayerResponsibilityCode.Trim(),
             OtherPayers = MapOtherPayers(source, out var unmatchedOtherPayerLines),
             UnmatchedOtherPayerLines = unmatchedOtherPayerLines,
+            AttachmentReports = (source.AttachmentReports ?? [])
+                .Select(r => new ClaimAttachmentReport
+                {
+                    ReportTypeCode = r.ReportTypeCode,
+                    TransmissionCode = r.TransmissionCode,
+                    ControlNumber = r.ControlNumber,
+                    LineNumber = r.LineNumber,
+                })
+                .ToList(),
 
             Status = ClaimStatus.Submitted,
 

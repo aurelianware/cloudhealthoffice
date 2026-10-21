@@ -19,6 +19,30 @@ public class AttachmentRepositoryMongo : IAttachmentRepository
             ?? "Attachments";
         _collection = database.GetCollection<Attachment>(collectionName);
         _logger = logger;
+
+        // The matcher's work list (status, oldest first); created once per process.
+        if (Interlocked.Exchange(ref _indexEnsured, 1) == 0)
+        {
+            _collection.Indexes.CreateOne(new CreateIndexModel<Attachment>(
+                Builders<Attachment>.IndexKeys.Ascending(x => x.Status).Ascending(x => x.CreatedDate),
+                new CreateIndexOptions { Name = "status_created" }));
+        }
+    }
+
+    private static int _indexEnsured;
+
+    public async Task<IReadOnlyList<Attachment>> GetUnmatchedAsync(string tenantId, int limit = 200)
+    {
+        var filter = Builders<Attachment>.Filter.And(
+            Builders<Attachment>.Filter.Eq(x => x.TenantId, tenantId),
+            Builders<Attachment>.Filter.Eq(x => x.Status, "Unmatched"));
+        return await _collection.Find(filter).SortBy(x => x.CreatedDate).Limit(limit).ToListAsync();
+    }
+
+    public async Task<IReadOnlyList<Attachment>> ListUnmatchedAsync(int limit)
+    {
+        var filter = Builders<Attachment>.Filter.Eq(x => x.Status, "Unmatched");
+        return await _collection.Find(filter).SortBy(x => x.CreatedDate).Limit(limit).ToListAsync();
     }
 
     public async Task<Attachment> CreateAsync(Attachment attachment)

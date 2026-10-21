@@ -83,4 +83,27 @@ public class HttpDocumentCatalogTests
         var stream = await Catalog(new Recorder(HttpStatusCode.NotFound, "")).DownloadAsync("t", "u", "doc-1", AttachmentParentType.Claim, "C1");
         stream.Should().BeNull();
     }
+
+    [Fact]
+    public async Task AddLink_WorksFromTheProvider_ToTheClaim_WithNoUserOnTheCall()
+    {
+        var recorder = new Recorder(HttpStatusCode.OK, """{"id":"doc-1"}""");
+
+        var linked = await Catalog(recorder).AddLinkAsync("tenant-1", null, "doc-1",
+            AttachmentParentType.Provider, "1234567893", AttachmentParentType.Claim, "CLM-9");
+
+        linked.Should().BeTrue();
+        recorder.Request!.Method.Should().Be(HttpMethod.Post);
+        recorder.Request.RequestUri!.PathAndQuery.Should().Be("/api/v1/documents/doc-1/links?subjectKind=Provider&subjectId=1234567893");
+        recorder.Request.Headers.Contains(HttpDocumentCatalog.OnBehalfOfHeader).Should().BeFalse();
+        recorder.RequestBody.Should().Contain("Claim:CLM-9");
+    }
+
+    [Fact]
+    public async Task AddLink_ToADocumentTheCatalogDoesNotHaveThere_IsFalse()
+    {
+        var linked = await Catalog(new Recorder(HttpStatusCode.NotFound, "")).AddLinkAsync("t", "u", "doc-1",
+            AttachmentParentType.Provider, "P1", AttachmentParentType.Claim, "C1");
+        linked.Should().BeFalse();
+    }
 }
