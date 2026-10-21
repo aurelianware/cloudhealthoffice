@@ -32,15 +32,27 @@ test("every site page carries the one shared nav and footer", () => {
   }
 });
 
+// Visible text for a content check (not a sanitizer): drop script/style bodies
+// and tags, repeating until stable so nested or split markup cannot survive.
+function visibleText(html) {
+  let prev;
+  let text = html;
+  do {
+    prev = text;
+    text = text
+      .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, " ")
+      .replace(/<[^<>]*>/g, " ");
+  } while (text !== prev);
+  return text.replace(/[<>]/g, " ");
+}
+
 test('visible copy does not use "independence" as a label (MESSAGE_SHEET naming rule)', () => {
   for (const f of pages()) {
-    let html = fs.readFileSync(f, "utf8");
+    const html = fs.readFileSync(f, "utf8");
     const attrs = [...html.matchAll(/(?:content|alt|title|aria-label)="([^"]*)"/g)]
       .map((m) => m[1])
       .filter((v) => !v.startsWith("http"));
-    const text = html
-      .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, "")
-      .replace(/<[^>]+>/g, " ");
+    const text = visibleText(html);
     for (const chunk of [text, ...attrs]) assert(!/independence/i.test(chunk), path.relative(site, f));
   }
 });
