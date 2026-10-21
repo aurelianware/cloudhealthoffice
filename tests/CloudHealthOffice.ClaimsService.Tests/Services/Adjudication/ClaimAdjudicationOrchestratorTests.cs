@@ -69,6 +69,44 @@ public class ClaimAdjudicationOrchestratorTests
         Assert.Equal(new[] { "Scrubbing", "BenefitCalculation", "Persistence" }, executed);
     }
 
+    [Theory]
+    [InlineData("found", MemberLookupOutcome.Found)]
+    [InlineData("missing", MemberLookupOutcome.NotFound)]
+    [InlineData("outage", MemberLookupOutcome.Unavailable)]
+    public async Task TheMemberLookup_TellsAMissingMemberFromAnOutage(string answer, MemberLookupOutcome expected)
+    {
+        var seen = MemberLookupOutcome.NotLookedUp;
+        var stages = new IClaimAdjudicationStage[]
+        {
+            new RecordingStage("BenefitCalculation", 300, isRequired: false, [], ctx =>
+            {
+                seen = ctx.MemberLookup;
+                return ClaimAdjudicationStageResult.Pass("BenefitCalculation");
+            }),
+            new RecordingStage("Persistence", 999, isRequired: true, []),
+        };
+        SetupAdapterReturningClaim();
+        switch (answer)
+        {
+            case "found":
+                _memberResolver.GetMemberAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                    .Returns(new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true });
+                break;
+            case "missing":
+                _memberResolver.GetMemberAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                    .Returns((ResolvedMember?)null);
+                break;
+            default:
+                _memberResolver.GetMemberAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                    .Returns<ResolvedMember?>(_ => throw new MemberUnavailableException("member-service answered 503"));
+                break;
+        }
+
+        await BuildOrchestrator(stages).AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+
+        Assert.Equal(expected, seen);
+    }
+
     [Fact]
     public async Task Adjudicate_TerminalStage_ShortCircuitsButPersistenceStillRuns()
     {
