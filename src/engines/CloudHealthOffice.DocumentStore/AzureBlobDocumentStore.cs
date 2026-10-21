@@ -1,30 +1,25 @@
 using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Sas;
 using Microsoft.Extensions.Logging;
 
 namespace CloudHealthOffice.DocumentStore;
 
 /// <summary>
-/// Production <see cref="IDocumentStore"/> backed by Azure Blob Storage.
+/// <see cref="IDocumentStore"/> backed by Azure Blob Storage. Each CHO
+/// container is an Azure container, created on first upload. Tags are blob
+/// index tags. Upload links are blob SAS tokens, which need account-key
+/// credentials (a connection string with an AccountKey); otherwise
+/// <see cref="CreateUploadLinkAsync"/> returns null.
 ///
-/// Registration (Program.cs / DI):
-/// <code>
-///   builder.Services.AddSingleton(new BlobServiceClient(connectionString));
-///   builder.Services.AddSingleton&lt;IDocumentStore, AzureBlobDocumentStore&gt;();
-/// </code>
+/// Registered by <c>AddChoDocumentStore</c> when <c>DocumentStore:Provider</c>
+/// is <c>Azure</c> (or unset with <c>BlobStorage:ConnectionString</c> present).
 /// </summary>
 public class AzureBlobDocumentStore : IDocumentStore
 {
     private readonly BlobServiceClient _client;
     private readonly ILogger<AzureBlobDocumentStore> _logger;
-
-    // Local copy on purpose: this library pins Microsoft.Extensions.*.Abstractions
-    // to 10.x (VersionOverride) while CloudHealthOffice.Infrastructure builds on
-    // 8.x, so it does not reference Infrastructure. Every other project uses
-    // CloudHealthOffice.Infrastructure.Logging.LogSanitizer.Sanitize.
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
     public AzureBlobDocumentStore(
         BlobServiceClient client,
@@ -34,9 +29,16 @@ public class AzureBlobDocumentStore : IDocumentStore
         _logger = logger;
     }
 
+    public Task<DocumentUploadResult> UploadAsync(
+        string container, string blobName,
+        Stream content, string contentType,
+        CancellationToken ct = default) =>
+        UploadAsync(container, blobName, content, contentType, null, ct);
+
     public async Task<DocumentUploadResult> UploadAsync(
         string container, string blobName,
         Stream content, string contentType,
+        IReadOnlyDictionary<string, string>? tags,
         CancellationToken ct = default)
     {
         var containerClient = _client.GetBlobContainerClient(container);
@@ -46,27 +48,22 @@ public class AzureBlobDocumentStore : IDocumentStore
         var blobClient = containerClient.GetBlobClient(blobName);
         var options = new BlobUploadOptions
         {
-            HttpHeaders = new BlobHttpHeaders { ContentType = contentType }
+            HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
+            Tags = tags is null ? null : new Dictionary<string, string>(tags)
         };
 
-        var sizeBytes = content.CanSeek ? content.Length : -1L;
-
-        _logger.LogDebug("Uploading blob {Container}/{BlobName}", SanitizeForLog(container), SanitizeForLog(blobName));
+        _logger.LogDebug("Uploading blob {Container}/{BlobName}", DocumentKeys.SanitizeForLog(container), DocumentKeys.SanitizeForLog(blobName));
         await blobClient.UploadAsync(content, options, ct);
 
-        // Use actual size if stream was seekable; fall back to 0
-        if (sizeBytes < 0 && blobClient.Uri is not null)
-        {
-            var props = await blobClient.GetPropertiesAsync(cancellationToken: ct);
-            sizeBytes = props.Value.ContentLength;
-        }
+        // The stored size, not the stream's: a non-seekable stream has no length.
+        var props = await blobClient.GetPropertiesAsync(cancellationToken: ct);
 
         return new DocumentUploadResult
         {
-            Uri       = blobClient.Uri!,
+            Uri       = blobClient.Uri,
             Container = container,
             BlobName  = blobName,
-            SizeBytes = Math.Max(0, sizeBytes)
+            SizeBytes = props.Value.ContentLength
         };
     }
 
@@ -74,9 +71,7 @@ public class AzureBlobDocumentStore : IDocumentStore
         string container, string blobName,
         CancellationToken ct = default)
     {
-        var blobClient = _client
-            .GetBlobContainerClient(container)
-            .GetBlobClient(blobName);
+        var blobClient = Blob(container, blobName);
 
         try
         {
@@ -93,11 +88,7 @@ public class AzureBlobDocumentStore : IDocumentStore
         string container, string blobName,
         CancellationToken ct = default)
     {
-        var blobClient = _client
-            .GetBlobContainerClient(container)
-            .GetBlobClient(blobName);
-
-        var result = await blobClient.ExistsAsync(ct);
+        var result = await Blob(container, blobName).ExistsAsync(ct);
         return result.Value;
     }
 
@@ -105,13 +96,89 @@ public class AzureBlobDocumentStore : IDocumentStore
         string container, string blobName,
         CancellationToken ct = default)
     {
-        var blobClient = _client
-            .GetBlobContainerClient(container)
-            .GetBlobClient(blobName);
-
-        await blobClient.DeleteIfExistsAsync(cancellationToken: ct);
+        await Blob(container, blobName).DeleteIfExistsAsync(cancellationToken: ct);
     }
 
-    public Uri GetUri(string container, string blobName) =>
-        _client.GetBlobContainerClient(container).GetBlobClient(blobName).Uri;
+    public async Task SetTagsAsync(
+        string container, string blobName,
+        IReadOnlyDictionary<string, string> tags,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            await Blob(container, blobName).SetTagsAsync(new Dictionary<string, string>(tags), cancellationToken: ct);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            throw new DocumentNotFoundException(container, blobName);
+        }
+    }
+
+    public async Task<DocumentProperties> GetPropertiesAsync(
+        string container, string blobName,
+        CancellationToken ct = default)
+    {
+        var blobClient = Blob(container, blobName);
+        try
+        {
+            var props = await blobClient.GetPropertiesAsync(cancellationToken: ct);
+            var tags = props.Value.TagCount > 0
+                ? (await blobClient.GetTagsAsync(cancellationToken: ct)).Value.Tags
+                : new Dictionary<string, string>();
+
+            return new DocumentProperties
+            {
+                SizeBytes   = props.Value.ContentLength,
+                ContentType = props.Value.ContentType,
+                Tags        = new Dictionary<string, string>(tags)
+            };
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            throw new DocumentNotFoundException(container, blobName);
+        }
+    }
+
+    public async Task<DocumentUploadLink?> CreateUploadLinkAsync(
+        string container, string blobName, string contentType,
+        DateTimeOffset expiresAtUtc, CancellationToken ct = default)
+    {
+        var containerClient = _client.GetBlobContainerClient(container);
+        var blobClient = containerClient.GetBlobClient(blobName);
+        if (!blobClient.CanGenerateSasUri)
+        {
+            return null;
+        }
+
+        // The client PUTs straight to storage, so the container must already exist.
+        await containerClient.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: ct);
+
+        var sasBuilder = new BlobSasBuilder
+        {
+            BlobContainerName = container,
+            BlobName = blobName,
+            Resource = "b",
+            ExpiresOn = expiresAtUtc,
+            // HTTPS only, except a plain-HTTP development endpoint (Azurite).
+            Protocol = blobClient.Uri.Scheme == Uri.UriSchemeHttp ? SasProtocol.HttpsAndHttp : SasProtocol.Https,
+            ContentType = contentType
+        };
+        sasBuilder.SetPermissions(BlobSasPermissions.Write | BlobSasPermissions.Create);
+
+        return new DocumentUploadLink
+        {
+            Url = blobClient.GenerateSasUri(sasBuilder),
+            Headers = new Dictionary<string, string>
+            {
+                ["x-ms-blob-type"] = "BlockBlob",
+                ["Content-Type"] = contentType
+            },
+            ExpiresAtUtc = expiresAtUtc
+        };
+    }
+
+    public Uri GetUri(string container, string blobName) => Blob(container, blobName).Uri;
+
+    private BlobClient Blob(string container, string blobName) =>
+        _client.GetBlobContainerClient(container).GetBlobClient(blobName);
 }

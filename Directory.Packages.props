@@ -49,6 +49,9 @@
 
   <ItemGroup>
     <PackageVersion Include="AngleSharp" Version="1.5.0" />
+    <!-- Document store providers (CloudHealthOffice.DocumentStore). AWSSDK.S3 stays on 3.7: MongoDB.Driver.Core 2.x
+         (via MongoDB.Driver.Core.Extensions.DiagnosticSources) pins AWSSDK.Core < 4.0, so S3 4.x is NU1107. -->
+    <PackageVersion Include="AWSSDK.S3" Version="3.7.511.8" />
     <PackageVersion Include="AspNetCore.HealthChecks.NpgSql" Version="8.0.0" />
     <PackageVersion Include="AspNetCore.HealthChecks.Uris" Version="8.0.1" />
     <PackageVersion Include="Azure.Core" Version="1.44.1" />
@@ -70,6 +73,7 @@
     <PackageVersion Include="CsvHelper" Version="33.0.1" />
     <PackageVersion Include="EphemeralMongo" Version="3.2.0" />
     <PackageVersion Include="FluentAssertions" Version="6.12.2" />
+    <PackageVersion Include="Google.Cloud.Storage.V1" Version="5.0.0" />
     <PackageVersion Include="Hl7.Fhir.R4" Version="5.10.2" />
     <PackageVersion Include="MessagePack" Version="2.5.303" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.32" />

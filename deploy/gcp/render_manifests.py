@@ -31,12 +31,19 @@ What it changes:
     still burst; use the default profile for benchmark runs on a larger cluster.
   - Kafka and messaging settings, probe paths and per-service settings that
     scripts/deploy-local.sh patches after applying are set here up front.
+  - With --documents-bucket and --documents-service-account, the services
+    that store documents (DOCUMENT_SERVICES) use Google Cloud Storage: each
+    gets its own Kubernetes service account bound to the Google service
+    account infrastructure/gcp creates (Workload Identity), and
+    DocumentStore__Provider=Gcs with the bucket. Without them they keep the
+    manifests' Azure Blob settings.
 
 Usage:
   render_manifests.py --registry REGION-docker.pkg.dev/PROJECT/cho --tag SHA \
       --kafka-bootstrap cloudhealthoffice-kafka-kafka-bootstrap.kafka.svc:9092 \
       [--ai-examiner] [--claims-replicas 2] [--benefit-plan-replicas 2] \
-      [--storage-class cho-pd-standard] [--resource-profile small] [--list-images]
+      [--storage-class cho-pd-standard] [--resource-profile small] \
+      [--documents-bucket BUCKET --documents-service-account GSA_EMAIL] [--list-images]
 """
 
 from __future__ import annotations
@@ -112,6 +119,12 @@ MANAGED_SECRETS = {
     "member-document-service-secret",
     "provider-verification-service-secrets",
 }
+
+# Services that store document bytes through IDocumentStore. Keep in step with
+# var.document_service_accounts in infrastructure/gcp: each name is both the
+# Deployment and the Kubernetes service account Workload Identity trusts.
+DOCUMENT_SERVICES = ("attachment-service", "member-document-service")
+WORKLOAD_IDENTITY_ANNOTATION = "iam.gke.io/gcp-service-account"
 
 # Probe paths scripts/deploy-local.sh patches to /health/live.
 READINESS_TO_LIVE = {"appeals-service", "consent-service", "personal-representative-service"}
@@ -312,12 +325,32 @@ def transform(doc: dict, args: argparse.Namespace) -> dict | None:
                 set_env(container, key, value)
         if name == "portal":
             set_env(container, "XDG_DATA_HOME", "/tmp")
+        if name in DOCUMENT_SERVICES and args.documents_bucket:
+            spec["serviceAccountName"] = name
+            set_env(container, "DocumentStore__Provider", "Gcs")
+            set_env(container, "DocumentStore__Gcs__Bucket", args.documents_bucket)
         if name == "smart-auth-service":
             # The only service whose manifest and Development settings name no
             # service-token client id; the demo token config requires one.
             set_env(container, "ChoAuth__ServiceToken__ClientId", "smart-auth-service")
 
     return doc
+
+
+def document_service_accounts(args: argparse.Namespace) -> list[dict]:
+    """Kubernetes service accounts for DOCUMENT_SERVICES, bound to the Google one."""
+    return [
+        {
+            "apiVersion": "v1",
+            "kind": "ServiceAccount",
+            "metadata": {
+                "name": name,
+                "namespace": "cloudhealthoffice",
+                "annotations": {WORKLOAD_IDENTITY_ANNOTATION: args.documents_service_account},
+            },
+        }
+        for name in DOCUMENT_SERVICES
+    ]
 
 
 def main() -> int:
@@ -332,6 +365,10 @@ def main() -> int:
                         help="StorageClass for the services' volumes (default: %(default)s)")
     parser.add_argument("--resource-profile", choices=("default", "small"), default="default",
                         help="small lowers CPU requests to fit one 8-vCPU node")
+    parser.add_argument("--documents-bucket", default="",
+                        help="Google Cloud Storage bucket for documents (terraform output documents_bucket)")
+    parser.add_argument("--documents-service-account", default="",
+                        help="Google service account the document services act as (terraform output documents_service_account)")
     parser.add_argument("--list-images", action="store_true", help="Print 'name dockerfile' for each image to build, then exit")
     args = parser.parse_args()
 
@@ -341,8 +378,10 @@ def main() -> int:
         return 0
     if not args.registry:
         parser.error("--registry is required")
+    if bool(args.documents_bucket) != bool(args.documents_service_account):
+        parser.error("--documents-bucket and --documents-service-account go together")
 
-    rendered = []
+    rendered = document_service_accounts(args) if args.documents_bucket else []
     for path in manifest_paths():
         if not path.exists():
             print(f"warning: manifest not found: {path.relative_to(REPO_ROOT)}", file=sys.stderr)

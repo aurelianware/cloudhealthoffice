@@ -12,6 +12,7 @@ flowchart LR
   gha["GitHub Actions<br/>deploy-gcp-gke.yml"]
   subgraph gcp["Google Cloud project"]
     ar["Artifact Registry<br/>cho"]
+    gcs[("Cloud Storage<br/>documents bucket")]
     subgraph gke["GKE: cho-demo"]
       subgraph ns["namespace cloudhealthoffice"]
         portal["Portal (Blazor)"]
@@ -34,12 +35,13 @@ flowchart LR
   svc --> mongo
   svc --> redis
   svc --> kafka
+  svc -- "Workload Identity" --> gcs
   svc -. "optional" .-> anthropic
 ```
 
 | Piece | Where it is defined |
 |---|---|
-| Cluster, image repository, keyless GitHub access, budget alert | [`infrastructure/gcp/`](../../infrastructure/gcp/README.md) (Terraform) |
+| Cluster, image repository, documents bucket, keyless GitHub access, budget alert | [`infrastructure/gcp/`](../../infrastructure/gcp/README.md) (Terraform) |
 | Build and deploy | [`.github/workflows/deploy-gcp-gke.yml`](../../.github/workflows/deploy-gcp-gke.yml), [`scripts/deploy-gke.sh`](../../scripts/deploy-gke.sh) |
 | GKE-specific manifest changes | [`deploy/gcp/render_manifests.py`](../../deploy/gcp/render_manifests.py) (the service manifests themselves are shared with AKS and local) |
 | Kafka | [`deploy/gcp/kafka/kafka-cluster.yaml`](../../deploy/gcp/kafka/kafka-cluster.yaml), topics from [`infrastructure/kafka/topics.yaml`](../../infrastructure/kafka/topics.yaml) |

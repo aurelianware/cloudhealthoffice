@@ -185,3 +185,45 @@ def test_fhir_serves_cho_native_patient_and_coverage_labelled_synthetic():
     assert config["data"]["FhirAdapters__Sources__Patient"] == "ChoNative"
     assert config["data"]["FhirAdapters__Sources__Coverage"] == "ChoNative"
     assert config["data"]["FhirAdapters__DataClassification"] == "synthetic"
+
+
+def test_document_services_keep_their_manifest_storage_without_a_bucket():
+    docs = render()
+    names = {d["metadata"]["name"] for d in docs if d["kind"] == "ServiceAccount"}
+    assert not names & {"attachment-service", "member-document-service"}
+    for name in ("attachment-service", "member-document-service"):
+        dep = deployments(docs)[name]
+        assert dep["spec"]["template"]["spec"].get("serviceAccountName") != name
+        assert "DocumentStore__Provider" not in env(dep)
+
+
+def test_document_services_use_the_bucket_through_workload_identity():
+    gsa = "cho-documents@demo-project.iam.gserviceaccount.com"
+    docs = render("--documents-bucket", "demo-project-cho-documents",
+                  "--documents-service-account", gsa)
+    accounts = [d for d in docs if d["kind"] == "ServiceAccount"]
+    document_accounts = {"attachment-service", "member-document-service"}
+    # One account each: no manifest already defines one with these names.
+    assert sorted(a["metadata"]["name"] for a in accounts if a["metadata"]["name"] in document_accounts) \
+        == sorted(document_accounts)
+    accounts = {a["metadata"]["name"]: a for a in accounts if a["metadata"]["name"] in document_accounts}
+    deps = deployments(docs)
+    for name in ("attachment-service", "member-document-service"):
+        assert accounts[name]["metadata"]["annotations"]["iam.gke.io/gcp-service-account"] == gsa
+        assert deps[name]["spec"]["template"]["spec"]["serviceAccountName"] == name
+        assert env(deps[name])["DocumentStore__Provider"] == "Gcs"
+        assert env(deps[name])["DocumentStore__Gcs__Bucket"] == "demo-project-cho-documents"
+    # No other service gets the document identity.
+    others = [n for n, d in deps.items()
+              if n not in document_accounts
+              and d["spec"]["template"]["spec"].get("serviceAccountName") in document_accounts]
+    assert not others
+
+
+def test_document_bucket_needs_its_service_account():
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--registry", REGISTRY, "--documents-bucket", "b"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "go together" in result.stderr

@@ -13,6 +13,7 @@ locals {
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "secretmanager.googleapis.com",
+    "storage.googleapis.com",
     "sts.googleapis.com",
   ]
 
@@ -97,6 +98,12 @@ resource "google_container_cluster" "cho" {
     channel = "REGULAR"
   }
 
+  # Workload Identity: pods act as Google service accounts without keys
+  # (document storage below). Autopilot always has it; Standard needs it set.
+  workload_identity_config {
+    workload_pool = "${var.project_id}.svc.id.goog"
+  }
+
   resource_labels = local.labels
 
   depends_on = [google_project_service.required]
@@ -123,12 +130,94 @@ resource "google_container_node_pool" "demo" {
     disk_size_gb = var.node_disk_size_gb
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
     labels       = local.labels
+
+    # Pods get their Kubernetes service account's Google identity, not the node's.
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
   }
 
   management {
     auto_repair  = true
     auto_upgrade = true
   }
+}
+
+# ── Document storage ─────────────────────────────────────────────────────────
+
+# One private bucket for every document the services store (IDocumentStore's
+# Gcs provider); each CHO container is a prefix inside it. Versioning keeps a
+# replaced or deleted object recoverable for var.documents_noncurrent_days.
+resource "google_storage_bucket" "documents" {
+  project  = var.project_id
+  name     = coalesce(var.documents_bucket_name, "${var.project_id}-cho-documents")
+  location = var.region
+  labels   = local.labels
+
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = var.documents_force_destroy
+
+  versioning {
+    enabled = true
+  }
+
+  # Replaced and deleted versions are kept for a while, then removed.
+  lifecycle_rule {
+    condition {
+      days_since_noncurrent_time = var.documents_noncurrent_days
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  # Pre-signed uploads land in a "<path>.upload" staging object that finalize
+  # moves into place; one never finalized is abandoned after a day.
+  lifecycle_rule {
+    condition {
+      age            = 1
+      matches_suffix = [".upload"]
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  depends_on = [google_project_service.required]
+}
+
+# The identity the document services run as (Workload Identity). It can read
+# and write objects in the documents bucket only, and sign upload links as
+# itself through the IAM signBlob API (pre-signed uploads).
+resource "google_service_account" "documents" {
+  project      = var.project_id
+  account_id   = "cho-documents"
+  display_name = "CHO document storage"
+  description  = "Kubernetes service accounts of the CHO document services (Workload Identity)."
+}
+
+resource "google_storage_bucket_iam_member" "documents_objects" {
+  bucket = google_storage_bucket.documents.name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_service_account.documents.email}"
+}
+
+resource "google_service_account_iam_member" "documents_sign_self" {
+  service_account_id = google_service_account.documents.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.documents.email}"
+}
+
+resource "google_service_account_iam_member" "documents_workload_identity" {
+  for_each = toset(var.document_service_accounts)
+
+  service_account_id = google_service_account.documents.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.kubernetes_namespace}/${each.value}]"
+
+  # The workload pool exists once the cluster has Workload Identity.
+  depends_on = [google_container_cluster.cho]
 }
 
 # ── Keyless GitHub Actions access (Workload Identity Federation) ─────────────

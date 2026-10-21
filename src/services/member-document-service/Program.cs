@@ -1,4 +1,4 @@
-using Azure.Storage.Blobs;
+using CloudHealthOffice.DocumentStore;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
@@ -38,15 +38,9 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-builder.Services.AddSingleton(sp =>
-{
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var connectionString = configuration["BlobStorage:ConnectionString"]
-        ?? throw new InvalidOperationException("BlobStorage:ConnectionString configuration missing");
-    return new BlobServiceClient(connectionString);
-});
-
-builder.Services.AddScoped<IMemberDocumentBlobService, MemberDocumentBlobService>();
+// Document bytes go to the configured store (Azure Blob, Google Cloud Storage
+// or S3; see AddChoDocumentStore). This service keeps the records in MongoDB.
+builder.Services.AddChoDocumentStore(builder.Environment.EnvironmentName);
 builder.Services.AddSingleton<IRetentionPolicyService, RetentionPolicyService>();
 builder.Services.AddSingleton(sp => MemberDocumentUploadPolicy.FromConfiguration(
     sp.GetRequiredService<IConfiguration>()));
@@ -78,6 +72,9 @@ builder.Services.AddChoHealthChecks(options =>
 builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();
+
+// Fail at startup, not on the first upload, when the document store is misconfigured.
+app.Services.GetRequiredService<IDocumentStore>();
 
 app.UseChoObservability();
 

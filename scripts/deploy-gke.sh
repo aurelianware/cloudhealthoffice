@@ -27,6 +27,10 @@
 #                            replica each); default keeps the manifests' requests
 #   CLAIMS_REPLICAS  BENEFIT_PLAN_REPLICAS   (1 with the small profile, else 2)
 #   ROLLOUT_TIMEOUT=900s
+#   DOCUMENTS_BUCKET  DOCUMENTS_SERVICE_ACCOUNT
+#                            Google Cloud Storage for attachment-service and member-document-service
+#                            (terraform outputs documents_bucket and documents_service_account in
+#                            infrastructure/gcp). Without them, uploaded documents are not stored.
 
 set -Eeuo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -232,6 +236,11 @@ render_args=(--registry "$GAR_REPOSITORY" --tag "$IMAGE_TAG"
   --storage-class "$STORAGE_CLASS" --resource-profile "$RESOURCE_PROFILE")
 [[ -n "$KAFKA_VALUE" ]] && render_args+=(--kafka-bootstrap "$KAFKA_VALUE")
 [[ "$AI_EXAMINER" == true ]] && render_args+=(--ai-examiner)
+if [[ -n "${DOCUMENTS_BUCKET:-}" && -n "${DOCUMENTS_SERVICE_ACCOUNT:-}" ]]; then
+  render_args+=(--documents-bucket "$DOCUMENTS_BUCKET" --documents-service-account "$DOCUMENTS_SERVICE_ACCOUNT")
+else
+  warn "DOCUMENTS_BUCKET / DOCUMENTS_SERVICE_ACCOUNT not set: attachment and member document uploads will fail (no storage). Set them from the infrastructure/gcp outputs."
+fi
 rendered="$(mktemp)"
 python3 deploy/gcp/render_manifests.py "${render_args[@]}" > "$rendered"
 apply_rendered() { apply_out="$(kubectl apply -n "$NAMESPACE" -f "$rendered" 2>&1)"; }

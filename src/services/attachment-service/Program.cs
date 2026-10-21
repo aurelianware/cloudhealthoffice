@@ -69,14 +69,9 @@ if (builder.Services.AddChoDatabase(builder.Configuration) is null)
         "Attachment Service requires a database. Configure MongoDb:ConnectionString.");
 }
 
-// Configure Azure Blob Storage + IDocumentStore
-builder.Services.AddSingleton(s =>
-{
-    var config = s.GetRequiredService<IConfiguration>();
-    var connectionString = config["BlobStorage:ConnectionString"] ?? throw new InvalidOperationException("BlobStorage:ConnectionString not configured");
-    return new Azure.Storage.Blobs.BlobServiceClient(connectionString);
-});
-builder.Services.AddSingleton<IDocumentStore, AzureBlobDocumentStore>();
+// Attachment bytes go to the configured store (Azure Blob, Google Cloud
+// Storage or S3; see AddChoDocumentStore).
+builder.Services.AddChoDocumentStore(builder.Environment.EnvironmentName);
 
 builder.Services.AddScoped<IAttachmentRepository, AttachmentRepositoryMongo>();
 
@@ -119,6 +114,9 @@ builder.Services.AddChoHealthChecks(options =>
 builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();
+
+// Fail at startup, not on the first upload, when the document store is misconfigured.
+app.Services.GetRequiredService<IDocumentStore>();
 
 app.UseChoObservability();
 

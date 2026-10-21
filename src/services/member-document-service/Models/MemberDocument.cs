@@ -90,7 +90,7 @@ public class MemberDocument
 
     /// <summary>
     /// Set while a pre-signed upload has not been finalized: the staging blob
-    /// the SAS URL writes to. The document's content cannot be downloaded until
+    /// the upload link writes to. The document's content cannot be downloaded until
     /// finalize has validated the staging blob and copied it to <see cref="BlobPath"/>.
     /// </summary>
     [StringLength(500)]
@@ -175,6 +175,16 @@ public sealed class PresignedUploadResponse
 {
     public string DocumentId { get; set; } = string.Empty;
     public string UploadUrl { get; set; } = string.Empty;
+
+    /// <summary>HTTP method for the upload (PUT).</summary>
+    public string UploadMethod { get; set; } = "PUT";
+
+    /// <summary>
+    /// Headers the upload request must carry, exactly as given. They depend on
+    /// the storage behind the link (Azure needs x-ms-blob-type), so clients copy
+    /// them rather than assuming a provider.
+    /// </summary>
+    public Dictionary<string, string> UploadHeaders { get; set; } = new();
     public string BlobPath { get; set; } = string.Empty;
     public DateTime ExpiresAtUtc { get; set; }
 }

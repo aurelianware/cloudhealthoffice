@@ -46,6 +46,8 @@ Add these to the repository settings (Settings → Secrets and variables → Act
 | Variable | `GKE_CLUSTER` | `terraform output -raw cluster_name` |
 | Variable | `GKE_LOCATION` | `terraform output -raw cluster_location` (the zone for Standard, the region for Autopilot; update it if you switch) |
 | Variable | `GAR_REPOSITORY` | `terraform output -raw artifact_registry_url` |
+| Variable | `DOCUMENTS_BUCKET` | `terraform output -raw documents_bucket` |
+| Variable | `DOCUMENTS_SERVICE_ACCOUNT` | `terraform output -raw documents_service_account` |
 
 Neither secret is a credential. They identify the federation provider and service account; GitHub's short-lived OIDC token is what authenticates.
 
@@ -61,10 +63,19 @@ Application secrets for the demo (for example `ANTHROPIC_API_KEY` for the AI cla
 
 `roles/container.admin` is broader than a production deployer should hold. It is acceptable here because the project exists only for the demo.
 
+## Document storage
+
+attachment-service and member-document-service store document bytes in one private bucket (`<project_id>-cho-documents` unless `documents_bucket_name` is set). Each CHO container is a prefix inside it, for example `member-documents/tenants/<tenant>/...`.
+
+- **Access:** uniform bucket-level access, public access prevention enforced. The services reach it as the `cho-documents` Google service account through Workload Identity: no keys exist. That account has `roles/storage.objectUser` on this bucket only, and `roles/iam.serviceAccountTokenCreator` on itself so it can sign pre-signed upload links.
+- **Which pods:** only the Kubernetes service accounts in `document_service_accounts` (default `attachment-service` and `member-document-service` in `cloudhealthoffice`). `deploy/gcp/render_manifests.py` creates those accounts and points the two Deployments at them when `DOCUMENTS_BUCKET` and `DOCUMENTS_SERVICE_ACCOUNT` are set.
+- **Versions:** versioning is on; a replaced or deleted version is kept `documents_noncurrent_days` (30) days. Abandoned pre-signed staging uploads (`*.upload`) are deleted after a day.
+- **Workload Identity** is enabled on the cluster and the node pool (`GKE_METADATA`). On an existing Standard cluster, applying this updates the cluster in place and rolls the node pool.
+
 ## Tear down
 
 ```bash
 terraform destroy -var="project_id=YOUR_PROJECT_ID"
 ```
 
-This deletes the cluster, the image repository and the federation setup, and stops all charges they incur. Deleting the whole project (`gcloud projects delete YOUR_PROJECT_ID`) also works if the project was created only for the demo.
+This deletes the cluster, the image repository and the federation setup, and stops all charges they incur. The documents bucket is not deleted while it holds objects, so stored documents are never removed by accident: empty it first, or apply with `-var="documents_force_destroy=true"` before destroying. Deleting the whole project (`gcloud projects delete YOUR_PROJECT_ID`) also works if the project was created only for the demo.
