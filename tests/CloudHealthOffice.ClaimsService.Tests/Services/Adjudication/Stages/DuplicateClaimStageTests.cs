@@ -117,8 +117,11 @@ public class DuplicateClaimStageTests
     [Theory]
     [InlineData("7")]
     [InlineData("8")]
-    public async Task Replacement_and_void_claims_are_never_flagged(string frequencyCode)
+    public async Task An_unlinked_replacement_or_void_is_checked_like_any_claim(string frequencyCode)
     {
+        // Linked corrections arrive as adjustment versions (PredecessorVersionId,
+        // below). One that reaches adjudication unlinked must not pay twice:
+        // it is caught as a duplicate of its original (here an exact one: denied).
         PriorClaimsAre(PriorClaim());
         var incoming = IncomingClaim();
         incoming.ClaimFrequencyCode = frequencyCode;
@@ -126,10 +129,8 @@ public class DuplicateClaimStageTests
 
         var result = await NewStage().ExecuteAsync(ctx, CancellationToken.None);
 
-        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
-        Assert.Null(ctx.PendDetails);
-        Assert.Null(ctx.AdjudicationResult.DenialReasonCode);
-        await _repository.DidNotReceiveWithAnyArgs().FindDuplicateCandidatesAsync(
+        Assert.NotEqual(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        await _repository.ReceivedWithAnyArgs().FindDuplicateCandidatesAsync(
             default!, default!, default, default, default!, default);
     }
 

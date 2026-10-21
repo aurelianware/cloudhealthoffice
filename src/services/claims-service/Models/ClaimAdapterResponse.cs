@@ -155,6 +155,9 @@ public class AdapterClaim
     public AiExamination? AiExamination { get; set; }
 
     public string? PriorAuthorizationNumber { get; set; }
+
+    /// <summary>837 2300 REF*F8; see <see cref="Claim.OriginalClaimReference"/>.</summary>
+    public string? OriginalClaimReference { get; set; }
     public string? ReferralNumber { get; set; }
     public string? RelatedCausesCode { get; set; }
     public DateTime? AccidentDate { get; set; }
@@ -226,6 +229,7 @@ public class AdapterClaim
         PendDetails = src.PendDetails,
         AiExamination = src.AiExamination,
         PriorAuthorizationNumber = src.PriorAuthorizationNumber,
+        OriginalClaimReference = src.OriginalClaimReference,
         ReferralNumber = src.ReferralNumber,
         RelatedCausesCode = src.RelatedCausesCode,
         AccidentDate = src.AccidentDate,
@@ -293,6 +297,7 @@ public class AdapterClaim
         PendDetails = PendDetails,
         AiExamination = AiExamination,
         PriorAuthorizationNumber = PriorAuthorizationNumber,
+        OriginalClaimReference = OriginalClaimReference,
         ReferralNumber = ReferralNumber,
         RelatedCausesCode = RelatedCausesCode,
         AccidentDate = AccidentDate,

@@ -251,6 +251,13 @@ public record ClaimHeader
     public string? DischargeDate { get; init; }
     public string? AdmissionTypeCode { get; init; }
     public string? PriorAuthorizationNumber { get; init; }
+
+    /// <summary>
+    /// 2300 REF*F8 — the payer claim control number of the claim a
+    /// replacement (frequency 7) or void (frequency 8) amends: the CLP07 the
+    /// payer sent on its 835.
+    /// </summary>
+    public string? OriginalClaimReference { get; init; }
     public RenderingProviderInfo? RenderingProvider { get; init; }
 
     // ── Institutional (837I 2300) ─────────────────────────────────

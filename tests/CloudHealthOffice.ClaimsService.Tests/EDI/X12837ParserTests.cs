@@ -397,4 +397,26 @@ public class X12837ParserTests
         // And survives the adapter round trip to the stored claim.
         Assert.Equal(3, claim.ToClaim().AttachmentReports.Count);
     }
+
+    [Fact]
+    public void Parse_RefF8_IsTheOriginalClaimAReplacementAmends()
+    {
+        var replacement = FmmisHlSample
+            .Replace("CLM*E2E-FL-SAMPLE-0001*200.00***11:B:1", "CLM*E2E-FL-SAMPLE-0001*200.00***11:B:7")
+            .Replace("HI*ABK:J06.9~", "REF*F8*ORIGINAL-CLAIM-9~HI*ABK:J06.9~");
+
+        var claim = X12837Parser.Parse(replacement)[0];
+        var mapped = X12837ClaimMapper.Map(claim, "tenant-1");
+
+        Assert.Equal("ORIGINAL-CLAIM-9", claim.ClaimHeader.OriginalClaimReference);
+        Assert.Equal("7", mapped.ClaimFrequencyCode);
+        Assert.Equal("ORIGINAL-CLAIM-9", mapped.OriginalClaimReference);
+        Assert.Equal("ORIGINAL-CLAIM-9", mapped.ToClaim().OriginalClaimReference);
+    }
+
+    [Fact]
+    public void Parse_RefF8_InAnotherPayersLoop_IsNotTheOriginal()
+    {
+        Assert.Null(X12837Parser.Parse(FmmisHlSample)[0].ClaimHeader.OriginalClaimReference);
+    }
 }

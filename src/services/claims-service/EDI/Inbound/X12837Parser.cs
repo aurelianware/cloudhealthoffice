@@ -103,6 +103,8 @@ public static class X12837Parser
         public string? FacilityTypeCode;
         // 2300 REF*G1 — prior authorization number for the claim.
         public string? PriorAuthorizationNumber;
+        // 2300 REF*F8 — the original claim a replacement or void amends.
+        public string? OriginalClaimReference;
         // 2300 / 2400 PWK — paperwork sent separately, with its control number.
         public List<AttachmentReport> AttachmentReports = [];
         public List<DiagnosisCode> DiagnosisCodes = [];
@@ -201,6 +203,9 @@ public static class X12837Parser
             Parse2400PriorAuthorization(s, seg);
         else if (s.ClaimOpen && s.CurrentLine is null && !s.HlSinceClaim && !s.InOtherPayerLoop() && seg.Element(0) == "G1")
             Parse2300PriorAuthorization(s, seg);
+        else if (s.ClaimOpen && s.CurrentLine is null && !s.HlSinceClaim && !s.InOtherPayerLoop() && seg.Element(0) == "F8"
+                 && seg.Element(1)?.Trim() is { Length: > 0 } originalClaim)
+            s.OriginalClaimReference = originalClaim;
         else if (s.LastNm1Context == "PE" && s.PayToPlan is not null && seg.Element(0) == "EI")
             s.PayToPlan = s.PayToPlan with { TaxId = seg.Element(1) };
         else if (s.LastNm1Context == "85" && s.BillingProvider is not null && seg.Element(0) == "EI")
@@ -906,6 +911,7 @@ public static class X12837Parser
             FrequencyCode = s.FrequencyCode,
             FacilityTypeCode = s.FacilityTypeCode,
             PriorAuthorizationNumber = s.PriorAuthorizationNumber,
+            OriginalClaimReference = s.OriginalClaimReference,
             DiagnosisCodes = s.DiagnosisCodes.Count > 0 ? [.. s.DiagnosisCodes] : null,
             // The principal diagnosis is the ABK/BK composite when
             // present — not blindly the first HI element, which on
@@ -953,6 +959,7 @@ public static class X12837Parser
         s.FrequencyCode = null;
         s.FacilityTypeCode = null;
         s.PriorAuthorizationNumber = null;
+        s.OriginalClaimReference = null;
         s.AttachmentReports = [];
         s.DiagnosisCodes = [];
         s.AdmissionDate = null;
