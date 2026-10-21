@@ -29,7 +29,7 @@ var signingOptions = builder.Configuration.GetSection(TokenSigningOptions.Sectio
 builder.Services.AddSingleton(serviceOptions);
 builder.Services.AddSingleton(signingOptions);
 builder.Services.AddSingleton<ISigningMaterialSource>(sp =>
-    TokenSigningSetup.Create(signingOptions, sp.GetRequiredService<IHostEnvironment>()));
+    TokenSigningSetup.Create(signingOptions, sp.GetRequiredService<IHostEnvironment>(), sp.GetService<ICloudKmsSigner>()));
 builder.Services.AddSingleton<TokenAudit>();
 builder.Services.AddScoped<TokenExchangeService>();
 

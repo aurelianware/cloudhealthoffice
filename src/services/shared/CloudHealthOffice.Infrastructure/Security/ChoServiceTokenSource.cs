@@ -19,8 +19,9 @@ namespace CloudHealthOffice.Infrastructure.Security;
 /// <list type="bullet">
 ///   <item><see cref="ChoServiceTokenSourceKind.TokenService"/> (deployed
 ///   environments): token-service issues the token after authenticating this
-///   service by its Azure workload identity. The service holds no signing key,
-///   so it can only ever obtain tokens naming itself.</item>
+///   service by its workload identity (Azure workload identity, or its
+///   Kubernetes service account). The service holds no signing key, so it can
+///   only ever obtain tokens naming itself.</item>
 ///   <item><see cref="ChoServiceTokenSourceKind.LocalKey"/> (Development and
 ///   Testing only): the service signs with a local key, as before.</item>
 /// </list>
@@ -120,7 +121,10 @@ public static class ChoServiceTokens
 
         services.TryAddSingleton<IChoServiceTokenSource>(sp => new TokenServiceChoServiceTokenSource(
             st,
-            sp.GetService<ChoServiceTokenCredential>()?.Credential ?? DefaultCredential(st),
+            sp.GetService<ChoServiceTokenCredential>()?.Credential
+                ?? (st.Credential == ChoServiceIdentityCredential.KubernetesServiceAccount
+                    ? new KubernetesServiceAccountTokenCredential(st.ServiceAccountTokenFile, sp.GetService<TimeProvider>())
+                    : DefaultCredential(st)),
             sp.GetRequiredService<IHttpClientFactory>().CreateClient(TokenServiceChoServiceTokenSource.HttpClientName),
             sp.GetService<ILogger<TokenServiceChoServiceTokenSource>>(),
             sp.GetService<TimeProvider>()));
@@ -253,15 +257,16 @@ public sealed class TokenServiceChoServiceTokenSource : IChoServiceTokenSource
         string entraToken;
         try
         {
-            var access = await _credential.GetTokenAsync(new TokenRequestContext([_options.EntraScope!]), ct);
+            var scopes = string.IsNullOrWhiteSpace(_options.EntraScope) ? Array.Empty<string>() : new[] { _options.EntraScope };
+            var access = await _credential.GetTokenAsync(new TokenRequestContext(scopes), ct);
             entraToken = access.Token;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError("Service token for {ClientId} unavailable: no Entra token for {Scope} ({Error})",
-                _options.ClientId, _options.EntraScope, ex.GetType().Name);
+            _logger.LogError("Service token for {ClientId} unavailable: no {Credential} proof for token-service ({Error})",
+                _options.ClientId, _options.Credential, ex.GetType().Name);
             throw new ChoServiceTokenUnavailableException(
-                "No Entra workload-identity token could be obtained for token-service.", ex);
+                "No workload-identity proof could be obtained for token-service.", ex);
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, ExchangePath)
@@ -336,5 +341,53 @@ public sealed class TokenServiceChoServiceTokenSource : IChoServiceTokenSource
         [JsonPropertyName("expires_in")] public int ExpiresIn { get; set; }
         [JsonPropertyName("client_id")] public string? ClientId { get; set; }
         [JsonPropertyName("tenant_id")] public string? TenantId { get; set; }
+    }
+}
+
+/// <summary>
+/// The pod's projected Kubernetes service-account token, presented to
+/// token-service as proof of this service's identity. The kubelet rotates the
+/// file before it expires, so it is read on every exchange (exchanges are
+/// rare: CHO service tokens are cached per tenant). Scopes are ignored; the
+/// token's audience is fixed by the projected volume.
+/// </summary>
+public sealed class KubernetesServiceAccountTokenCredential : TokenCredential
+{
+    /// <summary>Where the CHO manifests project the token-service-audience token.</summary>
+    public const string DefaultTokenFile = "/var/run/secrets/cho/token-service/token";
+
+    private readonly string _path;
+    private readonly TimeProvider _time;
+
+    public KubernetesServiceAccountTokenCredential(string path, TimeProvider? time = null)
+    {
+        _path = path;
+        _time = time ?? TimeProvider.System;
+    }
+
+    public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken)
+        => Read(File.ReadAllText(_path));
+
+    public override async ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken)
+        => Read(await File.ReadAllTextAsync(_path, cancellationToken));
+
+    private AccessToken Read(string content)
+    {
+        var token = content.Trim();
+        if (token.Length == 0)
+            throw new InvalidOperationException($"The service-account token file {_path} is empty.");
+
+        // The expiry is informational (token-service validates the token); an
+        // unreadable one falls back to a short horizon so the file is re-read soon.
+        DateTimeOffset expires;
+        try
+        {
+            expires = new DateTimeOffset(new Microsoft.IdentityModel.JsonWebTokens.JsonWebToken(token).ValidTo, TimeSpan.Zero);
+        }
+        catch (ArgumentException)
+        {
+            expires = _time.GetUtcNow().AddMinutes(1);
+        }
+        return new AccessToken(token, expires);
     }
 }

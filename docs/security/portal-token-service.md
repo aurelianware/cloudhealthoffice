@@ -471,7 +471,7 @@ Legacy oid-only links remain limited to the tenant's own directory (rule 1).
 
 | Environment | Key source | Issuer |
 |---|---|---|
-| Production | `TokenSigning:KeyVaultKeyId`. Required; PEM and symmetric keys are refused at startup | `cho-token-service` |
+| Production | `TokenSigning:KeyVaultKeyId` (Azure) or `TokenSigning:CloudKmsKeyVersion` (Google Cloud), exactly one. Required; PEM and symmetric keys are refused at startup | `cho-token-service` |
 | Staging and other non-production | Key Vault, or `TokenSigning:PrivateKeyPem` (RSA or EC P-256) | `cho-token-service` |
 | Development / Testing | Above, or `TokenSigning:SymmetricKey` (the shared development key) | `cho-portal-dev` in `appsettings.Development.json`, so local services that already trust the development user issuer accept these tokens unchanged |
 
@@ -490,6 +490,29 @@ az keyvault key download --vault-name <vault> -n cho-token-signing --version <v>
 
 Use a **versioned** `KeyVaultKeyId` and do not enable auto-rotation on this
 key. Services pin the public key, so a version change must be coordinated.
+
+**Cloud KMS signing (Google Cloud).** Set `TokenSigning:CloudKmsKeyVersion` to a
+full, explicit key version name
+(`projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>/cryptoKeyVersions/<n>`).
+The key's purpose is `ASYMMETRIC_SIGN` with `EC_SIGN_P256_SHA256` (ES256,
+recommended) or `RSA_SIGN_PKCS1_{2048,3072,4096}_SHA256` (RS256). The service
+reads the public key once and signs every token with Cloud KMS's
+`AsymmetricSign`, sending only the SHA-256 digest; the private key never leaves
+Cloud KMS. ECDSA signatures come back DER-encoded and are converted to the JWS
+`r || s` form. Credentials are Application Default Credentials, which on GKE
+is token-service's Workload Identity. That Google service account needs
+**Cloud KMS CryptoKey Signer/Verifier** and **Cloud KMS CryptoKey Public Key
+Viewer** on the key and nothing else. `infrastructure/gcp/token-signing.tf`
+(`enable_token_signing_kms = true`) creates the key ring, an HSM-protected key,
+the service account, the two key grants and the Workload Identity binding.
+
+```bash
+gcloud kms keys versions get-public-key 1 --key token-signing --keyring cho \
+  --location us-west1 --output-file cho-token-service.pub.pem
+```
+
+As with Key Vault, the version is pinned: rotate by adding a key version and
+moving to a new issuer name (below).
 
 **Rotation.** The shared `ChoAuth` layer accepts one key per issuer name.
 Rotate by moving to a new issuer name:
@@ -744,6 +767,75 @@ credential; set `ChoAuth__ServiceToken__ManagedIdentityClientId` to it.
    from every service's trust, delete the `cho-internal` private key from Key
    Vault and the `token-service-secrets` Secret, and rotate nothing else: the
    new tokens never depended on it.
+
+### Kubernetes service identity (GKE, EKS, on premises)
+
+Without Entra workload identity (any cluster outside AKS), services prove who
+they are with a **projected Kubernetes service-account token** instead. No
+cloud identity service is involved, so the same configuration works on every
+conformant cluster.
+
+```
+claims-service pod (service account claims-service)
+   │ reads /var/run/secrets/cho/token-service/token
+   │   (serviceAccountToken projected volume, audience cho-token-service, rotated by the kubelet)
+   ▼  POST http://token-service/v1/token/service   Authorization: Bearer <SA token>   { "tenantId": "acme" }
+token-service ──(validate: signature against the cluster's service-account issuer keys, iss, aud = cho-token-service,
+   │             short lifetime, pod-bound kubernetes.io claim agreeing with sub; registry: namespace/service account → client id)
+   ▼
+200 { access_token: <CHO service token, iss=cho-token-service-svc>, client_id: "claims-service", tenant_id: "acme" }
+```
+
+The validation is the same code that checks Argo workload tokens
+(`KubernetesTokenValidator`), with its own issuer settings and key cache.
+
+**token-service (`ServiceTokens`)**
+
+| Setting | Value |
+|---|---|
+| `IdentityProvider` | `Kubernetes` (default `Entra`) |
+| `Kubernetes:KubernetesIssuer` | the cluster's service-account issuer. GKE: `https://container.googleapis.com/v1/projects/<p>/locations/<l>/clusters/<c>` (Terraform output `kubernetes_service_account_issuer`); AKS: the OIDC issuer URL |
+| `Kubernetes:JwksJson` / `JwksFile` | optional: the issuer's JWKS (`kubectl get --raw /openid/v1/jwks`) instead of discovery |
+| `Kubernetes:Audience` | `cho-token-service` (never the CHO API audience) |
+| `ServiceClients` | `[{ "clientId": "claims-service", "namespace": "cloudhealthoffice", "serviceAccount": "claims-service" }]` |
+
+One namespace/service account per client id; no wildcards. `ObjectId` and
+`AppId` are refused with this provider, and `Namespace`/`ServiceAccount` with
+the Entra provider, so a deployment uses exactly one kind of proof. The same
+service account name in another namespace is a different identity.
+
+**Each service (`ChoAuth:ServiceToken`)**
+
+| Setting | Value |
+|---|---|
+| `Source` | `TokenService` |
+| `TokenServiceUrl` | `http://token-service` |
+| `Credential` | `KubernetesServiceAccount` (default `EntraWorkloadIdentity`) |
+| `ServiceAccountTokenFile` | default `/var/run/secrets/cho/token-service/token` |
+| `EntraScope` | not used |
+
+Each Deployment runs as its own service account and mounts the token:
+
+```yaml
+spec:
+  serviceAccountName: claims-service
+  containers:
+    - name: claims-service
+      volumeMounts:
+        - name: cho-token-service
+          mountPath: /var/run/secrets/cho/token-service
+          readOnly: true
+  volumes:
+    - name: cho-token-service
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: cho-token-service
+              expirationSeconds: 3600
+              path: token
+```
+
+The token file is read on every exchange, so kubelet rotation needs no restart.
 
 ## Entra app registration changes (owner action)
 

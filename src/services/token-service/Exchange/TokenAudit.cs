@@ -63,22 +63,43 @@ public sealed class TokenAudit
             "refused", Clean(identity?.Namespace), Clean(identity?.ServiceAccount), Clean(identity?.PodName),
             Clean(tenantId), Clean(reason));
 
-    /// <summary>A service token issued to a CHO service's managed identity.</summary>
-    public void ServiceIssued(ServiceTokens.EntraWorkloadIdentity identity, string clientId, string tenantId)
-        => _logger.LogInformation(
-            "CHO service token {Outcome}: client={Client} oid={Oid} appid={AppId} tenant={Tenant}",
-            "issued", Clean(clientId), identity.ObjectId, Clean(identity.AppId), Clean(tenantId));
+    /// <summary>A service token issued to a CHO service's workload identity.</summary>
+    public void ServiceIssued(ServiceTokens.ServiceIdentity identity, string clientId, string tenantId)
+    {
+        if (identity.Kubernetes is { } k8s)
+            _logger.LogInformation(
+                "CHO service token {Outcome}: client={Client} sa={Namespace}/{ServiceAccount} pod={Pod} tenant={Tenant}",
+                "issued", Clean(clientId), Clean(k8s.Namespace), Clean(k8s.ServiceAccount), Clean(k8s.PodName), Clean(tenantId));
+        else
+            _logger.LogInformation(
+                "CHO service token {Outcome}: client={Client} oid={Oid} appid={AppId} tenant={Tenant}",
+                "issued", Clean(clientId), identity.Entra?.ObjectId.ToString() ?? "-", Clean(identity.Entra?.AppId), Clean(tenantId));
+    }
 
-    /// <summary>A refused service-token request. The identity is null when the Entra token itself was refused.</summary>
-    public void ServiceRefused(ServiceTokens.EntraWorkloadIdentity? identity, string? clientId, string? tenantId, string reason)
-        => _logger.LogWarning(
-            "CHO service token {Outcome}: client={Client} oid={Oid} appid={AppId} tenant={Tenant} reason={Reason}",
-            "refused", Clean(clientId), identity?.ObjectId.ToString() ?? "-", Clean(identity?.AppId), Clean(tenantId), Clean(reason));
+    /// <summary>A refused service-token request. The identity is null when the identity proof itself was refused.</summary>
+    public void ServiceRefused(ServiceTokens.ServiceIdentity? identity, string? clientId, string? tenantId, string reason)
+    {
+        if (identity?.Kubernetes is { } k8s)
+            _logger.LogWarning(
+                "CHO service token {Outcome}: client={Client} sa={Namespace}/{ServiceAccount} pod={Pod} tenant={Tenant} reason={Reason}",
+                "refused", Clean(clientId), Clean(k8s.Namespace), Clean(k8s.ServiceAccount), Clean(k8s.PodName), Clean(tenantId), Clean(reason));
+        else
+            _logger.LogWarning(
+                "CHO service token {Outcome}: client={Client} oid={Oid} appid={AppId} tenant={Tenant} reason={Reason}",
+                "refused", Clean(clientId), identity?.Entra?.ObjectId.ToString() ?? "-", Clean(identity?.Entra?.AppId), Clean(tenantId), Clean(reason));
+    }
 
-    public void ServiceUnavailable(ServiceTokens.EntraWorkloadIdentity? identity, string? tenantId, string reason)
-        => _logger.LogError(
-            "CHO service token {Outcome}: oid={Oid} tenant={Tenant} reason={Reason}",
-            "refused", identity?.ObjectId.ToString() ?? "-", Clean(tenantId), Clean(reason));
+    public void ServiceUnavailable(ServiceTokens.ServiceIdentity? identity, string? tenantId, string reason)
+    {
+        if (identity?.Kubernetes is { } k8s)
+            _logger.LogError(
+                "CHO service token {Outcome}: sa={Namespace}/{ServiceAccount} tenant={Tenant} reason={Reason}",
+                "refused", Clean(k8s.Namespace), Clean(k8s.ServiceAccount), Clean(tenantId), Clean(reason));
+        else
+            _logger.LogError(
+                "CHO service token {Outcome}: oid={Oid} tenant={Tenant} reason={Reason}",
+                "refused", identity?.Entra?.ObjectId.ToString() ?? "-", Clean(tenantId), Clean(reason));
+    }
 
     // "-" marks an absent field and "…" a cut one, so the audit line keeps its shape.
     private static string Clean(string? value)

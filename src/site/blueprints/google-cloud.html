@@ -240,8 +240,8 @@
 <thead><tr><th>Component</th><th>Production design</th><th>Status</th></tr></thead>
 <tbody>
 <tr><td>Tenant isolation</td><td>Tenant taken only from the validated token; conflicting tenant headers refused; queries filtered by tenant</td><td><span class="st st-in">In repository</span></td></tr>
-<tr><td>Token signing</td><td>token-service issues asymmetrically signed tokens with the key held in a key management service; symmetric and file keys refused in Production</td><td><span class="st st-in">In repository</span> for Azure Key Vault · <span class="st st-need">Scoped work</span> Cloud KMS signing source</td></tr>
-<tr><td>Service identity</td><td>Each service proves its Kubernetes identity to token-service to obtain its token</td><td><span class="st st-in">In repository</span> Kubernetes token validation for workloads · <span class="st st-need">Scoped work</span> extend to all service tokens on GKE</td></tr>
+<tr><td>Token signing</td><td>token-service issues asymmetrically signed tokens with the key held in a key management service; symmetric and file keys refused in Production</td><td><span class="st st-in">In repository</span> Cloud KMS (HSM key, opt-in Terraform) and Azure Key Vault · <a href="/docs/configure-tenant-security#step-signing">configure</a></td></tr>
+<tr><td>Service identity</td><td>Each service proves its Kubernetes identity to token-service to obtain its token</td><td><span class="st st-in">In repository</span> projected service-account tokens for all service tokens · <span class="st st-cfg">Configuration</span> per-service accounts in the manifests · <a href="/docs/configure-tenant-security#step-identity">configure</a></td></tr>
 <tr><td>Staff sign-in</td><td>The plan's identity provider, exchanged for platform tokens with tenant membership and invitations</td><td><span class="st st-in">In repository</span> for Entra ID · <span class="st st-need">Scoped work</span> other providers</td></tr>
 <tr><td>External applications</td><td>SMART on FHIR for member and provider apps under CMS-0057-F</td><td><span class="st st-in">In repository</span> see the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CAPABILITY_RECONCILIATION.md">capability ledger</a> for scope</td></tr>
 <tr><td>Cloud access</td><td>Workload Identity for Cloud Storage, KMS and secrets; no static cloud keys</td><td><span class="st st-in">In repository</span> for Cloud Storage · <span class="st st-cfg">Configuration</span> elsewhere</td></tr>
@@ -291,7 +291,7 @@
 <p class="eyebrow">Getting there</p>
 <h2>The scoped work, in order</h2>
 <ol class="steps">
-<li><h3>Identity on Google Cloud</h3><p>Cloud KMS signing for token-service and Kubernetes-identity service tokens on GKE, so every service runs as a Production host.</p></li>
+<li><h3>Identity on Google Cloud</h3><p>Cloud KMS signing and Kubernetes service identity are in the repository. What remains is switching the manifests to Production hosts with a service account and projected token per service. See <a href="/docs/configure-tenant-security">Tenant Security</a>.</p></li>
 <li><h3>Production foundation</h3><p>Terraform for the per-plan project, organization policies, private regional cluster, load balancer and WAF, CMEK and the logging project.</p></li>
 <li><h3>Managed state and hardening</h3><p>Managed database, Kafka and Redis on private connections; secret store; network policies and service mesh; restore drill and penetration test.</p></li>
 </ol>

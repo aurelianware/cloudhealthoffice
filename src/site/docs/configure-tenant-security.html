@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tenant Security &amp; Multi-Tenant Authentication — Cloud Health Office Documentation</title>
+  <meta name="description" content="How Cloud Health Office isolates health plan tenants: the tenant comes only from a validated token, token-service signs with Cloud KMS or Key Vault, and services prove their identity with Kubernetes or Entra workload identity. Includes configuration steps for self-run deployments." />
+  <meta name="keywords" content="multi-tenant health plan security, tenant isolation, health plan SaaS authentication, Cloud KMS token signing, Kubernetes workload identity, Entra ID health plan" />
+  <link rel="canonical" href="https://cloudhealthoffice.com/docs/configure-tenant-security" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/docs/configure-tenant-security" />
+  <meta property="og:title" content="Tenant Security &amp; Multi-Tenant Authentication — Cloud Health Office" />
+  <meta property="og:description" content="How Cloud Health Office isolates health plan tenants: the tenant comes only from a validated token, token-service signs with Cloud KMS or Key Vault, and services prove their identity with Kubernetes or Entra workload identity. Includes configuration steps for self-run deployments." />
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"TechArticle","headline":"Tenant Security and Multi-Tenant Authentication","description":"How Cloud Health Office isolates health plan tenants: the tenant comes only from a validated token, token-service signs with Cloud KMS or Key Vault, and services prove their identity with Kubernetes or Entra workload identity. Includes configuration steps for self-run deployments.","url":"https://cloudhealthoffice.com/docs/configure-tenant-security","author":{"@type":"Organization","name":"Aurelianware, Inc."},"datePublished":"2026-10-21","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://cloudhealthoffice.com"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://cloudhealthoffice.com/docs"},{"@type":"ListItem","position":3,"name":"Tenant Security","item":"https://cloudhealthoffice.com/docs/configure-tenant-security"}]}}
+  </script>
+  <script async src="https://plausible.io/js/pa-JQNNrBf52mV2BxHPtkLAv.js"></script>
+  <script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)}</script>
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/docs.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs" aria-current="page">Documentation</a>
+<a href="/blueprints/google-cloud">Reference architecture</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+  <script>document.addEventListener('DOMContentLoaded',()=>{updateNavigation('#mainNav')});</script>
+
+  <main id="main-content">
+    <div class="docs-wrapper">
+      <aside class="docs-sidebar" id="docsSidebar"><div class="docs-sidebar-inner">
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Getting Started</div><ul><li><a href="/docs">Docs Home</a></li><li><a href="/docs/quickstart">Quick Start</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">Guides</div><ul><li><a href="/docs/compliance">CMS-0057-F Compliance</a></li><li><a href="/docs/architecture">Architecture</a></li><li><a href="/docs/fee-schedule-engine">Fee Schedule Engine</a></li><li><a href="/docs/api">API Reference</a></li><li><a href="/docs/deployment">Deployment</a></li><li><a href="/docs/configure-tenant-security" class="active">Tenant Security</a></li><li><a href="/docs/production-readiness-checklist">Production Readiness</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">User Guides</div><ul><li><a href="/docs/finance-guide">Finance Guide</a></li><li><a href="/docs/benefit-plan-guide">Benefit Plan Configuration</a></li><li><a href="/docs/claims-guide">Claims Adjudication</a></li><li><a href="/docs/prior-auth-guide">Prior Authorization</a></li><li><a href="/docs/eligibility-guide">Eligibility &amp; Enrollment</a></li><li><a href="/docs/fee-schedule-guide">Fee Schedule</a></li><li><a href="/docs/terminology-guide">Terminology Crosswalk</a></li><li><a href="/docs/provider-verification-guide">Provider Verification</a></li><li><a href="/docs/provider-enrollment-guide">Provider Enrollment</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">State Compliance</div><ul><li><a href="/docs/texas-compliance">Texas (STAR / STAR+PLUS)</a></li><li><a href="/docs/florida-compliance">Florida AHCA (SMMC 3.0)</a></li></ul></div>
+        <div class="docs-sidebar-section"><div class="docs-sidebar-section-title">On This Page</div><ul class="toc-sub"><li><a href="#model">Isolation model</a></li><li><a href="#who-issues">Who issues tokens</a></li><li><a href="#staff-access">Staff access</a></li><li><a href="#service-identity">Service-to-service</a></li><li><a href="#operating-models">Operating models</a></li><li><a href="#configure">Configure it yourself</a></li><li><a href="#step-verify">Verify</a></li><li><a href="#never">Never in production</a></li></ul></div>
+      </div></aside>
+
+      <div class="docs-content">
+        <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Tenant Security</span></div>
+
+        <h1>Tenant Security &amp; Multi-Tenant Authentication</h1>
+        <p class="docs-subtitle">How Cloud Health Office keeps every health plan's data and access separate, and how to configure token signing, service identity and staff sign-in when your team runs the platform.</p>
+
+        <h2 id="model">The isolation model</h2>
+        <p>Cloud Health Office is multi-tenant: one deployment can serve many tenants, and each tenant is one health plan or line of business. Isolation does not depend on network placement, a request header or the portal behaving well. It rests on one rule:</p>
+        <div class="callout callout-info">
+          <div class="callout-title">The tenant is part of the token</div>
+          <p>A request acts within exactly one tenant, and that tenant comes only from the <code>tenant_id</code> claim of a token whose signature, issuer, audience and lifetime have already been validated. There is no default tenant and no header fallback.</p>
+        </div>
+        <ul>
+          <li><strong>No tenant claim, no access.</strong> A validated token without a tenant claim is rejected with 401.</li>
+          <li><strong>Headers cannot change the tenant.</strong> An <code>X-Tenant-ID</code> header is accepted only when it matches the token. A header naming a different tenant is rejected with 403 <code>TENANT_CONTEXT_CONFLICT</code> and logged.</li>
+          <li><strong>Data access is scoped by the same value.</strong> Every service runs the shared authentication middleware, and repositories filter reads and writes by the tenant taken from the token.</li>
+          <li><strong>Tokens are short-lived.</strong> User and service tokens last five minutes by default, ten at most for service tokens and one hour at most for user tokens.</li>
+        </ul>
+
+        <h2 id="who-issues">Who issues tokens</h2>
+        <p>One component, <code>token-service</code>, issues every token the platform trusts. It signs with a key it cannot export (Azure Key Vault or Google Cloud KMS in production) and publishes the public key at <code>/.well-known/jwks.json</code>. Services hold no signing keys, so a compromised service cannot mint tokens for a user, a tenant or another service.</p>
+        <table>
+          <thead><tr><th>Token</th><th>Issuer</th><th>Who receives it</th><th>How the caller proves itself</th></tr></thead>
+          <tbody>
+            <tr><td>User</td><td><code>cho-token-service</code></td><td>The operations portal, for a signed-in staff member</td><td>The user's Microsoft Entra ID access token</td></tr>
+            <tr><td>Service</td><td><code>cho-token-service-svc</code></td><td>A platform service acting as itself (message consumers, scheduled jobs)</td><td>The pod's Entra workload identity, or its projected Kubernetes service-account token</td></tr>
+            <tr><td>Workload</td><td><code>cho-workload</code></td><td>Argo workflows (batch adjudication, file processing)</td><td>The workflow pod's projected Kubernetes service-account token</td></tr>
+          </tbody>
+        </table>
+        <p>Each issuer is trusted for one kind of token only. A service-issuer token without the service role is rejected rather than read as a user, so a service key could never be used to forge an administrator.</p>
+        <p>External applications (member apps and provider systems on the CMS-0057-F APIs) use SMART on FHIR authorization against the plan's own FHIR endpoints. That is separate from staff and service access.</p>
+
+        <h2 id="staff-access">Staff access: sign-in, memberships and roles</h2>
+        <p>Staff sign in with Microsoft Entra ID. The portal exchanges the user's Entra token for a Cloud Health Office token, and <code>token-service</code> decides everything that goes into it:</p>
+        <ol>
+          <li><strong>It validates the Entra token itself</strong>: signature, issuer against the token's directory, audience, the <code>Cho.Token</code> scope and expiry. App-only tokens are refused, so the portal's own credentials cannot produce a user token.</li>
+          <li><strong>It finds the user's membership</strong> in the requested tenant by Entra object id <em>and</em> directory id. A membership must be Active, and so must the tenant.</li>
+          <li><strong>It takes roles from the membership</strong> and expands them to permissions. Tenant administrators cannot grant platform-wide roles.</li>
+        </ol>
+        <p>A compromised portal therefore cannot ask for a token "for user X", choose roles, or reach a tenant the user does not belong to.</p>
+        <h3 id="onboarding">Onboarding a new tenant and its users</h3>
+        <ul>
+          <li><strong>The tenant.</strong> A tenant is created by signup or by a platform administrator and records the plan's Entra directory id. Sign-in is open only while the tenant is active.</li>
+          <li><strong>Users in the plan's own directory.</strong> An administrator adds the user with their work email. On first sign-in from the plan's registered directory, the account links to that Entra identity once and permanently.</li>
+          <li><strong>Guests, partners and delegated administrators.</strong> People from other directories join only by invitation: a single-use code with an expiry (seven days by default), redeemed by the invited person after they sign in. Email matching never links a guest, so another directory cannot claim an account by minting a token for the same address.</li>
+          <li><strong>Leaving.</strong> Disabling a user or revoking an invitation takes effect at their next token, within five minutes.</li>
+        </ul>
+        <h3 id="platform-admins">Platform administrators</h3>
+        <p>Cross-tenant administration requires two things together: an Entra token from the operator's own directory (<code>TokenService:PlatformTenantId</code>) and the <code>PlatformAdmin</code> app role. A customer directory that assigns the same role gets nothing. Leave <code>PlatformTenantId</code> empty to turn platform administration off.</p>
+
+        <h2 id="service-identity">Service-to-service access</h2>
+        <p>When a service calls another service without a user (a Kafka consumer posting a remittance, a nightly job), it requests a service token for the tenant it is working in. <code>token-service</code> works out <em>which</em> service is asking from a workload identity it can verify, looks it up in a registry and issues a token naming only that service. A service cannot obtain a token naming another service, and callees can require a specific caller with <code>[RequireServiceClient("claims-service")]</code>.</p>
+        <table>
+          <thead><tr><th>Platform</th><th>Proof of identity</th><th>Setting</th></tr></thead>
+          <tbody>
+            <tr><td>Azure (AKS)</td><td>Entra workload identity</td><td><code>ServiceTokens:IdentityProvider=Entra</code> (default)</td></tr>
+            <tr><td>Google Cloud (GKE), EKS, on premises</td><td>Projected Kubernetes service-account token, audience <code>cho-token-service</code></td><td><code>ServiceTokens:IdentityProvider=Kubernetes</code></td></tr>
+          </tbody>
+        </table>
+        <p>The Kubernetes option uses no cloud identity service, so the same configuration works on any conformant cluster. Tokens are checked against the cluster's service-account issuer, must be bound to a running pod and expire within an hour. Each namespace and service account maps to exactly one service. The same service account name in another namespace is a different identity.</p>
+
+        <h2 id="operating-models">How this applies in each operating model</h2>
+        <table>
+          <thead><tr><th>Model</th><th>Tenants</th><th>Signing key and identities</th></tr></thead>
+          <tbody>
+            <tr><td><strong>In your cloud</strong></td><td>Your plan's tenants only</td><td>In your Key Vault or Cloud KMS, under your cloud account. You configure everything below.</td></tr>
+            <tr><td><strong>In your cloud, operated by Aurelianware</strong></td><td>Your plan's tenants only</td><td>In your cloud account. Aurelianware operates to the access your engagement grants.</td></tr>
+            <tr><td><strong>Hosted by Cloud Health Office</strong> (under evaluation &mdash; not offered today)</td><td>Several plans on shared infrastructure</td><td>The same controls: tenant in the token, data scoped by tenant, invitations for outside users, no keys in services. <a href="/contact?interest=saas">Register interest</a>.</td></tr>
+          </tbody>
+        </table>
+        <p>The code paths are the same in every model. What changes is who holds the cloud account, the signing key and the platform administrator role.</p>
+
+        <h2 id="configure">Configure tenant security when you run it yourself</h2>
+        <p>These steps take a deployment from development keys to production identity. The full reference is <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/security/portal-token-service.md" target="_blank" rel="noopener noreferrer">docs/security/portal-token-service.md</a>.</p>
+
+        <h3 id="step-signing">1. Create the signing key</h3>
+        <p>Production refuses to start without a managed key; PEM and symmetric keys are rejected. Set exactly one of:</p>
+        <table>
+          <thead><tr><th>Cloud</th><th>Setting</th><th>Key</th><th>Identity needs</th></tr></thead>
+          <tbody>
+            <tr><td>Google Cloud</td><td><code>TokenSigning:CloudKmsKeyVersion</code></td><td><code>ASYMMETRIC_SIGN</code>, <code>EC_SIGN_P256_SHA256</code> (ES256, recommended) or <code>RSA_SIGN_PKCS1_*_SHA256</code>, HSM protection</td><td>CryptoKey Signer/Verifier and Public Key Viewer on that key only</td></tr>
+            <tr><td>Azure</td><td><code>TokenSigning:KeyVaultKeyId</code></td><td>EC P-256 or RSA, versioned id, auto-rotation off</td><td>Key Vault Crypto User on that key</td></tr>
+          </tbody>
+        </table>
+        <p>On Google Cloud, the reference Terraform creates the key ring, an HSM key, the <code>cho-token-service</code> service account, the two grants and the Workload Identity binding:</p>
+<pre><code><span class="code-comment"># infrastructure/gcp/terraform.tfvars</span>
+enable_token_signing_kms = true
+
+terraform apply
+terraform output token_signing_key_version     <span class="code-comment"># -> TokenSigning:CloudKmsKeyVersion</span>
+terraform output token_service_google_account  <span class="code-comment"># -> annotate the token-service Kubernetes service account</span>
+terraform output kubernetes_service_account_issuer</code></pre>
+        <p>The key version must be explicit (<code>.../cryptoKeyVersions/1</code>), never "latest". The private key never leaves the HSM: the service sends only a SHA-256 digest to be signed.</p>
+
+        <h3 id="step-trust">2. Make every service trust the issuers</h3>
+        <p>Download the public key and give it to every service through your secret store or environment, never in source control:</p>
+<pre><code>gcloud kms keys versions get-public-key 1 --key token-signing --keyring cho \
+  --location us-west1 --output-file cho-token-service.pub.pem</code></pre>
+<pre><code>"ChoAuth": {
+  "Audience": "cho-api",
+  "Issuers": [
+    { "Issuer": "cho-token-service",     "PublicKeyPem": "&lt;public key&gt;", "Kind": "User" },
+    { "Issuer": "cho-token-service-svc", "PublicKeyPem": "&lt;same key&gt;",   "Kind": "Service" },
+    { "Issuer": "cho-workload",          "PublicKeyPem": "&lt;same key&gt;",   "Kind": "Workload" }
+  ]
+}</code></pre>
+        <p>As environment variables: <code>ChoAuth__Issuers__0__Issuer=cho-token-service</code>, <code>ChoAuth__Issuers__0__PublicKeyPem=...</code>, and so on. To rotate, add a new key version under a new issuer name, trust both, switch <code>TokenSigning:Issuer</code>, and remove the old entry after about seven minutes.</p>
+
+        <h3 id="step-identity">3. Give each service its own identity</h3>
+        <p>On GKE, EKS or on-premises clusters, configure <code>token-service</code> to accept projected service-account tokens and register each service:</p>
+<pre><code>"ServiceTokens": {
+  "Enabled": true,
+  "IdentityProvider": "Kubernetes",
+  "Kubernetes": {
+    "KubernetesIssuer": "https://container.googleapis.com/v1/projects/&lt;project&gt;/locations/&lt;region&gt;/clusters/&lt;cluster&gt;",
+    "Audience": "cho-token-service"
+  },
+  "ServiceClients": [
+    { "ClientId": "claims-service", "Namespace": "cloudhealthoffice", "ServiceAccount": "claims-service" }
+  ]
+}</code></pre>
+        <p>Each service sets <code>ChoAuth:ServiceToken</code> to <code>Source=TokenService</code>, <code>TokenServiceUrl=http://token-service</code> and <code>Credential=KubernetesServiceAccount</code>, runs as its own service account and mounts the token:</p>
+<pre><code>spec:
+  serviceAccountName: claims-service
+  containers:
+    - name: claims-service
+      volumeMounts:
+        - name: cho-token-service
+          mountPath: /var/run/secrets/cho/token-service
+          readOnly: true
+  volumes:
+    - name: cho-token-service
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: cho-token-service
+              expirationSeconds: 3600
+              path: token</code></pre>
+        <p>The kubelet rotates the token and the service reads it on every exchange, so no restart is needed. On AKS, keep the default Entra provider and register each service's workload identity object id instead.</p>
+
+        <h3 id="step-signin">4. Set up staff sign-in</h3>
+        <ul>
+          <li>On the Cloud Health Office API app registration, expose the <code>Cho.Token</code> scope and grant it to the portal.</li>
+          <li>Define the <code>PlatformAdmin</code> app role and assign it only in your own directory. Set <code>TokenService:PlatformTenantId</code> to that directory's id.</li>
+          <li>For each tenant, record the plan's Entra directory id, add its administrators, and use invitations for anyone outside that directory.</li>
+        </ul>
+
+        <h3 id="step-verify">5. Verify</h3>
+<pre><code><span class="code-comment"># The published verification key (ES256 or RS256, never empty in production)</span>
+kubectl exec deploy/token-service -n cloudhealthoffice -- curl -s localhost:8080/.well-known/jwks.json
+
+<span class="code-comment"># Service tokens are audited with the workload that asked for them</span>
+kubectl logs deploy/token-service -n cloudhealthoffice | grep "CHO service token issued"
+<span class="code-comment">#   ... client=claims-service sa=cloudhealthoffice/claims-service pod=claims-service-7c9f... tenant=acme</span></code></pre>
+        <p>Also confirm that a request with a mismatched <code>X-Tenant-ID</code> header returns 403, and that an unregistered service account is refused with <code>unknown_service</code>.</p>
+
+        <h2 id="never">Never in production</h2>
+        <div class="callout callout-warning">
+          <div class="callout-title">Development keys are public</div>
+          <p>The symmetric development keys are in the public repository so anyone can run the platform locally. A deployment that trusts them is not isolated: anyone can mint a token for any tenant.</p>
+        </div>
+        <ul>
+          <li>Run deployed services as <code>Production</code> (or a staging environment), never <code>Development</code> or <code>Testing</code>. Both refuse to start on Kubernetes unless an override is set.</li>
+          <li>Do not set <code>CHO_ALLOW_DEV_ON_DEPLOYED_HOST</code> or <code>CHO_ALLOW_TESTING_ENVIRONMENT</code> on anything that holds real member data.</li>
+          <li>Do not configure <code>SymmetricKey</code> or the legacy <code>cho-internal</code> issuer outside local development.</li>
+          <li>Do not register two services under one service account, or use a wildcard namespace.</li>
+        </ul>
+
+        <div class="callout callout-success">
+          <div class="callout-title">Related</div>
+          <p>The <a href="/blueprints/google-cloud">Google Cloud reference architecture</a> shows where these pieces sit in a production environment, and the <a href="/docs/production-readiness-checklist">Production Readiness Checklist</a> covers what else to complete before go-live. To review your tenant model with us, <a href="/contact?interest=cms0057-assessment">book a readiness review</a>.</p>
+        </div>
+
+        <div class="docs-pager">
+          <a href="/docs/deployment"><div class="pager-label">&larr; Previous</div><div class="pager-title">Deployment</div></a>
+          <a href="/docs/production-readiness-checklist" class="next"><div class="pager-label">Next &rarr;</div><div class="pager-title">Production Readiness</div></a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <button class="docs-mobile-toggle" id="docsMobileToggle" aria-label="Toggle docs navigation">&#9776;</button>
+  <div class="docs-sidebar-overlay" id="docsSidebarOverlay"></div>
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+  <script>const t=document.getElementById('docsMobileToggle'),s=document.getElementById('docsSidebar'),o=document.getElementById('docsSidebarOverlay');if(t&&s){t.addEventListener('click',()=>{s.classList.toggle('open');o.classList.toggle('open')});o.addEventListener('click',()=>{s.classList.remove('open');o.classList.remove('open')})}</script>
+</body>
+</html>
