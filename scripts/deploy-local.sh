@@ -135,6 +135,7 @@ declare -A SERVICES=(
   [rfai-service]="src/services/rfai-service/Dockerfile"
   [work-management-service]="src/services/work-management-service/Dockerfile"
   [idcard-service]="src/services/idcard-service/Dockerfile"
+  [document-service]="src/services/document-service/Dockerfile"
   [member-document-service]="src/services/member-document-service/Dockerfile"
   [personal-representative-service]="src/services/personal-representative-service/Dockerfile"
   [terminology-service]="src/services/CHO.TerminologyService/Dockerfile"

@@ -1,0 +1,125 @@
+# Workload identity for document-service: its user-assigned managed identity, federated to
+# system:serviceaccount:cloudhealthoffice:document-service-sa. token-service issues this service's
+# CHO service tokens to that identity only (ServiceTokens:ServiceClients); the service holds
+# no signing key. See docs/security/portal-token-service.md ("Service tokens").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: document-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<DOCUMENT_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: document-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  MongoDb__DatabaseName: "CloudHealthOffice"
+  # Content no malware scanner has passed is refused until a scanner is
+  # wired (IDocumentScanner); set true only knowingly.
+  Documents__AllowUnscannedContent: "false"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-service
+  namespace: cloudhealthoffice
+  labels:
+    app: document-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: document-service
+  template:
+    metadata:
+      labels:
+        azure.workload.identity/use: "true"
+        app: document-service
+        tier: backend
+    spec:
+      serviceAccountName: document-service-sa
+      containers:
+      - name: document-service
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-document-service:latest
+        imagePullPolicy: Always
+        envFrom:
+        # Source=TokenService, token-service URL and Entra scope (shared by all services).
+        - configMapRef:
+            name: cho-service-tokens
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ChoAuth__ServiceToken__ClientId
+          value: "document-service"
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: document-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
+        - name: MongoDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: document-service-config
+              key: MongoDb__DatabaseName
+        # Document bytes: Azure Blob here (DocumentStore:Provider unset falls back
+        # to this setting). Other clouds set DocumentStore__Provider instead.
+        - name: BlobStorage__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: azure-storage-secret
+              key: connectionString
+        - name: Documents__AllowUnscannedContent
+          valueFrom:
+            configMapKeyRef:
+              name: document-service-config
+              key: Documents__AllowUnscannedContent
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: document-service
+  namespace: cloudhealthoffice
+  labels:
+    app: document-service
+spec:
+  type: ClusterIP
+  selector:
+    app: document-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
