@@ -10,11 +10,11 @@
 <PageTitle>Capitation Runs — Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="billing:read,payments:read" RoleName="Finance">
-<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: var(--cho-accent); font-weight: 700; letter-spacing: -0.5px;">
     <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mr-2" Style="vertical-align: middle;" />
     Capitation Runs
 </MudText>
-<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+<MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);" Class="mb-4">
     Generate monthly PMPM capitation statements for all capitated providers
 </MudText>
 
@@ -28,38 +28,38 @@
     <!-- ═══ LIST VIEW ═══ -->
     <MudGrid Spacing="3" Class="mb-4">
         <MudItem xs="6" sm="3">
-            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
-                <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Style="color: #00ffff; font-size: 2rem;" />
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-accent-bg-5); border: 1px solid var(--cb-accent-border-20); border-radius: 12px;">
+                <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Style="color: var(--cho-accent); font-size: 2rem;" />
                 <div>
-                    <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@FilteredRuns.Count()</MudText>
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Runs</MudText>
+                    <MudText Typo="Typo.h5" Style="color: var(--cho-accent); font-weight: 700;">@FilteredRuns.Count()</MudText>
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Total Runs</MudText>
                 </div>
             </MudPaper>
         </MudItem>
         <MudItem xs="6" sm="3">
-            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
-                <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Style="color: #00ff88; font-size: 2rem;" />
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-success-bg-5); border: 1px solid var(--cb-success-border-20); border-radius: 12px;">
+                <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Style="color: var(--cho-success); font-size: 2rem;" />
                 <div>
-                    <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@FilteredRuns.Sum(r => r.TotalNetPayable).ToString("C0")</MudText>
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Net Payable</MudText>
+                    <MudText Typo="Typo.h5" Style="color: var(--cho-success); font-weight: 700;">@FilteredRuns.Sum(r => r.TotalNetPayable).ToString("C0")</MudText>
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Total Net Payable</MudText>
                 </div>
             </MudPaper>
         </MudItem>
         <MudItem xs="6" sm="3">
-            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
-                <MudIcon Icon="@Icons.Material.Filled.People" Style="color: #ffaa00; font-size: 2rem;" />
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-warning-bg-5); border: 1px solid var(--cb-warning-border-20); border-radius: 12px;">
+                <MudIcon Icon="@Icons.Material.Filled.People" Style="color: var(--cho-warning); font-size: 2rem;" />
                 <div>
-                    <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@FilteredRuns.Sum(r => r.TotalMemberMonths)</MudText>
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Member-Months</MudText>
+                    <MudText Typo="Typo.h5" Style="color: var(--cho-warning); font-weight: 700;">@FilteredRuns.Sum(r => r.TotalMemberMonths)</MudText>
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Member-Months</MudText>
                 </div>
             </MudPaper>
         </MudItem>
         <MudItem xs="6" sm="3">
-            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
-                <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Style="color: #ff0055; font-size: 2rem;" />
+            <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-error-bg-5); border: 1px solid var(--cb-error-border-20); border-radius: 12px;">
+                <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Style="color: var(--cho-error); font-size: 2rem;" />
                 <div>
-                    <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@FilteredRuns.Count(r => r.Status == "Failed")</MudText>
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Failed</MudText>
+                    <MudText Typo="Typo.h5" Style="color: var(--cho-error); font-weight: 700;">@FilteredRuns.Count(r => r.Status == "Failed")</MudText>
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Failed</MudText>
                 </div>
             </MudPaper>
         </MudItem>
@@ -94,7 +94,7 @@
     @if (_loading) { <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" /> }
 
     <MudTable Items="FilteredRuns" Dense="true" Hover="true" T="CapRunSummary"
-              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+              Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
         <HeaderContent>
             <MudTh><MudTableSortLabel SortBy="new Func<CapRunSummary,object>(x=>x.RunNumber)">Run Number</MudTableSortLabel></MudTh>
             <MudTh>Type</MudTh>
@@ -110,10 +110,10 @@
         <RowTemplate>
             <MudTd DataLabel="Run Number">
                 <MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/capitation/runs/" + context.Id))"
-                           Style="font-family: monospace; color: #00ffff;">@context.RunNumber</MudButton>
+                           Style="font-family: monospace; color: var(--cho-accent);">@context.RunNumber</MudButton>
                 @if (context.Criteria?.ProviderNPI != null)
                 {
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">NPI: @context.Criteria.ProviderNPI</MudText>
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-40);">NPI: @context.Criteria.ProviderNPI</MudText>
                 }
             </MudTd>
             <MudTd DataLabel="Type">
@@ -130,7 +130,7 @@
             <MudTd DataLabel="Providers">@context.TotalProviders</MudTd>
             <MudTd DataLabel="Member-Months">@context.TotalMemberMonths.ToString("N0")</MudTd>
             <MudTd DataLabel="Net Payable">
-                <MudText Style="font-family: monospace; color: #00ff88;">@context.TotalNetPayable.ToString("C2")</MudText>
+                <MudText Style="font-family: monospace; color: var(--cho-success);">@context.TotalNetPayable.ToString("C2")</MudText>
             </MudTd>
             <MudTd DataLabel="Duration">
                 @if (context.ExecutionDurationSeconds.HasValue) { <text>@context.ExecutionDurationSeconds.Value.ToString("F1")s</text> }
@@ -155,9 +155,9 @@ else
         <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack"
                    OnClick="@(() => Navigation.NavigateTo("/capitation/runs"))" Class="mb-3">Back to Runs</MudButton>
 
-        <MudPaper Class="pa-4 mb-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+        <MudPaper Class="pa-4 mb-4" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
             <div class="d-flex align-center gap-3 mb-3 flex-wrap">
-                <MudText Typo="Typo.h5" Style="font-family: monospace; color: #00ffff;">@_selectedRun.RunNumber</MudText>
+                <MudText Typo="Typo.h5" Style="font-family: monospace; color: var(--cho-accent);">@_selectedRun.RunNumber</MudText>
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@GetRunTypeColor(_selectedRun.RunType)">@_selectedRun.RunType</MudChip>
                 @if (!string.IsNullOrEmpty(_selectedRun.LineOfBusiness))
                 {
@@ -171,15 +171,15 @@ else
             </div>
             @if (!string.IsNullOrEmpty(_selectedRun.Description))
             {
-                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-3">@_selectedRun.Description</MudText>
+                <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);" Class="mb-3">@_selectedRun.Description</MudText>
             }
             <MudGrid>
-                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Period</MudText><MudText>@_selectedRun.CapitationPeriod.ToString("MMM yyyy")</MudText></MudItem>
-                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Providers</MudText><MudText>@_selectedRun.TotalProviders</MudText></MudItem>
-                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Member-Months</MudText><MudText>@_selectedRun.TotalMemberMonths.ToString("N0")</MudText></MudItem>
-                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Gross</MudText><MudText Style="color: #00ff88;">@_selectedRun.TotalGrossCapitation.ToString("C2")</MudText></MudItem>
-                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Withholds</MudText><MudText Style="color: #ffaa00;">@_selectedRun.TotalWithholds.ToString("C2")</MudText></MudItem>
-                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Net Payable</MudText><MudText Style="color: #00ffff; font-weight: 700;">@_selectedRun.TotalNetPayable.ToString("C2")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Period</MudText><MudText>@_selectedRun.CapitationPeriod.ToString("MMM yyyy")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Providers</MudText><MudText>@_selectedRun.TotalProviders</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Member-Months</MudText><MudText>@_selectedRun.TotalMemberMonths.ToString("N0")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Gross</MudText><MudText Style="color: var(--cho-success);">@_selectedRun.TotalGrossCapitation.ToString("C2")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Withholds</MudText><MudText Style="color: var(--cho-warning);">@_selectedRun.TotalWithholds.ToString("C2")</MudText></MudItem>
+                <MudItem xs="6" md="2"><MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Net Payable</MudText><MudText Style="color: var(--cho-accent); font-weight: 700;">@_selectedRun.TotalNetPayable.ToString("C2")</MudText></MudItem>
             </MudGrid>
             @if (_selectedRun.Warnings.Any())
             {
@@ -189,7 +189,7 @@ else
 
         <MudText Typo="Typo.h6" Class="mb-2">Statements (@_runStatements.Count)</MudText>
         <MudTable Items="_runStatements" Dense="true" Hover="true" T="CapStatementSummary"
-                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+                  Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
             <HeaderContent>
                 <MudTh>Statement #</MudTh>
                 <MudTh>Provider</MudTh>
@@ -202,15 +202,15 @@ else
             </HeaderContent>
             <RowTemplate>
                 <MudTd><MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/capitation/statements/" + context.Id))"
-                                  Style="font-family: monospace; color: #00ffff; font-size: 0.85rem;">@context.StatementNumber</MudButton></MudTd>
+                                  Style="font-family: monospace; color: var(--cho-accent); font-size: 0.85rem;">@context.StatementNumber</MudButton></MudTd>
                 <MudTd>
                     <MudText Typo="Typo.body2">@context.ProviderName</MudText>
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">@context.ProviderNPI</MudText>
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-40);">@context.ProviderNPI</MudText>
                 </MudTd>
                 <MudTd>@context.MemberMonths</MudTd>
                 <MudTd Style="font-family: monospace;">@context.GrossCapitation.ToString("C2")</MudTd>
-                <MudTd Style="font-family: monospace; color: #ffaa00;">@context.WithholdAmount.ToString("C2")</MudTd>
-                <MudTd Style="font-family: monospace; color: #00ff88; font-weight: 600;">@context.NetPayable.ToString("C2")</MudTd>
+                <MudTd Style="font-family: monospace; color: var(--cho-warning);">@context.WithholdAmount.ToString("C2")</MudTd>
+                <MudTd Style="font-family: monospace; color: var(--cho-success); font-weight: 600;">@context.NetPayable.ToString("C2")</MudTd>
                 <MudTd><MudChip T="string" Size="Size.Small" Color="@GetStatementStatusColor(context.Status)">@context.Status</MudChip></MudTd>
                 <MudTd>
                     @if (context.Status is "Generated") { <MudButton Size="Size.Small" Color="Color.Success" OnClick="() => ApproveStatement(context)">Approve</MudButton> }

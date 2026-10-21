@@ -197,7 +197,7 @@
                         }
                     </MudItem>
                     <MudItem xs="12" md="4">
-                        <MudPaper Class="pa-4" Elevation="0" Style="background: rgba(0,255,136,0.05);">
+                        <MudPaper Class="pa-4" Elevation="0" Style="background: var(--cb-success-bg-5);">
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Final disposition</MudText>
                             <MudChip T="string"
                                      Color="@GetStatusColor(_claim.Status)"
@@ -232,7 +232,7 @@
 
         @if (_claim.AiExamination is { } aiExamination)
         {
-            <MudPaper Class="pa-5 mb-4" Elevation="2" Style="border: 1px solid rgba(0,255,255,0.35);">
+            <MudPaper Class="pa-5 mb-4" Elevation="2" Style="border: 1px solid var(--cb-accent-border-35);">
                 <MudGrid>
                     <MudItem xs="12" md="8">
                         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
@@ -261,7 +261,7 @@
                         }
                     </MudItem>
                     <MudItem xs="12" md="4">
-                        <MudPaper Class="pa-4" Elevation="0" Style="background: rgba(0,255,255,0.05);">
+                        <MudPaper Class="pa-4" Elevation="0" Style="background: var(--cb-accent-bg-5);">
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Recommended disposition</MudText>
                             <MudChip T="string"
                                      Color="@GetAiRecommendationColor(aiExamination.RecommendedDisposition)"
@@ -741,7 +741,7 @@
             {
                 <MudText Typo="Typo.h6" Class="mb-3">Pipeline</MudText>
                 <!-- Pipeline Steps -->
-                <MudText Typo="Typo.subtitle1" Class="mb-3" Style="color: #00ffff;">
+                <MudText Typo="Typo.subtitle1" Class="mb-3" Style="color: var(--cho-accent);">
                     <MudIcon Icon="@Icons.Material.Filled.Timeline" Class="mr-1" Size="Size.Small" />
                     Processing Pipeline
                 </MudText>
@@ -752,7 +752,7 @@
                                          Size="Size.Small"
                                          Variant="@(step.Status == "Passed" ? Variant.Filled : Variant.Outlined)">
                             <ItemOpposite>
-                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4); font-family: monospace;">
+                                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-40); font-family: monospace;">
                                     @(step.DurationMs.HasValue ? $"{step.DurationMs} ms" : "—")
                                 </MudText>
                             </ItemOpposite>
@@ -763,7 +763,7 @@
                                 </div>
                                 @if (!string.IsNullOrEmpty(step.Summary))
                                 {
-                                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">@step.Summary</MudText>
+                                    <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-70);">@step.Summary</MudText>
                                 }
                                 @if (!string.IsNullOrEmpty(step.ErrorDetail))
                                 {
@@ -775,7 +775,7 @@
                 </MudTimeline>
 
                 <!-- NCCI Edit Results -->
-                <MudText Typo="Typo.subtitle1" Class="mb-3" Style="color: #00ffff;">
+                <MudText Typo="Typo.subtitle1" Class="mb-3" Style="color: var(--cho-accent);">
                     <MudIcon Icon="@Icons.Material.Filled.FactCheck" Class="mr-1" Size="Size.Small" />
                     NCCI / MUE Edit Results
                 </MudText>
@@ -788,7 +788,7 @@
                 else
                 {
                     <MudTable Items="_adjudicationData.NcciResults" Dense="true" Hover="true" Class="mb-4"
-                              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;"
+                              Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;"
                               T="NcciEditResult">
                         <HeaderContent>
                             <MudTh>Edit Code</MudTh>
@@ -800,7 +800,7 @@
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Edit Code">
-                                <MudText Style="font-family: monospace; color: #00ffff;">@context.EditCode</MudText>
+                                <MudText Style="font-family: monospace; color: var(--cho-accent);">@context.EditCode</MudText>
                             </MudTd>
                             <MudTd DataLabel="Type">@context.EditType</MudTd>
                             <MudTd DataLabel="Description">@context.Description</MudTd>
@@ -818,12 +818,12 @@
                 }
                 <MudText Typo="Typo.h6" Class="mt-6 mb-3">Benefit calculation</MudText>
                 <!-- Fee Schedule Results -->
-                <MudText Typo="Typo.subtitle1" Class="mb-3" Style="color: #00ffff;">
+                <MudText Typo="Typo.subtitle1" Class="mb-3" Style="color: var(--cho-accent);">
                     <MudIcon Icon="@Icons.Material.Filled.PriceChange" Class="mr-1" Size="Size.Small" />
                     Fee Schedule — Rate Resolution
                 </MudText>
                 <MudTable Items="_adjudicationData.FeeScheduleResults" Dense="true" Hover="true" Class="mb-6"
-                          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;"
+                          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;"
                           T="FeeScheduleResult">
                     <HeaderContent>
                         <MudTh>Proc Code</MudTh>
@@ -835,14 +835,14 @@
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Proc Code">
-                            <MudText Style="font-family: monospace; color: #00ffff; font-weight: 600;">@context.ProcedureCode</MudText>
+                            <MudText Style="font-family: monospace; color: var(--cho-accent); font-weight: 600;">@context.ProcedureCode</MudText>
                         </MudTd>
                         <MudTd DataLabel="Fee Schedule">@context.FeeScheduleName</MudTd>
                         <MudTd DataLabel="Billed">
                             <MudText Style="font-family: monospace;">@context.BilledAmount.ToString("C2")</MudText>
                         </MudTd>
                         <MudTd DataLabel="Allowed">
-                            <MudText Style="font-family: monospace; color: #00ff88; font-weight: 600;">@context.AllowedAmount.ToString("C2")</MudText>
+                            <MudText Style="font-family: monospace; color: var(--cho-success); font-weight: 600;">@context.AllowedAmount.ToString("C2")</MudText>
                         </MudTd>
                         <MudTd DataLabel="Rate Basis">
                             <MudChip T="string" Size="Size.Small" Color="Color.Default">@context.RateBasis</MudChip>
@@ -855,67 +855,67 @@
                 @if (_adjudicationData.BenefitCalculation != null)
                 {
                     var bc = _adjudicationData.BenefitCalculation;
-                    <MudText Typo="Typo.subtitle1" Class="mb-3" Style="color: #00ffff;">
+                    <MudText Typo="Typo.subtitle1" Class="mb-3" Style="color: var(--cho-accent);">
                         <MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Class="mr-1" Size="Size.Small" />
                         Benefit Calculation
                     </MudText>
                     <MudGrid Spacing="3" Class="mb-6">
                         <MudItem xs="12" md="7">
-                            <MudPaper Class="pa-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;">
+                            <MudPaper Class="pa-4" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;">
                                 <div class="d-flex flex-column gap-2">
                                     <div class="d-flex justify-space-between">
-                                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Service Type</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);">Service Type</MudText>
                                         <MudText Typo="Typo.body2">@bc.ServiceType</MudText>
                                     </div>
                                     <div class="d-flex justify-space-between">
-                                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Benefit Rule Applied</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);">Benefit Rule Applied</MudText>
                                         <MudText Typo="Typo.body2">@bc.BenefitRuleApplied</MudText>
                                     </div>
                                     <div class="d-flex justify-space-between">
-                                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Network Tier</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);">Network Tier</MudText>
                                         <MudText Typo="Typo.body2">@bc.NetworkTier</MudText>
                                     </div>
-                                    <MudDivider Style="border-color: rgba(0,255,255,0.15);" />
+                                    <MudDivider Style="border-color: var(--cb-accent-border-15);" />
                                     <div class="d-flex justify-space-between">
-                                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Allowed Amount</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);">Allowed Amount</MudText>
                                         <MudText Typo="Typo.body2" Style="font-family: monospace;">@bc.AllowedAmount.ToString("C2")</MudText>
                                     </div>
                                     <div class="d-flex justify-space-between">
-                                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Deductible Applied</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);">Deductible Applied</MudText>
                                         <MudText Typo="Typo.body2" Style="font-family: monospace;">@bc.DeductibleApplied.ToString("C2")</MudText>
                                     </div>
                                     <div class="d-flex justify-space-between">
-                                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Deductible Remaining</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);">Deductible Remaining</MudText>
                                         <MudText Typo="Typo.body2" Style="font-family: monospace;">@bc.DeductibleRemaining.ToString("C2")</MudText>
                                     </div>
                                     <div class="d-flex justify-space-between">
-                                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Copay</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);">Copay</MudText>
                                         <MudText Typo="Typo.body2" Style="font-family: monospace;">@bc.CopayAmount.ToString("C2")</MudText>
                                     </div>
                                     <div class="d-flex justify-space-between">
-                                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Coinsurance</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);">Coinsurance</MudText>
                                         <MudText Typo="Typo.body2" Style="font-family: monospace;">@bc.CoinsuranceAmount.ToString("C2")</MudText>
                                     </div>
-                                    <MudDivider Style="border-color: rgba(0,255,136,0.2);" />
+                                    <MudDivider Style="border-color: var(--cb-success-border-20);" />
                                     <div class="d-flex justify-space-between">
-                                        <MudText Typo="Typo.subtitle2" Style="color: #00ff88;">Plan Payment</MudText>
-                                        <MudText Typo="Typo.subtitle2" Style="color: #00ff88; font-family: monospace;">@bc.PlanPayment.ToString("C2")</MudText>
+                                        <MudText Typo="Typo.subtitle2" Style="color: var(--cho-success);">Plan Payment</MudText>
+                                        <MudText Typo="Typo.subtitle2" Style="color: var(--cho-success); font-family: monospace;">@bc.PlanPayment.ToString("C2")</MudText>
                                     </div>
                                     <div class="d-flex justify-space-between">
-                                        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);">Member Responsibility</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);">Member Responsibility</MudText>
                                         <MudText Typo="Typo.body2" Style="font-family: monospace;">@bc.MemberResponsibility.ToString("C2")</MudText>
                                     </div>
                                 </div>
                             </MudPaper>
                         </MudItem>
                         <MudItem xs="12" md="5">
-                            <MudPaper Class="pa-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;">
-                                <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color: rgba(255,255,255,0.5);">Accumulator Progress</MudText>
+                            <MudPaper Class="pa-4" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;">
+                                <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color: var(--cb-fg-text-50);">Accumulator Progress</MudText>
                                 <div class="d-flex flex-column gap-3">
                                     <div>
                                         <div class="d-flex justify-space-between mb-1">
                                             <MudText Typo="Typo.body2">Deductible</MudText>
-                                            <MudText Typo="Typo.body2" Style="@(bc.DeductibleMet ? "color: #00ff88;" : "color: #ffaa00;")">
+                                            <MudText Typo="Typo.body2" Style="@(bc.DeductibleMet ? "color: var(--cho-success);" : "color: var(--cho-warning);")">
                                                 @(bc.DeductibleMet ? "Met ✓" : $"${bc.IndividualDeductibleBalance:N0} applied")
                                             </MudText>
                                         </div>
@@ -926,7 +926,7 @@
                                     <div>
                                         <div class="d-flex justify-space-between mb-1">
                                             <MudText Typo="Typo.body2">Out-of-Pocket Max</MudText>
-                                            <MudText Typo="Typo.body2" Style="@(bc.OopMaxMet ? "color: #00ff88;" : "color: #00ffff;")">
+                                            <MudText Typo="Typo.body2" Style="@(bc.OopMaxMet ? "color: var(--cho-success);" : "color: var(--cho-accent);")">
                                                 @(bc.OopMaxMet ? "Met ✓" : "In Progress")
                                             </MudText>
                                         </div>
@@ -938,8 +938,8 @@
 
                                 @if (bc.AccumulatorUpdates.Any())
                                 {
-                                    <MudDivider Class="my-3" Style="border-color: rgba(0,255,255,0.15);" />
-                                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);" Class="mb-2">Accumulator Updates This Claim</MudText>
+                                    <MudDivider Class="my-3" Style="border-color: var(--cb-accent-border-15);" />
+                                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);" Class="mb-2">Accumulator Updates This Claim</MudText>
                                     @foreach (var acc in bc.AccumulatorUpdates)
                                     {
                                         var pct = acc.Limit > 0 ? (double)(acc.NewBalance / acc.Limit * 100) : 0;
@@ -950,7 +950,7 @@
                                                 @pct.ToString("N0")% of @acc.Limit.ToString("C0")
                                             </MudChip>
                                         </div>
-                                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">
+                                        <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-40);">
                                             Applied: @acc.AmountApplied.ToString("C2") → Balance: @acc.NewBalance.ToString("C2")
                                         </MudText>
                                     }
@@ -1853,7 +1853,7 @@
 
 <style>
     code {
-        background-color: #f5f5f5;
+        background-color: var(--cho-text);
         padding: 2px 6px;
         border-radius: 3px;
         font-size: 0.9em;

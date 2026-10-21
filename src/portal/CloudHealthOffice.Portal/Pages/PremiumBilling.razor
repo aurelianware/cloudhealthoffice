@@ -15,8 +15,8 @@
 @if (_canRun)
 {
     <MudPaper Class="pa-4 mb-4" data-testid="create-run-form"
-              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
-        <MudText Typo="Typo.subtitle1" Class="mb-2" Style="color: #00ffff; font-weight: 600;">New billing run</MudText>
+              Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
+        <MudText Typo="Typo.subtitle1" Class="mb-2" Style="color: var(--cho-accent); font-weight: 600;">New billing run</MudText>
         <MudGrid Spacing="2">
             <MudItem xs="12" sm="3">
                 <div data-testid="run-period">
@@ -41,7 +41,7 @@
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                        OnClick="CreateRun" Disabled="_busy" data-testid="create-run">Create billing run</MudButton>
         </div>
-        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">
+        <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">
             A new run is Pending until it is executed. Whoever creates or executes a run cannot release its sponsor debits
             (separation of duties).
         </MudText>
@@ -54,7 +54,7 @@
 }
 
 <MudTable Items="_runs" Dense="true" Hover="true" T="BillingRun" data-testid="billing-runs"
-          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
     <HeaderContent>
         <MudTh>Run #</MudTh>
         <MudTh>Period</MudTh>
@@ -68,7 +68,7 @@
         <MudTh>Actions</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Run #"><span style="font-family: monospace; color: #00ffff;">@context.BillingRunNumber</span></MudTd>
+        <MudTd DataLabel="Run #"><span style="font-family: monospace; color: var(--cho-accent);">@context.BillingRunNumber</span></MudTd>
         <MudTd DataLabel="Period">@context.BillingPeriod.ToString("yyyy-MM")</MudTd>
         <MudTd DataLabel="Status"><MudChip T="string" Size="Size.Small" Color="@RunStatusColor(context.Status)">@context.Status</MudChip></MudTd>
         <MudTd DataLabel="Invoices">@context.TotalInvoices</MudTd>
@@ -103,7 +103,7 @@
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
-        <MudText Typo="Typo.body2" Class="pa-4" Style="color: rgba(255,255,255,0.4);">No billing runs yet</MudText>
+        <MudText Typo="Typo.body2" Class="pa-4" Style="color: var(--cb-fg-text-40);">No billing runs yet</MudText>
     </NoRecordsContent>
     <PagerContent><MudTablePager /></PagerContent>
 </MudTable>
@@ -112,9 +112,9 @@
 {
     var run = _selected;
     <MudPaper Class="pa-4 mt-4" data-testid="run-detail"
-              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.25); border-radius: 12px;">
+              Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-25); border-radius: 12px;">
         <div class="d-flex align-center gap-2 mb-2">
-            <MudText Typo="Typo.h6" Style="color: #00ffff;">@run.BillingRunNumber</MudText>
+            <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">@run.BillingRunNumber</MudText>
             <MudChip T="string" Size="Size.Small" Color="@RunStatusColor(run.Status)">@run.Status</MudChip>
             <MudSpacer />
             <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => _selected = null" />

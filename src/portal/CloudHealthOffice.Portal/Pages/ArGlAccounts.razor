@@ -8,11 +8,11 @@
 <PageTitle>GL Accounts — Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="finance:read" RoleName="Finance">
-<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: var(--cho-accent); font-weight: 700; letter-spacing: -0.5px;">
     <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Class="mr-2" Style="vertical-align: middle;" />
     GL Accounts
 </MudText>
-<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+<MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);" Class="mb-4">
     Chart of accounts — segment codes, account types, and premium split configuration
 </MudText>
 
@@ -24,38 +24,38 @@
 <!-- Summary Cards -->
 <MudGrid Spacing="3" Class="mb-4">
     <MudItem xs="6" sm="3">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Style="color: #00ffff; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-accent-bg-5); border: 1px solid var(--cb-accent-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Style="color: var(--cho-accent); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_accounts.Count</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Accounts</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-accent); font-weight: 700;">@_accounts.Count</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Total Accounts</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="3">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-success-bg-5); border: 1px solid var(--cb-success-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: var(--cho-success); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_accounts.Count(a => a.Status == "Active")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Active</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-success); font-weight: 700;">@_accounts.Count(a => a.Status == "Active")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Active</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="3">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.Balance" Style="color: #ffaa00; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-warning-bg-5); border: 1px solid var(--cb-warning-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Balance" Style="color: var(--cho-warning); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_accounts.Count(a => a.IsReconciliationAccount)</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Reconciliation Accounts</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-warning); font-weight: 700;">@_accounts.Count(a => a.IsReconciliationAccount)</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Reconciliation Accounts</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="3">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.Cancel" Style="color: #ff0055; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-error-bg-5); border: 1px solid var(--cb-error-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Cancel" Style="color: var(--cho-error); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_accounts.Count(a => a.Status == "Inactive")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Inactive</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-error); font-weight: 700;">@_accounts.Count(a => a.Status == "Inactive")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Inactive</MudText>
             </div>
         </MudPaper>
     </MudItem>
@@ -99,7 +99,7 @@
 }
 
 <MudTable Items="FilteredAccounts" Dense="true" Hover="true" T="GlAccountSummary"
-          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
     <HeaderContent>
         <MudTh>Account #</MudTh>
         <MudTh>Account Name</MudTh>
@@ -114,13 +114,13 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Account #">
-            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.AccountNumber</MudText>
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cho-accent);">@context.AccountNumber</MudText>
         </MudTd>
         <MudTd DataLabel="Account Name">
             <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.AccountName</MudText>
             @if (!string.IsNullOrEmpty(context.Description))
             {
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">@context.Description</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-40);">@context.Description</MudText>
             }
         </MudTd>
         <MudTd DataLabel="Type">
@@ -128,7 +128,7 @@
         </MudTd>
         <MudTd DataLabel="Sub-Type">@(context.SubType ?? "—")</MudTd>
         <MudTd DataLabel="Segments">
-            <MudText Typo="Typo.caption" Style="font-family: monospace; color: rgba(255,255,255,0.6);">@context.Segments</MudText>
+            <MudText Typo="Typo.caption" Style="font-family: monospace; color: var(--cb-fg-text-60);">@context.Segments</MudText>
         </MudTd>
         <MudTd DataLabel="LOB">
             @foreach (var lob in context.LineOfBusinessMapping.Take(3))
@@ -149,7 +149,7 @@
             }
             else
             {
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3);">—</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-30);">—</MudText>
             }
         </MudTd>
         <MudTd DataLabel="Reconciliation">
@@ -159,7 +159,7 @@
             }
             else
             {
-                <MudIcon Icon="@Icons.Material.Filled.RadioButtonUnchecked" Size="Size.Small" Style="color: rgba(255,255,255,0.2);" />
+                <MudIcon Icon="@Icons.Material.Filled.RadioButtonUnchecked" Size="Size.Small" Style="color: var(--cb-fg-text-20);" />
             }
         </MudTd>
         <MudTd DataLabel="Status">
@@ -190,9 +190,9 @@
     </RowTemplate>
     <NoRecordsContent>
         <div class="pa-8 text-center">
-            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
-            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No GL accounts found</MudText>
-            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Create your first account to get started</MudText>
+            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Style="font-size: 3rem; color: var(--cb-accent-text-30);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: var(--cb-fg-text-50);">No GL accounts found</MudText>
+            <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-30);">Create your first account to get started</MudText>
         </div>
     </NoRecordsContent>
     <PagerContent>
@@ -203,7 +203,7 @@
 <!-- New / Edit Account Dialog -->
 <MudDialog @bind-Visible="_dialogVisible" Options="_dialogOptions">
     <TitleContent>
-        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+        <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">
             <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Class="mr-2" />
             @(_editingAccount != null ? "Edit GL Account" : "New GL Account")
         </MudText>
@@ -242,7 +242,7 @@
 
             <!-- Segment Codes -->
             <MudItem xs="12">
-                <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color: #00ffff;">Segment Codes</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color: var(--cho-accent);">Segment Codes</MudText>
             </MudItem>
             <MudItem xs="4">
                 <MudTextField @bind-Value="_formSegCompany" Label="Company" Variant="Variant.Outlined" Dense="true" />
@@ -283,7 +283,7 @@
 
             <!-- Premium Split -->
             <MudItem xs="12">
-                <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color: #00ffff;">Premium Split</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mb-1" Style="color: var(--cho-accent);">Premium Split</MudText>
             </MudItem>
             <MudItem xs="6">
                 <MudNumericField @bind-Value="_formSponsorPct" Label="Sponsor %" Variant="Variant.Outlined"

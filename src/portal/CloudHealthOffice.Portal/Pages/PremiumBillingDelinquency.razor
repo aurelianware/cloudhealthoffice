@@ -16,9 +16,9 @@
 @if (_canFinance)
 {
     <MudPaper Class="pa-4 mb-4" data-testid="delinquency-run-panel"
-              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(255,0,85,0.3); border-radius: 12px;">
-        <MudText Typo="Typo.subtitle1" Style="color: #ff0055; font-weight: 600;">Run delinquency processing</MudText>
-        <MudText Typo="Typo.body2" Class="mb-3" Style="color: rgba(255,255,255,0.6);">
+              Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-error-border-30); border-radius: 12px;">
+        <MudText Typo="Typo.subtitle1" Style="color: var(--cho-error); font-weight: 600;">Run delinquency processing</MudText>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color: var(--cb-fg-text-60);">
             Marks every invoice past its grace period as Delinquent and suspends its sponsor in sponsor-service.
             Suspensions that failed before are retried.
         </MudText>
@@ -42,7 +42,7 @@
 @if (_result != null)
 {
     <MudPaper Class="pa-4 mb-4" data-testid="delinquency-result"
-              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.25); border-radius: 12px;">
+              Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-25); border-radius: 12px;">
         <MudText Typo="Typo.subtitle1" Class="mb-2">Result</MudText>
         <div class="d-flex gap-4 mb-2">
             <span>Marked delinquent: <strong data-testid="delinquent-count">@_result.DelinquentCount</strong></span>
@@ -84,7 +84,7 @@
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
 }
 <MudTable Items="FailedSuspensions" Dense="true" T="PremiumInvoice" data-testid="pending-retries" Class="mb-6"
-          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(255,0,85,0.3); border-radius: 12px;">
+          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-error-border-30); border-radius: 12px;">
     <HeaderContent>
         <MudTh>Invoice</MudTh>
         <MudTh>Sponsor</MudTh>
@@ -104,13 +104,13 @@
         <MudTd>@context.SponsorSuspension!.LastError</MudTd>
     </RowTemplate>
     <NoRecordsContent>
-        <MudText Typo="Typo.body2" Class="pa-4" Style="color: rgba(255,255,255,0.4);">No failed sponsor suspensions</MudText>
+        <MudText Typo="Typo.body2" Class="pa-4" Style="color: var(--cb-fg-text-40);">No failed sponsor suspensions</MudText>
     </NoRecordsContent>
 </MudTable>
 
 <MudText Typo="Typo.h6" Class="mb-2">Delinquent invoices</MudText>
 <MudTable Items="_delinquent" Dense="true" T="PremiumInvoice" data-testid="delinquent-invoices"
-          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
     <HeaderContent>
         <MudTh>Invoice</MudTh>
         <MudTh>Sponsor</MudTh>
@@ -141,7 +141,7 @@
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
-        <MudText Typo="Typo.body2" Class="pa-4" Style="color: rgba(255,255,255,0.4);">No delinquent invoices</MudText>
+        <MudText Typo="Typo.body2" Class="pa-4" Style="color: var(--cb-fg-text-40);">No delinquent invoices</MudText>
     </NoRecordsContent>
     <PagerContent><MudTablePager /></PagerContent>
 </MudTable>

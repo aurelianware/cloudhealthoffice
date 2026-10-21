@@ -260,6 +260,11 @@ if (!builder.Environment.IsDevelopment())
         });
 }
 
+// Theme (Enterprise / Sentinel) for this circuit, and per-tenant branding.
+builder.Services.AddScoped<CloudHealthOffice.Portal.Theming.ThemeState>();
+builder.Services.AddSingleton<CloudHealthOffice.Portal.Theming.ITenantBrandingProvider,
+    CloudHealthOffice.Portal.Theming.ConfigurationTenantBrandingProvider>();
+
 // Register tenant context service (must be before other services that depend on it)
 builder.Services.AddScoped<ITenantContextService, TenantContextService>();
 builder.Services.AddScoped<ISearchCriteriaPolicy, SearchCriteriaPolicy>();

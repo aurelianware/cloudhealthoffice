@@ -38,7 +38,7 @@
         }
         else if (_member != null)
         {
-            <div class="d-flex align-center gap-3 mb-4 pa-2" style="border: 1px solid rgba(0,255,255,0.2); border-radius: 8px; background: rgba(0,255,255,0.03);">
+            <div class="d-flex align-center gap-3 mb-4 pa-2" style="border: 1px solid var(--cb-accent-border-20); border-radius: 8px; background: var(--cb-accent-bg-3);">
                 <MudAvatar Size="Size.Large" Color="Color.Primary">
                     @(_member.FirstName[0])@(_member.LastName[0])
                 </MudAvatar>
@@ -266,7 +266,7 @@
                                         <MudText Typo="Typo.body2">@context.TransactionDate.ToString("MM/dd/yyyy")</MudText>
                                     </MudTd>
                                     <MudTd DataLabel="Batch ID">
-                                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,255,0.7);">@context.BatchId</MudText>
+                                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cb-accent-text-70);">@context.BatchId</MudText>
                                     </MudTd>
                                     <MudTd DataLabel="Type">
                                         <MudTooltip Text="@context.TransactionSetPurpose">
@@ -333,7 +333,7 @@
                         {
                             @foreach (var coverage in _coverages)
                             {
-                                <MudCard Class="mb-3" Elevation="1" Style="border: 1px solid rgba(0,255,255,0.15);">
+                                <MudCard Class="mb-3" Elevation="1" Style="border: 1px solid var(--cb-accent-border-15);">
                                     <MudCardHeader>
                                         <CardHeaderContent>
                                             <div class="d-flex align-center gap-2">
@@ -363,7 +363,7 @@
                                         <MudGrid>
                                             <MudItem xs="12" md="4">
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">COVERAGE ID</MudText>
-                                                <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,255,0.8);">@coverage.CoverageId</MudText>
+                                                <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cb-accent-text-80);">@coverage.CoverageId</MudText>
                                             </MudItem>
                                             <MudItem xs="12" md="4">
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">GROUP NUMBER</MudText>
@@ -371,7 +371,7 @@
                                             </MudItem>
                                             <MudItem xs="12" md="4">
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">PLAN ID</MudText>
-                                                <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,255,0.8);">@coverage.PlanId</MudText>
+                                                <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cb-accent-text-80);">@coverage.PlanId</MudText>
                                             </MudItem>
                                             <MudItem xs="12" md="4">
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">STATUS</MudText>
@@ -613,7 +613,7 @@
 
                             <MudGrid Class="mb-4">
                                 <MudItem xs="12" md="6">
-                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid rgba(0,255,255,0.1);">
+                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid var(--cb-accent-border-10);">
                                         <div class="d-flex justify-space-between mb-1">
                                             <MudText Typo="Typo.body2" Style="font-weight: 500;">Individual Deductible</MudText>
                                             <MudText Typo="Typo.body2">@_accumulators.IndividualDeductibleUsed.ToString("C") of @_accumulators.IndividualDeductibleLimit.ToString("C")</MudText>
@@ -625,7 +625,7 @@
                                     </MudPaper>
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid rgba(0,255,255,0.1);">
+                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid var(--cb-accent-border-10);">
                                         <div class="d-flex justify-space-between mb-1">
                                             <MudText Typo="Typo.body2" Style="font-weight: 500;">Family Deductible</MudText>
                                             <MudText Typo="Typo.body2">@_accumulators.FamilyDeductibleUsed.ToString("C") of @_accumulators.FamilyDeductibleLimit.ToString("C")</MudText>
@@ -637,7 +637,7 @@
                                     </MudPaper>
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid rgba(0,255,255,0.1);">
+                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid var(--cb-accent-border-10);">
                                         <div class="d-flex justify-space-between mb-1">
                                             <MudText Typo="Typo.body2" Style="font-weight: 500;">Individual Out-of-Pocket Max</MudText>
                                             <MudText Typo="Typo.body2">@_accumulators.IndividualOopUsed.ToString("C") of @_accumulators.IndividualOopLimit.ToString("C")</MudText>
@@ -649,7 +649,7 @@
                                     </MudPaper>
                                 </MudItem>
                                 <MudItem xs="12" md="6">
-                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid rgba(0,255,255,0.1);">
+                                    <MudPaper Class="pa-3" Elevation="1" Style="border: 1px solid var(--cb-accent-border-10);">
                                         <div class="d-flex justify-space-between mb-1">
                                             <MudText Typo="Typo.body2" Style="font-weight: 500;">Family Out-of-Pocket Max</MudText>
                                             <MudText Typo="Typo.body2">@_accumulators.FamilyOopUsed.ToString("C") of @_accumulators.FamilyOopLimit.ToString("C")</MudText>
@@ -756,7 +756,7 @@
                         }
                         else if (_pcp != null)
                         {
-                            <MudCard Elevation="2" Style="border: 1px solid rgba(0,255,136,0.3);">
+                            <MudCard Elevation="2" Style="border: 1px solid var(--cb-success-border-30);">
                                 <MudCardHeader>
                                     <CardHeaderContent>
                                         <div class="d-flex align-center gap-2">
@@ -779,7 +779,7 @@
                                         </MudItem>
                                         <MudItem xs="12" md="4">
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">NPI</MudText>
-                                            <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,255,0.8);">@_pcp.NPI</MudText>
+                                            <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cb-accent-text-80);">@_pcp.NPI</MudText>
                                         </MudItem>
                                         <MudItem xs="12" md="4">
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">SPECIALTY</MudText>

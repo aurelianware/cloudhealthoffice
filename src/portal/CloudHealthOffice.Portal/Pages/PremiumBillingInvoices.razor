@@ -18,8 +18,8 @@
         @foreach (var (label, amount, count, color) in AgingBuckets)
         {
             <MudItem xs="6" sm="2">
-                <MudPaper Class="pa-3" Style="@($"background: rgba(10,10,10,0.9); border: 1px solid {color}; border-radius: 12px;")">
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">@label (@count)</MudText>
+                <MudPaper Class="pa-3" Style="@($"background: var(--cb-surface-bg-90); border: 1px solid {color}; border-radius: 12px;")">
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">@label (@count)</MudText>
                     <MudText Typo="Typo.h6" Style="@($"color: {color}; font-family: monospace;")">@amount.ToString("C0")</MudText>
                 </MudPaper>
             </MudItem>
@@ -58,7 +58,7 @@ else
 }
 
 <MudTable Items="_invoices" Dense="true" Hover="true" T="PremiumInvoice" data-testid="invoices"
-          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
     <HeaderContent>
         <MudTh>Invoice #</MudTh>
         <MudTh>Sponsor</MudTh>
@@ -72,7 +72,7 @@ else
         <MudTh></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Invoice #"><span style="font-family: monospace; color: #00ffff;">@context.InvoiceNumber</span></MudTd>
+        <MudTd DataLabel="Invoice #"><span style="font-family: monospace; color: var(--cho-accent);">@context.InvoiceNumber</span></MudTd>
         <MudTd DataLabel="Sponsor">@context.SponsorName</MudTd>
         <MudTd DataLabel="Group">@context.GroupNumber</MudTd>
         <MudTd DataLabel="Period">@context.BillingPeriodStart.ToString("yyyy-MM")</MudTd>
@@ -93,7 +93,7 @@ else
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
-        <MudText Typo="Typo.body2" Class="pa-4" Style="color: rgba(255,255,255,0.4);">No invoices match</MudText>
+        <MudText Typo="Typo.body2" Class="pa-4" Style="color: var(--cb-fg-text-40);">No invoices match</MudText>
     </NoRecordsContent>
     <PagerContent><MudTablePager /></PagerContent>
 </MudTable>
@@ -110,9 +110,9 @@ else
 {
     var inv = _selected;
     <MudPaper Class="pa-4 mt-4" data-testid="invoice-detail"
-              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.25); border-radius: 12px;">
+              Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-25); border-radius: 12px;">
         <div class="d-flex align-center gap-2 mb-2">
-            <MudText Typo="Typo.h6" Style="color: #00ffff;">@inv.InvoiceNumber</MudText>
+            <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">@inv.InvoiceNumber</MudText>
             <MudChip T="string" Size="Size.Small" Color="@InvoiceStatusColor(inv.Status)">@inv.Status</MudChip>
             <MudSpacer />
             <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => _selected = null" />
@@ -269,11 +269,11 @@ else
         ? Array.Empty<(string, decimal, int, string)>()
         : new[]
         {
-            ("Current", _aging.CurrentAmount, _aging.CurrentCount, "#00ff88"),
-            ("30 days", _aging.ThirtyDayAmount, _aging.ThirtyDayCount, "#ffaa00"),
-            ("60 days", _aging.SixtyDayAmount, _aging.SixtyDayCount, "#ff7700"),
-            ("90+ days", _aging.NinetyPlusDayAmount, _aging.NinetyPlusDayCount, "#ff0055"),
-            ("Outstanding", _aging.TotalOutstanding, _aging.TotalCount, "#00ffff"),
+            ("Current", _aging.CurrentAmount, _aging.CurrentCount, "var(--cho-success)"),
+            ("30 days", _aging.ThirtyDayAmount, _aging.ThirtyDayCount, "var(--cho-warning)"),
+            ("60 days", _aging.SixtyDayAmount, _aging.SixtyDayCount, "var(--cho-warning)"),
+            ("90+ days", _aging.NinetyPlusDayAmount, _aging.NinetyPlusDayCount, "var(--cho-error)"),
+            ("Outstanding", _aging.TotalOutstanding, _aging.TotalCount, "var(--cho-accent)"),
         };
 
     protected override async Task OnInitializedAsync()

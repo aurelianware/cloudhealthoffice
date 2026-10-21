@@ -10,11 +10,11 @@
 <PageTitle>Reports & Analytics — Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="reports:claims,reports:financial,reports:compliance" RoleName="ClaimsSupervisor, Finance, or ComplianceOfficer">
-<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: var(--cho-accent); font-weight: 700; letter-spacing: -0.5px;">
     <MudIcon Icon="@Icons.Material.Filled.Assessment" Class="mr-2" Style="vertical-align: middle;" />
     Reports & Analytics
 </MudText>
-<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+<MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);" Class="mb-4">
     Operational reporting, payment analytics, eligibility statistics, and provider performance
 </MudText>
 
@@ -31,7 +31,7 @@
     <MudTabPanel Text="Claims Summary" Icon="@Icons.Material.Filled.Receipt">
         <div class="pt-4">
             <!-- Filter Bar -->
-            <MudPaper Class="pa-3 mb-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+            <MudPaper Class="pa-3 mb-4" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 10px;">
                 <MudGrid Spacing="2" AlignItems="Center">
                     <MudItem xs="12" sm="3">
                         <MudDatePicker @bind-Date="_claimsFrom" Label="From" Variant="Variant.Outlined" Margin="Margin.Dense" />
@@ -69,32 +69,32 @@
                 <!-- KPI Cards -->
                 <MudGrid Spacing="3" Class="mb-4">
                     <MudItem xs="6" sm="3">
-                        <MudPaper Class="pa-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 10px;">
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Claims</MudText>
-                            <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_claimsSummary.TotalClaims.ToString("N0")</MudText>
+                        <MudPaper Class="pa-3" Style="background: var(--cb-accent-bg-5); border: 1px solid var(--cb-accent-border-20); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Total Claims</MudText>
+                            <MudText Typo="Typo.h5" Style="color: var(--cho-accent); font-weight: 700;">@_claimsSummary.TotalClaims.ToString("N0")</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="6" sm="3">
-                        <MudPaper Class="pa-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 10px;">
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Approved</MudText>
-                            <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">
+                        <MudPaper Class="pa-3" Style="background: var(--cb-success-bg-5); border: 1px solid var(--cb-success-border-20); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Approved</MudText>
+                            <MudText Typo="Typo.h5" Style="color: var(--cho-success); font-weight: 700;">
                                 @_claimsSummary.ApprovedCount.ToString("N0")
-                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">
+                                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-40);">
                                     (@(_claimsSummary.TotalClaims > 0 ? (_claimsSummary.ApprovedCount * 100.0 / _claimsSummary.TotalClaims).ToString("N1") : "0")%)
                                 </MudText>
                             </MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="6" sm="3">
-                        <MudPaper Class="pa-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 10px;">
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Denied</MudText>
-                            <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_claimsSummary.DeniedCount.ToString("N0")</MudText>
+                        <MudPaper Class="pa-3" Style="background: var(--cb-error-bg-5); border: 1px solid var(--cb-error-border-20); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Denied</MudText>
+                            <MudText Typo="Typo.h5" Style="color: var(--cho-error); font-weight: 700;">@_claimsSummary.DeniedCount.ToString("N0")</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="6" sm="3">
-                        <MudPaper Class="pa-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 10px;">
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Paid</MudText>
-                            <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700; font-family: monospace;">@_claimsSummary.TotalPaid.ToString("C0")</MudText>
+                        <MudPaper Class="pa-3" Style="background: var(--cb-success-bg-5); border: 1px solid var(--cb-success-border-20); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Total Paid</MudText>
+                            <MudText Typo="Typo.h5" Style="color: var(--cho-success); font-weight: 700; font-family: monospace;">@_claimsSummary.TotalPaid.ToString("C0")</MudText>
                         </MudPaper>
                     </MudItem>
                 </MudGrid>
@@ -102,8 +102,8 @@
                 <!-- Daily Breakdown Chart (bar chart via data table) -->
                 @if (_claimsSummary.DailyBreakdown.Any())
                 {
-                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">Daily Claims Volume</MudText>
-                    <MudPaper Class="pa-3 mb-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: var(--cb-fg-text-60);">Daily Claims Volume</MudText>
+                    <MudPaper Class="pa-3 mb-4" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 10px;">
                         <MudChart ChartType="ChartType.Bar"
                                   ChartSeries="@_claimsDailySeries"
                                   XAxisLabels="@_claimsDailyLabels.ToArray()"
@@ -115,9 +115,9 @@
                 <!-- Top Providers -->
                 <MudGrid Spacing="3">
                     <MudItem xs="12" md="6">
-                        <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">Top Providers by Volume</MudText>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: var(--cb-fg-text-60);">Top Providers by Volume</MudText>
                         <MudTable Items="_claimsSummary.TopProviders" Dense="true" T="ClaimsByProvider"
-                                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                                  Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 10px;">
                             <HeaderContent>
                                 <MudTh>Provider</MudTh>
                                 <MudTh>Claims</MudTh>
@@ -125,24 +125,24 @@
                             </HeaderContent>
                             <RowTemplate>
                                 <MudTd>
-                                    <MudLink Href="@($"/providers/{context.ProviderId}")" Style="color: #00ffff;">@context.ProviderName</MudLink>
+                                    <MudLink Href="@($"/providers/{context.ProviderId}")" Style="color: var(--cho-accent);">@context.ProviderName</MudLink>
                                 </MudTd>
                                 <MudTd>@context.ClaimCount</MudTd>
-                                <MudTd><MudText Style="font-family: monospace; color: #00ff88;">@context.TotalPaid.ToString("C0")</MudText></MudTd>
+                                <MudTd><MudText Style="font-family: monospace; color: var(--cho-success);">@context.TotalPaid.ToString("C0")</MudText></MudTd>
                             </RowTemplate>
                         </MudTable>
                     </MudItem>
                     <MudItem xs="12" md="6">
-                        <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">Top Diagnoses</MudText>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: var(--cb-fg-text-60);">Top Diagnoses</MudText>
                         <MudTable Items="_claimsSummary.TopDiagnoses" Dense="true" T="ClaimsByDiagnosis"
-                                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                                  Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 10px;">
                             <HeaderContent>
                                 <MudTh>ICD-10</MudTh>
                                 <MudTh>Description</MudTh>
                                 <MudTh>Claims</MudTh>
                             </HeaderContent>
                             <RowTemplate>
-                                <MudTd><MudText Style="font-family: monospace; color: #00ffff;">@context.DiagnosisCode</MudText></MudTd>
+                                <MudTd><MudText Style="font-family: monospace; color: var(--cho-accent);">@context.DiagnosisCode</MudText></MudTd>
                                 <MudTd>@context.Description</MudTd>
                                 <MudTd>@context.ClaimCount</MudTd>
                             </RowTemplate>
@@ -189,27 +189,27 @@
             {
                 <MudGrid Spacing="3" Class="mb-4">
                     <MudItem xs="6" sm="3">
-                        <MudPaper Class="pa-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 10px;">
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total ERAs</MudText>
-                            <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_paymentSummary.EraCount</MudText>
+                        <MudPaper Class="pa-3" Style="background: var(--cb-accent-bg-5); border: 1px solid var(--cb-accent-border-20); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Total ERAs</MudText>
+                            <MudText Typo="Typo.h5" Style="color: var(--cho-accent); font-weight: 700;">@_paymentSummary.EraCount</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="6" sm="3">
-                        <MudPaper Class="pa-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 10px;">
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Paid</MudText>
-                            <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700; font-family: monospace;">@_paymentSummary.TotalEraAmount.ToString("C0")</MudText>
+                        <MudPaper Class="pa-3" Style="background: var(--cb-success-bg-5); border: 1px solid var(--cb-success-border-20); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Total Paid</MudText>
+                            <MudText Typo="Typo.h5" Style="color: var(--cho-success); font-weight: 700; font-family: monospace;">@_paymentSummary.TotalEraAmount.ToString("C0")</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="6" sm="3">
-                        <MudPaper Class="pa-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 10px;">
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Periods</MudText>
-                            <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_paymentSummary.ByPeriod.Count</MudText>
+                        <MudPaper Class="pa-3" Style="background: var(--cb-accent-bg-5); border: 1px solid var(--cb-accent-border-20); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Periods</MudText>
+                            <MudText Typo="Typo.h5" Style="color: var(--cho-accent); font-weight: 700;">@_paymentSummary.ByPeriod.Count</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="6" sm="3">
-                        <MudPaper Class="pa-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 10px;">
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Avg ERA Amount</MudText>
-                            <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700; font-family: monospace;">
+                        <MudPaper Class="pa-3" Style="background: var(--cb-success-bg-5); border: 1px solid var(--cb-success-border-20); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Avg ERA Amount</MudText>
+                            <MudText Typo="Typo.h5" Style="color: var(--cho-success); font-weight: 700; font-family: monospace;">
                                 @_paymentSummary.AvgEraAmount.ToString("C0")
                             </MudText>
                         </MudPaper>
@@ -218,8 +218,8 @@
 
                 @if (_paymentSummary.ByPeriod.Any())
                 {
-                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">Monthly ERA Distribution</MudText>
-                    <MudPaper Class="pa-3 mb-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: var(--cb-fg-text-60);">Monthly ERA Distribution</MudText>
+                    <MudPaper Class="pa-3 mb-4" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 10px;">
                         <MudChart ChartType="ChartType.Bar"
                                   ChartSeries="@_paymentMonthlySeries"
                                   XAxisLabels="@_paymentMonthlyLabels.ToArray()"
@@ -260,8 +260,8 @@
             {
                 <MudGrid Spacing="3">
                     <MudItem xs="12" md="4">
-                        <MudPaper Class="pa-4" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
-                            <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color: rgba(255,255,255,0.5);">Query Totals</MudText>
+                        <MudPaper Class="pa-4" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 10px;">
+                            <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color: var(--cb-fg-text-50);">Query Totals</MudText>
                             <div class="d-flex flex-column gap-3">
                                 @{
                                     var ineligibleRate = _eligStats.TotalRequests > 0
@@ -277,21 +277,21 @@
                                 <div>
                                     <div class="d-flex justify-space-between mb-1">
                                         <MudText Typo="Typo.body2">Eligible Rate</MudText>
-                                        <MudText Typo="Typo.body2" Style="color: #00ff88; font-weight: 600;">@_eligStats.EligibilityRate.ToString("P1")</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cho-success); font-weight: 600;">@_eligStats.EligibilityRate.ToString("P1")</MudText>
                                     </div>
                                     <MudProgressLinear Value="@(_eligStats.EligibilityRate * 100)" Color="Color.Success" Rounded="true" Style="height: 8px;" />
                                 </div>
                                 <div>
                                     <div class="d-flex justify-space-between mb-1">
                                         <MudText Typo="Typo.body2">Ineligible Rate</MudText>
-                                        <MudText Typo="Typo.body2" Style="color: #ff0055; font-weight: 600;">@ineligibleRate.ToString("P1")</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cho-error); font-weight: 600;">@ineligibleRate.ToString("P1")</MudText>
                                     </div>
                                     <MudProgressLinear Value="@(ineligibleRate * 100)" Color="Color.Error" Rounded="true" Style="height: 8px;" />
                                 </div>
                                 <div>
                                     <div class="d-flex justify-space-between mb-1">
                                         <MudText Typo="Typo.body2">Avg Response Time</MudText>
-                                        <MudText Typo="Typo.body2" Style="color: #00ffff; font-weight: 600;">@_eligStats.AvgResponseTimeMs ms</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: var(--cho-accent); font-weight: 600;">@_eligStats.AvgResponseTimeMs ms</MudText>
                                     </div>
                                     <MudProgressLinear Value="@Math.Min((double)_eligStats.AvgResponseTimeMs / 5, 100)" Color="Color.Info" Rounded="true" Style="height: 8px;" />
                                 </div>
@@ -332,28 +332,28 @@
             {
                 <MudGrid Spacing="3" Class="mb-4">
                     <MudItem xs="4">
-                        <MudPaper Class="pa-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 10px;">
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Approved</MudText>
-                            <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_authReport.ApprovedCount</MudText>
+                        <MudPaper Class="pa-3" Style="background: var(--cb-success-bg-5); border: 1px solid var(--cb-success-border-20); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Approved</MudText>
+                            <MudText Typo="Typo.h5" Style="color: var(--cho-success); font-weight: 700;">@_authReport.ApprovedCount</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="4">
-                        <MudPaper Class="pa-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 10px;">
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Denied</MudText>
-                            <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_authReport.DeniedCount</MudText>
+                        <MudPaper Class="pa-3" Style="background: var(--cb-error-bg-5); border: 1px solid var(--cb-error-border-20); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Denied</MudText>
+                            <MudText Typo="Typo.h5" Style="color: var(--cho-error); font-weight: 700;">@_authReport.DeniedCount</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="4">
-                        <MudPaper Class="pa-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 10px;">
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Pending</MudText>
-                            <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_authReport.PendingCount</MudText>
+                        <MudPaper Class="pa-3" Style="background: var(--cb-warning-bg-5); border: 1px solid var(--cb-warning-border-20); border-radius: 10px;">
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Pending</MudText>
+                            <MudText Typo="Typo.h5" Style="color: var(--cho-warning); font-weight: 700;">@_authReport.PendingCount</MudText>
                         </MudPaper>
                     </MudItem>
                 </MudGrid>
 
-                <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">By Service Type</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: var(--cb-fg-text-60);">By Service Type</MudText>
                 <MudTable Items="_authReport.ByServiceType" Dense="true" T="AuthByServiceType"
-                          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 10px;">
                     <HeaderContent>
                         <MudTh>Service Type</MudTh>
                         <MudTh>Approved</MudTh>
@@ -363,9 +363,9 @@
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd>@context.ServiceType</MudTd>
-                        <MudTd><MudText Style="color: #00ff88;">@context.ApprovedCount</MudText></MudTd>
-                        <MudTd><MudText Style="color: #ff0055;">@context.DeniedCount</MudText></MudTd>
-                        <MudTd><MudText Style="color: #ffaa00;">@(context.Count - context.ApprovedCount - context.DeniedCount)</MudText></MudTd>
+                        <MudTd><MudText Style="color: var(--cho-success);">@context.ApprovedCount</MudText></MudTd>
+                        <MudTd><MudText Style="color: var(--cho-error);">@context.DeniedCount</MudText></MudTd>
+                        <MudTd><MudText Style="color: var(--cho-warning);">@(context.Count - context.ApprovedCount - context.DeniedCount)</MudText></MudTd>
                         <MudTd>
                             @{
                                 var total = context.ApprovedCount + context.DeniedCount;
@@ -422,7 +422,7 @@
             {
                 <MudTable Items="_providerPerformance" Dense="true" Hover="true" T="ClaimsByProvider"
                           SortLabel="Sort"
-                          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 10px;">
+                          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 10px;">
                     <HeaderContent>
                         <MudTh><MudTableSortLabel SortBy="new Func<ClaimsByProvider,object>(x=>x.ProviderName)">Provider</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel SortBy="new Func<ClaimsByProvider,object>(x=>x.ClaimCount)">Claims</MudTableSortLabel></MudTh>
@@ -433,14 +433,14 @@
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Provider">
-                            <MudLink Href="@($"/providers/{context.ProviderId}")" Style="color: #00ffff;">@context.ProviderName</MudLink>
+                            <MudLink Href="@($"/providers/{context.ProviderId}")" Style="color: var(--cho-accent);">@context.ProviderName</MudLink>
                         </MudTd>
                         <MudTd DataLabel="Claims">@context.ClaimCount.ToString("N0")</MudTd>
                         <MudTd DataLabel="Total Billed">
                             <MudText Style="font-family: monospace;">@context.TotalBilled.ToString("C0")</MudText>
                         </MudTd>
                         <MudTd DataLabel="Total Paid">
-                            <MudText Style="font-family: monospace; color: #00ff88; font-weight: 600;">@context.TotalPaid.ToString("C0")</MudText>
+                            <MudText Style="font-family: monospace; color: var(--cho-success); font-weight: 600;">@context.TotalPaid.ToString("C0")</MudText>
                         </MudTd>
                         <MudTd DataLabel="Approval Rate">
                             <div class="d-flex align-center gap-2">

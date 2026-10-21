@@ -1,6 +1,6 @@
 @using CloudHealthOffice.Portal.Models
 
-<MudPaper Style="background: #111118; border: 1px solid #2a2a35; border-radius: 8px; padding: 16px; min-width: 220px;">
+<MudPaper Style="background: var(--cho-surface); border: 1px solid var(--cho-line); border-radius: 8px; padding: 16px; min-width: 220px;">
     @if (Loading)
     {
         <MudSkeleton SkeletonType="SkeletonType.Text" Width="120px" />
@@ -10,25 +10,25 @@
     {
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
             <span class="@GetFreshnessCssClass()"></span>
-            <MudText Typo="Typo.caption" Style="color: #9c9a92; text-transform: uppercase; letter-spacing: 0.05em;">
+            <MudText Typo="Typo.caption" Style="color: var(--cho-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
                 Current Edition
             </MudText>
         </div>
-        <MudText Typo="Typo.subtitle1" Style="color: #e8e6e0; font-weight: 600;">
+        <MudText Typo="Typo.subtitle1" Style="color: var(--cho-text); font-weight: 600;">
             @FormatEditionName(Edition.EditionId)
         </MudText>
-        <MudText Typo="Typo.caption" Style="color: #9c9a92;">
+        <MudText Typo="Typo.caption" Style="color: var(--cho-text-muted);">
             Loaded @FormatIngestedAt() UTC
         </MudText>
         @if (Edition.Chapters.Count > 0)
         {
             <div style="margin-top: 8px; display: flex; gap: 8px;">
                 <MudChip Size="Size.Small"
-                         Style="background: #1a1a24; color: #9c9a92; border: 1px solid #2a2a35; font-size: 0.7rem;">
+                         Style="background: var(--cho-raised); color: var(--cho-text-muted); border: 1px solid var(--cho-line); font-size: 0.7rem;">
                     @GetChapterCountLabel()
                 </MudChip>
                 <MudChip Size="Size.Small"
-                         Style="background: #1a1a24; color: #9c9a92; border: 1px solid #2a2a35; font-size: 0.7rem;">
+                         Style="background: var(--cho-raised); color: var(--cho-text-muted); border: 1px solid var(--cho-line); font-size: 0.7rem;">
                     @GetRuleCountLabel()
                 </MudChip>
             </div>
@@ -36,7 +36,7 @@
     }
     else
     {
-        <MudText Typo="Typo.caption" Style="color: #9c9a92;">No edition loaded</MudText>
+        <MudText Typo="Typo.caption" Style="color: var(--cho-text-muted);">No edition loaded</MudText>
     }
 </MudPaper>
 

@@ -11,15 +11,15 @@
 
 ::deep .pa-explorer-tabs .mud-tabs-toolbar {
     background: transparent;
-    border-bottom: 1px solid #2a2a35;
+    border-bottom: 1px solid var(--cho-line);
 }
 
 ::deep .pa-explorer-tabs .mud-tab.mud-tab-active {
-    color: #00e5cc !important;
+    color: var(--cho-accent-2) !important;
 }
 
 ::deep .pa-explorer-tabs .mud-tab-slider {
-    background: #00e5cc !important;
+    background: var(--cho-accent-2) !important;
 }
 
 /* Search bar */
@@ -29,17 +29,17 @@
 }
 
 ::deep .pa-search-bar .mud-input-outlined .mud-input-outlined-border {
-    border-color: #2a2a35;
+    border-color: var(--cho-line);
     transition: border-color 0.2s ease;
 }
 
 ::deep .pa-search-bar .mud-input-outlined:hover .mud-input-outlined-border {
-    border-color: rgba(0, 229, 204, 0.4);
+    border-color: var(--cb-accent2-border-40);
 }
 
 ::deep .pa-search-bar .mud-input-outlined.mud-focused .mud-input-outlined-border {
-    border-color: #00e5cc;
-    box-shadow: 0 0 0 2px rgba(0, 229, 204, 0.15);
+    border-color: var(--cho-accent-2);
+    box-shadow: 0 0 0 2px var(--cb-accent2-shadow-15);
 }
 
 ::deep .pa-autocomplete-dropdown {
@@ -48,8 +48,8 @@
     left: 0;
     right: 0;
     z-index: 100;
-    background: #111118;
-    border: 1px solid #2a2a35;
+    background: var(--cho-surface);
+    border: 1px solid var(--cho-line);
     border-radius: 4px;
     max-height: 240px;
     overflow-y: auto;
@@ -65,25 +65,25 @@
 }
 
 ::deep .pa-autocomplete-item:hover {
-    background: rgba(0, 229, 204, 0.08);
+    background: var(--cb-accent2-bg-8);
 }
 
 /* Rule card */
 ::deep .pa-rule-card {
-    background: #111118;
-    border: 1px solid #2a2a35;
+    background: var(--cho-surface);
+    border: 1px solid var(--cho-line);
     border-radius: 8px;
     overflow: hidden;
     transition: border-color 0.2s ease;
 }
 
 ::deep .pa-rule-card:hover {
-    border-color: rgba(0, 229, 204, 0.3);
+    border-color: var(--cb-accent2-border-30);
 }
 
 ::deep .pa-rule-card-header {
     padding: 12px 16px;
-    border-bottom: 1px solid rgba(42, 42, 53, 0.5);
+    border-bottom: 1px solid var(--cb-line-border-50);
 }
 
 ::deep .pa-rule-card-body {
@@ -101,9 +101,9 @@
 ::deep .pa-code-pill {
     display: inline-block;
     padding: 2px 10px;
-    background: rgba(0, 229, 204, 0.1);
-    color: #00e5cc;
-    border: 1px solid rgba(0, 229, 204, 0.25);
+    background: var(--cb-accent2-bg-10);
+    color: var(--cho-accent-2);
+    border: 1px solid var(--cb-accent2-border-25);
     border-radius: 4px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.8rem;
@@ -112,9 +112,9 @@
 }
 
 ::deep .pa-code-pill-secondary {
-    background: rgba(156, 154, 146, 0.1);
-    color: #9c9a92;
-    border-color: rgba(156, 154, 146, 0.25);
+    background: var(--cb-muted-bg-10);
+    color: var(--cho-text-muted);
+    border-color: var(--cb-muted-border-25);
 }
 
 /* Limit badges */
@@ -123,11 +123,11 @@
     align-items: center;
     gap: 6px;
     padding: 4px 10px;
-    background: #1a1a24;
-    border: 1px solid #2a2a35;
+    background: var(--cho-raised);
+    border: 1px solid var(--cho-line);
     border-radius: 4px;
     font-size: 0.8rem;
-    color: #e8e6e0;
+    color: var(--cho-text);
 }
 
 /* Documentation list */
@@ -140,7 +140,7 @@
 ::deep .pa-doc-list li {
     position: relative;
     padding: 4px 0 4px 16px;
-    color: #e8e6e0;
+    color: var(--cho-text);
     font-size: 0.85rem;
     line-height: 1.5;
 }
@@ -153,7 +153,7 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #00e5cc;
+    background: var(--cho-accent-2);
     opacity: 0.6;
 }
 
@@ -166,17 +166,17 @@
 }
 
 ::deep .pa-priority-p1 {
-    background: #00ff88;
-    box-shadow: 0 0 6px rgba(0, 255, 136, 0.4);
+    background: var(--cho-success);
+    box-shadow: 0 0 6px var(--cb-success-shadow-40);
 }
 
 ::deep .pa-priority-p2 {
-    background: #ffaa00;
-    box-shadow: 0 0 6px rgba(255, 170, 0, 0.4);
+    background: var(--cho-warning);
+    box-shadow: 0 0 6px var(--cb-warning-shadow-40);
 }
 
 ::deep .pa-priority-p3 {
-    background: #9c9a92;
+    background: var(--cho-text-muted);
 }
 
 /* Freshness indicator */
@@ -188,38 +188,38 @@
 }
 
 ::deep .pa-freshness-green {
-    background: #00ff88;
-    box-shadow: 0 0 6px rgba(0, 255, 136, 0.5);
+    background: var(--cho-success);
+    box-shadow: 0 0 6px var(--cb-success-shadow-50);
 }
 
 ::deep .pa-freshness-amber {
-    background: #ffaa00;
-    box-shadow: 0 0 6px rgba(255, 170, 0, 0.5);
+    background: var(--cho-warning);
+    box-shadow: 0 0 6px var(--cb-warning-shadow-50);
 }
 
 ::deep .pa-freshness-red {
-    background: #ff0055;
-    box-shadow: 0 0 6px rgba(255, 0, 85, 0.5);
+    background: var(--cho-error);
+    box-shadow: 0 0 6px var(--cb-error-shadow-50);
 }
 
 /* Diff cards */
 ::deep .pa-diff-card {
-    background: #111118;
-    border: 1px solid #2a2a35;
+    background: var(--cho-surface);
+    border: 1px solid var(--cho-line);
     border-radius: 8px;
     padding: 16px;
 }
 
 ::deep .pa-diff-before {
-    background: rgba(255, 0, 85, 0.05);
-    border: 1px solid rgba(255, 0, 85, 0.2);
+    background: var(--cb-error-bg-5);
+    border: 1px solid var(--cb-error-border-20);
     border-radius: 4px;
     padding: 10px;
 }
 
 ::deep .pa-diff-after {
-    background: rgba(0, 255, 136, 0.05);
-    border: 1px solid rgba(0, 255, 136, 0.2);
+    background: var(--cb-success-bg-5);
+    border: 1px solid var(--cb-success-border-20);
     border-radius: 4px;
     padding: 10px;
 }

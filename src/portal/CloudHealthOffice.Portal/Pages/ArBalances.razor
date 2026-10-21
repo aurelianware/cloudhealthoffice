@@ -8,11 +8,11 @@
 <PageTitle>AR Balances — Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="finance:read" RoleName="Finance">
-<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: var(--cho-accent); font-weight: 700; letter-spacing: -0.5px;">
     <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Class="mr-2" Style="vertical-align: middle;" />
     AR Balances
 </MudText>
-<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+<MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);" Class="mb-4">
     Period balances, aging, and reconciliation
 </MudText>
 
@@ -24,38 +24,38 @@
 <!-- Aging Dashboard -->
 <MudGrid Spacing="3" Class="mb-4">
     <MudItem xs="6" sm="2">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-success-bg-5); border: 1px solid var(--cb-success-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: var(--cho-success); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_aging.Current.ToString("C0")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Current</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-success); font-weight: 700;">@_aging.Current.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Current</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="2">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,255,0,0.05); border: 1px solid rgba(255,255,0,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.Schedule" Style="color: #ffff00; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-warning-bg-5); border: 1px solid var(--cb-warning-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Schedule" Style="color: var(--cho-warning); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #ffff00; font-weight: 700;">@_aging.Days31To60.ToString("C0")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">31-60 Days</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-warning); font-weight: 700;">@_aging.Days31To60.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">31-60 Days</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="2">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.Warning" Style="color: #ffaa00; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-warning-bg-5); border: 1px solid var(--cb-warning-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Style="color: var(--cho-warning); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_aging.Days61To90.ToString("C0")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">61-90 Days</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-warning); font-weight: 700;">@_aging.Days61To90.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">61-90 Days</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="2">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Style="color: #ff0055; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-error-bg-5); border: 1px solid var(--cb-error-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Style="color: var(--cho-error); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_aging.Days91To120.ToString("C0")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">91-120 Days</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-error); font-weight: 700;">@_aging.Days91To120.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">91-120 Days</MudText>
             </div>
         </MudPaper>
     </MudItem>
@@ -63,17 +63,17 @@
         <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(139,0,0,0.15); border: 1px solid rgba(139,0,0,0.4); border-radius: 12px;">
             <MudIcon Icon="@Icons.Material.Filled.Report" Style="color: #8b0000; font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #ff4444; font-weight: 700;">@_aging.Over120Days.ToString("C0")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">120+ Days</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-error); font-weight: 700;">@_aging.Over120Days.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">120+ Days</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="2">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Style="color: #00ffff; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-accent-bg-5); border: 1px solid var(--cb-accent-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Style="color: var(--cho-accent); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_aging.TotalOutstanding.ToString("C0")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Outstanding</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-accent); font-weight: 700;">@_aging.TotalOutstanding.ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Total Outstanding</MudText>
             </div>
         </MudPaper>
     </MudItem>
@@ -105,14 +105,14 @@
 
 <!-- Balances Grid -->
 <MudTable Items="FilteredBalances" Dense="true" Hover="true" T="ArBalanceSummary"
-          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
     <HeaderContent>
         <MudTh>Account #</MudTh>
         <MudTh>Account Name</MudTh>
         <MudTh Style="text-align: right;">Opening</MudTh>
         <MudTh Style="text-align: right;">Debits</MudTh>
         <MudTh Style="text-align: right;">Credits</MudTh>
-        <MudTh Style="text-align: right; color: #00ffff;">Closing</MudTh>
+        <MudTh Style="text-align: right; color: var(--cho-accent);">Closing</MudTh>
         <MudTh Style="text-align: right;">Sponsor Balance</MudTh>
         <MudTh Style="text-align: right;">Member Balance</MudTh>
         <MudTh>Reconciled</MudTh>
@@ -121,7 +121,7 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Account #">
-            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.AccountNumber</MudText>
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cho-accent);">@context.AccountNumber</MudText>
         </MudTd>
         <MudTd DataLabel="Account Name">
             @{
@@ -133,13 +133,13 @@
             <MudText Style="font-family: monospace;">@context.OpeningBalance.ToString("C2")</MudText>
         </MudTd>
         <MudTd DataLabel="Debits" Style="text-align: right;">
-            <MudText Style="font-family: monospace; color: #00ff88;">@context.TotalDebits.ToString("C2")</MudText>
+            <MudText Style="font-family: monospace; color: var(--cho-success);">@context.TotalDebits.ToString("C2")</MudText>
         </MudTd>
         <MudTd DataLabel="Credits" Style="text-align: right;">
-            <MudText Style="font-family: monospace; color: #ff0055;">@context.TotalCredits.ToString("C2")</MudText>
+            <MudText Style="font-family: monospace; color: var(--cho-error);">@context.TotalCredits.ToString("C2")</MudText>
         </MudTd>
         <MudTd DataLabel="Closing" Style="text-align: right;">
-            <MudText Style="font-family: monospace; font-weight: 700; color: #00ffff;">@context.ClosingBalance.ToString("C2")</MudText>
+            <MudText Style="font-family: monospace; font-weight: 700; color: var(--cho-accent);">@context.ClosingBalance.ToString("C2")</MudText>
         </MudTd>
         <MudTd DataLabel="Sponsor Balance" Style="text-align: right;">
             <MudText Style="font-family: monospace;">@context.SponsorBalance.ToString("C2")</MudText>
@@ -172,9 +172,9 @@
     </RowTemplate>
     <NoRecordsContent>
         <div class="pa-8 text-center">
-            <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
-            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No AR balances found</MudText>
-            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Balances will appear when GL accounts have activity</MudText>
+            <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Style="font-size: 3rem; color: var(--cb-accent-text-30);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: var(--cb-fg-text-50);">No AR balances found</MudText>
+            <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-30);">Balances will appear when GL accounts have activity</MudText>
         </div>
     </NoRecordsContent>
     <PagerContent>

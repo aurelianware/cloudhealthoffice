@@ -4,7 +4,7 @@
    transmission status, receipt, and one masked line per entry. The portal
    never receives the file or a full routing or account number. *@
 <MudPaper Class="pa-3 mb-3" data-testid="@TestId"
-          Style="@($"background: rgba(10,10,10,0.9); border: 1px solid {BorderColor}; border-radius: 12px;")">
+          Style="@($"background: var(--cb-surface-bg-90); border: 1px solid {BorderColor}; border-radius: 12px;")">
     <div class="d-flex flex-wrap align-center gap-2 mb-2">
         <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">NACHA file @Result.FileReference</MudText>
         <MudChip T="string" Size="Size.Small" Color="@StatusColor" data-testid="@($"{TestId}-status")">@StatusText</MudChip>
@@ -90,5 +90,5 @@
         _ => Color.Error
     };
 
-    private string BorderColor => Result.TransmissionStatus == "Transmitted" ? "rgba(0,255,136,0.35)" : "rgba(255,170,0,0.4)";
+    private string BorderColor => Result.TransmissionStatus == "Transmitted" ? "var(--cb-success-any-35)" : "var(--cb-warning-any-40)";
 }

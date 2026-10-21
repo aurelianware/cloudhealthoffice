@@ -1,8 +1,8 @@
 @using CloudHealthOffice.Portal.Models
 
-<MudPaper Style="background: #111118; border: 1px solid #2a2a35; border-radius: 8px; overflow: hidden;">
-    <div style="padding: 16px; border-bottom: 1px solid #2a2a35;">
-        <MudText Typo="Typo.subtitle2" Style="color: #e8e6e0; font-weight: 600;">
+<MudPaper Style="background: var(--cho-surface); border: 1px solid var(--cho-line); border-radius: 8px; overflow: hidden;">
+    <div style="padding: 16px; border-bottom: 1px solid var(--cho-line);">
+        <MudText Typo="Typo.subtitle2" Style="color: var(--cho-text); font-weight: 600;">
             <MudIcon Icon="@Icons.Material.Filled.Category" Size="Size.Small" Class="mr-1" />
             PA Categories
         </MudText>
@@ -20,7 +20,7 @@
     else if (Categories.Count == 0)
     {
         <div style="padding: 24px; text-align: center;">
-            <MudText Typo="Typo.body2" Style="color: #9c9a92;">No categories available</MudText>
+            <MudText Typo="Typo.body2" Style="color: var(--cho-text-muted);">No categories available</MudText>
         </div>
     }
     else
@@ -41,12 +41,12 @@
                                     <div style="font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                         @cat.Category
                                     </div>
-                                    <div style="font-size: 0.7rem; color: #9c9a92; font-family: 'JetBrains Mono', monospace;">
+                                    <div style="font-size: 0.7rem; color: var(--cho-text-muted); font-family: 'JetBrains Mono', monospace;">
                                         @cat.TmppmRef
                                     </div>
                                 </div>
                                 <MudChip Size="Size.Small"
-                                         Style="background: transparent; color: #9c9a92; font-size: 0.65rem; min-width: auto; height: 18px;">
+                                         Style="background: transparent; color: var(--cho-text-muted); font-size: 0.65rem; min-width: auto; height: 18px;">
                                     @cat.RuleCount
                                 </MudChip>
                             </div>
@@ -75,7 +75,7 @@
     {
         var isSelected = _selectedCategory == category;
         return isSelected
-            ? "border-left: 3px solid #00e5cc; background: rgba(0, 229, 204, 0.05); transition: all 0.2s ease;"
+            ? "border-left: 3px solid var(--cho-accent-2); background: var(--cb-accent2-bg-5); transition: all 0.2s ease;"
             : "border-left: 3px solid transparent; transition: all 0.2s ease;";
     }
 

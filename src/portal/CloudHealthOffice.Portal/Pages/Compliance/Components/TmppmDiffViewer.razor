@@ -41,15 +41,15 @@
         <div class="mt-4">
             <!-- Summary chips -->
             <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
-                <MudChip Style="background: rgba(0, 255, 136, 0.15); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.3);">
+                <MudChip Style="background: var(--cb-success-bg-15); color: var(--cho-success); border: 1px solid var(--cb-success-border-30);">
                     <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Small" Class="mr-1" />
                     @DiffResult.AddedCount Added
                 </MudChip>
-                <MudChip Style="background: rgba(0, 229, 204, 0.15); color: #00e5cc; border: 1px solid rgba(0, 229, 204, 0.3);">
+                <MudChip Style="background: var(--cb-accent2-bg-15); color: var(--cho-accent-2); border: 1px solid var(--cb-accent2-border-30);">
                     <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Class="mr-1" />
                     @DiffResult.ModifiedCount Modified
                 </MudChip>
-                <MudChip Style="background: rgba(255, 0, 85, 0.15); color: #ff0055; border: 1px solid rgba(255, 0, 85, 0.3);">
+                <MudChip Style="background: var(--cb-error-bg-15); color: var(--cho-error); border: 1px solid var(--cb-error-border-30);">
                     <MudIcon Icon="@Icons.Material.Filled.Remove" Size="Size.Small" Class="mr-1" />
                     @DiffResult.RemovedCount Removed
                 </MudChip>
@@ -68,17 +68,17 @@
                     <MudToggleIconButton @bind-Toggled="_showAdded"
                                          Icon="@Icons.Material.Filled.AddCircleOutline"
                                          ToggledIcon="@Icons.Material.Filled.AddCircle"
-                                         Style="@(_showAdded ? "color: #00ff88;" : "color: #9c9a92;")"
+                                         Style="@(_showAdded ? "color: var(--cho-success);" : "color: var(--cho-text-muted);")"
                                          Title="Added" />
                     <MudToggleIconButton @bind-Toggled="_showModified"
                                          Icon="@Icons.Material.Filled.EditNote"
                                          ToggledIcon="@Icons.Material.Filled.Edit"
-                                         Style="@(_showModified ? "color: #00e5cc;" : "color: #9c9a92;")"
+                                         Style="@(_showModified ? "color: var(--cho-accent-2);" : "color: var(--cho-text-muted);")"
                                          Title="Modified" />
                     <MudToggleIconButton @bind-Toggled="_showRemoved"
                                          Icon="@Icons.Material.Filled.RemoveCircleOutline"
                                          ToggledIcon="@Icons.Material.Filled.RemoveCircle"
-                                         Style="@(_showRemoved ? "color: #ff0055;" : "color: #9c9a92;")"
+                                         Style="@(_showRemoved ? "color: var(--cho-error);" : "color: var(--cho-text-muted);")"
                                          Title="Removed" />
                 </div>
 
@@ -89,11 +89,11 @@
                             <MudChip Size="Size.Small" Style="@GetDeltaStyle(delta.DeltaType)">
                                 @delta.DeltaType
                             </MudChip>
-                            <MudText Typo="Typo.subtitle2" Style="color: #e8e6e0;">@delta.Category</MudText>
+                            <MudText Typo="Typo.subtitle2" Style="color: var(--cho-text);">@delta.Category</MudText>
                             @if (delta.RequiresHumanReview)
                             {
                                 <MudChip Size="Size.Small"
-                                         Style="background: rgba(255, 170, 0, 0.15); color: #ffaa00; border: 1px solid rgba(255, 170, 0, 0.3);">
+                                         Style="background: var(--cb-warning-bg-15); color: var(--cho-warning); border: 1px solid var(--cb-warning-border-30);">
                                     <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Class="mr-1" />
                                     Review Required
                                 </MudChip>
@@ -102,7 +102,7 @@
 
                         @if (!string.IsNullOrEmpty(delta.Description))
                         {
-                            <MudText Typo="Typo.body2" Style="color: #9c9a92; margin-bottom: 8px;">
+                            <MudText Typo="Typo.body2" Style="color: var(--cho-text-muted); margin-bottom: 8px;">
                                 @delta.Description
                             </MudText>
                         }
@@ -114,8 +114,8 @@
                                 {
                                     <MudItem xs="12" md="6">
                                         <div class="pa-diff-before">
-                                            <MudText Typo="Typo.caption" Style="color: #ff0055; margin-bottom: 4px;">Before</MudText>
-                                            <MudText Typo="Typo.body2" Style="color: #e8e6e0; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">
+                                            <MudText Typo="Typo.caption" Style="color: var(--cho-error); margin-bottom: 4px;">Before</MudText>
+                                            <MudText Typo="Typo.body2" Style="color: var(--cho-text); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">
                                                 @delta.PreviousValue
                                             </MudText>
                                         </div>
@@ -125,8 +125,8 @@
                                 {
                                     <MudItem xs="12" md="6">
                                         <div class="pa-diff-after">
-                                            <MudText Typo="Typo.caption" Style="color: #00ff88; margin-bottom: 4px;">After</MudText>
-                                            <MudText Typo="Typo.body2" Style="color: #e8e6e0; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">
+                                            <MudText Typo="Typo.caption" Style="color: var(--cho-success); margin-bottom: 4px;">After</MudText>
+                                            <MudText Typo="Typo.body2" Style="color: var(--cho-text); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">
                                                 @delta.NewValue
                                             </MudText>
                                         </div>
@@ -180,9 +180,9 @@
 
     private static string GetDeltaStyle(string deltaType) => deltaType switch
     {
-        "Added" => "background: rgba(0, 255, 136, 0.15); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.3);",
-        "Modified" => "background: rgba(0, 229, 204, 0.15); color: #00e5cc; border: 1px solid rgba(0, 229, 204, 0.3);",
-        "Removed" => "background: rgba(255, 0, 85, 0.15); color: #ff0055; border: 1px solid rgba(255, 0, 85, 0.3);",
-        _ => "background: #1a1a24; color: #9c9a92; border: 1px solid #2a2a35;"
+        "Added" => "background: var(--cb-success-bg-15); color: var(--cho-success); border: 1px solid var(--cb-success-border-30);",
+        "Modified" => "background: var(--cb-accent2-bg-15); color: var(--cho-accent-2); border: 1px solid var(--cb-accent2-border-30);",
+        "Removed" => "background: var(--cb-error-bg-15); color: var(--cho-error); border: 1px solid var(--cb-error-border-30);",
+        _ => "background: var(--cho-raised); color: var(--cho-text-muted); border: 1px solid var(--cho-line);"
     };
 }

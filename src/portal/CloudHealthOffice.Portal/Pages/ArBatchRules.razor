@@ -8,11 +8,11 @@
 <PageTitle>Batch Posting Rules — Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="finance:read" RoleName="Finance">
-<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: var(--cho-accent); font-weight: 700; letter-spacing: -0.5px;">
     <MudIcon Icon="@Icons.Material.Filled.Rule" Class="mr-2" Style="vertical-align: middle;" />
     Batch Posting Rules
 </MudText>
-<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+<MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);" Class="mb-4">
     Auto-posting configuration for billing and payment run outputs
 </MudText>
 
@@ -51,7 +51,7 @@
 
 <!-- Rules Grid -->
 <MudTable Items="_rules" Dense="true" Hover="true" T="ArBatchRuleSummary"
-          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
     <HeaderContent>
         <MudTh>Rule Code</MudTh>
         <MudTh>Rule Name</MudTh>
@@ -67,13 +67,13 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Rule Code">
-            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.RuleCode</MudText>
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cho-accent);">@context.RuleCode</MudText>
         </MudTd>
         <MudTd DataLabel="Rule Name">
             <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.RuleName</MudText>
             @if (!string.IsNullOrEmpty(context.Description))
             {
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">@context.Description</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-40);">@context.Description</MudText>
             }
         </MudTd>
         <MudTd DataLabel="Trigger">
@@ -107,11 +107,11 @@
         <MudTd DataLabel="Auto-Approve">
             @if (context.AutoApproveThreshold.HasValue)
             {
-                <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ff88;">@context.AutoApproveThreshold.Value.ToString("C0")</MudText>
+                <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cho-success);">@context.AutoApproveThreshold.Value.ToString("C0")</MudText>
             }
             else
             {
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3);">Manual</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-30);">Manual</MudText>
             }
         </MudTd>
         <MudTd DataLabel="Order">
@@ -135,9 +135,9 @@
     </RowTemplate>
     <NoRecordsContent>
         <div class="pa-8 text-center">
-            <MudIcon Icon="@Icons.Material.Filled.Rule" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
-            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No batch posting rules found</MudText>
-            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Create rules to automate GL postings</MudText>
+            <MudIcon Icon="@Icons.Material.Filled.Rule" Style="font-size: 3rem; color: var(--cb-accent-text-30);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: var(--cb-fg-text-50);">No batch posting rules found</MudText>
+            <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-30);">Create rules to automate GL postings</MudText>
         </div>
     </NoRecordsContent>
     <PagerContent>
@@ -148,7 +148,7 @@
 <!-- New / Edit Rule Dialog -->
 <MudDialog @bind-Visible="_ruleDialogVisible" Options="_ruleDialogOptions">
     <TitleContent>
-        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+        <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">
             <MudIcon Icon="@Icons.Material.Filled.Rule" Class="mr-2" />
             @(_editingRule != null ? "Edit Batch Rule" : "New Batch Rule")
         </MudText>
@@ -241,7 +241,7 @@
 <!-- Test Rule Dialog -->
 <MudDialog @bind-Visible="_testDialogVisible" Options="_testDialogOptions">
     <TitleContent>
-        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+        <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">
             <MudIcon Icon="@Icons.Material.Filled.Science" Class="mr-2" />
             Test Rule: @(_testingRule?.RuleCode ?? "")
         </MudText>
@@ -255,31 +255,31 @@
             @if (_testResult != null)
             {
                 <MudItem xs="12">
-                    <MudPaper Class="pa-4" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
-                        <MudText Typo="Typo.subtitle2" Style="color: #00ffff;" Class="mb-2">Projected Result</MudText>
+                    <MudPaper Class="pa-4" Style="background: var(--cb-success-bg-5); border: 1px solid var(--cb-success-border-20); border-radius: 12px;">
+                        <MudText Typo="Typo.subtitle2" Style="color: var(--cho-accent);" Class="mb-2">Projected Result</MudText>
                         <MudGrid>
                             <MudItem xs="6">
-                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Debit Account</MudText>
+                                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Debit Account</MudText>
                                 <MudText Style="font-family: monospace;">@(_accountLookup.GetValueOrDefault(_testResult.DebitAccountId)?.AccountNumber ?? _testResult.DebitAccountId)</MudText>
-                                <MudText Typo="Typo.h6" Style="color: #00ff88; font-family: monospace;">@_testResult.DebitAmount.ToString("C2")</MudText>
+                                <MudText Typo="Typo.h6" Style="color: var(--cho-success); font-family: monospace;">@_testResult.DebitAmount.ToString("C2")</MudText>
                             </MudItem>
                             <MudItem xs="6">
-                                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Credit Account</MudText>
+                                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Credit Account</MudText>
                                 <MudText Style="font-family: monospace;">@(_accountLookup.GetValueOrDefault(_testResult.CreditAccountId)?.AccountNumber ?? _testResult.CreditAccountId)</MudText>
-                                <MudText Typo="Typo.h6" Style="color: #ff0055; font-family: monospace;">@_testResult.CreditAmount.ToString("C2")</MudText>
+                                <MudText Typo="Typo.h6" Style="color: var(--cho-error); font-family: monospace;">@_testResult.CreditAmount.ToString("C2")</MudText>
                             </MudItem>
                             @if (_testResult.SponsorSplitAmount.HasValue)
                             {
                                 <MudItem xs="6">
-                                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Sponsor Split</MudText>
-                                    <MudText Style="font-family: monospace; color: #ffaa00;">@_testResult.SponsorSplitAmount.Value.ToString("C2")</MudText>
+                                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Sponsor Split</MudText>
+                                    <MudText Style="font-family: monospace; color: var(--cho-warning);">@_testResult.SponsorSplitAmount.Value.ToString("C2")</MudText>
                                 </MudItem>
                             }
                             @if (_testResult.MemberSplitAmount.HasValue)
                             {
                                 <MudItem xs="6">
-                                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Member Split</MudText>
-                                    <MudText Style="font-family: monospace; color: #ffaa00;">@_testResult.MemberSplitAmount.Value.ToString("C2")</MudText>
+                                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Member Split</MudText>
+                                    <MudText Style="font-family: monospace; color: var(--cho-warning);">@_testResult.MemberSplitAmount.Value.ToString("C2")</MudText>
                                 </MudItem>
                             }
                         </MudGrid>
