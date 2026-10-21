@@ -1,3 +1,8 @@
+> **Archived (November 2025 plan, not current state).** This plan was not carried
+> out as written: no third-party penetration test has been performed, its scores
+> are unreviewed self-assessments, and its dates and budgets no longer apply. See
+> [README.md](README.md) for current sources.
+
 # Security Hardening Roadmap
 
 **Document Version:** 1.0  

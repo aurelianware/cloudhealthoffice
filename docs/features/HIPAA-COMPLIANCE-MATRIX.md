@@ -2,13 +2,21 @@
 
 # HIPAA Compliance Matrix - Technical Safeguards
 
+> **This is a design mapping, not an audit or a compliance attestation.** It maps the
+> technical safeguards Cloud Health Office is designed to provide to the HIPAA Security
+> Rule. It is self-assessed, has not been reviewed by an independent auditor, and
+> parts of it describe the earlier Azure deployment. HIPAA compliance is a property of
+> a covered entity's or business associate's whole program, not of software alone.
+> See [HIPAA-AUDIT-REPORT.md](HIPAA-AUDIT-REPORT.md) for known gaps and the
+> [security one-pager](../diligence/SECURITY-ONE-PAGER.md) for current state.
+
 ## Overview
 
-This document maps the Cloud Health Office system's security controls to HIPAA Security Rule requirements (45 CFR §§ 164.308, 164.310, 164.312). It demonstrates comprehensive compliance with all technical safeguards required for Protected Health Information (PHI) processing.
+This document maps the Cloud Health Office system's security controls to HIPAA Security Rule requirements (45 CFR §§ 164.308, 164.310, 164.312), so that a payer's security and compliance teams can see how each technical safeguard is meant to be met.
 
 ## Document Purpose
 
-- ✅ Demonstrate HIPAA Security Rule compliance
+- ✅ Show how the platform's design addresses each HIPAA Security Rule technical safeguard
 - ✅ Map technical controls to regulatory requirements
 - ✅ Provide audit trail for compliance assessments
 - ✅ Guide security configuration and validation
@@ -23,7 +31,7 @@ This document maps the Cloud Health Office system's security controls to HIPAA S
 | **Person/Entity Authentication** (§164.312(d)) | Required | ✅ Complete | Azure AD, Managed Identity |
 | **Transmission Security** (§164.312(e)(1)) | Required | ✅ Complete | TLS 1.2+, Private Endpoints |
 
-**Overall Compliance Score: 100% (All required standards addressed)**
+**All required technical safeguard standards are addressed in the design.** "Complete" above means a control is designed and documented, not independently verified.
 
 ---
 

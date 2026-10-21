@@ -1,8 +1,8 @@
 # CMS-0057-F Compliance Quickstart
 
-**Get FHIR-compliant in 15 minutes** ⏱️
+**A running CMS-0057-F sandbox in 15 minutes** ⏱️
 
-This guide helps you verify your health plan's CMS-0057-F compliance using Cloud Health Office's FHIR R4 APIs.
+This guide stands up Cloud Health Office's CMS-0057-F FHIR R4 APIs with synthetic data and runs the acceptance suite against them. It shows how the platform behaves; your plan's compliance depends on your own data, configuration and operations.
 
 ## What is CMS-0057-F?
 
@@ -12,8 +12,6 @@ The **CMS Interoperability and Prior Authorization Final Rule (CMS-0057-F)** req
 2. **Provider Access API** - Give providers access to member data (effective Jan 1, 2027)
 3. **Payer-to-Payer API** - Exchange member data when patients switch plans (effective Jan 1, 2027)
 4. **Prior Authorization API** - Convert prior auth to FHIR-based workflow (effective Jan 1, 2027)
-
-**Non-compliance penalty:** Up to $1M per violation
 
 ## Prerequisites
 
@@ -45,7 +43,7 @@ Expected output: FHIR CapabilityStatement JSON
 
 ### 2. Test Patient Access API (5 minutes)
 
-Using synthetic test data to verify compliance:
+Using synthetic test data:
 
 ```bash
 # Set test patient ID
@@ -71,27 +69,18 @@ curl -H "Authorization: Bearer test-token" \
 ✅ **Pass:** All endpoints return FHIR R4 JSON  
 ❌ **Fail:** 404 or non-FHIR responses
 
-### 3. Run Compliance Checker (3 minutes)
+### 3. Run the CMS-0057-F Acceptance Suite (3 minutes)
 
 ```bash
-# Run automated compliance validation
-npm run test:cms-compliance
-
-# Check output
+# Executable acceptance scenarios for the four CMS-0057-F APIs (synthetic data)
+dotnet test tests/Cms0057Acceptance.Tests/Cms0057Acceptance.Tests.csproj -c Debug
 ```
 
-Expected output:
-```
-✅ Patient Access API: COMPLIANT
-✅ Provider Access API: COMPLIANT  
-✅ Payer-to-Payer API: COMPLIANT
-✅ Prior Authorization API: COMPLIANT
-✅ OAuth 2.0 Security: CONFIGURED
-✅ US Core Profiles: VALID
-✅ HIPAA Audit Logging: ENABLED
-
-Overall Compliance Score: 100%
-```
+✅ **Pass:** every scenario passes. A green run shows the scenarios in the suite
+behave as specified against synthetic data. It is not a CMS certification (CMS does
+not certify payer APIs), a HIPAA attestation or a production-readiness review.
+Reconciled capability status is in the
+[capability ledger](../../docs/CAPABILITY_RECONCILIATION.md).
 
 ### 4. View Interactive API Documentation (2 minutes)
 
@@ -188,16 +177,18 @@ curl -H "Authorization: Bearer ${TOKEN}" \
   "http://localhost:3000/fhir/r4/Claim?_count=10"
 ```
 
-## Compliance Certification Support
+## Compliance Evidence Support
 
-Need help with CMS certification?
+CMS does not certify payer APIs; each payer demonstrates its own compliance. To build
+that evidence with Cloud Health Office:
 
-1. **Generate compliance report:**
-```bash
-npm run generate:compliance-report
-```
+1. **Generate the acceptance evidence package:** the
+   [CMS-0057-F Acceptance Evidence workflow](../../.github/workflows/cms0057-acceptance-evidence.yml)
+   runs the acceptance suite and produces a sanitized evidence snapshot.
 
-2. **Review checklist:** See `docs/compliance/CMS-0057-F-CHECKLIST.md`
+2. **Review the pilot checklist:** See
+   [`docs/compliance/CMS-0057-F-PILOT-DILIGENCE-CHECKLIST.md`](../../docs/compliance/CMS-0057-F-PILOT-DILIGENCE-CHECKLIST.md)
+   and the [readiness matrix](../../docs/compliance/CMS-0057-F-READINESS-MATRIX.md).
 
 3. **Get support:** Email compliance@cloudhealthoffice.com
 
@@ -228,7 +219,7 @@ npm run validate:x12-schemas
 
 ## Next Steps
 
-- ✅ **Complete:** Basic compliance verification
+- ✅ **Complete:** Sandbox running and acceptance suite passing
 - 📋 **Next:** [Patient Access Detailed Guide](./patient-access-quickstart.md)
 - 📋 **Next:** [Provider Access Setup](./provider-access-quickstart.md)
 - 📋 **Next:** [Prior Authorization Integration](./prior-auth-quickstart.md)
@@ -250,6 +241,5 @@ npm run validate:x12-schemas
 
 ---
 
-**Time to CMS compliance: 15 minutes** ✅  
-**Cost to implement: $0 for non-production use (BSL 1.1)** 💰  
-**Penalty avoidance: Up to $1M** 🚀
+**Time to a running sandbox: 15 minutes** ✅  
+**Cost to implement: $0 for non-production use (BSL 1.1)** 💰
