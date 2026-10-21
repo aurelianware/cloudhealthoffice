@@ -12,6 +12,8 @@ using EphemeralMongo;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
+if (args.FirstOrDefault() == "provider-access") return await ProviderAccessCampaign.Run(args);
+
 if (args.FirstOrDefault() == "p2p-consent") return await PayerConsentCampaign.Run(args);
 
 if (args.FirstOrDefault() == "fhir-smart") return await FhirSmartCampaign.Run(args);

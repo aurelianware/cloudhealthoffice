@@ -82,4 +82,15 @@ public sealed class EvidencePolicyTests
         results[0] = results[1];
         Assert.False(EvidencePolicy.IsCompletePass(true, results, PayerConsentCampaign.ScenarioIds));
     }
+    [Fact] public void ProviderCatalogRequiresItsOwnCompleteInventory()
+    {
+        var results = ProviderAccessCampaign.ScenarioIds.Select(id => new CaseResult(id, "PASS", "test")).ToArray();
+        Assert.Equal(30, results.Length);
+        Assert.Equal(results.Length, results.Select(r => r.Id).Distinct().Count());
+        Assert.True(EvidencePolicy.IsCompletePass(true, results, ProviderAccessCampaign.ScenarioIds));
+        Assert.False(EvidencePolicy.IsCompletePass(true, results, PayerConsentCampaign.ScenarioIds));
+        Assert.False(EvidencePolicy.IsCompletePass(false, results, ProviderAccessCampaign.ScenarioIds));
+        results[0] = results[1];
+        Assert.False(EvidencePolicy.IsCompletePass(true, results, ProviderAccessCampaign.ScenarioIds));
+    }
 }
