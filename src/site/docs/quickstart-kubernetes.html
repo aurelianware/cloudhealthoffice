@@ -385,14 +385,14 @@ kubectl logs -n cloudhealthoffice --all-containers --tail=20 | grep -i error</co
           <tbody>
             <tr><td>Namespace</td><td><code>cloudhealthoffice</code></td><td><code>cloudhealthoffice</code></td></tr>
             <tr><td>Service DNS</td><td><code>svc.cloudhealthoffice</code></td><td><code>svc.cloudhealthoffice</code></td></tr>
-            <tr><td>K8s manifests</td><td>Same files, <code>imagePullPolicy</code> patched</td><td><code>Always</code> (pulls from ACR)</td></tr>
+            <tr><td>K8s manifests</td><td>Same files, <code>imagePullPolicy</code> patched</td><td><code>Always</code> (pulls from your registry)</td></tr>
             <tr><td>Container port</td><td>8080</td><td>8080</td></tr>
-            <tr><td>Secrets</td><td>Local stubs via <code>deploy-local.sh</code></td><td>Azure Key Vault</td></tr>
-            <tr><td>Database</td><td>MongoDB StatefulSet (single node)</td><td>Azure Cosmos DB (MongoDB API)</td></tr>
-            <tr><td>Redis</td><td>Single pod</td><td>Azure Cache for Redis</td></tr>
+            <tr><td>Secrets</td><td>Local stubs via <code>deploy-local.sh</code></td><td>Azure Key Vault, HashiCorp Vault or Kubernetes Secrets</td></tr>
+            <tr><td>Database</td><td>MongoDB StatefulSet (single node)</td><td>Managed MongoDB-compatible service (on Azure: Azure DocumentDB)</td></tr>
+            <tr><td>Redis</td><td>Single pod</td><td>Managed Redis</td></tr>
             <tr><td>Ingress / TLS</td><td>None (port-forward)</td><td>NGINX + cert-manager + Let's Encrypt</td></tr>
             <tr><td>Replicas</td><td>1 per service</td><td>2+ with HPA autoscaling</td></tr>
-            <tr><td>Image registry</td><td>Local Docker daemon</td><td>Azure ACR / GitHub GHCR</td></tr>
+            <tr><td>Image registry</td><td>Local Docker daemon</td><td>Azure ACR, Google Artifact Registry or GitHub GHCR</td></tr>
           </tbody>
         </table>
 
