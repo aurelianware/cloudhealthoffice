@@ -253,6 +253,8 @@ builder.Services.Configure<PriorAuthAdjudicationOptions>(
 // the pipeline options.
 builder.Services.Configure<TenantEnforcementPolicyOptions>(
     builder.Configuration.GetSection(TenantEnforcementPolicyOptions.SectionName));
+builder.Services.Configure<TimelyFilingOptions>(
+    builder.Configuration.GetSection(TimelyFilingOptions.SectionName));
 
 var benefitPlanServiceTimeoutSeconds = Math.Clamp(
     builder.Configuration.GetValue<int?>("Services:BenefitPlanServiceTimeoutSeconds") ?? 5,
@@ -433,6 +435,7 @@ builder.Services.AddScoped<IAuthorizationValidationClient, HttpAuthorizationVali
 // closing a gap the original 5.5 stage scope never covered — see the
 // stage's own doc comment and docs/architecture/claim-adjudication-pipeline.md.
 builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, TimelyFilingStage>(); // Order=110
 builder.Services.AddScoped<IClaimAdjudicationStage, DuplicateClaimStage>(); // Order=120
 builder.Services.AddScoped<IClaimAdjudicationStage, ProviderIntegrityStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();

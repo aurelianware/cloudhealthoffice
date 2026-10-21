@@ -114,6 +114,8 @@ POST /api/v1/claims                                     (capability 5.3)
    │   └── iterate stages by Order ascending:                     │
    │                                                              │
    │       100  ScrubbingStage               ★ real (5.4)         │
+   │       110  TimelyFilingStage            ★ real (added 10/26) │
+   │       120  DuplicateClaimStage          ★ real               │
    │       150  ProviderIntegrityStage       ★ real (added 7/26)  │
    │       200  NetworkCredentialingStage    ★ real (5.6)         │
    │       250  PricingStage                 ★ real (added 10/26) │
@@ -468,6 +470,65 @@ exclusion check on a hypothetical calculation.
   confirmed `IsExcluded` finding. See
   [`integrity-score-consumption.md`](./integrity-score-consumption.md).
 
+## Timely filing stage (added October 2026)
+
+`TimelyFilingStage`, `Order=110`, after scrubbing and before duplicate
+detection and every stage that calls another service. It replaces scrub
+rule DL002 as the timely filing control: DL002 (ClaimsScrubEngine) is a
+warning measured from the day the scrub runs, which suits a provider-side
+pre-submission check but cannot deny, and drifts on re-runs.
+
+- **Clock.** Each line runs from its date of service to the payer receipt
+  date, `Claim.ReceivedDate`: stamped by `ClaimSubmissionService` at intake,
+  never taken from the submitter (not 837 BHT04) and never "today", so a
+  pend, outage or approval re-run cannot make a timely claim late.
+  Professional and dental lines start at their own from-date; an
+  institutional claim starts at its statement through-date for every line.
+  Late means received more than the limit's days after that date (UTC
+  calendar dates).
+- **Corrections.** An adjustment version (`PredecessorVersionId` set:
+  an 837 replacement or a payer reprocessing) is measured from the receipt
+  date of the chain's first version, found by walking predecessors. A
+  correction of a timely claim is timely; a correction of a late claim is
+  not. If the chain can't be read, the claim pends as check-unavailable.
+- **Limits** (`Adjudication:TimelyFiling`, `TimelyFilingOptions`). The
+  most specific rule wins: a provider rule (billing NPIs named in a
+  contract) for the claim's line of business, then a provider rule for any
+  line of business, then `LineOfBusinessLimitDays`, then
+  `DefaultLimitDays` (365, the Medicare limit). A `Tenants` entry replaces
+  the whole policy for that tenant. No limit configured: the stage passes.
+- **Outcome.** `Mode` `Deny` (default): every line late → Deny CO-29 on the
+  claim and on each line; some lines late → Pend `TIMELY` naming the
+  lines (the pipeline has no partial line denial before benefit
+  calculation, so the examiner denies those lines with CARC 29 or
+  overrides). `PendForReview` pends every late claim; `SoftValidation`
+  only logs and tags. An examiner approval of exactly the `TIMELY` pend
+  overrides the limit on the re-run (proof of timely filing, retroactive
+  eligibility). A claim with no receipt date pends `TIMELY`.
+- **Work queue.** New tenants get a "Timely Filing" queue for `TIMELY`;
+  existing tenants route it to their fallback queue until an admin adds one.
+
+```json
+"Adjudication": {
+  "TimelyFiling": {
+    "Mode": "Deny",
+    "DefaultLimitDays": 365,
+    "LineOfBusinessLimitDays": { "Medicaid": 95, "Commercial": 180 },
+    "ProviderRules": [
+      { "Name": "Regional Medical Center 2026", "BillingProviderNpis": [ "1234567893" ], "LimitDays": 120 }
+    ],
+    "Tenants": {
+      "tenant-id": { "Mode": "PendForReview", "DefaultLimitDays": 90 }
+    }
+  }
+}
+```
+
+Not yet modeled: a separate, usually shorter, limit for corrected claims
+measured from the original's remittance date, and COB secondary claims
+measured from the primary payer's adjudication date (837 2330B DTP*573 is
+not parsed). Both need data the claim does not carry today.
+
 ## Configuration
 
 ```json
@@ -480,6 +541,7 @@ exclusion check on a hypothetical calculation.
     "Pipeline": {
       "EnabledStages": {
         "Scrubbing": true,
+        "TimelyFiling": true,
         "ProviderIntegrity": true,
         "NetworkCredentialing": true,
         "BenefitCalculation": true,
@@ -531,6 +593,7 @@ to `AdjudicationResult.RemarkCodes` (835 MOA/MIA). Constants live in
 | NetworkCredentialing membership deny (OON, no tier, unverifiable) | 242 | — |
 | NetworkCredentialing credentialing deny | B7 | — |
 | ProviderIntegrity exclusion | gate's code, else B7 | — |
+| TimelyFiling (every line past the filing limit) | 29 | — |
 | Duplicate | 18 | — |
 | BenefitCalculation missing / non-GUID plan id, engine threw (Reject) | 16 | MA130 |
 | BenefitCalculation eligibility / prior auth | 27 / 197 | — |

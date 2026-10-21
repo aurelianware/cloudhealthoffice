@@ -26,6 +26,9 @@ public static class AdjudicationDenialCodes
     /// <summary>CARC 16 — claim/service lacks information or has submission/billing error(s). Structural rejects.</summary>
     public const string ClaimLacksInformationCarc = "16";
 
+    /// <summary>CARC 29 — the time limit for filing has expired. Timely filing denials.</summary>
+    public const string TimelyFilingExpiredCarc = "29";
+
     /// <summary>CARC 22 — this care may be covered by another payer per coordination of benefits.</summary>
     public const string CoveredByAnotherPayerCarc = "22";
 
