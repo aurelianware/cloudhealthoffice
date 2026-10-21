@@ -938,10 +938,10 @@ We respectfully disagree with this finding for the following reasons:
 - [OWASP Testing Guide](https://owasp.org/www-project-web-security-testing-guide/)
 
 ### Internal Documentation
-- [HIPAA-AUDIT-REPORT.md](HIPAA-AUDIT-REPORT.md)
+- [HIPAA-AUDIT-REPORT.md](../features/HIPAA-AUDIT-REPORT.md)
 - [ZERO-TRUST-ADMIN-ACCESS.md](ZERO-TRUST-ADMIN-ACCESS.md)
-- [HIPAA-COMPLIANCE-MATRIX.md](HIPAA-COMPLIANCE-MATRIX.md)
-- [SECURITY-HARDENING.md](../SECURITY-HARDENING.md)
+- [HIPAA-COMPLIANCE-MATRIX.md](../features/HIPAA-COMPLIANCE-MATRIX.md)
+- [SECURITY-HARDENING.md](SECURITY-HARDENING.md)
 
 ---
 

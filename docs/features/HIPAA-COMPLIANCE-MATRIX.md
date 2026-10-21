@@ -779,10 +779,10 @@ All required and addressable HIPAA Security Rule technical safeguards are implem
 - [Microsoft Trust Center - HIPAA](https://www.microsoft.com/en-us/trust-center/compliance/hipaa)
 
 ### Internal Documentation
-- [SECURITY-HARDENING.md](../SECURITY-HARDENING.md) - Comprehensive security guide
-- [SECURITY.md](../SECURITY.md) - Security practices and encryption
-- [DEPLOYMENT.md](../DEPLOYMENT.md) - Deployment procedures
-- [ARCHITECTURE.md](../ARCHITECTURE.md) - System architecture
+- [SECURITY-HARDENING.md](../security/SECURITY-HARDENING.md) - Comprehensive security guide
+- [SECURITY.md](../../SECURITY.md) - Security practices and encryption
+- [DEPLOYMENT.md](../deployment/DEPLOYMENT.md) - Deployment procedures
+- [ARCHITECTURE.md](../architecture/ARCHITECTURE.md) - System architecture
 
 ---
 

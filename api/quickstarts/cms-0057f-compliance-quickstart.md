@@ -8,10 +8,18 @@ This guide stands up Cloud Health Office's CMS-0057-F FHIR R4 APIs with syntheti
 
 The **CMS Interoperability and Prior Authorization Final Rule (CMS-0057-F)** requires health plans to:
 
-1. **Patient Access API** - Let patients access their data via FHIR (effective Jan 1, 2026)
-2. **Provider Access API** - Give providers access to member data (effective Jan 1, 2027)
-3. **Payer-to-Payer API** - Exchange member data when patients switch plans (effective Jan 1, 2027)
-4. **Prior Authorization API** - Convert prior auth to FHIR-based workflow (effective Jan 1, 2027)
+1. **Patient Access API** - Add prior authorization information to the existing Patient Access API, in place since 2021 (by Jan 1, 2027)
+2. **Provider Access API** - Give providers access to member data (by Jan 1, 2027)
+3. **Payer-to-Payer API** - Exchange member data when patients switch plans (by Jan 1, 2027)
+4. **Prior Authorization API** - Convert prior auth to FHIR-based workflow (by Jan 1, 2027)
+
+Operational provisions came first: 72-hour expedited and 7-day standard prior
+authorization decision timeframes from Jan 1, 2026 (QHP issuers on the FFEs are
+excluded), and the first public prior authorization metrics by March 31, 2026.
+Exact dates vary by payer type; see the
+[CMS fact sheet](https://www.cms.gov/newsroom/fact-sheets/cms-interoperability-and-prior-authorization-final-rule-cms-0057-f).
+A separate proposed rule, CMS-0062-P (April 2026), would add drug prior
+authorization to these APIs; it is not final.
 
 ## Prerequisites
 
@@ -221,8 +229,8 @@ npm run validate:x12-schemas
 
 - ✅ **Complete:** Sandbox running and acceptance suite passing
 - 📋 **Next:** [Patient Access Detailed Guide](./patient-access-quickstart.md)
-- 📋 **Next:** [Provider Access Setup](./provider-access-quickstart.md)
-- 📋 **Next:** [Prior Authorization Integration](./prior-auth-quickstart.md)
+- 📋 **Next:** [Provider Access architecture](../../docs/architecture/provider-access.md)
+- 📋 **Next:** [Prior Authorization API](../../docs/features/PRIOR-AUTHORIZATION-API.md)
 - 📋 **Advanced:** [Custom Rule Engine](./claims-scrubbing-quickstart.md)
 
 ## Resources
