@@ -14,6 +14,8 @@ on:
       - 'src/services/member-service/**'
       - 'src/services/coverage-service/**'
       - 'src/services/shared/CloudHealthOffice.Consent.Contracts/**'
+      - 'src/engines/CloudHealthOffice.PriorAuthRuleEngine/**'
+      - 'tests/CloudHealthOffice.PriorAuthRuleEngine.Tests/**'
       - 'src/services/shared/CloudHealthOffice.Infrastructure/**'
       - 'Directory.Packages.props'
       - 'Directory.Build.props'
@@ -113,6 +115,8 @@ jobs:
           dotnet build src/services/claims-service --configuration Release --verbosity quiet
       - name: Test evidence policy and build runner
         run: dotnet test tools/SecurityChallenge.Tests --configuration Release --verbosity quiet
+      - name: Verify rule bootstrap concurrency and tenant guards
+        run: dotnet test tests/CloudHealthOffice.PriorAuthRuleEngine.Tests --configuration Release --verbosity quiet
       - name: Run native consent binding lab
         run: >-
           dotnet tools/SecurityChallenge/bin/Release/net8.0/SecurityChallenge.dll p2p-consent

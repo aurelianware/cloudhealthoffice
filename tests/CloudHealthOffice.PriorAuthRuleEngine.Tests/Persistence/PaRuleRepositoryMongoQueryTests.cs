@@ -136,4 +136,43 @@ public sealed class PaRuleRepositoryMongoQueryTests : IAsyncLifetime
         // Band order is the enum's numeric order (RegulatoryExemption = 0 runs first).
         rules.Select(r => r.RuleName).Should().Equal("exemption", "clinical");
     }
+    [Fact]
+    public async Task ConcurrentFirstUpserts_KeepOneRulePerScope_WithoutStartupFailures()
+    {
+        for (var round = 0; round < 12; round++)
+        {
+            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var writes = new List<Task>();
+            foreach (var tenant in new string?[] { null, IsolationRules.TenantA, IsolationRules.TenantB })
+            for (var writer = 0; writer < 24; writer++)
+            {
+                var rule = IsolationRules.Rule(tenant, tenant ?? "platform");
+                rule.RuleId = "CONCURRENT-SEED-" + round;
+                writes.Add(Task.Run(async () => { await gate.Task; await _repo.UpsertAsync(rule); }));
+            }
+            gate.SetResult();
+            await Task.WhenAll(writes);
+        }
+        foreach (var tenant in new string?[] { null, IsolationRules.TenantA, IsolationRules.TenantB })
+        {
+            var rules = (await _repo.ListAsync(tenantId: tenant)).Where(r => r.TenantId == tenant).ToList();
+            rules.Should().HaveCount(12);
+            rules.Select(r => r.RuleId).Distinct().Should().HaveCount(12);
+            rules.Should().OnlyContain(r => r.RuleName == (tenant ?? "platform"));
+        }
+    }
+
+    [Fact]
+    public async Task DuplicateIdInAnotherTenant_RemainsAnError_AndDoesNotOverwriteIt()
+    {
+        var platform = IsolationRules.Rule(null, "platform");
+        var foreign = IsolationRules.Rule(IsolationRules.TenantB, "foreign-untouched");
+        foreign.Id = $"{platform.StateCode}:{(int)platform.Lob}:{platform.Program ?? "any"}:platform:{platform.RuleId}";
+        await _database.GetCollection<PaRuleDocument>("prior_auth_rules").InsertOneAsync(foreign);
+        var act = async () => await _repo.UpsertAsync(platform);
+        await act.Should().ThrowAsync<MongoWriteException>();
+        var remaining = await _database.GetCollection<PaRuleDocument>("prior_auth_rules").Find(r => r.Id == foreign.Id).SingleAsync();
+        remaining.TenantId.Should().Be(IsolationRules.TenantB);
+        remaining.RuleName.Should().Be("foreign-untouched");
+    }
 }
