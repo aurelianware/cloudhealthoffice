@@ -5,6 +5,7 @@ using AttachmentService.Models;
 using AttachmentService.Services;
 using AttachmentService.Tests.Support;
 using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AttachmentService.Tests.Security;
@@ -157,7 +158,76 @@ public class AttachmentControlNumberMatchingTests
 
         Assert.Equal("Unmatched", created.Status);
         Assert.Null(created.ClaimId);
-        Assert.Contains("held for review", created.Notes);
+        // The note names no other provider's claims.
+        Assert.DoesNotContain("CLM-", created.Notes);
+        Assert.DoesNotContain("2 claims", created.Notes);
+    }
+
+    [Fact]
+    public async Task ASingleClaimFromAnotherProvider_IsNotLinked()
+    {
+        // Providers number their own attachments; a lone match on the number
+        // alone could put this document on another provider's patient's claim.
+        _factory.Parents.AddControlNumber(Tenant, "ACN-77", "CLM-OTHER", "1111111112");
+
+        var created = await Body(await Client().PostAsync("/api/attachments", Form()));
+
+        Assert.Equal("Unmatched", created.Status);
+        Assert.Null(created.ClaimId);
+        Assert.Equal(AttachmentParentType.Provider, Assert.Single(_factory.Documents.Files.Values).SubjectType);
+
+        // Nor does the background matcher link it.
+        var (linked, _) = await Matcher.RunOnceAsync(CancellationToken.None);
+        Assert.Equal(0, linked);
+        Assert.Equal("Unmatched", _factory.Attachments.Items[created.Id].Status);
+    }
+
+    private HttpClient SubmitterWithoutClaimsRead()
+    {
+        // A submitter that may file attachments but not read claims (e.g. a
+        // provider-facing integration).
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+            ChoDevelopmentAuth.UserTokenIssuer().IssueUserToken(User, Tenant, [],
+                ["attachments:read", "attachments:write", ChoRolePermissions.DocumentsWrite, ChoRolePermissions.DocumentsRead, "providers:read"]));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
+        return client;
+    }
+
+    [Fact]
+    public async Task ACallerWhoCantReadClaims_LearnsNoClaimId_TheMatcherLinksItLater()
+    {
+        _factory.Parents.AddControlNumber(Tenant, "ACN-77", "CLM-9", Npi);
+
+        var response = await SubmitterWithoutClaimsRead().PostAsync("/api/attachments", Form());
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = await Body(response);
+        Assert.Equal("Unmatched", created.Status);
+        Assert.Null(created.ClaimId);
+        Assert.DoesNotContain("CLM-9", await (await SubmitterWithoutClaimsRead().GetAsync($"/api/attachments/{created.Id}")).Content.ReadAsStringAsync());
+        // Probing control numbers never reached claims-service in the caller's request.
+        Assert.Empty(_factory.Parents.Requests);
+
+        var (linked, _) = await Matcher.RunOnceAsync(CancellationToken.None);
+        Assert.Equal(1, linked);
+        Assert.Equal("CLM-9", _factory.Attachments.Items[created.Id].ClaimId);
+    }
+
+    [Fact]
+    public async Task TheMatcher_RefusesDatabasePerTenantMode()
+    {
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [UnmatchedAttachmentMatcher.TenantScopingSetting] = "true" })
+            .Build();
+        var matcher = new UnmatchedAttachmentMatcher(
+            _factory.Services.GetRequiredService<IServiceScopeFactory>(),
+            Microsoft.Extensions.Options.Options.Create(new AttachmentMatchingOptions()),
+            config, TimeProvider.System,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<UnmatchedAttachmentMatcher>.Instance);
+
+        Assert.NotNull(matcher.UnsupportedReason);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => matcher.RunOnceAsync(CancellationToken.None));
     }
 
     [Fact]

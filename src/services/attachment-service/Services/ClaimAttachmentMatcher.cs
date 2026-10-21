@@ -25,13 +25,14 @@ public interface IClaimAttachmentMatcher
 
     /// <summary>
     /// The one claim the 275 belongs to, or null when none or more than one
-    /// fits. Several claims can repeat a control number (two providers' own
-    /// numbering); the 275's provider (its NPI) then decides.
+    /// fits. A claim fits only when its billing NPI is the 275's provider:
+    /// providers number their own attachments (often short, sequential
+    /// numbers), so a control number alone would let one provider's document
+    /// land on another provider's patient's claim. A single match from a
+    /// different provider is held, not linked.
     /// </summary>
     static string? Choose(IReadOnlyList<ClaimControlNumberMatch> matches, string? providerId)
     {
-        if (matches.Count == 1)
-            return matches[0].ClaimId;
         var sameProvider = matches
             .Where(m => !string.IsNullOrWhiteSpace(providerId)
                         && string.Equals(m.BillingProviderNPI, providerId.Trim(), StringComparison.Ordinal))

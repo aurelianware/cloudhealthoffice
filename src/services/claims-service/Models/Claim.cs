@@ -2003,10 +2003,10 @@ public class ClaimAttachmentReport
 /// <summary>A claim that announced an attachment control number (see <c>GET api/claims/attachment-control-numbers/{controlNumber}</c>).</summary>
 public class AttachmentControlNumberMatch
 {
+    /// <summary>The claim's version chain id (<see cref="Claim.ClaimVersionId"/>): stable across adjustments.</summary>
     public string ClaimId { get; set; } = string.Empty;
     public string ClaimNumber { get; set; } = string.Empty;
     public string BillingProviderNPI { get; set; } = string.Empty;
-    public string MemberId { get; set; } = string.Empty;
     public DateTime SubmittedDate { get; set; }
 
     /// <summary>The claim's PWK reports with this control number (claim level, or which lines).</summary>

@@ -32,17 +32,27 @@ public sealed class AttachmentMatchingOptions
 /// it is rejected with <see cref="AttachmentRejectionCode.NoMatchingClaim"/>.
 /// Every call uses attachment-service's own service token for the
 /// attachment's tenant; there is no user on the call.
+/// <para>
+/// It may run on every replica: linking is idempotent (the catalog answers
+/// an existing link as done) and each attachment save is revision-checked,
+/// so a second replica's save of the same attachment fails and the
+/// attachment is simply looked at again next run.
+/// </para>
 /// </summary>
 public sealed class UnmatchedAttachmentMatcher : BackgroundService
 {
+    public const string TenantScopingSetting = "MongoDb:UseTenantScoping";
+
     private readonly IServiceScopeFactory _scopes;
     private readonly AttachmentMatchingOptions _options;
+    private readonly string? _unsupportedReason;
     private readonly TimeProvider _clock;
     private readonly ILogger<UnmatchedAttachmentMatcher> _logger;
 
     public UnmatchedAttachmentMatcher(
         IServiceScopeFactory scopes,
         IOptions<AttachmentMatchingOptions> options,
+        IConfiguration configuration,
         TimeProvider clock,
         ILogger<UnmatchedAttachmentMatcher> logger)
     {
@@ -50,12 +60,31 @@ public sealed class UnmatchedAttachmentMatcher : BackgroundService
         _options = options.Value;
         _clock = clock;
         _logger = logger;
+
+        // With a database per tenant there is no request to pick the tenant's
+        // database, so the matcher would see only the base database and find
+        // nothing, silently. It refuses instead, like the claims outboxes and
+        // the SLA watchdog.
+        if (configuration.GetValue(TenantScopingSetting, false))
+        {
+            _unsupportedReason =
+                "MongoDb:UseTenantScoping=true is not supported by the attachment matcher: with no request it can reach " +
+                "only the base database, not each tenant's. Held 275s will not be linked or expired.";
+        }
     }
+
+    /// <summary>Why the matcher will not run in this deployment; null when it can.</summary>
+    public string? UnsupportedReason => _unsupportedReason;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled)
             return;
+        if (_unsupportedReason is not null)
+        {
+            _logger.LogCritical("{Reason}", _unsupportedReason);
+            return;
+        }
 
         using var timer = new PeriodicTimer(_options.Interval);
         do
@@ -75,6 +104,9 @@ public sealed class UnmatchedAttachmentMatcher : BackgroundService
     /// <summary>One pass over the held attachments. Returns how many were linked and how many expired.</summary>
     public async Task<(int Linked, int Expired)> RunOnceAsync(CancellationToken ct)
     {
+        if (_unsupportedReason is not null)
+            throw new InvalidOperationException(_unsupportedReason);
+
         using var scope = _scopes.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IAttachmentRepository>();
         var matcher = scope.ServiceProvider.GetRequiredService<IClaimAttachmentMatcher>();
