@@ -327,11 +327,12 @@ services:
       - "5026:8080"
     environment:
       <<: *common-env
-      BlobStorage__ConnectionString: UseDevelopmentStorage=true
-      BlobStorage__ContainerName: member-documents
+      Services__DocumentService: http://document-service:8080
     depends_on:
       mongodb:
         condition: service_healthy
+      document-service:
+        condition: service_started
     healthcheck: *service-healthcheck
 
   document-service:

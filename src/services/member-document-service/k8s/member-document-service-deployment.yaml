@@ -18,7 +18,8 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   MongoDb__DatabaseName: "CloudHealthOffice"
-  BlobStorage__ContainerName: "member-documents"
+  # Files live in the document catalog; this service holds no storage credentials.
+  Services__DocumentService: "http://document-service.cloudhealthoffice"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -46,7 +47,8 @@ spec:
         image: clouhealthoffice.azurecr.io/cloudhealthoffice-member-document-service:latest
         imagePullPolicy: Always
         envFrom:
-        # Source=TokenService, token-service URL and Entra scope (shared by all services).
+        # Source=TokenService, token-service URL and Entra scope (shared by all
+        # services): this service calls document-service with its own token.
         - configMapRef:
             name: cho-service-tokens
         ports:
@@ -71,16 +73,11 @@ spec:
             configMapKeyRef:
               name: member-document-service-config
               key: MongoDb__DatabaseName
-        - name: BlobStorage__ConnectionString
-          valueFrom:
-            secretKeyRef:
-              name: azure-storage-secret
-              key: connectionString
-        - name: BlobStorage__ContainerName
+        - name: Services__DocumentService
           valueFrom:
             configMapKeyRef:
               name: member-document-service-config
-              key: BlobStorage__ContainerName
+              key: Services__DocumentService
         resources:
           requests:
             cpu: 100m

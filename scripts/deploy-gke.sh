@@ -28,7 +28,8 @@
 #   CLAIMS_REPLICAS  BENEFIT_PLAN_REPLICAS   (1 with the small profile, else 2)
 #   ROLLOUT_TIMEOUT=900s
 #   DOCUMENTS_BUCKET  DOCUMENTS_SERVICE_ACCOUNT
-#                            Google Cloud Storage for document-service and member-document-service
+#                            Google Cloud Storage for document-service (attachment- and
+#                            member-document-service file through it)
 #                            (terraform outputs documents_bucket and documents_service_account in
 #                            infrastructure/gcp). Without them, uploaded documents are not stored.
 
@@ -153,8 +154,7 @@ upsert_secret email-config SmtpHost=localhost SmtpPort=1025 EnableSsl=false \
   FromAddress=demo@cloudhealthoffice.local SalesTeamAddress=sales@cloudhealthoffice.local \
   Username=demo Password=demo
 upsert_secret attachment-service-secret MongoDb__ConnectionString="$MONGO_CONN"
-upsert_secret member-document-service-secret MongoDb__ConnectionString="$MONGO_CONN" \
-  BlobStorage__ConnectionString="$STORAGE_CONN"
+upsert_secret member-document-service-secret MongoDb__ConnectionString="$MONGO_CONN"
 upsert_secret sponsor-service-secrets MongoDb__ConnectionString="$MONGO_CONN"
 upsert_secret smart-auth-service-secrets MongoDb__ConnectionString="$MONGO_CONN" \
   MongoDb__DatabaseName=CloudHealthOffice

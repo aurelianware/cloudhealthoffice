@@ -79,4 +79,12 @@ public class MemberDocumentRepositoryMongo : IMemberDocumentRepository
 
         return document;
     }
+
+    public async Task DeleteUnfiledAsync(string tenantId, string id)
+    {
+        var filter = Builders<MemberDocument>.Filter.Eq(x => x.Id, id)
+                     & Builders<MemberDocument>.Filter.Eq(x => x.TenantId, tenantId)
+                     & Builders<MemberDocument>.Filter.Eq(x => x.DocumentId, null);
+        await _collection.DeleteOneAsync(filter);
+    }
 }

@@ -65,10 +65,10 @@ Application secrets for the demo (for example `ANTHROPIC_API_KEY` for the AI cla
 
 ## Document storage
 
-document-service and member-document-service store document bytes (attachment-service files through document-service) in one private bucket (`<project_id>-cho-documents` unless `documents_bucket_name` is set). Each CHO container is a prefix inside it, for example `member-documents/tenants/<tenant>/...`.
+document-service stores document bytes (attachment-service and member-document-service file through it) in one private bucket (`<project_id>-cho-documents` unless `documents_bucket_name` is set). Each CHO container is a prefix inside it, for example `documents/tenants/<tenant>/...`.
 
 - **Access:** uniform bucket-level access, public access prevention enforced. The services reach it as the `cho-documents` Google service account through Workload Identity: no keys exist. That account has `roles/storage.objectUser` on this bucket only, and `roles/iam.serviceAccountTokenCreator` on itself so it can sign pre-signed upload links.
-- **Which pods:** only the Kubernetes service accounts in `document_service_accounts` (default `document-service` and `member-document-service` in `cloudhealthoffice`). `deploy/gcp/render_manifests.py` creates those accounts and points those Deployments at them when `DOCUMENTS_BUCKET` and `DOCUMENTS_SERVICE_ACCOUNT` are set.
+- **Which pods:** only the Kubernetes service accounts in `document_service_accounts` (default `document-service` in `cloudhealthoffice`). `deploy/gcp/render_manifests.py` creates those accounts and points those Deployments at them when `DOCUMENTS_BUCKET` and `DOCUMENTS_SERVICE_ACCOUNT` are set.
 - **Versions:** versioning is on; a replaced or deleted version is kept `documents_noncurrent_days` (30) days. Abandoned pre-signed staging uploads (`*.upload`) are deleted after a day.
 - **Workload Identity** is enabled on the cluster and the node pool (`GKE_METADATA`). On an existing Standard cluster, applying this updates the cluster in place and rolls the node pool.
 

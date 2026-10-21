@@ -30,7 +30,7 @@ CHO already has four document paths, each built for one use:
 |---|---|---|
 | `CloudHealthOffice.DocumentStore` (`IDocumentStore`) | Upload (with tags) / download / exists / delete / tags / properties / pre-signed upload links against a container and blob name. Azure Blob, Google Cloud Storage, S3 and in-memory providers, chosen by `DocumentStore:Provider` (`AddChoDocumentStore`); one contract test suite runs every provider against its emulator. | No catalog, versioning or access control. |
 | **attachment-service** (`Attachment`) | X12 275 and portal uploads. One optional `ClaimId`, `AuthorizationId` and `AppealId` each, plus an `RFAIReference`. Generates 999/824 acknowledgments. Stores through `IDocumentStore`. | One link per kind, so a document can't support two claims. No retention, legal hold, sensitivity or access audit. Download streams to any caller in the tenant. |
-| **member-document-service** (`MemberDocument`) | Member documents. Has the most mature model: retention policy (`DEFAULT-10Y`), legal hold with history, SHA-256 hash, content sniffing, two-phase upload (pending → finalize), and a FHIR `DocumentReference` endpoint. | Member-scoped only. (Stores through `IDocumentStore` since step 1, so it runs on any of the three clouds.) |
+| **member-document-service** (`MemberDocument`) | Member documents. Has the most mature model: retention policy (`DEFAULT-10Y`), legal hold with history, SHA-256 hash, content sniffing, two-phase upload (pending → finalize), and a FHIR `DocumentReference` endpoint. | Member-scoped only. (Files through the catalog since step 3; see §13.) |
 | **rfai-service** (`RfaiCase`) | Authorization RFAIs (CDex Task, PAS-07). Received attachments carry an attachment control number, storage key and hash. | **Authorization only:** there's no claim RFAI. Attachment metadata lives inside the case rather than in a shared catalog. |
 | Claims gateway (`IClaimAttachmentContentStore`) | Attachments that arrive through the clearinghouse gateway, with a scan status. | A separate store, not linked to the others. |
 
@@ -125,7 +125,7 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 
 1. **Storage providers:** GCS and S3 for `IDocumentStore`; member-document-service moves onto `IDocumentStore`. *Built (2026-10-20).*
 2. **Catalog:** the document record and service (evolved from member-document-service), with many-to-many links, sensitivity tags, access audit, and the documents API. *Built (2026-10-20) as a new document-service; member-document-service moves onto it later.*
-3. **Move attachment-service onto the catalog:** existing `Attachment` rows migrate to documents with links. Keep the PWK attachment control number on the claim for 275 matching. *Attachments built (2026-10-20): attachment-service files through the catalog; there was no stored attachment data to migrate. PWK matching and member documents are separate PRs.*
+3. **Move attachment-service onto the catalog:** existing `Attachment` rows migrate to documents with links. Keep the PWK attachment control number on the claim for 275 matching. *Attachments built (2026-10-20): attachment-service files through the catalog; there was no stored attachment data to migrate. Member documents built (2026-10-20, §13). PWK matching is a separate PR.*
 4. **Correspondence** ([correspondence.md](correspondence.md)), starting with appeal notices. Generated letters are the first new producer on the catalog, and ID cards move onto it in the same phase.
 5. **Documents panel** on claim, authorization and appeal screens.
 6. **Claim RFAI:** extend rfai-service from authorizations to claims, with 277 RFAI out, 275 / upload / fax in, matching, and clean-date events.
@@ -168,5 +168,19 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 - **Least privilege:** attachment-service is no longer one of the services the GKE document identity trusts (`document_service_accounts`); only document-service and member-document-service touch the bucket.
 - **No migration:** there were no stored attachments to keep.
 
-Next: member-document-service onto the catalog, and keeping the 837 PWK attachment control number on the claim so an incoming 275 matches by its TRN02.
+Next: member-document-service onto the catalog (§13), and keeping the 837 PWK attachment control number on the claim so an incoming 275 matches by its TRN02.
+
+## 13. What step 3 built (member documents)
+
+- **Same API, files in the catalog.** member-document-service keeps its endpoints and its record: category and subcategory, effective and expiration dates, state, related members and resources, and the FHIR `DocumentReference` projection. The file is filed in the catalog linked to `Member:{memberId}` and to each related member, and the record keeps the catalog's `DocumentId`. Downloads come back through the catalog, opened from the document's member. Its callers (the portal's member record, idcard-service, personal-representative-service) are unchanged, apart from personal-representative-service reading `uploadPending` instead of the old staging path.
+- **Type:** the category becomes the catalog type: `IdCard`, `Lab` → `LabResult`, `Enrollment` → `EnrollmentForm`, `Consent` → `ConsentForm`, `ProofOfAuthority` → `AppointmentOfRepresentative`; any other category that is one identifier (e.g. `EOB`) is a tenant type; anything else is `Other`. The title is `Category/Subcategory`. The source becomes the channel (`Generated`, `Upload`, `Mail` for received).
+- **Identity and rights:** the same pattern as attachments. member-document-service calls with its own service token and names the user in `X-CHO-On-Behalf-Of`, and checks the catalog's rule in the user's name first: reading needs `members:read` and `documents:read`, filing `members:write`, `members:read` and `documents:write`. **Enrollment Specialists now hold `documents:read` and `documents:write`**, so they keep access to member documents.
+- **Retention:** the catalog accepts `CoverageTerminationDate`, so a member document's retention still runs from coverage end (`TX-10Y` from termination, etc.).
+- **Legal hold:** the catalog's hold is the one enforced; member-document-service changes it first and then mirrors it on its record (with the history it already kept). An upload can ask for a hold from the start (`LegalHold`, `LegalHoldReason` on the catalog's upload, `records:legal-hold` required); a held upload is never merged into an existing copy. When a service sets a hold, the catalog records the user it acts for as the hold's actor.
+- **Pre-signed uploads** start in the catalog; finalize is the catalog's (size, signature, hash, scan, duplicate merge). Only the same user can finish an upload: for a service, the catalog now also requires the same `X-CHO-On-Behalf-Of`. A finalized duplicate points the record at the existing catalog document.
+- **Order and failures:** the record is saved first (pending), the file filed, and the record updated with its `DocumentId`; if filing fails the record is removed. The catalog's 403, 409, 413 and 415 are passed on; anything else is 502.
+- **Least privilege:** member-document-service holds no storage credentials and has left the GKE document identity; only document-service touches the bucket.
+- **No migration:** there were no stored member documents to keep.
+- **Known limit:** when identical content is shared by two member records (a duplicate merge), a hold placed through one record shows on the catalog document but not on the other record's mirror. The catalog still enforces it.
+
 
