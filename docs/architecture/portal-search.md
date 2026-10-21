@@ -94,12 +94,14 @@ A search that is too broad is not rejected silently. The page says what to add (
 
 Work-list permissions can lift the limit. A role with `claims:worklist` can run wide searches, but always with a count shown first and paging, never an unbounded dump.
 
-**Demo tenants.** The relaxation follows the tenant's data, not the environment:
-- **What decides it:** a tenant flagged as synthetic-data (`IsDemo` today) may browse without selective criteria. A production deployment can host a demo tenant safely, and a test environment loaded with a copy of real data stays locked down.
-- **What stays on in demo:** audit, counts, paging and the 200-row page cap still apply. Only the selective-criteria rule relaxes.
-- **The flag must be true.** A demo tenant refuses inbound 834/837 files from production trading partners, so real members can't end up in a tenant that browses freely.
-- **Curated data, not just open search.** Demo tenants ship with named personas (a member with a family and an open appeal, a provider group with a disputed payment, a delinquent group) whose IDs and names are in the demo script. Most demos then use the same lookups a CSR would.
-- **Showing the guardrails.** A demo tenant can switch the rule back on (`Portal:Search:RequireCriteria = Always` per tenant) to show a compliance buyer what production behaves like.
+**The rule is always on, in every tenant and environment.** There is no switch that turns it off:
+- **Why:** a bypass is a code path where a privacy control is off. It only takes one wrong flag (a real tenant marked as demo) for real members to become browsable. "Can the minimum-necessary control be disabled?" should have the answer "no" for a health plan's security review and for SOC 2 / HITRUST auditors.
+- **Change:** drop the `NonDemoTenants` and `Never` modes of `Portal:Search:RequireCriteria`. Today `NonDemoTenants` is the default, so demo tenants browse as soon as a list page loads; that stops.
+- **Demos use the paths production has:**
+  - demo users hold work-list roles (§3.5), so a supervisor-style wide search works with counts and paging, as it would at a real plan;
+  - demo tenants ship with curated personas, such as a member with a family and an open appeal, a provider group disputing a payment, and a delinquent employer group, whose IDs and names are in the demo script.
+- **The synthetic-data flag (`IsDemo`) stays, but it no longer weakens any control.** It can still drive demo-only behavior such as refusing 834/837 files from production trading partners.
+- **Before the change ships:** seed the personas and the demo users' roles, and update local dev setups and the portal tests that rely on demo browsing.
 
 ### 3.6 Results
 
@@ -699,7 +701,7 @@ Each step is a separate PR; nothing is removed until its replacement is live.
 | 1 | Should full SSN be searchable, and by whom? | Yes, exact 9 digits only, behind `members:ssn-search` (enrollment and privacy roles). Last 4 only combined with name or DOB. Never shown in results; the row says "matched SSN". |
 | 2 | Phonetic name matching: stored Double Metaphone keys, or MongoDB Atlas Search? | Stored keys now. They work on any MongoDB, including the Cosmos for MongoDB deployments. Revisit Atlas Search if typo-tolerant search (edit distance) is wanted. |
 | 3 | PHI criteria in saved-search handles rather than URLs (§3.8)? | Yes. It changes `portal-navigation.md` §5.0 only for PHI fields. |
-| 4 | Replace "at least one criterion" with per-module selective criteria (§3.5)? | Yes, enforced in each service. Keep the `Portal:Search:RequireCriteria` modes, decided per tenant by its synthetic-data flag rather than per environment, and backed by curated demo personas (§3.5, Demo tenants). |
+| 4 | Replace "at least one criterion" with per-module selective criteria (§3.5)? | **Agreed:** enforced in each service, always on in every tenant. The `NonDemoTenants` and `Never` modes go; demos use work-list roles and curated personas (§3.5). |
 | 5 | Who may run wide work-list searches? | A `{module}:worklist` permission per module, granted to supervisor, finance and compliance roles. |
 | 6 | Should the benefit answer panel be in v1 of benefits search, or later? | First. It serves the most users (every CSR call about coverage). The cross-plan configuration search follows. |
 | 7 | Should staff-side provider directory search share the public directory API (`network-roster-api.md`)? | Share the query library, not the endpoint. Staff need inactive and pending providers and contract data the public API must not expose. |
