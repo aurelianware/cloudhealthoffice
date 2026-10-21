@@ -508,6 +508,86 @@ public sealed class DocumentPipelineTests : IClassFixture<DocumentServiceFactory
         Assert.Equal(3, _factory.Audit.Entries.Count(e => e.Action == DocumentAccessAction.LegalHold));
     }
 
+    // ── Services acting for a user ──────────────────────────────────
+
+    private HttpClient Service(string clientId = "attachment-service")
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
+            ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken(clientId, Tenant));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
+        return client;
+    }
+
+    [Fact]
+    public async Task AServiceUpload_RecordsTheUserItActedFor_AndItsSourceIds()
+    {
+        var client = Service();
+        client.DefaultRequestHeaders.Add(DocumentsController.OnBehalfOfHeader, "provider-user-9");
+        var form = Form(Pdf, links: ["Claim:CLM-1"]);
+        form.Add(new StringContent("AttachmentId=att-1"), "ExternalIds");
+        form.Add(new StringContent("X12-275"), "SourceChannel");
+
+        var response = await client.PostAsync("/api/v1/documents", form);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var stored = _factory.Documents.All.Single();
+        Assert.Equal("attachment-service", stored.CreatedBy);
+        Assert.Equal("provider-user-9", stored.CreatedOnBehalfOf);
+        Assert.Equal("att-1", stored.Source.ExternalIds["AttachmentId"]);
+        Assert.Equal("X12-275", stored.Source.Channel);
+        Assert.Contains(_factory.Audit.Entries, e => e.Actor == "attachment-service" && e.OnBehalfOf == "provider-user-9");
+    }
+
+    [Fact]
+    public async Task AUser_CannotClaimToActForSomeoneElse()
+    {
+        var client = Examiner();
+        client.DefaultRequestHeaders.Add(DocumentsController.OnBehalfOfHeader, "someone-else");
+
+        await UploadAsync(client, Pdf);
+
+        Assert.Null(_factory.Documents.All.Single().CreatedOnBehalfOf);
+        Assert.All(_factory.Audit.Entries, e => Assert.Null(e.OnBehalfOf));
+    }
+
+    [Fact]
+    public async Task AService_DoesNotGetSensitiveDocuments()
+    {
+        var doc = await UploadAsync(UmCoordinator(), Pdf, links: ["Claim:CLM-1"], sensitivity: ["HIV"]);
+
+        var response = await Service().GetAsync($"/api/v1/documents/{doc.Id}?{On("Claim", "CLM-1")}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AServiceNamingAnUnreadableUser_IsRefused()
+    {
+        var client = Service();
+        client.DefaultRequestHeaders.TryAddWithoutValidation(DocumentsController.OnBehalfOfHeader, "bad user!");
+
+        var response = await client.PostAsync("/api/v1/documents", Form(Pdf));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(_factory.Documents.All);
+    }
+
+    [Theory]
+    [InlineData("no-equals-sign")]
+    [InlineData("1bad=x")]
+    [InlineData("Key=has space")]
+    public async Task MalformedExternalIds_AreRejected(string entry)
+    {
+        var form = Form(Pdf);
+        form.Add(new StringContent(entry), "ExternalIds");
+
+        var response = await Examiner().PostAsync("/api/v1/documents", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(_factory.Documents.All);
+    }
+
     // ── Pre-signed upload ───────────────────────────────────────────
 
     private async Task<PresignedUploadResponse> StartAsync(HttpClient client)
