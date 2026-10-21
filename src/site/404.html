@@ -10,10 +10,10 @@
   <style>
     /* Self-contained fallback so the 404 renders even if sentinel.css is missing */
     :root {
-      --absolute-black: #000000;
-      --light-gray: #b0b0b0;
-      --neon-cyan: #00ffff;
-      --neon-green: #00ff88;
+      --absolute-black: #FFFFFF;
+      --light-gray: #334155;
+      --neon-cyan: #0E7490;
+      --neon-green: #0F766E;
     }
     body {
       margin: 0;
@@ -21,8 +21,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--absolute-black, #000);
-      color: var(--light-gray, #b0b0b0);
+      background: var(--absolute-black, #FFFFFF);
+      color: var(--light-gray, #334155);
       font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
       text-align: center;
       padding: 24px;
@@ -33,10 +33,10 @@
       font-weight: 700;
       line-height: 1;
       margin: 0;
-      color: var(--neon-cyan, #00ffff);
-      text-shadow: 0 0 24px rgba(0, 255, 255, 0.5);
+      color: var(--neon-cyan, #0E7490);
+      text-shadow: none;
     }
-    h1 { font-size: 1.6rem; margin: 16px 0 8px; color: #fff; }
+    h1 { font-size: 1.6rem; margin: 16px 0 8px; color: #0B1F33; }
     p { font-size: 1.05rem; line-height: 1.6; margin: 0 0 32px; }
     .actions { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
     .btn {
@@ -45,12 +45,12 @@
       border-radius: 8px;
       text-decoration: none;
       font-weight: 700;
-      border: 1px solid var(--neon-cyan, #00ffff);
+      border: 1px solid var(--neon-cyan, #0E7490);
     }
-    .btn-primary { background: var(--neon-cyan, #00ffff); color: var(--absolute-black, #000); }
-    .btn-secondary { background: transparent; color: var(--neon-cyan, #00ffff); }
+    .btn-primary { background: var(--neon-cyan, #0E7490); color: var(--absolute-black, #FFFFFF); }
+    .btn-secondary { background: transparent; color: var(--neon-cyan, #0E7490); }
     .links { margin-top: 32px; font-size: 0.95rem; }
-    .links a { color: var(--neon-green, #00ff88); margin: 0 10px; text-decoration: none; }
+    .links a { color: var(--neon-green, #0F766E); margin: 0 10px; text-decoration: none; }
     .links a:hover { text-decoration: underline; }
   </style>
 </head>

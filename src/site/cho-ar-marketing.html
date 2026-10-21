@@ -12,24 +12,24 @@
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
   :root {
-    --bg-primary: #080c14;
-    --bg-card: #0d1219;
-    --bg-card-alt: #0f1520;
-    --bg-nav: #0a0e16;
-    --border: rgba(0, 240, 255, 0.08);
-    --border-bright: rgba(0, 240, 255, 0.15);
-    --cyan: #00f0ff;
-    --cyan-dim: rgba(0, 240, 255, 0.6);
-    --green: #10b981;
-    --green-bright: #34d399;
-    --red: #ef4444;
-    --red-bright: #f87171;
-    --yellow: #f59e0b;
-    --yellow-bright: #fbbf24;
+    --bg-primary: #EEF3F8;
+    --bg-card: #EEF3F8;
+    --bg-card-alt: #EEF3F8;
+    --bg-nav: #EEF3F8;
+    --border: rgba(14, 116, 144, 0.08);
+    --border-bright: rgba(14, 116, 144, 0.15);
+    --cyan: #0E7490;
+    --cyan-dim: #0E7490;
+    --green: #0F766E;
+    --green-bright: #0F766E;
+    --red: #B91C1C;
+    --red-bright: #B91C1C;
+    --yellow: #B45309;
+    --yellow-bright: #B45309;
     --purple: #a78bfa;
-    --text-primary: #e5e7eb;
-    --text-secondary: rgba(255,255,255,0.5);
-    --text-dim: rgba(255,255,255,0.3);
+    --text-primary: #334155;
+    --text-secondary: #0B1F33;
+    --text-dim: #0B1F33;
   }
 
   body {
@@ -93,7 +93,7 @@
   .nav-item:hover { color: var(--text-secondary); }
   .nav-item.active {
     color: var(--cyan);
-    background: rgba(0, 240, 255, 0.04);
+    background: rgba(14, 116, 144, 0.04);
   }
   .nav-item.active::before {
     content: '';
@@ -291,7 +291,7 @@
     transition: background 0.1s;
   }
 
-  .data-table tbody tr:hover { background: rgba(0, 240, 255, 0.02); }
+  .data-table tbody tr:hover { background: rgba(14, 116, 144, 0.02); }
 
   .data-table td {
     padding: 11px 14px;
@@ -315,9 +315,9 @@
     font-family: 'JetBrains Mono', monospace;
     letter-spacing: 0.03em;
   }
-  .badge-yes { background: rgba(16,185,129,0.12); color: var(--green-bright); }
-  .badge-no { background: rgba(239,68,68,0.12); color: var(--red-bright); }
-  .badge-partial { background: rgba(245,158,11,0.12); color: var(--yellow-bright); }
+  .badge-yes { background: rgba(15, 118, 110, 0.12); color: var(--green-bright); }
+  .badge-no { background: rgba(185, 28, 28, 0.12); color: var(--red-bright); }
+  .badge-partial { background: rgba(180, 83, 9, 0.12); color: var(--yellow-bright); }
 
   .action-btn {
     background: transparent;
@@ -464,7 +464,7 @@
     <!-- Aging buckets -->
     <div class="aging-row">
       <div class="aging-card">
-        <div class="aging-icon" style="background: rgba(16,185,129,0.12);">
+        <div class="aging-icon" style="background: rgba(15, 118, 110, 0.12);">
           <span style="color: var(--green-bright);">✅</span>
         </div>
         <div>
@@ -475,7 +475,7 @@
         </div>
       </div>
       <div class="aging-card">
-        <div class="aging-icon" style="background: rgba(245,158,11,0.12);">
+        <div class="aging-icon" style="background: rgba(180, 83, 9, 0.12);">
           <span style="color: var(--yellow-bright);">⏱</span>
         </div>
         <div>
@@ -486,7 +486,7 @@
         </div>
       </div>
       <div class="aging-card">
-        <div class="aging-icon" style="background: rgba(245,158,11,0.12);">
+        <div class="aging-icon" style="background: rgba(180, 83, 9, 0.12);">
           <span style="color: var(--yellow);">⚠</span>
         </div>
         <div>
@@ -497,7 +497,7 @@
         </div>
       </div>
       <div class="aging-card">
-        <div class="aging-icon" style="background: rgba(239,68,68,0.12);">
+        <div class="aging-icon" style="background: rgba(185, 28, 28, 0.12);">
           <span style="color: var(--red-bright);">⊘</span>
         </div>
         <div>
@@ -508,7 +508,7 @@
         </div>
       </div>
       <div class="aging-card">
-        <div class="aging-icon" style="background: rgba(239,68,68,0.15);">
+        <div class="aging-icon" style="background: rgba(185, 28, 28, 0.15);">
           <span style="color: var(--red);">⛔</span>
         </div>
         <div>
@@ -519,7 +519,7 @@
         </div>
       </div>
       <div class="aging-card">
-        <div class="aging-icon" style="background: rgba(0,240,255,0.08);">
+        <div class="aging-icon" style="background: rgba(14, 116, 144, 0.08);">
           <span style="color: var(--cyan);">§</span>
         </div>
         <div>

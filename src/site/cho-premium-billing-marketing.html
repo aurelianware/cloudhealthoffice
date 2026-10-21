@@ -10,23 +10,23 @@
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg-primary: #080c14;
-      --bg-card: #0d1219;
-      --bg-nav: #0a0e16;
-      --cyan: #00f0ff;
-      --cyan-dim: rgba(0, 240, 255, 0.12);
-      --green: #10b981;
-      --green-light: #34d399;
-      --red: #ef4444;
-      --red-light: #f87171;
-      --yellow: #f59e0b;
-      --yellow-light: #fbbf24;
+      --bg-primary: #EEF3F8;
+      --bg-card: #EEF3F8;
+      --bg-nav: #EEF3F8;
+      --cyan: #0E7490;
+      --cyan-dim: #0E7490;
+      --green: #0F766E;
+      --green-light: #0F766E;
+      --red: #B91C1C;
+      --red-light: #B91C1C;
+      --yellow: #B45309;
+      --yellow-light: #B45309;
       --purple: #a78bfa;
-      --text-primary: #e2e8f0;
-      --text-secondary: #94a3b8;
-      --text-dim: #64748b;
-      --border: rgba(255, 255, 255, 0.06);
-      --border-light: rgba(255, 255, 255, 0.10);
+      --text-primary: #334155;
+      --text-secondary: #334155;
+      --text-dim: #475569;
+      --border: rgba(11, 31, 51, 0.09);
+      --border-light: rgba(11, 31, 51, 0.14);
     }
 
     body {
@@ -61,14 +61,14 @@
     .sidebar-logo .logo-icon {
       width: 32px;
       height: 32px;
-      background: linear-gradient(135deg, var(--cyan), #0088aa);
+      background: linear-gradient(135deg, var(--cyan), #EEF3F8);
       border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 16px;
       font-weight: 700;
-      color: #000;
+      color: #FFFFFF;
     }
 
     .sidebar-logo span {
@@ -114,7 +114,7 @@
     }
 
     .nav-item:hover {
-      background: rgba(255, 255, 255, 0.04);
+      background: rgba(11, 31, 51, 0.04);
       color: var(--text-primary);
     }
 
@@ -224,7 +224,7 @@
       width: 30px;
       height: 30px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #1e3a5f, #2d5a87);
+      background: linear-gradient(135deg, #EEF3F8, #EEF3F8);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -375,15 +375,15 @@
 
     .cycle-step.completed .step-dot {
       border-color: var(--green);
-      background: rgba(16, 185, 129, 0.12);
+      background: rgba(15, 118, 110, 0.12);
       color: var(--green-light);
     }
 
     .cycle-step.active .step-dot {
       border-color: var(--cyan);
-      background: rgba(0, 240, 255, 0.12);
+      background: rgba(14, 116, 144, 0.12);
       color: var(--cyan);
-      box-shadow: 0 0 16px rgba(0, 240, 255, 0.2);
+      box-shadow: 0 0 16px rgba(14, 116, 144, 0.2);
     }
 
     .step-label {
@@ -455,7 +455,7 @@
 
     .btn-sm.primary {
       background: var(--cyan);
-      color: #080c14;
+      color: #FFFFFF;
       border-color: var(--cyan);
       font-weight: 600;
     }
@@ -490,7 +490,7 @@
     }
 
     tbody tr:hover {
-      background: rgba(255, 255, 255, 0.02);
+      background: rgba(11, 31, 51, 0.02);
     }
 
     tbody tr:last-child td {

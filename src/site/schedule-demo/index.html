@@ -14,12 +14,12 @@
   <style>
     :root {
       color-scheme: dark;
-      --cyan: #00ffff;
-      --green: #00ff88;
-      --bg: #000;
-      --panel: rgba(0, 255, 255, 0.06);
-      --border: rgba(0, 255, 255, 0.22);
-      --muted: rgba(210, 220, 220, 0.72);
+      --cyan: #0E7490;
+      --green: #0F766E;
+      --bg: #FFFFFF;
+      --panel: rgba(14, 116, 144, 0.06);
+      --border: rgba(14, 116, 144, 0.22);
+      --muted: #334155;
     }
 
     * {
@@ -30,9 +30,9 @@
       margin: 0;
       min-height: 100vh;
       background:
-        radial-gradient(circle at 20% 20%, rgba(0, 255, 255, 0.12), transparent 34%),
-        linear-gradient(180deg, #050606 0%, var(--bg) 100%);
-      color: #fff;
+        radial-gradient(circle at 20% 20%, rgba(14, 116, 144, 0.12), transparent 34%),
+        linear-gradient(180deg, #F5F7FA 0%, var(--bg) 100%);
+      color: #0B1F33;
       font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
@@ -47,7 +47,7 @@
     }
 
     .brand {
-      color: #fff;
+      color: #0B1F33;
       font-weight: 800;
       text-decoration: none;
       letter-spacing: 0.02em;
@@ -70,8 +70,8 @@
       width: min(760px, 100%);
       border: 1px solid var(--border);
       border-radius: 8px;
-      background: linear-gradient(180deg, rgba(10, 14, 14, 0.94), rgba(0, 0, 0, 0.92));
-      box-shadow: 0 0 42px rgba(0, 255, 255, 0.14);
+      background: linear-gradient(180deg, rgba(245, 247, 250, 0.94), rgba(255, 255, 255, 0.92));
+      box-shadow: 0 0 42px rgba(14, 116, 144, 0.14);
       padding: clamp(32px, 6vw, 56px);
     }
 
@@ -118,8 +118,8 @@
     }
 
     .button-primary {
-      background: linear-gradient(90deg, #00c060, var(--green));
-      color: #000;
+      background: linear-gradient(90deg, #0F766E, var(--green));
+      color: #FFFFFF;
     }
 
     .button-secondary {
@@ -136,10 +136,10 @@
     }
 
     .detail {
-      border: 1px solid rgba(0, 255, 255, 0.14);
+      border: 1px solid rgba(14, 116, 144, 0.14);
       border-radius: 8px;
       padding: 16px;
-      background: rgba(0, 255, 255, 0.04);
+      background: rgba(14, 116, 144, 0.04);
     }
 
     .detail strong {
@@ -149,7 +149,7 @@
     }
 
     .detail span {
-      color: rgba(220, 230, 230, 0.72);
+      color: #334155;
       font-size: 0.9rem;
       line-height: 1.5;
     }
@@ -159,7 +159,7 @@
       border: 1px solid var(--border);
       border-radius: 8px;
       overflow: hidden;
-      background: #fff;
+      background: #FFFFFF;
     }
 
     .scheduler iframe {

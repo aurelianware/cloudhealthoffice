@@ -38,20 +38,20 @@
 
 .svc-status--available {
   color: var(--ev-green);
-  border-color: rgba(0, 255, 136, 0.35);
-  background: rgba(0, 255, 136, 0.07);
+  border-color: rgba(15, 118, 110, 0.35);
+  background: rgba(15, 118, 110, 0.07);
 }
 
 .svc-status--engagement {
   color: var(--ev-blue);
-  border-color: rgba(0, 180, 255, 0.35);
-  background: rgba(0, 180, 255, 0.07);
+  border-color: rgba(14, 116, 144, 0.35);
+  background: rgba(14, 116, 144, 0.07);
 }
 
 .svc-status--evaluation {
   color: var(--ev-amber);
-  border-color: rgba(255, 204, 102, 0.35);
-  background: rgba(255, 204, 102, 0.07);
+  border-color: rgba(180, 83, 9, 0.35);
+  background: rgba(180, 83, 9, 0.07);
 }
 
 /* ─── Relationship diagram: software · deployment · services ─────────────
@@ -70,7 +70,7 @@
 .svc-node {
   border: 1px solid var(--ev-border-bright);
   border-radius: 10px;
-  background: linear-gradient(160deg, rgba(0, 255, 255, 0.07), transparent 65%);
+  background: linear-gradient(160deg, rgba(14, 116, 144, 0.07), transparent 65%);
   padding: 0.85rem 1.1rem;
   text-align: center;
   font-family: var(--ev-mono);
@@ -82,8 +82,8 @@
 }
 
 .svc-node--plan {
-  border-color: rgba(0, 255, 136, 0.3);
-  background: linear-gradient(160deg, rgba(0, 255, 136, 0.07), transparent 65%);
+  border-color: rgba(15, 118, 110, 0.3);
+  background: linear-gradient(160deg, rgba(15, 118, 110, 0.07), transparent 65%);
   color: var(--ev-green);
 }
 
@@ -147,7 +147,7 @@
 }
 
 .svc-branch li::marker {
-  color: rgba(0, 255, 255, 0.4);
+  color: #0E7490;
 }
 
 @media (max-width: 780px) {
@@ -180,12 +180,12 @@
 
 .svc-layer--cho {
   border-color: var(--ev-border-bright);
-  background: linear-gradient(160deg, rgba(0, 255, 255, 0.06), transparent 70%);
+  background: linear-gradient(160deg, rgba(14, 116, 144, 0.06), transparent 70%);
 }
 
 .svc-layer--existing {
-  border-color: rgba(0, 180, 255, 0.25);
-  background: linear-gradient(160deg, rgba(0, 180, 255, 0.05), transparent 70%);
+  border-color: rgba(14, 116, 144, 0.25);
+  background: linear-gradient(160deg, rgba(14, 116, 144, 0.05), transparent 70%);
 }
 
 .svc-layer h3 {
@@ -194,7 +194,7 @@
   font-size: 0.72rem;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: #fff;
+  color: #0B1F33;
 }
 
 .svc-layer p {
@@ -228,16 +228,16 @@
 }
 
 .svc-lane--advisory {
-  border-color: rgba(0, 180, 255, 0.28);
+  border-color: rgba(14, 116, 144, 0.28);
 }
 
 .svc-lane--platform {
-  border-color: rgba(0, 255, 136, 0.28);
+  border-color: rgba(15, 118, 110, 0.28);
 }
 
 .svc-lane--both {
   border-color: var(--ev-border-bright);
-  background: linear-gradient(160deg, rgba(0, 255, 255, 0.05), transparent 65%);
+  background: linear-gradient(160deg, rgba(14, 116, 144, 0.05), transparent 65%);
 }
 
 .svc-lane h3 {
@@ -273,7 +273,7 @@
 .svc-offer > h3 {
   margin: 0.5rem 0 0.5rem;
   font-size: 1.15rem;
-  color: #fff;
+  color: #0B1F33;
 }
 
 .svc-offer__num {
@@ -309,7 +309,7 @@
 }
 
 .svc-offer__cols li::marker {
-  color: rgba(0, 255, 255, 0.35);
+  color: #0E7490;
 }
 
 /* ─── Deployment & operating model cards ─────────────────────────────────── */
@@ -341,7 +341,7 @@
 .svc-model__head h3 {
   margin: 0;
   font-size: 1.03rem;
-  color: #fff;
+  color: #0B1F33;
 }
 
 .svc-model dl {
@@ -409,7 +409,7 @@
 
 .svc-engagement {
   border: 1px solid var(--ev-border);
-  border-left: 2px solid rgba(0, 255, 255, 0.3);
+  border-left: 2px solid rgba(14, 116, 144, 0.3);
   border-radius: 0 12px 12px 0;
   background: var(--ev-surface-alt);
   padding: 1.2rem 1.3rem;
@@ -418,7 +418,7 @@
 .svc-engagement h3 {
   margin: 0 0 0.45rem;
   font-size: 1rem;
-  color: #fff;
+  color: #0B1F33;
 }
 
 .svc-engagement p {
@@ -445,7 +445,7 @@
 .svc-faq summary {
   cursor: pointer;
   font-weight: 600;
-  color: #fff;
+  color: #0B1F33;
   font-size: 0.95rem;
   list-style: none;
   display: flex;
@@ -504,8 +504,8 @@
 
 .cho-band {
   padding: 80px 24px;
-  background: linear-gradient(180deg, #000 0%, #04070c 100%);
-  border-top: 1px solid rgba(0, 255, 255, 0.08);
+  background: linear-gradient(180deg, #FFFFFF 0%, #F5F7FA 100%);
+  border-top: 1px solid rgba(14, 116, 144, 0.08);
 }
 
 .cho-band__inner {
@@ -521,23 +521,23 @@
 }
 
 .cho-band__card {
-  border: 1px solid rgba(0, 255, 255, 0.14);
+  border: 1px solid rgba(14, 116, 144, 0.14);
   border-radius: 12px;
-  background: rgba(8, 8, 8, 0.9);
+  background: rgba(245, 247, 250, 0.9);
   padding: 24px;
 }
 
 .cho-band__card h3 {
   margin: 0 0 10px;
   font-size: 1.05rem;
-  color: #fff;
+  color: #0B1F33;
 }
 
 .cho-band__card p {
   margin: 0;
   font-size: 0.92rem;
   line-height: 1.75;
-  color: rgba(176, 176, 176, 0.82);
+  color: #334155;
 }
 
 .cho-band__card .cho-band__more {
@@ -545,7 +545,7 @@
   margin-top: 14px;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #00ffff;
+  color: #0E7490;
 }
 
 .cho-band__actions {
@@ -591,7 +591,7 @@
   gap: 0.6rem;
   margin: 0 0 0.7rem;
   font-size: 1rem;
-  color: #fff;
+  color: #0B1F33;
 }
 
 .svc-qsection__letter {
@@ -649,7 +649,7 @@
   padding: 0 0.35rem;
   font-size: 0.82rem;
   font-weight: 600;
-  color: rgba(0, 255, 255, 0.8);
+  color: #0E7490;
 }
 
 .svc-gate__checks {
@@ -683,9 +683,9 @@
 .svc-gate__warning {
   margin: 0;
   padding: 0.7rem 0.9rem;
-  border: 1px solid rgba(255, 204, 102, 0.35);
+  border: 1px solid rgba(180, 83, 9, 0.35);
   border-radius: 8px;
-  background: rgba(255, 204, 102, 0.06);
+  background: rgba(180, 83, 9, 0.06);
   font-size: 0.82rem;
   color: var(--ev-text);
 }

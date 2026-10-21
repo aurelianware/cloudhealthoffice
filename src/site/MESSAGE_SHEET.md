@@ -22,20 +22,26 @@ Use the [canonical capability ledger](../../docs/CAPABILITY_RECONCILIATION.md) f
 These implementation statements do not assert full PAS/CRD/DTR/SMART conformance, universal compliance, production readiness or customer deployments. Unverified is not equivalent to missing. Preserve precise remaining limitations and reverify changed paths before stronger claims.
 
 ## Canonical one-liner
-CloudHealthOffice is a source-available health plan administration platform designed to help health plans pursue greater operational and technological independence.
+Cloud Health Office is a source-available, FHIR-native health plan administration platform that runs in the plan's own cloud, so plans keep control of their data and integrations while connecting to every partner they choose.
 
-## Executive positioning — approved implementation, October 19, 2026
-**Category:** Health Plan Independence.
-**Primary:** The Future of Health Plan Administration Belongs to Health Plans.
-**Supporting:** Stop Renting Your Health Plan's Future.
+## Executive positioning — approved implementation, October 21, 2026
+**Category:** Payer data sovereignty. Interoperable, source-available administration.
+**Primary:** Sovereign, interoperable health plan administration.
+**Supporting:** Your data, in your cloud, connected to every partner you choose.
+**Thesis line:** Plans pay to modernize. Too often, the vendor keeps what gets built.
 **Promise:** Your data. Your infrastructure. Your business rules. Your future.
 This promise expresses an aspiration for customer control; it grants no additional ownership, portability or licensing rights.
-**Category line:** Health Plan Independence. Source-available administration.
-**Primary CTA:** Discuss Your Independence Strategy.
-**Secondary CTA:** Read the Independence Manifesto.
+**Interoperability line:** Interoperability without giving up control. Connect once, in an environment you own.
+**Primary CTA:** Book a readiness review (→ /contact?interest=cms0057-assessment).
+**Secondary CTA:** Try the API sandbox.
+**Audience paths:** Health plans · Technology vendors · Channel and service partners · Investors · Payer architects and engineers (developer hub at /developers).
 **License disclosure:** Source-available under BSL 1.1. Production use requires a commercial license.
 **Progression:** Foothold → Domain Cutover → Core Modernization. Each expansion requires evidence, acceptance criteria, reconciliation and rollback planning.
 The Founding Transformation Partnership is an invitation to scope evaluation, not a claim of existing commitments, discounts, capacity or production rights.
+
+### Naming rule: avoid "independence"
+Do not use "independence" as a category, product label, CTA or headline. "Independence" is the brand of a major payer (Independence Blue Cross / Independence Health Group, which also operates a health plan administration business), so the word creates search and brand confusion. Use "sovereignty", "ownership" or "control". Existing URLs that contain the word (for example /health-plan-independence) stay live for link stability; their visible titles and copy do not use it. The Professional Services "independent advice" wording below is unaffected.
+Investor-facing copy describes the company, thesis and evidence only; it never states raise terms, amounts or an offer of securities.
 Calculator outputs are buyer-entered scenarios, not quotes or guaranteed savings. Unknown alternative licensing/support must block complete totals. AI implementations are advisory; full standards conformance and production outcomes remain unverified.
 
 ## CMS-0057-F definition (reuse verbatim under every mention of the rule)
@@ -71,8 +77,8 @@ workflow, and Platform Engagement (claims / payments / core replacement) are pai
 
 ---
 
-## Homepage copy (approved October 19, 2026)
-Use the executive positioning above. Preserve CMS-0057-F/FHIR metadata intent and technical acquisition paths. Homepage narrative: dependency questions; four dimensions of independence; AI architecture; incremental modernization; evidence; economics; partnership invitation. Services remain accessible below the product-led hero.
+## Homepage copy (approved October 21, 2026)
+Use the executive positioning above. Preserve CMS-0057-F/FHIR metadata intent and technical acquisition paths. Homepage narrative: sovereign interoperable hero; evidence strip; why sovereignty (data, integrations, modernize at your pace); interoperability hub; CMS-0057-F; incremental modernization; developer path; four ways to work with us; founder; evidence; services; contact. Services remain accessible below the product-led hero.
 
 
 ## Is
@@ -114,7 +120,7 @@ even when the right answer includes other systems.
 
 **Services tagline:** Independent advice. Practical implementation. Software when it fits.
 
-**Independence sentence (reuse verbatim):** A health plan does not need to purchase or deploy
+**Services-neutrality sentence (reuse verbatim):** A health plan does not need to purchase or deploy
 Cloud Health Office in order to engage Professional Services. Cloud Health Office technology is
 recommended only where appropriate.
 
@@ -293,7 +299,7 @@ solve the problem being discussed. Thin promotional content on that property def
 ---
 
 ## Information architecture
-Primary executive nav: **Why Independence · Platform · CMS-0057-F · Evidence · Documentation · Discuss Your Independence Strategy**. Pricing, Services, Trust and Contact remain accessible in footers; existing marketing navigation gains independence links selectively.
+Primary nav (one shared nav on every page, applied by `scripts/sync-site-chrome.mjs`): **Solutions · Platform · Interoperability · Developers · Evidence · Company · Book a readiness review**. Services, Pricing, Trust and Contact sit in the dropdowns and the shared footer.
 
 Pages: `/` · `/what-is` · `/platform` (Product) · `/cms-0057f-compliance` ·
 `/evidence` · `/docs` · `/pricing` · `/services` · `/contact` · `/deploy` · `/start`

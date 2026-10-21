@@ -1,11 +1,11 @@
 /* Scoped executive marketing surface. No portal or technical-document changes. */
 .independence {
-  --bg: #0b1218;
-  --surface: #131f28;
-  --ink: #f0f5f5;
-  --muted: #b7c8ce;
-  --accent: #77e4d0;
-  --line: #33454e;
+  --bg: #FFFFFF;
+  --surface: #F5F7FA;
+  --ink: #0B1F33;
+  --muted: #475569;
+  --accent: #0E7490;
+  --line: #D9E1EA;
   margin: 0;
   background: var(--bg);
   color: var(--ink);
@@ -30,7 +30,7 @@
   text-decoration-thickness: 2px;
 }
 .independence :focus-visible {
-  outline: 3px solid #a8f5df;
+  outline: 3px solid #0E7490;
   outline-offset: 5px;
 }
 .independence h1,
@@ -159,7 +159,7 @@
   padding: 15px 20px;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #0b1218;
+  color: #FFFFFF;
   border-radius: 3px;
   font: 600 0.92rem/1.5 system-ui;
   text-decoration: none;
@@ -317,7 +317,7 @@
   margin-top: 8px;
   color: var(--ink);
   background: var(--bg);
-  border: 1px solid #647c87;
+  border: 1px solid #D9E1EA;
   border-radius: 3px;
   font: inherit;
 }
@@ -356,10 +356,10 @@
   font-variant-numeric: tabular-nums;
 }
 .independence .negative {
-  color: #ffb7ae;
+  color: #B91C1C;
 }
 .independence [role="alert"] {
-  color: #ffb7ae;
+  color: #B91C1C;
 }
 .independence .skip-to-main {
   position: absolute;
@@ -459,7 +459,7 @@
 @media print {
   .independence {
     background: white;
-    color: #111;
+    color: #FFFFFF;
   }
   .independence nav,
   .independence footer,
@@ -475,7 +475,7 @@
   .independence a,
   .independence legend,
   .independence .negative {
-    color: #222;
+    color: #FFFFFF;
   }
   .independence .hero,
   .independence section {
@@ -484,9 +484,9 @@
   .independence .results,
   .independence input,
   .independence select {
-    color: #111;
+    color: #FFFFFF;
     background: white;
-    border-color: #777;
+    border-color: #D9E1EA;
   }
   .independence .results {
     break-inside: avoid;
