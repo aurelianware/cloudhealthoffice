@@ -46,13 +46,31 @@ P2P_MUTATIONS = {
 }
 
 
-def run(member, output, coverage=None, claims=None):
+PROVIDER_MUTATIONS = {
+    "attribution-bypass": (
+        "src/services/fhir-service/Services/ProviderAccess/ProviderAccessAuthorizationService.cs",
+        "if (!attributed)", "if (!attributed && request.MemberId.Length < 0)",
+        ["attribution.foreign-member", "attribution.lowercase", "attribution.query-spoof"],
+    ),
+    "provider-consent-bypass": (
+        "src/services/fhir-service/Services/ProviderAccess/ProviderAccessAuthorizationService.cs",
+        "if (!consent.Allowed)", "if (!consent.Allowed && request.MemberId.Length < 0)",
+        ["consent.activated-denial", "consent.system-denial", "consent.lowercase-denial", "consent.search-denial", "consent.withdrawn-permit-denial", "consent.deny-overrides-permit", "registry.outage-denial"],
+    ),
+}
+
+
+def run(member, output, coverage=None, claims=None, consent=None):
     profile = "p2p-consent" if coverage is not None else "fhir-smart"
     service_args = [str(member)] if coverage is None else [str(member), str(coverage), str(claims)]
     count = 55 if coverage is not None else 42
     mutations = P2P_MUTATIONS if coverage is not None else FHIR_MUTATIONS
     controls = (["export.inline-control", "export.cache-control", "match.control", "match.export-control", "tenant.b.inline-control"]
                 if coverage is not None else ["identity.valid-control", "identity.second-issuer-control", "cho.reader-control", "bulk.create-control"])
+    if consent is not None:
+        profile, count, mutations = "provider-access", 30, PROVIDER_MUTATIONS
+        service_args = [str(member), str(consent)]
+        controls = ["provider.control", "provider.system-control", "tenant.b.control", "consent.patient-self-control", "consent.other-member-control", "consent.other-tenant-control", "consent.revoked-optout-control", "consent.repermit-control", "registry.pre-outage-control", "registry.patient-self-control"]
     if subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip():
         raise RuntimeError("Sensitivity requires a clean committed checkout")
     source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
@@ -123,7 +141,11 @@ def run(member, output, coverage=None, claims=None):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 6 and sys.argv[1] == "p2p-consent":
+    if len(sys.argv) == 5 and sys.argv[1] == "provider-access":
+        if not all(Path(p).is_file() for p in sys.argv[2:4]) or Path(sys.argv[4]).exists():
+            sys.exit("Provide built member and consent assemblies and a new evidence directory")
+        run(Path(sys.argv[2]).resolve(), Path(sys.argv[4]).resolve(), consent=Path(sys.argv[3]).resolve())
+    elif len(sys.argv) == 6 and sys.argv[1] == "p2p-consent":
         if not all(Path(p).is_file() for p in sys.argv[2:5]) or Path(sys.argv[5]).exists():
             sys.exit("Provide built member, coverage and claims assemblies and a new evidence directory")
         run(Path(sys.argv[2]).resolve(), Path(sys.argv[5]).resolve(), Path(sys.argv[3]).resolve(), Path(sys.argv[4]).resolve())

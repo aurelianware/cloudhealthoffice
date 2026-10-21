@@ -54,6 +54,23 @@ public class SmartGapTests : IClassFixture<FhirTestWebAppFactory>
 
     private string Patient(string id, string scopes = "patient/*.read") => _factory.IssueToken(scopes, id);
 
+    [Theory]
+    [InlineData("pat-001", HttpStatusCode.OK)]
+    [InlineData("pat-999", HttpStatusCode.Forbidden)]
+    [InlineData("pat-001&_id=pat-999", HttpStatusCode.Forbidden)]
+    public async Task ProviderPatientSearch_IdMustNameOneAttributedMember(string id, HttpStatusCode expected)
+    {
+        using var response = await SendAsync(HttpMethod.Get, "/fhir/r4/Patient?_id=" + id,
+            Provider("user/Patient.read"));
+        response.StatusCode.Should().Be(expected);
+        if (expected == HttpStatusCode.OK)
+        {
+            var bundle = JsonSerializer.Deserialize<Bundle>(await response.Content.ReadAsStringAsync(), FhirJson)!;
+            bundle.Entry.Should().ContainSingle();
+            bundle.Entry[0].Resource.Id.Should().Be("pat-001");
+        }
+    }
+
     // ── 1. QuestionnaireResponse ──────────────────────────────────────────────
 
     [Fact]
