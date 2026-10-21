@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The portal now matches the marketing site's Enterprise look by default,
+  with Sentinel kept as a dark option and per-tenant branding.** Every portal
+  color now comes from tokens in `wwwroot/css/theme-tokens.css`. The new
+  default, Enterprise, uses the website palette (white and slate surfaces,
+  navy app bar, teal accent, IBM Plex Sans), and its text colors meet WCAG AA.
+  Sentinel, the original obsidian and neon cyan look, renders as before; users
+  switch between the two in the account menu, and the choice is kept in the
+  `cho-theme` cookie. `Portal:DefaultTheme` sets a deployment's default.
+  About 1,200 hardcoded colors across 57 pages now resolve through tokens;
+  translucent ones go through `legacy-color-bridge.css`, which gives Sentinel
+  the original value and Enterprise a value suited to how the color is used.
+  A tenant can set its own app bar name, logo and accent color under
+  `TenantBranding:{tenantId}`. Accents below AA contrast on white are ignored,
+  and status colors (paid, pended, denied) cannot be overridden. A test now
+  fails if a page hardcodes a Sentinel color again.
+
 - **Money is rounded to the cent half away from zero everywhere
   (`MoneyRounding.ToCents`).** Several calculations used `Math.Round(x, 2)`,
   whose default is banker's rounding (half to even). They now round a half

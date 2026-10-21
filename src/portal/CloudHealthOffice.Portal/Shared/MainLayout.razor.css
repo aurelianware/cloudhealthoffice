@@ -2,12 +2,13 @@
     height: 32px;
     margin-left: 12px;
     margin-right: 16px;
-    filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.4));
+    filter: drop-shadow(0 0 8px var(--cb-accent-shadow-40));
 }
 
 ::deep .appbar-title {
     font-weight: 700;
-    background: linear-gradient(135deg, #00ffff, #00ff88);
+    /* Solid on-appbar text in Enterprise; cyan-to-green in Sentinel (theme-tokens.css). */
+    background: var(--cho-appbar-title-fill);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

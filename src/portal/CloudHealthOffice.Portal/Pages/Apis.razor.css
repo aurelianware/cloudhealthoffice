@@ -2,7 +2,7 @@
 
 .apis-header {
     padding: 48px 0 32px;
-    border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+    border-bottom: 1px solid var(--cb-accent-border-15);
     margin-bottom: 32px;
 }
 
@@ -11,13 +11,13 @@
     font-weight: 700;
     letter-spacing: 2.5px;
     text-transform: uppercase;
-    color: #00ffff;
+    color: var(--cho-accent);
     margin-bottom: 12px;
 }
 
 .apis-page-title {
     font-weight: 700 !important;
-    background: linear-gradient(135deg, #00ffff, #00ff88) !important;
+    background: linear-gradient(135deg, var(--cho-accent), var(--cho-success)) !important;
     -webkit-background-clip: text !important;
     -webkit-text-fill-color: transparent !important;
     background-clip: text !important;
@@ -25,7 +25,7 @@
 }
 
 .apis-page-sub {
-    color: rgba(255, 255, 255, 0.65) !important;
+    color: var(--cb-fg-text-65) !important;
     max-width: 680px;
     line-height: 1.7;
     margin-bottom: 0 !important;
@@ -39,17 +39,17 @@
     gap: 16px;
     margin-top: 28px;
     padding: 20px 24px;
-    background: rgba(0, 255, 255, 0.05);
-    border: 1px solid rgba(0, 255, 255, 0.3);
+    background: var(--cb-accent-bg-5);
+    border: 1px solid var(--cb-accent-border-30);
     border-radius: 8px;
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.08);
+    box-shadow: 0 0 20px var(--cb-accent-shadow-8);
 }
 
 .apis-auth-banner-text {
     flex: 1;
     min-width: 220px;
     font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--cb-fg-text-75);
 }
 
 .apis-auth-banner-actions {

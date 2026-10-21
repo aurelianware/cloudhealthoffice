@@ -73,7 +73,7 @@
                         <MudText Typo="Typo.body2">@context.ReceivedDate.ToString("MM/dd/yyyy HH:mm")</MudText>
                     </MudTd>
                     <MudTd DataLabel="File Name">
-                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,255,0.7); font-size: 0.8em;">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cb-accent-text-70); font-size: 0.8em;">
                             @(context.OriginalFileName ?? context.BatchId)
                         </MudText>
                     </MudTd>
@@ -121,7 +121,7 @@
                     @if (_expandedBatchId == context.BatchId)
                     {
                         <MudTr>
-                            <td colspan="9" style="padding: 0 16px 16px 32px; background: rgba(0,255,255,0.02);">
+                            <td colspan="9" style="padding: 0 16px 16px 32px; background: var(--cb-accent-bg-2);">
                                 @if (_loadingBatchRecords)
                                 {
                                     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-2" />
@@ -142,7 +142,7 @@
                                         </HeaderContent>
                                         <RowTemplate Context="record">
                                             <MudTd>@record.TransactionDate.ToString("MM/dd/yyyy")</MudTd>
-                                            <MudTd><span style="font-family: monospace; color: rgba(0,255,255,0.7);">@record.MemberId</span></MudTd>
+                                            <MudTd><span style="font-family: monospace; color: var(--cb-accent-text-70);">@record.MemberId</span></MudTd>
                                             <MudTd>@record.MemberName</MudTd>
                                             <MudTd>
                                                 <MudChip T="string" Size="Size.Small"
@@ -174,7 +174,7 @@
                                                 }
                                                 else
                                                 {
-                                                    <span style="color: rgba(255,255,255,0.3);">—</span>
+                                                    <span style="color: var(--cb-fg-text-30);">—</span>
                                                 }
                                             </MudTd>
                                             <MudTd>
@@ -250,7 +250,7 @@
                         <MudText Typo="Typo.body2">@context.GeneratedDate.ToString("MM/dd/yyyy")</MudText>
                     </MudTd>
                     <MudTd DataLabel="Claim Number">
-                        <MudLink Href="@($"/claims/{context.ClaimId}")" Style="font-family: monospace; color: rgba(0,255,255,0.9);">
+                        <MudLink Href="@($"/claims/{context.ClaimId}")" Style="font-family: monospace; color: var(--cb-accent-text-90);">
                             @context.ClaimNumber
                         </MudLink>
                     </MudTd>
@@ -263,7 +263,7 @@
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Category Code">
-                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,136,0.8);">@context.StatusCategoryCode / @context.StatusCode</MudText>
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cb-success-text-80);">@context.StatusCategoryCode / @context.StatusCode</MudText>
                     </MudTd>
                     <MudTd DataLabel="Description">
                         <MudText Typo="Typo.body2">@context.StatusDescription</MudText>
@@ -319,23 +319,23 @@
         }
         else
         {
-            <MudPaper Elevation="1" Class="mb-3 pa-3" Style="border: 1px solid rgba(0,255,136,0.3); background: rgba(0,255,136,0.03);">
+            <MudPaper Elevation="1" Class="mb-3 pa-3" Style="border: 1px solid var(--cb-success-border-30); background: var(--cb-success-bg-3);">
                 <MudGrid>
                     <MudItem xs="6" md="3">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">TOTAL ERAs</MudText>
-                        <MudText Typo="Typo.h5" Style="color: #00ff88;">@_eras.Count</MudText>
+                        <MudText Typo="Typo.h5" Style="color: var(--cho-success);">@_eras.Count</MudText>
                     </MudItem>
                     <MudItem xs="6" md="3">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">TOTAL PAYMENT AMOUNT</MudText>
-                        <MudText Typo="Typo.h5" Style="color: #00ff88;">@_eras.Sum(e => e.TotalPaymentAmount).ToString("C")</MudText>
+                        <MudText Typo="Typo.h5" Style="color: var(--cho-success);">@_eras.Sum(e => e.TotalPaymentAmount).ToString("C")</MudText>
                     </MudItem>
                     <MudItem xs="6" md="3">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">TOTAL CLAIMS</MudText>
-                        <MudText Typo="Typo.h5" Style="color: #00ffff;">@_eras.Sum(e => e.ClaimCount)</MudText>
+                        <MudText Typo="Typo.h5" Style="color: var(--cho-accent);">@_eras.Sum(e => e.ClaimCount)</MudText>
                     </MudItem>
                     <MudItem xs="6" md="3">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">AVG ERA AMOUNT</MudText>
-                        <MudText Typo="Typo.h5" Style="color: #00ffff;">
+                        <MudText Typo="Typo.h5" Style="color: var(--cho-accent);">
                             @(_eras.Any() ? (_eras.Sum(e => e.TotalPaymentAmount) / _eras.Count).ToString("C") : "$0.00")
                         </MudText>
                     </MudItem>
@@ -359,7 +359,7 @@
                 <RowTemplate>
                     <MudTd DataLabel="Payment Date">@context.PaymentDate.ToString("MM/dd/yyyy")</MudTd>
                     <MudTd DataLabel="ERA ID">
-                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,255,0.7);">@context.EraId</MudText>
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cb-accent-text-70);">@context.EraId</MudText>
                     </MudTd>
                     <MudTd DataLabel="Payer">@context.PayerName</MudTd>
                     <MudTd DataLabel="Payee NPI">
@@ -373,7 +373,7 @@
                         <RecordLink Href="@($"/payments/{Uri.EscapeDataString(context.PaymentId)}")" style="font-family: monospace; font-size: 0.8em;" data-testid="era-payment-link">@context.CheckNumber</RecordLink>
                     </MudTd>
                     <MudTd DataLabel="Total Amount">
-                        <MudText Typo="Typo.body2" Style="color: #00ff88; font-weight: 600;">@context.TotalPaymentAmount.ToString("C")</MudText>
+                        <MudText Typo="Typo.body2" Style="color: var(--cho-success); font-weight: 600;">@context.TotalPaymentAmount.ToString("C")</MudText>
                     </MudTd>
                     <MudTd DataLabel="Claims">@context.ClaimCount</MudTd>
                     <MudTd DataLabel="Status">
@@ -464,7 +464,7 @@
                 <RowTemplate>
                     <MudTd DataLabel="Date">@context.TransactionDate.ToString("MM/dd/yyyy HH:mm")</MudTd>
                     <MudTd DataLabel="Transaction ID">
-                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0,255,255,0.7); font-size: 0.8em;">@context.TransactionId</MudText>
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cb-accent-text-70); font-size: 0.8em;">@context.TransactionId</MudText>
                     </MudTd>
                     <MudTd DataLabel="Type">
                         <MudChip T="string" Size="Size.Small" Color="@GetTxnTypeColor(context.TransactionType)">@context.TransactionType</MudChip>

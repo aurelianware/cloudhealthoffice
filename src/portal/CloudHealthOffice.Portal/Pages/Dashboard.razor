@@ -10,6 +10,7 @@
 @inject ITenantContextService TenantContextService
 @inject IUserContextService UserContextService
 @inject IConfiguration Configuration
+@inject CloudHealthOffice.Portal.Theming.ThemeState ThemeState
 
 <PageTitle>Dashboard - Cloud Health Office</PageTitle>
 
@@ -646,9 +647,10 @@
 
     private double[] _chartData = Array.Empty<double>();
     private string[] _chartLabels = { "Approved", "Denied", "Pending" };
-    private ChartOptions _chartOptions = new()
+    // MudChart needs literal colors, so the palette follows the active theme here.
+    private ChartOptions _chartOptions => new()
     {
-        ChartPalette = new[] { "#00ff88", "#ff0055", "#ffaa00" }
+        ChartPalette = CloudHealthOffice.Portal.Theming.ChoThemes.OutcomeChartPalette(ThemeState.Current)
     };
 
     protected override async Task OnInitializedAsync()

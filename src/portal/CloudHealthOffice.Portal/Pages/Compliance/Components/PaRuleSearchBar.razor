@@ -19,8 +19,8 @@
             {
                 <button type="button" class="pa-autocomplete-item" role="option" aria-selected="false" @onclick="() => SelectSuggestion(suggestion)">
                     <MudIcon Icon="@Icons.Material.Filled.Code" Size="Size.Small"
-                             Style="color: #9c9a92; margin-right: 8px;" />
-                    <span style="font-family: 'JetBrains Mono', monospace; color: #00e5cc;">@suggestion</span>
+                             Style="color: var(--cho-text-muted); margin-right: 8px;" />
+                    <span style="font-family: 'JetBrains Mono', monospace; color: var(--cho-accent-2);">@suggestion</span>
                 </button>
             }
         </MudPaper>

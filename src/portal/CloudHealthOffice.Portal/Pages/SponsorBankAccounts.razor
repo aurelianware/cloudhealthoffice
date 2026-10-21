@@ -43,8 +43,8 @@ else if (_group != null && _view != null)
     <MudGrid Spacing="3">
         <MudItem xs="12" md="6">
             <MudPaper Class="pa-4" data-testid="sba-active"
-                      Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,136,0.3); border-radius: 12px;">
-                <MudText Typo="Typo.subtitle1" Style="color: #00ff88; font-weight: 600;">Approved account — group @_view.GroupNumber</MudText>
+                      Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-success-border-30); border-radius: 12px;">
+                <MudText Typo="Typo.subtitle1" Style="color: var(--cho-success); font-weight: 600;">Approved account — group @_view.GroupNumber</MudText>
                 @if (_view.Active == null)
                 {
                     <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2" data-testid="sba-no-active">
@@ -55,7 +55,7 @@ else if (_group != null && _view != null)
                 else
                 {
                     <AccountDetails Account="_view.Active" />
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">
                         Approved by @(_view.ActiveApprovedBy ?? "—") @(_view.ActiveApprovedAt?.ToLocalTime().ToString("g"))
                     </MudText>
                 }
@@ -64,11 +64,11 @@ else if (_group != null && _view != null)
 
         <MudItem xs="12" md="6">
             <MudPaper Class="pa-4" data-testid="sba-pending-panel"
-                      Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(255,170,0,0.3); border-radius: 12px;">
-                <MudText Typo="Typo.subtitle1" Style="color: #ffaa00; font-weight: 600;">Pending change</MudText>
+                      Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-warning-border-30); border-radius: 12px;">
+                <MudText Typo="Typo.subtitle1" Style="color: var(--cho-warning); font-weight: 600;">Pending change</MudText>
                 @if (_view.Pending is not { } pending)
                 {
-                    <MudText Typo="Typo.body2" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No change awaiting approval.</MudText>
+                    <MudText Typo="Typo.body2" Class="mt-2" Style="color: var(--cb-fg-text-50);">No change awaiting approval.</MudText>
                 }
                 else
                 {
@@ -78,7 +78,7 @@ else if (_group != null && _view != null)
                         {
                             <MudText Typo="Typo.caption">Numbers unchanged from the approved account (enrollment change only).</MudText>
                         }
-                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">
+                        <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">
                             Proposed by @pending.RequestedBy @pending.RequestedAt.ToLocalTime().ToString("g")
                         </MudText>
                     </div>
@@ -115,9 +115,9 @@ else if (_group != null && _view != null)
     @if (_canPropose)
     {
         <MudPaper Class="pa-4 mt-4" data-testid="sba-propose-form"
-                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
-            <MudText Typo="Typo.subtitle1" Style="color: #00ffff; font-weight: 600;">Propose a change</MudText>
-            <MudText Typo="Typo.body2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">
+                  Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
+            <MudText Typo="Typo.subtitle1" Style="color: var(--cho-accent); font-weight: 600;">Propose a change</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2" Style="color: var(--cb-fg-text-60);">
                 The change stays pending until a different user with payments:approve approves it. Leave both numbers empty
                 to keep the approved account's numbers and change only the enrollment. Numbers you type are sent to
                 sponsor-service and never shown again (only the last 4).
@@ -167,7 +167,7 @@ else if (_group != null && _view != null)
 
     <MudText Typo="Typo.h6" Class="mt-6 mb-2">History</MudText>
     <MudTable Items="_history" Dense="true" T="SponsorBankAccountChange" data-testid="sba-history"
-              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+              Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
         <HeaderContent>
             <MudTh>Requested</MudTh>
             <MudTh>By</MudTh>
@@ -187,7 +187,7 @@ else if (_group != null && _view != null)
             <MudTd>@context.Reason</MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            <MudText Typo="Typo.body2" Class="pa-4" Style="color: rgba(255,255,255,0.4);">No changes yet</MudText>
+            <MudText Typo="Typo.body2" Class="pa-4" Style="color: var(--cb-fg-text-40);">No changes yet</MudText>
         </NoRecordsContent>
     </MudTable>
 }

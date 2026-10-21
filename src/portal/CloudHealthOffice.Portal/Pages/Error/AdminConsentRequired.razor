@@ -92,7 +92,7 @@
                 <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">
                     <strong>Method 2: Azure CLI</strong>
                 </MudText>
-                <MudPaper Outlined="true" Class="pa-3" Style="background-color: #1e1e1e; color: #d4d4d4;">
+                <MudPaper Outlined="true" Class="pa-3" Style="background-color: var(--cho-code-bg); color: var(--cho-code-text);">
                     <code>
                         az login --tenant @tenantId<br/>
                         az ad sp create --id @apiClientId
@@ -102,7 +102,7 @@
                 <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">
                     <strong>Method 3: PowerShell</strong>
                 </MudText>
-                <MudPaper Outlined="true" Class="pa-3" Style="background-color: #1e1e1e; color: #d4d4d4;">
+                <MudPaper Outlined="true" Class="pa-3" Style="background-color: var(--cho-code-bg); color: var(--cho-code-text);">
                     <code>
                         Connect-MgGraph -TenantId "@tenantId"<br/>
                         New-MgServicePrincipal -AppId "@apiClientId"
@@ -114,7 +114,7 @@
                 <MudText Typo="Typo.body2" Class="mb-2">
                     <strong>Error Details:</strong>
                 </MudText>
-                <MudPaper Outlined="true" Class="pa-3" Style="background-color: #f5f5f5;">
+                <MudPaper Outlined="true" Class="pa-3" Style="background-color: var(--cho-text);">
                     <MudText Typo="Typo.caption">
                         <strong>Error Code:</strong> AADSTS650052<br />
                         <strong>Tenant ID:</strong> @tenantId<br />

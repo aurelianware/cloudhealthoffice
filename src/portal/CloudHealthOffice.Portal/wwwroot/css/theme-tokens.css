@@ -1,0 +1,134 @@
+/* ============================================================
+   Cloud Health Office portal: semantic design tokens
+   ------------------------------------------------------------
+   Every color the portal paints comes from one of these tokens.
+   Two themes ship today, selected by <html data-cho-theme="...">:
+
+     enterprise  (default)  the marketing site's palette
+                            (src/site/css/enterprise.css): white and
+                            slate surfaces, navy ink, teal accent,
+                            IBM Plex Sans.
+     sentinel               the original obsidian + neon cyan look.
+
+   A tenant can override the accent (see TenantBrandingStyle).
+   Status colors (success / warning / error / info) are NOT
+   tenant-overridable: "denied" must look like "denied" everywhere.
+
+   New code: use the semantic tokens below (or MudBlazor's
+   --mud-palette-* vars). Never hardcode a hex value in a page.
+   Colors migrated from the old hardcoded styles resolve through
+   legacy-color-bridge.css.
+   ============================================================ */
+
+:root,
+:root[data-cho-theme="enterprise"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --cho-bg: #F5F7FA;            /* page canvas */
+  --cho-surface: #FFFFFF;       /* cards, tables, dialogs */
+  --cho-raised: #EEF3F8;        /* chips, table header, wells */
+  --cho-appbar: #0B2545;        /* navy app bar */
+  --cho-on-appbar: #FFFFFF;
+  --cho-on-appbar-muted: #D5E2EE;
+  --cho-appbar-title-fill: linear-gradient(#FFFFFF, #FFFFFF);
+  --cho-drawer: #FFFFFF;
+  --cho-code-bg: #0B1F33;
+  --cho-code-text: #D5E2EE;
+
+  /* Text */
+  --cho-ink: #0B1F33;           /* headings, strong text */
+  --cho-text: #334155;          /* body */
+  --cho-text-muted: #475569;    /* secondary, 7.6:1 on white */
+  --cho-text-subtle: #5B6B80;   /* captions, 5.6:1 on white, 4.9:1 on chips */
+
+  /* Lines */
+  --cho-line: #D9E1EA;
+  --cho-line-strong: #B8C4D2;
+
+  /* Brand accent (tenant-overridable) */
+  --cho-accent: #0E7490;
+  --cho-accent-hover: #0B5A70;
+  --cho-accent-soft: #E6F2F5;
+  --cho-on-accent: #FFFFFF;
+  --cho-accent-2: #0F766E;
+
+  /* Status (locked) */
+  --cho-success: #15803D;
+  --cho-warning: #B45309;
+  --cho-error: #B91C1C;
+  --cho-info: #0369A1;
+
+  --cho-rating-caution: #C2410C;
+  --cho-rating-blocked: #7F1D1D;
+
+  /* Effects */
+  --cho-shadow-sm: 0 1px 2px rgba(11, 31, 51, 0.06);
+  --cho-shadow-md: 0 12px 28px rgba(11, 31, 51, 0.12);
+  --glow-cyan: none;
+  --glow-green: none;
+  --glow-circuit: var(--cho-shadow-sm);
+
+  /* Type */
+  --cho-font: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --cho-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --cho-radius: 6px;
+}
+
+:root[data-cho-theme="sentinel"] {
+  color-scheme: dark;
+
+  --cho-bg: #000000;
+  --cho-surface: #0a0a0a;
+  --cho-raised: #0f0f0f;
+  --cho-appbar: #000000;
+  --cho-on-appbar: #ffffff;
+  --cho-on-appbar-muted: rgba(255, 255, 255, 0.7);
+  --cho-appbar-title-fill: linear-gradient(135deg, #00ffff, #00ff88);
+  --cho-drawer: #000000;
+  --cho-code-bg: #000000;
+  --cho-code-text: #00ffff;
+
+  --cho-ink: #ffffff;
+  --cho-text: #e8e6e0;
+  --cho-text-muted: #9c9a92;
+  --cho-text-subtle: rgba(255, 255, 255, 0.5);
+
+  --cho-line: #2a2a35;
+  --cho-line-strong: rgba(0, 255, 255, 0.3);
+
+  --cho-accent: #00ffff;
+  --cho-accent-hover: #ffffff;
+  --cho-accent-soft: rgba(0, 255, 255, 0.08);
+  --cho-on-accent: #000000;
+  --cho-accent-2: #00e5cc;
+
+  --cho-success: #00ff88;
+  --cho-warning: #ffaa00;
+  --cho-error: #ff0055;
+  --cho-info: #00d4ff;
+
+  --cho-rating-caution: #ff7a1a;
+  --cho-rating-blocked: #8b0028;
+
+  --cho-shadow-sm: 0 0 10px rgba(0, 255, 255, 0.15);
+  --cho-shadow-md: 0 0 30px rgba(0, 255, 255, 0.4), 0 0 60px rgba(0, 255, 136, 0.15);
+  --glow-cyan: 0 0 10px rgba(0, 255, 255, 0.4), 0 0 20px rgba(0, 255, 255, 0.2);
+  --glow-green: 0 0 10px rgba(0, 255, 136, 0.4), 0 0 20px rgba(0, 255, 136, 0.2);
+  --glow-circuit: 0 0 15px rgba(0, 255, 255, 0.3), 0 0 30px rgba(0, 255, 136, 0.15);
+
+  --cho-font: "Segoe UI", -apple-system, BlinkMacSystemFont, "Roboto", "Helvetica Neue", Arial, sans-serif;
+  --cho-mono: 'Courier New', ui-monospace, monospace;
+  --cho-radius: 4px;
+}
+
+/* Legacy names from the Sentinel-only stylesheet, kept so older
+   component CSS keeps resolving. Prefer the semantic names above. */
+:root {
+  --cho-black: var(--cho-bg);
+  --cho-obsidian: var(--cho-surface);
+  --cho-cyan: var(--cho-accent);
+  --cho-green: var(--cho-success);
+  --cho-gray: var(--cho-text-muted);
+  --cho-white: var(--cho-ink);
+}

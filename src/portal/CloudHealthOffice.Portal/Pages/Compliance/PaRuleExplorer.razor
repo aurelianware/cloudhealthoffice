@@ -57,7 +57,7 @@
                 else if (_searchResults != null && _searchResults.Count > 0)
                 {
                     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-                        @_searchResults.Count rule(s) found for <strong style="color: #00e5cc;">@_lastSearchCode</strong>
+                        @_searchResults.Count rule(s) found for <strong style="color: var(--cho-accent-2);">@_lastSearchCode</strong>
                     </MudText>
                     @foreach (var rule in _searchResults)
                     {
@@ -76,8 +76,8 @@
                 {
                     <div class="pa-empty-state">
                         <MudIcon Icon="@Icons.Material.Filled.ManageSearch"
-                                 Style="font-size: 4rem; color: #2a2a35;" />
-                        <MudText Typo="Typo.h6" Style="color: #9c9a92;" Class="mt-3">
+                                 Style="font-size: 4rem; color: var(--cho-line);" />
+                        <MudText Typo="Typo.h6" Style="color: var(--cho-text-muted);" Class="mt-3">
                             Search by CPT or HCPCS code to check Texas Medicaid PA requirements
                         </MudText>
                     </div>
@@ -100,9 +100,9 @@
                     }
                     else if (_categoryRules != null && _categoryRules.Count > 0)
                     {
-                        <MudText Typo="Typo.h6" Class="mb-3" Style="color: #e8e6e0;">
+                        <MudText Typo="Typo.h6" Class="mb-3" Style="color: var(--cho-text);">
                             @_selectedCategory
-                            <MudChip Size="Size.Small" Style="background: #1a1a24; color: #00e5cc; border: 1px solid #2a2a35;">
+                            <MudChip Size="Size.Small" Style="background: var(--cho-raised); color: var(--cho-accent-2); border: 1px solid var(--cho-line);">
                                 @_categoryRules.Count rules
                             </MudChip>
                         </MudText>
@@ -121,8 +121,8 @@
                     {
                         <div class="pa-empty-state">
                             <MudIcon Icon="@Icons.Material.Filled.FolderOpen"
-                                     Style="font-size: 4rem; color: #2a2a35;" />
-                            <MudText Typo="Typo.h6" Style="color: #9c9a92;" Class="mt-3">
+                                     Style="font-size: 4rem; color: var(--cho-line);" />
+                            <MudText Typo="Typo.h6" Style="color: var(--cho-text-muted);" Class="mt-3">
                                 Select a category from the sidebar to view its PA rules
                             </MudText>
                         </div>

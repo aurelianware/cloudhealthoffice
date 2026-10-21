@@ -23,7 +23,7 @@
     }
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4"
-             Style="border: 1px solid rgba(0, 255, 255, 0.2);">
+             Style="border: 1px solid var(--cb-accent-border-20);">
         <!-- Tab 1: API Keys -->
         <MudTabPanel Text="API Keys" Icon="@Icons.Material.Filled.Key">
             @if (_loadingKeys)
@@ -34,37 +34,37 @@
             <!-- Stats Row -->
             <MudGrid Class="pa-4">
                 <MudItem xs="12" sm="6" md="2">
-                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.2); background: rgba(0, 255, 255, 0.03);">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid var(--cb-accent-border-20); background: var(--cb-accent-bg-3);">
                         <MudText Typo="Typo.h4" Color="Color.Primary">@_apiKeys.Count</MudText>
                         <MudText Typo="Typo.caption">Total Keys</MudText>
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="2">
-                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 136, 0.2); background: rgba(0, 255, 136, 0.03);">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid var(--cb-success-border-20); background: var(--cb-success-bg-3);">
                         <MudText Typo="Typo.h4" Color="Color.Success">@_apiKeys.Count(k => k.IsActive)</MudText>
                         <MudText Typo="Typo.caption">Active Keys</MudText>
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="2">
-                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.2); background: rgba(0, 255, 255, 0.03);">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid var(--cb-accent-border-20); background: var(--cb-accent-bg-3);">
                         <MudText Typo="Typo.h4" Color="Color.Info">@_apiKeys.Sum(k => k.CurrentMonthUsage)</MudText>
                         <MudText Typo="Typo.caption">Total Usage This Month</MudText>
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="2">
-                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.15); background: rgba(0, 255, 255, 0.02);">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid var(--cb-accent-border-15); background: var(--cb-accent-bg-2);">
                         <MudText Typo="Typo.h4">@_apiKeys.Count(k => k.Tier == "Free")</MudText>
                         <MudText Typo="Typo.caption">Free</MudText>
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="2">
-                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.15); background: rgba(0, 255, 255, 0.02);">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid var(--cb-accent-border-15); background: var(--cb-accent-bg-2);">
                         <MudText Typo="Typo.h4">@_apiKeys.Count(k => k.Tier == "Starter")</MudText>
                         <MudText Typo="Typo.caption">Starter</MudText>
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="2">
-                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.15); background: rgba(0, 255, 255, 0.02);">
+                    <MudPaper Class="pa-4 text-center" Elevation="2" Style="border: 1px solid var(--cb-accent-border-15); background: var(--cb-accent-bg-2);">
                         <MudText Typo="Typo.h4">@(_apiKeys.Count(k => k.Tier == "Professional") + _apiKeys.Count(k => k.Tier == "Enterprise"))</MudText>
                         <MudText Typo="Typo.caption">Pro / Enterprise</MudText>
                     </MudPaper>
@@ -90,7 +90,7 @@
 
             <!-- API Keys Table -->
             <MudTable Items="_apiKeys" Hover="true" Striped="true" Dense="true" Elevation="0"
-                      Style="border: 1px solid rgba(0, 255, 255, 0.15);">
+                      Style="border: 1px solid var(--cb-accent-border-15);">
                 <HeaderContent>
                     <MudTh>Tenant Name</MudTh>
                     <MudTh>Email</MudTh>
@@ -110,7 +110,7 @@
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="API Key">
-                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0, 255, 255, 0.7);">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cb-accent-text-70);">
                             @(context.KeyPrefix)...
                         </MudText>
                     </MudTd>
@@ -153,7 +153,7 @@
 
             <!-- Fee Schedules Table -->
             <MudTable Items="_feeSchedules" Hover="true" Striped="true" Dense="true" Elevation="0" Class="ma-4"
-                      Style="border: 1px solid rgba(0, 255, 255, 0.15);">
+                      Style="border: 1px solid var(--cb-accent-border-15);">
                 <HeaderContent>
                     <MudTh>ID</MudTh>
                     <MudTh>Name</MudTh>
@@ -164,7 +164,7 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="ID">
-                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0, 255, 255, 0.7);">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cb-accent-text-70);">
                             @context.Id
                         </MudText>
                     </MudTd>
@@ -186,7 +186,7 @@
             </MudTable>
 
             <!-- Upload Section -->
-            <MudPaper Class="pa-4 ma-4" Elevation="2" Style="border: 1px solid rgba(0, 255, 255, 0.2); background: rgba(0, 255, 255, 0.02);">
+            <MudPaper Class="pa-4 ma-4" Elevation="2" Style="border: 1px solid var(--cb-accent-border-20); background: var(--cb-accent-bg-2);">
                 <MudText Typo="Typo.h6" GutterBottom="true">Upload Fee Schedule</MudText>
                 <MudGrid>
                     <MudItem xs="12" md="3">

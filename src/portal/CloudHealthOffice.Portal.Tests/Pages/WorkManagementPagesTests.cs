@@ -290,10 +290,14 @@ public class WorkManagementNavTests : TestContext
         tenant.Setup(t => t.GetCurrentTenantContextAsync()).ReturnsAsync(new TenantContext { TenantId = "tenant-a", TenantName = "Tenant A" });
         tenant.Setup(t => t.GetAvailableTenantsAsync()).ReturnsAsync(new List<TenantSubscription>());
         Services.AddSingleton(tenant.Object);
-        Services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
+        var config = new ConfigurationBuilder().Build();
+        Services.AddSingleton<IConfiguration>(config);
         Services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         Services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         Services.AddMudServices();
+        Services.AddScoped<CloudHealthOffice.Portal.Theming.ThemeState>();
+        Services.AddSingleton<CloudHealthOffice.Portal.Theming.ITenantBrandingProvider>(
+            new CloudHealthOffice.Portal.Theming.ConfigurationTenantBrandingProvider(config));
         JSInterop.Mode = JSRuntimeMode.Loose;
         this.AddTestAuthorization().SetAuthorized("user@test.example");
     }

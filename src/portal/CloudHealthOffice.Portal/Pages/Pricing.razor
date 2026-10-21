@@ -5,10 +5,10 @@
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
     <!-- Hero -->
     <div style="text-align: center; margin-bottom: 48px;">
-        <MudText Typo="Typo.h3" Class="mb-2" Style="font-weight: 700; background: linear-gradient(135deg, #00ffff, #00ff88); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+        <MudText Typo="Typo.h3" Class="mb-2" Style="font-weight: 700; background: linear-gradient(135deg, var(--cho-accent), var(--cho-success)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
             Pay Per Member. Not Per Feature.
         </MudText>
-        <MudText Typo="Typo.body1" Style="color: rgba(255, 255, 255, 0.7); max-width: 700px; margin: 0 auto;">
+        <MudText Typo="Typo.body1" Style="color: var(--cb-fg-text-70); max-width: 700px; margin: 0 auto;">
             Simple per-member-per-month pricing that scales with your health plan.
             No transaction caps. No feature gates. Every tier includes the full platform.
         </MudText>
@@ -19,18 +19,18 @@
 
         <!-- Free (Non-Production) -->
         <MudItem xs="12" sm="6" md="3">
-            <MudCard Elevation="4" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.3); display: flex; flex-direction: column;">
+            <MudCard Elevation="4" Style="height: 100%; border: 1px solid var(--cb-accent-border-30); display: flex; flex-direction: column;">
                 <MudCardContent Style="flex: 1;">
-                    <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: #00ffff;">
+                    <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: var(--cho-accent);">
                         Free for non-production use (BSL 1.1)
                     </MudText>
                     <MudText Typo="Typo.h3" Class="mb-1" Style="font-weight: 700;">
                         $0
                     </MudText>
-                    <MudText Typo="Typo.body2" Class="mb-4" Style="color: rgba(255, 255, 255, 0.6);">
+                    <MudText Typo="Typo.body2" Class="mb-4" Style="color: var(--cb-fg-text-60);">
                         Self-hosted
                     </MudText>
-                    <MudDivider Class="mb-4" Style="border-color: rgba(0, 255, 255, 0.2);" />
+                    <MudDivider Class="mb-4" Style="border-color: var(--cb-accent-border-20);" />
                     <MudList Dense="true">
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
                             <MudText Typo="Typo.body2">Full platform source code</MudText>
@@ -48,7 +48,7 @@
                             <MudText Typo="Typo.body2">BSL 1.1 license</MudText>
                         </MudListItem>
                         <MudListItem Icon="@Icons.Material.Filled.Remove" IconColor="Color.Default">
-                            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.4);">Community support only</MudText>
+                            <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-40);">Community support only</MudText>
                         </MudListItem>
                     </MudList>
                 </MudCardContent>
@@ -67,21 +67,21 @@
 
         <!-- Growth -->
         <MudItem xs="12" sm="6" md="3">
-            <MudCard Elevation="4" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.3); display: flex; flex-direction: column;">
+            <MudCard Elevation="4" Style="height: 100%; border: 1px solid var(--cb-accent-border-30); display: flex; flex-direction: column;">
                 <MudCardContent Style="flex: 1;">
-                    <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: #00ffff;">
+                    <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: var(--cho-accent);">
                         Growth
                     </MudText>
                     <MudText Typo="Typo.h3" Class="mb-1" Style="font-weight: 700;">
                         Contact Us
                     </MudText>
-                    <MudText Typo="Typo.body2" Class="mb-1" Style="color: rgba(255, 255, 255, 0.6);">
+                    <MudText Typo="Typo.body2" Class="mb-1" Style="color: var(--cb-fg-text-60);">
                         Up to 50,000 members
                     </MudText>
-                    <MudText Typo="Typo.caption" Class="mb-4" Style="color: #00ff88; font-style: italic;">
+                    <MudText Typo="Typo.caption" Class="mb-4" Style="color: var(--cho-success); font-style: italic;">
                         Usage-based pricing
                     </MudText>
-                    <MudDivider Class="mb-4" Style="border-color: rgba(0, 255, 255, 0.2);" />
+                    <MudDivider Class="mb-4" Style="border-color: var(--cb-accent-border-20);" />
                     <MudList Dense="true">
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
                             <MudText Typo="Typo.body2">Everything in Free tier</MudText>
@@ -117,24 +117,24 @@
 
         <!-- Scale (Featured) -->
         <MudItem xs="12" sm="6" md="3">
-            <MudCard Elevation="8" Style="height: 100%; border: 2px solid #00ffff; display: flex; flex-direction: column; position: relative; background: linear-gradient(180deg, rgba(0, 255, 255, 0.08) 0%, rgba(0, 0, 0, 0) 100%);">
+            <MudCard Elevation="8" Style="height: 100%; border: 2px solid var(--cho-accent); display: flex; flex-direction: column; position: relative; background: linear-gradient(180deg, var(--cb-accent-bg-8) 0%, rgba(0, 0, 0, 0) 100%);">
                 <div style="position: absolute; top: -12px; right: 20px;">
                     <MudChip Color="Color.Primary" Size="Size.Small" Style="font-weight: 700;">MOST POPULAR</MudChip>
                 </div>
                 <MudCardContent Style="flex: 1;">
-                    <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: #00ffff;">
+                    <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: var(--cho-accent);">
                         Scale
                     </MudText>
                     <MudText Typo="Typo.h3" Class="mb-1" Style="font-weight: 700;">
                         Contact Us
                     </MudText>
-                    <MudText Typo="Typo.body2" Class="mb-1" Style="color: rgba(255, 255, 255, 0.6);">
+                    <MudText Typo="Typo.body2" Class="mb-1" Style="color: var(--cb-fg-text-60);">
                         Up to 250,000 members
                     </MudText>
-                    <MudText Typo="Typo.caption" Class="mb-4" Style="color: #00ff88; font-style: italic;">
+                    <MudText Typo="Typo.caption" Class="mb-4" Style="color: var(--cho-success); font-style: italic;">
                         Usage-based pricing
                     </MudText>
-                    <MudDivider Class="mb-4" Style="border-color: rgba(0, 255, 255, 0.2);" />
+                    <MudDivider Class="mb-4" Style="border-color: var(--cb-accent-border-20);" />
                     <MudList Dense="true">
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
                             <MudText Typo="Typo.body2">Everything in Growth</MudText>
@@ -165,7 +165,7 @@
                                Color="Color.Primary"
                                FullWidth="true"
                                Size="Size.Large"
-                               Style="box-shadow: 0 0 20px rgba(0, 255, 255, 0.4);">
+                               Style="box-shadow: 0 0 20px var(--cb-accent-shadow-40);">
                         Start 30-Day Trial
                     </MudButton>
                 </MudCardActions>
@@ -174,21 +174,21 @@
 
         <!-- Enterprise -->
         <MudItem xs="12" sm="6" md="3">
-            <MudCard Elevation="4" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.3); display: flex; flex-direction: column;">
+            <MudCard Elevation="4" Style="height: 100%; border: 1px solid var(--cb-accent-border-30); display: flex; flex-direction: column;">
                 <MudCardContent Style="flex: 1;">
-                    <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: #00ffff;">
+                    <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; color: var(--cho-accent);">
                         Enterprise
                     </MudText>
                     <MudText Typo="Typo.h3" Class="mb-1" Style="font-weight: 700;">
-                        Custom<MudText Typo="Typo.body1" Inline="true" Style="color: rgba(255, 255, 255, 0.5);"> PMPM</MudText>
+                        Custom<MudText Typo="Typo.body1" Inline="true" Style="color: var(--cb-fg-text-50);"> PMPM</MudText>
                     </MudText>
-                    <MudText Typo="Typo.body2" Class="mb-1" Style="color: rgba(255, 255, 255, 0.6);">
+                    <MudText Typo="Typo.body2" Class="mb-1" Style="color: var(--cb-fg-text-60);">
                         250,000+ members
                     </MudText>
-                    <MudText Typo="Typo.caption" Class="mb-4" Style="color: #00ff88; font-style: italic;">
+                    <MudText Typo="Typo.caption" Class="mb-4" Style="color: var(--cho-success); font-style: italic;">
                         Volume pricing available — contact sales
                     </MudText>
-                    <MudDivider Class="mb-4" Style="border-color: rgba(0, 255, 255, 0.2);" />
+                    <MudDivider Class="mb-4" Style="border-color: var(--cb-accent-border-20);" />
                     <MudList Dense="true">
                         <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
                             <MudText Typo="Typo.body2">Everything in Scale</MudText>
@@ -227,11 +227,11 @@
     </MudGrid>
 
     <!-- PMPM Calculator -->
-    <MudPaper Class="mt-12 pa-8" Elevation="4" Style="border: 2px solid rgba(0, 255, 255, 0.3); max-width: 700px; margin-left: auto; margin-right: auto;">
+    <MudPaper Class="mt-12 pa-8" Elevation="4" Style="border: 2px solid var(--cb-accent-border-30); max-width: 700px; margin-left: auto; margin-right: auto;">
         <MudText Typo="Typo.h5" Class="mb-2" Style="font-weight: 600; text-align: center;">
             Estimate Your Monthly Cost
         </MudText>
-        <MudText Typo="Typo.body2" Class="mb-6" Style="color: rgba(255, 255, 255, 0.6); text-align: center;">
+        <MudText Typo="Typo.body2" Class="mb-6" Style="color: var(--cb-fg-text-60); text-align: center;">
             Drag the slider to see your estimated cost based on enrolled member count.
         </MudText>
 
@@ -239,21 +239,21 @@
             <MudText Typo="Typo.body1" Style="min-width: 80px;">Members:</MudText>
             <MudSlider T="double" @bind-Value="_memberCount" Min="1000" Max="500000" Step="1000"
                        Color="Color.Primary" Style="flex: 1;" />
-            <MudText Typo="Typo.h6" Style="min-width: 100px; text-align: right; color: #00ffff;">
+            <MudText Typo="Typo.h6" Style="min-width: 100px; text-align: right; color: var(--cho-accent);">
                 @MemberCountFormatted
             </MudText>
         </div>
 
-        <MudDivider Class="my-4" Style="border-color: rgba(0, 255, 255, 0.2);" />
+        <MudDivider Class="my-4" Style="border-color: var(--cb-accent-border-20);" />
 
         <div style="text-align: center;">
-            <MudText Typo="Typo.h3" Style="font-weight: 700; color: #00ffff; text-shadow: 0 0 20px rgba(0, 255, 255, 0.4);">
+            <MudText Typo="Typo.h3" Style="font-weight: 700; color: var(--cho-accent); text-shadow: 0 0 20px var(--cb-accent-shadow-40);">
                 @MonthlyEstimate/mo
             </MudText>
-            <MudText Typo="Typo.body1" Class="mt-1" Style="color: rgba(255, 255, 255, 0.6);">
+            <MudText Typo="Typo.body1" Class="mt-1" Style="color: var(--cb-fg-text-60);">
                 @AnnualEstimate per year
             </MudText>
-            <MudText Typo="Typo.body2" Class="mt-1" Style="color: #00ff88;">
+            <MudText Typo="Typo.body2" Class="mt-1" Style="color: var(--cho-success);">
                 @TierLabel tier · @RateLabel PMPM
             </MudText>
 
@@ -273,56 +273,56 @@
     <MudText Typo="Typo.h5" Class="mt-12 mb-2" Style="font-weight: 600; text-align: center;">
         Every Tier Includes the Full Platform
     </MudText>
-    <MudText Typo="Typo.body2" Class="mb-6" Style="color: rgba(255, 255, 255, 0.6); text-align: center;">
+    <MudText Typo="Typo.body2" Class="mb-6" Style="color: var(--cb-fg-text-60); text-align: center;">
         No feature gates. No module upsells. You get everything.
     </MudText>
 
     <MudGrid Spacing="3">
         <MudItem xs="12" sm="6" md="4">
-            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid var(--cb-accent-border-15);">
                 <MudCardContent>
-                    <MudText Typo="Typo.h6" Style="color: #00ffff;">Claims Processing</MudText>
-                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">837P/I/D, claims scrubbing (20+ rules), 10-step adjudication, 835 ERA. Sub-500ms.</MudText>
+                    <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">Claims Processing</MudText>
+                    <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-70);">837P/I/D, claims scrubbing (20+ rules), 10-step adjudication, 835 ERA. Sub-500ms.</MudText>
                 </MudCardContent>
             </MudCard>
         </MudItem>
         <MudItem xs="12" sm="6" md="4">
-            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid var(--cb-accent-border-15);">
                 <MudCardContent>
-                    <MudText Typo="Typo.h6" Style="color: #00ffff;">Eligibility</MudText>
-                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">Real-time and batch 270/271 verification. Member, coverage, and benefit plan management.</MudText>
+                    <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">Eligibility</MudText>
+                    <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-70);">Real-time and batch 270/271 verification. Member, coverage, and benefit plan management.</MudText>
                 </MudCardContent>
             </MudCard>
         </MudItem>
         <MudItem xs="12" sm="6" md="4">
-            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid var(--cb-accent-border-15);">
                 <MudCardContent>
-                    <MudText Typo="Typo.h6" Style="color: #00ffff;">Prior Authorization</MudText>
-                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">CDS Hooks for coverage discovery and FHIR PAS submission (in development). X12 278 bridging planned. CMS-0057-F conformance in progress.</MudText>
+                    <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">Prior Authorization</MudText>
+                    <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-70);">CDS Hooks for coverage discovery and FHIR PAS submission (in development). X12 278 bridging planned. CMS-0057-F conformance in progress.</MudText>
                 </MudCardContent>
             </MudCard>
         </MudItem>
         <MudItem xs="12" sm="6" md="4">
-            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid var(--cb-accent-border-15);">
                 <MudCardContent>
-                    <MudText Typo="Typo.h6" Style="color: #00ffff;">Medical Attachments</MudText>
-                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">275 inbound, RFAI case management, 277 status, 824 acknowledgment.</MudText>
+                    <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">Medical Attachments</MudText>
+                    <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-70);">275 inbound, RFAI case management, 277 status, 824 acknowledgment.</MudText>
                 </MudCardContent>
             </MudCard>
         </MudItem>
         <MudItem xs="12" sm="6" md="4">
-            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid var(--cb-accent-border-15);">
                 <MudCardContent>
-                    <MudText Typo="Typo.h6" Style="color: #00ffff;">FHIR R4 APIs</MudText>
-                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory.</MudText>
+                    <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">FHIR R4 APIs</MudText>
+                    <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-70);">Patient Access, Provider Access, Payer-to-Payer, Prior Auth, Provider Directory.</MudText>
                 </MudCardContent>
             </MudCard>
         </MudItem>
         <MudItem xs="12" sm="6" md="4">
-            <MudCard Elevation="2" Style="height: 100%; border: 1px solid rgba(0, 255, 255, 0.15);">
+            <MudCard Elevation="2" Style="height: 100%; border: 1px solid var(--cb-accent-border-15);">
                 <MudCardContent>
-                    <MudText Typo="Typo.h6" Style="color: #00ffff;">Enrollment &amp; EDI</MudText>
-                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.7);">834 import, 17 Argo Workflows, SFTP polling, Kafka events, multi-clearinghouse.</MudText>
+                    <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">Enrollment &amp; EDI</MudText>
+                    <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-70);">834 import, 17 Argo Workflows, SFTP polling, Kafka events, multi-clearinghouse.</MudText>
                 </MudCardContent>
             </MudCard>
         </MudItem>
@@ -400,11 +400,11 @@
     </MudExpansionPanels>
 
     <!-- CTA -->
-    <MudPaper Class="mt-12 pa-6" Elevation="3" Style="border: 1px solid rgba(0, 255, 255, 0.3); background: rgba(0, 255, 255, 0.05); text-align: center;">
+    <MudPaper Class="mt-12 pa-6" Elevation="3" Style="border: 1px solid var(--cb-accent-border-30); background: var(--cb-accent-bg-5); text-align: center;">
         <MudText Typo="Typo.h5" Class="mb-3" Style="font-weight: 700;">
             Ready to See What It Costs for Your Plan?
         </MudText>
-        <MudText Typo="Typo.body1" Class="mb-4" Style="color: rgba(255, 255, 255, 0.7);">
+        <MudText Typo="Typo.body1" Class="mb-4" Style="color: var(--cb-fg-text-70);">
             30-day free trial. No credit card required. Production-grade from day one.
         </MudText>
         <MudButton Href="/signup"

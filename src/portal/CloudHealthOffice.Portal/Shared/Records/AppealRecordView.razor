@@ -18,7 +18,7 @@
         else
         {
             @* Header *@
-            <div class="d-flex align-center gap-3 mb-4 pa-2" style="border: 1px solid rgba(0,255,255,0.2); border-radius: 8px; background: rgba(0,255,255,0.03);">
+            <div class="d-flex align-center gap-3 mb-4 pa-2" style="border: 1px solid var(--cb-accent-border-20); border-radius: 8px; background: var(--cb-accent-bg-3);">
                 <MudAvatar Size="Size.Large" Color="@(Detail.IsExpedited ? Color.Error : Color.Primary)">
                     <MudIcon Icon="@Icons.Material.Filled.Balance" />
                 </MudAvatar>
@@ -139,7 +139,7 @@
                             {
                                 <MudTimelineItem Color="@GetTimelineColor(evt.EventType)" Size="Size.Small">
                                     <ItemContent>
-                                        <MudCard Elevation="1" Class="mb-1" Style="border: 1px solid rgba(0,255,255,0.1);">
+                                        <MudCard Elevation="1" Class="mb-1" Style="border: 1px solid var(--cb-accent-border-10);">
                                             <MudCardContent Class="py-2">
                                                 <div class="d-flex justify-space-between align-center">
                                                     <MudText Typo="Typo.body1" Style="font-weight: 500;">@evt.Description</MudText>

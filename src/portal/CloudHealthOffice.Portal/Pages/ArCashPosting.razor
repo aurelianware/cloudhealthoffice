@@ -8,11 +8,11 @@
 <PageTitle>Cash Posting — Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="finance:read" RoleName="Finance">
-<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: var(--cho-accent); font-weight: 700; letter-spacing: -0.5px;">
     <MudIcon Icon="@Icons.Material.Filled.Payments" Class="mr-2" Style="vertical-align: middle;" />
     Cash Posting
 </MudText>
-<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+<MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);" Class="mb-4">
     Apply sponsor and member payments to open AR balances
 </MudText>
 
@@ -24,46 +24,46 @@
 <!-- Summary Cards -->
 <MudGrid Spacing="3" Class="mb-4">
     <MudItem xs="6" sm="3">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.Payments" Style="color: #00ffff; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-accent-bg-5); border: 1px solid var(--cb-accent-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Payments" Style="color: var(--cho-accent); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">
+                <MudText Typo="Typo.h5" Style="color: var(--cho-accent); font-weight: 700;">
                     @_postings.Where(p => p.ReceiptDate.Month == DateTime.Today.Month && p.ReceiptDate.Year == DateTime.Today.Year).Sum(p => p.Amount).ToString("C0")
                 </MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Posted (This Month)</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Total Posted (This Month)</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="3">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-success-bg-5); border: 1px solid var(--cb-success-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: var(--cho-success); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_postings.Sum(p => p.AppliedAmount).ToString("C0")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Applied Amount</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-success); font-weight: 700;">@_postings.Sum(p => p.AppliedAmount).ToString("C0")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Applied Amount</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="3">
         @{
             var unappliedTotal = _postings.Sum(p => p.UnappliedAmount);
-            var unappliedColor = unappliedTotal > 0 ? "#ffaa00" : "#00ff88";
-            var unappliedBorder = unappliedTotal > 0 ? "rgba(255,170,0,0.2)" : "rgba(0,255,136,0.2)";
-            var unappliedBg = unappliedTotal > 0 ? "rgba(255,170,0,0.05)" : "rgba(0,255,136,0.05)";
+            var unappliedColor = unappliedTotal > 0 ? "var(--cho-warning)" : "var(--cho-success)";
+            var unappliedBorder = unappliedTotal > 0 ? "var(--cb-warning-any-20)" : "var(--cb-success-any-20)";
+            var unappliedBg = unappliedTotal > 0 ? "var(--cb-warning-any-5)" : "var(--cb-success-any-5)";
         }
         <MudPaper Class="pa-3 d-flex align-center gap-3" Style="@($"background: {unappliedBg}; border: 1px solid {unappliedBorder}; border-radius: 12px;")">
             <MudIcon Icon="@Icons.Material.Filled.Warning" Style="@($"color: {unappliedColor}; font-size: 2rem;")" />
             <div>
                 <MudText Typo="Typo.h5" Style="@($"color: {unappliedColor}; font-weight: 700;")">@unappliedTotal.ToString("C0")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Unapplied Amount</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Unapplied Amount</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="3">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Style="color: #ffaa00; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-warning-bg-5); border: 1px solid var(--cb-warning-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Style="color: var(--cho-warning); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_postings.Count(p => p.Status == "Pending")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Pending</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-warning); font-weight: 700;">@_postings.Count(p => p.Status == "Pending")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Pending</MudText>
             </div>
         </MudPaper>
     </MudItem>
@@ -102,7 +102,7 @@
 
 <!-- Cash Postings Grid -->
 <MudTable Items="_postings" Dense="true" Hover="true" T="CashPostingSummary"
-          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
     <HeaderContent>
         <MudTh>Posting #</MudTh>
         <MudTh>Receipt Date</MudTh>
@@ -117,7 +117,7 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Posting #">
-            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.PostingNumber</MudText>
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cho-accent);">@context.PostingNumber</MudText>
         </MudTd>
         <MudTd DataLabel="Receipt Date">@context.ReceiptDate.ToString("MM/dd/yyyy")</MudTd>
         <MudTd DataLabel="Payer Type">
@@ -128,10 +128,10 @@
             <MudText Style="font-family: monospace; font-weight: 600;">@context.Amount.ToString("C2")</MudText>
         </MudTd>
         <MudTd DataLabel="Applied" Style="text-align: right;">
-            <MudText Style="font-family: monospace; color: #00ff88;">@context.AppliedAmount.ToString("C2")</MudText>
+            <MudText Style="font-family: monospace; color: var(--cho-success);">@context.AppliedAmount.ToString("C2")</MudText>
         </MudTd>
         <MudTd DataLabel="Unapplied" Style="text-align: right;">
-            <MudText Style="@($"font-family: monospace; color: {(context.UnappliedAmount > 0 ? "#ffaa00" : "rgba(255,255,255,0.4)")};")">
+            <MudText Style="@($"font-family: monospace; color: {(context.UnappliedAmount > 0 ? "var(--cho-warning)" : "var(--cb-fg-any-40)")};")">
                 @context.UnappliedAmount.ToString("C2")
             </MudText>
         </MudTd>
@@ -139,7 +139,7 @@
             @context.PaymentMethod
             @if (!string.IsNullOrEmpty(context.CheckNumber))
             {
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">#@context.CheckNumber</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-40);">#@context.CheckNumber</MudText>
             }
         </MudTd>
         <MudTd DataLabel="Status">
@@ -166,9 +166,9 @@
     </RowTemplate>
     <NoRecordsContent>
         <div class="pa-8 text-center">
-            <MudIcon Icon="@Icons.Material.Filled.Payments" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
-            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No cash postings found</MudText>
-            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Post a new receipt to get started</MudText>
+            <MudIcon Icon="@Icons.Material.Filled.Payments" Style="font-size: 3rem; color: var(--cb-accent-text-30);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: var(--cb-fg-text-50);">No cash postings found</MudText>
+            <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-30);">Post a new receipt to get started</MudText>
         </div>
     </NoRecordsContent>
     <PagerContent>
@@ -179,7 +179,7 @@
 <!-- New Receipt Dialog -->
 <MudDialog @bind-Visible="_receiptDialogVisible" Options="_dialogOptions">
     <TitleContent>
-        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+        <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">
             <MudIcon Icon="@Icons.Material.Filled.Receipt" Class="mr-2" />
             Post New Receipt
         </MudText>

@@ -8,11 +8,11 @@
 
 <PermissionGate Permission="claims:read" RoleName="ClaimsSupervisor">
 <div class="edi-transactions-page">
-<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700;">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: var(--cho-accent); font-weight: 700;">
     <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Class="mr-2" Style="vertical-align: middle;" />
     EDI Transactions
 </MudText>
-<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.55);" Class="mb-4">
+<MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-55);" Class="mb-4">
     Every 834 enrollment and 837 claim file dropped through the evaluator on-ramp, accepted or rejected — the audit
     trail behind the 834-to-837 loop.
 </MudText>
@@ -31,7 +31,7 @@
                        OnClick="@(() => LoadEnrollmentData())" Disabled="_enrollmentLoading">
                 Refresh
             </MudButton>
-            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.55);">@EnrollmentStatus</MudText>
+            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55);">@EnrollmentStatus</MudText>
         </div>
         @if (_enrollmentLoading)
         {
@@ -40,7 +40,7 @@
 
         <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 700;">Runs</MudText>
         <MudTable Items="_enrollmentRuns" Dense="true" Hover="true" T="EnrollmentImportRunRecord" RowsPerPage="10"
-                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;" Class="mb-4">
+                  Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;" Class="mb-4">
             <HeaderContent>
                 <MudTh>Started</MudTh>
                 <MudTh>Batch / File</MudTh>
@@ -58,32 +58,32 @@
                     </MudLink>
                     @if (!string.IsNullOrWhiteSpace(context.FileName))
                     {
-                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); display: block;">@context.FileName</MudText>
+                        <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-45); display: block;">@context.FileName</MudText>
                     }
                 </MudTd>
                 <MudTd DataLabel="Accepted / Failed">
                     <MudText Typo="Typo.body2">
-                        <span style="color: #00ff88;">@context.SuccessCount</span> / <span style="color: @(context.FailedCount > 0 ? "#ff0055" : "rgba(255,255,255,0.55)")">@context.FailedCount</span>
+                        <span style="color: var(--cho-success);">@context.SuccessCount</span> / <span style="color: @(context.FailedCount > 0 ? "var(--cho-error)" : "var(--cb-fg-any-55)")">@context.FailedCount</span>
                     </MudText>
                 </MudTd>
                 <MudTd DataLabel="Members">
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.65);">
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-65);">
                         +@context.MembersCreated / ~@context.MembersUpdated / -@context.MembersTerminated · @context.DependentsCreated deps
                     </MudText>
                 </MudTd>
                 <MudTd DataLabel="Coverage">
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.65);">
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-65);">
                         @context.CoverageRecordsCreated created
                         @if (context.CoverageMappingsUnresolved > 0)
                         {
-                            <span style="color: #ffca28;"> · @context.CoverageMappingsUnresolved unresolved</span>
+                            <span style="color: var(--cho-warning);"> · @context.CoverageMappingsUnresolved unresolved</span>
                         }
                     </MudText>
                 </MudTd>
             </RowTemplate>
             <NoRecordsContent>
                 <div class="pa-6 text-center">
-                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.55);">No 834 import runs found</MudText>
+                    <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-55);">No 834 import runs found</MudText>
                 </div>
             </NoRecordsContent>
             <PagerContent>
@@ -101,7 +101,7 @@
             }
         </div>
         <MudTable Items="FilteredEnrollmentTransactions" Dense="true" Hover="true" T="Enrollment834Record" RowsPerPage="25"
-                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;">
+                  Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;">
             <HeaderContent>
                 <MudTh>Received</MudTh>
                 <MudTh>Member</MudTh>
@@ -115,7 +115,7 @@
                 </MudTd>
                 <MudTd DataLabel="Member">
                     <MudText Typo="Typo.body2">@context.MemberName</MudText>
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.45); font-family: monospace;">@context.MemberId</MudText>
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-45); font-family: monospace;">@context.MemberId</MudText>
                 </MudTd>
                 <MudTd DataLabel="Batch">
                     <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.BatchId</MudText>
@@ -127,14 +127,14 @@
                     <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip>
                     @if (context.Errors.Count > 0)
                     {
-                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.55); display: block;">@string.Join("; ", context.Errors)</MudText>
+                        <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;">@string.Join("; ", context.Errors)</MudText>
                     }
                 </MudTd>
             </RowTemplate>
             <NoRecordsContent>
                 <div class="pa-8 text-center">
-                    <MudIcon Icon="@Icons.Material.Filled.HowToReg" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
-                    <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.55);">No 834 transactions found</MudText>
+                    <MudIcon Icon="@Icons.Material.Filled.HowToReg" Style="font-size: 3rem; color: var(--cb-accent-text-30);" />
+                    <MudText Typo="Typo.body1" Class="mt-2" Style="color: var(--cb-fg-text-55);">No 834 transactions found</MudText>
                 </div>
             </NoRecordsContent>
             <PagerContent>
@@ -149,14 +149,14 @@
                        OnClick="@(() => LoadClaimTransactions())" Disabled="_claimLoading">
                 Refresh
             </MudButton>
-            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.55);">@ClaimStatus</MudText>
+            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55);">@ClaimStatus</MudText>
         </div>
         @if (_claimLoading)
         {
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-3" />
         }
         <MudTable Items="_claimTransactions" Dense="true" Hover="true" T="ClaimImportTransactionRecord" RowsPerPage="25"
-                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 8px;">
+                  Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 8px;">
             <HeaderContent>
                 <MudTh>Received</MudTh>
                 <MudTh>Claim</MudTh>
@@ -190,14 +190,14 @@
                     <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip>
                     @if (context.Errors.Count > 0)
                     {
-                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.55); display: block;">@string.Join("; ", context.Errors)</MudText>
+                        <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-55); display: block;">@string.Join("; ", context.Errors)</MudText>
                     }
                 </MudTd>
             </RowTemplate>
             <NoRecordsContent>
                 <div class="pa-8 text-center">
-                    <MudIcon Icon="@Icons.Material.Filled.Receipt" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
-                    <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.55);">No 837 import transactions found</MudText>
+                    <MudIcon Icon="@Icons.Material.Filled.Receipt" Style="font-size: 3rem; color: var(--cb-accent-text-30);" />
+                    <MudText Typo="Typo.body1" Class="mt-2" Style="color: var(--cb-fg-text-55);">No 837 import transactions found</MudText>
                 </div>
             </NoRecordsContent>
             <PagerContent>

@@ -4,13 +4,13 @@
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+        <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">
             <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" Style="vertical-align: middle;" />
             New Capitation Run
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+        <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);" Class="mb-4">
             Create a capitation run to generate PMPM payment statements for capitated providers.
         </MudText>
 
@@ -103,7 +103,7 @@
         @if (_creating)
         {
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
-            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);" Class="mt-1 text-center">
+            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);" Class="mt-1 text-center">
                 Creating capitation run...
             </MudText>
         }

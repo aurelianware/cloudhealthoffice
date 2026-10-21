@@ -20,13 +20,13 @@
     @if (_canReadRuns)
     {
         <MudItem xs="12" md="7">
-            <MudPaper Class="pa-3" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+            <MudPaper Class="pa-3" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
                 <MudText Typo="Typo.subtitle2" Class="mb-2">Completed billing runs</MudText>
                 <MudSimpleTable Dense="true" Style="background: transparent;" data-testid="eft-runs">
                     <tbody>
                         @foreach (var run in _runs)
                         {
-                            <tr style="@(run.Id == _run?.Id ? "background: rgba(0,255,255,0.08);" : "")">
+                            <tr style="@(run.Id == _run?.Id ? "background: var(--cb-accent-bg-8);" : "")">
                                 <td style="font-family: monospace;">@run.BillingRunNumber</td>
                                 <td>@run.BillingPeriod.ToString("yyyy-MM")</td>
                                 <td>@run.TotalInvoices invoices</td>
@@ -47,7 +47,7 @@
         </MudItem>
     }
     <MudItem xs="12" md="5">
-        <MudPaper Class="pa-3" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+        <MudPaper Class="pa-3" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
             <MudText Typo="Typo.subtitle2" Class="mb-2">Drafts for one invoice</MudText>
             <div data-testid="eft-invoice-lookup">
                 <MudTextField @bind-Value="_lookupInvoiceId" Label="Invoice id" Variant="Variant.Outlined" Margin="Margin.Dense" />
@@ -61,9 +61,9 @@
 @if (_canRelease)
 {
     <MudPaper Class="pa-4 my-4" data-testid="eft-release"
-              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(255,170,0,0.4); border-radius: 12px;">
-        <MudText Typo="Typo.subtitle1" Style="color: #ffaa00; font-weight: 600;">Release sponsor debits</MudText>
-        <MudText Typo="Typo.body2" Class="mb-3" Style="color: rgba(255,255,255,0.6);">
+              Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-warning-border-40); border-radius: 12px;">
+        <MudText Typo="Typo.subtitle1" Style="color: var(--cho-warning); font-weight: 600;">Release sponsor debits</MudText>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color: var(--cb-fg-text-60);">
             Releasing pulls money from sponsor bank accounts. It needs payments:approve and must be done by someone other
             than the user who created or executed the billing run. Only sponsors with an approved bank account are debited;
             the rest are listed under "Needs attention".
@@ -128,8 +128,8 @@
 @if (_attention.Count > 0)
 {
     <MudPaper Class="pa-3 mb-4" data-testid="eft-needs-attention"
-              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(255,0,85,0.4); border-radius: 12px;">
-        <MudText Typo="Typo.subtitle1" Style="color: #ff0055; font-weight: 600;">Needs attention — not debited</MudText>
+              Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-error-border-40); border-radius: 12px;">
+        <MudText Typo="Typo.subtitle1" Style="color: var(--cho-error); font-weight: 600;">Needs attention — not debited</MudText>
         <MudSimpleTable Dense="true" Style="background: transparent;">
             <thead><tr><th>Sponsor group</th><th>Invoice / draft</th><th>Reason</th><th></th></tr></thead>
             <tbody>
@@ -158,7 +158,7 @@
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
 }
 <MudTable Items="_drafts" Dense="true" Hover="true" T="EftDraft" data-testid="eft-drafts"
-          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
     <HeaderContent>
         <MudTh>Invoice</MudTh>
         <MudTh>Group</MudTh>
@@ -182,7 +182,7 @@
         <MudTd>
             @if (context.ReturnCode != null)
             {
-                <span style="color: #ff0055;">@context.ReturnCode @context.ReturnReason</span>
+                <span style="color: var(--cho-error);">@context.ReturnCode @context.ReturnReason</span>
             }
             else if (context.SettledAt != null)
             {
@@ -194,12 +194,12 @@
             }
             @if (!string.IsNullOrEmpty(context.ErrorMessage))
             {
-                <div style="color: #ff0055;">@context.ErrorMessage</div>
+                <div style="color: var(--cho-error);">@context.ErrorMessage</div>
             }
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
-        <MudText Typo="Typo.body2" Class="pa-4" Style="color: rgba(255,255,255,0.4);">
+        <MudText Typo="Typo.body2" Class="pa-4" Style="color: var(--cb-fg-text-40);">
             @(_draftsTitle == null ? "Choose a billing run or an invoice to see its drafts" : "No drafts")
         </MudText>
     </NoRecordsContent>

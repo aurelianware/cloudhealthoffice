@@ -1,5 +1,6 @@
 @inject NavigationManager Navigation
 @inject IConfiguration Configuration
+@inject CloudHealthOffice.Portal.Theming.ThemeState ThemeState
 
 <CascadingAuthenticationState>
     <Router AppAssembly="@typeof(App).Assembly">
@@ -16,7 +17,7 @@
                             }
                         </NotAuthorized>
                         <Authorizing>
-                            <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0a0a0a;">
+                            <div class="cho-fullpage">
                                 <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
                             </div>
                         </Authorizing>
@@ -24,9 +25,9 @@
                     <FocusOnNavigate RouteData="@routeData" Selector="h1" />
                 </ChildContent>
                 <ErrorContent Context="ex">
-                    <div style="padding: 2rem; background: #0f0f0f; color: #ff0055; font-family: 'Segoe UI', sans-serif; min-height: 100vh;">
-                        <h2 style="color: #ff0055;">An error occurred</h2>
-                        <p style="color: rgba(255,255,255,0.7);">Something went wrong loading this page. Please <a href="/" style="color: #00ffff;">return to the dashboard</a> or reload.</p>
+                    <div class="cho-fullpage-error">
+                        <h2>An error occurred</h2>
+                        <p>Something went wrong loading this page. Please <a href="/">return to the dashboard</a> or reload.</p>
                     </div>
                 </ErrorContent>
             </ErrorBoundary>
@@ -41,6 +42,11 @@
 </CascadingAuthenticationState>
 
 @code {
+    /// <summary>Theme resolved by _Host.cshtml from the cho-theme cookie.</summary>
+    [Parameter] public string? InitialTheme { get; set; }
+
+    protected override void OnInitialized() => ThemeState.Initialize(InitialTheme);
+
     private bool IsLocalDemoAuth()
         => string.Equals(
             Configuration["Authentication:Mode"],

@@ -24,7 +24,7 @@
     else
     {
         var p = _payment;
-        <div class="d-flex align-center gap-3 mb-4 pa-2" style="border: 1px solid rgba(0,255,255,0.2); border-radius: 8px; background: rgba(0,255,255,0.03);">
+        <div class="d-flex align-center gap-3 mb-4 pa-2" style="border: 1px solid var(--cb-accent-border-20); border-radius: 8px; background: var(--cb-accent-bg-3);">
             <MudAvatar Size="Size.Large" Color="Color.Primary"><MudIcon Icon="@(p.IsEft ? Icons.Material.Filled.AccountBalance : Icons.Material.Filled.Receipt)" /></MudAvatar>
             <div>
                 <MudText Typo="Typo.h5" Style="font-weight: 600;">@p.Label</MudText>

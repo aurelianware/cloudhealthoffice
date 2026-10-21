@@ -10,11 +10,11 @@
 <PageTitle>Provider Contracts — Cloud Health Office</PageTitle>
 
 <PermissionGate Permission="contracts:read" RoleName="Finance">
-<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: var(--cho-accent); font-weight: 700; letter-spacing: -0.5px;">
     <MudIcon Icon="@Icons.Material.Filled.Description" Class="mr-2" Style="vertical-align: middle;" />
     Provider Contracts
 </MudText>
-<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+<MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);" Class="mb-4">
     Master provider agreements — capitation, FFS, and hybrid payment arrangements
 </MudText>
 
@@ -28,38 +28,38 @@
 <!-- KPI Cards -->
 <MudGrid Spacing="3" Class="mb-4">
     <MudItem xs="6" sm="2">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.Description" Style="color: #00ffff; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-accent-bg-5); border: 1px solid var(--cb-accent-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Description" Style="color: var(--cho-accent); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #00ffff; font-weight: 700;">@_contracts.Count</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Total Contracts</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-accent); font-weight: 700;">@_contracts.Count</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Total Contracts</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="2">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: #00ff88; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-success-bg-5); border: 1px solid var(--cb-success-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color: var(--cho-success); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #00ff88; font-weight: 700;">@_contracts.Count(c => c.Status == "Active")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Active</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-success); font-weight: 700;">@_contracts.Count(c => c.Status == "Active")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Active</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="2">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,170,0,0.05); border: 1px solid rgba(255,170,0,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.EditNote" Style="color: #ffaa00; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-warning-bg-5); border: 1px solid var(--cb-warning-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.EditNote" Style="color: var(--cho-warning); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #ffaa00; font-weight: 700;">@_contracts.Count(c => c.Status == "Draft")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Draft</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-warning); font-weight: 700;">@_contracts.Count(c => c.Status == "Draft")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Draft</MudText>
             </div>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="2">
-        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: rgba(255,0,85,0.05); border: 1px solid rgba(255,0,85,0.2); border-radius: 12px;">
-            <MudIcon Icon="@Icons.Material.Filled.Cancel" Style="color: #ff0055; font-size: 2rem;" />
+        <MudPaper Class="pa-3 d-flex align-center gap-3" Style="background: var(--cb-error-bg-5); border: 1px solid var(--cb-error-border-20); border-radius: 12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Cancel" Style="color: var(--cho-error); font-size: 2rem;" />
             <div>
-                <MudText Typo="Typo.h5" Style="color: #ff0055; font-weight: 700;">@_contracts.Count(c => c.Status == "Terminated")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Terminated</MudText>
+                <MudText Typo="Typo.h5" Style="color: var(--cho-error); font-weight: 700;">@_contracts.Count(c => c.Status == "Terminated")</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Terminated</MudText>
             </div>
         </MudPaper>
     </MudItem>
@@ -68,7 +68,7 @@
             <MudIcon Icon="@Icons.Material.Filled.Autorenew" Style="color: #8a2be2; font-size: 2rem;" />
             <div>
                 <MudText Typo="Typo.h5" Style="color: #8a2be2; font-weight: 700;">@_contracts.Count(c => c.Status == "PendingRenewal")</MudText>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Pending Renewal</MudText>
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Pending Renewal</MudText>
             </div>
         </MudPaper>
     </MudItem>
@@ -127,7 +127,7 @@
 
 <!-- Contracts Table -->
 <MudTable Items="_contracts" Dense="true" Hover="true" T="ProviderContractSummary"
-          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+          Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
     <HeaderContent>
         <MudTh>Contract #</MudTh>
         <MudTh>Provider NPI</MudTh>
@@ -142,7 +142,7 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Contract #">
-            <MudText Typo="Typo.body2" Style="font-family: monospace; color: #00ffff;">@context.ContractNumber</MudText>
+            <MudText Typo="Typo.body2" Style="font-family: monospace; color: var(--cho-accent);">@context.ContractNumber</MudText>
         </MudTd>
         <MudTd DataLabel="Provider NPI">
             <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.ProviderNPI</MudText>
@@ -199,9 +199,9 @@
     </RowTemplate>
     <NoRecordsContent>
         <div class="pa-8 text-center">
-            <MudIcon Icon="@Icons.Material.Filled.Description" Style="font-size: 3rem; color: rgba(0,255,255,0.3);" />
-            <MudText Typo="Typo.body1" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No provider contracts found</MudText>
-            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.3);">Create a new contract to get started</MudText>
+            <MudIcon Icon="@Icons.Material.Filled.Description" Style="font-size: 3rem; color: var(--cb-accent-text-30);" />
+            <MudText Typo="Typo.body1" Class="mt-2" Style="color: var(--cb-fg-text-50);">No provider contracts found</MudText>
+            <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-30);">Create a new contract to get started</MudText>
         </div>
     </NoRecordsContent>
     <PagerContent>
@@ -214,7 +214,7 @@
 {
     <MudDialog @bind-Visible="_showCreateForm" Options="new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true }">
         <TitleContent>
-            <MudText Typo="Typo.h6" Style="color: #00ffff;">
+            <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">
                 @(string.IsNullOrEmpty(editContract.Id) ? "New" : "Edit") Provider Contract
             </MudText>
         </TitleContent>
@@ -316,38 +316,38 @@
 @if (_detailContract != null)
 {
     <MudDrawer @bind-Open="_showDetail" Anchor="Anchor.End" Width="600px" Variant="DrawerVariant.Temporary"
-               Style="background: #0a0a0a; border-left: 1px solid rgba(0,255,255,0.2);">
+               Style="background: var(--cho-surface); border-left: 1px solid var(--cb-accent-border-20);">
         <MudDrawerHeader>
-            <MudText Typo="Typo.h6" Style="color: #00ffff;">@_detailContract.ContractNumber</MudText>
+            <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">@_detailContract.ContractNumber</MudText>
             <MudSpacer />
             <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="() => _showDetail = false" />
         </MudDrawerHeader>
         <div class="pa-4">
             <!-- Contract Details -->
-            <MudText Typo="Typo.subtitle1" Class="mb-2" Style="color: #00ffff;">Contract Details</MudText>
+            <MudText Typo="Typo.subtitle1" Class="mb-2" Style="color: var(--cho-accent);">Contract Details</MudText>
             <MudSimpleTable Dense="true" Style="background: transparent;">
                 <tbody>
-                    <tr><td style="color: rgba(255,255,255,0.5);">Provider</td><td>@_detailContract.ProviderName (@_detailContract.ProviderNPI)</td></tr>
-                    <tr><td style="color: rgba(255,255,255,0.5);">TIN</td><td>@(_detailContract.ProviderTin ?? "—")</td></tr>
-                    <tr><td style="color: rgba(255,255,255,0.5);">LOB</td><td>@_detailContract.LineOfBusiness</td></tr>
-                    <tr><td style="color: rgba(255,255,255,0.5);">Payment</td><td>@FormatMethodology(_detailContract.PaymentMethodology)</td></tr>
-                    <tr><td style="color: rgba(255,255,255,0.5);">Network</td><td>@FormatNetworkStatus(_detailContract.NetworkStatus)</td></tr>
-                    <tr><td style="color: rgba(255,255,255,0.5);">Status</td><td><MudChip T="string" Size="Size.Small" Color="@GetStatusColor(_detailContract.Status)">@_detailContract.Status</MudChip></td></tr>
-                    <tr><td style="color: rgba(255,255,255,0.5);">Effective</td><td>@_detailContract.EffectiveDate.ToString("MM/dd/yyyy")</td></tr>
-                    <tr><td style="color: rgba(255,255,255,0.5);">Term Date</td><td>@(_detailContract.TerminationDate?.ToString("MM/dd/yyyy") ?? "Open-ended")</td></tr>
+                    <tr><td style="color: var(--cb-fg-text-50);">Provider</td><td>@_detailContract.ProviderName (@_detailContract.ProviderNPI)</td></tr>
+                    <tr><td style="color: var(--cb-fg-text-50);">TIN</td><td>@(_detailContract.ProviderTin ?? "—")</td></tr>
+                    <tr><td style="color: var(--cb-fg-text-50);">LOB</td><td>@_detailContract.LineOfBusiness</td></tr>
+                    <tr><td style="color: var(--cb-fg-text-50);">Payment</td><td>@FormatMethodology(_detailContract.PaymentMethodology)</td></tr>
+                    <tr><td style="color: var(--cb-fg-text-50);">Network</td><td>@FormatNetworkStatus(_detailContract.NetworkStatus)</td></tr>
+                    <tr><td style="color: var(--cb-fg-text-50);">Status</td><td><MudChip T="string" Size="Size.Small" Color="@GetStatusColor(_detailContract.Status)">@_detailContract.Status</MudChip></td></tr>
+                    <tr><td style="color: var(--cb-fg-text-50);">Effective</td><td>@_detailContract.EffectiveDate.ToString("MM/dd/yyyy")</td></tr>
+                    <tr><td style="color: var(--cb-fg-text-50);">Term Date</td><td>@(_detailContract.TerminationDate?.ToString("MM/dd/yyyy") ?? "Open-ended")</td></tr>
                 </tbody>
             </MudSimpleTable>
 
             <!-- Amendments -->
-            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2" Style="color: #00ffff;">Amendments</MudText>
+            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2" Style="color: var(--cho-accent);">Amendments</MudText>
             @if (_detailContract.Amendments.Any())
             {
                 @foreach (var amendment in _detailContract.Amendments.OrderByDescending(a => a.EffectiveDate))
                 {
-                    <MudPaper Class="pa-3 mb-2" Style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+                    <MudPaper Class="pa-3 mb-2" Style="background: var(--cb-fg-bg-3); border: 1px solid var(--cb-fg-border-10); border-radius: 8px;">
                         <div class="d-flex justify-space-between">
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@amendment.AmendmentType</MudChip>
-                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);">Effective @amendment.EffectiveDate.ToString("MM/dd/yyyy")</MudText>
+                            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-40);">Effective @amendment.EffectiveDate.ToString("MM/dd/yyyy")</MudText>
                         </div>
                         <MudText Typo="Typo.body2" Class="mt-1">@amendment.Description</MudText>
                     </MudPaper>
@@ -355,18 +355,18 @@
             }
             else
             {
-                <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.4);">No amendments</MudText>
+                <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-40);">No amendments</MudText>
             }
 
             <!-- Rate Config Children -->
-            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2" Style="color: #00ffff;">Rate Config Children</MudText>
+            <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2" Style="color: var(--cho-accent);">Rate Config Children</MudText>
             <div class="d-flex gap-4">
                 <div>
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">Capitation Rate Configs</MudText>
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">Capitation Rate Configs</MudText>
                     <MudText Typo="Typo.h6">@_detailContract.CapitationRateConfigIds.Count</MudText>
                 </div>
                 <div>
-                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">FFS Rate Configs</MudText>
+                    <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);">FFS Rate Configs</MudText>
                     <MudText Typo="Typo.h6">@_detailContract.FfsRateConfigIds.Count</MudText>
                 </div>
             </div>

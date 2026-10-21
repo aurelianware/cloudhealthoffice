@@ -5,13 +5,13 @@
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6" Style="color: #00ffff;">
+        <MudText Typo="Typo.h6" Style="color: var(--cho-accent);">
             <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" Style="vertical-align: middle;" />
             Create Payment Run
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-4">
+        <MudText Typo="Typo.body2" Style="color: var(--cb-fg-text-50);" Class="mb-4">
             A payment run collects all approved claims within the specified criteria, calculates final payment amounts,
             and generates an EDI 835 ERA remittance file.
         </MudText>
@@ -88,7 +88,7 @@
                         </MudChip>
                     }
                 </div>
-                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.4);" Class="mt-1">
+                <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-40);" Class="mt-1">
                     Select at least one claim status to include in this run
                 </MudText>
             </MudItem>
@@ -97,7 +97,7 @@
         @if (_creating)
         {
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
-            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);" Class="mt-1 text-center">
+            <MudText Typo="Typo.caption" Style="color: var(--cb-fg-text-50);" Class="mt-1 text-center">
                 Queuing payment run...
             </MudText>
         }
