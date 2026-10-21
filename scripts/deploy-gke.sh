@@ -28,7 +28,7 @@
 #   CLAIMS_REPLICAS  BENEFIT_PLAN_REPLICAS   (1 with the small profile, else 2)
 #   ROLLOUT_TIMEOUT=900s
 #   DOCUMENTS_BUCKET  DOCUMENTS_SERVICE_ACCOUNT
-#                            Google Cloud Storage for attachment-service and member-document-service
+#                            Google Cloud Storage for attachment-, document- and member-document-service
 #                            (terraform outputs documents_bucket and documents_service_account in
 #                            infrastructure/gcp). Without them, uploaded documents are not stored.
 

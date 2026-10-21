@@ -72,7 +72,8 @@ public static class StandardRoles
             "workspace:use",
             "claims:read", "claims:work", "claims:override-request", "claims:note",
             "workqueue:read", "workqueue:work",
-            "members:read", "accumulators:read", "providers:read"
+            "members:read", "accumulators:read", "providers:read",
+            "documents:read", "documents:write"
         }
     };
 
@@ -88,6 +89,7 @@ public static class StandardRoles
             "claims:read", "claims:work", "claims:override-request", "claims:note",
             "workqueue:read", "workqueue:work",
             "members:read", "accumulators:read", "providers:read",
+            "documents:read", "documents:write",
             // Supervisor-specific permissions
             "claims:override-approve", "claims:override-edit", "workqueue:assign", "workqueue:reassign",
             "workqueue:admin",
@@ -107,6 +109,7 @@ public static class StandardRoles
             "members:read", "members:search", "accumulators:read",
             "eligibility:check", "claims:read", "claims:note", "coverage:read",
             "authorizations:read", "providers:read",
+            "documents:read", "documents:write",
             "payer-to-payer:initiate"
         }
     };
@@ -139,6 +142,7 @@ public static class StandardRoles
             "rfai:read", "rfai:write",
             "correspondence:read", "correspondence:write",
             "members:read", "claims:read",
+            "documents:read", "documents:write", "documents:read-sensitive",
             "clinical:read"
         }
     };
@@ -198,7 +202,9 @@ public static class StandardRoles
         {
             "workspace:use",
             "*:read", "audit:read", "compliance:read", "reports:compliance",
-            "records:legal-hold"
+            "records:legal-hold",
+            // Exact-only: *:read does not reach it.
+            "documents:read-sensitive"
         }
     };
 

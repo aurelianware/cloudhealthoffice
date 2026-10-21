@@ -286,4 +286,38 @@ public class ChoRolePermissionsTests
             Assert.DoesNotContain(ChoRolePermissions.ForRole(role),
                 p => p.StartsWith("bulk-export", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Theory]
+    [InlineData("*:*")]
+    [InlineData("*:read")]
+    [InlineData("documents:*")]
+    public void Wildcards_never_grant_exact_only_permissions(string granted)
+    {
+        Assert.False(ChoRolePermissions.Matches(granted, ChoRolePermissions.DocumentsReadSensitive));
+        Assert.False(ChoRolePermissions.Matches(granted, "calls:read"));
+    }
+
+    [Fact]
+    public void Exact_only_permissions_are_granted_by_name()
+    {
+        Assert.True(ChoRolePermissions.Satisfies(ChoRolePermissions.ForRole(ChoRolePermissions.UMCoordinator), ChoRolePermissions.DocumentsReadSensitive));
+        Assert.True(ChoRolePermissions.Satisfies(ChoRolePermissions.ForRole(ChoRolePermissions.ComplianceOfficer), ChoRolePermissions.DocumentsReadSensitive));
+        Assert.False(ChoRolePermissions.Satisfies(ChoRolePermissions.ForRole(ChoRolePermissions.TenantAdmin), ChoRolePermissions.DocumentsReadSensitive));
+        // A wildcard still reaches the ordinary document permissions.
+        Assert.True(ChoRolePermissions.Satisfies(ChoRolePermissions.ForRole(ChoRolePermissions.TenantAdmin), ChoRolePermissions.DocumentsRead));
+    }
+
+    [Fact]
+    public void A_service_token_does_not_imply_exact_only_permissions()
+    {
+        var service = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            [
+                new System.Security.Claims.Claim(ChoClaimTypes.Role, ChoServiceRole.Name),
+                new System.Security.Claims.Claim(ChoPrincipal.ServiceIssuerMarker, "true"),
+            ], "test"));
+        Assert.True(ChoPrincipal.IsService(service));
+
+        Assert.True(ChoPrincipal.HasPermission(service, ChoRolePermissions.DocumentsRead));
+        Assert.False(ChoPrincipal.HasPermission(service, ChoRolePermissions.DocumentsReadSensitive));
+    }
 }

@@ -25,7 +25,8 @@
 #     Dockerfile to invoke.
 #
 # Service set: 37 services = 34 currently in deploy-azure-aks.yml's matrix
-# plus idcard-service and provider-verification-service (both already
+# plus document-service (new; not AKS deploy-targeted until it has a managed
+# identity there), idcard-service and provider-verification-service (both already
 # PR-validated by docker-build.yml today; preserved here so δ3 doesn't
 # regress existing coverage). Both services have a separate doc-gap on
 # main: they build but don't deploy. That's a pre-existing condition, not
@@ -53,6 +54,7 @@ claims-service:                ['src/services/claims-service/**']
 CloudHealthOffice.PricingApi:  ['src/services/CloudHealthOffice.PricingApi/**']
 consent-service:               ['src/services/consent-service/**']
 coverage-service:              ['src/services/coverage-service/**']
+document-service:              ['src/services/document-service/**']
 eligibility-service:           ['src/services/eligibility-service/**']
 encounter-service:             ['src/services/encounter-service/**']
 encounter-submission-service:  ['src/services/encounter-submission-service/**']

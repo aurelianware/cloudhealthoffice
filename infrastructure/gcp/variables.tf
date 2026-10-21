@@ -84,7 +84,7 @@ variable "kubernetes_namespace" {
 variable "document_service_accounts" {
   description = "Kubernetes service accounts allowed to act as the document storage identity."
   type        = list(string)
-  default     = ["attachment-service", "member-document-service"]
+  default     = ["attachment-service", "document-service", "member-document-service"]
 }
 
 variable "documents_bucket_name" {
