@@ -311,9 +311,12 @@ services:
       - "5014:8080"
     environment:
       <<: *common-env
+      Services__DocumentService: http://document-service:8080
     depends_on:
       mongodb:
         condition: service_healthy
+      document-service:
+        condition: service_started
     healthcheck: *service-healthcheck
 
   member-document-service:

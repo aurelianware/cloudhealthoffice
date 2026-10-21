@@ -63,6 +63,12 @@ public sealed class CatalogDocument
 
     public string CreatedBy { get; set; } = string.Empty;
 
+    /// <summary>
+    /// When a CHO service uploaded it for a user (attachment-service filing a
+    /// provider's upload, say): that user. <see cref="CreatedBy"/> is then the service.
+    /// </summary>
+    public string? CreatedOnBehalfOf { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
@@ -250,6 +256,9 @@ public sealed class DocumentAccessEvent
 
     public string Actor { get; set; } = string.Empty;
 
+    /// <summary>The user a CHO service acted for (its X-CHO-On-Behalf-Of header); null when the actor is the user.</summary>
+    public string? OnBehalfOf { get; set; }
+
     public DateTime At { get; set; }
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -308,6 +317,7 @@ public sealed class DocumentView
     public DateTime ReceivedAt { get; init; }
     public DateTime CreatedAt { get; init; }
     public string CreatedBy { get; init; } = string.Empty;
+    public string? CreatedOnBehalfOf { get; init; }
 }
 
 public sealed class DocumentListResponse
@@ -331,6 +341,9 @@ public sealed class UploadDocumentForm
     public List<string> Sensitivity { get; set; } = new();
 
     public string? SourceChannel { get; set; }
+
+    /// <summary>Identifiers from the channel as "key=value" (e.g. "AttachmentControlNumber=ACN-1"). At most 10.</summary>
+    public List<string> ExternalIds { get; set; } = new();
 
     public DateTime? ReceivedAt { get; set; }
 

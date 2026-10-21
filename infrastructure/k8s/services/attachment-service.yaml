@@ -6,16 +6,9 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  BlobStorage__ContainerName: "attachments"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: attachment-service-secret
-  namespace: cloudhealthoffice
-type: Opaque
-stringData:
-  BlobStorage__ConnectionString: "UseDevelopmentStorage=true"
+  # Attachment files live in the document catalog (document-service);
+  # this service holds no storage credentials.
+  Services__DocumentService: "http://document-service.cloudhealthoffice"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -50,16 +43,11 @@ spec:
             secretKeyRef:
               name: database-secret
               key: connectionString
-        - name: BlobStorage__ContainerName
+        - name: Services__DocumentService
           valueFrom:
             configMapKeyRef:
               name: attachment-service-config
-              key: BlobStorage__ContainerName
-        - name: BlobStorage__ConnectionString
-          valueFrom:
-            secretKeyRef:
-              name: attachment-service-secret
-              key: BlobStorage__ConnectionString
+              key: Services__DocumentService
         resources:
           requests:
             memory: "256Mi"

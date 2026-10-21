@@ -403,6 +403,7 @@ services:
       - Services__ClaimsService=http://claims-service:8080
       - Services__AuthorizationService=http://authorization-service:8080
       - Services__AppealsService=http://appeals-service:8080
+      - Services__DocumentService=http://document-service:8080
     depends_on:
       mongo:
         condition: service_healthy

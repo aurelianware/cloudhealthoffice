@@ -3,7 +3,6 @@ using Microsoft.OpenApi.Models;
 using AttachmentService;
 using AttachmentService.Repositories;
 using AttachmentService.Services;
-using CloudHealthOffice.DocumentStore;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
@@ -69,9 +68,15 @@ if (builder.Services.AddChoDatabase(builder.Configuration) is null)
         "Attachment Service requires a database. Configure MongoDb:ConnectionString.");
 }
 
-// Attachment bytes go to the configured store (Azure Blob, Google Cloud
-// Storage or S3; see AddChoDocumentStore).
-builder.Services.AddChoDocumentStore(builder.Environment.EnvironmentName);
+// Attachment files live in the document catalog (document-service), which
+// owns their storage, links and access audit.
+builder.Services.AddHttpClient(HttpDocumentCatalog.ClientName, client =>
+{
+    client.BaseAddress = new Uri((builder.Configuration["Services:DocumentService"]
+        ?? HttpDocumentCatalog.DefaultBaseUrl).TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+builder.Services.AddScoped<IDocumentCatalog, HttpDocumentCatalog>();
 
 builder.Services.AddScoped<IAttachmentRepository, AttachmentRepositoryMongo>();
 
@@ -114,9 +119,6 @@ builder.Services.AddChoHealthChecks(options =>
 builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();
-
-// Fail at startup, not on the first upload, when the document store is misconfigured.
-app.Services.GetRequiredService<IDocumentStore>();
 
 app.UseChoObservability();
 
