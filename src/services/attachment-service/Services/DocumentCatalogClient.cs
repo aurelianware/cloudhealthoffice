@@ -38,8 +38,15 @@ public sealed record CatalogUpload(
 
 public sealed record CatalogUploadResult(string DocumentId);
 
-/// <summary>The catalog could not be reached or refused the request; nothing should be assumed stored.</summary>
-public sealed class DocumentCatalogException(string message, Exception? inner = null) : Exception(message, inner);
+/// <summary>
+/// The catalog could not be reached (<see cref="StatusCode"/> null) or refused
+/// the request (its status); nothing should be assumed stored.
+/// </summary>
+public sealed class DocumentCatalogException(string message, Exception? inner = null, HttpStatusCode? statusCode = null)
+    : Exception(message, inner)
+{
+    public HttpStatusCode? StatusCode { get; } = statusCode;
+}
 
 public sealed class HttpDocumentCatalog : IDocumentCatalog
 {
@@ -60,6 +67,18 @@ public sealed class HttpDocumentCatalog : IDocumentCatalog
         _services = services;
         _logger = logger;
     }
+
+    /// <summary>
+    /// What a user needs, in their own name, for the catalog's subject check:
+    /// attachment-service calls with its service token, which the catalog
+    /// trusts, so it enforces the same rule itself before calling.
+    /// </summary>
+    public static string SubjectReadPermission(AttachmentParentType type) => type switch
+    {
+        AttachmentParentType.Claim => "claims:read",
+        AttachmentParentType.Authorization => "authorizations:read",
+        _ => "appeals:read",
+    };
 
     public static string SubjectKind(AttachmentParentType type) => type switch
     {
@@ -111,7 +130,7 @@ public sealed class HttpDocumentCatalog : IDocumentCatalog
 
             _logger.LogError("document-service refused an attachment upload for tenant {TenantId}: {Status}",
                 LogSanitizer.Sanitize(upload.TenantId), (int)response.StatusCode);
-            throw new DocumentCatalogException($"document-service answered {(int)response.StatusCode}");
+            throw new DocumentCatalogException($"document-service answered {(int)response.StatusCode}", statusCode: response.StatusCode);
         }
     }
 
@@ -143,15 +162,26 @@ public sealed class HttpDocumentCatalog : IDocumentCatalog
             {
                 _logger.LogError("document-service answered {Status} for attachment content in tenant {TenantId}",
                     (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
-                throw new DocumentCatalogException($"document-service answered {(int)response.StatusCode}");
+                throw new DocumentCatalogException($"document-service answered {(int)response.StatusCode}", statusCode: response.StatusCode);
             }
 
-            // Attachments are size-capped at upload, so buffering keeps the
-            // response's lifetime simple.
-            var buffer = new MemoryStream();
-            await response.Content.CopyToAsync(buffer, ct);
-            buffer.Position = 0;
-            return buffer;
+            // Staged on local disk (deleted on close), not in memory: an
+            // attachment can be tens of megabytes. Keeps the response's
+            // lifetime simple.
+            var buffer = new FileStream(
+                Path.GetTempFileName(), FileMode.Create, FileAccess.ReadWrite, FileShare.None,
+                bufferSize: 81920, FileOptions.DeleteOnClose | FileOptions.Asynchronous);
+            try
+            {
+                await response.Content.CopyToAsync(buffer, ct);
+                buffer.Position = 0;
+                return buffer;
+            }
+            catch
+            {
+                await buffer.DisposeAsync();
+                throw;
+            }
         }
     }
 
