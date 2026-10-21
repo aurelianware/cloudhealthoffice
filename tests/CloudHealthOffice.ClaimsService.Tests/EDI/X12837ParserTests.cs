@@ -339,4 +339,62 @@ public class X12837ParserTests
     {
         Assert.Throws<X12FormatException>(() => X12837Parser.Parse("not an edi file"));
     }
+
+    // FmmisHlSample with PWK added: one claim-level (2300) report sent
+    // electronically (a 275 will repeat ACN-CLAIM-1 in TRN02), one line-level
+    // (2400) report by fax, and one "available on request" with no number.
+    private static readonly string PaperworkSample = FmmisHlSample
+        .Replace("HI*ABK:J06.9~", "PWK*09*EL***AC*ACN-CLAIM-1~PWK*OZ*AA~HI*ABK:J06.9~")
+        .Replace("SV1*HC:99213*150.00*UN*1*11**1~", "SV1*HC:99213*150.00*UN*1*11**1~PWK*03*FX***AC*ACN-LINE-1~");
+
+    [Fact]
+    public void Parse_Pwk_KeepsClaimAndLineReports_WithTheirControlNumbers()
+    {
+        var claim = X12837Parser.Parse(PaperworkSample)[0];
+
+        Assert.NotNull(claim.AttachmentReports);
+        Assert.Collection(claim.AttachmentReports!,
+            r =>
+            {
+                Assert.Equal(("09", "EL", "ACN-CLAIM-1"), (r.ReportTypeCode, r.TransmissionCode, r.ControlNumber));
+                Assert.Null(r.LineNumber);
+            },
+            r =>
+            {
+                Assert.Equal(("OZ", "AA"), (r.ReportTypeCode, r.TransmissionCode));
+                Assert.Null(r.ControlNumber);
+            },
+            r =>
+            {
+                Assert.Equal(("03", "FX", "ACN-LINE-1"), (r.ReportTypeCode, r.TransmissionCode, r.ControlNumber));
+                Assert.Equal(1, r.LineNumber);
+            });
+    }
+
+    [Fact]
+    public void Parse_WithoutPwk_HasNoAttachmentReports()
+    {
+        Assert.Null(X12837Parser.Parse(FmmisHlSample)[0].AttachmentReports);
+    }
+
+    [Fact]
+    public void Parse_Pwk_IsKeptPerClaim_NotCarriedToTheNext()
+    {
+        var claims = X12837Parser.Parse(EncounterEngineBatchSample.Replace("HI*ABK:Z00.00*ABF:E119", "PWK*09*EL***AC*ACN-1\nHI*ABK:Z00.00*ABF:E119"));
+
+        Assert.Equal("ACN-1", Assert.Single(claims[0].AttachmentReports!).ControlNumber);
+        Assert.Null(claims[1].AttachmentReports);
+    }
+
+    [Fact]
+    public void Map_CarriesPwkReportsOntoTheClaim()
+    {
+        var claim = X12837ClaimMapper.Map(X12837Parser.Parse(PaperworkSample)[0], "tenant-1");
+
+        Assert.Equal(3, claim.AttachmentReports.Count);
+        Assert.Equal("ACN-CLAIM-1", claim.AttachmentReports[0].ControlNumber);
+        Assert.Equal(1, claim.AttachmentReports[2].LineNumber);
+        // And survives the adapter round trip to the stored claim.
+        Assert.Equal(3, claim.ToClaim().AttachmentReports.Count);
+    }
 }

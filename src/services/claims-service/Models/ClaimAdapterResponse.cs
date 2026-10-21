@@ -129,6 +129,9 @@ public class AdapterClaim
     /// <summary>See <see cref="Claim.UnmatchedOtherPayerLines"/>.</summary>
     public List<ClaimOtherPayerLine> UnmatchedOtherPayerLines { get; set; } = new();
 
+    /// <summary>837 PWK; see <see cref="Claim.AttachmentReports"/>.</summary>
+    public List<ClaimAttachmentReport> AttachmentReports { get; set; } = new();
+
     /// <summary>Derived three-character type of bill; see <see cref="Claim.TypeOfBill"/>.</summary>
     public string? TypeOfBill =>
         InstitutionalClaimDetails.ComposeTypeOfBill(Institutional?.FacilityTypeCode, ClaimFrequencyCode);
@@ -210,6 +213,7 @@ public class AdapterClaim
         PayerResponsibilityCode = src.PayerResponsibilityCode,
         OtherPayers = src.OtherPayers?.ToList() ?? new(),
         UnmatchedOtherPayerLines = src.UnmatchedOtherPayerLines?.ToList() ?? new(),
+        AttachmentReports = src.AttachmentReports?.ToList() ?? new(),
         Status = src.Status,
         SubmittedDate = src.SubmittedDate,
         ReceivedDate = src.ReceivedDate,
@@ -278,6 +282,7 @@ public class AdapterClaim
         PayerResponsibilityCode = PayerResponsibilityCode,
         OtherPayers = OtherPayers?.ToList() ?? new(),
         UnmatchedOtherPayerLines = UnmatchedOtherPayerLines?.ToList() ?? new(),
+        AttachmentReports = AttachmentReports?.ToList() ?? new(),
         Status = Status,
         SubmittedDate = SubmittedDate,
         ReceivedDate = ReceivedDate,

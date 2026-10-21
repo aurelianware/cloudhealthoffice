@@ -41,6 +41,10 @@ public sealed class ClaimIndexInitializer : IHostedService
             new CreateIndexModel<Claim>(keys.Ascending(c => c.TenantId).Ascending(c => c.SubmittedDate)),
             // Compound index for search
             new CreateIndexModel<Claim>(keys.Ascending(c => c.TenantId).Ascending(c => c.ServiceDateFrom)),
+            // 275 matching: a 275's TRN02 names the claim's PWK06 attachment control number.
+            new CreateIndexModel<Claim>(new IndexKeysDefinitionBuilder<Claim>()
+                .Ascending(c => c.TenantId).Ascending("AttachmentReports.ControlNumber"),
+                new CreateIndexOptions { Name = "attachment_control_number" }),
             // Versioning chain key index — supports GetLatestVersion / ListVersions.
             new CreateIndexModel<Claim>(keys.Ascending(c => c.TenantId).Ascending(c => c.ClaimVersionId).Descending(c => c.VersionNumber)),
             // Accumulator rebuild indexes — support Redis cache-miss aggregation by owner/plan/year.

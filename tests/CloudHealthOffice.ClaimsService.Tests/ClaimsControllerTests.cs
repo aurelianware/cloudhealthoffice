@@ -241,6 +241,50 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
+    public async Task FindByAttachmentControlNumber_AnswersTheClaimsThatAnnouncedIt()
+    {
+        var claim = CreateValidClaim();
+        claim.Id = "claim-pwk";
+        claim.BillingProviderNPI = "1234567893";
+        claim.AttachmentReports =
+        [
+            new ClaimAttachmentReport { ReportTypeCode = "09", TransmissionCode = "EL", ControlNumber = "ACN-77" },
+            new ClaimAttachmentReport { ReportTypeCode = "03", TransmissionCode = "FX", ControlNumber = "OTHER", LineNumber = 1 },
+        ];
+        _repo.FindByAttachmentControlNumberAsync("ACN-77", Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Claim> { claim });
+
+        var response = await _client.GetAsync("/api/claims/attachment-control-numbers/ACN-77");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var matches = await response.Content.ReadFromJsonAsync<List<AttachmentControlNumberMatch>>();
+        var match = Assert.Single(matches!);
+        Assert.Equal("claim-pwk", match.ClaimId);
+        Assert.Equal("1234567893", match.BillingProviderNPI);
+        Assert.Equal("ACN-77", Assert.Single(match.Reports).ControlNumber);
+    }
+
+    [Fact]
+    public async Task FindByAttachmentControlNumber_NoClaim_IsAnEmptyList()
+    {
+        _repo.FindByAttachmentControlNumberAsync("ACN-NONE", Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Claim>());
+
+        var response = await _client.GetAsync("/api/claims/attachment-control-numbers/ACN-NONE");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty((await response.Content.ReadFromJsonAsync<List<AttachmentControlNumberMatch>>())!);
+    }
+
+    [Fact]
+    public async Task FindByAttachmentControlNumber_TooLong_Is400()
+    {
+        var response = await _client.GetAsync($"/api/claims/attachment-control-numbers/{new string('A', 81)}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task GetClaimByNumber_ExistingClaim_Returns200()
     {
         var claim = CreateValidClaim();

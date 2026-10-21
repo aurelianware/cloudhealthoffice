@@ -41,6 +41,9 @@ public static class AttachmentRejectionCode
     /// <summary>Document type does not match the type requested in the RFAI. TED01=5</summary>
     public const string DocumentTypeMismatch = "DOC_TYPE_MISMATCH";
 
+    /// <summary>No claim announced the 275's attachment control number (TRN02) within the hold period. TED01=2</summary>
+    public const string NoMatchingClaim = "NO_MATCHING_CLAIM";
+
     /// <summary>
     /// Map a CHO rejection code to the corresponding X12 TED01 Error Type Code.
     /// Returns null if the code is not recognised (no TED segment emitted).
@@ -55,6 +58,7 @@ public static class AttachmentRejectionCode
         InvalidData           => "5",
         SizeExceeded          => "5",
         DocumentTypeMismatch  => "5",
+        NoMatchingClaim       => "2",
         _                     => null
     };
 
@@ -72,6 +76,7 @@ public static class AttachmentRejectionCode
         InvalidData           => "Data validation failure",
         SizeExceeded          => "File size exceeds maximum allowed",
         DocumentTypeMismatch  => "Document type does not match RFAI request",
+        NoMatchingClaim       => "No claim matches the attachment control number",
         _                     => "Attachment rejected"
     };
 }

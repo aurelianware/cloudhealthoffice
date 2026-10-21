@@ -22,6 +22,15 @@ public interface IDocumentCatalog
 
     /// <summary>The file, or null when the catalog has no such document on that subject (404).</summary>
     Task<Stream?> DownloadAsync(string tenantId, string onBehalfOf, string documentId, AttachmentParentType subjectType, string subjectId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Links the document to another subject, working from one it is already
+    /// linked to. False when the catalog has no such document on <paramref name="fromType"/>
+    /// (404). <paramref name="onBehalfOf"/> is null when no user is on the call
+    /// (the background matcher).
+    /// </summary>
+    Task<bool> AddLinkAsync(string tenantId, string? onBehalfOf, string documentId,
+        AttachmentParentType fromType, string fromId, AttachmentParentType toType, string toId, CancellationToken ct = default);
 }
 
 public sealed record CatalogUpload(
@@ -77,14 +86,18 @@ public sealed class HttpDocumentCatalog : IDocumentCatalog
     {
         AttachmentParentType.Claim => "claims:read",
         AttachmentParentType.Authorization => "authorizations:read",
-        _ => "appeals:read",
+        AttachmentParentType.Appeal => "appeals:read",
+        AttachmentParentType.Provider => "providers:read",
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
     public static string SubjectKind(AttachmentParentType type) => type switch
     {
         AttachmentParentType.Claim => "Claim",
         AttachmentParentType.Authorization => "Authorization",
-        _ => "Appeal",
+        AttachmentParentType.Appeal => "Appeal",
+        AttachmentParentType.Provider => "Provider",
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
     public async Task<CatalogUploadResult> UploadAsync(CatalogUpload upload, CancellationToken ct = default)
@@ -189,10 +202,47 @@ public sealed class HttpDocumentCatalog : IDocumentCatalog
         }
     }
 
-    private async Task PrepareAsync(HttpRequestMessage request, HttpClient client, string tenantId, string onBehalfOf)
+    public async Task<bool> AddLinkAsync(string tenantId, string? onBehalfOf, string documentId,
+        AttachmentParentType fromType, string fromId, AttachmentParentType toType, string toId, CancellationToken ct = default)
+    {
+        var client = _httpClientFactory.CreateClient(ClientName);
+        var path = $"api/v1/documents/{Uri.EscapeDataString(documentId)}/links"
+                   + $"?subjectKind={SubjectKind(fromType)}&subjectId={Uri.EscapeDataString(fromId)}";
+        using var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = JsonContent.Create(new { link = $"{SubjectKind(toType)}:{toId}" })
+        };
+        await PrepareAsync(request, client, tenantId, onBehalfOf);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.SendAsync(request, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            throw new DocumentCatalogException("document-service unreachable", ex);
+        }
+
+        using (response)
+        {
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return false;
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("document-service answered {Status} linking an attachment in tenant {TenantId}",
+                    (int)response.StatusCode, LogSanitizer.Sanitize(tenantId));
+                throw new DocumentCatalogException($"document-service answered {(int)response.StatusCode}", statusCode: response.StatusCode);
+            }
+            return true;
+        }
+    }
+
+    private async Task PrepareAsync(HttpRequestMessage request, HttpClient client, string tenantId, string? onBehalfOf)
     {
         request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
-        request.Headers.Add(OnBehalfOfHeader, onBehalfOf);
+        if (!string.IsNullOrWhiteSpace(onBehalfOf))
+            request.Headers.Add(OnBehalfOfHeader, onBehalfOf);
 
         var tokens = ChoServiceTokens.Resolve(_services);
         var target = client.BaseAddress is null ? request.RequestUri : new Uri(client.BaseAddress, request.RequestUri!);
