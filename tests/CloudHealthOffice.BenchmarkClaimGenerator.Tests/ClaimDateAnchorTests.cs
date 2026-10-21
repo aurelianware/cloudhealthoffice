@@ -66,6 +66,39 @@ public class ClaimDateAnchorTests
     }
 
     [Fact]
+    public void EveryServiceDateIsWithinTheTimelyFilingBudget()
+    {
+        var referenceDate = new DateTime(2026, 10, 15);
+        var refData = new InMemoryReferenceDataProvider();
+        var generators = new (IClaimGenerator Generator, string[] SubTypes)[]
+        {
+            (new ProfessionalClaimGenerator(refData, referenceDate), ProfessionalSubTypes),
+            (new InstitutionalClaimGenerator(refData, referenceDate), InstitutionalSubTypes),
+            (new DentalClaimGenerator(refData, referenceDate), DentalSubTypes),
+            (new EdgeCaseClaimGenerator(refData, referenceDate), EdgeCaseSubTypes),
+        };
+
+        var oldest = referenceDate;
+        var id = 0;
+        for (var seed = 0; seed < 150; seed++)
+        {
+            foreach (var (generator, subTypes) in generators)
+            {
+                var random = new Random(seed);
+                foreach (var subType in subTypes)
+                {
+                    var claim = generator.Generate(++id, subType, random);
+                    oldest = new[] { oldest, claim.DateOfService, claim.Lines.Min(l => l.ServiceDate) }.Min();
+                }
+            }
+        }
+
+        // Inside a 365-day filing limit with two months to spare for submission.
+        Assert.True((referenceDate - oldest).TotalDays <= ClaimDateAnchor.MaxServiceAgeDays,
+            $"oldest service date {oldest:d} is more than {ClaimDateAnchor.MaxServiceAgeDays} days before {referenceDate:d}");
+    }
+
+    [Fact]
     public void LongestInstitutionalStay_StillEndsAndIsReceivedOnOrBeforeTheReferenceDate()
     {
         var referenceDate = new DateTime(2026, 10, 15);

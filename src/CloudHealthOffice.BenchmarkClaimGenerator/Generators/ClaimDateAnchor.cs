@@ -9,8 +9,18 @@ namespace CloudHealthOffice.BenchmarkClaimGenerator.Generators;
 /// </summary>
 public static class ClaimDateAnchor
 {
-    /// <summary>Width of the window service dates are drawn from.</summary>
-    public const int ServiceWindowDays = 365;
+    /// <summary>
+    /// Width of the window service dates are drawn from. With the longest
+    /// tail (an 89-day stay plus receipt lag) the oldest service date is
+    /// under 300 days before the reference date, so every claim is inside a
+    /// 365-day timely filing limit even when the corpus is submitted weeks
+    /// after it was generated (claims-service TimelyFilingStage denies late
+    /// claims with CARC 29).
+    /// </summary>
+    public const int ServiceWindowDays = 180;
+
+    /// <summary>The most days any generated service date is before the reference date.</summary>
+    public const int MaxServiceAgeDays = 300;
 
     /// <summary>
     /// The reference date for a run: the supplied date, or today (UTC),
@@ -29,7 +39,8 @@ public static class ClaimDateAnchor
     /// <paramref name="maxTailDays"/> after it (length of stay, receipt lag)
     /// still falls before the reference date. Consumes exactly one
     /// <c>random.Next(ServiceWindowDays)</c>, the same draw the generators
-    /// made against their former fixed 2024 base date.
+    /// made against their former fixed 2024 base date (over a
+    /// 365-day window before October 2026).
     /// </summary>
     public static DateTime DrawServiceDate(DateTime referenceDate, int maxTailDays, Random random)
     {
