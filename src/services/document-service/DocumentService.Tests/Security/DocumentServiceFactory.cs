@@ -90,13 +90,13 @@ public sealed class InMemoryDocumentRepository : IDocumentRepository
             .OrderByDescending(d => d.ReceivedAt)
             .ToList());
 
-    public Task<CatalogDocument?> FindByHashAsync(string tenantId, string sha256, CancellationToken ct = default) =>
-        Task.FromResult(_rows
+    public Task<IReadOnlyList<CatalogDocument>> FindByHashAsync(string tenantId, string sha256, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CatalogDocument>>(_rows
             .Where(r => r.Key.Item1 == tenantId)
             .Select(r => Load(r.Value))
             .Where(d => d.Sha256 == sha256 && d.PendingUploadPath == null)
             .OrderBy(d => d.CreatedAt)
-            .FirstOrDefault());
+            .ToList());
 
     public Task<CatalogDocument> UpdateAsync(CatalogDocument document, CancellationToken ct = default)
     {

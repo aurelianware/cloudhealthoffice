@@ -572,6 +572,45 @@ public sealed class DocumentPipelineTests : IClassFixture<DocumentServiceFactory
     }
 
     [Fact]
+    public async Task ARepeatedFinalize_NeverLeavesTheDocumentWithoutContent()
+    {
+        var start = await StartAsync(Examiner());
+        var pending = _factory.Documents.All.Single();
+        await _factory.Storage.Inner.UploadAsync(DocumentsController.Container, pending.PendingUploadPath!, new MemoryStream(Pdf), "application/pdf");
+
+        var first = await Examiner().PostAsync($"/api/v1/documents/{start.DocumentId}/finalize", null);
+        var retry = await Examiner().PostAsync($"/api/v1/documents/{start.DocumentId}/finalize", null);
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, retry.StatusCode);
+        var stored = _factory.Documents.All.Single();
+        Assert.Equal(Pdf, _factory.Storage.Inner.GetBytes(DocumentsController.Container, stored.StoragePath));
+    }
+
+    [Fact]
+    public async Task IdenticalBytes_MergeIntoAnyCopyTheUploaderCanOpen_NotJustTheOldest()
+    {
+        await UploadAsync(UmCoordinator(), Pdf, links: ["Claim:CLM-1"], sensitivity: ["BEHAVIORAL_HEALTH"]);
+        var mine = await UploadAsync(Examiner(), Pdf, links: ["Claim:CLM-2"]);
+
+        var again = await Examiner().PostAsync("/api/v1/documents", Form(Pdf, links: ["Claim:CLM-3"]));
+
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.Equal(2, _factory.Documents.All.Count);
+        Assert.Equal(2, _factory.Documents.All.Single(d => d.Id == mine.Id).Links.Count);
+    }
+
+    [Fact]
+    public async Task ReadingAnAccessLog_IsItselfAudited()
+    {
+        var doc = await UploadAsync(Examiner(), Pdf);
+
+        await Compliance().GetAsync($"/api/v1/documents/{doc.Id}/access-log");
+
+        Assert.Contains(_factory.Audit.Entries, e => e.Action == DocumentAccessAction.AccessLog && e.Allowed && e.Actor == "compliance-1");
+    }
+
+    [Fact]
     public async Task PresignedUpload_WhenStorageCantSign_Is501_AndRecordsNothing()
     {
         _factory.Storage.CanSign = false;

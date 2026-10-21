@@ -277,7 +277,8 @@ public enum DocumentAccessAction
     Upload,
     Link,
     Unlink,
-    LegalHold
+    LegalHold,
+    AccessLog
 }
 
 // ── API shapes ────────────────────────────────────────────────────────────

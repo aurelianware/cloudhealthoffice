@@ -164,9 +164,14 @@ public sealed class DocumentsController : ControllerBase
     public async Task<IActionResult> AccessLog(string id, [FromQuery] int limit = 200, CancellationToken ct = default)
     {
         var document = await _documents.GetAsync(TenantId, id, ct);
+        var refusal = document is null ? "no such document in tenant"
+            : document.Sensitivity.Count > 0 && !_actor.HasPermission(ChoRolePermissions.DocumentsReadSensitive)
+                ? $"sensitive ({string.Join(",", document.Sensitivity)}): needs {ChoRolePermissions.DocumentsReadSensitive}"
+                : null;
+        await AuditAsync(DocumentAccessAction.AccessLog, id, null, allowed: refusal is null, refusal, ct);
         if (document is null)
             return NotFound();
-        if (document.Sensitivity.Count > 0 && !_actor.HasPermission(ChoRolePermissions.DocumentsReadSensitive))
+        if (refusal != null)
             return Forbidden(RestrictedMessage);
 
         var entries = await _audit.ForDocumentAsync(TenantId, id, Math.Clamp(limit, 1, 1000), ct);
@@ -210,8 +215,8 @@ public sealed class DocumentsController : ControllerBase
 
         var sha256 = Sha256Hex(buffer);
 
-        var duplicate = await _documents.FindByHashAsync(TenantId, sha256, ct);
-        if (duplicate != null && CanMergeInto(duplicate))
+        var duplicate = (await _documents.FindByHashAsync(TenantId, sha256, ct)).FirstOrDefault(CanMergeInto);
+        if (duplicate != null)
             return await MergeDuplicateAsync(duplicate, metadata, ct);
 
         var id = Guid.NewGuid().ToString("N");
@@ -268,8 +273,8 @@ public sealed class DocumentsController : ControllerBase
         var link = await _store.CreateUploadLinkAsync(Container, document.PendingUploadPath, contentType, expires, ct);
         if (link is null)
         {
-            return StatusCode(StatusCodes.Status501NotImplemented,
-                "Pre-signed uploads need storage credentials that can sign upload links; upload the file with multipart/form-data instead.");
+            return await RefuseUploadAsync(auditSubject, null, StatusCodes.Status501NotImplemented,
+                "Pre-signed uploads need storage credentials that can sign upload links; upload the file with multipart/form-data instead.", ct);
         }
 
         await AuditAsync(DocumentAccessAction.Upload, id, auditSubject, allowed: true,
@@ -314,7 +319,8 @@ public sealed class DocumentsController : ControllerBase
         }
         catch (DocumentNotFoundException)
         {
-            return Conflict("Nothing has been uploaded for this document yet.");
+            return await RefuseUploadAsync(auditSubject, id, StatusCodes.Status409Conflict,
+                "Nothing has been uploaded for this document yet.", ct);
         }
         if (staged.SizeBytes > _uploadPolicy.MaxUploadBytes)
         {
@@ -349,8 +355,8 @@ public sealed class DocumentsController : ControllerBase
         }
 
         var sha256 = Sha256Hex(buffer);
-        var duplicate = await _documents.FindByHashAsync(TenantId, sha256, ct);
-        if (duplicate != null && CanMergeInto(duplicate))
+        var duplicate = (await _documents.FindByHashAsync(TenantId, sha256, ct)).FirstOrDefault(CanMergeInto);
+        if (duplicate != null)
         {
             var merged = await MergeDuplicateAsync(duplicate,
                 new UploadMetadata(document.Links, document.Sensitivity, document.Source.Channel, document.ReceivedAt, null), ct);
@@ -368,6 +374,11 @@ public sealed class DocumentsController : ControllerBase
         document.Sha256 = sha256;
         document.SizeBytes = buffer.Length;
         document.PendingUploadPath = null;
+        // Each finalize attempt writes its own object, so a concurrent finalize
+        // of the same upload (a retry, a double click) can never overwrite or
+        // delete the content the winning attempt recorded.
+        document.StoragePath = DocumentUploadPolicy.BuildStoragePath(
+            TenantId, $"{document.Id}-{Guid.NewGuid():N}"[..(document.Id.Length + 9)], document.ContentType, document.StoragePath);
 
         await AuditAsync(DocumentAccessAction.Upload, id, auditSubject, allowed: true,
             $"pre-signed upload finalized: {document.Type}", ct);
@@ -379,7 +390,7 @@ public sealed class DocumentsController : ControllerBase
         }
         catch (DocumentConcurrencyException)
         {
-            // The record is still pending; its final path must stay empty.
+            // Another attempt won; this attempt's own object is unreferenced.
             await _store.DeleteAsync(Container, document.StoragePath, CancellationToken.None);
             return ConcurrencyConflict();
         }

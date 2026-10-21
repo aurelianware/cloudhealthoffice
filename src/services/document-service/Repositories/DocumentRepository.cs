@@ -12,8 +12,8 @@ public interface IDocumentRepository
     /// <summary>Finalized and pending documents linked to one subject, newest received first.</summary>
     Task<IReadOnlyList<CatalogDocument>> ListBySubjectAsync(string tenantId, DocumentLink subject, CancellationToken ct = default);
 
-    /// <summary>A finalized document in the tenant with this content hash (duplicate detection).</summary>
-    Task<CatalogDocument?> FindByHashAsync(string tenantId, string sha256, CancellationToken ct = default);
+    /// <summary>Finalized documents in the tenant with this content hash, oldest first (duplicate detection).</summary>
+    Task<IReadOnlyList<CatalogDocument>> FindByHashAsync(string tenantId, string sha256, CancellationToken ct = default);
 
     /// <summary>Saves only if the document is still at the revision that was read; otherwise <see cref="DocumentConcurrencyException"/>.</summary>
     Task<CatalogDocument> UpdateAsync(CatalogDocument document, CancellationToken ct = default);
@@ -66,12 +66,12 @@ public sealed class DocumentRepositoryMongo : IDocumentRepository
         return await _collection.Find(filter).SortByDescending(x => x.ReceivedAt).ToListAsync(ct);
     }
 
-    public async Task<CatalogDocument?> FindByHashAsync(string tenantId, string sha256, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CatalogDocument>> FindByHashAsync(string tenantId, string sha256, CancellationToken ct = default)
     {
         var filter = Builders<CatalogDocument>.Filter.Eq(x => x.TenantId, tenantId)
                      & Builders<CatalogDocument>.Filter.Eq(x => x.Sha256, sha256)
                      & Builders<CatalogDocument>.Filter.Eq(x => x.PendingUploadPath, null);
-        return await _collection.Find(filter).SortBy(x => x.CreatedAt).FirstOrDefaultAsync(ct);
+        return await _collection.Find(filter).SortBy(x => x.CreatedAt).ToListAsync(ct);
     }
 
     public async Task<CatalogDocument> UpdateAsync(CatalogDocument document, CancellationToken ct = default)

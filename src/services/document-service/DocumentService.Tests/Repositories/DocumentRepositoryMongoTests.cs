@@ -76,10 +76,10 @@ public sealed class DocumentRepositoryMongoTests : IAsyncLifetime
     {
         await _repository.CreateAsync(Doc("pending", sha: "abc", pending: true));
         await _repository.CreateAsync(Doc("elsewhere", tenant: "other", sha: "abc"));
-        Assert.Null(await _repository.FindByHashAsync(Tenant, "abc"));
+        Assert.Empty(await _repository.FindByHashAsync(Tenant, "abc"));
 
         await _repository.CreateAsync(Doc("final", sha: "abc"));
-        Assert.Equal("final", (await _repository.FindByHashAsync(Tenant, "abc"))!.Id);
+        Assert.Equal(["final"], (await _repository.FindByHashAsync(Tenant, "abc")).Select(d => d.Id));
     }
 
     [Fact]
