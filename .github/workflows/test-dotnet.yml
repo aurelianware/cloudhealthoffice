@@ -120,7 +120,8 @@ jobs:
             mcr.microsoft.com/azure-storage/azurite:3.37.0 \
             azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
           docker run -d --name fake-gcs -p 4443:4443 fsouza/fake-gcs-server:1.52.2 \
-            -scheme http -port 4443 -public-host 127.0.0.1:4443 -backend memory
+            -scheme http -port 4443 -public-host 127.0.0.1:4443 \
+            -external-url http://127.0.0.1:4443 -backend memory
           mkdir -p "$RUNNER_TEMP/minio-data"
           MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin \
             nohup "$HOME/minio-bin/minio" server "$RUNNER_TEMP/minio-data" --address 127.0.0.1:9000 \
