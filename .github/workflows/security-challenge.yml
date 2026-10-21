@@ -14,6 +14,9 @@ on:
       - 'src/services/member-service/**'
       - 'src/services/coverage-service/**'
       - 'src/services/consent-service/**'
+      - 'src/services/document-service/**'
+      - 'src/services/attachment-service/**'
+      - 'src/engines/CloudHealthOffice.DocumentStore/**'
       - 'src/services/shared/CloudHealthOffice.Consent.Contracts/**'
       - 'src/engines/CloudHealthOffice.PriorAuthRuleEngine/**'
       - 'tests/CloudHealthOffice.PriorAuthRuleEngine.Tests/**'
@@ -158,3 +161,29 @@ jobs:
           src/services/consent-service/bin/Release/net8.0/consent-service.dll
           "${{ runner.temp }}/cho-provider-access-sensitivity"
       # Baseline and mutants retain finding-bearing evidence locally; no automatic publication.
+
+  document-isolation-lab:
+    name: Synthetic document catalog and attachment isolation (.NET 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build real catalog and attachment services
+        run: |
+          dotnet build src/services/document-service --configuration Release --verbosity quiet
+          dotnet build src/services/attachment-service --configuration Release --verbosity quiet
+      - name: Test evidence policy and build runner
+        run: dotnet test tools/SecurityChallenge.Tests --configuration Release --verbosity quiet
+      - name: Verify catalog and attachment regressions
+        run: |
+          dotnet test src/services/document-service/DocumentService.Tests --configuration Release --verbosity quiet
+          dotnet test src/services/attachment-service/AttachmentService.Tests --configuration Release --verbosity quiet
+      - name: Prove sensitivity and gateway permission defects are detected
+        run: >-
+          python3 tools/SecurityChallenge/run-fhir-sensitivity.py documents
+          src/services/attachment-service/bin/Release/net8.0/attachment-service.dll
+          "${{ runner.temp }}/cho-document-isolation-sensitivity"
+      # No finding-bearing evidence uploads or automatic publication.
