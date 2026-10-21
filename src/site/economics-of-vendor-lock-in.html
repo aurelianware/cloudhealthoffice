@@ -20,23 +20,26 @@
 </script>
 <script defer src="/js/pmpm-calculator.js">
 </script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
 </head>
 <body class="independence">
 <a href="#main-content" class="skip-to-main">Skip to main content</a>
-<nav aria-label="Primary">
-<a class="brand" href="/">
-<img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="44" height="44">
-<span>Cloud Health Office<small>Health Plan Independence</small>
-</span>
-</a>
-<button id="mobileMenuToggle" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">Menu</button>
+<nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
 <ul id="mainNav">
 <li>
 <details>
-<summary>Why Independence</summary>
+<summary>Solutions</summary>
 <div>
-<a href="/health-plan-independence">Independence Manifesto</a>
-<a href="/economics-of-vendor-lock-in">Economics of Vendor Lock-In</a>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
 </div>
 </details>
 </li>
@@ -44,26 +47,45 @@
 <details>
 <summary>Platform</summary>
 <div>
-<a href="/platform">Platform Overview</a>
-<a href="/ai-ready-health-plan-architecture">AI-Ready Architecture</a>
-<a href="/incremental-modernization">Incremental Modernization</a>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
 <a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
 </div>
 </details>
 </li>
+<li><a href="/#interoperability">Interoperability</a></li>
 <li>
-<a href="/cms-0057f-compliance">CMS-0057-F</a>
-</li>
-<li>
-<a href="/evidence">Evidence</a>
-</li>
-<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
 <a href="/docs">Documentation</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="https://sandbox.cloudhealthoffice.com">API sandbox</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
 </li>
+<li><a href="/evidence">Evidence</a></li>
 <li>
-<a class="nav-cta" data-ga-event="independence_strategy_cta_click" href="/founding-transformation-partners#strategy">Discuss Your Independence Strategy</a>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
 </li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
 </ul>
+</div>
 </nav>
 <main id="main-content" tabindex="-1">
 <header class="hero">
@@ -172,24 +194,49 @@
 <li>Simple payback = (T + P) / (A − B), only when A − B is positive</li>
 </ul>
 <p>This constant-volume, undiscounted model excludes taxes, inflation, financing, growth and the timing of cash flows. Simple payback is an approximation, especially when parallel-run expenses occur later. Validate assumptions with commercial and finance teams.</p>
-<a href="/founding-transformation-partners#strategy" data-ga-event="independence_strategy_cta_click" class="button">Discuss Your Independence Strategy</a>
+<a href="/founding-transformation-partners#strategy" data-ga-event="independence_strategy_cta_click" class="button">Discuss a Design Partnership</a>
 </section>
 </main>
-<footer>
-<a href="/">Cloud Health Office</a>
-<p>Health Plan Independence. Source-available administration.</p>
-<div class="footer-links">
-<a href="/platform">Platform</a>
-<a href="/start">Evaluator pack</a>
+<footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
 <a href="/deploy">Deployment</a>
 <a href="/pricing">Pricing</a>
-<a href="/services">Professional Services</a>
-<a href="/trust">Trust &amp; Security</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
 <a href="/contact">Contact</a>
 <a href="/legal/privacy-policy">Privacy</a>
 <a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
 </div>
-<p class="fine">Source-available under BSL 1.1. Production use requires a commercial license. © 2026 Aurelianware, Inc.</p>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
 </footer>
 </body>
 </html>

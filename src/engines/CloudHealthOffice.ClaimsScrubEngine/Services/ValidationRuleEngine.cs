@@ -147,6 +147,9 @@ public sealed partial class ValidationRuleEngine : IValidationRuleEngine
         Add("DL001", "Service Date Not Future",
             "Validates that service date is not in the future",
             ValidationCategory.DateLogic, ValidationSeverity.Error, AllTypes, dl.ServiceDateNotFuture, 5);
+        // A pre-submission warning, measured from the day the scrub runs. The
+        // payer-side control is claims-service's TimelyFilingStage, which
+        // measures from the payer receipt date and can deny (CARC 29).
         Add("DL002", "Service Date Within Filing Limit",
             "Validates that claim is filed within timely filing limit",
             ValidationCategory.DateLogic, ValidationSeverity.Warning, AllTypes, dl.ServiceDateWithinFilingLimit, 5,

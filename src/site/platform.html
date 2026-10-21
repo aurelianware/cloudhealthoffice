@@ -67,8 +67,8 @@
     .platform-hero {
       text-align: center;
       padding: 60px 0;
-      background: linear-gradient(180deg, #000000 0%, #0a0a0a 100%);
-      border-bottom: 2px solid #00ffff;
+      background: linear-gradient(180deg, #FFFFFF 0%, #F5F7FA 100%);
+      border-bottom: 2px solid #0E7490;
     }
     
     .stats-grid {
@@ -79,8 +79,8 @@
     }
     
     .stat-card {
-      background: #0a0a0a;
-      border: 2px solid #00ffff;
+      background: #F5F7FA;
+      border: 2px solid #0E7490;
       border-radius: 12px;
       padding: 30px;
       text-align: center;
@@ -88,22 +88,22 @@
     }
     
     .stat-card:hover {
-      border-color: #00ff88;
-      box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+      border-color: #0F766E;
+      box-shadow: 0 0 30px rgba(14, 116, 144, 0.3);
       transform: translateY(-4px);
     }
     
     .stat-number {
       font-size: 3rem;
       font-weight: bold;
-      color: #00ffff;
-      text-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+      color: #0E7490;
+      text-shadow: none;
       margin-bottom: 10px;
     }
     
     .stat-label {
       font-size: 1rem;
-      color: #b0b0b0;
+      color: #334155;
     }
     
     .capability-section {
@@ -118,8 +118,8 @@
     }
     
     .capability-card {
-      background: #0a0a0a;
-      border-left: 4px solid #00ffff;
+      background: #F5F7FA;
+      border-left: 4px solid #0E7490;
       padding: 30px;
       border-radius: 8px;
     }
@@ -145,7 +145,7 @@
       content: "✓";
       position: absolute;
       left: 0;
-      color: #00ff88;
+      color: #0F766E;
       font-weight: bold;
     }
 
@@ -157,9 +157,9 @@
     }
 
     .layers-card {
-      background: #0a0a0a;
-      border: 1px solid rgba(0,255,255,0.22);
-      border-top: 3px solid #00ffff;
+      background: #F5F7FA;
+      border: 1px solid rgba(14, 116, 144, 0.22);
+      border-top: 3px solid #0E7490;
       border-radius: 8px;
       padding: 24px;
     }
@@ -170,7 +170,7 @@
     }
 
     .layers-card p {
-      color: #b0b0b0;
+      color: #334155;
       line-height: 1.65;
       margin: 0 0 12px 0;
       font-size: 0.98rem;
@@ -181,13 +181,13 @@
     .layers-constraint {
       margin-top: 20px;
       font-size: 0.95rem;
-      color: #888;
+      color: #475569;
     }
 
     .mcc-proof-strip {
-      background: #0a0a0a;
-      border: 1px solid rgba(0,255,255,0.22);
-      border-left: 4px solid #00ff88;
+      background: #F5F7FA;
+      border: 1px solid rgba(14, 116, 144, 0.22);
+      border-left: 4px solid #0F766E;
       border-radius: 8px;
       padding: 28px;
       margin: 36px 0 60px;
@@ -207,22 +207,22 @@
     }
 
     .mcc-proof-metric {
-      border: 1px solid rgba(0,255,255,0.14);
+      border: 1px solid rgba(14, 116, 144, 0.14);
       border-radius: 8px;
       padding: 14px;
-      background: rgba(0,0,0,0.38);
+      background: rgba(255, 255, 255, 0.38);
     }
 
     .mcc-proof-metric strong {
       display: block;
-      color: #fff;
+      color: #0B1F33;
       font-size: 1.15rem;
       line-height: 1.2;
       margin-bottom: 6px;
     }
 
     .mcc-proof-metric span {
-      color: rgba(176,176,176,0.72);
+      color: #334155;
       font-size: 0.82rem;
       line-height: 1.35;
     }
@@ -239,32 +239,75 @@
       }
     }
   </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<script defer src="/js/mobile-nav.js"></script>
+<link rel="stylesheet" href="/css/enterprise.css">
 </head>
 <body>
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
-  <nav style="margin-bottom:40px;">
-    <div class="nav-inner">
-      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
-        <img src="graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
-        <span class="nav-logo-text">Cloud Health Office</span>
-      </a>
-      <div class="nav-right">
-        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
-        <ul id="mainNav">
-<li><a href="/health-plan-independence">Why Independence</a></li>
-          <li><a href="/solutions-payers">Solutions</a></li>
-          <li><a href="/platform" style="color:#00ffff;" aria-current="page">Platform</a></li>
-          <li><a href="/cms-0057f-compliance">Compliance</a></li>
-          <li><a href="/pricing">Pricing</a></li>
-          <li><a href="/trust">Trust</a></li>
-          <li><a href="/docs">Docs</a></li>
-          <li><a href="/evidence">Evidence</a></li>
-          <li><a href="/founder">Founder</a></li><li><a href="/services">Services</a></li><li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
-        </ul>
-      </div>
-    </div>
-  </nav>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform" aria-current="page">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="https://sandbox.cloudhealthoffice.com">API sandbox</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
   <script>
     // Update navigation with auth status on page load
     document.addEventListener('DOMContentLoaded', () => {
@@ -333,20 +376,20 @@
 
       <!-- ===== WHAT'S READY TODAY ===== -->
       <section class="assessment-section">
-        <div class="section-label" style="color:#00ffff; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:16px;">What's ready today</div>
+        <div class="section-label" style="color:#0E7490; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:16px;">What's ready today</div>
         <h2>What Runs Today &mdash; and What Doesn't Yet.</h2>
         <p>This page documents the platform's building blocks. Availability differs by capability: some run today, while production integrations, SLAs, and customer validation remain pilot- or roadmap-scoped. We'd rather draw that line clearly than blur it.</p>
         <p style="margin-top:16px;"><strong>Usable now:</strong> the claims adjudication, pricing, and fee-schedule engines are implemented and inspectable in the repository &mdash; including the free fee-schedule lookup and claims-repricing tools that run on the same code.</p>
         <p style="margin-top:12px;"><strong>Pilot-scoped:</strong> payer deployments start with a CMS-0057-F compliance layer alongside your existing core, then modernize domain by domain on your timeline. Your system of record stays authoritative until you choose to cut over a domain.</p>
         <p style="margin-top:12px;"><strong>Roadmap:</strong> subscription packaging, update cadences, and public production SLAs for the data and API services are still being completed.</p>
         <p style="margin-top:20px;">
-          <a href="/pricing" style="color:#00ffff;">See pricing &rarr;</a>
+          <a href="/pricing" style="color:#0E7490;">See pricing &rarr;</a>
         </p>
       </section>
 
       <!-- ===== THREE LAYERS — FOOTHOLD / DOMAIN CUTOVER / CORE ===== -->
       <section id="layers" class="assessment-section" aria-labelledby="layers-heading">
-        <div class="section-label" style="color:#00ffff; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:16px;">Where you start</div>
+        <div class="section-label" style="color:#0E7490; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:16px;">Where you start</div>
         <h2 id="layers-heading">Foothold, Domain cutover, Core.</h2>
         <p>Three budget questions. Same platform. You enter where this year&rsquo;s money already is.</p>
 
@@ -396,12 +439,12 @@
             <span>122 observation-window timeouts; 1,000,000/1,000,000 later terminal, 0 dead letters</span>
           </div>
         </div>
-        <p style="font-size:0.95rem; color:#888;">
+        <p style="font-size:0.95rem; color:#475569;">
           This local result is not a production-cloud capacity claim. Part 15 remains the strict zero-platform-failure 1M baseline;
           Part 16 measures the faster platform-owned asynchronous path and discloses its fixed observation-window limitation.
-          <a href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus" style="color:#00ffff;">Read Part 16</a>
+          <a href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus" style="color:#0E7490;">Read Part 16</a>
           &middot;
-          <a href="/docs/million-claim-challenge" style="color:#00ffff;">See the benchmark methodology &rarr;</a>
+          <a href="/docs/million-claim-challenge" style="color:#0E7490;">See the benchmark methodology &rarr;</a>
         </p>
       </section>
 
@@ -505,7 +548,7 @@
             font-size: 0.7rem;
             letter-spacing: 0.2em;
             text-transform: uppercase;
-            color: rgba(0, 240, 255, 0.6);
+            color: #0E7490;
             margin: 0 0 0.75rem;
           ">Inside the Platform</p>
 
@@ -513,7 +556,7 @@
             font-family: 'Inter', -apple-system, sans-serif;
             font-size: clamp(1.5rem, 3vw, 2.2rem);
             font-weight: 700;
-            color: #e5e7eb;
+            color: #334155;
             margin: 0 0 1rem;
             line-height: 1.2;
           ">Portal Walkthrough With Seeded Data</h2>
@@ -521,7 +564,7 @@
           <p style="
             font-family: 'Inter', -apple-system, sans-serif;
             font-size: 1rem;
-            color: rgba(255, 255, 255, 0.4);
+            color: #0B1F33;
             max-width: 660px;
             margin: 0 auto;
             line-height: 1.6;
@@ -541,10 +584,10 @@
         ">
           <button onclick="showTab('dashboard')" id="tab-dashboard" class="tour-tab tour-tab-active" style="
             padding: 10px 24px;
-            background: rgba(0, 240, 255, 0.08);
-            border: 1px solid rgba(0, 240, 255, 0.2);
+            background: rgba(14, 116, 144, 0.08);
+            border: 1px solid rgba(14, 116, 144, 0.2);
             border-radius: 6px 0 0 6px;
-            color: #00f0ff;
+            color: #0E7490;
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.72rem;
             font-weight: 600;
@@ -556,9 +599,9 @@
           <button onclick="showTab('queues')" id="tab-queues" class="tour-tab" style="
             padding: 10px 24px;
             background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(11, 31, 51, 0.14);
             border-radius: 0;
-            color: rgba(255, 255, 255, 0.4);
+            color: #0B1F33;
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.72rem;
             font-weight: 600;
@@ -570,9 +613,9 @@
           <button onclick="showTab('architecture')" id="tab-architecture" class="tour-tab" style="
             padding: 10px 24px;
             background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(11, 31, 51, 0.14);
             border-radius: 0 6px 6px 0;
-            color: rgba(255, 255, 255, 0.4);
+            color: #0B1F33;
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.72rem;
             font-weight: 600;
@@ -592,39 +635,39 @@
             border-radius: 12px;
             overflow: hidden;
             box-shadow:
-              0 0 0 1px rgba(0, 240, 255, 0.06),
-              0 30px 80px rgba(0, 0, 0, 0.6),
-              0 0 60px rgba(0, 240, 255, 0.03);
+              0 0 0 1px rgba(14, 116, 144, 0.06),
+              0 30px 80px rgba(11, 31, 51, 0.12),
+              0 0 60px rgba(14, 116, 144, 0.03);
           ">
             <!-- Browser bar -->
             <div style="
-              background: #0d1117;
+              background: #EEF3F8;
               padding: 12px 16px;
               display: flex;
               align-items: center;
               gap: 8px;
-              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+              border-bottom: 1px solid rgba(11, 31, 51, 0.09);
             ">
               <div style="display: flex; gap: 6px; margin-right: 12px;">
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #B91C1C;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #B45309;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #0F766E;"></div>
               </div>
               <div style="
                 flex: 1;
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: rgba(11, 31, 51, 0.05);
+                border: 1px solid rgba(11, 31, 51, 0.12);
                 border-radius: 6px;
                 padding: 5px 14px;
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 0.7rem;
-                color: rgba(255, 255, 255, 0.35);
+                color: #0B1F33;
                 display: flex;
                 align-items: center;
                 gap: 6px;
               ">
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="#0F766E"/>
                 </svg>
                 local-demo/operations/dashboard
               </div>
@@ -632,7 +675,7 @@
             <img
               src="/graphics/platform-operations-dashboard.svg"
               alt="Cloud Health Office operations dashboard showing 14,892 claims processed, an 87.3% auto-adjudication rate, 1.2 second average end-to-end processing time, and $4.2M total plan paid, with an adjudication-outcome breakdown and a recent-claims table (local demo data)"
-              style="width: 100%; display: block; background: #0a0e16;"
+              style="width: 100%; display: block; background: #EEF3F8;"
               loading="lazy"
             />
           </div>
@@ -646,8 +689,8 @@
             margin: 0 auto;
           ">
             <div style="
-              background: rgba(255,255,255,0.015);
-              border: 1px solid rgba(0, 240, 255, 0.08);
+              background: rgba(11, 31, 51, 0.015);
+              border: 1px solid rgba(14, 116, 144, 0.08);
               border-radius: 8px;
               padding: 16px 18px;
             ">
@@ -655,19 +698,19 @@
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 1.3rem;
                 font-weight: 700;
-                color: #00f0ff;
+                color: #0E7490;
                 margin-bottom: 4px;
               ">14,892 demo</div>
               <div style="
                 font-size: 0.72rem;
-                color: rgba(255,255,255,0.35);
+                color: #0B1F33;
                 line-height: 1.4;
               ">Claims processed with full audit trail, real-time status tracking, and compliance metadata.</div>
             </div>
 
             <div style="
-              background: rgba(255,255,255,0.015);
-              border: 1px solid rgba(16, 185, 129, 0.12);
+              background: rgba(11, 31, 51, 0.015);
+              border: 1px solid rgba(15, 118, 110, 0.12);
               border-radius: 8px;
               padding: 16px 18px;
             ">
@@ -675,19 +718,19 @@
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 1.3rem;
                 font-weight: 700;
-                color: #34d399;
+                color: #0F766E;
                 margin-bottom: 4px;
               ">87.3% demo</div>
               <div style="
                 font-size: 0.72rem;
-                color: rgba(255,255,255,0.35);
+                color: #0B1F33;
                 line-height: 1.4;
               ">Auto-adjudication rate. Denied and pended claims route to examiner work queues automatically.</div>
             </div>
 
             <div style="
-              background: rgba(255,255,255,0.015);
-              border: 1px solid rgba(0, 240, 255, 0.08);
+              background: rgba(11, 31, 51, 0.015);
+              border: 1px solid rgba(14, 116, 144, 0.08);
               border-radius: 8px;
               padding: 16px 18px;
             ">
@@ -695,19 +738,19 @@
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 1.3rem;
                 font-weight: 700;
-                color: #e5e7eb;
+                color: #334155;
                 margin-bottom: 4px;
               ">1.2 sec demo</div>
               <div style="
                 font-size: 0.72rem;
-                color: rgba(255,255,255,0.35);
+                color: #0B1F33;
                 line-height: 1.4;
               ">Average end-to-end claim processing. Eligibility, benefit resolution, pricing, and adjudication.</div>
             </div>
 
             <div style="
-              background: rgba(255,255,255,0.015);
-              border: 1px solid rgba(0, 240, 255, 0.08);
+              background: rgba(11, 31, 51, 0.015);
+              border: 1px solid rgba(14, 116, 144, 0.08);
               border-radius: 8px;
               padding: 16px 18px;
             ">
@@ -715,12 +758,12 @@
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 1.3rem;
                 font-weight: 700;
-                color: #e5e7eb;
+                color: #334155;
                 margin-bottom: 4px;
               ">$4.2M</div>
               <div style="
                 font-size: 0.72rem;
-                color: rgba(255,255,255,0.35);
+                color: #0B1F33;
                 line-height: 1.4;
               ">Total plan paid. Real-time financial visibility across all claim types and benefit plans.</div>
             </div>
@@ -744,38 +787,38 @@
               border-radius: 12px;
               overflow: hidden;
               box-shadow:
-                0 0 0 1px rgba(0, 240, 255, 0.06),
-                0 30px 80px rgba(0, 0, 0, 0.6),
-                0 0 60px rgba(0, 240, 255, 0.03);
+                0 0 0 1px rgba(14, 116, 144, 0.06),
+                0 30px 80px rgba(11, 31, 51, 0.12),
+                0 0 60px rgba(14, 116, 144, 0.03);
             ">
               <div style="
-                background: #0d1117;
+                background: #EEF3F8;
                 padding: 12px 16px;
                 display: flex;
                 align-items: center;
                 gap: 8px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+                border-bottom: 1px solid rgba(11, 31, 51, 0.09);
               ">
                 <div style="display: flex; gap: 6px; margin-right: 12px;">
-                  <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
-                  <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
-                  <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+                  <div style="width: 10px; height: 10px; border-radius: 50%; background: #B91C1C;"></div>
+                  <div style="width: 10px; height: 10px; border-radius: 50%; background: #B45309;"></div>
+                  <div style="width: 10px; height: 10px; border-radius: 50%; background: #0F766E;"></div>
                 </div>
                 <div style="
                   flex: 1;
-                  background: rgba(255, 255, 255, 0.05);
-                  border: 1px solid rgba(255, 255, 255, 0.08);
+                  background: rgba(11, 31, 51, 0.05);
+                  border: 1px solid rgba(11, 31, 51, 0.12);
                   border-radius: 6px;
                   padding: 5px 14px;
                   font-family: 'JetBrains Mono', monospace;
                   font-size: 0.7rem;
-                  color: rgba(255, 255, 255, 0.35);
+                  color: #0B1F33;
                   display: flex;
                   align-items: center;
                   gap: 6px;
                 ">
                   <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                    <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="#0F766E"/>
                   </svg>
                   local-demo/operations/work-queues
                 </div>
@@ -783,7 +826,7 @@
               <img
                 src="/graphics/platform-work-queues.png"
                 alt="Cloud Health Office Claims Work Queues with NCCI/MUE, Prior Auth, COB, Provider, and Medical Review queues"
-                style="width: 100%; display: block; background: #080c14;"
+                style="width: 100%; display: block; background: #EEF3F8;"
                 loading="lazy"
               />
             </div>
@@ -792,80 +835,80 @@
             <div style="display: flex; flex-direction: column; gap: 12px;">
 
               <div style="
-                background: rgba(255,255,255,0.015);
-                border: 1px solid rgba(248, 113, 113, 0.15);
+                background: rgba(11, 31, 51, 0.015);
+                border: 1px solid rgba(185, 28, 28, 0.15);
                 border-radius: 8px;
                 padding: 14px 16px;
               ">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.4);"></div>
-                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #e5e7eb;">NCCI/MUE Edits</span>
+                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #B91C1C; box-shadow: 0 0 6px rgba(185, 28, 28, 0.4);"></div>
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #334155;">NCCI/MUE Edits</span>
                 </div>
-                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.35); margin: 0; line-height: 1.45;">
+                <p style="font-size: 0.75rem; color: #0B1F33; margin: 0; line-height: 1.45;">
                   National Correct Coding Initiative and Medically Unlikely Edit violations
                   caught during adjudication. Automatic unbundling detection.
                 </p>
               </div>
 
               <div style="
-                background: rgba(255,255,255,0.015);
-                border: 1px solid rgba(251, 191, 36, 0.15);
+                background: rgba(11, 31, 51, 0.015);
+                border: 1px solid rgba(180, 83, 9, 0.15);
                 border-radius: 8px;
                 padding: 14px 16px;
               ">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #fbbf24; box-shadow: 0 0 6px rgba(251,191,36,0.4);"></div>
-                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #e5e7eb;">Missing Prior Auth</span>
+                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #B45309; box-shadow: 0 0 6px rgba(180, 83, 9, 0.4);"></div>
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #334155;">Missing Prior Auth</span>
                 </div>
-                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.35); margin: 0; line-height: 1.45;">
+                <p style="font-size: 0.75rem; color: #0B1F33; margin: 0; line-height: 1.45;">
                   Claims requiring authorization without an auth on file. Routed via the
                   PriorAuthDecisionEngine — configurable decision rules, rationale, and deadline tracking.
                 </p>
               </div>
 
               <div style="
-                background: rgba(255,255,255,0.015);
-                border: 1px solid rgba(0, 240, 255, 0.15);
+                background: rgba(11, 31, 51, 0.015);
+                border: 1px solid rgba(14, 116, 144, 0.15);
                 border-radius: 8px;
                 padding: 14px 16px;
               ">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #00f0ff; box-shadow: 0 0 6px rgba(0,240,255,0.4);"></div>
-                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #e5e7eb;">COB / Other Payer</span>
+                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #0E7490; box-shadow: 0 0 6px rgba(14, 116, 144, 0.4);"></div>
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #334155;">COB / Other Payer</span>
                 </div>
-                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.35); margin: 0; line-height: 1.45;">
+                <p style="font-size: 0.75rem; color: #0B1F33; margin: 0; line-height: 1.45;">
                   Coordination of benefits with primary, secondary, tertiary payers.
                   Birthday rule, gender rule, and Medicare secondary logic built in.
                 </p>
               </div>
 
               <div style="
-                background: rgba(255,255,255,0.015);
+                background: rgba(11, 31, 51, 0.015);
                 border: 1px solid rgba(167, 139, 250, 0.15);
                 border-radius: 8px;
                 padding: 14px 16px;
               ">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
                   <div style="width: 8px; height: 8px; border-radius: 50%; background: #a78bfa; box-shadow: 0 0 6px rgba(167,139,250,0.4);"></div>
-                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #e5e7eb;">Provider Not Contracted</span>
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #334155;">Provider Not Contracted</span>
                 </div>
-                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.35); margin: 0; line-height: 1.45;">
+                <p style="font-size: 0.75rem; color: #0B1F33; margin: 0; line-height: 1.45;">
                   Flagged by the ProviderVerificationService — multi-source integrity
                   checks against NPPES, OIG/LEIE, SAM.gov, PECOS, CMS Open Payments.
                 </p>
               </div>
 
               <div style="
-                background: rgba(255,255,255,0.015);
-                border: 1px solid rgba(52, 211, 153, 0.15);
+                background: rgba(11, 31, 51, 0.015);
+                border: 1px solid rgba(15, 118, 110, 0.15);
                 border-radius: 8px;
                 padding: 14px 16px;
               ">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 6px rgba(52,211,153,0.4);"></div>
-                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #e5e7eb;">Medical Review</span>
+                  <div style="width: 8px; height: 8px; border-radius: 50%; background: #0F766E; box-shadow: 0 0 6px rgba(15, 118, 110, 0.4);"></div>
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #334155;">Medical Review</span>
                 </div>
-                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.35); margin: 0; line-height: 1.45;">
+                <p style="font-size: 0.75rem; color: #0B1F33; margin: 0; line-height: 1.45;">
                   High-dollar claims, unusual procedure combinations, or clinical documentation
                   requirements. Full examiner assignment and audit trail.
                 </p>
@@ -887,132 +930,132 @@
           ">
 
             <!-- Service cards - all 29 -->
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">01 · ClaimsService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">837 P/I/D intake, validation, adjudication orchestration</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">01 · ClaimsService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">837 P/I/D intake, validation, adjudication orchestration</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">02 · EligibilityService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">270/271 real-time eligibility verification</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">02 · EligibilityService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">270/271 real-time eligibility verification</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">03 · AuthorizationService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Prior auth record and decisions; Da Vinci PAS in development; X12 278 planned</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">03 · AuthorizationService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Prior auth record and decisions; Da Vinci PAS in development; X12 278 planned</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">04 · ClaimStatusService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">276/277 real-time claim status inquiry</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">04 · ClaimStatusService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">276/277 real-time claim status inquiry</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">05 · RemittanceService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">835 ERA generation, payment reconciliation</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">05 · RemittanceService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">835 ERA generation, payment reconciliation</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">06 · EnrollmentService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">834 enrollment, member lifecycle management</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">06 · EnrollmentService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">834 enrollment, member lifecycle management</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">07 · ProviderService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Provider directory, credentialing, NPI management</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">07 · ProviderService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Provider directory, credentialing, NPI management</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">08 · MemberService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Member demographics, coverage, ID card generation</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">08 · MemberService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Member demographics, coverage, ID card generation</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">09 · AppealsService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Appeals intake, workflow, deadline tracking</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">09 · AppealsService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Appeals intake, workflow, deadline tracking</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">10 · FhirGateway</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">FHIR R4 API surface, SMART on FHIR, Da Vinci profiles</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">10 · FhirGateway</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">FHIR R4 API surface, SMART on FHIR, Da Vinci profiles</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">11 · ApiGateway (YARP)</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Reverse proxy, rate limiting, auth, routing</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">11 · ApiGateway (YARP)</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Reverse proxy, rate limiting, auth, routing</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">12 · NotificationService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Email, SMS, in-app alerts, deadline reminders</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">12 · NotificationService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Email, SMS, in-app alerts, deadline reminders</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">13 · AuditService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Immutable audit log, 7-year retention, PHI tracking</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">13 · AuditService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Immutable audit log, 7-year retention, PHI tracking</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">14 · ReportingService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Operational analytics, compliance dashboards, exports</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">14 · ReportingService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Operational analytics, compliance dashboards, exports</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">15 · WorkQueueService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Examiner routing, assignment, pend management</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">15 · WorkQueueService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Examiner routing, assignment, pend management</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">16 · DocumentService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">275 attachments, clinical docs, blob storage</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">16 · DocumentService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">275 attachments, clinical docs, blob storage</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">17 · PremiumBillingService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">NACHA/ACH generation, Stripe, EFT lifecycle</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">17 · PremiumBillingService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">NACHA/ACH generation, Stripe, EFT lifecycle</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">18 · IdentityService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Azure AD, RBAC, tenant isolation, SMART scopes</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">18 · IdentityService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Azure AD, RBAC, tenant isolation, SMART scopes</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">19 · ConfigurationService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Tenant config, benefit plans, business rules</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">19 · ConfigurationService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Tenant config, benefit plans, business rules</div>
             </div>
-            <div class="svc-card" style="background: rgba(0,240,255,0.03); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00f0ff; font-weight: 600; margin-bottom: 4px;">20 · ClearinghouseAdapter</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Outbound Stedi gateway; Availity and Change adapters are scaffolds</div>
+            <div class="svc-card" style="background: rgba(14, 116, 144, 0.03); border: 1px solid rgba(14, 116, 144, 0.1); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0E7490; font-weight: 600; margin-bottom: 4px;">20 · ClearinghouseAdapter</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Outbound Stedi gateway; Availity and Change adapters are scaffolds</div>
             </div>
 
             <!-- Engines / specialty services -->
             <div class="svc-card" style="background: rgba(167,139,250,0.03); border: 1px solid rgba(167,139,250,0.12); border-radius: 8px; padding: 14px 16px;">
               <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #a78bfa; font-weight: 600; margin-bottom: 4px;">21 · BenefitEngine</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">HDHP/HSA, COB waterfall, NCCI, accumulator mgmt</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">HDHP/HSA, COB waterfall, NCCI, accumulator mgmt</div>
             </div>
             <div class="svc-card" style="background: rgba(167,139,250,0.03); border: 1px solid rgba(167,139,250,0.12); border-radius: 8px; padding: 14px 16px;">
               <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #a78bfa; font-weight: 600; margin-bottom: 4px;">22 · FeeScheduleEngine</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">DRG, Medicaid cross-schedule, multiple procedure ranking</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">DRG, Medicaid cross-schedule, multiple procedure ranking</div>
             </div>
             <div class="svc-card" style="background: rgba(167,139,250,0.03); border: 1px solid rgba(167,139,250,0.12); border-radius: 8px; padding: 14px 16px;">
               <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #a78bfa; font-weight: 600; margin-bottom: 4px;">23 · PriorAuthDecisionEngine</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">TX Medicaid PA pathways, 400–600+ rules, CMS-0057-F</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">TX Medicaid PA pathways, 400–600+ rules, CMS-0057-F</div>
             </div>
             <div class="svc-card" style="background: rgba(167,139,250,0.03); border: 1px solid rgba(167,139,250,0.12); border-radius: 8px; padding: 14px 16px;">
               <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #a78bfa; font-weight: 600; margin-bottom: 4px;">24 · TerminologyService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">SNOMED↔ICD-10↔CPT translation, plan-specific overrides</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">SNOMED↔ICD-10↔CPT translation, plan-specific overrides</div>
             </div>
             <div class="svc-card" style="background: rgba(167,139,250,0.03); border: 1px solid rgba(167,139,250,0.12); border-radius: 8px; padding: 14px 16px;">
               <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #a78bfa; font-weight: 600; margin-bottom: 4px;">25 · CapitationService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">PMPM calc, NACHA ACH credit, Stripe Connect, X12 835 ERA</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">PMPM calc, NACHA ACH credit, Stripe Connect, X12 835 ERA</div>
             </div>
-            <div class="svc-card" style="background: rgba(52,211,153,0.03); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #34d399; font-weight: 600; margin-bottom: 4px;">26 · ProviderVerificationService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">NPPES, OIG/LEIE, SAM.gov, PECOS, composite integrity score</div>
+            <div class="svc-card" style="background: rgba(15, 118, 110, 0.03); border: 1px solid rgba(15, 118, 110, 0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0F766E; font-weight: 600; margin-bottom: 4px;">26 · ProviderVerificationService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">NPPES, OIG/LEIE, SAM.gov, PECOS, composite integrity score</div>
             </div>
-            <div class="svc-card" style="background: rgba(52,211,153,0.03); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #34d399; font-weight: 600; margin-bottom: 4px;">27 · ComplianceChecker</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">CMS-0057-F automated validation, 72hr/7-day SLA tracking</div>
+            <div class="svc-card" style="background: rgba(15, 118, 110, 0.03); border: 1px solid rgba(15, 118, 110, 0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0F766E; font-weight: 600; margin-bottom: 4px;">27 · ComplianceChecker</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">CMS-0057-F automated validation, 72hr/7-day SLA tracking</div>
             </div>
-            <div class="svc-card" style="background: rgba(52,211,153,0.03); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #34d399; font-weight: 600; margin-bottom: 4px;">28 · AccumulatorService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Redis-backed, QNXT source-of-truth pattern, reversal support</div>
+            <div class="svc-card" style="background: rgba(15, 118, 110, 0.03); border: 1px solid rgba(15, 118, 110, 0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0F766E; font-weight: 600; margin-bottom: 4px;">28 · AccumulatorService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Redis-backed, QNXT source-of-truth pattern, reversal support</div>
             </div>
-            <div class="svc-card" style="background: rgba(52,211,153,0.03); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #34d399; font-weight: 600; margin-bottom: 4px;">29 · BlazorPortal</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">The Sentinel UI — operations, config, work queues, analytics</div>
+            <div class="svc-card" style="background: rgba(15, 118, 110, 0.03); border: 1px solid rgba(15, 118, 110, 0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0F766E; font-weight: 600; margin-bottom: 4px;">29 · BlazorPortal</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">The Sentinel UI — operations, config, work queues, analytics</div>
             </div>
-            <div class="svc-card" style="background: rgba(52,211,153,0.03); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #34d399; font-weight: 600; margin-bottom: 4px;">30 · ProviderEnrollmentService</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">Multi-state Medicaid enrollment — TMHP PEMS, CAQH, PAVE, FMMIS, eMedNY</div>
-              <a href="/docs/texas-compliance" style="font-size: 0.65rem; color: #00ffff; text-decoration: none; margin-top: 4px; display: inline-block;">See Texas State Compliance &rarr;</a>
+            <div class="svc-card" style="background: rgba(15, 118, 110, 0.03); border: 1px solid rgba(15, 118, 110, 0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0F766E; font-weight: 600; margin-bottom: 4px;">30 · ProviderEnrollmentService</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">Multi-state Medicaid enrollment — TMHP PEMS, CAQH, PAVE, FMMIS, eMedNY</div>
+              <a href="/docs/texas-compliance" style="font-size: 0.65rem; color: #0E7490; text-decoration: none; margin-top: 4px; display: inline-block;">See Texas State Compliance &rarr;</a>
             </div>
-            <div class="svc-card" style="background: rgba(52,211,153,0.03); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 14px 16px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #34d399; font-weight: 600; margin-bottom: 4px;">31 · PriorAuthRuleEngine</div>
-              <div style="font-size: 0.7rem; color: rgba(255,255,255,0.35);">State-specific PA decision rules, gold card exemptions, Redis-cached rule sets</div>
+            <div class="svc-card" style="background: rgba(15, 118, 110, 0.03); border: 1px solid rgba(15, 118, 110, 0.12); border-radius: 8px; padding: 14px 16px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #0F766E; font-weight: 600; margin-bottom: 4px;">31 · PriorAuthRuleEngine</div>
+              <div style="font-size: 0.7rem; color: #0B1F33;">State-specific PA decision rules, gold card exemptions, Redis-cached rule sets</div>
             </div>
 
           </div>
@@ -1025,23 +1068,23 @@
             justify-content: center;
             gap: 32px;
             padding: 16px 0;
-            border-top: 1px solid rgba(0, 240, 255, 0.06);
+            border-top: 1px solid rgba(14, 116, 144, 0.06);
           ">
             <div style="text-align: center;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #00f0ff;">36</div>
-              <div style="font-size: 0.65rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em;">SERVICES IN REPO</div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #0E7490;">36</div>
+              <div style="font-size: 0.65rem; color: #0B1F33; letter-spacing: 0.1em;">SERVICES IN REPO</div>
             </div>
             <div style="text-align: center;">
               <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #a78bfa;">9</div>
-              <div style="font-size: 0.65rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em;">CLASS LIBRARIES</div>
+              <div style="font-size: 0.65rem; color: #0B1F33; letter-spacing: 0.1em;">CLASS LIBRARIES</div>
             </div>
             <div style="text-align: center;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #34d399;">19,982</div>
-              <div style="font-size: 0.65rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em;">PAYMENTS EXACT</div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #0F766E;">19,982</div>
+              <div style="font-size: 0.65rem; color: #0B1F33; letter-spacing: 0.1em;">PAYMENTS EXACT</div>
             </div>
             <div style="text-align: center;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #e5e7eb;">1M</div>
-              <div style="font-size: 0.65rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em;">LOCAL BENCHMARK</div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #334155;">1M</div>
+              <div style="font-size: 0.65rem; color: #0B1F33; letter-spacing: 0.1em;">LOCAL BENCHMARK</div>
             </div>
           </div>
         </div>
@@ -1094,7 +1137,7 @@
             font-size: 0.7rem;
             letter-spacing: 0.2em;
             text-transform: uppercase;
-            color: rgba(0, 240, 255, 0.6);
+            color: #0E7490;
             margin: 0 0 0.75rem;
           ">Platform Architecture</p>
 
@@ -1102,7 +1145,7 @@
             font-family: 'Inter', -apple-system, sans-serif;
             font-size: clamp(1.5rem, 3vw, 2.2rem);
             font-weight: 700;
-            color: #e5e7eb;
+            color: #334155;
             margin: 0 0 1rem;
             line-height: 1.2;
           ">Service-Oriented Claims Administration Architecture</h2>
@@ -1110,7 +1153,7 @@
           <p style="
             font-family: 'Inter', -apple-system, sans-serif;
             font-size: 1rem;
-            color: rgba(255, 255, 255, 0.4);
+            color: #0B1F33;
             max-width: 700px;
             margin: 0 auto;
             line-height: 1.6;
@@ -1127,14 +1170,14 @@
           border-radius: 12px;
           overflow: hidden;
           box-shadow:
-            0 0 0 1px rgba(0, 240, 255, 0.06),
-            0 30px 80px rgba(0, 0, 0, 0.6),
-            0 0 60px rgba(0, 240, 255, 0.03);
+            0 0 0 1px rgba(14, 116, 144, 0.06),
+            0 30px 80px rgba(11, 31, 51, 0.12),
+            0 0 60px rgba(14, 116, 144, 0.03);
         ">
           <img
             src="/graphics/platform-architecture.png"
             alt="Cloud Health Office reference architecture with C# services, X12 EDI intake, FHIR R4 APIs, and a claims adjudication pipeline"
-            style="width: 100%; display: block; background: #080c14;"
+            style="width: 100%; display: block; background: #EEF3F8;"
             loading="lazy"
           />
         </div>
@@ -1154,7 +1197,7 @@
             font-size: 0.7rem;
             letter-spacing: 0.2em;
             text-transform: uppercase;
-            color: rgba(0, 240, 255, 0.6);
+            color: #0E7490;
             margin: 0 0 0.75rem;
           ">Financial Operations</p>
 
@@ -1162,7 +1205,7 @@
             font-family: 'Inter', -apple-system, sans-serif;
             font-size: clamp(1.5rem, 3vw, 2.2rem);
             font-weight: 700;
-            color: #e5e7eb;
+            color: #334155;
             margin: 0 0 1rem;
             line-height: 1.2;
           ">End-to-End Payer Financial Lifecycle</h2>
@@ -1170,7 +1213,7 @@
           <p style="
             font-family: 'Inter', -apple-system, sans-serif;
             font-size: 1rem;
-            color: rgba(255, 255, 255, 0.4);
+            color: #0B1F33;
             max-width: 720px;
             margin: 0 auto;
             line-height: 1.6;
@@ -1181,7 +1224,7 @@
           <p style="
             font-family: 'Inter', -apple-system, sans-serif;
             font-size: 0.8rem;
-            color: rgba(255, 255, 255, 0.3);
+            color: #0B1F33;
             max-width: 720px;
             margin: 0.75rem auto 0;
             line-height: 1.6;
@@ -1200,10 +1243,10 @@
         ">
           <button onclick="showFinTab('ar')" id="fin-tab-ar" class="fin-tab fin-tab-active" style="
             padding: 10px 20px;
-            background: rgba(0, 240, 255, 0.08);
-            border: 1px solid rgba(0, 240, 255, 0.2);
+            background: rgba(14, 116, 144, 0.08);
+            border: 1px solid rgba(14, 116, 144, 0.2);
             border-radius: 6px 0 0 6px;
-            color: #00f0ff;
+            color: #0E7490;
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.68rem;
             font-weight: 600;
@@ -1215,9 +1258,9 @@
           <button onclick="showFinTab('cap')" id="fin-tab-cap" class="fin-tab" style="
             padding: 10px 20px;
             background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(11, 31, 51, 0.14);
             border-radius: 0;
-            color: rgba(255, 255, 255, 0.4);
+            color: #0B1F33;
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.68rem;
             font-weight: 600;
@@ -1229,9 +1272,9 @@
           <button onclick="showFinTab('billing')" id="fin-tab-billing" class="fin-tab" style="
             padding: 10px 20px;
             background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(11, 31, 51, 0.14);
             border-radius: 0;
-            color: rgba(255, 255, 255, 0.4);
+            color: #0B1F33;
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.68rem;
             font-weight: 600;
@@ -1243,9 +1286,9 @@
           <button onclick="showFinTab('ffs')" id="fin-tab-ffs" class="fin-tab" style="
             padding: 10px 20px;
             background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(11, 31, 51, 0.14);
             border-radius: 0 6px 6px 0;
-            color: rgba(255, 255, 255, 0.4);
+            color: #0B1F33;
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.68rem;
             font-weight: 600;
@@ -1263,38 +1306,38 @@
             border-radius: 12px;
             overflow: hidden;
             box-shadow:
-              0 0 0 1px rgba(0, 240, 255, 0.06),
-              0 30px 80px rgba(0, 0, 0, 0.6),
-              0 0 60px rgba(0, 240, 255, 0.03);
+              0 0 0 1px rgba(14, 116, 144, 0.06),
+              0 30px 80px rgba(11, 31, 51, 0.12),
+              0 0 60px rgba(14, 116, 144, 0.03);
           ">
             <div style="
-              background: #0d1117;
+              background: #EEF3F8;
               padding: 12px 16px;
               display: flex;
               align-items: center;
               gap: 8px;
-              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+              border-bottom: 1px solid rgba(11, 31, 51, 0.09);
             ">
               <div style="display: flex; gap: 6px; margin-right: 12px;">
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #B91C1C;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #B45309;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #0F766E;"></div>
               </div>
               <div style="
                 flex: 1;
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: rgba(11, 31, 51, 0.05);
+                border: 1px solid rgba(11, 31, 51, 0.12);
                 border-radius: 6px;
                 padding: 5px 14px;
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 0.7rem;
-                color: rgba(255, 255, 255, 0.35);
+                color: #0B1F33;
                 display: flex;
                 align-items: center;
                 gap: 6px;
               ">
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="#0F766E"/>
                 </svg>
                 local-demo/finance/ar-balances
               </div>
@@ -1302,7 +1345,7 @@
             <img
               src="/graphics/platform-balances.png"
               alt="Cloud Health Office AR Balances — period balances, aging buckets (Current through 120+ Days), sponsor and member balances, reconciliation status across 142 accounts"
-              style="width: 100%; display: block; background: #080c14;"
+              style="width: 100%; display: block; background: #EEF3F8;"
               loading="lazy"
             />
           </div>
@@ -1315,21 +1358,21 @@
             max-width: 1100px;
             margin: 0 auto;
           ">
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #00f0ff; margin-bottom: 4px;">$1.6M</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Total outstanding AR across 142 sponsor group accounts with full aging visibility.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(14, 116, 144, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #0E7490; margin-bottom: 4px;">$1.6M</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Total outstanding AR across 142 sponsor group accounts with full aging visibility.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(16, 185, 129, 0.12); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #34d399; margin-bottom: 4px;">53%</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Current (0-30 days). Healthy AR aging with automated reconciliation and period close.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(15, 118, 110, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #0F766E; margin-bottom: 4px;">53%</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Current (0-30 days). Healthy AR aging with automated reconciliation and period close.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #e5e7eb; margin-bottom: 4px;">Debit/Credit</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Double-entry GL integration. Opening + debits - credits = closing balance every period.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(14, 116, 144, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #334155; margin-bottom: 4px;">Debit/Credit</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Double-entry GL integration. Opening + debits - credits = closing balance every period.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #e5e7eb; margin-bottom: 4px;">Split View</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Sponsor balance vs. member balance breakout with one-click reconciliation.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(14, 116, 144, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #334155; margin-bottom: 4px;">Split View</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Sponsor balance vs. member balance breakout with one-click reconciliation.</div>
             </div>
           </div>
         </div>
@@ -1342,38 +1385,38 @@
             border-radius: 12px;
             overflow: hidden;
             box-shadow:
-              0 0 0 1px rgba(0, 240, 255, 0.06),
-              0 30px 80px rgba(0, 0, 0, 0.6),
-              0 0 60px rgba(0, 240, 255, 0.03);
+              0 0 0 1px rgba(14, 116, 144, 0.06),
+              0 30px 80px rgba(11, 31, 51, 0.12),
+              0 0 60px rgba(14, 116, 144, 0.03);
           ">
             <div style="
-              background: #0d1117;
+              background: #EEF3F8;
               padding: 12px 16px;
               display: flex;
               align-items: center;
               gap: 8px;
-              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+              border-bottom: 1px solid rgba(11, 31, 51, 0.09);
             ">
               <div style="display: flex; gap: 6px; margin-right: 12px;">
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #B91C1C;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #B45309;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #0F766E;"></div>
               </div>
               <div style="
                 flex: 1;
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: rgba(11, 31, 51, 0.05);
+                border: 1px solid rgba(11, 31, 51, 0.12);
                 border-radius: 6px;
                 padding: 5px 14px;
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 0.7rem;
-                color: rgba(255, 255, 255, 0.35);
+                color: #0B1F33;
                 display: flex;
                 align-items: center;
                 gap: 6px;
               ">
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="#0F766E"/>
                 </svg>
                 local-demo/finance/capitation
               </div>
@@ -1381,7 +1424,7 @@
             <img
               src="/graphics/platform-capitation.png"
               alt="Cloud Health Office Capitation Management — 47 active contracts, $1.8M monthly obligation, PMPM rate configuration, ACH payment runs across 5,398 capitated members"
-              style="width: 100%; display: block; background: #080c14;"
+              style="width: 100%; display: block; background: #EEF3F8;"
               loading="lazy"
             />
           </div>
@@ -1394,21 +1437,21 @@
             max-width: 1100px;
             margin: 0 auto;
           ">
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #00f0ff; margin-bottom: 4px;">47</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Active capitation contracts across 12 provider groups with PMPM rate management.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(14, 116, 144, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #0E7490; margin-bottom: 4px;">47</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Active capitation contracts across 12 provider groups with PMPM rate management.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(16, 185, 129, 0.12); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #34d399; margin-bottom: 4px;">$1.85M</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Monthly capitation obligation. Payment run pipeline: Generated → Review → ACH → Settled.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(15, 118, 110, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #0F766E; margin-bottom: 4px;">$1.85M</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Monthly capitation obligation. Payment run pipeline: Generated → Review → ACH → Settled.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(167, 139, 250, 0.12); border-radius: 8px; padding: 16px 18px;">
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(167, 139, 250, 0.12); border-radius: 8px; padding: 16px 18px;">
               <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #a78bfa; margin-bottom: 4px;">$342</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Blended average PMPM rate. Per-contract rate configuration with LOB segmentation.</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Blended average PMPM rate. Per-contract rate configuration with LOB segmentation.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #e5e7eb; margin-bottom: 4px;">5,398</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Members under capitation. Medicaid and commercial LOBs with automatic enrollment sync.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(14, 116, 144, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #334155; margin-bottom: 4px;">5,398</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Members under capitation. Medicaid and commercial LOBs with automatic enrollment sync.</div>
             </div>
           </div>
         </div>
@@ -1421,38 +1464,38 @@
             border-radius: 12px;
             overflow: hidden;
             box-shadow:
-              0 0 0 1px rgba(0, 240, 255, 0.06),
-              0 30px 80px rgba(0, 0, 0, 0.6),
-              0 0 60px rgba(0, 240, 255, 0.03);
+              0 0 0 1px rgba(14, 116, 144, 0.06),
+              0 30px 80px rgba(11, 31, 51, 0.12),
+              0 0 60px rgba(14, 116, 144, 0.03);
           ">
             <div style="
-              background: #0d1117;
+              background: #EEF3F8;
               padding: 12px 16px;
               display: flex;
               align-items: center;
               gap: 8px;
-              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+              border-bottom: 1px solid rgba(11, 31, 51, 0.09);
             ">
               <div style="display: flex; gap: 6px; margin-right: 12px;">
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #B91C1C;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #B45309;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #0F766E;"></div>
               </div>
               <div style="
                 flex: 1;
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: rgba(11, 31, 51, 0.05);
+                border: 1px solid rgba(11, 31, 51, 0.12);
                 border-radius: 6px;
                 padding: 5px 14px;
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 0.7rem;
-                color: rgba(255, 255, 255, 0.35);
+                color: #0B1F33;
                 display: flex;
                 align-items: center;
                 gap: 6px;
               ">
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="#0F766E"/>
                 </svg>
                 local-demo/finance/premium-billing
               </div>
@@ -1460,7 +1503,7 @@
             <img
               src="/graphics/platform-premium-billing.png"
               alt="Cloud Health Office Premium Billing — $3.2M billed for April 2026, 89.9% collection rate, NACHA/ACH file generation, EFT lifecycle tracking across 142 sponsor groups"
-              style="width: 100%; display: block; background: #080c14;"
+              style="width: 100%; display: block; background: #EEF3F8;"
               loading="lazy"
             />
           </div>
@@ -1473,21 +1516,21 @@
             max-width: 1100px;
             margin: 0 auto;
           ">
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #00f0ff; margin-bottom: 4px;">$3.2M</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Monthly premium billed across 142 sponsor groups with automated invoice generation.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(14, 116, 144, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #0E7490; margin-bottom: 4px;">$3.2M</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Monthly premium billed across 142 sponsor groups with automated invoice generation.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(16, 185, 129, 0.12); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #34d399; margin-bottom: 4px;">89.9%</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Collection rate. NACHA/ACH CCD format with Stripe ACH integration and webhook processing.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(15, 118, 110, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #0F766E; margin-bottom: 4px;">89.9%</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Collection rate. NACHA/ACH CCD format with Stripe ACH integration and webhook processing.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(245, 158, 11, 0.12); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #fbbf24; margin-bottom: 4px;">$187K</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Pending EFT drafts. Full lifecycle tracking: Pending → Settled → Returned with audit trail.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(180, 83, 9, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #B45309; margin-bottom: 4px;">$187K</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Pending EFT drafts. Full lifecycle tracking: Pending → Settled → Returned with audit trail.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #e5e7eb; margin-bottom: 4px;">5-Step</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Billing cycle pipeline. Invoice → Send → Payment Window → ACH Processing → Reconciliation.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(14, 116, 144, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #334155; margin-bottom: 4px;">5-Step</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Billing cycle pipeline. Invoice → Send → Payment Window → ACH Processing → Reconciliation.</div>
             </div>
           </div>
         </div>
@@ -1500,38 +1543,38 @@
             border-radius: 12px;
             overflow: hidden;
             box-shadow:
-              0 0 0 1px rgba(0, 240, 255, 0.06),
-              0 30px 80px rgba(0, 0, 0, 0.6),
-              0 0 60px rgba(0, 240, 255, 0.03);
+              0 0 0 1px rgba(14, 116, 144, 0.06),
+              0 30px 80px rgba(11, 31, 51, 0.12),
+              0 0 60px rgba(14, 116, 144, 0.03);
           ">
             <div style="
-              background: #0d1117;
+              background: #EEF3F8;
               padding: 12px 16px;
               display: flex;
               align-items: center;
               gap: 8px;
-              border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+              border-bottom: 1px solid rgba(11, 31, 51, 0.09);
             ">
               <div style="display: flex; gap: 6px; margin-right: 12px;">
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f57;"></div>
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #febc2e;"></div>
-                <div style="width: 10px; height: 10px; border-radius: 50%; background: #28c840;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #B91C1C;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #B45309;"></div>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #0F766E;"></div>
               </div>
               <div style="
                 flex: 1;
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: rgba(11, 31, 51, 0.05);
+                border: 1px solid rgba(11, 31, 51, 0.12);
                 border-radius: 6px;
                 padding: 5px 14px;
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 0.7rem;
-                color: rgba(255, 255, 255, 0.35);
+                color: #0B1F33;
                 display: flex;
                 align-items: center;
                 gap: 6px;
               ">
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="rgba(40,200,64,0.7)"/>
+                  <path d="M8 1a5 5 0 0 0-5 5v2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2h6z" fill="#0F766E"/>
                 </svg>
                 local-demo/finance/ffs-payments
               </div>
@@ -1539,7 +1582,7 @@
             <img
               src="/graphics/platform-ffs-payments.png"
               alt="Cloud Health Office FFS Payment Runs — $4.3M weekly run, 2,847 claims across 312 providers, 835 ERA generation, ACH/check processing with provider remittance"
-              style="width: 100%; display: block; background: #080c14;"
+              style="width: 100%; display: block; background: #EEF3F8;"
               loading="lazy"
             />
           </div>
@@ -1552,21 +1595,21 @@
             max-width: 1100px;
             margin: 0 auto;
           ">
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #00f0ff; margin-bottom: 4px;">$4.3M</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Weekly FFS payment run. Claims finalized, priced, and settled with full 835 ERA remittance.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(14, 116, 144, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #0E7490; margin-bottom: 4px;">$4.3M</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Weekly FFS payment run. Claims finalized, priced, and settled with full 835 ERA remittance.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(16, 185, 129, 0.12); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #34d399; margin-bottom: 4px;">2,847</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Claims in run across 312 providers. Allowed, plan paid, and member responsibility breakout.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(15, 118, 110, 0.12); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #0F766E; margin-bottom: 4px;">2,847</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Claims in run across 312 providers. Allowed, plan paid, and member responsibility breakout.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(167, 139, 250, 0.12); border-radius: 8px; padding: 16px 18px;">
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(167, 139, 250, 0.12); border-radius: 8px; padding: 16px 18px;">
               <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #a78bfa; margin-bottom: 4px;">312</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">835 ERAs generated. HIPAA 5010 compliant remittance advice per provider per payment run.</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">835 ERAs generated. HIPAA 5010 compliant remittance advice per provider per payment run.</div>
             </div>
-            <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(0, 240, 255, 0.08); border-radius: 8px; padding: 16px 18px;">
-              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #e5e7eb; margin-bottom: 4px;">4.2 days</div>
-              <div style="font-size: 0.72rem; color: rgba(255,255,255,0.35); line-height: 1.4;">Average turnaround from claim receipt to provider payment. ACH CCD+ or check disbursement.</div>
+            <div style="background: rgba(11, 31, 51, 0.015); border: 1px solid rgba(14, 116, 144, 0.08); border-radius: 8px; padding: 16px 18px;">
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: #334155; margin-bottom: 4px;">4.2 days</div>
+              <div style="font-size: 0.72rem; color: #0B1F33; line-height: 1.4;">Average turnaround from claim receipt to provider payment. ACH CCD+ or check disbursement.</div>
             </div>
           </div>
         </div>
@@ -1663,7 +1706,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 # Example only: timing varies; this does not constitute production readiness</code></pre>
       </section>
 
-      <section aria-labelledby="platform-deployment-services-heading" style="margin-top:40px; padding:34px; border:1px solid rgba(0,255,255,0.16); border-radius:14px; background:linear-gradient(160deg, rgba(0,255,255,0.045), transparent 65%);">
+      <section aria-labelledby="platform-deployment-services-heading" style="margin-top:40px; padding:34px; border:1px solid rgba(14, 116, 144, 0.16); border-radius:14px; background:linear-gradient(160deg, rgba(14, 116, 144, 0.045), transparent 65%);">
         <h2 id="platform-deployment-services-heading" style="margin-top:0;">How it runs, and who helps you run it</h2>
         <p>
           The platform is one part of the decision. <a href="/deploy">Deployment and operating models</a>
@@ -1751,65 +1794,46 @@ cd generated/your-payer/infrastructure && ./deploy.sh
   </script>
 
   <!-- ===== FOOTER ===== -->
-  <footer class="site-footer">
-    <div class="footer-inner">
-      <div class="footer-grid">
-        <div class="footer-brand">
-          <h4>Cloud Health Office</h4>
-          <p>The compliance and modernization layer for legacy payer core admin systems. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
-          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
-          <p style="margin-top:14px;">
-            <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer"
-               aria-label="Cloud Health Office on GitHub"
-               style="display:inline-flex; align-items:center; gap:8px; color:rgba(176,176,176,0.85); font-size:0.85rem;">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.46-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.32 9.32 0 0 1 2.5-.34c.85 0 1.71.12 2.5.34 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.35 4.79-4.58 5.05.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.6.69.49A10.03 10.03 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"/></svg>
-              View source on GitHub
-            </a>
-          </p>
-        </div>
-        <div class="footer-col">
-          <h5>Product</h5>
-          <ul>
-            <li><a href="/solutions-payers">Solutions</a></li>
-            <li><a href="/platform">Platform</a></li>
-            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
-            <li><a href="/pricing">Pricing</a></li>
-            <li><a href="/pricing-api">Repricing API</a></li>
-            <li><a href="/claims-repricing">Free Repricing Tool</a></li>
-            <li><a href="/release-notes">Release Notes</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h5>Documentation</h5>
-          <ul>
-            <li><a href="/docs/quickstart">Quick Start</a></li>
-            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
-            <li><a href="/docs/million-claim-challenge">Million Claim Challenge</a></li>
-            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
-            <li><a href="/docs/architecture">Architecture</a></li>
-            <li><a href="/trust">Trust &amp; Security</a></li>
-            <li><a href="/docs/api">API Reference</a></li>
-            <li><a href="/docs/deployment">Deployment</a></li>
-            <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h5>Company &amp; Contact</h5>
-          <ul>
-            <li><a href="/founder">Founder</a></li>
-            <li><a href="/contact">Contact Sales</a></li><li><a href="/services">Professional Services</a></li>
-            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
-            <li><a href="/deploy">Deploy</a></li>
-            <li><a href="mailto:investors@cloudhealthoffice.com">Investors</a></li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="footer-bottom">
-        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
-        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="legal/privacy-policy.html" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
-      </div>
-    </div>
-  </footer>
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
 </body>
 </html>

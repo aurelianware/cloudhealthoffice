@@ -109,11 +109,11 @@
     .lookup-demo {
       max-width: 700px;
       margin: 0 auto;
-      background: rgba(8,8,8,0.9);
-      border: 1px solid rgba(0,255,255,0.2);
+      background: rgba(245, 247, 250, 0.9);
+      border: 1px solid rgba(14, 116, 144, 0.2);
       border-radius: 16px;
       padding: 40px;
-      box-shadow: 0 0 30px rgba(0,255,255,0.06);
+      box-shadow: 0 0 30px rgba(14, 116, 144, 0.06);
     }
     .lookup-row {
       display: grid;
@@ -127,7 +127,7 @@
       display: block;
       font-size: 0.82rem;
       font-weight: 600;
-      color: rgba(176,176,176,0.8);
+      color: #334155;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       margin-bottom: 8px;
@@ -135,25 +135,25 @@
     .lookup-field input, .lookup-field select {
       width: 100%;
       padding: 12px 14px;
-      background: rgba(0,0,0,0.6);
-      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255, 255, 255, 0.6);
+      border: 1px solid rgba(11, 31, 51, 0.14);
       border-radius: 8px;
-      color: #fff;
+      color: #0B1F33;
       font-size: 0.95rem;
       font-family: inherit;
       box-sizing: border-box;
     }
     .lookup-field input:focus, .lookup-field select:focus {
       outline: none;
-      border-color: #00ffff;
-      box-shadow: 0 0 0 3px rgba(0,255,255,0.1);
+      border-color: #0E7490;
+      box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.1);
     }
-    .lookup-field select option { background: #111; }
+    .lookup-field select option { background: #F5F7FA; }
     .lookup-btn {
       width: 100%;
       padding: 14px;
-      background: #00ffff;
-      color: #000;
+      background: #0E7490;
+      color: #FFFFFF;
       border: none;
       border-radius: 8px;
       font-size: 1rem;
@@ -163,12 +163,12 @@
       margin-top: 8px;
       transition: box-shadow 0.2s ease;
     }
-    .lookup-btn:hover { box-shadow: 0 0 20px rgba(0,255,255,0.4); }
+    .lookup-btn:hover { box-shadow: 0 0 20px rgba(14, 116, 144, 0.4); }
     .lookup-result {
       margin-top: 24px;
       padding: 24px;
-      background: rgba(0,255,136,0.04);
-      border: 1px solid rgba(0,255,136,0.2);
+      background: rgba(15, 118, 110, 0.04);
+      border: 1px solid rgba(15, 118, 110, 0.2);
       border-radius: 12px;
       display: none;
     }
@@ -182,11 +182,11 @@
       display: flex;
       justify-content: space-between;
       padding: 8px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
+      border-bottom: 1px solid rgba(11, 31, 51, 0.075);
     }
-    .result-label { color: rgba(176,176,176,0.7); font-size: 0.88rem; }
-    .result-value { color: #fff; font-weight: 600; font-size: 0.95rem; }
-    .result-value.highlight { color: #00ff88; font-size: 1.2rem; }
+    .result-label { color: #334155; font-size: 0.88rem; }
+    .result-value { color: #0B1F33; font-weight: 600; font-size: 0.95rem; }
+    .result-value.highlight { color: #0F766E; font-size: 1.2rem; }
     .use-case-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -194,25 +194,25 @@
       margin-top: 40px;
     }
     .use-case-card {
-      background: rgba(8,8,8,0.9);
-      border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(245, 247, 250, 0.9);
+      border: 1px solid rgba(11, 31, 51, 0.105);
       border-radius: 16px;
       padding: 36px 28px;
       transition: border-color 0.3s ease;
     }
-    .use-case-card:hover { border-color: rgba(0,255,255,0.3); }
+    .use-case-card:hover { border-color: rgba(14, 116, 144, 0.3); }
     .use-case-icon {
       font-size: 2rem;
       margin-bottom: 16px;
       display: block;
     }
     .use-case-card h3 {
-      color: #fff;
+      color: #0B1F33;
       font-size: 1.1rem;
       margin-bottom: 12px;
     }
     .use-case-card p {
-      color: rgba(176,176,176,0.7);
+      color: #334155;
       font-size: 0.9rem;
       line-height: 1.6;
       margin: 0;
@@ -224,24 +224,24 @@
       margin-top: 32px;
     }
     .schedule-card {
-      background: rgba(8,8,8,0.9);
-      border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(245, 247, 250, 0.9);
+      border: 1px solid rgba(11, 31, 51, 0.105);
       border-radius: 16px;
       padding: 32px 24px;
       text-align: center;
     }
-    .schedule-card h3 { color: #00ffff; font-size: 1.1rem; margin-bottom: 8px; }
-    .schedule-card .schedule-type { color: rgba(176,176,176,0.6); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
+    .schedule-card h3 { color: #0E7490; font-size: 1.1rem; margin-bottom: 8px; }
+    .schedule-card .schedule-type { color: #334155; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
     .schedule-card ul { list-style: none; padding: 0; margin: 0; text-align: left; }
-    .schedule-card li { font-size: 0.88rem; color: rgba(176,176,176,0.7); padding: 6px 0; }
-    .schedule-card li::before { content: '\2713'; color: #00ff88; margin-right: 8px; font-weight: 700; }
+    .schedule-card li { font-size: 0.88rem; color: #334155; padding: 6px 0; }
+    .schedule-card li::before { content: '\2713'; color: #0F766E; margin-right: 8px; font-weight: 700; }
     .free-banner {
       display: inline-block;
-      background: rgba(0,255,136,0.1);
-      border: 1px solid rgba(0,255,136,0.3);
+      background: rgba(15, 118, 110, 0.1);
+      border: 1px solid rgba(15, 118, 110, 0.3);
       border-radius: 24px;
       padding: 6px 20px;
-      color: #00ff88;
+      color: #0F766E;
       font-size: 0.85rem;
       font-weight: 600;
       text-transform: uppercase;
@@ -255,40 +255,84 @@
       margin-top: 32px;
     }
     .trust-item { text-align: center; }
-    .trust-number { font-size: 2rem; font-weight: 700; color: #00ffff; }
-    .trust-label { font-size: 0.82rem; color: rgba(176,176,176,0.6); margin-top: 4px; }
+    .trust-number { font-size: 2rem; font-weight: 700; color: #0E7490; }
+    .trust-label { font-size: 0.82rem; color: #334155; margin-top: 4px; }
     @media (max-width: 768px) {
       .lookup-row, .use-case-grid, .schedule-grid { grid-template-columns: 1fr; }
       .trust-grid { grid-template-columns: repeat(2, 1fr); }
       .result-grid { grid-template-columns: 1fr; }
     }
   </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<script defer src="/js/mobile-nav.js"></script>
+<link rel="stylesheet" href="/css/enterprise.css">
 </head>
 <body>
 
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
 
-  <nav style="margin-bottom:40px;">
-    <div class="nav-inner">
-      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
-        <img src="graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
-        <span class="nav-logo-text">Cloud Health Office</span>
-      </a>
-      <div class="nav-right">
-        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
-        <ul id="mainNav">
-          <li><a href="/">Home</a></li>
-          <li><a href="/solutions-payers">Solutions</a></li>
-          <li><a href="/cms-0057f-compliance">CMS Compliance</a></li>
-          <li><a href="/pricing">Pricing</a></li>
-          <li><a href="/platform">Platform</a></li>
-          <li><a href="/docs">Docs</a></li>
-          <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
-          <li><a href="/founder">Founder</a></li><li><a href="/services">Services</a></li><li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact Sales</a></li>
-        </ul>
-      </div>
-    </div>
-  </nav>
+  <nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing" aria-current="page">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="https://sandbox.cloudhealthoffice.com">API sandbox</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       updateNavigation('#mainNav');
@@ -317,14 +361,14 @@
 
       <!-- ===== PRODUCT LINE CONTEXT (W3.2) ===== -->
       <section class="assessment-section">
-        <div class="section-label" style="color:#00ffff; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:16px;">Product Line Context</div>
+        <div class="section-label" style="color:#0E7490; font-size:0.85rem; letter-spacing:2px; text-transform:uppercase; margin-bottom:16px;">Product Line Context</div>
         <h2>Public Tools &amp; Transactional Services</h2>
         <p>The free Medicare claims repricing surface on this page is part of Cloud Health Office (CHO)'s <strong>Public Tools</strong> product line &mdash; free utilities that establish credibility and serve as the top of the commercial funnel. No signup, no commercial relationship required.</p>
         <p style="margin-top:12px;">The same calculation engine is also available as a metered, self-serve API: the <strong>Claims Repricing API</strong>, part of CHO's <strong>Transactional Services</strong> product line. Free tier flows naturally into paid tier as call volume grows. Both surfaces run the same <code>FeeScheduleEngine</code> code that powers payer-scale deployments under <strong>Platform Engagement</strong>.</p>
-        <p style="margin-top:16px; font-size:0.95rem; color:#888;">
-          <a href="/pricing" style="color:#00ffff;">See full pricing</a> &middot;
-          <a href="/pricing-api" style="color:#00ffff;">API documentation</a> &middot;
-          <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Canonical positioning &rarr;</a>
+        <p style="margin-top:16px; font-size:0.95rem; color:#475569;">
+          <a href="/pricing" style="color:#0E7490;">See full pricing</a> &middot;
+          <a href="/pricing-api" style="color:#0E7490;">API documentation</a> &middot;
+          <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#0E7490;">Canonical positioning &rarr;</a>
         </p>
       </section>
 
@@ -457,9 +501,9 @@
               <div class="result-item"><span class="result-label">Fee Schedule</span><span class="result-value" id="resultFs">—</span></div>
             </div>
           </div>
-          <p style="text-align:center; margin-top:16px; font-size:0.82rem; color:rgba(176,176,176,0.5);">
+          <p style="text-align:center; margin-top:16px; font-size:0.82rem; color:#334155;">
             Powered by the same pricing model used by Cloud Health Office.
-            <a href="/pricing-api" style="color:#00ffff;">Request API access</a> for programmatic evaluation.
+            <a href="/pricing-api" style="color:#0E7490;">Request API access</a> for programmatic evaluation.
           </p>
         </div>
       </section>
@@ -527,21 +571,21 @@
         <div class="schedule-grid">
           <div class="schedule-card">
             <h3>1. Submit a Code</h3>
-            <p style="color:rgba(176,176,176,0.7); font-size:0.9rem;">
+            <p style="color:#334155; font-size:0.9rem;">
               Enter a CPT, HCPCS, or DRG code with the fee schedule and place of service.
               Use the form above or call the REST API directly.
             </p>
           </div>
           <div class="schedule-card">
             <h3>2. Get the Rate</h3>
-            <p style="color:rgba(176,176,176,0.7); font-size:0.9rem;">
+            <p style="color:#334155; font-size:0.9rem;">
               Receive the Medicare allowed amount with full breakdown: RVU components,
               conversion factor, facility differential, and modifier adjustments.
             </p>
           </div>
           <div class="schedule-card">
             <h3>3. Scale Up</h3>
-            <p style="color:rgba(176,176,176,0.7); font-size:0.9rem;">
+            <p style="color:#334155; font-size:0.9rem;">
               Integrate via API for batch repricing. Connect to your claims adjudication
               pipeline or build custom rate comparison dashboards.
             </p>
@@ -554,26 +598,26 @@
         <h2>What's Included Free</h2>
         <div style="max-width:600px; margin:0 auto;">
           <ul style="list-style:none; padding:0;">
-            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
-              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> 1,000 claims per month
+            <li style="padding:12px 0; border-bottom:1px solid rgba(11, 31, 51, 0.075); color:#334155; font-size:0.95rem;">
+              <span style="color:#0F766E; margin-right:10px; font-weight:700;">&#10003;</span> 1,000 claims per month
             </li>
-            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
-              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> All three Medicare fee schedules (RBRVS, OPPS, MS-DRG)
+            <li style="padding:12px 0; border-bottom:1px solid rgba(11, 31, 51, 0.075); color:#334155; font-size:0.95rem;">
+              <span style="color:#0F766E; margin-right:10px; font-weight:700;">&#10003;</span> All three Medicare fee schedules (RBRVS, OPPS, MS-DRG)
             </li>
-            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
-              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> Full RVU breakdown &amp; modifier adjustments
+            <li style="padding:12px 0; border-bottom:1px solid rgba(11, 31, 51, 0.075); color:#334155; font-size:0.95rem;">
+              <span style="color:#0F766E; margin-right:10px; font-weight:700;">&#10003;</span> Full RVU breakdown &amp; modifier adjustments
             </li>
-            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
-              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> Facility / non-facility rate differentiation
+            <li style="padding:12px 0; border-bottom:1px solid rgba(11, 31, 51, 0.075); color:#334155; font-size:0.95rem;">
+              <span style="color:#0F766E; margin-right:10px; font-weight:700;">&#10003;</span> Facility / non-facility rate differentiation
             </li>
-            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
-              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> Multiple procedure payment reduction (MPPR)
+            <li style="padding:12px 0; border-bottom:1px solid rgba(11, 31, 51, 0.075); color:#334155; font-size:0.95rem;">
+              <span style="color:#0F766E; margin-right:10px; font-weight:700;">&#10003;</span> Multiple procedure payment reduction (MPPR)
             </li>
-            <li style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:rgba(176,176,176,0.8); font-size:0.95rem;">
-              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> REST API with JSON responses
+            <li style="padding:12px 0; border-bottom:1px solid rgba(11, 31, 51, 0.075); color:#334155; font-size:0.95rem;">
+              <span style="color:#0F766E; margin-right:10px; font-weight:700;">&#10003;</span> REST API with JSON responses
             </li>
-            <li style="padding:12px 0; color:rgba(176,176,176,0.8); font-size:0.95rem;">
-              <span style="color:#00ff88; margin-right:10px; font-weight:700;">&#10003;</span> No credit card, no contract, no vendor lock-in
+            <li style="padding:12px 0; color:#334155; font-size:0.95rem;">
+              <span style="color:#0F766E; margin-right:10px; font-weight:700;">&#10003;</span> No credit card, no contract, no vendor lock-in
             </li>
           </ul>
         </div>
@@ -595,20 +639,47 @@
     </div>
   </main>
 
-  <footer>
-    <p>
-      <strong>Cloud Health Office</strong><br>
-      Source-available healthcare payer infrastructure.
-    </p>
-    <p>
-      BSL 1.1 &bull; Free for non-production use &bull; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a> &bull; &copy; 2026 Aurelianware<br>
-      <a href="https://github.com/aurelianware/cloudhealthoffice">GitHub</a> &bull;
-      <a href="/docs">Docs</a> &bull;
-      <a href="mailto:mark@aurelianware.com">Contact</a> &bull;
-      <a href="/legal/privacy-policy">Privacy</a>
-    </p>
-      <p style="margin-top:18px;"><a href="/founder">Meet the founder &rarr;</a> &nbsp;&middot;&nbsp; <a href="/services">Professional Services &rarr;</a></p>
-  </footer>
+  <footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
 
   <script>
     async function lookupCode() {
