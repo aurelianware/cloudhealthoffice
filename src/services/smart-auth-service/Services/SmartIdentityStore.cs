@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using MongoDB.Driver;
 using SmartAuthService.Models;
 
@@ -132,6 +133,7 @@ public sealed class MongoSmartIdentityStore : ISmartIdentityStore
 
     private Task ReadyAsync() => _indexes.Value;
 
+    [CrossTenantQuery("Resolves the tenant: keyed by IdP issuer+subject, unique among active links; the resolver then refuses a client of another tenant.")]
     public async Task<MemberLink?> FindActiveMemberLinkAsync(SmartIdentity identity, CancellationToken ct = default)
     {
         await ReadyAsync();
@@ -140,6 +142,7 @@ public sealed class MongoSmartIdentityStore : ISmartIdentityStore
             .FirstOrDefaultAsync(ct);
     }
 
+    [CrossTenantQuery("Resolves the tenant: keyed by IdP issuer+subject, unique among active links; the resolver then refuses a client of another tenant.")]
     public async Task<ProviderUserLink?> FindActiveProviderLinkAsync(SmartIdentity identity, CancellationToken ct = default)
     {
         await ReadyAsync();

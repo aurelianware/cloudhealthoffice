@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using CHO.TerminologyService.Models;
 using CHO.TerminologyService.Services;
 using MongoDB.Driver;
@@ -220,9 +221,14 @@ public class MongoConceptMapRepository : IConceptMapRepository
         await _versions.InsertOneAsync(version, cancellationToken: ct);
     }
 
+    /// <summary>
+    /// Deactivates the previous global versions of a map. Only global versions
+    /// (no TenantId): a global reload must not touch a tenant's override.
+    /// </summary>
     public async Task DeactivatePreviousVersionsAsync(string mapName, string exceptVersionId, CancellationToken ct = default)
     {
         var filter = Builders<MapVersion>.Filter.And(
+            Builders<MapVersion>.Filter.Eq(v => v.TenantId, null),
             Builders<MapVersion>.Filter.Eq(v => v.MapName, mapName),
             Builders<MapVersion>.Filter.Ne(v => v.Id, exceptVersionId),
             Builders<MapVersion>.Filter.Eq(v => v.IsActive, true)
@@ -232,6 +238,7 @@ public class MongoConceptMapRepository : IConceptMapRepository
         await _versions.UpdateManyAsync(filter, update, cancellationToken: ct);
     }
 
+    [CrossTenantQuery("Map syndication background service: logs every version, global and tenant overrides; never reaches a request.")]
     public async Task<List<MapVersion>> GetAllMapVersionsAsync(CancellationToken ct = default)
     {
         return await _versions.Find(_ => true)

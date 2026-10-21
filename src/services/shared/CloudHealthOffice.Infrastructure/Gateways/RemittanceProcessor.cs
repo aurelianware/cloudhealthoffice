@@ -105,12 +105,16 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
         foreach (var claim in receipt.Claims)
         {
             var match = await RemittanceMatcher
-                .MatchClaimAsync(claim, remittance.Gateway, remittance.TransmissionId, _transmissions, ct)
+                .MatchClaimAsync(claim, remittance.Gateway, remittance.TransmissionId, _transmissions, ct, remittance.RestrictToTenantId)
                 .ConfigureAwait(false);
+            // Only a matched claim links to a transmission: a transmission id the
+            // body carried but that did not match (unknown, or another tenant's)
+            // must not list this receipt under that transmission.
             if (match.Ambiguous)
             {
                 claim.MatchStatus = RemittanceClaimMatchStatus.Ambiguous;
                 claim.MatchReason = match.Reason;
+                claim.TransmissionId = null;
                 ambiguous++;
                 continue;
             }
@@ -119,6 +123,7 @@ public sealed class RemittanceProcessor : IRemittanceProcessor
             {
                 claim.MatchStatus = RemittanceClaimMatchStatus.Unmatched;
                 claim.MatchReason = match.Reason ?? "unmatched";
+                claim.TransmissionId = null;
                 continue;
             }
 

@@ -39,6 +39,15 @@ public sealed class GatewayRemittance
     /// <summary>Optional explicit transmission id (development injection).</summary>
     public string? TransmissionId { get; set; }
 
+    /// <summary>
+    /// Set by the development injection endpoint to the caller's tenant: claims
+    /// match only that tenant's transmissions (by id, payer or patient control
+    /// number), never another tenant's. Not bound from request bodies; a real
+    /// clearinghouse 835 leaves it null and the match decides the tenant.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? RestrictToTenantId { get; set; }
+
     public string? RawSourceReference { get; set; }
 
     /// <summary>

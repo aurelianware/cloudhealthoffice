@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using CoverageService.Exceptions;
 using CoverageService.Models;
 using MongoDB.Driver;
@@ -223,6 +224,7 @@ public class CoverageRepositoryMongo : ICoverageRepository
         return (int)count;
     }
 
+    [CrossTenantQuery("CoverageStatusSweepJob (background): finds due transitions across tenants; SetStatusAsync filters on each coverage's TenantId.")]
     public async Task<List<Coverage>> GetStatusTransitionsDueAsync(DateTime today, int maxItems)
     {
         var builder = Builders<Coverage>.Filter;
