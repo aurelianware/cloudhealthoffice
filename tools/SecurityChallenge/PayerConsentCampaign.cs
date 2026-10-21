@@ -44,6 +44,7 @@ public static class PayerConsentCampaign
         var active = "lab.fixtures"; var completed = false; string? mongoVersion = null;
         try
         {
+            active = "lab.mongo";
             using var mongo = MongoRunner.Run(new MongoRunnerOptions { Version = MongoVersion.V7, Edition = MongoEdition.Community, ConnectionTimeout = TimeSpan.FromSeconds(30) });
             using var client = new MongoClient(mongo.ConnectionString);
             var db = client.GetDatabase("p2p_security_" + runId);
@@ -53,7 +54,9 @@ public static class PayerConsentCampaign
                 new Dictionary<string, string?> { ["Downstream:CoverageService:BaseUrl"] = "http://127.0.0.1:1/" });
             await using var coverage = new LocalService(args[3], mongo.ConnectionString, db.DatabaseNamespace.DatabaseName, false);
             await using var claims = new LocalService(args[4], mongo.ConnectionString, db.DatabaseNamespace.DatabaseName, false);
-            await member.Ready(); await coverage.Ready(); await claims.Ready();
+            active = "lab.member-ready"; await member.Ready();
+            active = "lab.coverage-ready"; await coverage.Ready();
+            active = "lab.claims-ready"; await claims.Ready();
             Dictionary<string, string?> Settings(string tenant)
             {
                 var settings = new Dictionary<string, string?>
@@ -81,7 +84,9 @@ public static class PayerConsentCampaign
             }
             await using var fhirA = new LocalService(args[1], mongo.ConnectionString, db.DatabaseNamespace.DatabaseName, false, Settings("synthetic-payer-a"));
             await using var fhirB = new LocalService(args[1], mongo.ConnectionString, db.DatabaseNamespace.DatabaseName, false, Settings("synthetic-payer-b"));
-            await fhirA.Ready(); await fhirB.Ready();
+            active = "lab.fhir-a-ready"; await fhirA.Ready();
+            active = "lab.fhir-b-ready"; await fhirB.Ready();
+            active = "lab.seed-fixtures";
             var hosts = new Dictionary<string, LocalService> { ["a"] = fhirA, ["b"] = fhirB };
             var ids = new Dictionary<string, (string Coverage, string Claim)>();
             foreach (var fixture in new[] { (Payer: "a", Id: "shared-member"), (Payer: "a", Id: "other-member"), (Payer: "a", Id: "match-member"), (Payer: "b", Id: "shared-member"), (Payer: "b", Id: "foreign-only") })
@@ -231,7 +236,7 @@ public static class PayerConsentCampaign
             await Case("state.domain-unchanged", async () => initialDomain == await Snapshot(true));
             completed = true;
         }
-        catch (Exception e) { completed = false; Console.Error.WriteLine("Lab ERROR: " + e.GetType().Name); results.Add(new("lab.prerequisites", "ERROR", "Owned lab setup, fixture, execution or cleanup failed")); }
+        catch (Exception e) { completed = false; Console.Error.WriteLine("Lab ERROR at " + active + ": " + e.GetType().Name); results.Add(new("lab.prerequisites", "ERROR", "Owned lab setup, fixture, execution or cleanup failed")); }
         var unsupported = new[] { "production-identity-tls-encryption", "provider-access-opt-outs", "consent-revocation-propagation", "cryptographic-consent-provenance", "claims-appeals-authorization-link-writes", "outbound-payer-exchange", "financial-accounting", "per-tenant-databases", "live-messaging", "durable-fhir-decision-audit", "comprehensive-eob-redaction" };
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true };
         async Task Write(string name, object value) => await File.WriteAllTextAsync(Path.Combine(output, name), JsonSerializer.Serialize(value, json));
