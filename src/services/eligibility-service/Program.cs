@@ -78,6 +78,12 @@ builder.Services.AddSingleton<EligibilityAdapterFactory>();
 // Registers Mock, Stedi (when configured), and IPayerReferenceService.
 // The existing EligibilityAdapterFactory flow above is unchanged.
 builder.Services.AddChoHealthcareGateways(builder.Configuration);
+// The Mock gateway (the default) answers 270s with made-up eligibility.
+if (string.Equals(builder.Configuration["HealthcareTransactions:DefaultGateway"] ?? "Mock", "Mock", StringComparison.OrdinalIgnoreCase))
+{
+    CloudHealthOffice.Infrastructure.Security.ChoSyntheticData.EnsureAllowed(
+        builder.Environment, builder.Configuration, "HealthcareTransactions:DefaultGateway=Mock");
+}
 
 // Payer-side eligibility responder (inbound 270-equivalent). Distinct from
 // IEligibilityGateway (CHO → external payer). Stedi inbound routing is
@@ -106,6 +112,9 @@ builder.Services.AddScoped<IEdi271Generator, Edi271Generator>();
 builder.Services.AddChoX12Interchange(builder.Configuration);
 
 // Temporal eligibility (date-bound read projection over coverage-service)
+// No accumulator-service client yet: the stub answers made-up accumulators.
+CloudHealthOffice.Infrastructure.Security.ChoSyntheticData.EnsureAllowed(
+    builder.Environment, builder.Configuration, "The temporal eligibility accumulator client (StubAccumulatorClient)");
 builder.Services.AddSingleton<IAccumulatorClient, StubAccumulatorClient>();
 builder.Services.AddScoped<ITemporalEligibilityService, TemporalEligibilityService>();
 

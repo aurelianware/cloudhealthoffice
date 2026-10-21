@@ -165,6 +165,10 @@ builder.Services.AddSingleton<IFhirDataAdapter>(sp => new RoutingFhirDataAdapter
     sp.GetRequiredService<MockFhirDataAdapter>(),
     sp.GetService<ChoNativeFhirDataAdapter>()));
 builder.Services.AddSingleton<FhirBundleBuilder>();
+// The Patient Access data provider is the in-memory mock (no CHO-native one
+// yet): only Development, Testing or a declared synthetic-data demo may run it.
+CloudHealthOffice.Infrastructure.Security.ChoSyntheticData.EnsureAllowed(
+    builder.Environment, builder.Configuration, "The Patient Access data provider (MockPatientAccessDataProvider)");
 builder.Services.AddSingleton<MockPatientAccessDataProvider>();
 builder.Services.AddSingleton<IPatientAccessDataProvider>(sp =>
     sp.GetRequiredService<MockPatientAccessDataProvider>());
@@ -396,6 +400,8 @@ var useMockAppealAdapter = builder.Configuration.GetValue<bool>(
 
 if (useMockAppealAdapter)
 {
+    CloudHealthOffice.Infrastructure.Security.ChoSyntheticData.EnsureAllowed(
+        builder.Environment, builder.Configuration, "Appeals:UseMockAdapter (MockFhirAppealAdapter)");
     builder.Services.AddSingleton<IFhirAppealAdapter, MockFhirAppealAdapter>();
 }
 else

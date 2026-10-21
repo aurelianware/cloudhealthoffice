@@ -177,10 +177,9 @@ builder.Services.AddRazorPages()
     .AddMicrosoftIdentityUI();
 builder.Services.AddServerSideBlazor(options =>
 {
-    // Always enable detailed errors so circuit exceptions appear in server logs.
-    // The error detail is only sent to the client in Development; in Production the
-    // server still logs it but the client only sees a generic message.
-    options.DetailedErrors = true;
+    // Detailed circuit errors go to the browser, so only in Development.
+    // Exceptions are logged server-side in every environment either way.
+    options.DetailedErrors = builder.Environment.IsDevelopment();
     options.DisconnectedCircuitMaxRetained = 100;
     options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(3);
     options.JSInteropDefaultCallTimeout = TimeSpan.FromSeconds(60);
@@ -325,10 +324,9 @@ builder.Services.AddSignalR(options =>
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
     options.HandshakeTimeout = TimeSpan.FromSeconds(15);
     options.MaximumReceiveMessageSize = 64 * 1024; // 64 KB
-    // Keep detailed errors enabled so exceptions are logged server-side.
-    // Clients only see the full message in Development; in Production they
-    // see a generic error, but the pod log captures the full exception.
-    options.EnableDetailedErrors = true;
+    // Hub exception detail is sent to the client, so only in Development; the
+    // server logs the full exception in every environment.
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
 });
 
 if (useLocalDemoAuth)
