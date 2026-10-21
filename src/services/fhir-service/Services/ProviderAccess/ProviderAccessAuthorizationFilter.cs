@@ -231,6 +231,13 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
             var id = ParseResourceId(http.Request.Path);
             if (!string.IsNullOrWhiteSpace(id))
                 return id;
+
+            // Patient._id names the member directly, just like Patient/{id}.
+            // Native Patient search accepts _id rather than patient/subject.
+            // Never choose one member from a repeated _id query.
+            var ids = http.Request.Query["_id"];
+            if (ids.Count > 0)
+                return ids.Count == 1 && !string.IsNullOrWhiteSpace(ids[0]) ? ids[0] : null;
         }
 
         // Every search parameter that names the member. Coverage accepts

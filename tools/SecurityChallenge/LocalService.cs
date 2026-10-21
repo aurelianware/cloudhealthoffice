@@ -106,6 +106,13 @@ internal sealed class LocalService : IAsyncDisposable
         throw new InvalidOperationException("Local process exited before readiness");
     }
 
+    // Fault injection only for an owned child process; no external target is accepted.
+    public async Task StopAsync()
+    {
+        if (!_process.HasExited) _process.Kill(entireProcessTree: true);
+        await _process.WaitForExitAsync();
+    }
+
     public async ValueTask DisposeAsync()
     {
         Http.Dispose();
