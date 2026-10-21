@@ -9,13 +9,17 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace CloudHealthOffice.TokenService.ServiceTokens;
 
 /// <summary>
-/// <c>POST /v1/token/service</c>: a CHO service presents an Entra access token
-/// it obtained with its Azure workload identity and receives a short-lived CHO
-/// service token naming itself.
+/// <c>POST /v1/token/service</c>: a CHO service proves its workload identity
+/// and receives a short-lived CHO service token naming itself. The proof is an
+/// Entra access token from its Azure workload identity
+/// (<see cref="ServiceIdentityProvider.Entra"/>), or its projected Kubernetes
+/// service-account token (<see cref="ServiceIdentityProvider.Kubernetes"/>,
+/// any conformant cluster).
 ///
 /// The caller names only the tenant. Which service it is comes from the
-/// validated Entra token's <c>oid</c> (its managed identity) and the configured
-/// registry, so a service can only ever obtain tokens naming itself. The token
+/// validated identity (managed identity <c>oid</c>, or namespace and service
+/// account) and the configured registry, so a service can only ever obtain
+/// tokens naming itself. The token
 /// has exactly the claims services used to mint locally
 /// (<see cref="ChoTokenIssuer.IssueServiceToken"/>: <c>sub</c> = <c>azp</c> =
 /// client id, role <c>cho.service</c>, <c>tenant_id</c>), signed with
@@ -37,13 +41,31 @@ public static class ServiceTokenEndpoint
         if (!options.Enabled)
             return services;
 
-        services.TryAddSingleton<IEntraSigningKeys>(_ =>
-            !string.IsNullOrWhiteSpace(options.JwksJson)
-                ? new StaticEntraSigningKeys(options.JwksJson!)
-                : new DiscoveryEntraSigningKeys(options.EffectiveMetadataAddress,
-                    new HttpClient { Timeout = TimeSpan.FromSeconds(10) }, requireHttps: !environment.IsDevelopment()));
-        services.TryAddSingleton<IEntraWorkloadTokenValidator>(sp =>
-            new EntraWorkloadTokenValidator(options, sp.GetRequiredService<IEntraSigningKeys>()));
+        if (options.IdentityProvider == ServiceIdentityProvider.Kubernetes)
+        {
+            // Its own validator instance: the cluster issuer here may differ from
+            // WorkloadTokens', and the two endpoints must not share key caches.
+            var k8s = options.Kubernetes.ToValidatorOptions();
+            var staticJwks = k8s.StaticJwks();
+            IKubernetesSigningKeys keys = staticJwks != null
+                ? new StaticKubernetesSigningKeys(staticJwks)
+                : new DiscoveryKubernetesSigningKeys(k8s, new HttpClient { Timeout = TimeSpan.FromSeconds(10) },
+                    requireHttps: !environment.IsDevelopment());
+            services.TryAddSingleton<IServiceIdentityValidator>(sp =>
+                new KubernetesServiceIdentityValidator(new KubernetesTokenValidator(k8s, keys, sp.GetService<TimeProvider>())));
+        }
+        else
+        {
+            services.TryAddSingleton<IEntraSigningKeys>(_ =>
+                !string.IsNullOrWhiteSpace(options.JwksJson)
+                    ? new StaticEntraSigningKeys(options.JwksJson!)
+                    : new DiscoveryEntraSigningKeys(options.EffectiveMetadataAddress,
+                        new HttpClient { Timeout = TimeSpan.FromSeconds(10) }, requireHttps: !environment.IsDevelopment()));
+            services.TryAddSingleton<IEntraWorkloadTokenValidator>(sp =>
+                new EntraWorkloadTokenValidator(options, sp.GetRequiredService<IEntraSigningKeys>()));
+            services.TryAddSingleton<IServiceIdentityValidator>(sp =>
+                new EntraServiceIdentityValidator(sp.GetRequiredService<IEntraWorkloadTokenValidator>()));
+        }
         services.AddSingleton(new ServiceClientRegistry(options.AllServiceClients()));
         services.AddSingleton<ServiceTokenService>();
         return services;
@@ -83,20 +105,39 @@ public static class ServiceTokenEndpoint
                 http.Response.Headers.WWWAuthenticate = "Bearer error=\"invalid_token\"";
             return Results.Json(new { error = outcome.Error }, statusCode: outcome.Status);
         })
-        // Authenticated here by the workload-identity token, not by the user (delegated) Entra scheme.
+        // Authenticated here by the workload-identity proof, not by the user (delegated) Entra scheme.
         .AllowAnonymous();
 
         return app;
     }
 }
 
-/// <summary>The registry: managed identity object id to CHO service client id. Exact matches only.</summary>
+/// <summary>
+/// The registry: a workload identity (managed identity object id, or Kubernetes
+/// namespace and service account) to CHO service client id. Exact matches only.
+/// </summary>
 public sealed class ServiceClientRegistry
 {
-    private readonly Dictionary<Guid, ServiceClientRegistration> _byObjectId;
+    private readonly Dictionary<Guid, ServiceClientRegistration> _byObjectId = new();
+    private readonly Dictionary<string, ServiceClientRegistration> _byServiceAccount = new(StringComparer.Ordinal);
 
     public ServiceClientRegistry(IEnumerable<ServiceClientRegistration> registrations)
-        => _byObjectId = registrations.ToDictionary(r => Guid.Parse(r.ObjectId!));
+    {
+        foreach (var r in registrations)
+        {
+            if (!string.IsNullOrWhiteSpace(r.ObjectId))
+                _byObjectId.Add(Guid.Parse(r.ObjectId), r);
+            else if (!string.IsNullOrWhiteSpace(r.Namespace) && !string.IsNullOrWhiteSpace(r.ServiceAccount))
+                _byServiceAccount.Add(r.Namespace + "/" + r.ServiceAccount, r);
+        }
+    }
+
+    public ServiceClientRegistration? Find(ServiceIdentity identity)
+    {
+        if (identity.Kubernetes is { } k8s)
+            return _byServiceAccount.GetValueOrDefault(k8s.Namespace + "/" + k8s.ServiceAccount);
+        return identity.Entra is { } entra ? Find(entra) : null;
+    }
 
     public ServiceClientRegistration? Find(EntraWorkloadIdentity identity)
     {
@@ -112,7 +153,7 @@ public sealed class ServiceClientRegistry
 
 public sealed class ServiceTokenService
 {
-    private readonly IEntraWorkloadTokenValidator _validator;
+    private readonly IServiceIdentityValidator _validator;
     private readonly ServiceClientRegistry _registry;
     private readonly ServiceTokenOptions _options;
     private readonly ISigningMaterialSource _signing;
@@ -120,7 +161,7 @@ public sealed class ServiceTokenService
     private readonly TokenAudit _audit;
 
     public ServiceTokenService(
-        IEntraWorkloadTokenValidator validator,
+        IServiceIdentityValidator validator,
         ServiceClientRegistry registry,
         ServiceTokenOptions options,
         ISigningMaterialSource signing,
@@ -196,7 +237,7 @@ public sealed class ServiceTokenService
     }
 
     private ServiceTokenOutcome Refuse(
-        EntraWorkloadIdentity? identity, ServiceClientRegistration? registration, string? tenantId, string reason, int status, string error)
+        ServiceIdentity? identity, ServiceClientRegistration? registration, string? tenantId, string reason, int status, string error)
     {
         _audit.ServiceRefused(identity, registration?.ClientId, tenantId, reason);
         return ServiceTokenOutcome.Fail(status, error);

@@ -137,7 +137,7 @@ To bring everything back, rerun the deploy workflow with the existing image tag.
   - a Google BAA
   - customer-managed encryption keys
   - a private cluster with Private Service Connect
-  - asymmetric token signing through token-service (with a Google workload identity path)
+  - Production hosts with asymmetric token signing through token-service. The code exists: Cloud KMS signing (`TokenSigning:CloudKmsKeyVersion`) and service identity from projected Kubernetes service-account tokens (`ServiceTokens:IdentityProvider=Kubernetes`). `infrastructure/gcp/token-signing.tf` creates the key and identity; what remains is switching the manifests to Production hosts with per-service service accounts and the projected token volume (docs/security/portal-token-service.md)
   - Google's managed services for state: Managed Service for Apache Kafka (configuration only, no code change), Cloud Storage behind the document store interface, and Google Secret Manager or HashiCorp Vault (the Vault provider already exists) behind the secret provider interface
 
   Estimate: about 5–7 engineer-weeks.

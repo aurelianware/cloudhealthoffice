@@ -277,6 +277,12 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://cloudhealthoffice.com/docs/configure-tenant-security</loc>
+    <lastmod>2026-10-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://cloudhealthoffice.com/docs/publish-version-benefit-plan</loc>
     <lastmod>2026-09-10</lastmod>
     <changefreq>monthly</changefreq>

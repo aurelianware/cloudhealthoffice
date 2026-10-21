@@ -10,8 +10,8 @@ namespace CloudHealthOffice.TokenService.Signing;
 
 /// <summary>
 /// Bound from <c>TokenSigning</c>. Exactly one key source is used, chosen in
-/// this order: <see cref="KeyVaultKeyId"/>, <see cref="PrivateKeyPem"/>,
-/// <see cref="SymmetricKey"/>.
+/// this order: <see cref="KeyVaultKeyId"/> or <see cref="CloudKmsKeyVersion"/>
+/// (never both), <see cref="PrivateKeyPem"/>, <see cref="SymmetricKey"/>.
 /// </summary>
 public sealed class TokenSigningOptions
 {
@@ -30,6 +30,17 @@ public sealed class TokenSigningOptions
     /// current at startup is pinned until the next restart.
     /// </summary>
     public string? KeyVaultKeyId { get; set; }
+
+    /// <summary>
+    /// Google Cloud KMS key version
+    /// (<c>projects/{p}/locations/{l}/keyRings/{r}/cryptoKeys/{k}/cryptoKeyVersions/{v}</c>),
+    /// with purpose ASYMMETRIC_SIGN and algorithm EC_SIGN_P256_SHA256 (ES256) or
+    /// RSA_SIGN_PKCS1_*_SHA256 (RS256). Signing happens inside Cloud KMS; the
+    /// private key never reaches this process. The version is always explicit,
+    /// so the published <c>kid</c> always matches the signing key. Credentials
+    /// come from Application Default Credentials (GKE Workload Identity).
+    /// </summary>
+    public string? CloudKmsKeyVersion { get; set; }
 
     /// <summary>Client id of a user-assigned managed identity for Key Vault, if not the default.</summary>
     public string? ManagedIdentityClientId { get; set; }
@@ -66,24 +77,40 @@ public static class TokenSigningSetup
     /// <summary>
     /// Picks the key source and refuses the ones not allowed on this host:
     /// symmetric keys outside Development/Testing (as the shared ChoAuth layer
-    /// does), and PEM keys in Production, which must sign through Key Vault.
+    /// does), and PEM keys in Production, which must sign through Key Vault or Cloud KMS.
     /// </summary>
-    public static ISigningMaterialSource Create(TokenSigningOptions options, IHostEnvironment environment)
+    public static ISigningMaterialSource Create(
+        TokenSigningOptions options, IHostEnvironment environment, ICloudKmsSigner? cloudKms = null)
     {
         if (string.IsNullOrWhiteSpace(options.Issuer) || string.IsNullOrWhiteSpace(options.Audience))
             throw new InvalidOperationException($"{TokenSigningOptions.SectionName}:Issuer and Audience are required.");
 
         var allowSymmetric = environment.IsDevelopment() || environment.IsEnvironment("Testing");
 
-        if (!string.IsNullOrWhiteSpace(options.KeyVaultKeyId))
+        var hasKeyVault = !string.IsNullOrWhiteSpace(options.KeyVaultKeyId);
+        var hasCloudKms = !string.IsNullOrWhiteSpace(options.CloudKmsKeyVersion);
+        if (hasKeyVault && hasCloudKms)
+            throw new InvalidOperationException(
+                $"Set only one of {TokenSigningOptions.SectionName}:KeyVaultKeyId or {TokenSigningOptions.SectionName}:CloudKmsKeyVersion.");
+
+        if (hasKeyVault)
             return new KeyVaultSigningMaterialSource(options);
+
+        if (hasCloudKms)
+        {
+            if (!CloudKmsSigningMaterialSource.IsKeyVersionName(options.CloudKmsKeyVersion!))
+                throw new InvalidOperationException(
+                    $"{TokenSigningOptions.SectionName}:CloudKmsKeyVersion must be a full key version name: " +
+                    "projects/{project}/locations/{location}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{version}.");
+            return new CloudKmsSigningMaterialSource(options.CloudKmsKeyVersion!, cloudKms ?? new GoogleCloudKmsSigner());
+        }
 
         if (!string.IsNullOrWhiteSpace(options.PrivateKeyPem))
         {
             if (environment.IsProduction())
                 throw new InvalidOperationException(
                     $"{TokenSigningOptions.SectionName}:PrivateKeyPem is not permitted in Production. " +
-                    $"Set {TokenSigningOptions.SectionName}:KeyVaultKeyId so tokens are signed inside Key Vault.");
+                    $"Set {TokenSigningOptions.SectionName}:KeyVaultKeyId or CloudKmsKeyVersion so tokens are signed inside a key management service.");
             var credentials = PemKeys.SigningCredentials(options.PrivateKeyPem);
             return new StaticSigningMaterialSource(new SigningMaterial(credentials, PemKeys.PublicJwk(credentials.Key)));
         }
@@ -93,14 +120,14 @@ public static class TokenSigningSetup
             if (!allowSymmetric)
                 throw new InvalidOperationException(
                     $"{TokenSigningOptions.SectionName}:SymmetricKey is permitted only on a Development or Testing host. " +
-                    "Use KeyVaultKeyId (or PrivateKeyPem outside Production).");
+                    "Use KeyVaultKeyId or CloudKmsKeyVersion (or PrivateKeyPem outside Production).");
             return new StaticSigningMaterialSource(new SigningMaterial(
                 new SigningCredentials(new SymmetricSecurityKey(Convert.FromBase64String(options.SymmetricKey)),
                     SecurityAlgorithms.HmacSha256), null));
         }
 
         throw new InvalidOperationException(
-            $"No CHO token signing key is configured. Set {TokenSigningOptions.SectionName}:KeyVaultKeyId.");
+            $"No CHO token signing key is configured. Set {TokenSigningOptions.SectionName}:KeyVaultKeyId or CloudKmsKeyVersion.");
     }
 }
 

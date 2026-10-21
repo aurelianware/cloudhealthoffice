@@ -218,6 +218,19 @@ public sealed class ChoServiceTokenOptions
     public string? TokenServiceUrl { get; set; }
 
     /// <summary>
+    /// How this service proves its identity to token-service. TokenService source only.
+    /// <see cref="ChoServiceIdentityCredential.EntraWorkloadIdentity"/> (default, AKS) or
+    /// <see cref="ChoServiceIdentityCredential.KubernetesServiceAccount"/> (any cluster).
+    /// </summary>
+    public ChoServiceIdentityCredential Credential { get; set; } = ChoServiceIdentityCredential.EntraWorkloadIdentity;
+
+    /// <summary>
+    /// The projected service-account token file, audience-bound to token-service
+    /// (a <c>serviceAccountToken</c> projected volume). KubernetesServiceAccount credential only.
+    /// </summary>
+    public string ServiceAccountTokenFile { get; set; } = KubernetesServiceAccountTokenCredential.DefaultTokenFile;
+
+    /// <summary>
     /// The Entra scope of token-service's service-token API, <c>api://&lt;app id&gt;/.default</c>.
     /// The workload identity's access token for it is what token-service exchanges. TokenService source only.
     /// </summary>
@@ -281,7 +294,13 @@ public sealed class ChoServiceTokenOptions
                 if (!Uri.TryCreate(TokenServiceUrl, UriKind.Absolute, out var url)
                     || (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
                     throw new InvalidOperationException($"{section}:TokenServiceUrl must be an absolute http(s) URL.");
-                if (string.IsNullOrWhiteSpace(EntraScope) || !EntraScope.EndsWith("/.default", StringComparison.Ordinal))
+                if (Credential == ChoServiceIdentityCredential.KubernetesServiceAccount)
+                {
+                    if (string.IsNullOrWhiteSpace(ServiceAccountTokenFile) || !Path.IsPathRooted(ServiceAccountTokenFile))
+                        throw new InvalidOperationException(
+                            $"{section}:ServiceAccountTokenFile must be the absolute path of the projected service-account token.");
+                }
+                else if (string.IsNullOrWhiteSpace(EntraScope) || !EntraScope.EndsWith("/.default", StringComparison.Ordinal))
                     throw new InvalidOperationException(
                         $"{section}:EntraScope must be token-service's application scope, api://<app id>/.default.");
                 if (RefreshBefore < TimeSpan.Zero || RefreshBefore > TimeSpan.FromMinutes(5))
@@ -292,6 +311,16 @@ public sealed class ChoServiceTokenOptions
                 throw new InvalidOperationException($"{section}:Source must be LocalKey or TokenService.");
         }
     }
+}
+
+/// <summary>How a service proves its identity to token-service.</summary>
+public enum ChoServiceIdentityCredential
+{
+    /// <summary>An Entra token from the pod's Azure workload identity.</summary>
+    EntraWorkloadIdentity,
+
+    /// <summary>The pod's projected Kubernetes service-account token.</summary>
+    KubernetesServiceAccount,
 }
 
 internal static class ChoKeys
