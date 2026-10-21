@@ -12,6 +12,10 @@ on:
       - 'src/services/appeals-service/**'
       - 'src/services/fhir-service/**'
       - 'src/services/member-service/**'
+      - 'src/services/coverage-service/**'
+      - 'src/services/shared/CloudHealthOffice.Consent.Contracts/**'
+      - 'src/engines/CloudHealthOffice.PriorAuthRuleEngine/**'
+      - 'tests/CloudHealthOffice.PriorAuthRuleEngine.Tests/**'
       - 'src/services/shared/CloudHealthOffice.Infrastructure/**'
       - 'Directory.Packages.props'
       - 'Directory.Build.props'
@@ -93,3 +97,39 @@ jobs:
           src/services/member-service/bin/Release/net8.0/member-service.dll
           "${{ runner.temp }}/cho-fhir-smart-sensitivity"
       # No finding-bearing artifact uploads. Review before publishing KB evidence.
+
+  p2p-consent-lab:
+    name: Synthetic P2P consent binding lab and sensitivity (.NET 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build real native P2P services
+        run: |
+          dotnet build src/services/fhir-service --configuration Release --verbosity quiet
+          dotnet build src/services/member-service --configuration Release --verbosity quiet
+          dotnet build src/services/coverage-service --configuration Release --verbosity quiet
+          dotnet build src/services/claims-service --configuration Release --verbosity quiet
+      - name: Test evidence policy and build runner
+        run: dotnet test tools/SecurityChallenge.Tests --configuration Release --verbosity quiet
+      - name: Verify rule bootstrap concurrency and tenant guards
+        run: dotnet test tests/CloudHealthOffice.PriorAuthRuleEngine.Tests --configuration Release --verbosity quiet
+      - name: Run native consent binding lab
+        run: >-
+          dotnet tools/SecurityChallenge/bin/Release/net8.0/SecurityChallenge.dll p2p-consent
+          src/services/fhir-service/bin/Release/net8.0/fhir-service.dll
+          src/services/member-service/bin/Release/net8.0/member-service.dll
+          src/services/coverage-service/bin/Release/net8.0/coverage-service.dll
+          src/services/claims-service/bin/Release/net8.0/claims-service.dll
+          "${{ runner.temp }}/cho-p2p-consent-evidence"
+      - name: Prove member and cached-consent binding defects are detected
+        run: >-
+          python3 tools/SecurityChallenge/run-fhir-sensitivity.py p2p-consent
+          src/services/member-service/bin/Release/net8.0/member-service.dll
+          src/services/coverage-service/bin/Release/net8.0/coverage-service.dll
+          src/services/claims-service/bin/Release/net8.0/claims-service.dll
+          "${{ runner.temp }}/cho-p2p-consent-sensitivity"
+      # No finding-bearing evidence upload or automatic knowledge-base publication.
