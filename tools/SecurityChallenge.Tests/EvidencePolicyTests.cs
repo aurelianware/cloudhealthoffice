@@ -71,4 +71,15 @@ public sealed class EvidencePolicyTests
         results[0] = results[0] with { Outcome = "FAIL" };
         Assert.False(EvidencePolicy.IsCompletePass(true, results, FhirSmartCampaign.ScenarioIds));
     }
+    [Fact] public void PayerConsentCatalogRequiresItsOwnCompleteInventory()
+    {
+        var results = PayerConsentCampaign.ScenarioIds.Select(id => new CaseResult(id, "PASS", "test")).ToArray();
+        Assert.Equal(55, results.Length);
+        Assert.Equal(results.Length, results.Select(r => r.Id).Distinct().Count());
+        Assert.True(EvidencePolicy.IsCompletePass(true, results, PayerConsentCampaign.ScenarioIds));
+        Assert.False(EvidencePolicy.IsCompletePass(true, results, FhirSmartCampaign.ScenarioIds));
+        Assert.False(EvidencePolicy.IsCompletePass(true, Passing(), PayerConsentCampaign.ScenarioIds));
+        results[0] = results[1];
+        Assert.False(EvidencePolicy.IsCompletePass(true, results, PayerConsentCampaign.ScenarioIds));
+    }
 }

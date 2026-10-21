@@ -41,10 +41,12 @@ internal sealed class LocalSmartIssuer : IAsyncDisposable
         }
     }
     public string Token(string tenant = "synthetic-payer-a", string? patient = "shared-member", string scopes = "patient/Patient.read",
-        string? issuer = null, string audience = "fhir-api", int expiresMinutes = 5, int notBeforeMinutes = -10, bool wrongKey = false, bool unsigned = false, string scopeClaim = "scope")
+        string? issuer = null, string audience = "fhir-api", int expiresMinutes = 5, int notBeforeMinutes = -10, bool wrongKey = false, bool unsigned = false, string scopeClaim = "scope", string? payerId = null, string? clientId = null)
     {
         using var other = wrongKey ? RSA.Create(2048) : null;
         var claims = new List<Claim> { new("sub", "synthetic-smart-user"), new("tenant_id", tenant), new(scopeClaim, scopes) };
+        if (payerId != null) claims.Add(new("payer_id", payerId));
+        if (clientId != null) claims.Add(new("client_id", clientId));
         if (patient != null) claims.Add(new("patient", patient));
         var credentials = unsigned ? null : new SigningCredentials(new RsaSecurityKey(other ?? _rsa) { KeyId = "synthetic-rsa" }, SecurityAlgorithms.RsaSha256);
         return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(issuer ?? Issuer, audience, claims,

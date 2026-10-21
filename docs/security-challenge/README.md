@@ -35,6 +35,15 @@ with healthy controls. Patient data is ChoNative; bulk coverage is job metadata
 only. All three profiles feed review-only knowledge-base drafts; their individual
 unsupported areas remain explicit.
 
+## Native payer consent binding campaign
+
+The [payer-to-payer consent extension](P2P-CONSENT.md) adds 55 scenarios across
+real FHIR, member, coverage and claims processes, two source tenants and two
+requesting-payer identities. It tests consent/member binding, durable cache keys,
+resource confinement and bounded financial-field redaction. Two disposable
+mutants must expose wrong-member consent and cross-payer/cross-tenant cache reuse.
+Its explicit limits include provider opt-outs and live revocation propagation.
+
 ## Reproduce
 
 Run from the repository root with the pinned .NET 8 SDK, Git and network access

@@ -14,7 +14,7 @@ import tarfile
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-MUTATIONS = {
+FHIR_MUTATIONS = {
     "scope-bypass": (
         "src/services/fhir-service/Middleware/SmartScopeEnforcementMiddleware.cs",
         "if (!HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts,",
@@ -30,7 +30,29 @@ MUTATIONS = {
 }
 
 
-def run(member, output):
+P2P_MUTATIONS = {
+    "consent-member-bypass": (
+        "src/services/fhir-service/Services/PayerToPayer/PdexConsent.cs",
+        "if (PatientIdentifiers.Overlaps(ids!)) return true;",
+        "if (ids.Count > 0) return true;",
+        ["export.consent.wrong-patient", "match.consent.wrong-patient"],
+    ),
+    "consent-cache-key-bypass": (
+        "src/services/fhir-service/Services/PayerToPayer/PayerToPayerConsentAttestations.cs",
+        "_collection.Find(Key(tenantId, memberId, receivingPayerId))",
+        "_collection.Find(new BsonDocument(\"memberId\", memberId))",
+        ["cache.foreign-payer", "cache.foreign-tenant"],
+    ),
+}
+
+
+def run(member, output, coverage=None, claims=None):
+    profile = "p2p-consent" if coverage is not None else "fhir-smart"
+    service_args = [str(member)] if coverage is None else [str(member), str(coverage), str(claims)]
+    count = 55 if coverage is not None else 42
+    mutations = P2P_MUTATIONS if coverage is not None else FHIR_MUTATIONS
+    controls = (["export.inline-control", "export.cache-control", "match.control", "match.export-control", "tenant.b.inline-control"]
+                if coverage is not None else ["identity.valid-control", "identity.second-issuer-control", "cho.reader-control", "bulk.create-control"])
     if subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip():
         raise RuntimeError("Sensitivity requires a clean committed checkout")
     source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
@@ -39,17 +61,17 @@ def run(member, output):
     records = []
     runner = ROOT / "tools/SecurityChallenge/bin/Release/net8.0/SecurityChallenge.dll"
     baseline = output / "baseline"
-    subprocess.run(["dotnet", str(runner), "fhir-smart",
+    subprocess.run(["dotnet", str(runner), profile,
                     str(ROOT / "src/services/fhir-service/bin/Release/net8.0/fhir-service.dll"),
-                    str(member), str(baseline)], cwd=ROOT, check=True)
+                    *service_args, str(baseline)], cwd=ROOT, check=True)
     baseline_results = [json.loads(line) for line in (baseline / "scenario-results.jsonl").read_text().splitlines()]
     baseline_manifest = json.loads((baseline / "manifest.json").read_text())
     catalog = {r["id"] for r in baseline_results}
-    if (len(baseline_results) != 42 or len(catalog) != 42 or not baseline_manifest["completed"]
+    if (len(baseline_results) != count or len(catalog) != count or not baseline_manifest["completed"]
             or baseline_manifest["sourceDirty"] or baseline_manifest["sourceCommit"] != source
             or any(r["outcome"] != "PASS" for r in baseline_results)):
         raise RuntimeError("Healthy clean-source baseline required before sensitivity")
-    for name, (file, before, after, expected) in MUTATIONS.items():
+    for name, (file, before, after, expected) in mutations.items():
         packet = output / name
         with tempfile.TemporaryDirectory(prefix="cho-fhir-mutant-") as temporary:
             temporary = Path(temporary)
@@ -72,11 +94,10 @@ def run(member, output):
                                 "--disable-build-servers", "-m:1", "-p:UseSharedCompilation=false", "--verbosity", "quiet"],
                                cwd=checkout, stdout=log, stderr=subprocess.STDOUT, check=True)
             mutant = checkout / "src/services/fhir-service/bin/Release/net8.0/fhir-service.dll"
-            process = subprocess.run(["dotnet", str(runner), "fhir-smart", str(mutant), str(member), str(packet)], cwd=ROOT)
+            process = subprocess.run(["dotnet", str(runner), profile, str(mutant), *service_args, str(packet)], cwd=ROOT)
             manifest = json.loads((packet / "manifest.json").read_text())
             results = [json.loads(line) for line in (packet / "scenario-results.jsonl").read_text().splitlines()]
             by_id = {r["id"]: r["outcome"] for r in results}
-            controls = ["identity.valid-control", "identity.second-issuer-control", "cho.reader-control", "bulk.create-control"]
             detected = (process.returncode == 1 and manifest["completed"] and not manifest["sourceDirty"]
                         and manifest["sourceCommit"] == source and len(results) == len(catalog) and set(by_id) == catalog
                         and all(by_id.get(i) == "FAIL" for i in expected)
@@ -90,7 +111,7 @@ def run(member, output):
             records.append(record)
             # The nested manifest identifies the runner checkout and binary hashes;
             # this record explicitly identifies the different service source.
-            (output / "sensitivity-results.json").write_text(json.dumps({"sourceCommit": source,
+            (output / "sensitivity-results.json").write_text(json.dumps({"sourceCommit": source, "profile": profile,
                 "serviceSource": "disposable-mutated-git-archive", "publication": "REQUIRES_REVIEW", "mutations": records}, indent=2) + "\n")
             if not detected:
                 raise RuntimeError("Mutant was not detected with healthy controls: " + name)
@@ -102,6 +123,11 @@ def run(member, output):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3 or not Path(sys.argv[1]).is_file() or Path(sys.argv[2]).exists():
-        sys.exit("Usage: run-fhir-sensitivity.py <member-service.dll> <new-evidence-directory>")
-    run(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve())
+    if len(sys.argv) == 6 and sys.argv[1] == "p2p-consent":
+        if not all(Path(p).is_file() for p in sys.argv[2:5]) or Path(sys.argv[5]).exists():
+            sys.exit("Provide built member, coverage and claims assemblies and a new evidence directory")
+        run(Path(sys.argv[2]).resolve(), Path(sys.argv[5]).resolve(), Path(sys.argv[3]).resolve(), Path(sys.argv[4]).resolve())
+    elif len(sys.argv) == 3 and Path(sys.argv[1]).is_file() and not Path(sys.argv[2]).exists():
+        run(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve())
+    else:
+        sys.exit("Usage: run-fhir-sensitivity.py [p2p-consent] <member-service.dll> [<coverage-service.dll> <claims-service.dll>] <new-evidence-directory>")
