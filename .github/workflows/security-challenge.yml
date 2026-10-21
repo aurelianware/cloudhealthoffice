@@ -13,6 +13,7 @@ on:
       - 'src/services/fhir-service/**'
       - 'src/services/member-service/**'
       - 'src/services/coverage-service/**'
+      - 'src/services/consent-service/**'
       - 'src/services/shared/CloudHealthOffice.Consent.Contracts/**'
       - 'src/engines/CloudHealthOffice.PriorAuthRuleEngine/**'
       - 'tests/CloudHealthOffice.PriorAuthRuleEngine.Tests/**'
@@ -133,3 +134,27 @@ jobs:
           src/services/claims-service/bin/Release/net8.0/claims-service.dll
           "${{ runner.temp }}/cho-p2p-consent-sensitivity"
       # No finding-bearing evidence upload or automatic knowledge-base publication.
+
+  provider-access-lab:
+    name: Synthetic provider attribution and live consent lab (.NET 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build real FHIR, member and consent services
+        run: |
+          dotnet build src/services/fhir-service --configuration Release --verbosity quiet
+          dotnet build src/services/member-service --configuration Release --verbosity quiet
+          dotnet build src/services/consent-service --configuration Release --verbosity quiet
+      - name: Test evidence policy and build runner
+        run: dotnet test tools/SecurityChallenge.Tests --configuration Release --verbosity quiet
+      - name: Prove attribution and live consent defects are detected
+        run: >-
+          python3 tools/SecurityChallenge/run-fhir-sensitivity.py provider-access
+          src/services/member-service/bin/Release/net8.0/member-service.dll
+          src/services/consent-service/bin/Release/net8.0/consent-service.dll
+          "${{ runner.temp }}/cho-provider-access-sensitivity"
+      # Baseline and mutants retain finding-bearing evidence locally; no automatic publication.

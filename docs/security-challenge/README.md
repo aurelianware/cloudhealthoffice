@@ -180,3 +180,12 @@ authorization-line handling, claims and appeal authorization, payment idempotenc
 boundaries, sensitive-data canaries, production identity and ingress, then an
 independent reproduction campaign. Each expansion must ship executable oracles
 and a revised denominator before being described as tested.
+
+
+The [Provider Access extension](PROVIDER-ACCESS.md) adds 30 scenarios against the
+real consent/member/FHIR processes: configured attribution, HTTP opt-out and
+withdrawal transitions, purpose/member/tenant isolation and registry shutdown
+following a successful read. Two additional controlled defects prove attribution
+and consent denials are detected. The five profiles total 207 baseline scenarios
+and six specified mutation experiments; these counts describe scoped local
+coverage, not production certification. Evidence remains review-only.
