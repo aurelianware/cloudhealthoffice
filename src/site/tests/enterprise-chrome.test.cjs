@@ -66,4 +66,21 @@ test("homepage routes every audience to a known contact topic", () => {
   }
   assert(home.includes('id="interoperability"') && home.includes('id="work-with-us"'));
   assert(!/free CMS-0057-F/i.test(home), "commercial posture: do not headline free CMS-0057-F");
+  assert(contact.includes('<option value="sandbox-access">'));
+});
+
+test("no page links to the retired sandbox host", () => {
+  const RETIRED_HOST = "sandbox." + "cloudhealthoffice.com";
+  for (const f of pages()) {
+    const html = fs.readFileSync(f, "utf8");
+    for (const m of html.matchAll(/\b(?:href|src|action)="([^"]+)"/g)) {
+      let host = "";
+      try {
+        host = new URL(m[1], "https://cloudhealthoffice.com/").hostname;
+      } catch {
+        continue;
+      }
+      assert.notEqual(host, RETIRED_HOST, path.relative(site, f) + " links to " + m[1]);
+    }
+  }
 });

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Explorer — CMS-0057-F FHIR API Specifications | Cloud Health Office</title>
+<meta name="description" content="Browse the OpenAPI specifications for the Cloud Health Office Patient Access, Provider Access, Payer-to-Payer, Prior Authorization and claims APIs.">
+<link rel="canonical" href="https://cloudhealthoffice.com/api-explorer" />
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://cloudhealthoffice.com/api-explorer">
+<meta property="og:title" content="Cloud Health Office API Explorer">
+<meta property="og:description" content="OpenAPI specifications for the Cloud Health Office FHIR and claims APIs.">
+<meta property="og:image" content="https://cloudhealthoffice.com/graphics/cloudhealthoffice/claims-evidence-pipeline.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Cloud Health Office API Explorer">
+<meta name="twitter:description" content="OpenAPI specifications for the Cloud Health Office FHIR and claims APIs.">
+<script defer src="/js/mobile-nav.js"></script>
+<style>
+  body.ent .explorer-head { padding: 56px 0 28px; background: var(--cho-surface); border-bottom: 1px solid var(--cho-line); }
+  body.ent .spec-tabs { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0 0; padding: 0; }
+  body.ent .spec-tabs a { display: inline-flex; align-items: center; min-height: 40px; padding: 8px 14px; border: 1px solid var(--cho-line-strong); border-radius: 6px; background: #FFFFFF; color: var(--cho-ink); font-size: 15px; font-weight: 500; text-decoration: none; }
+  body.ent .spec-tabs a[aria-current="true"] { background: var(--cho-navy); border-color: var(--cho-navy); color: #FFFFFF; }
+  body.ent .explorer-note { margin-top: 18px; font-size: 14px; color: var(--cho-muted); max-width: 820px; }
+  body.ent #redoc-container { min-height: 60vh; }
+  body.ent .explorer-fallback { padding: 48px 24px; max-width: var(--cho-max); margin: 0 auto; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="/css/enterprise.css">
+</head>
+<body class="ent">
+<a href="#main-content" class="skip-to-main">Skip to main content</a>
+<nav class="site-nav" aria-label="Primary">
+<div class="site-nav-inner">
+<a class="site-brand" href="/"><img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" width="32" height="32"><span>Cloud Health Office</span></a>
+<button id="mobileMenuToggle" type="button" aria-label="Toggle navigation menu" aria-controls="mainNav" aria-expanded="false">☰</button>
+<ul id="mainNav">
+<li>
+<details>
+<summary>Solutions</summary>
+<div>
+<a href="/solutions-payers">For health plans</a>
+<a href="/cms-0057f-compliance">CMS-0057-F compliance</a>
+<a href="/claims-repricing">Claims repricing</a>
+<a href="/incremental-modernization">Incremental modernization</a>
+</div>
+</details>
+</li>
+<li>
+<details>
+<summary>Platform</summary>
+<div>
+<a href="/platform">Platform overview</a>
+<a href="/health-plan-independence">Why sovereignty</a>
+<a href="/ai-ready-health-plan-architecture">AI-ready architecture</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+</details>
+</li>
+<li><a href="/#interoperability">Interoperability</a></li>
+<li>
+<details>
+<summary>Developers</summary>
+<div>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/quickstart">Quickstart</a>
+<a href="/docs/api">API reference</a>
+<a href="/api-explorer" aria-current="page">API explorer</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Source on GitHub</a>
+</div>
+</details>
+</li>
+<li><a href="/evidence">Evidence</a></li>
+<li>
+<details>
+<summary>Company</summary>
+<div>
+<a href="/founder">Founder</a>
+<a href="/#work-with-us">Partners &amp; investors</a>
+<a href="/services">Professional services</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+</div>
+</details>
+</li>
+<li><a class="nav-cta" data-ga-event="readiness_review_cta_click" href="/contact?interest=cms0057-assessment">Book a readiness review</a></li>
+</ul>
+</div>
+</nav>
+<main id="main-content" tabindex="-1">
+<div class="explorer-head">
+<div class="wrap">
+<p class="eyebrow">API explorer</p>
+<h1>Cloud Health Office API specifications</h1>
+<p class="lede">Browse the OpenAPI specifications published in the public repository. Choose an API:</p>
+<ul class="spec-tabs" id="spec-tabs">
+<li><a href="/api-explorer?spec=patient-access" data-spec="patient-access">Patient Access</a></li>
+<li><a href="/api-explorer?spec=provider-access" data-spec="provider-access">Provider Access</a></li>
+<li><a href="/api-explorer?spec=payer-to-payer" data-spec="payer-to-payer">Payer-to-Payer</a></li>
+<li><a href="/api-explorer?spec=prior-auth" data-spec="prior-auth">Prior Authorization</a></li>
+<li><a href="/api-explorer?spec=claims-scrubbing" data-spec="claims-scrubbing">Claims Scrubbing</a></li>
+<li><a href="/api-explorer?spec=encounter-service" data-spec="encounter-service">Encounters</a></li>
+<li><a href="/api-explorer?spec=risk-adjustment" data-spec="risk-adjustment">Risk Adjustment</a></li>
+</ul>
+<p class="explorer-note">These pages document the API contracts; they do not call a live environment. To call them against synthetic data, <a href="/contact?interest=sandbox-access">request a sandbox</a> or run the <a href="/docs/quickstart">quickstart</a> locally. Capability status and limits are in the <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/CAPABILITY_RECONCILIATION.md">capability ledger</a>.</p>
+</div>
+</div>
+<div id="redoc-container">
+<noscript><div class="explorer-fallback"><p>The explorer needs JavaScript. The specifications are also available as files: <a href="/openapi/patient-access-api.yaml">Patient Access</a>, <a href="/openapi/provider-access-api.yaml">Provider Access</a>, <a href="/openapi/payer-to-payer-api.yaml">Payer-to-Payer</a>, <a href="/openapi/prior-auth-api.yaml">Prior Authorization</a>.</p></div></noscript>
+</div>
+</main>
+<footer class="cho-footer">
+<div class="cho-footer-inner">
+<div class="cho-footer-brand">
+<strong>Cloud Health Office</strong>
+<p>Sovereign, interoperable health plan administration. A product of Aurelianware, Inc.</p>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Platform</p>
+<a href="/platform">Overview</a>
+<a href="/#interoperability">Interoperability</a>
+<a href="/deploy">Deployment</a>
+<a href="/pricing">Pricing</a>
+<a href="/trust">Trust &amp; security</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Developers</p>
+<a href="/developers">Developer hub</a>
+<a href="/docs">Documentation</a>
+<a href="/docs/api">API reference</a>
+<a href="/evidence">Evidence</a>
+<a href="/release-notes">Release notes</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Work with us</p>
+<a href="/contact?interest=cms0057-assessment">Health plans</a>
+<a href="/contact?interest=vendor-integration">Technology vendors</a>
+<a href="/contact?interest=channel-partner">Channel partners</a>
+<a href="/contact?interest=investor">Investors</a>
+<a href="/services">Professional services</a>
+</div>
+<div class="cho-footer-col">
+<p class="cho-footer-heading">Company</p>
+<a href="/founder">Founder</a>
+<a href="/insights">Insights</a>
+<a href="/contact">Contact</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<a href="https://github.com/aurelianware/cloudhealthoffice">Public source</a>
+</div>
+</div>
+<p class="cho-footer-legal">© 2026 Aurelianware, Inc. Source-available under BSL 1.1. Production use requires a commercial license.</p>
+</footer>
+<script src="https://cdn.jsdelivr.net/npm/redoc@2.1.5/bundles/redoc.standalone.js"></script>
+<script>
+(function () {
+  var SPECS = {
+    'patient-access': 'patient-access-api.yaml',
+    'provider-access': 'provider-access-api.yaml',
+    'payer-to-payer': 'payer-to-payer-api.yaml',
+    'prior-auth': 'prior-auth-api.yaml',
+    'claims-scrubbing': 'claims-scrubbing-api.yaml',
+    'encounter-service': 'encounter-service-api.yaml',
+    'risk-adjustment': 'risk-adjustment-api.yaml'
+  };
+  var requested = new URLSearchParams(window.location.search).get('spec');
+  var key = Object.prototype.hasOwnProperty.call(SPECS, requested) ? requested : 'patient-access';
+  var tabs = document.querySelectorAll('#spec-tabs a');
+  for (var i = 0; i < tabs.length; i++) {
+    if (tabs[i].getAttribute('data-spec') === key) tabs[i].setAttribute('aria-current', 'true');
+  }
+  var container = document.getElementById('redoc-container');
+  var file = '/openapi/' + SPECS[key];
+  function fallback() {
+    container.innerHTML = '';
+    var box = document.createElement('div');
+    box.className = 'explorer-fallback';
+    var p = document.createElement('p');
+    p.textContent = 'The interactive explorer could not load. Download the specification instead: ';
+    var a = document.createElement('a');
+    a.href = file;
+    a.textContent = SPECS[key];
+    p.appendChild(a);
+    box.appendChild(p);
+    container.appendChild(box);
+  }
+  if (!window.Redoc) { fallback(); return; }
+  window.Redoc.init(file, {
+    hideDownloadButton: false,
+    expandResponses: '200,201',
+    scrollYOffset: 'nav.site-nav',
+    theme: {
+      colors: { primary: { main: '#0E7490' }, text: { primary: '#0B1F33' } },
+      typography: {
+        fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
+        headings: { fontFamily: "'IBM Plex Sans', system-ui, sans-serif" },
+        code: { fontFamily: "'IBM Plex Mono', ui-monospace, monospace" }
+      },
+      sidebar: { backgroundColor: '#F5F7FA' },
+      rightPanel: { backgroundColor: '#0B1F33' }
+    }
+  }, container, function (err) { if (err) fallback(); });
+})();
+</script>
+</body>
+</html>
