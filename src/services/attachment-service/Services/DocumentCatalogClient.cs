@@ -91,11 +91,15 @@ public sealed class HttpDocumentCatalog : IDocumentCatalog
     {
         var client = _httpClientFactory.CreateClient(ClientName);
 
+        // The title is the 275's free-text document type and the subject id a
+        // validated plain id. Both are HTML-encoded on the way out: a no-op for
+        // ids and ordinary titles, and it keeps markup out of a field the
+        // portal shows.
         using var form = new MultipartFormDataContent
         {
             { new StringContent(CatalogType), "Type" },
-            { new StringContent(upload.Title), "Title" },
-            { new StringContent($"{SubjectKind(upload.SubjectType)}:{upload.SubjectId}"), "Links" },
+            { new StringContent(WebUtility.HtmlEncode(upload.Title)), "Title" },
+            { new StringContent($"{SubjectKind(upload.SubjectType)}:{WebUtility.HtmlEncode(upload.SubjectId)}"), "Links" },
             { new StringContent(upload.Channel), "SourceChannel" },
         };
         foreach (var (key, value) in upload.ExternalIds)
