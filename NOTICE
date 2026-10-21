@@ -1,5 +1,5 @@
 Cloud Health Office
-Copyright 2024-2026 Aurelianware, Inc.
+Copyright 2025-2026 Aurelianware, Inc.
 
 This product is licensed under the Business Source License 1.1.
 See the LICENSE file for the full license text.
@@ -8,3 +8,12 @@ The Licensed Work converts to Apache License, Version 2.0 on the Change Date
 specified in the LICENSE file (2030-03-08).
 
 For commercial licensing inquiries: licensing@cloudhealthoffice.com
+
+Third-party components are listed, with their licences, in
+THIRD-PARTY-NOTICES.md. Each remains under its own licence.
+
+QuestPDF (used by idcard-service to lay out member ID card PDFs) is not open
+source: it is free under its Community License only for organisations with
+under USD 1,000,000 in annual gross revenue and other qualifying users. An
+organisation that deploys idcard-service and does not qualify needs a QuestPDF
+Professional or Enterprise licence (https://www.questpdf.com/license/).

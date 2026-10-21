@@ -20,7 +20,8 @@ place business logic can live.
 
 The project is licensed under BSL 1.1. Non-production use is permitted for
 evaluation, development, testing, and staging. See [LICENSE](LICENSE) for the
-exact terms.
+exact terms. Third-party components and their licences are listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Executive Summary
 
