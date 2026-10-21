@@ -141,6 +141,14 @@ resource "google_container_node_pool" "demo" {
     auto_repair  = true
     auto_upgrade = true
   }
+
+  # Replace the node in place rather than adding a surge node first: a second
+  # node would not fit a new account's 12-vCPU quota. Upgrades and node
+  # config changes (such as enabling Workload Identity) cause a short outage.
+  upgrade_settings {
+    max_surge       = 0
+    max_unavailable = 1
+  }
 }
 
 # ── Document storage ─────────────────────────────────────────────────────────
@@ -185,6 +193,20 @@ resource "google_storage_bucket" "documents" {
   }
 
   depends_on = [google_project_service.required]
+}
+
+# Record who read and wrote stored documents (Cloud Storage data access logs
+# are off by default).
+resource "google_project_iam_audit_config" "storage" {
+  project = var.project_id
+  service = "storage.googleapis.com"
+
+  audit_log_config {
+    log_type = "DATA_READ"
+  }
+  audit_log_config {
+    log_type = "DATA_WRITE"
+  }
 }
 
 # The identity the document services run as (Workload Identity). It can read

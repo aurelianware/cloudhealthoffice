@@ -198,7 +198,17 @@ public class MemberDocumentsController : ControllerBase
             return Conflict("The upload for this document has not been finalized.");
         }
 
-        var stream = await _documents.DownloadAsync(doc.BlobContainer, doc.BlobPath, ct);
+        Stream stream;
+        try
+        {
+            stream = await _documents.DownloadAsync(doc.BlobContainer, doc.BlobPath, ct);
+        }
+        catch (DocumentNotFoundException)
+        {
+            _logger.LogWarning("Member document {TenantId}/{DocumentId} has a record but no stored content",
+                LogSanitizer.Sanitize(doc.TenantId), LogSanitizer.Sanitize(doc.Id));
+            return NotFound();
+        }
         var fileName = $"{doc.Id}{Path.GetExtension(doc.BlobPath)}";
         // Always an attachment, never sniffed into something the browser renders.
         Response.Headers["X-Content-Type-Options"] = "nosniff";
@@ -384,6 +394,26 @@ public class MemberDocumentsController : ControllerBase
     private async Task<IActionResult> FinalizePendingUploadAsync(MemberDocument doc, CancellationToken ct)
     {
         var stagingPath = doc.PendingUploadBlobPath!;
+
+        // Check the stored size before reading anything: an upload link cannot
+        // cap the size on every cloud, so an oversize upload is refused here
+        // without pulling it into the pod.
+        DocumentProperties stagedProperties;
+        try
+        {
+            stagedProperties = await _documents.GetPropertiesAsync(doc.BlobContainer, stagingPath, ct);
+        }
+        catch (DocumentNotFoundException)
+        {
+            return Conflict("Nothing has been uploaded for this document yet.");
+        }
+        if (stagedProperties.SizeBytes > _uploadPolicy.MaxUploadBytes)
+        {
+            await _documents.DeleteAsync(doc.BlobContainer, stagingPath, ct);
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                $"Documents are limited to {_uploadPolicy.MaxUploadBytes} bytes; the upload was discarded.");
+        }
+
         using var buffer = new MemoryStream();
         try
         {

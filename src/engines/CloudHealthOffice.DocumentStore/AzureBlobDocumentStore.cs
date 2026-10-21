@@ -41,11 +41,9 @@ public class AzureBlobDocumentStore : IDocumentStore
         IReadOnlyDictionary<string, string>? tags,
         CancellationToken ct = default)
     {
-        var containerClient = _client.GetBlobContainerClient(container);
-        await containerClient.CreateIfNotExistsAsync(
+        var blobClient = Blob(container, blobName);
+        await _client.GetBlobContainerClient(container).CreateIfNotExistsAsync(
             PublicAccessType.None, cancellationToken: ct);
-
-        var blobClient = containerClient.GetBlobClient(blobName);
         var options = new BlobUploadOptions
         {
             HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
@@ -143,8 +141,8 @@ public class AzureBlobDocumentStore : IDocumentStore
         string container, string blobName, string contentType,
         DateTimeOffset expiresAtUtc, CancellationToken ct = default)
     {
+        var blobClient = Blob(container, blobName);
         var containerClient = _client.GetBlobContainerClient(container);
-        var blobClient = containerClient.GetBlobClient(blobName);
         if (!blobClient.CanGenerateSasUri)
         {
             return null;
@@ -179,6 +177,11 @@ public class AzureBlobDocumentStore : IDocumentStore
 
     public Uri GetUri(string container, string blobName) => Blob(container, blobName).Uri;
 
-    private BlobClient Blob(string container, string blobName) =>
-        _client.GetBlobContainerClient(container).GetBlobClient(blobName);
+    private BlobClient Blob(string container, string blobName)
+    {
+        // Same naming rules as the bucket providers: a '..' segment would be
+        // normalised away by the URI and could reach another container.
+        DocumentKeys.ObjectName(container, blobName);
+        return _client.GetBlobContainerClient(container).GetBlobClient(blobName);
+    }
 }

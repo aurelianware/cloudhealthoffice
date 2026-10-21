@@ -12,8 +12,10 @@ namespace CloudHealthOffice.DocumentStore;
 /// One bucket per deployment (<c>DocumentStore:Gcs:Bucket</c>), created by
 /// Terraform, never by this class; each CHO container is a prefix inside it
 /// (see <see cref="DocumentKeys"/>). Tags are the object's custom metadata,
-/// since GCS has no separate tag store; bucket lifecycle rules can match on
-/// them.
+/// since GCS has no separate tag store. GCS lifecycle rules cannot match
+/// custom metadata, so on this provider the tags record retention and legal
+/// hold but the storage tier does not act on them; the document service
+/// enforces both (object holds and bucket lock are later steps).
 ///
 /// Credentials come from Application Default Credentials. On GKE that is
 /// Workload Identity, a compute credential, so upload links are signed by the
@@ -133,24 +135,36 @@ public sealed class GcsDocumentStore : IDocumentStore
         CancellationToken ct = default)
     {
         var objectName = DocumentKeys.ObjectName(container, blobName);
-        var current = await TryGetObjectAsync(objectName, ct)
-            ?? throw new DocumentNotFoundException(container, blobName);
 
         // Update replaces all metadata (patch would merge, leaving stale keys).
-        // The metageneration precondition makes a concurrent change fail
-        // instead of being silently overwritten.
-        current.Metadata = new Dictionary<string, string>(tags);
-        try
+        // The metageneration precondition stops a concurrent change from being
+        // silently overwritten; on a conflict the read-modify-write is retried,
+        // since the new tags replace the old ones whatever they were.
+        for (var attempt = 1; ; attempt++)
         {
-            await _client.UpdateObjectAsync(current,
-                new UpdateObjectOptions { IfMetagenerationMatch = current.Metageneration },
-                ct);
-        }
-        catch (GoogleApiException ex) when (ex.HttpStatusCode == HttpStatusCode.NotFound)
-        {
-            throw new DocumentNotFoundException(container, blobName);
+            var current = await TryGetObjectAsync(objectName, ct)
+                ?? throw new DocumentNotFoundException(container, blobName);
+            current.Metadata = new Dictionary<string, string>(tags);
+            try
+            {
+                await _client.UpdateObjectAsync(current,
+                    new UpdateObjectOptions { IfMetagenerationMatch = current.Metageneration },
+                    ct);
+                return;
+            }
+            catch (GoogleApiException ex) when (ex.HttpStatusCode == HttpStatusCode.NotFound)
+            {
+                throw new DocumentNotFoundException(container, blobName);
+            }
+            catch (GoogleApiException ex) when (ex.HttpStatusCode == HttpStatusCode.PreconditionFailed && attempt < MaxTagAttempts)
+            {
+                _logger.LogDebug("Object {ObjectName} changed while its tags were set; retrying",
+                    DocumentKeys.SanitizeForLog(objectName));
+            }
         }
     }
+
+    private const int MaxTagAttempts = 3;
 
     public async Task<DocumentProperties> GetPropertiesAsync(
         string container, string blobName,

@@ -23,8 +23,9 @@ public class InMemoryDocumentStore : IDocumentStore
 
     private readonly ConcurrentDictionary<string, Entry> _blobs = new();
 
+    // Same naming rules as the real providers, so a test catches a bad name.
     private static string Key(string container, string blobName) =>
-        $"{container}/{blobName}";
+        DocumentKeys.ObjectName(container, blobName);
 
     public Task<DocumentUploadResult> UploadAsync(
         string container, string blobName,

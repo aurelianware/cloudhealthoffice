@@ -1,4 +1,5 @@
 using System.Net;
+using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Logging;
@@ -87,7 +88,7 @@ public sealed class S3DocumentStore : IDocumentStore
         try
         {
             var response = await _client.GetObjectAsync(_bucket, DocumentKeys.ObjectName(container, blobName), ct);
-            return response.ResponseStream;
+            return new ResponseOwningStream(response);
         }
         catch (AmazonS3Exception ex) when (IsNotFound(ex))
         {
@@ -169,18 +170,29 @@ public sealed class S3DocumentStore : IDocumentStore
         string container, string blobName, string contentType,
         DateTimeOffset expiresAtUtc, CancellationToken ct = default)
     {
-        var url = await _client.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+        string url;
+        try
         {
-            BucketName = _bucket,
-            Key = DocumentKeys.ObjectName(container, blobName),
-            Verb = HttpVerb.PUT,
-            ContentType = contentType,
-            Expires = expiresAtUtc.UtcDateTime,
-            // HTTPS everywhere except a plain-HTTP local endpoint (MinIO in tests).
-            Protocol = _client.Config.ServiceURL?.StartsWith("http://", StringComparison.OrdinalIgnoreCase) == true
-                ? Protocol.HTTP
-                : Protocol.HTTPS
-        });
+            url = await _client.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+            {
+                BucketName = _bucket,
+                Key = DocumentKeys.ObjectName(container, blobName),
+                Verb = HttpVerb.PUT,
+                ContentType = contentType,
+                Expires = expiresAtUtc.UtcDateTime,
+                // HTTPS everywhere except a plain-HTTP local endpoint (MinIO in tests).
+                Protocol = _client.Config.ServiceURL?.StartsWith("http://", StringComparison.OrdinalIgnoreCase) == true
+                    ? Protocol.HTTP
+                    : Protocol.HTTPS
+            });
+        }
+        catch (AmazonClientException ex)
+        {
+            // No credentials that can sign (the SDK's chain found none): say
+            // so, like the other providers, rather than failing the request.
+            _logger.LogWarning(ex, "S3 credentials cannot sign upload links; pre-signed uploads are unavailable.");
+            return null;
+        }
 
         return new DocumentUploadLink
         {
@@ -215,5 +227,39 @@ public sealed class S3DocumentStore : IDocumentStore
         await content.CopyToAsync(temp, ct);
         temp.Position = 0;
         return temp;
+    }
+
+    /// <summary>
+    /// The object's body, disposing the whole S3 response (and its connection)
+    /// when the caller disposes the stream.
+    /// </summary>
+    private sealed class ResponseOwningStream(GetObjectResponse response) : Stream
+    {
+        private readonly Stream _inner = response.ResponseStream;
+
+        public override bool CanRead => _inner.CanRead;
+        public override bool CanSeek => _inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => _inner.Position = value; }
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            _inner.ReadAsync(buffer, offset, count, cancellationToken);
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            _inner.ReadAsync(buffer, cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void Flush() { }
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+                response.Dispose();
+            }
+            base.Dispose(disposing);
+        }
     }
 }

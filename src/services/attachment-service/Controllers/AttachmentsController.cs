@@ -304,12 +304,15 @@ public class AttachmentsController : ControllerBase
             return NotFound();
         }
 
-        if (!await _documentStore.ExistsAsync(attachment.BlobContainerName!, attachment.BlobName))
+        Stream stream;
+        try
+        {
+            stream = await _documentStore.DownloadAsync(attachment.BlobContainerName!, attachment.BlobName);
+        }
+        catch (DocumentNotFoundException)
         {
             return NotFound("File not found in storage");
         }
-
-        var stream      = await _documentStore.DownloadAsync(attachment.BlobContainerName!, attachment.BlobName);
         var contentType = AttachmentUploadRules.ContentTypeFor(attachment.DocumentFormat);
         var fileName    = ClaimAttachmentRules.SanitizePathSegment(attachment.Id) + AttachmentUploadRules.ExtensionFor(attachment.DocumentFormat);
 

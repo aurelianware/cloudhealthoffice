@@ -114,7 +114,8 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 *Built in step 1:*
 - **Configuration:** `DocumentStore:Provider` is `Azure`, `Gcs`, `S3` or `InMemory` (Development only). With no provider set, a deployment that has `BlobStorage:ConnectionString` stays on Azure; otherwise the service refuses to start.
 - **Layout:** Azure keeps one container per CHO container. Google Cloud Storage and S3 use one bucket per deployment, with each CHO container as a prefix, because bucket names are global.
-- **Tags** (retention policy, retention date, legal hold) are Azure blob index tags, GCS object metadata and S3 object tags, so each cloud's lifecycle rules can act on them. S3 allows 10 per object.
+- **Tags** (retention policy, retention date, legal hold) are Azure blob index tags, GCS object metadata and S3 object tags (10 per object). Azure and S3 lifecycle rules can filter on them; GCS lifecycle rules cannot match custom metadata, so on GCS the tags are a record only. Storage-level enforcement of holds (GCS object holds, S3 Object Lock, Azure immutability) comes with write-once, below.
+- **Uploads:** finalize checks the staged object's size before reading it, since no cloud's upload link caps size the same way. A staging object left by an abandoned upload is deleted after a day on GCS (bucket lifecycle rule); Azure and S3 deployments need the same rule on the `.upload` suffix.
 - **Pre-signed uploads:** Azure SAS, GCS V4 signed URLs (on GKE, signed by IAM as the Workload Identity service account) and S3 presigned PUTs. The link carries the headers the client must send, so clients never need to know which cloud is behind it.
 - **GKE demo:** Terraform creates a private, versioned documents bucket and a `cho-documents` service account that only attachment-service and member-document-service can act as (Workload Identity, no keys).
 - **Encryption:** each tenant gets its own key-encryption key (cloud KMS).

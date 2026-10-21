@@ -75,11 +75,13 @@ public class DocumentStoreRegistrationTests
         Assert.Contains(missing, ex.Message);
     }
 
-    [Fact]
-    public void AnUnknownProvider_Fails()
+    [Theory]
+    [InlineData("Dropbox")]
+    [InlineData("1")] // an enum's number would otherwise pick a provider silently
+    public void AnUnknownProvider_Fails(string provider)
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => Create(Config(("DocumentStore:Provider", "Dropbox"))));
-        Assert.Contains("Dropbox", ex.Message);
+        var ex = Assert.Throws<InvalidOperationException>(() => Create(Config(("DocumentStore:Provider", provider))));
+        Assert.Contains(provider, ex.Message);
     }
 
     [Fact]

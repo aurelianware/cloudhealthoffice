@@ -126,6 +126,8 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
             });
         _factory.Blobs.Setup(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new MemoryStream(Pdf));
+        _factory.Blobs.Setup(b => b.GetPropertiesAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DocumentProperties { SizeBytes = Pdf.Length });
         _factory.Blobs.Setup(b => b.CreateUploadLinkAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string c, string p, string type, DateTimeOffset expires, CancellationToken _) => new DocumentUploadLink
             {
@@ -641,7 +643,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         // Every store reports a missing staging object the same way, whatever cloud it is.
         var staging = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload";
         _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(staging));
-        _factory.Blobs.Setup(b => b.DownloadAsync("member-documents", staging, It.IsAny<CancellationToken>()))
+        _factory.Blobs.Setup(b => b.GetPropertiesAsync("member-documents", staging, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new DocumentNotFoundException("member-documents", staging));
 
         var response = await Client().PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
@@ -697,6 +699,37 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
         Assert.Empty(_uploads);
         _factory.Blobs.Verify(b => b.DeleteAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Finalize_RefusesAnOversizeUpload_WithoutReadingIt()
+    {
+        // An upload link can't cap size on every cloud; the stored size is
+        // checked first, so an oversize upload never reaches the pod.
+        var staging = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload";
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(staging));
+        _factory.Blobs.Setup(b => b.GetPropertiesAsync("member-documents", staging, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DocumentProperties { SizeBytes = 5L * 1024 * 1024 * 1024 });
+
+        var response = await Client().PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+        _factory.Blobs.Verify(b => b.DownloadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _factory.Blobs.Verify(b => b.DeleteAsync("member-documents", staging, It.IsAny<CancellationToken>()), Times.Once);
+        _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Content_WhoseStoredFileIsMissing_Is404_Not500()
+    {
+        var stored = StoredDocument(pendingPath: null);
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(stored);
+        _factory.Blobs.Setup(b => b.DownloadAsync("member-documents", stored.BlobPath, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DocumentNotFoundException("member-documents", stored.BlobPath));
+
+        var response = await Client().GetAsync($"/api/v1/member-documents/{DocId}/content");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]

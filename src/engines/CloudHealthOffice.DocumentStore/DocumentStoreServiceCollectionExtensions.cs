@@ -91,7 +91,8 @@ public static class DocumentStoreServiceCollectionExtensions
             }
             provider = DocumentStoreProvider.Azure;
         }
-        else if (!Enum.TryParse(configured.Trim(), ignoreCase: true, out provider)
+        else if (configured.Trim().All(char.IsDigit)
+                 || !Enum.TryParse(configured.Trim(), ignoreCase: true, out provider)
                  || !Enum.IsDefined(provider))
         {
             throw new InvalidOperationException(
