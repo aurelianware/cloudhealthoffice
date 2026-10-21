@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 using EligibilityService.Models;
@@ -104,6 +105,7 @@ public class MongoContainerAdapter : IBatchJobContainer
             BlobUri: slot.BlobUri);
     }
 
+    [CrossTenantQuery("Read by document id, and every id is composed as {tenantId}::{id} by BatchJobStore from the request's tenant.")]
     private async Task<JobDoc?> ReadDocAsync(string docId, CancellationToken ct)
     {
         return await _collection.Find(d => d.Id == docId).FirstOrDefaultAsync(ct);

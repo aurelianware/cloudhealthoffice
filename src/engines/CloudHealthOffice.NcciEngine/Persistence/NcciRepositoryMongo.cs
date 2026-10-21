@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using CloudHealthOffice.NcciEngine.Domain;
 using CloudHealthOffice.NcciEngine.Models;
 using Microsoft.Extensions.Configuration;
@@ -204,6 +205,7 @@ internal class NcciRepositoryMongo : INcciRepository
             .FirstOrDefaultAsync(ct);
     }
 
+    [CrossTenantQuery("Upsert by id; the id embeds the tenant (NcciLoadRecord.MakeId(tenantId, ...)) and record.TenantId comes from the caller's token.")]
     public async Task SaveLoadRecordAsync(NcciLoadRecord record, CancellationToken ct = default)
     {
         await _ledger.ReplaceOneAsync(

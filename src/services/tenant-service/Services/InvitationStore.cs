@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using TenantService.Models;
@@ -487,6 +488,7 @@ public sealed class MongoInvitationStore : IInvitationStore
         return new RedeemResult(InvitationError.Conflict);
     }
 
+    [CrossTenantQuery("Updates by the server-generated GUID of an invitation read within the tenant, or found by its secret code hash during redemption.")]
     private Task MarkRedeemedAsync(Invitation inv, string tid, string oid, CancellationToken ct)
         => _invitations.UpdateOneAsync(
             InvitationFilter.And(

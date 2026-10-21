@@ -45,18 +45,23 @@ public sealed class GatewayRemittanceDemoController : ControllerBase
         }
 
         var contextTenant = HttpContext.GetTenantId();
-        if (!string.IsNullOrWhiteSpace(body.TransmissionId))
+        if (!string.IsNullOrWhiteSpace(body.TransmissionId)
+            && await _transmissions.GetByTenantAndIdAsync(contextTenant, body.TransmissionId, ct) is null)
         {
-            var transmission = await _transmissions.GetByIdAsync(body.TransmissionId, ct);
-            if (transmission is null)
-            {
-                return NotFound(new { error = "Transmission not found." });
-            }
+            return NotFound(new { error = "Transmission not found." });
+        }
 
-            if (!string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
-            {
-                return BadRequest(new { error = "Tenant does not match the claim transmission." });
-            }
+        // An injected 835 belongs to the caller's tenant: its claims match only
+        // that tenant's transmissions, and its remittance and event ids are
+        // namespaced by tenant so it can never replay another tenant's receipt.
+        body.RestrictToTenantId = contextTenant;
+        if (!string.IsNullOrWhiteSpace(body.RemittanceId))
+        {
+            body.RemittanceId = $"{contextTenant}:{body.RemittanceId.Trim()}";
+        }
+        if (!string.IsNullOrWhiteSpace(body.EventId))
+        {
+            body.EventId = $"{contextTenant}:{body.EventId.Trim()}";
         }
 
         if (string.IsNullOrWhiteSpace(body.Gateway))
@@ -81,16 +86,10 @@ public sealed class GatewayRemittanceDemoController : ControllerBase
             return NotFound();
         }
 
-        var transmission = await _transmissions.GetByIdAsync(transmissionId, ct);
+        var transmission = await _transmissions.GetByTenantAndIdAsync(HttpContext.GetTenantId(), transmissionId, ct);
         if (transmission is null)
         {
             return NotFound(new { error = "Transmission not found." });
-        }
-
-        var contextTenant = HttpContext.GetTenantId();
-        if (!string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
-        {
-            return BadRequest(new { error = "Tenant does not match the claim transmission." });
         }
 
         var list = await _receipts.ListByTransmissionIdAsync(transmission.TransmissionId, ct);

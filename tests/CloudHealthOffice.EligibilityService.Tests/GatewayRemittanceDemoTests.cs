@@ -188,6 +188,64 @@ public class GatewayRemittanceDemoTests : IClassFixture<EligibilityApiFactory>
         using var other = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         other.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-beta");
         var history = await other.GetAsync($"/api/dev/gateway/claims/{transmissionId}/remittance");
-        Assert.Equal(HttpStatusCode.BadRequest, history.StatusCode);
+        // Another tenant's transmission is indistinguishable from a missing one.
+        Assert.Equal(HttpStatusCode.NotFound, history.StatusCode);
+    }
+
+    [Fact]
+    public async Task Inject_FromAnotherTenant_NeverMatchesThisTenantsClaims()
+    {
+        var submit = await _client.PostAsJsonAsync("/api/dev/gateway/claims", new
+        {
+            tenantId = "tenant-alpha",
+            claimId = "CLM-XTENANT-2001",
+            claimType = "Professional",
+            frequencyCode = "1",
+            payerId = "60054",
+            placeOfServiceCode = "11",
+            totalCharge = 10,
+            billingProvider = new { npi = "1999999984", organizationName = "Therapy Associates" },
+            subscriber = new { memberId = "U7777788888", firstName = "John", lastName = "Anon" },
+            serviceLines = new[]
+            {
+                new { lineNumber = 1, procedureCode = "90837", units = 1, chargeAmount = 10 }
+            }
+        });
+        submit.EnsureSuccessStatusCode();
+        using var submitDoc = JsonDocument.Parse(await submit.Content.ReadAsStringAsync());
+        var transmissionId = submitDoc.RootElement.GetProperty("result").GetProperty("transmissionId").GetString();
+
+        using var other = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
+        other.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-beta");
+
+        // By transmission id: refused outright.
+        var byId = await other.PostAsJsonAsync("/api/dev/gateway/remittance", new
+        {
+            remittanceId = "era-cross-1",
+            gateway = "Mock",
+            paymentAmount = 1,
+            claims = new[] { new { transmissionId, claimStatusCode = "1", chargedAmount = 10, paidAmount = 1 } }
+        });
+        Assert.Equal(HttpStatusCode.OK, byId.StatusCode);
+        using (var doc = JsonDocument.Parse(await byId.Content.ReadAsStringAsync()))
+            Assert.Equal(0, doc.RootElement.GetProperty("matchedClaimCount").GetInt32());
+
+        // By patient control number: alpha's claim is not a candidate for beta's 835.
+        var byPcn = await other.PostAsJsonAsync("/api/dev/gateway/remittance", new
+        {
+            remittanceId = "era-cross-2",
+            gateway = "Mock",
+            paymentAmount = 1,
+            claims = new[] { new { patientControlNumber = "CLM-XTENANT-2001", claimStatusCode = "1", chargedAmount = 10, paidAmount = 1 } }
+        });
+        byPcn.EnsureSuccessStatusCode();
+        using (var doc = JsonDocument.Parse(await byPcn.Content.ReadAsStringAsync()))
+            Assert.Equal(0, doc.RootElement.GetProperty("matchedClaimCount").GetInt32());
+
+        // And alpha's transmission still has no remittance.
+        var history = await _client.GetAsync($"/api/dev/gateway/claims/{transmissionId}/remittance");
+        history.EnsureSuccessStatusCode();
+        using var historyDoc = JsonDocument.Parse(await history.Content.ReadAsStringAsync());
+        Assert.True(historyDoc.RootElement.GetArrayLength() == 0, historyDoc.RootElement.ToString());
     }
 }

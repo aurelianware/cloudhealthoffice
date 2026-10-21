@@ -18,13 +18,18 @@ internal static class RemittanceMatcher
         string gatewayName,
         string? explicitTransmissionId,
         IClaimTransmissionStore store,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? restrictToTenantId = null)
     {
         if (!string.IsNullOrWhiteSpace(explicitTransmissionId) ||
             !string.IsNullOrWhiteSpace(claim.TransmissionId))
         {
             var id = FirstNonBlank(explicitTransmissionId, claim.TransmissionId)!;
             var byId = await store.GetByIdAsync(id, ct).ConfigureAwait(false);
+            if (byId is not null && !InTenant(byId, restrictToTenantId))
+            {
+                byId = null;
+            }
             return byId is null
                 ? new Result(null, false, "explicit-transmission-not-found")
                 : new Result(byId, false, "transmission-id");
@@ -35,7 +40,7 @@ internal static class RemittanceMatcher
             var byPayer = await store
                 .FindByPayerClaimControlNumberAsync(gatewayName, claim.PayerClaimControlNumber, ct)
                 .ConfigureAwait(false);
-            var decided = Decide(byPayer, "payer-claim-control-number");
+            var decided = Decide(InTenant(byPayer, restrictToTenantId), "payer-claim-control-number");
             if (decided.Ambiguous || decided.Transmission is not null)
             {
                 return decided;
@@ -47,7 +52,7 @@ internal static class RemittanceMatcher
             var byPatient = await store
                 .FindByPatientControlNumberAsync(gatewayName, claim.PatientControlNumber, ct)
                 .ConfigureAwait(false);
-            var decided = Decide(byPatient, "patient-control-number");
+            var decided = Decide(InTenant(byPatient, restrictToTenantId), "patient-control-number");
             if (decided.Ambiguous || decided.Transmission is not null)
             {
                 return decided;
@@ -74,6 +79,13 @@ internal static class RemittanceMatcher
 
         return new Result(found[0], false, reason);
     }
+
+    private static bool InTenant(ClaimTransmissionRecord record, string? tenantId) =>
+        tenantId is null || string.Equals(record.TenantId, tenantId, StringComparison.Ordinal);
+
+    private static IReadOnlyList<ClaimTransmissionRecord> InTenant(
+        IReadOnlyList<ClaimTransmissionRecord> found, string? tenantId) =>
+        tenantId is null ? found : found.Where(r => InTenant(r, tenantId)).ToList();
 
     private static string? FirstNonBlank(params string?[] values) =>
         values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));

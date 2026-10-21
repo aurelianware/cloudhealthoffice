@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -114,6 +115,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
         return await _collection.Find(filter).FirstOrDefaultAsync();
     }
 
+    [CrossTenantQuery("EncounterSubmissionWorker (background): deadline sweep across tenants; each flagged submission is updated under its own TenantId.")]
     public async Task<IEnumerable<EncounterSubmission>> GetApproachingDeadlineAsync(int warningDays = 7)
     {
         var warningCutoff = DateTime.UtcNow.AddDays(warningDays);
@@ -290,6 +292,7 @@ public class EncounterSubmissionServiceImpl : IEncounterSubmissionService
     {
         var filter = Builders<EncounterSubmission>.Filter.And(
             Builders<EncounterSubmission>.Filter.Eq(s => s.Id, submission.Id),
+            Builders<EncounterSubmission>.Filter.Eq(s => s.TenantId, submission.TenantId),
             Builders<EncounterSubmission>.Filter.Eq(s => s.Status, EncounterSubmissionStatus.Pending)
         );
 

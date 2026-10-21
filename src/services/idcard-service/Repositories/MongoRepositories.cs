@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using IdCardService.Models;
 using MongoDB.Driver;
 
@@ -89,6 +90,7 @@ public class MongoIdCardRecordRepository : IIdCardRecordRepository
             .ToListAsync(ct);
     }
 
+    [CrossTenantQuery("QnxtMirrorReconciliationJob (hosted service): re-enqueues each record with its own TenantId.")]
     public async Task<List<IdCardRecord>> ListIssuedSinceAsync(DateTime since, CancellationToken ct = default)
     {
         return await _collection.Find(x => x.IssuedAt >= since).ToListAsync(ct);

@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Xunit.Abstractions;
 
 namespace CloudHealthOffice.Architecture.Tests;
 
@@ -25,7 +26,7 @@ namespace CloudHealthOffice.Architecture.Tests;
 /// cover that.
 /// </para>
 /// </summary>
-public class TenantFilterArchitectureTests
+public class TenantFilterArchitectureTests(ITestOutputHelper output)
 {
     internal const string AttributeName = "CrossTenantQuery";
 
@@ -63,6 +64,7 @@ public class TenantFilterArchitectureTests
         // Guards the check itself: if path discovery or parsing broke, it
         // would pass vacuously.
         var stats = Inventory(SourceFiles());
+        output.WriteLine($"{stats.TenantScopedTypes} tenant-scoped document types; {stats.CheckedQueries} queries checked.");
         Assert.True(stats.TenantScopedTypes > 50, $"only {stats.TenantScopedTypes} tenant-scoped document types found");
         Assert.True(stats.CheckedQueries > 300, $"only {stats.CheckedQueries} queries checked");
     }
@@ -86,12 +88,26 @@ public class TenantFilterArchitectureTests
                 public Task<Global> Shared(string id) => _globals.Find(g => g.Id == id).FirstAsync();
                 public Task Insert(Widget w) => _widgets.InsertOneAsync(w);
             }
+            public class GadgetRepository
+            {
+                private readonly IMongoCollection<Widget> _widgets;
+                public Task<List<Widget>> ForTenant(string tenantId) => Query(Builders<Widget>.Filter.Eq(w => w.TenantId, tenantId));
+                private Task<List<Widget>> Query(FilterDefinition<Widget> filter) => _widgets.Find(filter).ToListAsync();
+            }
+            public class LeakyGadgetRepository
+            {
+                private readonly IMongoCollection<Widget> _widgets;
+                public Task<List<Widget>> ForTenant(string tenantId) => Query(Builders<Widget>.Filter.Eq(w => w.TenantId, tenantId));
+                public Task<List<Widget>> Everything() => Query(FilterDefinition<Widget>.Empty);
+                private Task<List<Widget>> Query(FilterDefinition<Widget> filter) => _widgets.Find(filter).ToListAsync();
+            }
             """;
 
         var violations = Scan([("Fixture.cs", source)]);
 
-        var only = Assert.Single(violations);
-        Assert.Contains("WidgetRepository.ById", only);
+        Assert.Equal(2, violations.Count);
+        Assert.Contains(violations, v => v.Contains("WidgetRepository.ById"));
+        Assert.Contains(violations, v => v.Contains("LeakyGadgetRepository.Query"));
     }
 
     // ── Scanner ─────────────────────────────────────────────────────────
@@ -316,12 +332,32 @@ public class TenantFilterArchitectureTests
                 var identifiers = m.DescendantNodes().OfType<IdentifierNameSyntax>().Select(i => i.Identifier.Text);
                 if (identifiers.Any(id => tenantFields.Contains(id)
                         || byName.TryGetValue(id, out var callees) && callees.Any(aware.Contains)))
+                {
                     changed |= aware.Add(m);
+                    continue;
+                }
+
+                // A private helper that runs a filter its callers build is as
+                // scoped as they are: aware when it has callers in this type
+                // and every one of them is.
+                if (TakesFilter(m) && m is BaseMethodDeclarationSyntax method
+                    && method.Modifiers.Any(SyntaxKind.PrivateKeyword))
+                {
+                    var name = MemberName(m);
+                    var callers = members.Where(o => o != m && o.DescendantNodes().OfType<IdentifierNameSyntax>()
+                        .Any(i => i.Identifier.Text == name)).ToList();
+                    if (callers.Count > 0 && callers.All(aware.Contains))
+                        changed |= aware.Add(m);
+                }
             }
         } while (changed);
 
         return aware;
     }
+
+    private static bool TakesFilter(SyntaxNode member) =>
+        member is BaseMethodDeclarationSyntax m && m.ParameterList.Parameters.Any(p =>
+            p.Type is GenericNameSyntax { Identifier.Text: "FilterDefinition" or "Expression" or "PipelineDefinition" });
 
     private static bool MentionsTenant(SyntaxNode node) =>
         node.DescendantTokens().Any(t => t.IsKind(SyntaxKind.IdentifierToken)

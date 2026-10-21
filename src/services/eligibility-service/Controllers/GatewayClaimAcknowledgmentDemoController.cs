@@ -50,9 +50,11 @@ public sealed class GatewayClaimAcknowledgmentDemoController : ControllerBase
 
         var ack = new GatewayClaimAcknowledgment
         {
+            // Namespaced by the (tenant-checked) transmission so a caller-chosen
+            // id can never replay another tenant's acknowledgment.
             AcknowledgmentId = string.IsNullOrWhiteSpace(body.AcknowledgmentId)
                 ? $"dev-{transmission.TransmissionId}"
-                : body.AcknowledgmentId.Trim(),
+                : $"dev-{transmission.TransmissionId}-{body.AcknowledgmentId.Trim()}",
             Gateway = string.IsNullOrWhiteSpace(transmission.GatewayName)
                 ? "Mock"
                 : transmission.GatewayName,

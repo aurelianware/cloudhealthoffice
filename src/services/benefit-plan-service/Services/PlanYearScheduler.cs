@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using BenefitPlanService.Models;
 using MongoDB.Driver;
 
@@ -34,6 +35,7 @@ public sealed class MongoPlanYearScheduleSource : IPlanYearScheduleSource
         _collection = database.GetCollection<BenefitPlan>(collectionName);
     }
 
+    [CrossTenantQuery("PlanYearScheduler (hosted service): enumerates plans across tenants and publishes each transition under the plan's own tenant.")]
     public async IAsyncEnumerable<BenefitPlan> EnumeratePlansAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
