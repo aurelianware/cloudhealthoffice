@@ -122,12 +122,7 @@ public sealed class TokenExchangeService
 
         // PlatformAdmin is granted only by the rule above, never by a tenant's
         // own role assignment, which a tenant administrator controls.
-        var roles = (member?.Roles ?? new List<string>())
-            .Where(r => !string.IsNullOrWhiteSpace(r))
-            .Where(r => !string.Equals(r, ChoRolePermissions.PlatformAdmin, StringComparison.OrdinalIgnoreCase))
-            .Where(r => !string.Equals(r, ChoServiceRole.Name, StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var roles = TenantRoles(member?.Roles);
         if (platformAdmin)
             roles.Add(ChoRolePermissions.PlatformAdmin);
 
@@ -224,6 +219,19 @@ public sealed class TokenExchangeService
         _audit.Linked(user, tenant.TenantId, linkedNow.Id);
         return linkedNow;
     }
+
+    /// <summary>
+    /// The roles a tenant membership grants. PlatformAdmin and the service role
+    /// are dropped: a tenant administrator controls these roles and must not be
+    /// able to grant cross-tenant or service power.
+    /// </summary>
+    internal static List<string> TenantRoles(IEnumerable<string>? roles)
+        => (roles ?? [])
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Where(r => !string.Equals(r, ChoRolePermissions.PlatformAdmin, StringComparison.OrdinalIgnoreCase))
+            .Where(r => !string.Equals(r, ChoServiceRole.Name, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     /// <summary>Marker: more than one record in the tenant is linked to this identity.</summary>
     private static readonly DirectoryUser Ambiguous = new();

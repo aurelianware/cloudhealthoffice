@@ -2,6 +2,7 @@ using System.Text.Json;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.TokenService;
+using CloudHealthOffice.TokenService.CloudflareAccess;
 using CloudHealthOffice.TokenService.Directory;
 using CloudHealthOffice.TokenService.Entra;
 using CloudHealthOffice.TokenService.Exchange;
@@ -44,6 +45,13 @@ var serviceTokenOptions = builder.Configuration.GetSection(ServiceTokenOptions.S
                           ?? new ServiceTokenOptions();
 serviceTokenOptions.Validate(signingOptions.Issuer, workloadOptions.Issuer, builder.Environment.IsDevelopment());
 builder.Services.AddServiceTokens(serviceTokenOptions, builder.Environment);
+
+// People signed in by Cloudflare Access, for the tenants that opt in:
+// POST /v1/token/exchange/cloudflare-access. Off unless CloudflareAccess:Enabled.
+var accessOptions = builder.Configuration.GetSection(CloudflareAccessExchangeOptions.SectionName).Get<CloudflareAccessExchangeOptions>()
+                    ?? new CloudflareAccessExchangeOptions();
+accessOptions.Validate();
+builder.Services.AddCloudflareAccessExchange(accessOptions);
 
 // Entra ID access tokens from the portal (on behalf of a signed-in user).
 builder.Services.AddEntraUserTokenValidation(builder.Configuration, serviceOptions);
@@ -120,6 +128,7 @@ app.MapInvitationRedemption();
 app.MapSignup();
 app.MapWorkloadTokens();
 app.MapServiceTokens();
+app.MapCloudflareAccessExchange();
 
 app.MapPost("/v1/token/exchange", async (HttpContext http, TokenExchangeService exchange, TokenAudit audit) =>
 {

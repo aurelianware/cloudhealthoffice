@@ -147,6 +147,14 @@
           <li><strong>Guests, partners and delegated administrators.</strong> People from other directories join only by invitation: a single-use code with an expiry (seven days by default), redeemed by the invited person after they sign in. Email matching never links a guest, so another directory cannot claim an account by minting a token for the same address.</li>
           <li><strong>Leaving.</strong> Disabling a user or revoking an invitation takes effect at their next token, within five minutes.</li>
         </ul>
+        <h3 id="cloudflare-access">Sign-in through Cloudflare Access (demos and sandboxes)</h3>
+        <p>A deployment published through a Cloudflare Tunnel can use Cloudflare Access as its only sign-in. The portal trusts the signed token Access adds to every request, so people sign in once, with whatever Access allows (Google Workspace, Microsoft or a one-time email code). <code>token-service</code> validates that token again and issues a platform token only when:</p>
+        <ul>
+          <li>the tenant is listed in <code>CloudflareAccess:Tenants</code>, an explicit opt-in per tenant;</li>
+          <li>the person is an <strong>Active</strong> user of that tenant with the same email address, and their roles come from that user record.</li>
+        </ul>
+        <p>Access decides who reaches the portal; the tenant's user list decides what they can do. Use it for demonstrations and evaluation tenants; production tenants sign in through their own identity provider.</p>
+
         <h3 id="platform-admins">Platform administrators</h3>
         <p>Cross-tenant administration requires two things together: an Entra token from the operator's own directory (<code>TokenService:PlatformTenantId</code>) and the <code>PlatformAdmin</code> app role. A customer directory that assigns the same role gets nothing. Leave <code>PlatformTenantId</code> empty to turn platform administration off.</p>
 

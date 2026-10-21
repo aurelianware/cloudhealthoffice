@@ -1,5 +1,6 @@
 """Checks for deploy/gcp/render_manifests.py. Run: python3 -m pytest deploy/gcp"""
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -232,3 +233,147 @@ def test_document_bucket_needs_its_service_account():
     )
     assert result.returncode != 0
     assert "go together" in result.stderr
+
+
+# ── --security production ───────────────────────────────────────────────────
+
+KMS_VERSION = "projects/cho-demo/locations/us-west1/keyRings/cho/cryptoKeys/token-signing/cryptoKeyVersions/1"
+TOKEN_SERVICE_GSA = "cho-token-service@cho-demo.iam.gserviceaccount.com"
+CLUSTER_ISSUER = "https://container.googleapis.com/v1/projects/cho-demo/locations/us-west1/clusters/cho"
+ACCESS_TEAM = "cho-demo.cloudflareaccess.com"
+ACCESS_AUD = "test-access-application-aud"
+PUBLIC_KEY = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEexample\n-----END PUBLIC KEY-----\n"
+
+
+def production_args(tmp_path, *extra):
+    key = tmp_path / "token-service.pub.pem"
+    key.write_text(PUBLIC_KEY)
+    return ("--security", "production",
+            "--token-signing-key-version", KMS_VERSION,
+            "--token-service-google-account", TOKEN_SERVICE_GSA,
+            "--kubernetes-issuer", CLUSTER_ISSUER,
+            "--token-public-key-file", str(key),
+            "--access-team-domain", ACCESS_TEAM,
+            "--access-audience", ACCESS_AUD, *extra)
+
+
+def config_map(docs, name):
+    return next(d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"] == name)["data"]
+
+
+def test_production_hosts_accept_no_development_keys_or_overrides(tmp_path):
+    docs = render(*production_args(tmp_path))
+    text = yaml.safe_dump_all(docs)
+    for marker in ("CHO_TESTING", "CHO_ALLOW_TESTING_ENVIRONMENT", "CHO_ALLOW_DEV_ON_DEPLOYED_HOST",
+                   "SymmetricKey", "cho-portal-dev", "cho-internal-dev", "LocalDemo",
+                   "Q0hPLWRldmVsb3BtZW50", "local-demo-admin", "SmartAuth__DevMode"):
+        assert marker not in text, marker
+    for name, dep in deployments(docs).items():
+        assert env(dep)["ASPNETCORE_ENVIRONMENT"] == "Staging", name
+    for d in docs:
+        if d["kind"] == "ConfigMap" and "ASPNETCORE_ENVIRONMENT" in (d.get("data") or {}):
+            assert d["data"]["ASPNETCORE_ENVIRONMENT"] == "Staging", d["metadata"]["name"]
+
+
+def test_production_services_trust_only_the_token_service_key(tmp_path):
+    tokens = config_map(render(*production_args(tmp_path)), "cho-service-tokens")
+    issuers = {(tokens[f"ChoAuth__Issuers__{i}__Issuer"], tokens[f"ChoAuth__Issuers__{i}__Kind"]) for i in range(3)}
+    assert issuers == {("cho-token-service", "User"), ("cho-token-service-svc", "Service"), ("cho-workload", "Workload")}
+    assert all(tokens[f"ChoAuth__Issuers__{i}__PublicKeyPem"] == PUBLIC_KEY for i in range(3))
+    assert tokens["ChoAuth__ServiceToken__Source"] == "TokenService"
+    assert tokens["ChoAuth__ServiceToken__Credential"] == "KubernetesServiceAccount"
+
+
+def test_production_token_service_signs_with_cloud_kms_and_registers_every_service(tmp_path):
+    docs = render(*production_args(tmp_path))
+    deps = deployments(docs)
+    assert deps["token-service"]["spec"]["replicas"] == 1
+
+    config = config_map(docs, "token-service-config")
+    assert config["TokenSigning__CloudKmsKeyVersion"] == KMS_VERSION
+    assert "TokenSigning__KeyVaultKeyId" not in config
+    assert config["ServiceTokens__IdentityProvider"] == "Kubernetes"
+    assert config["ServiceTokens__Kubernetes__KubernetesIssuer"] == CLUSTER_ISSUER
+    assert not any(k.startswith("ServiceTokens__Audiences") or k == "ServiceTokens__EntraTenantId" for k in config)
+    assert config["WorkloadTokens__Enabled"] == "false"
+    assert config["CloudflareAccess__TeamDomain"] == ACCESS_TEAM
+    assert config["CloudflareAccess__Audiences__0"] == ACCESS_AUD
+    assert config["CloudflareAccess__Tenants__0"] == "demo"
+    assert config["TokenService__PlatformTenantId"] == ""
+
+    accounts = {d["metadata"]["name"]: d["metadata"].get("annotations", {}) for d in docs if d["kind"] == "ServiceAccount"}
+    assert accounts["token-service-sa"] == {"iam.gke.io/gcp-service-account": TOKEN_SERVICE_GSA}
+    assert not any(k.startswith("azure.workload.identity/") for a in accounts.values() for k in a)
+
+    registry = json.loads(config_map(docs, "token-service-service-clients")["service-clients.json"])
+    by_client = {r["clientId"]: r for r in registry}
+    assert by_client["claims-service"] == {"clientId": "claims-service", "namespace": "cloudhealthoffice", "serviceAccount": "claims-service-sa"}
+    assert "token-service" not in by_client and "portal" not in by_client
+    assert len({r["serviceAccount"] for r in registry}) == len(registry)
+    for name, dep in deps.items():
+        if name in ("portal", "token-service"):
+            continue
+        spec = dep["spec"]["template"]["spec"]
+        assert spec["serviceAccountName"] in accounts, name
+        assert any(r["serviceAccount"] == spec["serviceAccountName"] for r in registry), name
+        assert {"azure.workload.identity/use"}.isdisjoint(dep["spec"]["template"]["metadata"].get("labels", {})), name
+
+
+def test_production_services_present_a_projected_token(tmp_path):
+    deps = deployments(render(*production_args(tmp_path)))
+    for name, dep in deps.items():
+        if name in ("portal", "token-service"):
+            continue
+        spec = dep["spec"]["template"]["spec"]
+        volume = next(v for v in spec["volumes"] if v["name"] == "cho-token-service")
+        source = volume["projected"]["sources"][0]["serviceAccountToken"]
+        assert source == {"audience": "cho-token-service", "expirationSeconds": 3600, "path": "token"}, name
+        for container in spec["containers"]:
+            assert {"name": "cho-token-service", "mountPath": "/var/run/secrets/cho/token-service", "readOnly": True} \
+                in container["volumeMounts"], name
+        values = env(dep)
+        assert values["ChoAuth__ServiceToken__Credential"] == "KubernetesServiceAccount", name
+        assert values["ChoAuth__ServiceToken__ClientId"], name
+    assert env(deps["idcard-service"])["ChoAuth__ServiceToken__ClientId"] == "idcard-service"
+
+
+def test_production_portal_signs_in_through_cloudflare_access(tmp_path):
+    portal = env(deployments(render(*production_args(tmp_path)))["portal"])
+    assert portal["Authentication__Mode"] == "CloudflareAccess"
+    assert portal["Authentication__CloudflareAccess__TeamDomain"] == ACCESS_TEAM
+    assert portal["Authentication__CloudflareAccess__Audiences__0"] == ACCESS_AUD
+    assert portal["Services__TokenService"] == "http://token-service"
+
+
+def test_production_keeps_document_storage_identity(tmp_path):
+    docs = render(*production_args(tmp_path, "--documents-bucket", "cho-docs",
+                                   "--documents-service-account", "cho-documents@cho-demo.iam.gserviceaccount.com"))
+    registry = json.loads(config_map(docs, "token-service-service-clients")["service-clients.json"])
+    assert {"clientId": "document-service", "namespace": "cloudhealthoffice", "serviceAccount": "document-service"} in registry
+
+
+def test_production_needs_every_setting(tmp_path):
+    args = list(production_args(tmp_path))
+    i = args.index("--access-audience")
+    del args[i:i + 2]
+    result = subprocess.run([sys.executable, str(SCRIPT), "--registry", REGISTRY, *args], capture_output=True, text=True)
+    assert result.returncode != 0 and "--access-audience" in result.stderr
+
+
+def test_production_refuses_development_hosts_and_unpinned_keys(tmp_path):
+    for override in (("--host-environment", "Development"),
+                     ("--token-signing-key-version", KMS_VERSION.rsplit("/", 1)[0] + "/latest")):
+        args = list(production_args(tmp_path))
+        if override[0] in args:
+            args[args.index(override[0]) + 1] = override[1]
+        else:
+            args += override
+        result = subprocess.run([sys.executable, str(SCRIPT), "--registry", REGISTRY, *args], capture_output=True, text=True)
+        assert result.returncode != 0, override
+
+
+def test_demo_mode_is_unchanged_by_default():
+    deps = deployments(render())
+    assert deps["token-service"]["spec"]["replicas"] == 0
+    assert env(deps["claims-service"])["CHO_ALLOW_DEV_ON_DEPLOYED_HOST"] == "true"
+    assert not any(d["kind"] == "ConfigMap" and d["metadata"]["name"] == "cho-service-tokens" for d in render())

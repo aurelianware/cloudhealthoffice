@@ -2,6 +2,7 @@
 @page "/signin"
 @using Microsoft.AspNetCore.Authorization
 @inject NavigationManager Navigation
+@inject IConfiguration Configuration
 
 @attribute [AllowAnonymous]
 
@@ -26,6 +27,6 @@
     private void GoToSignIn()
     {
         var redirectUri = Uri.EscapeDataString(Navigation.Uri);
-        Navigation.NavigateTo($"/MicrosoftIdentity/Account/SignIn?redirectUri={redirectUri}", forceLoad: true);
+        Navigation.NavigateTo($"{PortalAuthMode.SignInPath(Configuration)}?redirectUri={redirectUri}", forceLoad: true);
     }
 }

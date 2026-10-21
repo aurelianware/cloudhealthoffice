@@ -132,7 +132,7 @@
                 </MudMenu>
             </Authorized>
             <NotAuthorized>
-                <MudIconButton Icon="@Icons.Material.Filled.Login" Color="Color.Inherit" Href="/MicrosoftIdentity/Account/SignIn" aria-label="Sign in" />
+                <MudIconButton Icon="@Icons.Material.Filled.Login" Color="Color.Inherit" Href="@PortalAuthMode.SignInPath(Configuration)" aria-label="Sign in" />
             </NotAuthorized>
         </AuthorizeView>
     </MudAppBar>
@@ -428,17 +428,9 @@
     private bool _tenantLoadComplete;
     private List<TenantSubscription> _availableTenants = new();
 
-    private bool IsLocalDemoAuth()
-        => string.Equals(
-            Configuration["Authentication:Mode"],
-            "LocalDemo",
-            StringComparison.OrdinalIgnoreCase);
-
     private void SignIn()
     {
-        var signInPath = IsLocalDemoAuth()
-            ? "/local-demo/sign-in"
-            : "/MicrosoftIdentity/Account/SignIn";
+        var signInPath = PortalAuthMode.SignInPath(Configuration);
         Navigation.NavigateTo(signInPath, forceLoad: true);
     }
 
@@ -565,9 +557,7 @@
 
     private void Logout()
     {
-        var signOutPath = IsLocalDemoAuth()
-            ? "/local-demo/sign-out"
-            : "/MicrosoftIdentity/Account/SignOut";
+        var signOutPath = PortalAuthMode.SignOutPath(Configuration);
         Navigation.NavigateTo(signOutPath, forceLoad: true);
     }
 

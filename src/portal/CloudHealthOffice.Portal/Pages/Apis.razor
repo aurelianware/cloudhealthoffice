@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @inject NavigationManager Navigation
+@inject IConfiguration Configuration
 
 @attribute [AllowAnonymous]
 
@@ -416,5 +417,5 @@ curl https://sandbox.cloudhealthoffice.com/fhir/r4/ExplanationOfBenefit?patient=
 </MudContainer>
 
 @code {
-    private void SignIn() => Navigation.NavigateTo("/MicrosoftIdentity/Account/SignIn", forceLoad: true);
+    private void SignIn() => Navigation.NavigateTo(PortalAuthMode.SignInPath(Configuration), forceLoad: true);
 }

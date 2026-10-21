@@ -6,9 +6,11 @@ name: Deploy demo to GKE
 # Runs on every push to main (merged PRs; docs-only changes are skipped) and on
 # demand. Set the repository variable GKE_AUTO_DEPLOY=false to pause the
 # automatic deploys, e.g. before a live demo; the manual run keeps working.
-# Demo-grade: synthetic data, no public ingress, development signing keys (see
-# docs/deploy/GCP-DEMO.md). The Azure workflow (deploy-azure-aks.yml) is
-# separate and unaffected.
+# Demo-grade: synthetic data, no public ingress. Development signing keys
+# unless the production security variables below are set, in which case
+# services run with Cloud KMS signing, Kubernetes service identity and
+# Cloudflare Access sign-in (docs/deploy/GCP-DEMO.md, "Production security").
+# The Azure workflow (deploy-azure-aks.yml) is separate and unaffected.
 #
 # The AI claims examiner is on for automatic runs, and for manual runs unless
 # ai_examiner is unticked. When it is on, a missing ANTHROPIC_API_KEY fails the
@@ -22,6 +24,11 @@ name: Deploy demo to GKE
 #             CLOUDFLARE_TUNNEL_TOKEN (optional, runs the Cloudflare Tunnel connector;
 #               see docs/deploy/GCP-PUBLIC-HOSTING-PLAN.md before setting it)
 #   variables GCP_PROJECT_ID, GKE_CLUSTER, GKE_LOCATION, GAR_REPOSITORY
+#   production security (variables; all five or none, plus DEMO_ADMIN_EMAILS):
+#             TOKEN_SIGNING_KEY_VERSION, TOKEN_SERVICE_GOOGLE_ACCOUNT, KUBERNETES_SA_ISSUER
+#               (terraform outputs, with enable_token_signing_kms = true)
+#             CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD (Cloudflare Zero Trust)
+#             DEMO_ADMIN_EMAILS (comma-separated; made TenantAdmin of the demo tenant)
 
 on:
   push:
@@ -157,6 +164,10 @@ jobs:
           location: ${{ env.GKE_LOCATION }}
           project_id: ${{ env.GCP_PROJECT_ID }}
 
+      - name: Set up gcloud
+        # Reads the token signing public key when production security is configured.
+        uses: google-github-actions/setup-gcloud@v2
+
       - name: Install PyYAML
         run: pip install --quiet pyyaml
 
@@ -173,6 +184,13 @@ jobs:
           # Document storage (terraform outputs in infrastructure/gcp); optional.
           DOCUMENTS_BUCKET: ${{ vars.DOCUMENTS_BUCKET }}
           DOCUMENTS_SERVICE_ACCOUNT: ${{ vars.DOCUMENTS_SERVICE_ACCOUNT }}
+          # Production security (all five, or none for the development-key demo).
+          TOKEN_SIGNING_KEY_VERSION: ${{ vars.TOKEN_SIGNING_KEY_VERSION }}
+          TOKEN_SERVICE_GOOGLE_ACCOUNT: ${{ vars.TOKEN_SERVICE_GOOGLE_ACCOUNT }}
+          KUBERNETES_SA_ISSUER: ${{ vars.KUBERNETES_SA_ISSUER }}
+          CF_ACCESS_TEAM_DOMAIN: ${{ vars.CF_ACCESS_TEAM_DOMAIN }}
+          CF_ACCESS_AUD: ${{ vars.CF_ACCESS_AUD }}
+          DEMO_ADMIN_EMAILS: ${{ vars.DEMO_ADMIN_EMAILS }}
         run: ./scripts/deploy-gke.sh
 
       - name: Pod status

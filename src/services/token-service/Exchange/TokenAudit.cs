@@ -101,6 +101,23 @@ public sealed class TokenAudit
                 "refused", identity?.Entra?.ObjectId.ToString() ?? "-", Clean(tenantId), Clean(reason));
     }
 
+    /// <summary>A user token issued to a person Cloudflare Access signed in. The email is never logged.</summary>
+    public void AccessIssued(CloudHealthOffice.Infrastructure.Security.CloudflareAccessIdentity identity, string tenantId, string subject, IReadOnlyCollection<string> roles)
+        => _logger.LogInformation(
+            "CHO token {Outcome}: sub={Subject} idp={Idp} access_sub={AccessSubject} tenant={Tenant} roles={Roles}",
+            "issued", Clean(subject), "cloudflare-access", Clean(identity.Subject), Clean(tenantId), string.Join(",", roles.Select(Clean)));
+
+    /// <summary>A refused Cloudflare Access exchange. The identity is null when the Access token itself was refused.</summary>
+    public void AccessRefused(CloudHealthOffice.Infrastructure.Security.CloudflareAccessIdentity? identity, string? tenantId, string? subject, string reason)
+        => _logger.LogWarning(
+            "CHO token {Outcome}: sub={Subject} idp={Idp} access_sub={AccessSubject} tenant={Tenant} reason={Reason}",
+            "refused", Clean(subject), "cloudflare-access", Clean(identity?.Subject), Clean(tenantId), Clean(reason));
+
+    public void AccessUnavailable(CloudHealthOffice.Infrastructure.Security.CloudflareAccessIdentity? identity, string? tenantId, string reason)
+        => _logger.LogError(
+            "CHO token {Outcome}: idp={Idp} access_sub={AccessSubject} tenant={Tenant} reason={Reason}",
+            "refused", "cloudflare-access", Clean(identity?.Subject), Clean(tenantId), Clean(reason));
+
     // "-" marks an absent field and "…" a cut one, so the audit line keeps its shape.
     private static string Clean(string? value)
         => string.IsNullOrEmpty(value) ? "-"

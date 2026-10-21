@@ -186,9 +186,9 @@
     private bool IsDemoEnvironment => !HostEnvironment.IsProduction();
 
     private string SignInHref =>
-        string.Equals(Configuration["Authentication:Mode"], "LocalDemo", StringComparison.OrdinalIgnoreCase)
+        PortalAuthMode.IsLocalDemo(Configuration)
             ? "/local-demo/sign-in?redirectUri=/"
-            : "/MicrosoftIdentity/Account/SignIn";
+            : PortalAuthMode.SignInPath(Configuration);
 
     private sealed record Feature(string Kicker, string Title, string Description);
 

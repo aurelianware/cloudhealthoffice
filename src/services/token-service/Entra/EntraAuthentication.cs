@@ -46,10 +46,12 @@ public static class EntraAuthentication
             var innerReceived = events.OnMessageReceived;
             events.OnMessageReceived = async ctx =>
             {
-                // Likewise the service-token exchange: an app-only workload-identity
-                // token, validated by that endpoint against its own audience.
+                // Likewise the service-token exchange (an app-only workload-identity
+                // token) and the Cloudflare Access exchange (an Access token):
+                // each endpoint validates its own proof.
                 if (ctx.Request.Path.Equals(Workload.WorkloadTokenEndpoint.Path, StringComparison.OrdinalIgnoreCase)
-                    || ctx.Request.Path.Equals(ServiceTokens.ServiceTokenEndpoint.Path, StringComparison.OrdinalIgnoreCase))
+                    || ctx.Request.Path.Equals(ServiceTokens.ServiceTokenEndpoint.Path, StringComparison.OrdinalIgnoreCase)
+                    || CloudflareAccess.CloudflareAccessEndpoints.IsPath(ctx.Request.Path))
                 {
                     ctx.NoResult();
                     return;

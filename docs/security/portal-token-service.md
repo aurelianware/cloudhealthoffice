@@ -837,6 +837,58 @@ spec:
 
 The token file is read on every exchange, so kubelet rotation needs no restart.
 
+## Cloudflare Access sign-in
+
+A deployment behind Cloudflare Access (the GKE demo with production security,
+`docs/deploy/GCP-DEMO.md`) can use Access as the sign-in instead of Entra, so
+people sign in once, at Cloudflare.
+
+```
+Browser ──▶ Cloudflare Access (policy: who may reach the hostname; IdP: Google, Microsoft, one-time PIN…)
+              │ adds Cf-Access-Jwt-Assertion (RS256, iss = https://<team>.cloudflareaccess.com, aud = application AUD tag)
+              ▼
+           Portal (Authentication:Mode=CloudflareAccess) ── validates the header itself; no second sign-in
+              │ POST /v1/token/exchange/cloudflare-access   Authorization: Bearer <Access token>
+              ▼
+           token-service ── validates it again: team keys (/cdn-cgi/access/certs), iss, aud, expiry, a person (email + sub)
+              │             tenant must be listed in CloudflareAccess:Tenants; Active TenantUser with exactly that email
+              ▼
+           200 { CHO user token (cho-token-service), roles from the TenantUser } — same contract as /v1/token/exchange
+```
+
+| Setting | Where | Value |
+|---|---|---|
+| `CloudflareAccess:Enabled` | token-service | `true` (off by default; the endpoints do not exist otherwise) |
+| `CloudflareAccess:TeamDomain` | token-service, portal (`Authentication:CloudflareAccess:TeamDomain`) | `yourteam.cloudflareaccess.com` |
+| `CloudflareAccess:Audiences` | token-service, portal (`Authentication:CloudflareAccess:Audiences`) | the Access application's AUD tag |
+| `CloudflareAccess:Tenants` | token-service | the CHO tenants that accept Access sign-in, e.g. `["demo"]`. Required, no wildcard |
+| `Authentication:Mode` | portal | `CloudflareAccess` |
+
+Rules:
+
+- **Opt-in per tenant.** Cloudflare vouches for an email address through
+  whatever identity provider the Access policy allows. That is weaker than a
+  tenant's own Entra directory, so only tenants listed in
+  `CloudflareAccess:Tenants` accept it. A request for any other tenant is
+  refused (`tenant_not_enabled`), whatever users it has.
+- **Both gates.** The Access policy decides who reaches the portal; an
+  **Active** TenantUser with the same address (case-insensitive) decides
+  whether a token is issued and with which roles. Invited, Disabled and Locked
+  users get nothing. `PlatformAdmin` and `cho.service` are dropped from roles,
+  as for Entra users, and no one becomes a platform admin this way.
+- **Access service tokens** (machine clients: `common_name`, no email) are
+  refused. An Entra token is refused at these endpoints, and an Access token at
+  the Entra ones.
+- **Nothing is linked.** No oid or tid is written; invitations and signup stay
+  Entra flows and are not offered to Access users.
+- **Audit.** `CHO token issued: sub=<TenantUser id> idp=cloudflare-access access_sub=<Access user id> tenant=… roles=…`.
+  The email is never logged.
+
+The portal stores the validated Access token on the circuit's principal and
+presents it to token-service; a plain HTTP request presents the fresh header.
+An Access token lasts the Access session (24 hours by default); after it
+expires the user reloads the page and Cloudflare renews it.
+
 ## Entra app registration changes (owner action)
 
 On the CHO API app registration (`api://cfada1ac-f251-48ea-9330-39212aa4c862`):

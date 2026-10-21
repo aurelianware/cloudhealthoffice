@@ -64,10 +64,7 @@
     private ChoInvitationResult? _result;
     private bool _started;
 
-    private bool IsLocalDemoAuth()
-        => string.Equals(Configuration["Authentication:Mode"], "LocalDemo", StringComparison.OrdinalIgnoreCase);
-
-    private string SignOutPath => IsLocalDemoAuth() ? "/local-demo/sign-out" : "/MicrosoftIdentity/Account/SignOut";
+    private string SignOutPath => PortalAuthMode.SignOutPath(Configuration);
 
     protected override async Task OnInitializedAsync()
     {
