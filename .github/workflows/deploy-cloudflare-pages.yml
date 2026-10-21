@@ -81,6 +81,24 @@ jobs:
             echo "::warning::No test-metrics.json found; site will publish the committed static values."
           fi
 
+      # CI publishes interoperability and acceptance evidence to the
+      # ci-evidence branch (scripts/ci/publish-evidence.sh), not to main.
+      # Serve the latest published snapshot; the copy committed in src/site
+      # is the fallback.
+      - name: Overlay published evidence from ci-evidence
+        working-directory: .
+        run: |
+          if git fetch --quiet --depth=1 origin ci-evidence; then
+            for f in davinci-interop-public-evidence.json cms0057-public-evidence.json; do
+              if git cat-file -e "FETCH_HEAD:evidence/$f" 2>/dev/null; then
+                git show "FETCH_HEAD:evidence/$f" > "src/site/insights/cms-0057-f/$f"
+                echo "Using published $f from ci-evidence"
+              fi
+            done
+          else
+            echo "::notice::No ci-evidence branch yet; serving the committed evidence snapshots."
+          fi
+
       - name: Install dependencies
         run: npm ci
 

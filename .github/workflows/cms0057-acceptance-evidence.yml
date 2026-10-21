@@ -220,6 +220,7 @@ jobs:
     if: false && github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
+      actions: write
 
     steps:
       - uses: actions/checkout@v7
@@ -232,21 +233,20 @@ jobs:
           name: cms0057-public-evidence
           path: incoming
 
-      - name: Update committed snapshot if changed
+      # main only takes reviewed pull requests: the snapshot goes to the
+      # ci-evidence branch, and the site deploys overlay it onto src/site.
+      - name: Publish the snapshot to ci-evidence
+        id: publish
+        run: >-
+          bash scripts/ci/publish-evidence.sh "evidence: CMS-0057-F acceptance from ${{ github.sha }}"
+          incoming/cms0057-public-evidence.json:evidence/cms0057-public-evidence.json
+
+      # A push made with GITHUB_TOKEN starts no workflows, so redeploy the
+      # site explicitly.
+      - name: Redeploy the site
+        if: steps.publish.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          DEST=src/site/insights/cms-0057-f/cms0057-public-evidence.json
-          mkdir -p "$(dirname "$DEST")"
-          cp incoming/cms0057-public-evidence.json "$DEST"
-          if git diff --quiet -- "$DEST"; then
-            echo "Public evidence snapshot unchanged; nothing to publish."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$DEST"
-          # No [skip ci]: this commit touches only src/site/**, which must trigger
-          # the Pages deploy. It does not match this workflow's paths, so it does
-          # not re-trigger evidence generation.
-          git commit -m "chore: publish latest validated CMS-0057-F acceptance evidence"
-          git push origin HEAD:main
+          gh workflow run deploy-pages.yml --ref main
+          gh workflow run deploy-cloudflare-pages.yml --ref main
