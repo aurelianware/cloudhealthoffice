@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using AttachmentService.Models;
 using AttachmentService.Repositories;
 using AttachmentService.Services;
-using CloudHealthOffice.DocumentStore;
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
@@ -20,7 +19,7 @@ public class AttachmentsController : ControllerBase
 {
     private readonly IAttachmentRepository _repository;
     private readonly IAcknowledgmentService _acknowledgmentService;
-    private readonly IDocumentStore _documentStore;
+    private readonly IDocumentCatalog _catalog;
     private readonly ICurrentActor _actor;
     private readonly IAttachmentParentLookup _parents;
     private readonly AttachmentUploadOptions _uploadOptions;
@@ -29,7 +28,7 @@ public class AttachmentsController : ControllerBase
     public AttachmentsController(
         IAttachmentRepository repository,
         IAcknowledgmentService acknowledgmentService,
-        IDocumentStore documentStore,
+        IDocumentCatalog catalog,
         ICurrentActor actor,
         IAttachmentParentLookup parents,
         IOptions<AttachmentUploadOptions> uploadOptions,
@@ -37,7 +36,7 @@ public class AttachmentsController : ControllerBase
     {
         _repository = repository;
         _acknowledgmentService = acknowledgmentService;
-        _documentStore = documentStore;
+        _catalog = catalog;
         _actor = actor;
         _parents = parents;
         _uploadOptions = uploadOptions.Value;
@@ -150,12 +149,12 @@ public class AttachmentsController : ControllerBase
                     detail: $"No {parentType.ToString().ToLowerInvariant()} {parentId} exists for this tenant.");
             }
 
-            // Upload file to document store if provided
+            // The file goes to the document catalog, linked to the attachment's parent.
             if (file != null && file.Length > 0 && format is not null)
             {
-                const string containerName = "attachments";
-
-                using var stream = file.OpenReadStream();
+                using var stream = new MemoryStream();
+                await file.CopyToAsync(stream, HttpContext.RequestAborted);
+                stream.Position = 0;
                 if (!await AttachmentUploadRules.HasSignatureAsync(stream, format, HttpContext.RequestAborted))
                 {
                     return Problem(
@@ -164,35 +163,42 @@ public class AttachmentsController : ControllerBase
                         detail: $"The file content is not a {format.Format} file.");
                 }
 
-                // Blob name: tenantId/parentType/parentId/attachmentId.ext. Every segment is
-                // validated or server-generated, and sanitized again as defense in depth.
-                var parentFolder = parentType switch
-                {
-                    AttachmentParentType.Claim => "claims",
-                    AttachmentParentType.Authorization => "authorizations",
-                    _ => "appeals",
-                };
-                var blobName = string.Join('/',
-                    ClaimAttachmentRules.SanitizePathSegment(attachment.TenantId),
-                    parentFolder,
-                    ClaimAttachmentRules.SanitizePathSegment(parentId),
-                    ClaimAttachmentRules.SanitizePathSegment(attachment.Id) + format.Extension);
-
-                // Compute SHA-256 hash before upload
-                using var sha256 = SHA256.Create();
-                var hashBytes = await sha256.ComputeHashAsync(stream);
-                var hash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
-
                 stream.Position = 0;
-                var uploaded = await _documentStore.UploadAsync(containerName, blobName, stream, format.ContentType);
+                var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, HttpContext.RequestAborted)).ToLowerInvariant();
+                stream.Position = 0;
 
-                attachment.DocumentFormat    = format.Format;
-                attachment.BlobUrl           = uploaded.Uri.ToString();
-                attachment.BlobContainerName = containerName;
-                attachment.BlobName          = blobName;
-                attachment.FileSizeBytes      = file.Length;
-                attachment.FileHash          = hash;
-                attachment.Status            = "Validated";
+                var externalIds = new Dictionary<string, string> { ["AttachmentId"] = attachment.Id };
+                if (AttachmentUploadRules.IsValidParentId(attachment.RFAIReference ?? string.Empty))
+                    externalIds["RfaiReference"] = attachment.RFAIReference!;
+
+                CatalogUploadResult stored;
+                try
+                {
+                    stored = await _catalog.UploadAsync(new CatalogUpload(
+                        attachment.TenantId,
+                        _actor.UserId,
+                        parentType,
+                        parentId,
+                        Title: string.IsNullOrWhiteSpace(attachment.DocumentType) ? "Attachment" : attachment.DocumentType,
+                        stream,
+                        format.ContentType,
+                        ClaimAttachmentRules.SanitizePathSegment(attachment.Id) + format.Extension,
+                        Channel: string.IsNullOrWhiteSpace(attachment.RawX12) ? "Upload" : "X12-275",
+                        externalIds), HttpContext.RequestAborted);
+                }
+                catch (DocumentCatalogException ex)
+                {
+                    _logger.LogError(ex, "Could not file an attachment in the document catalog (trace id {TraceId})",
+                        ChoProblemResults.TraceId(HttpContext));
+                    return this.ServerError("Could not store the attachment file; nothing was saved. Retry later.",
+                        StatusCodes.Status502BadGateway);
+                }
+
+                attachment.DocumentFormat = format.Format;
+                attachment.DocumentId     = stored.DocumentId;
+                attachment.FileSizeBytes  = file.Length;
+                attachment.FileHash       = hash;
+                attachment.Status         = "Validated";
             }
 
             // If this is a solicited attachment (RFAI response), link it to the authorization
@@ -291,7 +297,9 @@ public class AttachmentsController : ControllerBase
     }
 
     /// <summary>
-    /// Download attachment file from Blob Storage
+    /// Download the attachment's file from the document catalog, opened from
+    /// the attachment's own claim, authorization or appeal. The catalog
+    /// records the download in its access audit, for the calling user.
     /// </summary>
     [HttpGet("{id}/download")]
     public async Task<IActionResult> DownloadAttachment(string id)
@@ -299,23 +307,37 @@ public class AttachmentsController : ControllerBase
         var tenantId = _actor.TenantId;
 
         var attachment = await _repository.GetByIdAsync(id, tenantId);
-        if (attachment == null || string.IsNullOrWhiteSpace(attachment.BlobName))
+        if (attachment == null || string.IsNullOrWhiteSpace(attachment.DocumentId))
         {
             return NotFound();
         }
 
-        Stream stream;
+        var (parentType, parentId) =
+            !string.IsNullOrWhiteSpace(attachment.ClaimId) ? (AttachmentParentType.Claim, attachment.ClaimId!)
+            : !string.IsNullOrWhiteSpace(attachment.AuthorizationId) ? (AttachmentParentType.Authorization, attachment.AuthorizationId!)
+            : (AttachmentParentType.Appeal, attachment.AppealId!);
+
+        Stream? stream;
         try
         {
-            stream = await _documentStore.DownloadAsync(attachment.BlobContainerName!, attachment.BlobName);
+            stream = await _catalog.DownloadAsync(tenantId, _actor.UserId, attachment.DocumentId, parentType, parentId, HttpContext.RequestAborted);
         }
-        catch (DocumentNotFoundException)
+        catch (DocumentCatalogException ex)
+        {
+            _logger.LogError(ex, "Could not read an attachment from the document catalog (trace id {TraceId})",
+                ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Could not read the attachment file. Retry later.", StatusCodes.Status502BadGateway);
+        }
+
+        if (stream is null)
         {
             return NotFound("File not found in storage");
         }
+
         var contentType = AttachmentUploadRules.ContentTypeFor(attachment.DocumentFormat);
         var fileName    = ClaimAttachmentRules.SanitizePathSegment(attachment.Id) + AttachmentUploadRules.ExtensionFor(attachment.DocumentFormat);
 
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
         return File(stream, contentType, fileName);
     }
 

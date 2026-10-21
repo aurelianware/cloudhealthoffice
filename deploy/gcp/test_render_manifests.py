@@ -190,8 +190,8 @@ def test_fhir_serves_cho_native_patient_and_coverage_labelled_synthetic():
 def test_document_services_keep_their_manifest_storage_without_a_bucket():
     docs = render()
     names = {d["metadata"]["name"] for d in docs if d["kind"] == "ServiceAccount"}
-    assert not names & {"attachment-service", "document-service", "member-document-service"}
-    for name in ("attachment-service", "document-service", "member-document-service"):
+    assert not names & {"document-service", "member-document-service"}
+    for name in ("document-service", "member-document-service"):
         dep = deployments(docs)[name]
         assert dep["spec"]["template"]["spec"].get("serviceAccountName") != name
         assert "DocumentStore__Provider" not in env(dep)
@@ -202,13 +202,13 @@ def test_document_services_use_the_bucket_through_workload_identity():
     docs = render("--documents-bucket", "demo-project-cho-documents",
                   "--documents-service-account", gsa)
     accounts = [d for d in docs if d["kind"] == "ServiceAccount"]
-    document_accounts = {"attachment-service", "document-service", "member-document-service"}
+    document_accounts = {"document-service", "member-document-service"}
     # One account each: no manifest already defines one with these names.
     assert sorted(a["metadata"]["name"] for a in accounts if a["metadata"]["name"] in document_accounts) \
         == sorted(document_accounts)
     accounts = {a["metadata"]["name"]: a for a in accounts if a["metadata"]["name"] in document_accounts}
     deps = deployments(docs)
-    for name in ("attachment-service", "document-service", "member-document-service"):
+    for name in ("document-service", "member-document-service"):
         assert accounts[name]["metadata"]["annotations"]["iam.gke.io/gcp-service-account"] == gsa
         assert deps[name]["spec"]["template"]["spec"]["serviceAccountName"] == name
         assert env(deps[name])["DocumentStore__Provider"] == "Gcs"

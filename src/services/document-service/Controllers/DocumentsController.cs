@@ -33,6 +33,18 @@ public sealed class DocumentsController : ControllerBase
     public const string Container = "documents";
     public const string ScreenHeader = "X-CHO-Screen";
 
+    /// <summary>
+    /// The user a CHO service is acting for. Honored only from a service token
+    /// (a user can't claim to act for someone else); recorded in the document
+    /// and the audit, never used for access decisions.
+    /// </summary>
+    public const string OnBehalfOfHeader = "X-CHO-On-Behalf-Of";
+
+    private static readonly System.Text.RegularExpressions.Regex ExternalIdKey =
+        new("^[A-Za-z][A-Za-z0-9_-]{0,39}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex SafeToken =
+        new("^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
     /// <summary>The only thing a refused caller learns about a restricted document.</summary>
     public const string RestrictedMessage = "This document is restricted.";
 
@@ -73,6 +85,16 @@ public sealed class DocumentsController : ControllerBase
 
     private string TenantId => _actor.TenantId;
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
+
+    private string? OnBehalfOf
+    {
+        get
+        {
+            if (!_actor.IsService) return null;
+            var value = Request.Headers[OnBehalfOfHeader].ToString().Trim();
+            return SafeToken.IsMatch(value) ? value : null;
+        }
+    }
 
     // ── Reading ──────────────────────────────────────────────────────────
 
@@ -197,6 +219,8 @@ public sealed class DocumentsController : ControllerBase
         if (metadata.Error is { } error)
             return error;
         var auditSubject = metadata.Links[0];
+        if (ParseExternalIds(form.ExternalIds) is not { } externalIds)
+            return BadRequest("ExternalIds are \"key=value\" (key: a letter then letters, digits, '-' or '_'; value: one token), at most 10.");
 
         if (file is null || file.Length == 0)
             return BadRequest("A file is required.");
@@ -221,6 +245,7 @@ public sealed class DocumentsController : ControllerBase
 
         var id = Guid.NewGuid().ToString("N");
         var document = NewDocument(id, form.Type, form.Title, contentType, file.FileName, metadata, form.StateCode, form.RetentionPolicyId);
+        document.Source.ExternalIds = externalIds;
         document.Sha256 = sha256;
         document.SizeBytes = buffer.Length;
 
@@ -615,6 +640,7 @@ public sealed class DocumentsController : ControllerBase
             StorageContainer = Container,
             StoragePath = DocumentUploadPolicy.BuildStoragePath(TenantId, id, contentType, fileName),
             CreatedBy = _actor.UserId,
+            CreatedOnBehalfOf = OnBehalfOf,
             CreatedAt = Now,
             ReceivedAt = metadata.ReceivedAt
         };
@@ -717,6 +743,7 @@ public sealed class DocumentsController : ControllerBase
             TenantId = TenantId,
             DocumentId = documentId,
             Actor = _actor.UserId,
+            OnBehalfOf = OnBehalfOf,
             At = Now,
             Action = action,
             SubjectKind = subject?.Kind.ToString(),
@@ -725,6 +752,21 @@ public sealed class DocumentsController : ControllerBase
             Allowed = allowed,
             Detail = detail
         }, ct);
+    }
+
+    private static Dictionary<string, string>? ParseExternalIds(List<string>? values)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var entry in (values ?? []).Where(v => !string.IsNullOrWhiteSpace(v)))
+        {
+            var eq = entry.IndexOf('=');
+            if (eq <= 0) return null;
+            var key = entry[..eq].Trim();
+            var value = entry[(eq + 1)..].Trim();
+            if (!ExternalIdKey.IsMatch(key) || !SafeToken.IsMatch(value)) return null;
+            result[key] = value;
+        }
+        return result.Count <= 10 ? result : null;
     }
 
     private static object HoldState(CatalogDocument d) => new { id = d.Id, legalHold = d.Retention.LegalHold.Set };

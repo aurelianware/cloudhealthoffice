@@ -125,7 +125,7 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 
 1. **Storage providers:** GCS and S3 for `IDocumentStore`; member-document-service moves onto `IDocumentStore`. *Built (2026-10-20).*
 2. **Catalog:** the document record and service (evolved from member-document-service), with many-to-many links, sensitivity tags, access audit, and the documents API. *Built (2026-10-20) as a new document-service; member-document-service moves onto it later.*
-3. **Move attachment-service onto the catalog:** existing `Attachment` rows migrate to documents with links. Keep the PWK attachment control number on the claim for 275 matching.
+3. **Move attachment-service onto the catalog:** existing `Attachment` rows migrate to documents with links. Keep the PWK attachment control number on the claim for 275 matching. *Attachments built (2026-10-20): attachment-service files through the catalog; there was no stored attachment data to migrate. PWK matching and member documents are separate PRs.*
 4. **Correspondence** ([correspondence.md](correspondence.md)), starting with appeal notices. Generated letters are the first new producer on the catalog, and ID cards move onto it in the same phase.
 5. **Documents panel** on claim, authorization and appeal screens.
 6. **Claim RFAI:** extend rfai-service from authorizations to claims, with 277 RFAI out, 275 / upload / fax in, matching, and clean-date events.
@@ -156,4 +156,14 @@ Extend `IDocumentStore` with **Google Cloud Storage** and **S3** providers along
 - **Scanning:** an `IDocumentScanner` seam with no scanner wired, so documents stay `Pending`. Content is served only when `Documents:AllowUnscannedContent` is on (Development and the GKE demo); `Infected` and `Failed` never.
 
 **Left for later:** the consent check for Part 2; a real scanner; checking that a linked subject exists in its owning service; new versions of a document; the nightly retention-expiry job with tombstones; moving member-document-service and attachment-service onto the catalog (step 3); and the portal's Documents panel (step 5).
+
+## 12. What step 3 built (attachments)
+
+- **attachment-service holds no storage.** It keeps the X12 275 record (control numbers, payer and provider, 999/824 acknowledgments) and files the attachment's file in the catalog, linked to its claim, authorization or appeal. The record keeps the catalog's `DocumentId`. Downloads go through the catalog, opened from that same parent.
+- **Identity:** attachment-service calls document-service with its own tenant-scoped service token and names the user it acts for in `X-CHO-On-Behalf-Of`. The catalog records that user in the document (`CreatedOnBehalfOf`) and in every audit entry (`OnBehalfOf`). The header counts only from a service token; a user can't claim to act for someone else, and it never grants access. Service tokens don't imply `documents:read-sensitive`, so a service can't open sensitive documents.
+- **Source ids:** the catalog stores the attachment id and RFAI reference as source identifiers (`ExternalIds`), and the channel (`X12-275` when the 275 came in as EDI, `Upload` otherwise).
+- **Least privilege:** attachment-service is no longer one of the services the GKE document identity trusts (`document_service_accounts`); only document-service and member-document-service touch the bucket.
+- **No migration:** there were no stored attachments to keep.
+
+Next: member-document-service onto the catalog, and keeping the 837 PWK attachment control number on the claim so an incoming 275 matches by its TRN02.
 
