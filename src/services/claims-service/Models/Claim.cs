@@ -180,6 +180,15 @@ public class Claim
     public string ClaimFrequencyCode { get; set; } = "1";
 
     /// <summary>
+    /// 837 2300 REF*F8: the payer claim control number (835 CLP07, the
+    /// claim's id) of the claim this replacement (7) or void (8) amends.
+    /// Inbound 837 corrections are applied to that claim's chain
+    /// (InboundClaimCorrectionService), never processed as new claims.
+    /// </summary>
+    [StringLength(80)]
+    public string? OriginalClaimReference { get; set; }
+
+    /// <summary>
     /// Total claim charge amount (sum of all service lines)
     /// 837: CLM02
     /// </summary>
