@@ -20,7 +20,9 @@
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
     <!-- ChoServiceClientResilience: retries, timeouts and a circuit breaker on every service HttpClient. -->
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" VersionOverride="8.23.0" />
     <PackageReference Include="MongoDB.Driver" />
+    <PackageReference Include="Polly.Extensions" VersionOverride="8.8.0" />
   <PackageReference Include="SharpCompress" />
   <PackageReference Include="Snappier" />
     <PackageReference Include="StackExchange.Redis" />
