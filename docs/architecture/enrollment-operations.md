@@ -1,0 +1,200 @@
+# Enrollment operations: working 834 exceptions, reconciliation and retro changes
+
+**Status:** Draft for review (2026-10-21).
+**Scope:** How a plan's enrollment team works what the 834 could not apply:
+- the exception queue;
+- corrections sent back to sponsors;
+- full-file reconciliation;
+- retroactive changes and their effect on claims;
+- the enrollment history on the member record.
+
+**Related:**
+- [edi-operations.md](edi-operations.md): file receipt, envelopes, acknowledgments and trading partners (the file layer this doc builds on).
+- [work-management.md](work-management.md): the work engine every exception runs through.
+- [member-foundation.md](member-foundation.md) and [temporal-eligibility.md](temporal-eligibility.md): members and dated coverage.
+- [portal-navigation.md](portal-navigation.md): Enrollment Ops sits under Operations.
+
+> **Not legal advice.** §6 summarizes the ACA rescission rule and state reconciliation practice as researched on 2026-10-21. Confirm with counsel before the commercial retro floor ships as a hard rule.
+
+---
+
+## 1. Who does what
+
+Two teams touch an 834, and they do different jobs:
+
+| Layer | Question | Owner | Where they work |
+|---|---|---|---|
+| File | Did it arrive, parse and get acknowledged? | EDI analyst | EDI Operations ([edi-operations.md](edi-operations.md)) |
+| Record | Could each member change be applied? | **Enrollment specialist** | Enrollment Ops and the member record |
+
+The EDI analyst never fixes members. Once a file is accepted, every member-level problem is the enrollment team's, worked as a work item with an SLA like any other queue. Supervisors see the same queue views they use for claims.
+
+## 2. What exists today
+
+**In place:**
+- enrollment-import-service applies 834 adds, changes, terms and reinstatements through member-service and coverage-service.
+- It records a run summary per file (`EnrollmentImportRun`) and one row per member transaction (`EnrollmentTransaction`).
+- The member record's Enrollment tab shows the member's enrollment events and 834 transactions.
+- `WorkType.Enrollment834` exists in work-management, with the `enrollment:process` permission.
+
+**Missing:**
+- **Rejection reasons are not stored.** A rejected member is saved as `Rejected` with no reason; the text survives only in the run's error list. The Enrollment tab's Reason column is always empty.
+- **Nothing creates `Enrollment834` work items,** and there is no fix-and-reprocess action. Today the only remedy is re-sending the file or a manual enrollment.
+- **The BGN segment is not read,** so CHO cannot tell a change file from a full or audit file, and there is no reconciliation.
+- **Retro changes are flagged but not acted on.** Events dated more than 30 days back get `IsRetro`; nothing tells claims.
+- **Files that arrive by SFTP skip the duplicate check and the transaction record.** The fix belongs to [edi-operations.md](edi-operations.md) §4.
+
+## 3. The exception record
+
+Every member transaction that cannot be applied, or that needs a person's decision, becomes an `EnrollmentException` and an `Enrollment834` work item:
+
+| Field | Purpose |
+|---|---|
+| File, transaction set and INS position | Where it came from; links to the file in EDI Operations |
+| Sponsor, subscriber ID, member ID (when matched) | Who it is about |
+| Maintenance type (INS03), reason (INS04), effective dates | What the sponsor asked for |
+| **Reason code** and message | Why CHO could not apply it (see the table below) |
+| Proposed change | Before and after values, so the specialist sees exactly what would change |
+| Status | Open → Resolved (applied / matched / rejected to sponsor / no action) or Held (waiting for the sponsor) |
+| Resolution, resolver, approver | Who decided and why; second approver where §6 requires one |
+
+**Reason codes** (from `EnrollmentValidator` plus the new checks):
+
+| Code | Meaning | Usual fix |
+|---|---|---|
+| `SUBSCRIBER_NOT_FOUND` | A change or term names a subscriber CHO does not have | Match to an existing member, or send back to the sponsor |
+| `DEPENDENT_BEFORE_SUBSCRIBER` | Dependent arrived without its subscriber | Hold until the subscriber arrives; auto-retry |
+| `PLAN_CODE_UNMAPPED` | HD03/HD04 plan code has no mapping | Plan-side fix: add the mapping, then reprocess |
+| `POSSIBLE_DUPLICATE` | An add looks like an existing person (name, DOB, SSN, MBI or Medicaid ID) | Match or confirm as new |
+| `COVERAGE_OVERLAP` | New coverage overlaps an existing span | Choose which span wins |
+| `RETRO_BEYOND_LIMIT` | Effective date is earlier than the retro rule allows (§6) | Approve with reason (two-person), apply prospectively, or send back |
+| `RETRO_AFFECTS_PAID_CLAIMS` | A retro term or plan change would move paid claims | Approve; claims review is raised (§6) |
+| `STATE_GATE` | Fails a state-specific enrollment rule | Per state rule |
+| `RECON_DIFFERENCE` | Found by reconciliation (§5) | Per the sponsor's mode |
+
+**Specialist actions:**
+- **Correct and reprocess:** edit the proposed values (not the original transaction), then apply.
+- **Match to member:** link to an existing member and apply.
+- **Approve retro:** with a reason, and a second approver where §6 requires one.
+- **Send back to sponsor:** with a reason (see §4).
+- **Hold:** waiting for the sponsor; it comes back on a date.
+- **No action:** with a reason.
+
+Every action is recorded on the exception and on the member's enrollment history.
+
+## 4. Telling the sponsor
+
+Who owns the data decides what "send back" means, so each sponsor has a **correction channel**:
+
+| Channel | Sponsors | What CHO produces |
+|---|---|---|
+| **Error report** | Employer groups (commercial) | **Per file:** a readable report modeled on carrier summary reports. It gives counts by severity, then each rejected member with the reason and the fix needed. Stored in the document store, with a notice to the sponsor's contact. The sponsor corrects the data in its next file. |
+| **Discrepancy report** | State Medicaid | **Per reconciliation cycle:** the state's discrepancy form, a template per state, plus a "no discrepancies" certification when there are none. The deadline is tracked (Oregon allows 14 days after the monthly file) and the signer recorded (Oregon requires the CEO, CFO or a delegate). The plan never rejects a state's member: the state is the source of truth and corrects confirmed errors in its next file. |
+| **Reconciliation file** | Marketplace (FFM) | **Later:** the monthly reconciliation response (RCNI) against CMS's pre-audit file. Until then, Marketplace sponsors use report-only reconciliation. |
+
+File-level problems (bad envelope, syntax) go back as the 999/TA1, plus the same readable summary. That belongs to EDI Operations.
+
+## 5. Reconciliation
+
+The BGN segment says what a file is: BGN08 `2` change, `4` verify (audit), `RX` replace. Full and audit files are run through a reconciliation that compares the file with what CHO holds for that sponsor on the file's date. It finds:
+- members on the file but not in CHO;
+- members in CHO but not on the file;
+- differences in dates, plan or demographics.
+
+What happens to each difference is set per sponsor:
+
+| Mode | Typical sponsor | Behavior |
+|---|---|---|
+| **Authoritative** | State Medicaid | CHO aligns to the file. Two kinds of difference become exceptions instead: anything that hits paid claims, and anything the plan believes the state got wrong. Those feed the state's discrepancy report. |
+| **Report-only** | Marketplace until RCNI exists; any sponsor being onboarded | Every difference is an exception; nothing changes automatically. |
+| **Full replace** | Small employer groups that send a complete file every time | Members missing from the file are termed (subject to §6). **Guard:** if more than a set share of the sponsor's members (default 10%) would be termed, the whole file is held for review. One truncated file must not wipe out a group. |
+
+Each reconciliation run is a record of its own:
+- the file and the date it was compared on;
+- counts per difference type;
+- exceptions created;
+- for authoritative sponsors, the report sent, its due date, and its signer.
+
+The Enrollment Ops page shows the current cycle per sponsor.
+
+## 6. Retroactive changes
+
+**How limits are set.** Line-of-business defaults, overridden per benefit plan, then per sponsor; the most specific wins. Each level sets:
+- how far back an add may go;
+- how far back a term may go, and to what date;
+- whether a term beyond the limit is applied at the limit, held, or applied with approval.
+
+**Proposed defaults:**
+
+| Line of business | Adds | Terms |
+|---|---|---|
+| Commercial group | Up to 60 days back | Back to the **premium paid-through date** only. Beyond that, apply at the end of the current month unless a reason is recorded and a second person approves. |
+| Individual / ACA | The exchange's dates | The exchange's dates |
+| Medicaid | The state's dates, no limit | The state's dates, no limit |
+
+**The legal floor for commercial plans.** Under the ACA rescission rule (45 CFR 147.128), a retroactive termination is allowed only for:
+- non-payment of premium, back to the date premiums were paid through;
+- fraud or intentional misrepresentation, with 30 days' written notice.
+
+An employer telling the plan late that an employee left does not qualify; the practice is a prospective term with COBRA offered from that date. Overrides may tighten the defaults but may not loosen past this floor without a recorded reason in the allowed categories.
+
+**Effect on claims.** A retro term, retro plan change or retro add that touches dates with paid or pended claims publishes an event. Claims raises a review work item listing the affected claims; it does not silently re-adjudicate. Recoupment is a claims decision, made with the provider notice rules of that line of business. North Carolina's 2025 recoupment problems after retro managed-care enrollment show what goes wrong without this step.
+
+**Medicare Advantage** enrollment does not arrive by 834. It is reconciled against CMS's weekly transaction replies and monthly membership report, and is out of scope here (an existing gap in MODULE-STATUS).
+
+## 7. Enrollment history on the member record
+
+The member's Enrollment tab answers "why is this person termed?" without leaving the record. It shows every 834 transaction that touched the member:
+- file, date and maintenance type;
+- before and after values;
+- the outcome, with the stored reason;
+- any exception and who resolved it.
+
+Manual changes and reconciliation actions appear on the same timeline. Today's tab has the right shape; it needs the stored reasons (§2) and the exception links.
+
+## 8. The Enrollment Ops page
+
+For enrollment specialists and their supervisors (`enrollment:process`; supervisors also `workqueue:admin`):
+
+1. **Exceptions:** the `Enrollment834` queue by reason, sponsor and age, with Get Next. Opening one shows the exception, the proposed change, the member (if matched) and the actions in §3.
+2. **Reconciliation:** the current cycle per sponsor, with differences, exceptions, the report due date and its status.
+3. **Sponsors:** files expected and received, last file, counts, the error rate and open exceptions. Missing-file alerts come from EDI Operations' expected-file schedule.
+4. **Retro:** retro changes awaiting approval, and those applied this month with claims impact.
+
+The page reads enrollment and work-management data only. Member detail needs `members:read`, as on the member record.
+
+## 9. Build order
+
+1. **Store the reason** on every rejected transaction, with the INS position and file link. Show it on the member's Enrollment tab.
+2. **Exceptions and work items:** the `EnrollmentException` record, `Enrollment834` items with SLAs, and the specialist actions (reprocess, match, hold, no action, send back).
+3. **Enrollment Ops page:** the exceptions view, then sponsors.
+4. **Retro rules:** line-of-business, plan and sponsor settings; the commercial floor; two-person approval; the claims-impact event and claims review items.
+5. **Sponsor error reports:** generated per file into the document store, plus the sponsor-contact notice.
+6. **Reconciliation:**
+   - read BGN08;
+   - the comparison engine and the three modes;
+   - the full-replace guard;
+   - reconciliation runs.
+7. **State discrepancy reports:** a template per state, deadline tracking and signer, starting with the pilot plan's state.
+8. **Marketplace reconciliation file (RCNI),** when a Marketplace plan needs it.
+
+SFTP files reaching the same import path with the duplicate check is a prerequisite of steps 2 and 6, owned by [edi-operations.md](edi-operations.md) §9 step 1.
+
+## 10. Open questions
+
+1. **Full-replace guard:** is 10% the right default, and should it be a count for small groups (e.g. more than 5 members)?
+2. **Commercial retro adds:** 60 days, or tie it to the employer's eligibility rules (new-hire waiting periods)?
+3. **Pilot states:** which states' discrepancy formats to build first?
+4. **Sponsor self-service:** should employer groups correct errors in a sponsor portal rather than only in their next file?
+
+## Sources
+
+- [Oregon OHA, Enrollment Discrepancy Reporting Guide](https://www.oregon.gov/oha/HSD/OHP/CCO/Enrollment-Discrepancy-Reporting-Guide.pdf)
+- [Oregon OHA, 2025 changes to enrollment reconciliation certification](https://oregon.gov/oha/HSD/OHP/Announcements/2025%20Changes%20to%20Enrollment%20Reconciliation%20Certification%20documents.pdf)
+- [CMS, Enrollment Reconciliation and IC834 workgroup](https://www.hhs.gov/guidance/sites/default/files/hhs-guidance-documents/CMS/enrollment-reconciliation-&-ic834-workgroup.pdf)
+- [GuideWell, 834 Summary Error Report](https://files.guidewell.com/m/3a13abea01829941/original/834-summary-error-report.pdf)
+- [Washington HCA, PEBB error correction guidelines](https://www.hca.wa.gov/assets/perspay/pebb-error-correction-guidelines.pdf)
+- [45 CFR 147.128, Rescissions](https://www.law.cornell.edu/cfr/text/45/147.128)
+- [McGriff, Retroactive termination of individuals' benefits coverage](https://mcgriff.com/resources/articles/retroactive-termination-individual-benefits.html)
+- [NC Medicaid, Retro-enrollment changes and impact on claims (2025)](https://medicaid.ncdhhs.gov/blog/2025/02/11/important-update-retro-enrollment-changes-and-impact-claims)
+- [CMS, Medicare Advantage enrollment reconciliation process](https://www.cms.gov/research-statistics-data-and-systems/cms-information-technology/mapdhelpdesk/downloads/enrollment_recon_process_final.pdf)
