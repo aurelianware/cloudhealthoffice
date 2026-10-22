@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Files;
 using ClaimsService.Audit;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
@@ -58,6 +59,7 @@ public class ClaimsV1Controller : ControllerBase
     private readonly Snip.ISnip837Validator _snipValidator;
     private readonly Snip.Snip837ValidationOptions _snipOptions;
     private readonly IX12InterchangeIntake? _interchangeIntake;
+    private readonly IEdiFileRecorder? _ediFiles;
 
     /// <summary>
     /// Set (1) once any claim of the raw 837 upload reached SubmitAsync. From
@@ -78,9 +80,11 @@ public class ClaimsV1Controller : ControllerBase
         Microsoft.Extensions.Options.IOptions<Snip.Snip837ValidationOptions>? snipOptions = null,
         IX12InterchangeIntake? interchangeIntake = null,
         Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null,
-        IInboundClaimCorrectionService? corrections = null)
+        IInboundClaimCorrectionService? corrections = null,
+        IEdiFileRecorder? ediFiles = null)
     {
         _corrections = corrections;
+        _ediFiles = ediFiles;
         _interchangeIntake = interchangeOptions?.Value.Enabled == false ? null : interchangeIntake;
         _snipOptions = snipOptions?.Value ?? new Snip.Snip837ValidationOptions();
         _snipValidator = snipValidator ?? new Snip.X12837SnipValidator(_snipOptions);
@@ -159,6 +163,8 @@ public class ClaimsV1Controller : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Raw837ImportResult>> ImportRaw837(
         [FromForm] IFormFile file,
+        [FromForm] string? source = null,
+        [FromForm] string? sourcePath = null,
         CancellationToken ct = default)
     {
         if (file is null || file.Length == 0)
@@ -187,11 +193,29 @@ public class ClaimsV1Controller : ControllerBase
                 FileName = file.FileName,
             };
             envelope = await _interchangeIntake.ReceiveAsync(intakeRequest, ct);
+        }
 
+        // The file record (edi-operations.md §3): written for every file,
+        // whether its envelope was accepted, rejected or a duplicate.
+        var ediFile = _ediFiles is null ? null : await _ediFiles.RecordReceivedAsync(new EdiFileIntake
+        {
+            TenantId = GetTenantId(),
+            Content = ediContent,
+            TransactionType = "837",
+            Source = source,
+            FileName = file.FileName,
+            SourcePath = sourcePath,
+            ReceivedBy = ResolveActorId(),
+        }, envelope, ct);
+
+        if (envelope is not null)
+        {
             if (envelope.IsRejected)
             {
                 _logger.LogWarning("Uploaded 837 file {FileName} rejected at the interchange envelope", LogSanitizer.Sanitize(file.FileName));
-                return BadRequest(EnvelopeFailure(file.FileName, envelope));
+                var failure = EnvelopeFailure(file.FileName, envelope);
+                failure.EdiFileId = ediFile?.Id;
+                return BadRequest(failure);
             }
             ediContent = envelope.AcceptedContent!;
         }
@@ -205,10 +229,11 @@ public class ClaimsV1Controller : ControllerBase
         // claim numbers, so a resend would create the earlier claims again.
         try
         {
-            var imported = await ImportAcceptedRaw837Async(file, ediContent, envelope, ct);
+            var imported = await ImportAcceptedRaw837Async(file, ediContent, envelope, ediFile?.Id, ct);
             if (imported.Result is ObjectResult { StatusCode: >= 400 } && envelope is not null
                 && Volatile.Read(ref _raw837SubmissionStarted) == 0)
                 await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
+            await CompleteEdiFileAsync(ediFile, imported);
             return imported;
         }
         catch when (envelope is not null && Volatile.Read(ref _raw837SubmissionStarted) == 0)
@@ -219,8 +244,28 @@ public class ClaimsV1Controller : ControllerBase
     }
 
     /// <summary>SNIP, parse and submit for the interchanges whose envelope was accepted.</summary>
+    /// <summary>Records what the import made of the file on its <see cref="EdiFile"/>.</summary>
+    private Task CompleteEdiFileAsync(EdiFile? ediFile, ActionResult<Raw837ImportResult> imported)
+    {
+        if (_ediFiles is null || ediFile is null) return Task.CompletedTask;
+        var body = imported.Result is ObjectResult objectResult ? objectResult.Value : imported.Value;
+        var result = body as Raw837ImportResult;
+        var failed = imported.Result is ObjectResult { StatusCode: >= 400 };
+        var error = result?.Error
+                    ?? body?.GetType().GetProperty("error")?.GetValue(body) as string;
+        if (result is not null) result.EdiFileId = ediFile.Id;
+        return _ediFiles.CompleteAsync(ediFile, new EdiFileCompletion
+        {
+            AcceptedRecords = failed ? 0 : result?.SucceededCount ?? 0,
+            RejectedRecords = failed ? 0 : (result?.TotalClaims ?? 0) - (result?.SucceededCount ?? 0),
+            Ack999Code = result?.AcknowledgmentCode,
+            Ack999ControlNumber = result?.Acknowledgment999ControlNumber,
+            Errors = failed && error is not null ? [error] : [],
+        }, CancellationToken.None);
+    }
+
     private async Task<ActionResult<Raw837ImportResult>> ImportAcceptedRaw837Async(
-        IFormFile file, string ediContent, InterchangeIntakeResult? envelope, CancellationToken ct)
+        IFormFile file, string ediContent, InterchangeIntakeResult? envelope, string? ediFileId, CancellationToken ct)
     {
         var ta1ControlNumber = envelope?.Interchanges.FirstOrDefault(i => i.Ta1ControlNumber is not null)?.Ta1ControlNumber;
 
@@ -343,6 +388,7 @@ public class ClaimsV1Controller : ControllerBase
                 await _importTransactions.CreateAsync(new ClaimImportTransaction
                 {
                     TenantId = tenantId,
+                    EdiFileId = ediFileId,
                     ClaimNumber = parsed.ClaimId,
                     ClaimId = result?.Claim?.Id,
                     MemberId = adapterClaim.MemberId,
@@ -385,6 +431,7 @@ public class ClaimsV1Controller : ControllerBase
             Results = results.ToList(),
             AcknowledgmentCode = snip?.AcknowledgmentCode,
             Acknowledgment999 = acknowledgment,
+            Acknowledgment999ControlNumber = acknowledgmentControl,
             SnipIssues = snip?.AllIssues.ToList() ?? [],
         }, envelope));
     }
@@ -842,6 +889,12 @@ public class Raw837ImportResult
 
     /// <summary>The X12 999 acknowledgment (005010X231A1) for the file.</summary>
     public string? Acknowledgment999 { get; set; }
+
+    /// <summary>ISA13 of the 999.</summary>
+    public string? Acknowledgment999ControlNumber { get; set; }
+
+    /// <summary>The file's record (<c>GET api/v1/claims/edi/files/{id}</c>).</summary>
+    public string? EdiFileId { get; set; }
 
     /// <summary>
     /// Interchange envelope outcome, as in TA104: A, E or R (R when any
