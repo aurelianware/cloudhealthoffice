@@ -73,6 +73,22 @@ public sealed class InMemoryCodeAttributeSource : IMsDrgCodeAttributeSource
         params string[] diagnosisCategoryOperands) =>
         new(mdc, severity, [], diagnosisCategoryOperands, []);
 
+    /// <summary>
+    /// A diagnosis whose lists are operands rather than diagnosis categories.
+    ///
+    /// <para>
+    /// The distinction matters for the code-driven operands, which read a
+    /// code's operands and never its categories — as CMS's own diagnosis
+    /// lookup does, its category branch being unreachable. The significant
+    /// trauma lists arrive as operands in the real tables.
+    /// </para>
+    /// </summary>
+    public static DiagnosisCodeAttributes DiagnosisWithOperands(
+        int mdc,
+        ComplicationLevel severity,
+        params string[] operands) =>
+        new(mdc, severity, operands, [], []);
+
     /// <summary>A procedure with the given operand list.</summary>
     public static ProcedureCodeAttributes Procedure(params string[] operands) =>
         new(operands);

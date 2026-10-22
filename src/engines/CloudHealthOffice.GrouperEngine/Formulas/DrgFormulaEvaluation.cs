@@ -22,11 +22,27 @@ namespace CloudHealthOffice.GrouperEngine.Formulas;
 /// Whether a mask entry suppressed in <paramref name="Mdc"/> counts. True is
 /// the grouping path.
 /// </param>
+/// <param name="ReturnCodes">
+/// Where an MCE edit operand records the grouper return code it raised. May be
+/// <see langword="null"/> when the caller only wants the boolean — but a
+/// grouping caller wants it, because that code is how a claim becomes
+/// ungroupable and the boolean does not carry it.
+/// </param>
 public readonly record struct DrgFormulaEvaluation(
     IAttributeMask Mask,
     int Mdc = -1,
-    bool ApplySuppression = false)
+    bool ApplySuppression = false,
+    GrouperReturnCodeSink? ReturnCodes = null,
+    ClaimCodes? Claim = null)
 {
+    /// <summary>
+    /// The claim's codes, which the code-driven operands read. Empty when the
+    /// caller did not supply them, in which case every one of those operands
+    /// is false — which is what CMS answers for a claim with no codes, but is
+    /// not what it answers for a real stay. A grouping caller supplies them.
+    /// </summary>
+    public ClaimCodes Codes => Claim ?? ClaimCodes.Empty;
+
     /// <summary>True when the stay satisfies <paramref name="attribute"/>.</summary>
     public bool Satisfies(OperandName attribute) => ApplySuppression
         ? Mask.ContainsUnsuppressed(attribute, Mdc)

@@ -130,16 +130,63 @@ public abstract record DrgFormulaExpression
         /// </summary>
         public OperandName Parsed { get; } = OperandName.Parse(Name);
 
+        /// <summary>
+        /// CMS's special logic list this operand names, if it names one. These
+        /// do not mean set membership, and two of the ways they differ are
+        /// invisible in the formula text: the name is normalised to the
+        /// tables' spelling, and the position prefix the formula wrote is
+        /// discarded. See <see cref="SpecialLogicList"/>.
+        /// </summary>
+        public SpecialLogicList? Special { get; } =
+            SpecialLogicList.TryResolve(OperandName.Parse(Name).ListName, out var special)
+                ? special
+                : null;
+
         /// <inheritdoc/>
         public override bool Evaluate(
             DrgFormulaEvaluation context, ICollection<string>? matched)
         {
-            if (!context.Satisfies(Parsed))
+            if (Special is null)
+            {
+                if (!context.Satisfies(Parsed))
+                {
+                    return false;
+                }
+
+                matched?.Add(Name);
+                return true;
+            }
+
+            if (Special.Kind == SpecialLogicKind.CodeDriven)
+            {
+                if (!CodeDrivenOperand.Evaluate(Special, context.Codes))
+                {
+                    return false;
+                }
+
+                matched?.Add(Special.CanonicalName);
+                return true;
+            }
+
+            // An MCE edit ignores cluster suppression -- CMS's own node does a
+            // plain mask lookup -- while ONLY:incident respects it, because
+            // that node is built on the suppression-aware one.
+            var satisfied = Special.Kind == SpecialLogicKind.GrouperReturnCode
+                ? context.Mask.Contains(Special.Attribute)
+                : context.Satisfies(Special.Attribute);
+
+            if (!satisfied)
             {
                 return false;
             }
 
-            matched?.Add(Name);
+            matched?.Add(Special.Attribute.ToString());
+
+            if (Special.Kind == SpecialLogicKind.GrouperReturnCode)
+            {
+                context.ReturnCodes?.Raise(Special.ReturnCode);
+            }
+
             return true;
         }
 

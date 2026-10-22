@@ -427,9 +427,11 @@ Build order:
      `PT:` say where the codes must appear — any diagnosis, the principal only,
      a secondary only, every diagnosis, or a patient attribute. 196 of the 452
      distinct operands in V44's 824 formulas are prefixed (`PDX` 170, `ANY` 14,
-     `SDX` 11, `ONLY` 1). The same list appears under three different prefixes
-     (`ONLY:incident`, `PDX:incident`, `SDX:incident`), so a grouper that
-     ignored the prefix would collapse three different tests into one.
+     `SDX` 11, `ONLY` 1). A grouper that ignored the prefix would collapse
+     different tests into one. (The example this ADR used to give —
+     `ONLY:incident`, `PDX:incident`, `SDX:incident` — turned out to be the one
+     case where the prefix does *not* decide the answer. See the correction
+     below.)
 
      CMS does not treat `:` as punctuation, so a prefixed operand is a single
      atom — the parser needed no change, and the split belongs where the
@@ -568,15 +570,259 @@ Build order:
    mask. Had that gone the other way round it would have been a wrong DRG on
    every stay with a cluster.
 
-   What is left:
+   **Second correction, and this one was found by asking CMS rather than
+   reading it.** `SpecialNodeCheck` in the oracle tool drives CMS's real node
+   supplier over chosen formulas and masks and prints its answers. Doing that
+   found two defects in work this ADR had already called done:
 
-   - the dozen special-logic operand nodes, counting nodes included;
-   - driving the ranked formula lists per MDC — 824 formulas for V44 — with
-     `reRouteMdcId` (20 formulas) and `severitySuppressionOperand` (56).
+   - **The MCE edit operands are spelled in the wrong case.** CMS's tables
+     spell them `invalid_pdx`, `invalid_sex`, `pdx_ecode`, `invalid_dstat`;
+     its *formulas* spell them `INVALID_PDX`, `INVALID_SEX`, `PDX_ECODE`,
+     `INVALID_DSTAT`. The resolution is case-insensitive and then normalises to
+     the tables' spelling, so the mask must hold the lower-case one. CHO's mask
+     held the upper-case one for three of the four. Since attribute matching is
+     case-sensitive, those three edits could never have fired, and a claim with
+     an invalid principal diagnosis would have grouped as though it had a valid
+     one. No error, just the wrong DRG. CMS confirms an upper-case mask entry
+     answers false.
+
+   - **A position prefix on a special list name is discarded.** The node
+     supplier looks the name up without the prefix, so `PDX:incident` and
+     `SDX:incident` are both evaluated as `ONLY:incident`. CMS answers true for
+     `PDX:incident` against a mask holding only `ONLY:incident`, and false
+     against one holding only `PDX:incident`. So the real V44 MDC 15 formula
+     `(PDX:incident & SDX:mdc15fallthrough) | (PDX:mdc15fallthrough &
+     SDX:incident) | ANY:drg794codes` does not test the two positions
+     separately, however much it reads as though it does — and `incident` was
+     exactly the example used above to argue that prefixes matter. It was the
+     wrong example.
+
+   Both are fixed, and the 22 answers CMS gave are now assertions rather than
+   claims. The lesson is the one from step 3: where a question can be put to
+   CMS's own grouper, reading its source is the slower and less reliable way to
+   answer it.
+
+   **The code-driven operands are now built, and asking CMS paid for itself a
+   second time.** Eleven V44 operands read the claim's codes rather than its
+   mask, and every one of them appears in a real V440 formula. `CodeDrivenNodeCheck`
+   runs CMS's own nodes over synthetic codes, and four of the rules turned out
+   not to be what the operand names say:
+
+   - `MULTST` and `BILATERAL` take **at most one list per code**. CMS takes
+     from each code the first list it carries that it has not already found and
+     then moves on, so one diagnosis on both the head and the chest trauma
+     lists is not a multiple-trauma stay. Two codes carrying one each are.
+   - `BILATERAL` is satisfied by **any two** of its six lists, so a right hip
+     and a right knee satisfy it. It never checks that the two are a left/right
+     pair.
+   - `MULTFUSE` wants two occurrences but **not** two different lists, where
+     `SINGLEFUSIONCTR` wants both — and the two are built from the same fusion
+     lists. The same list twice satisfies one and not the other.
+   - The vessel and stent counts are **weighted**: `vessel3` is worth three, so
+     one code can satisfy `FOUR_VESSELS` alone while three `vessel1` codes
+     cannot.
+
+   And a fifth trap, in CMS's naming rather than its logic: two of its
+   node-factory members are not named after the operand they match.
+   `SGLANTFUSECTR` matches the operand `SGLANTCTR`, and `SGLPOST1FUSECTR`
+   matches `SGLPOST1CTR`. A table keyed on the member names — the obvious way
+   to build one — leaves both counters as ordinary mask lookups, and a mask
+   lookup on one of these names is always false. That is two of the eleven
+   silently dead, with no error to notice.
+
+   Two smaller points of faithfulness that the same run settled. A diagnosis
+   list name is matched **case-insensitively and without its prefix**, because
+   CMS's diagnosis lookup walks the list comparing names; a procedure's is
+   matched **exactly**, because its lookup is a hash-set lookup. So a diagnosis
+   carrying `STHEAD` satisfies `MULTST` and a procedure carrying `RIGHTHIP`
+   does not satisfy `BILATERAL`. And a satisfied cluster's pseudo-code is
+   **not** among the procedures these operands walk: a cluster reaches the
+   formulas through the mask only.
+
+   The guard that refused these operands is kept, now for a special list with
+   no rule, so the next fiscal year's new list is loud rather than quietly
+   false.
+
+   **The ranked formula driver is built, and it is a loop rather than a
+   decision tree**: an MDC's rows are tried in rank order and the first
+   formula that matches wins. Two properties of that loop are quiet when got
+   wrong:
+
+   - **The mask is not constant.** Severity is recomputed for *every* row,
+     with that row's own suppression list applied, and added to the mask as an
+     operand before the row is evaluated. 56 of V44's 824 rows carry a
+     suppression list. A grouper that computed severity once before the loop
+     would pay those 56 at the wrong severity, and the other 768 — which write
+     a suppression list of one empty string, matching nothing — would hide
+     that nothing was wrong.
+   - **Rank ties keep the table's own order**, because CMS's sort is stable.
+     In several MDCs a row that assigns no DRG shares a rank with a real DRG
+     row. That tie is harmless, and checkably so: the row cannot match at all.
+     A gated test asserts that against a real release.
+
+   Severity also needed the **CC exclusion lists**, which are the mechanism
+   that stops a stay being paid twice for one clinical fact. V44 lists a group
+   for 26,168 principal diagnoses pointing at 3,013 shared groups, the largest
+   listing 5,565 codes. Three things take a secondary out of the severity
+   count — the exclusion list, an `mccalive` code on a stay the patient did
+   not survive, and a hospital-acquired condition — and all three are
+   reductions, so leaving any of them out pays *more* than the claim has
+   earned, with no error to notice. The first two are built; HAC determination
+   is not, so the severity processor takes the set as a parameter and its
+   contract says a caller who cannot supply it must refuse the claim.
+
+   **MDC assignment is built, and it is not what this ADR said it was.** The
+   previous revision of this section said the MDC comes from the `MDCnn` rows
+   in the DRG logic table. It does not. Reading CMS's own chain settled it:
+   `PdxMdcGrouping` is one line — `processingData.getPrincipalDx().getMdc()`
+   — so a stay's MDC is read straight off its principal diagnosis's row in
+   the code table, and no formula is searched for it. The `MDCnn` rows are
+   vestigial: no V44 code carries an `MDCnn` operand, so they cannot match.
+
+   That matters beyond the wording, because the wrong reading would have built
+   a search where CMS has a lookup, and a search over rows that can never
+   match answers "no MDC" on every claim.
+
+   What CMS does instead is three passes over rankings, in this order, and the
+   order is the whole of it:
+
+   1. **Pre-MDC.** MDC 0's ranking runs on every stay. It holds the transplant
+      DRGs, 7 MCE edit rows, and 3 rows that route a stay out to multiple
+      trauma (24), HIV (25) or kidney transplant (11).
+   2. **The principal diagnosis's MDC** — but *only* if the pre-MDC pass
+      matched nothing. A pre-MDC match skips this pass even when it assigns no
+      DRG.
+   3. **Re-routing**, at most two hops. Not a loop: CMS looks at the reroute
+      on the second hop's match and stops.
+
+   Four details of that chain are each quiet when got wrong, and all four are
+   asserted by tests:
+
+   - An MCE edit can fire at **any** of the three passes, not just the
+     pre-MDC one: V44 carries edit rows in MDC 0, 5, 15 and 20.
+   - The **first** hop's MDC is recorded and the second's is not, and the MDC
+     CMS reports is read off the end of that list — so a two-hop stay
+     reports the first destination, not where its DRG came from. MDC 29 is a
+     shared destination and reports the MDC the stay was routed out of.
+   - A hop that matches nothing leaves the stay on a row that assigns no DRG,
+     which ends grouping with no answer rather than keeping the pre-reroute
+     DRG. CMS throws there and so does CHO.
+   - The severity reported is the **last** ranking's, not the pre-MDC pass's.
+
+   The 56 rows that assign no DRG now have a checked account of themselves: 7
+   MCE edits, 20 reroutes, and 29 that cannot match at all. The last 29 are
+   safe for a reason the table nowhere states — they name an operand nothing
+   supplies — so a gated test re-derives that from each release rather than
+   trusting it. Two of them are subtler than the `MDCnn` rows: MDC 5 rank 87 is
+   `(ANY:ami) & (ami)`, dead only because a diagnosis's lists enter the mask
+   with a position and the unprefixed half can never be satisfied, and MDC 15
+   rank 2 is the single operand `5`.
+
+   One more thing that run settled: `invalid_age`, one of CMS's five MCE edit
+   operands, appears in **no** V44 formula, and CMS's own mask builder writes
+   no age operand. So CHO's not writing one is correct rather than a hole.
+
+   **Confidence.** This step is the least evidenced part of the grouper. The
+   code-driven operands and the severity count were each built against answers
+   printed by CMS's own classes; this chain was read off `GrouperChain`,
+   `PreMdcGrouping`, `PdxMdcGrouping`, `MdcRerouteGrouping` and
+   `MsdrgDrgResults` and asserted against hand-built tables. The end-to-end
+   parity run is what will confirm the order.
+
+   **Hospital-acquired conditions are built, and so are the two grouping
+   passes around them.** A HAC is a condition Medicare will not pay the
+   hospital for having caused, so it stops counting towards the stay's
+   complication level — which can drop the stay out of a severity-split DRG
+   into its lower-paying sibling. CMS therefore decides the DRG **twice** on
+   every stay: once with every secondary counting, then the HAC policy, then
+   again. Both answers are part of the result, because the pair is the payment
+   mechanism and either one alone cannot explain the difference.
+
+   V44 has 14 conditions, each with one formula, over 5,281 codes. The
+   determination is per secondary diagnosis and reads the POA indicator: a
+   condition present on admission (or clinically undetermined, `W`) is not one
+   the hospital caused; a code the CC exclusion list already removed is not
+   reconsidered; otherwise the condition's formula decides it. A HAC formula is
+   evaluated outside any MDC, with no cluster suppression, over the secondary
+   diagnoses only — not the principal.
+
+   **Three behaviours here are CMS's rather than the policy's, and all three
+   are replicated.** Parity is the requirement: firing a condition the payer
+   does not takes severity off a stay the payer pays in full, which underpays
+   the hospital.
+
+   - **HAC 6 cannot fire in V44 at all.** A code gets its conditions only when
+     one of its HAC list names starts with an upper-case `HAC` — CMS's check
+     is `getListName().startsWith("HAC")`, and Java's is case-sensitive. Every
+     V44 code on HAC 6 is on it through `hac06_show` or `hac06_sdx` alone, so
+     catheter-associated urinary tract infection is never determined, its
+     formula never evaluated, and its show-list rule never reached. Two of the
+     nine `hac11_sdx` codes go the same way. A gated test re-derives this from
+     each release, so a fiscal year that changes it fails loudly — and the
+     show-list rule is built and tested against that day.
+   - **The unknown-reporting-status check is a tautology.** CMS counts
+     secondaries where `poa != Y || poa != W`, which is true of every value, so
+     it counts every secondary on the claim. Two or more, on a stay with any
+     met condition and a facility whose POA reporting status is unknown,
+     refuses the claim. Named as such in the engine so it cannot be read as
+     arithmetic that was meant.
+   - **One unreadable POA anywhere refuses the claim**, not only on the code
+     carrying the condition. CMS sets the flag while walking every HAC-bearing
+     secondary and then applies it to every condition but HAC 6.
+
+   `invalid_age` and the age edits are not involved: as above, V44 names
+   neither.
+
+   **Confidence.** Like MDC assignment, this is source-derived rather than
+   oracle-confirmed, with one exception worth naming: the HAC 6 gate is
+   confirmed against the release's own tables, not just against CMS's code.
+
+   **The parity run is done, and the engine agrees with CMS on every row.** All
+   33 rows of the oracle corpus that CMS grouped match on **five** things each
+   — DRG, MDC, base DRG, severity and the medical/surgical partition — not on
+   the DRG alone, because a right DRG reached through the wrong MDC is a
+   coincidence waiting to stop happening. The 34th row, which CMS refuses, is
+   asserted separately: it refuses with the same return code.
+
+   The corpus rows exist to separate a correct grouper from a plausible wrong
+   one: three-way severity splits, CC exclusions, the pre-MDC rules, the
+   surgical hierarchy, the sex edit, and the present-on-admission cases where a
+   hospital-acquired condition moves the stay to a lower-paying DRG. So the two
+   source-derived chains above — MDC assignment and the HAC policy — now have
+   evidence behind them and not only a careful reading.
+
+   **The run found one defect, and it was in CHO's policy rather than its
+   logic.** The engine refused any claim carrying a code outside the release's
+   tables, on the reasoning that an unrecognised code is not an absent one.
+   That is stricter than CMS and wrong in the direction that matters: CMS groups
+   a stay with an unknown secondary diagnosis or procedure as though the code
+   were absent, and refuses an unknown *principal* through its own
+   `invalid_pdx` edit with a return code attached. Three corpus rows
+   disagreed for that reason alone. The engine now groups all three the way CMS
+   does and reports the unrecognised codes alongside the answer, so a caller can
+   still reject the claim back to the biller — as its own policy, not as the
+   grouper's answer.
+
+   A second run, over a broad sample of the release's own codes rather than the
+   corpus, grouped 1,684 of 1,876 stays and refused 192 with **nothing thrown**.
+   That is not parity — nothing in it knows what CMS would have said — but it
+   is the run that exercises every part of the chain at scale, and the failure it
+   exists to catch is a chain that works on hand-built tables and falls over on
+   CMS's own.
+
+   What is left in this stage:
+
+   - A larger corpus. 34 rows is enough to catch a wrong chain and not enough to
+     claim parity in general; the oracle takes a corpus file, so growing it is
+     work rather than design.
+   - CMS's two marking passes, which record which codes affected the DRG. The
+     matched operands carry most of the same information from the other
+     direction.
 
    None of this changes the recommendation or the build order. It does mean
-   step 4 is larger than this ADR implied two commits ago, and that the CMS
-   extracted tables cannot simply be committed.
+   step 4 is larger than this ADR first implied, that one thing this ADR
+   asserted about MDC assignment was wrong, and that the CMS extracted tables
+   cannot simply be committed.
 5. `IppsPaymentCalculator`: wage index, labor/non-labor split, IME, DSH,
    outlier, transfer and post-acute transfer policy; plus the
    provider-specific-file home the data model is missing.

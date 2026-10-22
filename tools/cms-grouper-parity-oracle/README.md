@@ -149,3 +149,62 @@ CHO-authored code: the compatibility shim, the oracle, the corpus, and the
 grouper's answers for those 34 invented stays. The MS-DRG definitions, the code
 attribute tables and the grouper logic stay in CMS's distribution, and this tool
 is useless without it.
+
+## Asking CMS what an operand means
+
+`SpecialNodeCheck` drives CMS's own node supplier over chosen formulas and
+masks and prints its answers. About a dozen operand names in CMS's data are not
+set lookups — they are "special logic lists" that the supplier turns into nodes
+with real behaviour — and two of the ways they differ cannot be seen in the
+formula text:
+
+* The names are resolved case-insensitively and then **normalised to the
+  tables' spelling**. A formula says `INVALID_PDX`; the attribute the node
+  looks for is `invalid_pdx`.
+* The lookup is on the list name alone, with the **position prefix discarded**,
+  so `PDX:incident` is evaluated as `ONLY:incident`.
+
+Running it found both of those as live defects in work that had already been
+reviewed and merged.
+
+`CodeDrivenNodeCheck` does the same for the eleven operands that read the
+claim's codes rather than its mask — significant trauma, bilateral pairs, the
+fusion, vessel and stent counters, MDC fall-through. It builds synthetic
+diagnosis and procedure codes carrying chosen lists and runs CMS's real nodes
+over them. Four of those rules are not what the operand names say:
+
+* `MULTST` and `BILATERAL` take **at most one list per code**, so one diagnosis
+  on both the head and chest lists is not a multiple-trauma stay.
+* `BILATERAL` takes any two of its six lists, so a right hip and a right knee
+  satisfy it. It never checks that the two are a pair.
+* `MULTFUSE` wants two occurrences but not two different lists, where
+  `SINGLEFUSIONCTR` wants both — and they are built from the same fusion lists.
+* The vessel and stent counts are **weighted**: one `vessel4` satisfies
+  `FOUR_VESSELS`, three `vessel1` do not.
+
+And a naming trap it caught: two of CMS's node-factory members are not named
+after the operand they match. `SGLANTFUSECTR` matches the operand `SGLANTCTR`
+and `SGLPOST1FUSECTR` matches `SGLPOST1CTR`. A table keyed on the member names
+leaves both counters as ordinary mask lookups, which are always false.
+
+`SeverityCheck` calls CMS's real `MsdrgSeverityProcessor` directly. Severity is
+not a property of a claim: it is recomputed for **every** formula an MDC holds,
+with that formula's own suppression list applied, and added to the mask as an
+operand before the formula is evaluated. 56 of V44's 824 formulas carry a
+suppression list; the other 768 write a list of one empty string, which matches
+no list and so suppresses nothing. The check pins that, and that both the
+suppression operand and a code's attribute are matched case-insensitively with
+any position prefix ignored.
+
+Run them after changing the formula evaluator, or on a new fiscal year's jars:
+
+```
+CMS_MSDRG_JARS=/path/to/jars ./run.sh            # the parity corpus
+java -cp <same classpath> gov.cho.grouper.oracle.SpecialNodeCheck
+java -cp <same classpath> gov.cho.grouper.oracle.CodeDrivenNodeCheck
+java -cp <same classpath> gov.cho.grouper.oracle.SeverityCheck
+java -cp <same classpath> gov.cho.grouper.oracle.FormulaPrecedenceCheck
+```
+
+Their answers are asserted on the .NET side in `SpecialLogicListTests`,
+`CodeDrivenNodeTests` and `SeverityTests`.

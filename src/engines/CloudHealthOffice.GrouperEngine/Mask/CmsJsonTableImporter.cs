@@ -2,6 +2,11 @@ using System.Collections.Frozen;
 using System.Text.Json;
 using CloudHealthOffice.GrouperEngine.Domain;
 
+using CloudHealthOffice.GrouperEngine.Formulas;
+using CloudHealthOffice.GrouperEngine.Hac;
+using CloudHealthOffice.GrouperEngine.Services;
+using CloudHealthOffice.GrouperEngine.Severity;
+
 namespace CloudHealthOffice.GrouperEngine.Mask;
 
 /// <summary>
@@ -34,6 +39,428 @@ public static class CmsJsonTableImporter
     private const string ProcedurePatternFile = "prPatterns.json";
     private const string SexMdcFile = "codeGenderMdcs.json";
     private const string ClusterFile = "clusters.json";
+    private const string PrincipalExclusionFile = "pdxExclusionGroups.json";
+    private const string ExclusionGroupFile = "exclusionGroups.json";
+    private const string FormulaFile = "formulaRoot.json";
+    private const string HacInformationFile = "hacInformation.json";
+    private const string HacFormulaFile = "hacFormulaLists.json";
+
+    /// <summary>
+    /// Imports the DRG logic table in <paramref name="directory"/> for
+    /// <paramref name="version"/>: every MDC's ranked formulas.
+    ///
+    /// <para>
+    /// Each formula is parsed here rather than on first use, so a release
+    /// carrying a formula this engine cannot parse fails at import with the
+    /// offending text named, instead of on some later claim.
+    /// </para>
+    /// </summary>
+    public static InMemoryFormulaSource ImportFormulas(string directory, string version)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+
+        using var document = ReadDocument(directory, FormulaFile);
+
+        var rows = new List<MsDrgFormulaRow>();
+
+        foreach (var mdc in Member(document.RootElement, "mdc_formulas", FormulaFile)
+            .EnumerateObject())
+        {
+            if (!int.TryParse(
+                    mdc.Name,
+                    System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var mdcNumber))
+            {
+                throw new MsDrgTableImportException(
+                    $"{FormulaFile} holds a ranking under '{mdc.Name}', which is not an MDC "
+                    + "number.");
+            }
+
+            if (!mdc.Value.TryGetProperty("formulas", out var formulas))
+            {
+                continue;
+            }
+
+            foreach (var formula in formulas.EnumerateArray())
+            {
+                // A row carries its rank per version, and a version it has no
+                // rank for is a version the row does not apply to.
+                if (!TryRankForVersion(formula, version, out var rank))
+                {
+                    continue;
+                }
+
+                var text = formula.TryGetProperty("formula", out var formulaText)
+                    ? formulaText.GetString()
+                    : null;
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    throw new MsDrgTableImportException(
+                        $"{FormulaFile} has a row in MDC {mdcNumber} with no formula.");
+                }
+
+                DrgFormulaExpression parsed;
+                try
+                {
+                    parsed = DrgFormulaParser.Parse(text);
+                }
+                catch (DrgFormulaException exception)
+                {
+                    throw new MsDrgTableImportException(
+                        $"{FormulaFile} has a formula in MDC {mdcNumber} this engine cannot "
+                        + $"parse: '{text}'.",
+                        exception);
+                }
+
+                rows.Add(new MsDrgFormulaRow(
+                    Mdc: mdcNumber,
+                    Rank: rank,
+                    Drg: Integer(formula, "drg"),
+                    BaseDrg: Integer(formula, "baseDrg"),
+                    Partition: Partition(formula),
+                    ReRouteMdc: Integer(formula, "reRouteMdcId"),
+                    FormulaText: text,
+                    Formula: parsed,
+                    SeveritySuppressionOperands: Strings(formula, "severitySuppressionOperand"),
+                    DrgSeverity: Integer(formula, "drgSeverity")));
+            }
+        }
+
+        return new InMemoryFormulaSource(version, rows);
+    }
+
+    private static bool TryRankForVersion(JsonElement formula, string version, out int rank)
+    {
+        rank = 0;
+
+        if (!formula.TryGetProperty("versionRanks", out var ranks))
+        {
+            return false;
+        }
+
+        foreach (var candidate in ranks.EnumerateArray())
+        {
+            if (candidate.TryGetProperty("version", out var named)
+                && string.Equals(named.GetString(), version, StringComparison.OrdinalIgnoreCase))
+            {
+                rank = candidate.TryGetProperty("rank", out var ranked) ? ranked.GetInt32() : 0;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static DrgTablePartition Partition(JsonElement formula) =>
+        formula.TryGetProperty("surgical", out var surgical)
+            ? surgical.GetString() switch
+            {
+                "SURGICAL" => DrgTablePartition.Surgical,
+                "MEDICAL" => DrgTablePartition.Medical,
+                _ => DrgTablePartition.NotApplicable,
+            }
+            : DrgTablePartition.NotApplicable;
+
+    private static int Integer(JsonElement row, string name) =>
+        row.TryGetProperty(name, out var value) ? value.GetInt32() : 0;
+
+    private static IReadOnlyList<int> Integers(JsonElement row, string name)
+    {
+        if (!row.TryGetProperty(name, out var listed))
+        {
+            return [];
+        }
+
+        var values = new List<int>();
+        foreach (var value in listed.EnumerateArray())
+        {
+            values.Add(value.GetInt32());
+        }
+
+        return values;
+    }
+
+    private static IReadOnlyList<string> Strings(JsonElement row, string name)
+    {
+        if (!row.TryGetProperty(name, out var listed))
+        {
+            return [];
+        }
+
+        var values = new List<string>();
+        foreach (var value in listed.EnumerateArray())
+        {
+            var text = value.GetString();
+            if (!string.IsNullOrEmpty(text))
+            {
+                values.Add(text);
+            }
+        }
+
+        return values;
+    }
+
+    /// <summary>
+    /// Imports every table one release needs, in one call.
+    ///
+    /// <para>
+    /// Six files are read: the code tables, the clusters, the DRG logic table,
+    /// the two CC exclusion files and the two HAC files. A release missing any
+    /// of them is refused here rather than part-way through grouping a claim.
+    /// </para>
+    /// </summary>
+    public static MsDrgRelease ImportRelease(string directory, string version)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+
+        return new MsDrgRelease(
+            version,
+            Import(directory, version),
+            ImportClusters(directory, version),
+            ImportFormulas(directory, version),
+            ImportExclusions(directory, version),
+            ImportHac(directory, version));
+    }
+
+    /// <summary>
+    /// Imports a release's hospital-acquired-condition tables: which codes are
+    /// on which HAC lists, and the formula that decides each condition.
+    ///
+    /// <para>
+    /// <b>A code gets its HAC lists only if one of them is spelled in upper
+    /// case.</b> That is not this importer's idea. CMS attaches a code's
+    /// conditions when one of its HAC attributes passes
+    /// <c>getListName().startsWith("HAC")</c>, and Java's <c>startsWith</c> is
+    /// case-sensitive, so a code on only <c>hac06_show</c>, <c>hac06_sdx</c> or
+    /// <c>hac11_sdx</c> gets none. The consequence in V44 is that HAC 6 cannot
+    /// fire at all. Replicated rather than corrected, because a grouper that
+    /// fires a condition the payer does not takes severity off a stay the payer
+    /// pays in full, and that underpays the hospital.
+    /// </para>
+    /// </summary>
+    /// <exception cref="MsDrgTableImportException">
+    /// The directory is not a CMS release's table directory, or a HAC formula
+    /// does not parse.
+    /// </exception>
+    public static InMemoryHacSource ImportHac(string directory, string version)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+
+        using var informationDocument = ReadDocument(directory, HacInformationFile);
+
+        var byCode = new Dictionary<string, IReadOnlyList<MsDrgHacEntry>>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var code in
+            Member(informationDocument.RootElement, "hacInfos", HacInformationFile)
+                .EnumerateObject())
+        {
+            if (!TryRowForVersion(
+                code.Value, version, HacInformationFile, code.Name, out var row))
+            {
+                continue;
+            }
+
+            var lists = Strings(row, "hacOperands");
+            var numbers = Integers(row, "hacNumbers");
+
+            if (lists.Count != numbers.Count)
+            {
+                throw new MsDrgTableImportException(
+                    $"{HacInformationFile} gives code '{code.Name}' {lists.Count} HAC "
+                    + $"lists and {numbers.Count} HAC numbers. They are parallel arrays, "
+                    + "so pairing them up would be a guess.");
+            }
+
+            if (!lists.Any(list => list.StartsWith("HAC", StringComparison.Ordinal)))
+            {
+                // CMS's own gate, above. The code is on a HAC list and still
+                // carries no condition.
+                continue;
+            }
+
+            var entries = new List<MsDrgHacEntry>(lists.Count);
+
+            for (var index = 0; index < lists.Count; index++)
+            {
+                entries.Add(new MsDrgHacEntry(numbers[index], lists[index]));
+            }
+
+            byCode[code.Name] = entries;
+        }
+
+        using var formulaDocument = ReadDocument(directory, HacFormulaFile);
+
+        var byNumber = new Dictionary<int, IReadOnlyList<DrgFormulaExpression>>();
+
+        foreach (var condition in
+            Member(formulaDocument.RootElement, "hacFormulaLists", HacFormulaFile)
+                .EnumerateObject())
+        {
+            if (!int.TryParse(condition.Name, out var number))
+            {
+                throw new MsDrgTableImportException(
+                    $"{HacFormulaFile} keys a condition on '{condition.Name}', which is "
+                    + "not a HAC number.");
+            }
+
+            if (!condition.Value.TryGetProperty("hacFormulaItems", out var rows))
+            {
+                continue;
+            }
+
+            var formulas = new List<DrgFormulaExpression>();
+
+            foreach (var row in rows.EnumerateArray())
+            {
+                if (!MentionsVersion(row, version))
+                {
+                    continue;
+                }
+
+                var text = row.TryGetProperty("formula", out var formula)
+                    ? formula.GetString()
+                    : null;
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    throw new MsDrgTableImportException(
+                        $"{HacFormulaFile} gives HAC {number} a row with no formula.");
+                }
+
+                try
+                {
+                    formulas.Add(DrgFormulaParser.Parse(text));
+                }
+                catch (DrgFormulaException exception)
+                {
+                    throw new MsDrgTableImportException(
+                        $"{HacFormulaFile} gives HAC {number} the formula '{text}', which "
+                        + "this engine cannot read. A condition whose formula cannot be "
+                        + "parsed cannot be determined, and the stay would then be paid as "
+                        + "though the hospital had not caused it.",
+                        exception);
+                }
+            }
+
+            if (formulas.Count > 0)
+            {
+                byNumber[number] = formulas;
+            }
+        }
+
+        return new InMemoryHacSource(version, byCode, byNumber);
+    }
+
+    /// <summary>
+    /// Imports the CC exclusion lists in <paramref name="directory"/> for
+    /// <paramref name="version"/>.
+    ///
+    /// <para>
+    /// Two files: one mapping each principal diagnosis to a group id for a
+    /// version, and one holding the groups. The groups are shared heavily —
+    /// V44 points 26,168 principal diagnoses at 3,013 groups, the largest of
+    /// which lists 5,565 codes — so each group is read once and the index
+    /// holds references to it.
+    /// </para>
+    ///
+    /// <para>
+    /// A principal diagnosis naming a group the group file does not hold is
+    /// refused rather than skipped. Skipping it would silently stop excluding
+    /// anything for that principal, and the consequence of under-excluding is
+    /// a higher-paying DRG, not an error.
+    /// </para>
+    /// </summary>
+    public static InMemoryExclusionSource ImportExclusions(string directory, string version)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+
+        using var groupDocument = ReadDocument(directory, ExclusionGroupFile);
+
+        var groups = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+
+        foreach (var group in
+            Member(groupDocument.RootElement, "exclusionGroups", ExclusionGroupFile)
+                .EnumerateObject())
+        {
+            // The secondary's code is matched case-insensitively, where CMS
+            // matches it exactly. The difference is deliberate and one-sided:
+            // CHO's own code lookup is already case-insensitive, so matching
+            // exactly here would exclude nothing for a differently-cased code
+            // that the rest of the engine recognises -- and under-excluding
+            // pays more, not less.
+            var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (group.Value.TryGetProperty("codes", out var listed))
+            {
+                foreach (var code in listed.EnumerateArray())
+                {
+                    var value = code.GetString();
+                    if (!string.IsNullOrEmpty(value))
+                    {
+                        codes.Add(value);
+                    }
+                }
+            }
+
+            groups[group.Name] = codes;
+        }
+
+        using var principalDocument = ReadDocument(directory, PrincipalExclusionFile);
+
+        var byPrincipal = new Dictionary<string, IReadOnlySet<string>>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var principal in
+            Member(principalDocument.RootElement, "pdx_exclusion_groups", PrincipalExclusionFile)
+                .EnumerateObject())
+        {
+            if (!principal.Value.TryGetProperty("groups", out var rows))
+            {
+                continue;
+            }
+
+            foreach (var row in rows.EnumerateArray())
+            {
+                if (!MentionsVersion(row, version))
+                {
+                    continue;
+                }
+
+                var id = row.TryGetProperty("groupId", out var groupId)
+                    ? groupId.GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : throw new MsDrgTableImportException(
+                        $"{PrincipalExclusionFile} has a row for '{principal.Name}' with no "
+                        + "'groupId'.");
+
+                if (!groups.TryGetValue(id, out var codes))
+                {
+                    throw new MsDrgTableImportException(
+                        $"{PrincipalExclusionFile} points '{principal.Name}' at exclusion group "
+                        + $"'{id}', which {ExclusionGroupFile} does not hold.");
+                }
+
+                if (byPrincipal.TryGetValue(principal.Name, out var already)
+                    && !ReferenceEquals(already, codes))
+                {
+                    throw new MsDrgTableImportException(
+                        $"{PrincipalExclusionFile} gives '{principal.Name}' two different "
+                        + $"exclusion groups for {version}. The release is inconsistent and "
+                        + "guessing which to use would change what the stay is paid.");
+                }
+
+                byPrincipal[principal.Name] = codes;
+            }
+        }
+
+        return new InMemoryExclusionSource(version, byPrincipal);
+    }
 
     /// <summary>
     /// Imports the procedure clusters in <paramref name="directory"/> for
@@ -543,5 +970,48 @@ public sealed class ImportedCodeTables : IMsDrgCodeAttributeSource
     {
         ArgumentNullException.ThrowIfNull(code);
         return procedures.TryGetValue(code, out attributes!);
+    }
+
+    /// <summary>
+    /// Whether any diagnosis code in the table carries the named operand
+    /// list. A scan of the whole table, so for checking a release rather than
+    /// for grouping a claim.
+    /// </summary>
+    public bool CarriesDiagnosisOperand(string listName)
+    {
+        ArgumentNullException.ThrowIfNull(listName);
+
+        return diagnoses.Values.Any(attributes =>
+            Mentions(attributes.Operands, listName)
+            || Mentions(attributes.DiagnosisCategoryOperands, listName)
+            || Mentions(attributes.HacOperands, listName));
+    }
+
+    /// <summary>
+    /// Whether any procedure code in the table carries the named operand
+    /// list.
+    /// </summary>
+    public bool CarriesProcedureOperand(string listName)
+    {
+        ArgumentNullException.ThrowIfNull(listName);
+
+        return procedures.Values.Any(attributes =>
+            Mentions(attributes.Operands, listName));
+    }
+
+    private static bool Mentions(IReadOnlyList<string> operands, string listName)
+    {
+        foreach (var operand in operands)
+        {
+            if (string.Equals(
+                    OperandName.Parse(operand).ListName,
+                    listName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

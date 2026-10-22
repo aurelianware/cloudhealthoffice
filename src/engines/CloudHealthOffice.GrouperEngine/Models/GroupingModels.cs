@@ -1,4 +1,5 @@
 using CloudHealthOffice.GrouperEngine.Domain;
+using CloudHealthOffice.GrouperEngine.Hac;
 
 namespace CloudHealthOffice.GrouperEngine.Models;
 
@@ -57,6 +58,20 @@ public sealed record MsDrgGroupingRequest
 
     /// <summary>Administrative sex: <c>M</c>, <c>F</c> or <c>U</c>. Drives the MCE sex edits.</summary>
     public string? Sex { get; init; }
+
+    /// <summary>
+    /// Whether the facility reports present-on-admission indicators. CMS takes
+    /// this as a runtime option rather than off the claim, because it is a
+    /// property of the provider.
+    ///
+    /// <para>
+    /// There is no safe default. A facility wrongly treated as exempt is paid
+    /// for harm it caused; one wrongly treated as reporting has its claim
+    /// refused. <see cref="HospitalPoaReporting.Unknown"/> is CMS's own answer
+    /// to that and refuses the claim, so it is the default here too.
+    /// </para>
+    /// </summary>
+    public HospitalPoaReporting PoaReporting { get; init; } = HospitalPoaReporting.Unknown;
 
     /// <summary>UB-04 patient (discharge) status, 837I CL103. <c>02</c>, <c>20</c>, <c>07</c> change grouping.</summary>
     public string? DischargeStatus { get; init; }
