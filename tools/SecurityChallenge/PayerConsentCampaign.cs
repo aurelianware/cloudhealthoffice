@@ -30,15 +30,15 @@ public static class PayerConsentCampaign
 
     public static async Task<int> Run(string[] args)
     {
-        if (args.Length != 6 || args.Skip(1).Take(4).Any(p => !File.Exists(p)) || Path.Exists(args[5]))
-        { Console.Error.WriteLine("Usage: SecurityChallenge p2p-consent <fhir-service.dll> <member-service.dll> <coverage-service.dll> <claims-service.dll> <new-evidence-directory>"); return 2; }
-        var output = Path.GetFullPath(args[5]);
+        if (args.Length != 7 || args.Skip(1).Take(5).Any(p => !File.Exists(p)) || Path.Exists(args[6]))
+        { Console.Error.WriteLine("Usage: SecurityChallenge p2p-consent <fhir-service.dll> <member-service.dll> <coverage-service.dll> <claims-service.dll> <authorization-service.dll> <new-evidence-directory>"); return 2; }
+        var output = Path.GetFullPath(args[6]);
         if (OperatingSystem.IsWindows()) Directory.CreateDirectory(output);
         else Directory.CreateDirectory(output, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         var results = new List<CaseResult>(); var observations = new List<object>(); var states = new List<object>(); var audits = new List<object>();
         var started = DateTimeOffset.UtcNow; var runId = Guid.NewGuid().ToString("N");
         var source = Git("rev-parse", "HEAD"); var dirty = Git("status", "--porcelain").Length != 0;
-        var binaries = args.Skip(1).Take(4).SelectMany(assembly => Directory.GetFiles(Path.GetDirectoryName(Path.GetFullPath(assembly))!)
+        var binaries = args.Skip(1).Take(5).SelectMany(assembly => Directory.GetFiles(Path.GetDirectoryName(Path.GetFullPath(assembly))!)
             .Where(p => p.EndsWith(".dll", StringComparison.Ordinal) || p.EndsWith(".deps.json", StringComparison.Ordinal) || p.EndsWith(".runtimeconfig.json", StringComparison.Ordinal))
             .Order(StringComparer.Ordinal).Select(p => new { service = Path.GetFileNameWithoutExtension(assembly), file = Path.GetFileName(p), sha256 = Hash(File.ReadAllBytes(p)) })).ToArray();
         var active = "lab.fixtures"; var completed = false; string? mongoVersion = null;
@@ -54,9 +54,14 @@ public static class PayerConsentCampaign
                 new Dictionary<string, string?> { ["Downstream:CoverageService:BaseUrl"] = "http://127.0.0.1:1/" });
             await using var coverage = new LocalService(args[3], mongo.ConnectionString, db.DatabaseNamespace.DatabaseName, false);
             await using var claims = new LocalService(args[4], mongo.ConnectionString, db.DatabaseNamespace.DatabaseName, false);
+            // The native export reads the member's prior authorizations as
+            // ExplanationOfBenefit (use = preauthorization), so the lab hosts
+            // authorization-service too; a dead port would fail every export.
+            await using var authorizations = new LocalService(args[5], mongo.ConnectionString, db.DatabaseNamespace.DatabaseName, false);
             active = "lab.member-ready"; await member.Ready();
             active = "lab.coverage-ready"; await coverage.Ready();
             active = "lab.claims-ready"; await claims.Ready();
+            active = "lab.authorizations-ready"; await authorizations.Ready();
             Dictionary<string, string?> Settings(string tenant)
             {
                 var settings = new Dictionary<string, string?>
@@ -72,6 +77,7 @@ public static class PayerConsentCampaign
                 settings["Services:MemberServiceUrl"] = member.Http.BaseAddress!.ToString();
                 settings["Services:CoverageServiceUrl"] = coverage.Http.BaseAddress!.ToString();
                 settings["Services:ClaimsServiceUrl"] = claims.Http.BaseAddress!.ToString();
+                settings["Services:AuthorizationServiceUrl"] = authorizations.Http.BaseAddress!.ToString();
                 foreach (var i in new[] { 0, 1 })
                 {
                     var issuer = i == 0 ? authority : otherIssuer; var key = $"SmartAuth:TrustedIssuers:{i}:";

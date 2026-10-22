@@ -76,9 +76,9 @@ DOCUMENT_MUTATIONS = {
 }
 
 
-def run(member, output, coverage=None, claims=None, consent=None, documents=False):
+def run(member, output, coverage=None, claims=None, consent=None, documents=False, authorizations=None):
     profile = "p2p-consent" if coverage is not None else "fhir-smart"
-    service_args = [str(member)] if coverage is None else [str(member), str(coverage), str(claims)]
+    service_args = [str(member)] if coverage is None else [str(member), str(coverage), str(claims), str(authorizations)]
     count = 55 if coverage is not None else 42
     mutations = P2P_MUTATIONS if coverage is not None else FHIR_MUTATIONS
     controls = (["export.inline-control", "export.cache-control", "match.control", "match.export-control", "tenant.b.inline-control"]
@@ -174,11 +174,12 @@ if __name__ == "__main__":
         if not all(Path(p).is_file() for p in sys.argv[2:4]) or Path(sys.argv[4]).exists():
             sys.exit("Provide built member and consent assemblies and a new evidence directory")
         run(Path(sys.argv[2]).resolve(), Path(sys.argv[4]).resolve(), consent=Path(sys.argv[3]).resolve())
-    elif len(sys.argv) == 6 and sys.argv[1] == "p2p-consent":
-        if not all(Path(p).is_file() for p in sys.argv[2:5]) or Path(sys.argv[5]).exists():
-            sys.exit("Provide built member, coverage and claims assemblies and a new evidence directory")
-        run(Path(sys.argv[2]).resolve(), Path(sys.argv[5]).resolve(), Path(sys.argv[3]).resolve(), Path(sys.argv[4]).resolve())
+    elif len(sys.argv) == 7 and sys.argv[1] == "p2p-consent":
+        if not all(Path(p).is_file() for p in sys.argv[2:6]) or Path(sys.argv[6]).exists():
+            sys.exit("Provide built member, coverage, claims and authorization assemblies and a new evidence directory")
+        run(Path(sys.argv[2]).resolve(), Path(sys.argv[6]).resolve(), Path(sys.argv[3]).resolve(), Path(sys.argv[4]).resolve(),
+            authorizations=Path(sys.argv[5]).resolve())
     elif len(sys.argv) == 3 and Path(sys.argv[1]).is_file() and not Path(sys.argv[2]).exists():
         run(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve())
     else:
-        sys.exit("Usage: run-fhir-sensitivity.py documents <attachment-service.dll> <new-evidence-directory> OR [p2p-consent] <member-service.dll> [<coverage-service.dll> <claims-service.dll>] <new-evidence-directory>")
+        sys.exit("Usage: run-fhir-sensitivity.py documents <attachment-service.dll> <new-evidence-directory> OR [p2p-consent] <member-service.dll> [<coverage-service.dll> <claims-service.dll> <authorization-service.dll>] <new-evidence-directory>")

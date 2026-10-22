@@ -117,6 +117,7 @@ jobs:
           dotnet build src/services/member-service --configuration Release --verbosity quiet
           dotnet build src/services/coverage-service --configuration Release --verbosity quiet
           dotnet build src/services/claims-service --configuration Release --verbosity quiet
+          dotnet build src/services/authorization-service --configuration Release --verbosity quiet
       - name: Test evidence policy and build runner
         run: dotnet test tools/SecurityChallenge.Tests --configuration Release --verbosity quiet
       - name: Verify rule bootstrap concurrency and tenant guards
@@ -128,6 +129,7 @@ jobs:
           src/services/member-service/bin/Release/net8.0/member-service.dll
           src/services/coverage-service/bin/Release/net8.0/coverage-service.dll
           src/services/claims-service/bin/Release/net8.0/claims-service.dll
+          src/services/authorization-service/bin/Release/net8.0/authorization-service.dll
           "${{ runner.temp }}/cho-p2p-consent-evidence"
       - name: Prove member and cached-consent binding defects are detected
         run: >-
@@ -135,6 +137,7 @@ jobs:
           src/services/member-service/bin/Release/net8.0/member-service.dll
           src/services/coverage-service/bin/Release/net8.0/coverage-service.dll
           src/services/claims-service/bin/Release/net8.0/claims-service.dll
+          src/services/authorization-service/bin/Release/net8.0/authorization-service.dll
           "${{ runner.temp }}/cho-p2p-consent-sensitivity"
       # No finding-bearing evidence upload or automatic knowledge-base publication.
 
