@@ -377,6 +377,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 ReceivedAt = DateTime.UtcNow,
                 Status = status,
                 FileName = batch.FileName,
+                EdiFileId = batch.EdiFileId,
                 MaintenanceReasonCode = memberEnrollment.MaintenanceReason,
                 EffectiveDate = memberEnrollment.EnrollmentDate,
                 TerminationDate = memberEnrollment.TerminationDate,

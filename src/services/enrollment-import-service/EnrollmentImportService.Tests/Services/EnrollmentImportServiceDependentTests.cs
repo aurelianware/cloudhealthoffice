@@ -1280,6 +1280,24 @@ public class EnrollmentImportServiceDependentTests
     }
 
     [Fact]
+    public async Task EveryTransaction_LinksToTheEdiFileItCameIn()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var batch = new Enrollment834
+        {
+            BatchId = "R19",
+            EdiFileId = "EDIFILE-1",
+            Enrollments = { Subscriber("SUB1", "001", Child("EMMA", "20120304")) },
+            DependentEnrollments = { Child("BABY", "20260115", "021") },
+        };
+
+        await h.ImportAsync(batch);
+
+        h.Transactions.Should().HaveCountGreaterThanOrEqualTo(3).And.OnlyContain(t => t.EdiFileId == "EDIFILE-1");
+    }
+
+    [Fact]
     public async Task SubscriberTermination_NotOnFile_IsAcceptedWithANote()
     {
         var h = new Harness();
