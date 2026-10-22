@@ -1,3 +1,4 @@
+using CloudHealthOffice.FeeScheduleEngine.Configuration;
 using CloudHealthOffice.FeeScheduleEngine.Models;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Persistence;
@@ -24,8 +25,18 @@ public sealed class ContractShadowLedger
 {
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
 
-    /// <summary>One contract lookup: what each store answered with.</summary>
-    public sealed record Entry(ProviderContract? Legacy, ProviderContract? Canonical);
+    /// <summary>
+    /// One contract lookup: what each store answered with, and which of the two
+    /// the claim is being paid on.
+    /// </summary>
+    public sealed record Entry(ProviderContract? Legacy, ProviderContract? Canonical, ContractPricingMode Mode)
+    {
+        /// <summary>The contract the paid pass used.</summary>
+        public ProviderContract? Paid => Mode == ContractPricingMode.Canonical ? Canonical ?? Legacy : Legacy;
+
+        /// <summary>The contract the shadow pass prices with: the other one.</summary>
+        public ProviderContract? Shadow => Mode == ContractPricingMode.Canonical ? Legacy : Canonical;
+    }
 
     /// <summary>True when at least one lookup found a canonical contract to shadow against.</summary>
     public bool HasCanonicalContract => _entries.Values.Any(e => e.Canonical is not null);
@@ -38,15 +49,24 @@ public sealed class ContractShadowLedger
 
     public void Clear() => _entries.Clear();
 
-    public void Record(string key, ProviderContract? legacy, ProviderContract? canonical)
-        => _entries[key] = new Entry(legacy, canonical);
+    /// <summary>
+    /// Which contract this claim is paid on. A claim is one tenant's, so one
+    /// mode; <see cref="ContractPricingMode.Off"/> when nothing was recorded.
+    /// </summary>
+    public ContractPricingMode Mode => _entries.Count == 0 ? ContractPricingMode.Off : _entries.Values.First().Mode;
+
+    public void Record(
+        string key, ProviderContract? legacy, ProviderContract? canonical, ContractPricingMode mode)
+        => _entries[key] = new Entry(legacy, canonical, mode);
 
     public bool TryGet(string key, out Entry entry) => _entries.TryGetValue(key, out entry!);
 }
 
 /// <summary>
-/// The contract repository the shadow pass reads: the canonical contract the
-/// dual read already found, out of <see cref="ContractShadowLedger"/>.
+/// The contract repository the shadow pass reads: whichever contract the paid
+/// pass did <b>not</b> use, out of <see cref="ContractShadowLedger"/>. In the
+/// phase 4 window that is the canonical contract; after the phase 5 cutover it is
+/// the legacy one, so the window keeps running in the other direction for a cycle.
 ///
 /// <para>
 /// It touches no database. A lookup the paid pass never made has no entry and
@@ -66,7 +86,7 @@ public sealed class ShadowContractRepository : IProviderContractRepository
         CancellationToken ct = default)
     {
         var key = ContractShadowLedger.KeyFor(tenantId, providerNpi, planId, serviceDate);
-        return Task.FromResult(_ledger.TryGet(key, out var entry) ? entry.Canonical : null);
+        return Task.FromResult(_ledger.TryGet(key, out var entry) ? entry.Shadow : null);
     }
 
     public Task<ProviderContract> UpsertAsync(ProviderContract contract, CancellationToken ct = default)

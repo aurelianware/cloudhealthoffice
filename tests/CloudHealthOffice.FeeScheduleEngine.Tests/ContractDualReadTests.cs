@@ -51,7 +51,9 @@ public class ContractDualReadTests
 
         var parity = Assert.Single(recorder.Recorded);
         Assert.Equal(ParityOutcome.AmountDelta, parity.Outcome);
+        Assert.Equal(ContractPricingMode.Shadow, parity.Mode);
         Assert.Equal(110m, parity.PaidAmount);
+        Assert.Equal(110m, parity.LegacyAmount);
         Assert.Equal(130m, parity.CanonicalAmount);
         Assert.Equal(20m, parity.Delta);
         Assert.Contains(CanonicalScheduleId, parity.Reason);
@@ -239,6 +241,92 @@ public class ContractDualReadTests
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // THE CUTOVER (PHASE 5)
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task AfterTheCutover_TheClaimIsPaidOnTheCanonicalContract()
+    {
+        var (engine, recorder) = Window(
+            legacy: LegacyContract(LegacyScheduleId),
+            canonical: CanonicalContract(CanonicalScheduleId),
+            options: CutOver(Tenant));
+
+        var result = await engine.ResolveAsync(Request("99213"));
+
+        Assert.Equal(130m, result.AllowedAmount);
+        Assert.Equal(CanonicalScheduleId, result.FeeScheduleId);
+
+        // The same delta, from the same two stores, with the same sign — a
+        // dashboard built during the window still reads correctly after it.
+        var parity = Assert.Single(recorder.Recorded);
+        Assert.Equal(ParityOutcome.AmountDelta, parity.Outcome);
+        Assert.Equal(ContractPricingMode.Canonical, parity.Mode);
+        Assert.Equal(110m, parity.LegacyAmount);
+        Assert.Equal(130m, parity.CanonicalAmount);
+        Assert.Equal(130m, parity.PaidAmount);
+        Assert.Equal(20m, parity.Delta);
+    }
+
+    [Fact]
+    public async Task AfterTheCutover_TheLegacyContractIsStillPricedInTheShadow()
+    {
+        // Same rate sheet in both stores: after the cutover the comparison runs
+        // in the other direction, and a match still has to be a match.
+        var (engine, recorder) = Window(
+            legacy: LegacyContract(LegacyScheduleId),
+            canonical: CanonicalContract(LegacyScheduleId),
+            options: CutOver(Tenant));
+
+        await engine.ResolveAsync(Request("99213"));
+
+        var parity = Assert.Single(recorder.Recorded);
+        Assert.Equal(ParityOutcome.Match, parity.Outcome);
+        Assert.Equal(ContractPricingMode.Canonical, parity.Mode);
+    }
+
+    [Fact]
+    public async Task AfterTheCutover_AProviderTheBackfillMissed_IsStillPaidOnLegacy()
+    {
+        var (engine, recorder) = Window(
+            legacy: LegacyContract(LegacyScheduleId),
+            canonical: null,
+            options: CutOver(Tenant));
+
+        var result = await engine.ResolveAsync(Request("99213"));
+
+        // Not the plan default: a provider that appeared since the cutover was
+        // gated still pays at its contracted rate, and the gap is reported.
+        Assert.Equal(110m, result.AllowedAmount);
+        Assert.Equal(ParityOutcome.NoCanonicalContract, Assert.Single(recorder.Recorded).Outcome);
+    }
+
+    [Fact]
+    public void RollingBackIsTheSameSetting_MovedBack()
+    {
+        var cutOver = CutOver(Tenant);
+        Assert.Equal(ContractPricingMode.Canonical, cutOver.ModeFor(Tenant));
+
+        // Dropping the tenant from the cutover list leaves it in the window it
+        // came from, still compared, paid on legacy again.
+        var rolledBack = new ContractDualReadOptions { Mode = ContractPricingMode.Shadow };
+        Assert.Equal(ContractPricingMode.Shadow, rolledBack.ModeFor(Tenant));
+    }
+
+    [Fact]
+    public void OneTenantCanBeCutOverWhileAnotherIsStillInTheWindow()
+    {
+        var options = new ContractDualReadOptions
+        {
+            Mode = ContractPricingMode.Shadow,
+            CanonicalTenants = new HashSet<string>(StringComparer.Ordinal) { Tenant },
+        };
+
+        Assert.Equal(ContractPricingMode.Canonical, options.ModeFor(Tenant));
+        Assert.Equal(ContractPricingMode.Shadow, options.ModeFor(OtherTenant));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // WHO IS IN THE WINDOW
     // ═══════════════════════════════════════════════════════════════════
 
@@ -296,7 +384,7 @@ public class ContractDualReadTests
     {
         var options = new ContractDualReadOptions
         {
-            Enabled = enabled,
+            Mode = enabled ? ContractPricingMode.Shadow : ContractPricingMode.Off,
             Tenants = tenants.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal),
         };
 
@@ -334,25 +422,34 @@ public class ContractDualReadTests
 
     private static ContractDualReadOptions InWindow(params string[] tenants) => new()
     {
-        Enabled = true,
+        Mode = ContractPricingMode.Shadow,
         Tenants = tenants.ToHashSet(StringComparer.Ordinal),
     };
 
+    private static ContractDualReadOptions CutOver(params string[] tenants) => new()
+    {
+        Mode = ContractPricingMode.Shadow,
+        CanonicalTenants = tenants.ToHashSet(StringComparer.Ordinal),
+    };
+
     private static (IRateResolutionService Engine, RecordingParityRecorder Recorder) Window(
-        ProviderContract? legacy, ProviderContract? canonical)
+        ProviderContract? legacy, ProviderContract? canonical, ContractDualReadOptions? options = null)
     {
         var ledger = new ContractShadowLedger();
         var recorder = new RecordingParityRecorder();
-        return (Decorate(DualRead(legacy, canonical, ledger), ledger, recorder), recorder);
+        return (Decorate(DualRead(legacy, canonical, ledger, options), ledger, recorder), recorder);
     }
 
     private static DualReadProviderContractRepository DualRead(
-        ProviderContract? legacy, ProviderContract? canonical, ContractShadowLedger ledger)
+        ProviderContract? legacy,
+        ProviderContract? canonical,
+        ContractShadowLedger ledger,
+        ContractDualReadOptions? options = null)
         => new(
             legacy: new CountingContractRepo(legacy),
             canonical: new CountingContractRepo(canonical),
             ledger: ledger,
-            options: InWindow(),
+            options: options ?? InWindow(),
             logger: NullLogger<DualReadProviderContractRepository>.Instance);
 
     private static ShadowPricingRateResolutionService Decorate(

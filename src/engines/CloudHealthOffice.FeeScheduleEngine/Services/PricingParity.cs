@@ -1,3 +1,4 @@
+using CloudHealthOffice.FeeScheduleEngine.Configuration;
 using CloudHealthOffice.FeeScheduleEngine.Domain;
 using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.Infrastructure.Observability;
@@ -34,9 +35,15 @@ public enum ParityOutcome
 }
 
 /// <summary>
-/// One line's parity, as the phase 4 window records it. Carries no member
+/// One line's parity, as the dual-read window records it. Carries no member
 /// identity: a provider NPI, a plan, a procedure code and two amounts are what
 /// a delta has to be chased down with.
+///
+/// <para>
+/// The two amounts are named by the store they came from, not by which one paid,
+/// so a record reads the same before and after the cutover. <see cref="Mode"/>
+/// is which of them the claim was actually paid.
+/// </para>
 /// </summary>
 public sealed record LineParity
 {
@@ -49,14 +56,25 @@ public sealed record LineParity
 
     public required ParityOutcome Outcome { get; init; }
 
-    /// <summary>What the claim was paid: the legacy contract's allowed amount.</summary>
-    public required decimal PaidAmount { get; init; }
+    /// <summary>Which contract the claim was paid on.</summary>
+    public required ContractPricingMode Mode { get; init; }
 
-    /// <summary>What the canonical contract would have allowed.</summary>
+    /// <summary>What the legacy contract allowed.</summary>
+    public required decimal LegacyAmount { get; init; }
+
+    /// <summary>What the canonical contract allowed.</summary>
     public required decimal CanonicalAmount { get; init; }
 
-    /// <summary>Canonical minus paid: positive means the canonical contract pays more.</summary>
-    public decimal Delta => CanonicalAmount - PaidAmount;
+    /// <summary>The amount the claim was actually paid, out of those two.</summary>
+    public decimal PaidAmount
+        => Mode == ContractPricingMode.Canonical ? CanonicalAmount : LegacyAmount;
+
+    /// <summary>
+    /// Canonical minus legacy: positive means the canonical contract pays more.
+    /// Its sign does not change at the cutover, so a dashboard built during the
+    /// window still reads correctly after it.
+    /// </summary>
+    public decimal Delta => CanonicalAmount - LegacyAmount;
 
     /// <summary>Why it is not a <see cref="ParityOutcome.Match"/>, in words. Null when it is.</summary>
     public string? Reason { get; init; }
@@ -93,6 +111,9 @@ public sealed class MetricPricingParityRecorder : IPricingParityRecorder
         ChoMetrics.ContractParityLines.Add(
             1,
             new KeyValuePair<string, object?>("cho.tenant", parity.TenantId),
+            new KeyValuePair<string, object?>("cho.mode", parity.Mode == ContractPricingMode.Canonical
+                ? "canonical"
+                : "shadow"),
             new KeyValuePair<string, object?>("cho.outcome", OutcomeTag(parity.Outcome)));
 
         if (parity.Outcome == ParityOutcome.AmountDelta)
@@ -107,10 +128,11 @@ public sealed class MetricPricingParityRecorder : IPricingParityRecorder
 
         _logger.LogWarning(
             "Contract parity {Outcome} on line {LineNumber} ({ProcedureCode}) for provider {ProviderNpi} " +
-            "plan {PlanId} on {ServiceDate:yyyy-MM-dd}: paid {PaidAmount:0.00}, canonical would allow " +
-            "{CanonicalAmount:0.00} (delta {Delta:0.00}). {Reason}",
+            "plan {PlanId} on {ServiceDate:yyyy-MM-dd}: legacy {LegacyAmount:0.00}, canonical " +
+            "{CanonicalAmount:0.00} (delta {Delta:0.00}); paid on {Mode}. {Reason}",
             parity.Outcome, parity.LineNumber, parity.ProcedureCode, parity.ProviderNpi, parity.PlanId,
-            parity.ServiceDate, parity.PaidAmount, parity.CanonicalAmount, parity.Delta, parity.Reason);
+            parity.ServiceDate, parity.LegacyAmount, parity.CanonicalAmount, parity.Delta, parity.Mode,
+            parity.Reason);
     }
 
     private static string OutcomeTag(ParityOutcome outcome) => outcome switch
@@ -135,10 +157,18 @@ public static class PricingParityComparer
     public static LineParity Compare(
         PricingRequest request,
         PricingResult paid,
-        PricingResult canonical,
+        PricingResult shadow,
+        ContractPricingMode mode,
         bool canonicalContractExists)
     {
-        var (outcome, reason) = Classify(paid, canonical, canonicalContractExists);
+        // The paid pass is the canonical one only after the cutover; before it,
+        // the shadow pass is. Sorting that out here is what lets every outcome
+        // below be named by the store it is about.
+        var (legacy, canonical) = mode == ContractPricingMode.Canonical
+            ? (shadow, paid)
+            : (paid, shadow);
+
+        var (outcome, reason) = Classify(legacy, canonical, mode, canonicalContractExists);
 
         return new LineParity
         {
@@ -149,51 +179,66 @@ public static class PricingParityComparer
             LineNumber = request.LineNumber,
             ProcedureCode = request.ProcedureCode,
             Outcome = outcome,
-            PaidAmount = paid.AllowedAmount,
+            Mode = mode,
+            LegacyAmount = legacy.AllowedAmount,
             CanonicalAmount = canonical.AllowedAmount,
             Reason = reason,
         };
     }
 
     private static (ParityOutcome Outcome, string? Reason) Classify(
-        PricingResult paid, PricingResult canonical, bool canonicalContractExists)
+        PricingResult legacy,
+        PricingResult canonical,
+        ContractPricingMode mode,
+        bool canonicalContractExists)
     {
-        var paidPends = paid.RateSource == RateSource.Unresolved;
+        // A cut-over tenant whose provider has no canonical contract is paid on
+        // legacy by the fallback, so both passes price identically and the line
+        // would otherwise read as a match. It is the one gap the cutover cannot
+        // afford to hide: the tenant is meant to be paying on canonical.
+        if (mode == ContractPricingMode.Canonical && !canonicalContractExists)
+        {
+            return (ParityOutcome.NoCanonicalContract,
+                "this tenant is cut over, and the backfill has written no canonical contract for this provider " +
+                "and plan: the line was paid on the legacy contract by the fallback");
+        }
+
+        var legacyPends = legacy.RateSource == RateSource.Unresolved;
         var canonicalPends = canonical.RateSource == RateSource.Unresolved;
 
         // A pend on one side and not the other is the finding, whatever the
         // amounts are: one of the two contracts refuses to price this line.
-        if (canonicalPends && !paidPends)
+        if (canonicalPends && !legacyPends)
             return (ParityOutcome.CanonicalPends, canonical.UnresolvedReason);
-        if (paidPends && !canonicalPends)
-            return (ParityOutcome.LegacyPends, paid.UnresolvedReason);
+        if (legacyPends && !canonicalPends)
+            return (ParityOutcome.LegacyPends, legacy.UnresolvedReason);
 
-        if (!canonicalContractExists && paid.AllowedAmount != canonical.AllowedAmount)
+        if (!canonicalContractExists && legacy.AllowedAmount != canonical.AllowedAmount)
         {
             return (ParityOutcome.NoCanonicalContract,
-                "the backfill has written no canonical contract for this provider and plan, so the shadow " +
-                "pass priced the line at the plan default");
+                "the backfill has written no canonical contract for this provider and plan, so the canonical " +
+                "side priced the line at the plan default");
         }
 
-        if (paid.AllowedAmount != canonical.AllowedAmount)
+        if (legacy.AllowedAmount != canonical.AllowedAmount)
         {
             return (ParityOutcome.AmountDelta,
-                $"paid from {Describe(paid)}, canonical from {Describe(canonical)}");
+                $"legacy from {Describe(legacy)}, canonical from {Describe(canonical)}");
         }
 
         var differences = new List<string>();
-        if (paid.RateSource != canonical.RateSource)
-            differences.Add($"rate source {paid.RateSource} vs {canonical.RateSource}");
-        if (!string.Equals(paid.FeeScheduleId, canonical.FeeScheduleId, StringComparison.Ordinal))
-            differences.Add($"schedule {paid.FeeScheduleId ?? "(none)"} vs {canonical.FeeScheduleId ?? "(none)"}");
-        if (paid.FeeScheduleType != canonical.FeeScheduleType)
-            differences.Add($"schedule type {paid.FeeScheduleType} vs {canonical.FeeScheduleType}");
-        if (paid.IsPerStayRate != canonical.IsPerStayRate)
-            differences.Add($"per-stay {paid.IsPerStayRate} vs {canonical.IsPerStayRate}");
-        if (paid.NetworkStatus != canonical.NetworkStatus)
-            differences.Add($"network status {paid.NetworkStatus} vs {canonical.NetworkStatus}");
-        if (paid.LesserOfBilledApplied != canonical.LesserOfBilledApplied)
-            differences.Add($"lesser-of-billed {paid.LesserOfBilledApplied} vs {canonical.LesserOfBilledApplied}");
+        if (legacy.RateSource != canonical.RateSource)
+            differences.Add($"rate source {legacy.RateSource} vs {canonical.RateSource}");
+        if (!string.Equals(legacy.FeeScheduleId, canonical.FeeScheduleId, StringComparison.Ordinal))
+            differences.Add($"schedule {legacy.FeeScheduleId ?? "(none)"} vs {canonical.FeeScheduleId ?? "(none)"}");
+        if (legacy.FeeScheduleType != canonical.FeeScheduleType)
+            differences.Add($"schedule type {legacy.FeeScheduleType} vs {canonical.FeeScheduleType}");
+        if (legacy.IsPerStayRate != canonical.IsPerStayRate)
+            differences.Add($"per-stay {legacy.IsPerStayRate} vs {canonical.IsPerStayRate}");
+        if (legacy.NetworkStatus != canonical.NetworkStatus)
+            differences.Add($"network status {legacy.NetworkStatus} vs {canonical.NetworkStatus}");
+        if (legacy.LesserOfBilledApplied != canonical.LesserOfBilledApplied)
+            differences.Add($"lesser-of-billed {legacy.LesserOfBilledApplied} vs {canonical.LesserOfBilledApplied}");
 
         // The same amount reached another way is not a payment difference, but
         // it is a contract that does not say what the one paying says, and the

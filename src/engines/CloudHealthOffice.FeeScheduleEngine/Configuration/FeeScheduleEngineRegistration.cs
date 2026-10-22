@@ -59,16 +59,22 @@ public class FeeScheduleEngineBuilder
         => UseMongoRepositories();
 
     /// <summary>
-    /// Turns on the dual-read window of ADR 016 phase 4: every claim is priced
-    /// with both the legacy and the canonical provider contract, <b>paid on
-    /// legacy</b>, and the difference is reported per line as
+    /// Turns on the dual read of ADR 016 phases 4 and 5: every claim is priced
+    /// with both the legacy and the canonical provider contract, and the
+    /// difference is reported per line as
     /// <c>cho.pricing.contract_parity.total</c>.
     ///
     /// <para>
-    /// Chain it after <see cref="UseMongoRepositories"/>. It is a no-op unless
-    /// <c>FeeScheduleEngine:ContractDualRead:Enabled</c> is true, so a service
-    /// can call it unconditionally and a deployment decides when a tenant enters
-    /// the window — see <see cref="ContractDualReadOptions"/>.
+    /// Which one pays is per tenant. In phase 4's window it is legacy, so opening
+    /// the window changes no payment; after phase 5's cutover it is the canonical
+    /// contract, with legacy still priced in the shadow for one more cycle.
+    /// Rollback is the same setting, moved back.
+    /// </para>
+    ///
+    /// <para>
+    /// Chain it after <see cref="UseMongoRepositories"/>. It is a no-op until a
+    /// deployment names a tenant, so a service can call it unconditionally — see
+    /// <see cref="ContractDualReadOptions"/>.
     /// </para>
     ///
     /// <para>
@@ -83,7 +89,7 @@ public class FeeScheduleEngineBuilder
         var options = ContractDualReadOptions.FromConfiguration(configuration);
         _services.AddSingleton(options);
 
-        if (!options.Enabled)
+        if (!options.IsEnabled)
             return this;
 
         _services.AddScoped<ContractShadowLedger>();

@@ -5,17 +5,28 @@ using Microsoft.Extensions.Logging;
 namespace CloudHealthOffice.FeeScheduleEngine.Persistence;
 
 /// <summary>
-/// The dual read of ADR 016 phase 4: every contract lookup reads both the
-/// legacy engine contract and the canonical contract the backfill wrote.
+/// The dual read of ADR 016 phases 4 and 5: every contract lookup reads both the
+/// legacy engine contract and the canonical contract the backfill wrote, and
+/// answers with the one the tenant's mode says to pay on.
 ///
 /// <para>
-/// <b>It answers with legacy.</b> For the whole window the claim is paid on the
-/// contract that paid it yesterday, so switching this on changes no payment. The
-/// canonical contract is recorded in <see cref="ContractShadowLedger"/>, and
+/// In <see cref="ContractPricingMode.Shadow"/> — phase 4's window — <b>it
+/// answers with legacy</b>: the claim is paid on the contract that paid it
+/// yesterday, so opening the window changes no payment. In
+/// <see cref="ContractPricingMode.Canonical"/> — phase 5's cutover — it answers
+/// with the canonical contract. Either way the other contract is recorded in
+/// <see cref="ContractShadowLedger"/> and
 /// <see cref="Services.ShadowPricingRateResolutionService"/> prices the same
-/// lines against it and reports the difference. The exit criterion is zero
-/// unexplained deltas over one full monthly claim cycle per tenant; phase 5's
-/// per-tenant flag is what moves payment across.
+/// lines against it, so the comparison keeps running for a cycle after the
+/// cutover and a regression shows up as a parity delta.
+/// </para>
+///
+/// <para>
+/// A cut-over tenant whose provider has no canonical contract is still paid on
+/// legacy rather than dropped to the plan default. The cutover is gated on the
+/// backfill's conflict report being empty, so a gap here is a provider that
+/// appeared since — a claim that still pays, recorded as
+/// <see cref="Services.ParityOutcome.NoCanonicalContract"/> for someone to fix.
 /// </para>
 ///
 /// <para>
@@ -60,13 +71,14 @@ public sealed class DualReadProviderContractRepository : IProviderContractReposi
         string tenantId, string providerNpi, string planId, DateTime serviceDate,
         CancellationToken ct = default)
     {
-        var paid = await _legacy.GetContractAsync(tenantId, providerNpi, planId, serviceDate, ct);
+        var legacy = await _legacy.GetContractAsync(tenantId, providerNpi, planId, serviceDate, ct);
 
         // A tenant outside the window is read exactly as it was before phase 4:
         // one query, no second pass. Recording nothing is what tells the shadow
         // decorator there is nothing to compare.
-        if (!_options.IsInWindow(tenantId))
-            return paid;
+        var mode = _options.ModeFor(tenantId);
+        if (mode == ContractPricingMode.Off)
+            return legacy;
 
         var key = ContractShadowLedger.KeyFor(tenantId, providerNpi, planId, serviceDate);
         ProviderContract? canonical = null;
@@ -88,15 +100,19 @@ public sealed class DualReadProviderContractRepository : IProviderContractReposi
                 _logger.LogError(
                     ex,
                     "Dual read: the canonical contract for provider {ProviderNpi} on plan {PlanId} could not be " +
-                    "read. The claim is priced on the legacy contract, as it is for the whole window.",
+                    "read. The claim is priced on the legacy contract — which is what pays it during the " +
+                    "window, and is the fallback after the cutover.",
                     providerNpi, planId);
             }
 
             _canonicalByKey[key] = canonical;
         }
 
-        _ledger.Record(key, paid, canonical);
-        return paid;
+        _ledger.Record(key, legacy: legacy, canonical: canonical, mode: mode);
+
+        // After the cutover the claim is paid on the canonical contract, falling
+        // back to legacy where the backfill has not reached the provider.
+        return mode == ContractPricingMode.Canonical ? canonical ?? legacy : legacy;
     }
 
     /// <summary>

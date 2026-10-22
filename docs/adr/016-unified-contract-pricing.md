@@ -14,9 +14,11 @@ the engine contract a claim would be priced from. Phase 3's contract backfill is
 implemented as `tools/ProviderContractBackfill`, with the conflict report the
 cutover is gated on. Phase 4's dual read is implemented: inside a per-tenant
 window every claim is priced with both the legacy and the canonical contract and
-**paid on legacy**, with the difference reported per line. Phase 3's fee schedule
-re-ingest, phase 4's PricingApi schedule fallback, and phase 5, are planned for
-later PRs.
+**paid on legacy**, with the difference reported per line, and phase 5's
+per-tenant cutover flag moves payment onto the canonical contract with the
+comparison still running the other way. Phase 3's fee schedule re-ingest, phase
+4's PricingApi schedule fallback, and the retirement of the legacy stores that
+closes phase 5, are planned for later PRs.
 
 ## Context
 
@@ -401,11 +403,30 @@ implemented, rather than silently ignoring them.
 
 **Phase 5: cutover.**
 
-- A per-tenant flag switches payment to the canonical result. Rollback is the
-  same flag; legacy reads stay available for one more cycle.
-- Then the legacy engine `ProviderContracts` collection becomes read-only and
-  is archived, `fee_schedule_entries` is retired, and the dual-read code is
-  removed.
+- **Done.** `FeeScheduleEngine:ContractDualRead:CanonicalTenants` is the
+  per-tenant flag: a tenant on it is paid on the canonical contract, and the
+  legacy contract is priced in the shadow instead, so the comparison keeps
+  running in the other direction for one more cycle. The parity record names its
+  two amounts by store rather than by which one paid, and the delta is always
+  canonical minus legacy, so a dashboard built during the window still reads
+  correctly after the cutover.
+
+  Rollback is the same flag, moved back. Nothing is migrated in either direction
+  and no claim is rewritten, so there is no window during which a rollback is
+  unsafe.
+
+  One deliberate fallback: a cut-over tenant whose provider has no canonical
+  contract is still paid on the legacy contract rather than dropped to the plan
+  default. The cutover is gated on an empty conflict report, so that is a
+  provider which appeared since — it pays correctly and the line is recorded as
+  `no_canonical_contract`, which is reported even though both passes then price
+  identically.
+
+- **Open.** The legacy engine `ProviderContracts` collection becomes read-only
+  and is archived, `fee_schedule_entries` is retired, and the dual-read code is
+  removed. None of that can happen until every tenant has been cut over and has
+  stayed cut over, because until then the legacy contract is what a rollback pays
+  on.
 - provider-contracts-service is the only contract writer. The engine owns only
   schedules and evaluation.
 
@@ -527,6 +548,7 @@ BenefitEngine and claims-service have no facility-rate POS list
 - `src/engines/CloudHealthOffice.FeeScheduleEngine/Persistence/ContractShadowLedger.cs`
 - `src/engines/CloudHealthOffice.FeeScheduleEngine/Services/ShadowPricingRateResolutionService.cs`
 - `src/engines/CloudHealthOffice.FeeScheduleEngine/Services/PricingParity.cs` and `docs/operations/CONTRACT-DUAL-READ-WINDOW.md`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Configuration/ContractDualReadOptions.cs`
 - `tests/CloudHealthOffice.FeeScheduleEngine.Tests/ContractDualReadTests.cs`
 - `src/services/provider-contracts-service/Models/ReimbursementTermRequests.cs`
 - `src/services/ffs-service/Models/FfsRateConfig.cs` (superseded; read by the phase 3 backfill)

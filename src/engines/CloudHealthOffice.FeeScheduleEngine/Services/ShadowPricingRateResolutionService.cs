@@ -1,3 +1,4 @@
+using CloudHealthOffice.FeeScheduleEngine.Configuration;
 using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.FeeScheduleEngine.Persistence;
 using Microsoft.Extensions.Logging;
@@ -5,14 +6,16 @@ using Microsoft.Extensions.Logging;
 namespace CloudHealthOffice.FeeScheduleEngine.Services;
 
 /// <summary>
-/// The shadow half of ADR 016 phase 4: prices every claim twice, pays on the
-/// legacy contract, and reports per line what the canonical contract would have
-/// allowed.
+/// The shadow half of ADR 016 phases 4 and 5: prices every claim twice and
+/// reports per line what the store it was <i>not</i> paid on would have allowed.
+/// During phase 4's window the claim is paid on legacy; after phase 5's cutover
+/// it is paid on canonical and legacy becomes the shadow, so the comparison keeps
+/// running for a cycle in the other direction.
 ///
 /// <para>
 /// The paid pass is the engine exactly as it is, reading contracts through
 /// <see cref="DualReadProviderContractRepository"/> — which answers with the
-/// legacy contract and records the canonical one in
+/// contract the tenant's mode says to pay on and records both in
 /// <see cref="ContractShadowLedger"/>. The shadow pass is a second engine whose
 /// contract repository is that ledger, so it reads no database and sees the same
 /// pair of contracts the paid pass did.
@@ -81,6 +84,7 @@ public sealed class ShadowPricingRateResolutionService : IRateResolutionService
             return;
 
         var canonicalExists = _ledger.HasCanonicalContract;
+        var mode = _ledger.Mode;
 
         try
         {
@@ -88,7 +92,7 @@ public sealed class ShadowPricingRateResolutionService : IRateResolutionService
                 ? [await _shadow.ResolveAsync(requests[0], ct)]
                 : (await _shadow.ResolveBatchAsync(requests, ct)).LineResults;
 
-            RecordComparison(requests, paid, shadow, canonicalExists);
+            RecordComparison(requests, paid, shadow, mode, canonicalExists);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -99,7 +103,7 @@ public sealed class ShadowPricingRateResolutionService : IRateResolutionService
                 requests.Count);
 
             foreach (var (request, result) in Zip(requests, paid))
-                _recorder.Record(Failed(request, result, ex));
+                _recorder.Record(Failed(request, result, mode, ex));
         }
     }
 
@@ -107,6 +111,7 @@ public sealed class ShadowPricingRateResolutionService : IRateResolutionService
         IReadOnlyList<PricingRequest> requests,
         IReadOnlyList<PricingResult> paid,
         IReadOnlyList<PricingResult> shadow,
+        ContractPricingMode mode,
         bool canonicalExists)
     {
         // Both passes price the same requests in the same order, so a length
@@ -130,8 +135,9 @@ public sealed class ShadowPricingRateResolutionService : IRateResolutionService
                     LineNumber = request.LineNumber,
                     ProcedureCode = request.ProcedureCode,
                     Outcome = ParityOutcome.ShadowFailed,
-                    PaidAmount = result.AllowedAmount,
-                    CanonicalAmount = 0m,
+                    Mode = mode,
+                    LegacyAmount = result.AllowedAmount,
+                    CanonicalAmount = result.AllowedAmount,
                     Reason = $"the shadow pass returned {shadow.Count} line(s) for {paid.Count} priced line(s)",
                 });
             }
@@ -140,10 +146,12 @@ public sealed class ShadowPricingRateResolutionService : IRateResolutionService
         }
 
         for (var i = 0; i < paid.Count; i++)
-            _recorder.Record(PricingParityComparer.Compare(requests[i], paid[i], shadow[i], canonicalExists));
+            _recorder.Record(PricingParityComparer.Compare(
+                requests[i], paid[i], shadow[i], mode, canonicalExists));
     }
 
-    private static LineParity Failed(PricingRequest request, PricingResult paid, Exception ex) => new()
+    private static LineParity Failed(
+        PricingRequest request, PricingResult paid, ContractPricingMode mode, Exception ex) => new()
     {
         TenantId = request.TenantId,
         ProviderNpi = request.ProviderNpi,
@@ -152,8 +160,12 @@ public sealed class ShadowPricingRateResolutionService : IRateResolutionService
         LineNumber = request.LineNumber,
         ProcedureCode = request.ProcedureCode,
         Outcome = ParityOutcome.ShadowFailed,
-        PaidAmount = paid.AllowedAmount,
-        CanonicalAmount = 0m,
+        Mode = mode,
+        // Nothing is known about the other store on this line, so neither amount
+        // is a finding: a failed shadow pass measures nothing, and recording a
+        // zero would read as a delta the size of the claim.
+        LegacyAmount = paid.AllowedAmount,
+        CanonicalAmount = paid.AllowedAmount,
         Reason = ex.Message,
     };
 
