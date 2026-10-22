@@ -2,10 +2,16 @@ using ClaimsService.Models;
 
 namespace ClaimsService.Adapters;
 
+// Architecture intent: CHO is the reference backend. This is a separate,
+// payer-specific connector template completed from QRE discovery (version,
+// configuration, licensing, hosting and solution architecture). Its unimplemented
+// methods are engagement work, not proof the native workflow is missing.
+// See docs/adr/027-core-adapter-engagement-boundary.md and
+// docs/features/questionnaires/qre-core-admin-adapter-questions.md.
 /// <summary>
 /// Stub adapter for tenants whose claims live in TriZetto Facets. All
 /// methods throw <see cref="NotImplementedException"/> with a clear
-/// migration TODO until the Facets integration ships.
+/// migration TODO until the payer-specific Facets connector is implemented and accepted.
 /// </summary>
 /// <remarks>
 /// TODO(facets-claims): integrate with the Facets claim API (CLM transaction

@@ -2,10 +2,16 @@ using BenefitPlanService.Models;
 
 namespace BenefitPlanService.Adapters;
 
+// Architecture intent: CHO is the reference backend. This is a separate,
+// payer-specific connector template completed from QRE discovery (version,
+// configuration, licensing, hosting and solution architecture). Its unimplemented
+// methods are engagement work, not proof the native workflow is missing.
+// See docs/adr/027-core-adapter-engagement-boundary.md and
+// docs/features/questionnaires/qre-core-admin-adapter-questions.md.
 /// <summary>
 /// Stub adapter for tenants whose benefit plans live in HealthEdge HealthRules
 /// Payer. All methods throw <see cref="NotImplementedException"/> with a clear
-/// migration TODO until the HealthEdge integration ships.
+/// migration TODO until the payer-specific HealthEdge connector is implemented and accepted.
 /// </summary>
 /// <remarks>
 /// TODO(healthedge-benefit-plan): integrate with the HealthRules Payer plan

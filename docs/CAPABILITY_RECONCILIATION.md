@@ -16,7 +16,9 @@
 
 ### Intentional engagement boundary: external core adapters
 
-QNXT, Facets and HealthEdge interfaces are deliberately completed per payer
+CHO is the reference backend implementation behind the adapter contracts.
+[ADR 027](adr/027-core-adapter-engagement-boundary.md) records the assessment rule.
+QNXT, Facets and HealthEdge use different connector implementations completed per payer
 engagement. Platform version/release, tenant configuration, licensed interfaces,
 solution architecture, hosting and data access differ by implementation. A named
 interface whose methods throw is therefore **engagement work**, not evidence of
