@@ -79,9 +79,27 @@ jobs:
       - name: Install PowerShell Script Analyzer
         shell: pwsh
         run: |
-          Write-Host "Installing PSScriptAnalyzer module..."
-          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
-          Write-Host "✓ PSScriptAnalyzer installed successfully"
+          # GitHub's Ubuntu images ship PSScriptAnalyzer; use it when present so the
+          # job doesn't depend on the PowerShell Gallery, whose downloads fail
+          # intermittently. Otherwise install with retries.
+          if (Get-Module -ListAvailable -Name PSScriptAnalyzer) {
+            $v = (Get-Module -ListAvailable -Name PSScriptAnalyzer | Sort-Object Version -Descending | Select-Object -First 1).Version
+            Write-Host "✓ PSScriptAnalyzer $v already installed on the runner"
+            exit 0
+          }
+          for ($attempt = 1; $attempt -le 4; $attempt++) {
+            try {
+              Write-Host "Installing PSScriptAnalyzer (attempt $attempt)..."
+              Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop
+              Write-Host "✓ PSScriptAnalyzer installed successfully"
+              exit 0
+            } catch {
+              Write-Host "Install failed: $($_.Exception.Message)"
+              if ($attempt -lt 4) { Start-Sleep -Seconds (15 * $attempt) }
+            }
+          }
+          Write-Host "::error::PSScriptAnalyzer could not be installed from the PowerShell Gallery after 4 attempts"
+          exit 1
 
       - name: PowerShell Script Analyzer
         shell: pwsh
