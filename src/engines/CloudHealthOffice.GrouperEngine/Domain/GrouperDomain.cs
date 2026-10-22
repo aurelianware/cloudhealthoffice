@@ -102,7 +102,30 @@ public enum GroupingStatus
     DemographicConflict,
 
     /// <summary>The grouper has no tables loaded for the stay's discharge date.</summary>
-    NoTablesForDischargeDate
+    NoTablesForDischargeDate,
+
+    /// <summary>
+    /// A Medicare Code Editor edit in the grouper's own tables refused the
+    /// claim. The edit's return code is carried in the result's notes, because
+    /// the edits are table data and a new fiscal year can add one.
+    /// </summary>
+    RefusedByCodeEdit,
+
+    /// <summary>
+    /// The present-on-admission indicators cannot carry the
+    /// hospital-acquired-condition decision, so there is no lawful DRG to pay:
+    /// one is missing, or one is unreadable on a stay with a condition whose
+    /// status would change the payment. CMS refuses the claim here rather than
+    /// guessing, and so does this.
+    /// </summary>
+    PresentOnAdmissionUnusable,
+
+    /// <summary>
+    /// The grouper was asked for a DRG it was not given one to report: the
+    /// billed-DRG implementation with no DRG on the claim. Not a grouping
+    /// failure — nothing was grouped.
+    /// </summary>
+    NoBilledDrg
 }
 
 /// <summary>Where a paid DRG came from — the audit question a payer must answer.</summary>

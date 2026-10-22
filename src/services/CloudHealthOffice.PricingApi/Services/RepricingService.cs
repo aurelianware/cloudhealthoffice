@@ -2,6 +2,7 @@ using System.Globalization;
 using CloudHealthOffice.FeeScheduleEngine.Services;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Models;
+using CloudHealthOffice.GrouperEngine.Services;
 using CloudHealthOffice.PricingApi.Services.Engine;
 using Microsoft.Extensions.Logging.Abstractions;
 using EngineDomain = CloudHealthOffice.FeeScheduleEngine.Domain;
@@ -38,25 +39,54 @@ public class RepricingService : IRepricingService
 {
     private readonly IFeeScheduleRepository _feeScheduleRepo;
     private readonly IPricingScheduleSource _scheduleSource;
+    private readonly IInpatientDrgResolver _drgResolver;
     private readonly ILogger<RepricingService> _logger;
     private readonly ILoggerFactory _loggerFactory;
 
     public RepricingService(IFeeScheduleRepository feeScheduleRepo, ILogger<RepricingService> logger)
-        : this(feeScheduleRepo, new LegacyEntryScheduleSource(feeScheduleRepo), logger, NullLoggerFactory.Instance)
+        : this(feeScheduleRepo, new LegacyEntryScheduleSource(feeScheduleRepo),
+               BilledDrgOnly(), logger, NullLoggerFactory.Instance)
+    {
+    }
+
+    /// <summary>
+    /// Constructs the service with no grouper, so an inpatient claim is priced
+    /// by the DRG it carries. For a caller whose claims arrive already grouped,
+    /// and for the tests that price a known DRG.
+    /// </summary>
+    public RepricingService(
+        IFeeScheduleRepository feeScheduleRepo,
+        IPricingScheduleSource scheduleSource,
+        ILogger<RepricingService> logger,
+        ILoggerFactory loggerFactory)
+        : this(feeScheduleRepo, scheduleSource, BilledDrgOnly(), logger, loggerFactory)
     {
     }
 
     public RepricingService(
         IFeeScheduleRepository feeScheduleRepo,
         IPricingScheduleSource scheduleSource,
+        IInpatientDrgResolver drgResolver,
         ILogger<RepricingService> logger,
         ILoggerFactory loggerFactory)
     {
+        _drgResolver = drgResolver;
         _feeScheduleRepo = feeScheduleRepo;
         _scheduleSource = scheduleSource;
         _logger = logger;
         _loggerFactory = loggerFactory;
     }
+
+    /// <summary>
+    /// The resolver the parameterless-dependency constructor uses: the claim's
+    /// own DRG and no grouping. That is what this class did before it had a
+    /// grouper to ask, so a caller constructing it the short way keeps the
+    /// behaviour it had.
+    /// </summary>
+    private static IInpatientDrgResolver BilledDrgOnly() =>
+        new GrouperInpatientDrgResolver(
+            new BilledDrgGrouper(),
+            NullLoggerFactory.Instance.CreateLogger<GrouperInpatientDrgResolver>());
 
     public async Task<RepricingResponse> RepriceClaimAsync(RepricingRequest request)
     {
@@ -69,26 +99,40 @@ public class RepricingService : IRepricingService
         if (RepricingClaimSetting.ContradictionWarning(request) is { } contradiction)
             warnings.Add(contradiction);
 
+        // The DRG is resolved before the schedule is loaded, because loading an
+        // MS-DRG schedule means fetching that DRG's rate row: a grouping done
+        // afterwards would assign a DRG the loaded schedule holds no rate for.
+        // Either the claim carries the DRG, or the configured grouper assigns
+        // one -- which grouper that is, or whether the claim's own DRG simply
+        // stands, is the deployment's decision (ADR 024 step 8).
+        var pricedDrg = request.DrgCode;
+        if (PricesByDrg(request, claimType))
+        {
+            var grouped = await _drgResolver.ResolveAsync(request);
+            pricedDrg = grouped.DrgCode;
+            warnings.AddRange(grouped.Notes);
+            if (grouped.Warning is { } reason)
+                warnings.Add(reason);
+        }
+
         var query = new PricingScheduleQuery(
             claimType,
             request.Locality,
             request.Lines.Select(l => l.ProcedureCode).ToList(),
-            request.DrgCode,
+            pricedDrg,
             RepricingClaimSetting.NormalizedBillType(request));
 
         var loaded = await _scheduleSource.LoadAsync(request.FeeScheduleId, query)
             ?? throw new InvalidOperationException($"Fee schedule '{request.FeeScheduleId}' not found.");
 
         List<PricedLine> pricedLines;
-        if (loaded.Schedule.Type == EngineDomain.FeeScheduleType.Drg && string.IsNullOrEmpty(request.DrgCode))
+        if (loaded.Schedule.Type == EngineDomain.FeeScheduleType.Drg && string.IsNullOrEmpty(pricedDrg))
         {
-            // Cloud Health Office has no MS-DRG grouper: an inpatient claim without a DRG cannot be priced.
-            warnings.Add("No DRG code provided. Inpatient pricing requires a valid MS-DRG. Provide DrgCode or ensure diagnoses support DRG grouping.");
             pricedLines = request.Lines.Select(l => NotPriced(l, "DRG code required for inpatient pricing")).ToList();
         }
         else
         {
-            pricedLines = await PriceWithEngineAsync(request, loaded, warnings);
+            pricedLines = await PriceWithEngineAsync(request with { DrgCode = pricedDrg }, loaded, warnings);
         }
 
         return new RepricingResponse
@@ -98,7 +142,7 @@ public class RepricingService : IRepricingService
             FeeScheduleVersion = loaded.Version,
             ClaimType = claimType,
             BillType = RepricingClaimSetting.NormalizedBillType(request),
-            DrgCode = request.DrgCode,
+            DrgCode = pricedDrg,
             TotalAllowed = pricedLines.Sum(l => l.AllowedAmount),
             TotalBilled = request.Lines.Any(l => l.BilledAmount.HasValue)
                 ? request.Lines.Sum(l => l.BilledAmount ?? 0)
@@ -108,6 +152,24 @@ public class RepricingService : IRepricingService
             PricedAt = DateTimeOffset.UtcNow
         };
     }
+
+    /// <summary>
+    /// Whether this claim would price by DRG, decided without the schedule so
+    /// the DRG can be resolved before the schedule is loaded.
+    ///
+    /// <para>
+    /// Deliberately the claim-shaped half of the loader's own test: an
+    /// inpatient claim, or an institutional one with a hospital inpatient
+    /// Part A type of bill. The loader also requires the schedule to be an
+    /// MS-DRG schedule, which cannot be known yet — so on a claim shaped like
+    /// this against some other schedule, a grouper is asked for a DRG that
+    /// then goes unused. That costs a grouping and changes no price.
+    /// </para>
+    /// </summary>
+    internal static bool PricesByDrg(RepricingRequest request, ClaimType claimType) =>
+        claimType == ClaimType.Inpatient
+        || (claimType == ClaimType.Institutional
+            && RepricingClaimSetting.IsDrgEligibleBillType(RepricingClaimSetting.NormalizedBillType(request)));
 
     public async Task<CodeLookupResponse?> LookupCodeAsync(CodeLookupRequest request)
     {

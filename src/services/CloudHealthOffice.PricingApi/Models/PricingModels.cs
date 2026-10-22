@@ -48,11 +48,82 @@ public record RepricingRequest
     /// <summary>Additional diagnosis codes.</summary>
     public List<string>? SecondaryDiagnoses { get; init; }
 
-    /// <summary>MS-DRG code (if known; otherwise will be derived from diagnoses + procedures).</summary>
+    /// <summary>
+    /// MS-DRG code, when the claim carries one. A configured grouper is asked
+    /// for a DRG when this is absent and <see cref="InpatientStay"/> says
+    /// enough about the stay to group it; otherwise an inpatient claim without
+    /// a DRG cannot be priced.
+    /// </summary>
     public string? DrgCode { get; init; }
+
+    /// <summary>
+    /// What the grouper needs about an inpatient stay beyond its diagnoses.
+    /// Optional, and absent on every claim that arrives with its DRG already
+    /// assigned.
+    ///
+    /// <para>
+    /// Grouping without it is not a partial answer but a wrong one: a stay
+    /// whose operating-room procedures were not sent groups into the medical
+    /// partition of its MDC and comes back with a plausible DRG that pays the
+    /// wrong amount. So a grouper is asked only when this is present.
+    /// </para>
+    /// </summary>
+    public InpatientStayRequest? InpatientStay { get; init; }
 
     /// <summary>Individual service lines to price.</summary>
     public required List<ClaimLineRequest> Lines { get; init; }
+}
+
+/// <summary>
+/// The stay details an MS-DRG grouper needs that a line-level repricing
+/// request does not otherwise carry.
+/// </summary>
+public record InpatientStayRequest
+{
+    /// <summary>
+    /// Discharge date. Required, because a stay is grouped by the tables in
+    /// force on the date of discharge rather than the date of admission.
+    /// </summary>
+    public required DateOnly DischargeDate { get; init; }
+
+    /// <summary>
+    /// ICD-10-PCS procedure codes, principal first. Not the claim lines'
+    /// CPT/HCPCS codes, which are a different code set and do not group: an
+    /// inpatient stay's procedures come from 837I HI*BBR and HI*BBQ.
+    /// </summary>
+    public List<string>? ProcedureCodes { get; init; }
+
+    /// <summary>
+    /// Present-on-admission indicators for <see cref="RepricingRequest.SecondaryDiagnoses"/>,
+    /// in the same order and the same length. Y, N, U, W, 1 or E.
+    /// </summary>
+    public List<string?>? SecondaryDiagnosisPoa { get; init; }
+
+    /// <summary>
+    /// Whether the facility reports present-on-admission indicators at all.
+    /// A property of the provider, not of the claim. Absent means unknown,
+    /// which the hospital-acquired-condition rules refuse rather than guess
+    /// at.
+    /// </summary>
+    public bool? FacilityReportsPoa { get; init; }
+
+    /// <summary>UB-04 patient discharge status (837I CL103), e.g. "01", "20".</summary>
+    public string? DischargeStatus { get; init; }
+
+    /// <summary>Patient age in years at admission.</summary>
+    public int? AgeYears { get; init; }
+
+    /// <summary>Age in days at admission, which is what distinguishes a neonate.</summary>
+    public int? AgeDays { get; init; }
+
+    /// <summary>Administrative sex: M, F or U.</summary>
+    public string? Sex { get; init; }
+
+    /// <summary>Length of stay in days.</summary>
+    public int? LengthOfStayDays { get; init; }
+
+    /// <summary>Birth weight in grams (837I value code 54), for neonatal grouping.</summary>
+    public int? BirthWeightGrams { get; init; }
 }
 
 public record ClaimLineRequest

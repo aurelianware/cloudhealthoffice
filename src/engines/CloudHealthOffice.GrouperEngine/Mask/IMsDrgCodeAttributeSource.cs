@@ -64,9 +64,13 @@ public sealed record ProcedureCodeAttributes(IReadOnlyList<string> Operands);
 ///
 /// <para>
 /// A code that is not in the tables is not an error here. It is a fact the
-/// caller has to act on — an unknown code must make the grouper refuse rather
-/// than quietly group the stay as though the code were absent — which is why
-/// these are <c>TryGet</c> methods and not indexers returning an empty list.
+/// caller has to report, which is why these are <c>TryGet</c> methods and not
+/// indexers returning an empty list. It is not a reason to refuse the stay:
+/// the parity run settled that CMS groups a stay carrying an unknown
+/// secondary diagnosis or procedure as though the code were absent, and
+/// refuses an unknown principal through its own <c>invalid_pdx</c> edit during
+/// grouping rather than ahead of it. An earlier version of this paragraph said
+/// the opposite.
 /// </para>
 /// </summary>
 public interface IMsDrgCodeAttributeSource
