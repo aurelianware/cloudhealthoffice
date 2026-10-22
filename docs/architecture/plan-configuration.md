@@ -174,6 +174,21 @@ The group agreement between the sponsor and the plan, per contract term (usually
 | Documentation requirements | Proof required per event or dependent | Enrollment exceptions, correspondence |
 | Underwriting conditions | Minimum participation and employer contribution | Renewal review |
 
+**Numbers and what lasts across renewals:**
+- The **group number** stays on the sponsor (`Sponsor.GroupNumber`): it identifies the account and does not change at renewal.
+- Each **sponsor policy** has its own **policy (sub-group) number** under the group, e.g. 123456-0001 for the PPO and 123456-0002 for the HMO. This is the number often printed on ID cards and sent as the group number on the 834 (`REF*1L`) and the 837 (`SBR03`).
+- A sponsor policy is a lasting record that continues across renewals, with its terms **versioned per contract term**. Renewal does not create new policies, so coverage, ID cards and claims never need re-pointing.
+- The contract term holds the dates, status and signed document, and covers the policy terms for that year.
+- The 834 import resolves `REF*1L` against policy numbers as well as group numbers (policy → sponsor). Today it, and the orphan retry, assume `REF*1L` is the group number.
+
+```
+Sponsor (group number)
+  └─ Sponsor policy (policy / sub-group number; lasts across renewals)
+       ├─ Classes
+       └─ Terms per contract year (rates, eligibility, settings)
+Contract term (dates, status, signed document) ── covers ──> that year's policy terms
+```
+
 **Legal floors on these** (to be verified against the regulation text when built): group waiting periods of at most 90 days; dependent coverage to age 26; special enrollment windows of at least 30 days for group plans, and 60 days after loss of Medicaid or CHIP.
 
 **Flow:** a new group or renewal opens a draft term → the account manager enters plans, tiers, rates, eligibility and settings → anything out of range goes to underwriting → on signature the document is attached and the term activates on its start date → enrollment and billing resolve from it as of each member's dates. A detailed design follows at enrollment step 4.
