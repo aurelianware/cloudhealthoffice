@@ -23,7 +23,7 @@ public class CoverageLookupFailureTests
     }
 
     private static (ChoEligibilityAdapter Adapter, TemporalEligibilityService Temporal, EligibilityServiceImpl Service) Build(
-        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send)
+        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send, IEligibilityRepository? repository = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -31,12 +31,13 @@ public class CoverageLookupFailureTests
         }).Build();
         var factory = Substitute.For<IHttpClientFactory>();
         factory.CreateClient("EligibilityDefault").Returns(_ => new HttpClient(new Handler(send)));
+        var adapter = new ChoEligibilityAdapter(factory, config, NullLogger<ChoEligibilityAdapter>.Instance);
         return (
-            new ChoEligibilityAdapter(factory, config, NullLogger<ChoEligibilityAdapter>.Instance),
+            adapter,
             new TemporalEligibilityService(factory, new StubAccumulatorClient(), config, NullLogger<TemporalEligibilityService>.Instance),
-            new EligibilityServiceImpl(Substitute.For<IEligibilityRepository>(), new HttpClient(new Handler(send)),
+            new EligibilityServiceImpl(repository ?? Substitute.For<IEligibilityRepository>(), new HttpClient(new Handler(send)),
                 NullLogger<EligibilityServiceImpl>.Instance, config,
-                new EligibilityAdapterFactory([], factory, config, NullLogger<EligibilityAdapterFactory>.Instance)));
+                new EligibilityAdapterFactory([adapter], factory, config, NullLogger<EligibilityAdapterFactory>.Instance)));
     }
 
     private static Task<HttpResponseMessage> Response(HttpStatusCode status, string body) => Task.FromResult(
@@ -93,6 +94,20 @@ public class CoverageLookupFailureTests
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => adapter.VerifyEligibilityAsync(new EligibilityAdapterRequest { SubscriberId = "M1" }, cts.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => temporal.GetAsOfAsync("t1", "M1", Date, cts.Token));
+    }
+
+    [Fact]
+    public async Task InquiryFailure_IsMarkedFailedAndNeverPersistsANegativeResponse()
+    {
+        var repository = Substitute.For<IEligibilityRepository>();
+        var (_, _, service) = Build((_, _) => Response(HttpStatusCode.ServiceUnavailable, "{}"), repository);
+        var inquiry = new EligibilityInquiry { TenantId = "t1", SubscriberId = "M1", ServiceDateFrom = Date };
+
+        await Assert.ThrowsAsync<CoverageLookupUnavailableException>(() => service.ProcessInquiryAsync(inquiry));
+
+        Assert.Equal(EligibilityInquiryStatus.Failed, inquiry.Status);
+        await repository.Received(1).UpdateInquiryAsync(Arg.Is<EligibilityInquiry>(i => i.Status == EligibilityInquiryStatus.Failed));
+        await repository.DidNotReceive().CreateResponseAsync(Arg.Any<EligibilityResponse>());
     }
 
     [Fact]

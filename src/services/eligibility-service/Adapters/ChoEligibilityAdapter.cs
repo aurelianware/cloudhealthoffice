@@ -81,6 +81,8 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
             $"{coverageUrl}/coverage/member/{Uri.EscapeDataString(subscriberId)}/active?serviceDate={serviceDate:yyyy-MM-dd}");
         request.Headers.Add("X-Tenant-ID", tenantId);
         var coverages = await CoverageLookup.ReadAsync<ChoCoverageDto>(client, request, ct);
+        if (coverages.Count == 0)
+            _logger.LogWarning("No active coverage found for member {SubscriberId}", LogSanitizer.MaskId(subscriberId));
         return EligibilityServiceImpl.SelectCoverageFor(coverages, serviceDate, serviceTypeCode, groupNumber);
     }
 
