@@ -165,7 +165,7 @@ The page reads enrollment and work-management data only. Member detail needs `me
 
 ## 9. Build order
 
-1. **Store the reason** on every rejected transaction, with the INS position and file link. Show it on the member's Enrollment tab. *Built 2026-10-22 (§9.1); the file link arrives with the EDI file record.*
+1. **Store the reason** on every rejected transaction, with the INS position and file link. Show it on the member's Enrollment tab. *Built 2026-10-22 (§9.1), including the link to the EDI file record.*
 2. **Exceptions and work items:** the `EnrollmentException` record, `Enrollment834` items with SLAs, and the specialist actions (reprocess, match, hold, no action, send back).
 3. **Enrollment Ops page:** the exceptions view, then sponsors.
 4. **Retro rules:** line-of-business, plan and sponsor settings; the commercial floor; two-person approval; the claims-impact event and claims review items.
@@ -197,6 +197,7 @@ SFTP files reaching the same import path with the duplicate check is a prerequis
   - `UNEXPECTED_ERROR`;
   - `TERM_SKIPPED_NOT_ON_FILE`: a note on an accepted termination that found no one to terminate.
 - Stored messages follow the import's existing rule: an unexpected exception's text stays in the log. A downstream refusal is recorded by service and HTTP status, not by its body.
+- Each transaction from an uploaded or SFTP file carries `EdiFileId`, the EDI file record it came in ([edi-operations.md](edi-operations.md) §3).
 - member-service passes the fields through on `GET /api/v1/members/{id}/834-transactions`. The member record's Enrollment tab shows:
   - the file and position;
   - the sponsor's reason (INS04) in its own column;

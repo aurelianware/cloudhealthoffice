@@ -1,0 +1,123 @@
+# Re-runs the MS-DRG parity oracle against CMS's own grouper.
+#
+# This job cannot run on a push. The CMS MS-DRG jars are distributed per
+# requester and carry American Hospital Association UB-04 copyright, so they
+# are not in this repository and are not fetchable from CI. The oracle's
+# answers are committed instead, and the .NET test CmsParityTests compares
+# CHO's grouper against them on every build — that is where parity is enforced.
+#
+# What this workflow is for is refreshing those answers: on a new fiscal year's
+# jars, on a corpus change, or to confirm a committed result was not hand-edited.
+# Supply the jars as a workflow artifact or a URL the runner can reach.
+name: Grouper parity oracle
+
+on:
+  workflow_dispatch:
+    inputs:
+      jars_url:
+        description: >-
+          URL of a zip holding msdrg-core, msdrg-model-v2 and
+          msdrg-binary-access. Leave blank to use an artifact named cms-msdrg-jars.
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - "tools/cms-grouper-parity-oracle/**"
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs on every PR that touches the harness. It cannot group anything without
+  # the CMS jars, but it can prove the shim still compiles and that the corpus
+  # and the committed answers still line up — which is what usually breaks.
+  check-harness:
+    name: Check the harness without the jars
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Compile the foundation shim
+        working-directory: tools/cms-grouper-parity-oracle
+        run: |
+          mkdir -p build/shim
+          javac -Werror -d build/shim $(find foundation-shim/src -name '*.java')
+
+      - name: Check the corpus and the committed answers agree
+        working-directory: tools/cms-grouper-parity-oracle/corpus
+        run: |
+          # Every answer must have a claim, and every claim an answer. A row
+          # that exists on one side only means someone edited one file.
+          rows() { grep -v '^#' "$1" | grep -v '^id|' | grep -v '^[[:space:]]*$' | cut -d'|' -f1 | sort; }
+          diff <(rows reference-claims.psv) <(rows expected-v44.psv) \
+            && echo "corpus and answers line up"
+
+      - name: Check no CMS artifact was committed
+        working-directory: tools/cms-grouper-parity-oracle
+        run: |
+          if find . -name '*.jar' -o -name '*.bin' | grep -q .; then
+            echo "A jar or table buffer is committed under the harness. It must not be." >&2
+            find . -name '*.jar' -o -name '*.bin' >&2
+            exit 1
+          fi
+          echo "no CMS artifact committed"
+
+  refresh-answers:
+    name: Re-run the oracle
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Fetch the CMS jars from the supplied URL
+        if: inputs.jars_url != ''
+        run: |
+          mkdir -p "$RUNNER_TEMP/jars"
+          curl -fsSL "${{ inputs.jars_url }}" -o "$RUNNER_TEMP/jars.zip"
+          unzip -j -o "$RUNNER_TEMP/jars.zip" '*.jar' -d "$RUNNER_TEMP/jars"
+
+      - name: Take the CMS jars from an uploaded artifact
+        if: inputs.jars_url == ''
+        uses: actions/download-artifact@v4
+        with:
+          name: cms-msdrg-jars
+          path: ${{ runner.temp }}/jars
+
+      - name: Add the open-source dependencies
+        run: |
+          cd "$RUNNER_TEMP/jars"
+          base=https://maven-central.storage-download.googleapis.com/maven2
+          curl -fsSL -o protobuf-java.jar \
+            "$base/com/google/protobuf/protobuf-java/3.25.5/protobuf-java-3.25.5.jar"
+          curl -fsSL -o slf4j-api.jar \
+            "$base/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar"
+
+      - name: Run the oracle
+        env:
+          CMS_MSDRG_JARS: ${{ runner.temp }}/jars
+        run: tools/cms-grouper-parity-oracle/run.sh
+
+      - name: Show what changed
+        run: |
+          # A clean diff means the committed answers were reproduced exactly,
+          # which is the result to hope for on an unchanged corpus.
+          git diff --stat -- tools/cms-grouper-parity-oracle/corpus
+          git diff -- tools/cms-grouper-parity-oracle/corpus
+
+      - name: Upload the refreshed answers
+        uses: actions/upload-artifact@v4
+        with:
+          name: expected-v44
+          path: tools/cms-grouper-parity-oracle/corpus/expected-v44.psv

@@ -1066,6 +1066,7 @@ public class Enrollment834Record
     public string? EffectiveDate { get; set; }
     public string? TerminationDate { get; set; }
     public string? FileName { get; set; }
+    public string? EdiFileId { get; set; }
     public string? FilePosition { get; set; }
 
     /// <summary>Why it was not applied (or a note on an accepted row); see enrollment-import-service's EnrollmentRejectionReasons.</summary>

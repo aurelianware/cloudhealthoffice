@@ -1,0 +1,98 @@
+# Reference inpatient stays for MS-DRG parity testing (ADR 024 step 3).
+#
+# Every row is invented. There is no member, no provider, no claim number and
+# no date of service here — only a combination of ICD-10-CM and ICD-10-PCS
+# codes and the demographics the grouper needs. Nothing in this file is or
+# derives from real patient data, and nothing in it may be used to pay a claim.
+#
+# Rows are chosen to pin behaviour, not to be representative: each one exists
+# because it distinguishes a correct grouper from a plausible wrong one. The
+# `why` column says what it is for.
+#
+# Columns:
+#   id                 stable row name, used to join to expected-v44.psv
+#   pdx                principal diagnosis (ICD-10-CM, no decimal point)
+#   sdx                secondary diagnoses, comma-separated CODE:POA
+#                      POA is a GfcPoa name: Y, N, U, W, E, ONE, BLANK, INVALID
+#   procedures         ICD-10-PCS codes, comma-separated
+#   age_years          age in years at discharge
+#   sex                MALE | FEMALE | UNKNOWN
+#   discharge_status   MsdrgDischargeStatus name
+#   why                what this row is testing
+id|pdx|sdx|procedures|age_years|sex|discharge_status|why
+
+# ── Three-way severity split: heart failure, MDC 05 medical, DRGs 291/292/293.
+#    Pins that an MCC beats a CC and that a bare stay falls to "without".
+hf-mcc|I509|J9600:Y||71|MALE|HOME_SELFCARE_ROUTINE|three-way split, MCC arm
+hf-cc|I509|N179:Y||71|MALE|HOME_SELFCARE_ROUTINE|three-way split, CC arm
+hf-none|I509|||71|MALE|HOME_SELFCARE_ROUTINE|three-way split, without CC/MCC arm
+hf-mcc-and-cc|I509|N179:Y,J9600:Y||71|MALE|HOME_SELFCARE_ROUTINE|MCC outranks a co-present CC
+hf-two-cc|I509|N179:Y,E1165:Y||71|MALE|HOME_SELFCARE_ROUTINE|a second diagnosis that is neither CC nor MCC (E1165) adds nothing
+
+# ── Two-way severity split: major joint replacement, MDC 08 surgical, 469/470.
+#    The row that catches a grouper which assumes every family is three-way:
+#    a CC here pays at "without MCC", not at a middle rung that does not exist.
+tkr-none|M1711||0SRC0J9|68|FEMALE|HOME_SELFCARE_ROUTINE|two-way split, without arm
+tkr-cc|M1711|N179:Y|0SRC0J9|68|FEMALE|HOME_SELFCARE_ROUTINE|two-way split, CC still pays "without MCC"
+tkr-mcc|M1711|J9601:Y|0SRC0J9|68|FEMALE|HOME_SELFCARE_ROUTINE|two-way split, MCC arm
+
+# ── Partition: the same principal diagnosis with and without an OR procedure
+#    must leave MDC 08 by different doors.
+joint-medical|M1711|||68|FEMALE|HOME_SELFCARE_ROUTINE|medical partition when no OR procedure is present
+joint-surgical|M1711||0SRC0J9|68|FEMALE|HOME_SELFCARE_ROUTINE|surgical partition once an OR procedure appears
+
+# ── CC exclusions: a secondary diagnosis too close to the principal one earns
+#    no severity credit. J181 is a pneumonia, so it cannot complicate J189.
+pneumonia-excluded-cc|J189|J181:Y||70|MALE|HOME_SELFCARE_ROUTINE|J181 is an MCC, excluded against J189, so it gives no credit
+pneumonia-real-cc|J189|N179:Y||70|MALE|HOME_SELFCARE_ROUTINE|unrelated CC does give credit
+pneumonia-mcc|J189|J9600:Y||70|MALE|HOME_SELFCARE_ROUTINE|MCC arm of the pneumonia family
+
+# ── Present on admission: a hospital-acquired condition earns no severity
+#    credit, a present-on-admission one does. Same code, different POA.
+poa-present|I509|L89314:Y||78|FEMALE|HOME_SELFCARE_ROUTINE|POA=Y counts toward severity
+poa-acquired|I509|L89314:N||78|FEMALE|HOME_SELFCARE_ROUTINE|POA=N is hospital-acquired, no credit
+poa-undocumented|I509|L89314:U||78|FEMALE|HOME_SELFCARE_ROUTINE|POA=U is treated as acquired
+poa-clinically-undetermined|I509|L89314:W||78|FEMALE|HOME_SELFCARE_ROUTINE|POA=W counts, unlike N and U
+
+# ── Pre-MDC: a transplant outranks whatever MDC the principal diagnosis sits in.
+premdc-heart-transplant|I509||02YA0Z0|55|MALE|HOME_SELFCARE_ROUTINE|pre-MDC transplant takes precedence over MDC 05
+premdc-tracheostomy|J189||0B110F4,5A1955Z|60|MALE|HOME_SELFCARE_ROUTINE|tracheostomy with ventilation is pre-MDC
+premdc-ecmo|I509||5A1522F|52|MALE|HOME_SELFCARE_ROUTINE|ECMO is pre-MDC
+
+# ── Surgical hierarchy: when two OR procedures from different classes are
+#    present, the higher-ranked class wins. A grouper that takes the first
+#    procedure listed gets these two rows inconsistent with each other.
+hierarchy-order-a|I509|J9600:Y|02YA0Z0,0SRC0J9|55|MALE|HOME_SELFCARE_ROUTINE|hierarchy, transplant listed first
+hierarchy-order-b|I509|J9600:Y|0SRC0J9,02YA0Z0|55|MALE|HOME_SELFCARE_ROUTINE|hierarchy, same two procedures listed in reverse
+
+# ── Sex consistency. OPEN QUESTION: both rows group to 726 with grc=OK, so the
+#    grouper does not reject a male-only diagnosis on a female stay. Either N400
+#    is not sex-restricted in V44, or the sex edit is an MCE edit that lives
+#    outside the grouper. Until that is settled, CHO must not invent a
+#    DemographicConflict status the reference grouper does not produce.
+sex-conflict|N400|||70|FEMALE|HOME_SELFCARE_ROUTINE|male-only diagnosis on a female stay: not rejected
+sex-consistent|N400|||70|MALE|HOME_SELFCARE_ROUTINE|the same diagnosis, consistent sex: same answer
+
+# ── Principal-diagnosis acceptability. J9600 turns out to be acceptable as a
+#    principal and groups to 189, so this row records that fact rather than the
+#    rejection I expected. A genuinely unacceptable principal still needs a row;
+#    finding one is work for step 4, from the extracted pdxExclusionGroups table.
+unacceptable-pdx|J9600|||65|MALE|HOME_SELFCARE_ROUTINE|acute respiratory failure IS acceptable as principal
+
+# ── Invalid input. Only an unrecognised principal diagnosis is an error; an
+#    unrecognised secondary or procedure is ignored and the claim still groups.
+invalid-pdx|ZZZZZ|||65|MALE|HOME_SELFCARE_ROUTINE|principal diagnosis not in the code set
+invalid-sdx|I509|ZZZZZ:Y||65|MALE|HOME_SELFCARE_ROUTINE|unknown secondary diagnosis
+invalid-procedure|M1711||ZZZZZZZ|68|FEMALE|HOME_SELFCARE_ROUTINE|unknown procedure code
+
+# ── Discharge status: transfer and death change the DRG for some families and
+#    nothing for others. Both answers are worth pinning.
+discharge-died|I509|J9600:Y||71|MALE|DIED|death in hospital
+discharge-transfer|I509|J9600:Y||71|MALE|SHORT_TERM_HOSPITAL|transfer to another acute hospital
+discharge-hospice|I509|J9600:Y||71|MALE|HOSPICE_HOME|discharge to hospice
+
+# ── Age: newborn and paediatric routing differs from adult routing for the
+#    same principal diagnosis.
+age-neonate|P0500|||0|MALE|HOME_SELFCARE_ROUTINE|newborn, MDC 15
+age-child|J189|||7|FEMALE|HOME_SELFCARE_ROUTINE|paediatric pneumonia
+age-adult|J189|||45|FEMALE|HOME_SELFCARE_ROUTINE|the same diagnosis in an adult

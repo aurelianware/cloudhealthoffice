@@ -16,6 +16,9 @@ public class Enrollment834Record
     public string? TerminationDate { get; set; }
     public string? FileName { get; set; }
 
+    /// <summary>The EDI file record this came in, for EDI Operations' file detail.</summary>
+    public string? EdiFileId { get; set; }
+
     /// <summary>Where in the file: "INS 3", "INS 3, dependent 1".</summary>
     public string? FilePosition { get; set; }
 

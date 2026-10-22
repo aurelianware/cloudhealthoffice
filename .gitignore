@@ -91,3 +91,6 @@ interop/docker-compose.proxy.yml
 
 # Security challenge packets require private triage before publication.
 artifacts/security-challenge/
+
+# Parity oracle build output (the CMS jars it needs are never committed)
+tools/cms-grouper-parity-oracle/build/
