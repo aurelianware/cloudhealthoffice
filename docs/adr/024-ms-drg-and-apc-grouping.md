@@ -126,6 +126,82 @@ titles verbatim so a reviewer can diff them against Appendix A.
 
 ## Decision
 
+### What other payer platforms actually do
+
+Checked because "build or buy" should be answered against what the market
+does, not from first principles.
+
+**None of the incumbents wrote a grouper.** QNXT and Facets both price
+through the same component, Cognizant's TriZetto NetworX Pricer, which is
+marketed as covering 350-plus pricing calculations including DRG, APC, APG
+and APR-DRG — and which
+[integrates with Medicare and Medicaid third-party grouper technology](https://www.cognizant.com/en_us/trizetto/documents/cognizant-trizetto-networx-pricer.pdf)
+rather than containing one. The grouper comes from a partner: Cognizant's
+[Facets partner page](https://www.cognizant.com/trizetto/partners/facets)
+names Optum's ECMPro as integrating with NetworX for grouping, pricing and
+editing across the federal PPS models, and
+[Micro-Dyn](https://www.microdynmedical.com/drgactive-ippsgrouper) sells
+DRGActive and PRICERActive as QNXT integrations. HealthRules appears the
+same way, as a target in grouper vendors' integration lists.
+
+So the architecture this ADR proposes — a grouping seam with a licensed or
+reference grouper behind it — is not a workaround for being smaller than the
+incumbents. It is what the incumbents are. The difference worth having is
+shipping a working grouper behind the seam by default, where they ship an
+integration point and a purchase order.
+
+**A native port of the CMS grouper is proven, not speculative.** The one
+publicly documented attempt,
+[a Zig port with Python bindings](https://docs.bedrockbilling.com/blog/rewriting-cms-grouper-in-zig/),
+reports a line-by-line port validated against the CMS Java application over
+more than 50,000 reference claims at a 100% output match, across MS-DRG
+assignment, MDC routing and the HAC modifiers. Two numbers from it matter
+here:
+
+| | Claims per second |
+| --- | --- |
+| CMS Java grouper (their measurement, standard laptop) | ~500 |
+| Their native port | >11,000 |
+
+That is the case against option B on its own terms. 500 claims per second,
+plus JVM warmup and a heap full of reference-data hash maps, is not something
+to put on the adjudication hot path.
+
+**It also changes step 2 below.** They did not parse the definitions-manual
+text; they extracted the logic and tables out of the CMS jars (through JPype)
+into intermediate files, then compiled those. That is the better source: the
+jars are what CMS actually runs, where the Appendix text is a rendering of
+it. The importer should take the jars as its source of truth and use the
+Appendix files as a cross-check, not the other way round.
+
+They also flag something this ADR had not accounted for: ICD-10 codes change
+every 1 October, so a claim from an earlier fiscal year has to be
+forward-mapped with the CMS conversion tables before it can be grouped under
+a later version. Grouping by discharge date (which the table set already
+does) covers the normal case; re-grouping an old stay under a current version
+does not, and needs those tables.
+
+**Commercial grouper pricing is quote-only.** Solventum (the former 3M
+health information business) licenses
+[Grouper Plus Content Services](https://www.solventum.com/en-us/home/health-information-technology/solutions/gpcs/)
+modularly — "a single clinical classification methodology or a combination" —
+to providers, payers and software partners, and publishes no price. Optum
+does the same with EASYGroup. No honest cost figure can go in this ADR
+without a quote, so option C's cost is stated as a structure (per
+methodology, recurring) and not a number.
+
+**Outpatient is a two-method world, and only one method is free.** Medicare
+APC is public: the I/OCE and the OPPS addenda cost nothing. The commercial
+alternative is Solventum's
+[EAPG](https://assets.solventum.com/is/content/mmmspinco/eapg-classification-system-factsheet-pdfa-his-pm-enpdf),
+which bundles at the visit level where APC pays per code, is common in
+Medicaid, and is used by a number of commercial payers — DC Medicaid's FAQ
+has named BCBS of Oklahoma, Minnesota and Alabama and Wellmark among them,
+and Solventum's own material claims roughly 20 major payers, which is
+vendor-reported. UnitedHealthcare uses its own Outpatient Procedural Groupers
+instead. A payer platform therefore needs APC natively and EAPG as a licensed
+plug-in; it cannot have EAPG any other way.
+
 ### 4. The three options
 
 **Option A — pluggable interface, native .NET grouper, CMS jar as the parity
@@ -169,14 +245,31 @@ out of the box.
 
 ### 5. Recommendation
 
-Option A, with the Option C adapter seam preserved: the interfaces are the
-deliverable either way, so a customer who already licences EASYGroup can plug
-it in, and a customer who wants CMS parity can run the sidecar. Build order:
+Option A, with option C shipped as a first-class deployment rather than a
+fallback — which the market evidence above sharpens in three ways.
+
+1. **The seam is not optional under any option**, and it is what the
+   incumbents sell. Build it first (done), so a customer who already licences
+   EASYGroup or GPCS plugs it in, and one who wants bit-exact CMS parity runs
+   the sidecar.
+2. **Option B is rejected on measured throughput**, not on taste: ~500 claims
+   per second with JVM warmup is not an adjudication-path component. The jar
+   stays, as the CI parity oracle and as an optional provider for a customer
+   who asks for it.
+3. **The parity target is now a known quantity**: >50,000 reference claims at
+   100% match has been done by someone else against the same software. That is
+   the bar for step 7, and "we agree with CMS V44 on N claims" is the sentence
+   diligence should get.
+
+Build order:
 
 1. `GrouperEngine` contracts, domain types and the grouping-result audit
    record (billed DRG vs assigned DRG vs paid DRG, with the reason).
 2. Table import and persistence for the MS-DRG definition tables, weights and
-   mean LOS, versioned by FY and effective date.
+   mean LOS, versioned by FY and effective date. Source the tables from the
+   CMS jars and cross-check them against the Appendix files, not the reverse
+   (see above). Include the ICD-10 forward-mapping tables, so an old stay can
+   be re-grouped under a current version.
 3. `TableDrivenMsDrgGrouper`: MDC, pre-MDC, surgical hierarchy, CC/MCC with
    exclusions, sex/age/discharge-status edits.
 4. `IppsPaymentCalculator`: wage index, labor/non-labor split, IME, DSH,
