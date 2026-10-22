@@ -107,7 +107,7 @@ What happens to each difference is set per sponsor:
 |---|---|---|
 | **Authoritative** | State Medicaid | CHO aligns to the file. Two kinds of difference become exceptions instead: anything that hits paid claims, and anything the plan believes the state got wrong. Those feed the state's discrepancy report. |
 | **Report-only** | Marketplace until RCNI exists; any sponsor being onboarded | Every difference is an exception; nothing changes automatically. |
-| **Full replace** | Small employer groups that send a complete file every time | Members missing from the file are termed (subject to §6). **Guard:** if more than a set share of the sponsor's members (default 10%) would be termed, the whole file is held for review. One truncated file must not wipe out a group. |
+| **Full replace** | Small employer groups that send a complete file every time | Members missing from the file are termed (subject to §6). **Guard:** if the file would term more than 10% of the sponsor's members, or more than 5 members for a sponsor with fewer than 50, whichever is smaller, the whole file is held for review. One truncated file must not wipe out a group. Both numbers are settings at the same three levels as §6. |
 
 Each reconciliation run is a record of its own:
 - the file and the date it was compared on;
@@ -124,11 +124,15 @@ The Enrollment Ops page shows the current cycle per sponsor.
 - how far back a term may go, and to what date;
 - whether a term beyond the limit is applied at the limit, held, or applied with approval.
 
+**Sponsor policy and class levels.** Retro limits and waiting periods also resolve at the sponsor's policy (the sponsor's offering of one benefit plan for a date range) and, for waiting periods, the employee class under it (full-time / part-time, hourly / salaried). The full order is line of business → benefit plan → sponsor → sponsor policy → class, most specific wins, and the commercial floor below applies at every level. The orphan grace period (§10, decision 5) and the full-replace guard (§5) stay at sponsor level: they follow the sponsor's file, which covers all its policies. The settings lookup is built as a chain of levels from the start, so the policy and class levels slot in when the sponsor policy record exists.
+
+**Waiting periods are a separate setting** at the same levels: how long a new hire waits before coverage starts, which decides the effective date an add should carry. A sponsor with a 90-day waiting period does not thereby get a 90-day retro window.
+
 **Proposed defaults:**
 
 | Line of business | Adds | Terms |
 |---|---|---|
-| Commercial group | Up to 60 days back | Back to the **premium paid-through date** only. Beyond that, apply at the end of the current month unless a reason is recorded and a second person approves. |
+| Commercial group | Up to 60 days back (decided) | Back to the **premium paid-through date** only. Beyond that, apply at the end of the current month unless a reason is recorded and a second person approves. |
 | Individual / ACA | The exchange's dates | The exchange's dates |
 | Medicaid | The state's dates, no limit | The state's dates, no limit |
 
@@ -167,8 +171,8 @@ The page reads enrollment and work-management data only. Member detail needs `me
 
 1. **Store the reason** on every rejected transaction, with the INS position and file link. Show it on the member's Enrollment tab. *Built 2026-10-22 (§9.1), including the link to the EDI file record.*
 2. **Exceptions and work items:** the `EnrollmentException` record, `Enrollment834` items with SLAs, and the specialist actions (reprocess, match, hold, no action, send back). *Built 2026-10-22 (§9.2), API only; the screen is step 3.*
-3. **Enrollment Ops page:** the exceptions view, then sponsors.
-4. **Retro rules:** line-of-business, plan and sponsor settings; the commercial floor; two-person approval; the claims-impact event and claims review items.
+3. **Enrollment Ops page:** the exceptions view, then sponsors. Ahead of it: the automatic orphan-dependent retry (§10, decision 5).
+4. **Sponsor policy record, then retro rules.** The record: sponsor policy (sponsor, benefit plan, effective and end dates, contract terms) with optional classes under it (eligibility rule such as hours per week or pay type, waiting period). It is the equivalent of QNXT group / subgroup / plan and Facets group / subgroup / class, and also carries premium rates by tier, eligibility rules by class and open enrollment per plan as those move off the flat sponsor record. Then the **retro rules:** settings at line of business, benefit plan, sponsor, sponsor policy and class; the commercial floor; two-person approval; the claims-impact event and claims review items.
 5. **Sponsor error reports:** generated per file into the document store, plus the sponsor-contact notice.
 6. **Reconciliation:**
    - read BGN08;
@@ -224,12 +228,15 @@ SFTP files reaching the same import path with the duplicate check is a prerequis
 - **Work items.** `GET …/exceptions/work-snapshots` pages the workable exceptions (open, or held past their date) with no PHI: id, number, reason, group, member id, maintenance type, created date. work-management-service reconciles against it every 2 minutes (`WorkManagement:EnrollmentReconcile`; also `POST api/v1/work/admin/reconcile/enrollment`): each becomes an `Enrollment834` item, routed by reason code, and items whose exception is resolved or held are closed. Default queues: Retry (downstream unavailable, concurrent update; 2-day SLA), Matching (subscriber or dependent not found, possible duplicate; 5 days), Retro (3 days), Data (validation, invalid, downstream rejected, plan code, state gate; 5 days) and Other. An item opens `/enrollment-ops/exceptions/{id}`.
 - **Deferred to step 3:** the exception screen. Until it exists the demo seed gives no one membership in the enrollment queues, so Get Next never opens a page that is not there; supervisors see the items in the work list.
 
-## 10. Open questions
+## 10. Decisions (2026-10-22)
 
-1. **Full-replace guard:** is 10% the right default, and should it be a count for small groups (e.g. more than 5 members)?
-2. **Commercial retro adds:** 60 days, or tie it to the employer's eligibility rules (new-hire waiting periods)?
-3. **Pilot states:** which states' discrepancy formats to build first?
-4. **Sponsor self-service:** should employer groups correct errors in a sponsor portal rather than only in their next file?
+1. **Full-replace guard:** hold the file when it would term more than 10% of the sponsor's members, or more than 5 for sponsors under 50 members, whichever is smaller (§5).
+2. **Commercial retro adds:** 60 days as the commercial line-of-business default, overridable per benefit plan and then per sponsor. Waiting periods are a separate setting at the same levels (§6).
+3. **Pilot states:** the pilot search targets California local Medi-Cal plans (public RFPs; D-SNP expansion to 41 counties in January 2026 means local plans need Medicare reconciliation) and Oregon CCOs (CCO 3.0 procurement with the 2027 waiver; the strictest published reconciliation rules). Texas stays warm through existing relationships. Discrepancy reports are a template per state: **Oregon first**, as the reference implementation (public, strictest specification), then California and Medicare TRR/MMR reconciliation when a California plan engages.
+4. **Sponsor self-service:** sponsors correct errors in their next 834. A sponsor portal where employer groups fix errors themselves is on the roadmap, after the error reports (step 5).
+5. **Orphan dependents across files:** a dependent rejected as `SUBSCRIBER_NOT_FOUND` starts as a held exception for a grace period instead of entering the Matching queue. When any import or manual change adds that subscriber, CHO reprocesses the tenant's orphans that name the subscriber id, and a periodic sweep retries held orphans as a backstop. A successful retry resolves the exception as Applied ("automatic retry, subscriber arrived in file X"). An orphan still unmatched when the grace period ends opens in the Matching queue with its history. The grace period is a setting at line of business, overridable per benefit plan and then per sponsor (the most specific wins). There is no published industry standard; companion guides require the subscriber in the same or an earlier transmission ([SC PEBA 834 guide](https://www.procurement.sc.gov/files/Attachment_8_--_834_Dental_Companion_Guide.pdf)), and the Marketplace sends each enrollment group as one transaction ([CMS 834 companion guide](https://ichraconnect.hioscar.com/CMS_X12_834_Companion_Guide_v7.2.pdf)), so an orphan is either a late subscriber in the sponsor's next file or an error. The window therefore covers one file cycle. Line-of-business defaults: **commercial group 7 days** (weekly files are the common employer cadence; a sponsor sending daily can set 2); **individual / Marketplace 0**; **Medicaid 0** (the state's file is complete, and a real orphan is a discrepancy to report). Once expected-file schedules exist (EDI step 5), a sponsor's window can be set as "one expected file cycle" instead of a day count. Within one file, the parser already holds a dependent until its transaction set ends. Built after the large-file intake (edi-operations.md §11), since both change the import.
+
+Sources for 3: [PointClickCare on California's D-SNP expansion](https://pointclickcare.com/blog/our-markets/health-plans/californias-dsnp-expansion-changed-the-stakes-for-medical-plans/), [OHA CCO 3.0 procurement](https://www.oregon.gov/oha/OHPB/MtgDocs/6.%20CCO%203.0%20Procurement.pdf), [OHA CCO Enrollment Reconciliation and Discrepancy Reporting Guide 2025](https://www.oregon.gov/oha/HSD/OHP/CCO/CCO%20Enrollment%20Reconciliation%20and%20Discrepancy%20Reporting%20Guide%202025.pdf), [Fierce Healthcare on the Texas STAR/CHIP injunction](https://www.fiercehealthcare.com/payers/texas-pauses-116b-medicaid-contract-awards-state-health-plans-relieved).
 
 ## Sources
 
