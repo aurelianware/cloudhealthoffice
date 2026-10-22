@@ -48,6 +48,36 @@ public static class DefaultClaimQueues
 }
 
 /// <summary>
+/// The enrollment exception queues a tenant starts with
+/// (docs/architecture/enrollment-operations.md §3), routed on the exception's
+/// reason code. Seeded per tenant on first use, like the claim queues.
+/// Enrollment turnaround is short: a member waiting on an add cannot use
+/// their coverage.
+/// </summary>
+public static class DefaultEnrollmentQueues
+{
+    public static readonly IReadOnlyList<DefaultClaimQueues.Definition> All =
+    [
+        new("enrollment.retry", "Enrollment: Service Unavailable", "A CHO service was unavailable or busy; reprocess as received.", 10,
+            ["DOWNSTREAM_UNAVAILABLE", "CONCURRENT_UPDATE"], 2),
+        new("enrollment.matching", "Enrollment: Member Matching", "The subscriber is not on file, a dependent cannot be identified, or the member may already exist.", 20,
+            ["SUBSCRIBER_NOT_FOUND", "DEPENDENT_NOT_IDENTIFIED", "POSSIBLE_DUPLICATE"], 5),
+        new("enrollment.retro", "Enrollment: Retro Changes", "Retroactive changes beyond the limit, or touching paid claims, awaiting approval.", 30,
+            ["RETRO_BEYOND_LIMIT", "RETRO_AFFECTS_PAID_CLAIMS"], 3),
+        new("enrollment.data", "Enrollment: Data and Validation", "The change failed validation, was not allowed, or was refused by a CHO service.", 40,
+            ["VALIDATION_FAILED", "INVALID_TRANSACTION", "DOWNSTREAM_REJECTED", "PLAN_CODE_UNMAPPED", "STATE_GATE"], 5),
+        new("enrollment.other", "Enrollment: Other", "Every enrollment exception no other queue matched.", 1000, [], 5, Fallback: true),
+    ];
+
+    public static WorkQueue Create(DefaultClaimQueues.Definition d, string tenantId, DateTime now)
+    {
+        var queue = DefaultClaimQueues.Create(d, tenantId, now);
+        queue.WorkType = WorkType.Enrollment834;
+        return queue;
+    }
+}
+
+/// <summary>
 /// Entitlement: the role is coarse security over which work TYPES a person
 /// may do. A queue membership can only narrow it: Get Next skips queues whose
 /// work type the caller's own token does not permit, whatever the membership
@@ -74,7 +104,7 @@ public static class WorkEntitlements
         WorkType.Claim => $"/claims/{Uri.EscapeDataString(item.SourceId)}",
         WorkType.Appeal => $"/appeals?appealId={Uri.EscapeDataString(item.SourceId)}",
         WorkType.PriorAuth => $"/authorizations?authorizationId={Uri.EscapeDataString(item.SourceId)}",
-        WorkType.Enrollment834 => "/enrollment-ops",
+        WorkType.Enrollment834 => $"/enrollment-ops/exceptions/{Uri.EscapeDataString(item.SourceId)}",
         WorkType.Payment => "/payment-runs",
         _ => "/my-work",
     };

@@ -244,6 +244,19 @@ periodic reconcile on for tenant `demo` (`deploy/gcp/render_manifests.py`): it
 picks up claims pended before the service started (seeded data) and repairs
 anything lost.
 
+### Enrollment exceptions (`Enrollment834`)
+
+enrollment-import-service has no event stream yet, so its work flows by
+reconcile alone: `WorkManagement:EnrollmentReconcile` (`Enabled` true,
+`IntervalMinutes` 2, `PageSize` 500) pages through
+`GET api/v1/enrollment/exceptions/work-snapshots` and applies each workable
+exception as an item (`PrimaryPendCode` = the reason code, so routing uses the
+same criteria as claims), then closes open items whose exception is resolved or
+held. `POST admin/reconcile/enrollment` runs it on demand. Default queues are in
+[enrollment-operations.md](enrollment-operations.md) §9.2; they are seeded with
+the claim queues, and demo seed users get no membership in them until the
+exception screen exists.
+
 ## API and permissions
 
 Base `/api/v1/work`. Tenant and actor always from the CHO token.
@@ -294,7 +307,8 @@ refuses to start).
    events), appeal and PA criteria, `openUrl` to their screens; regulatory
    deadlines feed `attributes.deadline` (expedited 72-hour PA, appeal clocks).
 3. **834 enrollment and payment exceptions**: enrollment-import and
-   payment-service exceptions as work.
+   payment-service exceptions as work. *Enrollment built 2026-10-22 (reconcile
+   only; see above).*
 
 Deferred from phase 1: lease enforcement in claims-service (the resolve refusing
 a claim leased to someone else); per-user Get Next serialization; criteria for

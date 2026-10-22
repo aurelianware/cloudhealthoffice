@@ -65,6 +65,14 @@ public class Enrollment834
     /// </summary>
     [JsonIgnore]
     public string? EdiFileId { get; set; }
+
+    /// <summary>
+    /// Set when this batch reprocesses one enrollment exception: the outcome
+    /// of its single top-level transaction updates that exception instead of
+    /// opening a new one. Set by the exception service; [JsonIgnore].
+    /// </summary>
+    [JsonIgnore]
+    public string? ReprocessExceptionId { get; set; }
 }
 
 public class MemberEnrollment

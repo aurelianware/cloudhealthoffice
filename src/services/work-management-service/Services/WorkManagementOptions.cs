@@ -19,6 +19,9 @@ public sealed class WorkManagementOptions
 
     public ReconcileOptions Reconcile { get; set; } = new();
 
+    /// <summary>Periodic reconcile of enrollment exceptions (their only path into work today).</summary>
+    public EnrollmentReconcileOptions EnrollmentReconcile { get; set; } = new();
+
     /// <summary>
     /// Users given a primary membership in every claim queue of a tenant that
     /// has no memberships for them yet, checked when this process first uses
@@ -55,4 +58,16 @@ public sealed class ReconcileOptions
 
     /// <summary>Tenants to reconcile besides those already configured here (first use seeds them).</summary>
     public List<string> Tenants { get; set; } = new();
+}
+
+/// <summary>
+/// Periodic reconcile against enrollment-import-service. On by default:
+/// enrollment exceptions have no event stream yet, so this is how they become
+/// (and stop being) work items. Tenants are the same as the claims reconcile's.
+/// </summary>
+public sealed class EnrollmentReconcileOptions
+{
+    public bool Enabled { get; set; } = true;
+    public int IntervalMinutes { get; set; } = 2;
+    public int PageSize { get; set; } = 500;
 }

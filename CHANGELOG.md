@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **834 enrollment exceptions are worked as work items.** Every rejected 834
+  row opens an `EnrollmentException` holding the change as received, its reason
+  and errors, and its file. Enrollment specialists can reprocess it (optionally
+  corrected), match a dependent to its subscriber, hold it, send it back to the
+  sponsor or close it with no action, each recorded with who and why.
+  work-management-service reconciles workable exceptions into `Enrollment834`
+  items routed to Retry, Matching, Retro, Data and Other queues by reason. See
+  `docs/architecture/enrollment-operations.md` §9.2.
+
 - **Finalized claims publish to the plan's managed FHIR store, streaming to
   BigQuery and Vertex AI (ADR 023).** With `ManagedFhirStore:Provider` set to
   `GcpHealthcare`, fhir-service consumes `claims.finalized.v1` and writes each

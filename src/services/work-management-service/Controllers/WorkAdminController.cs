@@ -21,13 +21,15 @@ public sealed class WorkAdminController : ControllerBase
     private readonly WorkConfigService _config;
     private readonly WorkIntakeService _intake;
     private readonly IClaimsWorkSource _claims;
+    private readonly IEnrollmentWorkSource _enrollment;
     private readonly WorkManagementOptions _options;
     private readonly ICurrentActor _actor;
 
     public WorkAdminController(
-        WorkConfigService config, WorkIntakeService intake, IClaimsWorkSource claims,
+        WorkConfigService config, WorkIntakeService intake, IClaimsWorkSource claims, IEnrollmentWorkSource enrollment,
         IOptions<WorkManagementOptions> options, ICurrentActor actor)
     {
+        _enrollment = enrollment;
         _config = config;
         _intake = intake;
         _claims = claims;
@@ -133,6 +135,14 @@ public sealed class WorkAdminController : ControllerBase
     public async Task<ActionResult<ReconcileResult>> Reconcile(CancellationToken ct)
     {
         var result = await _intake.ReconcileClaimsAsync(Tenant, _claims, Math.Clamp(_options.Reconcile.PageSize, 1, 1000), ct);
+        return result.Succeeded ? Ok(result) : StatusCode(StatusCodes.Status502BadGateway, result);
+    }
+
+    /// <summary>Brings enrollment exception work in step with enrollment-import-service now.</summary>
+    [HttpPost("reconcile/enrollment")]
+    public async Task<ActionResult<ReconcileResult>> ReconcileEnrollment(CancellationToken ct)
+    {
+        var result = await _intake.ReconcileEnrollmentAsync(Tenant, _enrollment, Math.Clamp(_options.EnrollmentReconcile.PageSize, 1, 1000), ct);
         return result.Succeeded ? Ok(result) : StatusCode(StatusCodes.Status502BadGateway, result);
     }
 }

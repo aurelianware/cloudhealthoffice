@@ -524,6 +524,7 @@ services:
       - Kafka__BootstrapServers=kafka:9092
       - Kafka__ClientId=work-management-service
       - Services__ClaimsService=http://claims-service:8080
+      - Services__EnrollmentImportService=http://enrollment-import-service:8080
     depends_on:
       mongo:
         condition: service_healthy

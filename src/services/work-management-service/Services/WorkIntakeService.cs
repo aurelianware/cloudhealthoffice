@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Work;
 using CloudHealthOffice.Events;
 using WorkManagementService.Domain;
 using WorkManagementService.Models;
@@ -85,41 +86,79 @@ public sealed class WorkIntakeService
         MemberId = e.MemberId,
     };
 
+    /// <summary>
+    /// A source's report that one of its records needs work (or no longer
+    /// does), whatever the work type: a claims.work.v1 event, or an
+    /// enrollment exception from a reconcile.
+    /// </summary>
+    internal sealed record SourceChange(
+        string TenantId, WorkType WorkType, string SourceId, string SourceNumber, bool Needed,
+        WorkItemAttributes Attributes, long SourceVersion, string? EventId, string? ActorId,
+        string? Resolution, string DefaultActor, string? CreatedDetail);
+
     /// <summary>Applies one claims.work.v1 event.</summary>
-    public async Task<IntakeOutcome> ApplyClaimEventAsync(ClaimWorkEvent evt, CancellationToken ct = default)
+    public Task<IntakeOutcome> ApplyClaimEventAsync(ClaimWorkEvent evt, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(evt.TenantId) || string.IsNullOrWhiteSpace(evt.ClaimId))
             throw new ArgumentException("A claim work event needs a tenant and a claim id.", nameof(evt));
         var needed = string.Equals(evt.EventType, ClaimWorkEventTopics.WorkNeeded, StringComparison.Ordinal);
         if (!needed && !string.Equals(evt.EventType, ClaimWorkEventTopics.WorkResolved, StringComparison.Ordinal))
             throw new ArgumentException($"Unknown claim work event type '{evt.EventType}'.", nameof(evt));
+        var attributes = AttributesOf(evt);
+        return ApplyAsync(new SourceChange(evt.TenantId, WorkType.Claim, evt.ClaimId, evt.ClaimNumber, needed, attributes,
+            evt.SourceVersion, evt.EventId, evt.ActorId, evt.Resolution, "claims-service", $"pend {attributes.PrimaryPendCode}"), ct);
+    }
 
-        await _config.EnsureSeededAsync(evt.TenantId, ct);
-        var id = WorkItem.IdFor(evt.TenantId, WorkType.Claim, evt.ClaimId);
+    /// <summary>The work attributes of an enrollment exception: queues route on its reason code.</summary>
+    public static WorkItemAttributes AttributesOf(EnrollmentWorkSnapshot s) => new()
+    {
+        PrimaryPendCode = s.ReasonCode,
+        PendCodes = [s.ReasonCode],
+        PendReason = s.ReasonCode,
+        // Unchanged reason, unchanged item: a reconcile repeating the state does not rewrite it.
+        PendFingerprint = s.ReasonCode,
+        ReceivedDate = s.CreatedAt,
+        MemberId = s.MemberId,
+    };
+
+    /// <summary>Applies one enrollment exception that needs work (from enrollment-import-service).</summary>
+    public Task<IntakeOutcome> ApplyEnrollmentNeededAsync(string tenantId, EnrollmentWorkSnapshot snapshot, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(snapshot.ExceptionId))
+            throw new ArgumentException("An enrollment exception needs a tenant and an id.", nameof(snapshot));
+        return ApplyAsync(new SourceChange(tenantId, WorkType.Enrollment834, snapshot.ExceptionId, snapshot.Number, Needed: true,
+            AttributesOf(snapshot), snapshot.SourceVersion, $"enrollment:{snapshot.ExceptionId}:{snapshot.SourceVersion}", null, null,
+            "enrollment-import-service", snapshot.ReasonCode), ct);
+    }
+
+    internal async Task<IntakeOutcome> ApplyAsync(SourceChange change, CancellationToken ct)
+    {
+        await _config.EnsureSeededAsync(change.TenantId, ct);
+        var id = WorkItem.IdFor(change.TenantId, change.WorkType, change.SourceId);
 
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
-            var item = await _store.GetItemAsync(evt.TenantId, id, ct);
-            if (item is not null && evt.SourceVersion <= item.SourceVersion)
+            var item = await _store.GetItemAsync(change.TenantId, id, ct);
+            if (item is not null && change.SourceVersion <= item.SourceVersion)
                 return IntakeOutcome.Ignored;
 
-            var outcome = needed
-                ? await TryApplyNeededAsync(item, id, evt, ct)
-                : await TryApplyResolvedAsync(item, id, evt, ct);
+            var outcome = change.Needed
+                ? await TryApplyNeededAsync(item, id, change, ct)
+                : await TryApplyResolvedAsync(item, id, change, ct);
             if (outcome is { } done) return done;
         }
 
         throw new InvalidOperationException(
-            $"Work item {id} kept changing under {MaxAttempts} attempts to apply {evt.EventType}; the event will be retried.");
+            $"Work item {id} kept changing under {MaxAttempts} attempts to apply {(change.Needed ? "work-needed" : "work-resolved")}; it will be retried.");
     }
 
     /// <summary>Null when the compare-and-swap lost (re-read and retry).</summary>
-    private async Task<IntakeOutcome?> TryApplyNeededAsync(WorkItem? item, string id, ClaimWorkEvent evt, CancellationToken ct)
+    private async Task<IntakeOutcome?> TryApplyNeededAsync(WorkItem? item, string id, SourceChange evt, CancellationToken ct)
     {
         var now = Now;
-        var attributes = AttributesOf(evt);
+        var attributes = evt.Attributes;
         var queues = await _store.ListQueuesAsync(evt.TenantId, ct);
-        var queue = WorkRouter.Route(WorkType.Claim, attributes, queues);
+        var queue = WorkRouter.Route(evt.WorkType, attributes, queues);
 
         if (item is null)
         {
@@ -127,10 +166,10 @@ public sealed class WorkIntakeService
             {
                 Id = id,
                 TenantId = evt.TenantId,
-                WorkType = WorkType.Claim,
-                SourceRef = WorkItem.SourceRefFor(WorkType.Claim, evt.ClaimId),
-                SourceId = evt.ClaimId,
-                SourceNumber = evt.ClaimNumber,
+                WorkType = evt.WorkType,
+                SourceRef = WorkItem.SourceRefFor(evt.WorkType, evt.SourceId),
+                SourceId = evt.SourceId,
+                SourceNumber = evt.SourceNumber,
                 Attributes = attributes,
                 Status = WorkItemStatus.Open,
                 CreatedAt = now,
@@ -140,8 +179,8 @@ public sealed class WorkIntakeService
             };
             Place(item, queue, now);
             if (!await _store.TryCreateItemAsync(item, ct)) return null;
-            await AuditAsync(item, WorkAuditActions.Created, evt.ActorId ?? "claims-service", queueId: item.QueueId,
-                detail: $"pend {attributes.PrimaryPendCode}");
+            await AuditAsync(item, WorkAuditActions.Created, evt.ActorId ?? evt.DefaultActor, queueId: item.QueueId,
+                detail: evt.CreatedDetail);
             return IntakeOutcome.Created;
         }
 
@@ -156,7 +195,7 @@ public sealed class WorkIntakeService
             return IntakeOutcome.Ignored;
 
         item.Attributes = attributes;
-        item.SourceNumber = string.IsNullOrWhiteSpace(evt.ClaimNumber) ? item.SourceNumber : evt.ClaimNumber;
+        item.SourceNumber = string.IsNullOrWhiteSpace(evt.SourceNumber) ? item.SourceNumber : evt.SourceNumber;
         item.SourceVersion = evt.SourceVersion;
         item.LastEventId = evt.EventId;
         item.UpdatedAt = now;
@@ -175,19 +214,19 @@ public sealed class WorkIntakeService
 
         if (!wasActive)
         {
-            await AuditAsync(item, WorkAuditActions.Reopened, evt.ActorId ?? "claims-service", queueId: item.QueueId);
+            await AuditAsync(item, WorkAuditActions.Reopened, evt.ActorId ?? evt.DefaultActor, queueId: item.QueueId);
             return IntakeOutcome.Reopened;
         }
         if (previousQueue != item.QueueId)
         {
-            await AuditAsync(item, WorkAuditActions.Rerouted, evt.ActorId ?? "claims-service", queueId: item.QueueId,
+            await AuditAsync(item, WorkAuditActions.Rerouted, evt.ActorId ?? evt.DefaultActor, queueId: item.QueueId,
                 detail: $"from {previousQueue}");
             return IntakeOutcome.Rerouted;
         }
         return IntakeOutcome.Updated;
     }
 
-    private async Task<IntakeOutcome?> TryApplyResolvedAsync(WorkItem? item, string id, ClaimWorkEvent evt, CancellationToken ct)
+    private async Task<IntakeOutcome?> TryApplyResolvedAsync(WorkItem? item, string id, SourceChange evt, CancellationToken ct)
     {
         var now = Now;
         if (item is null)
@@ -199,11 +238,11 @@ public sealed class WorkIntakeService
             {
                 Id = id,
                 TenantId = evt.TenantId,
-                WorkType = WorkType.Claim,
-                SourceRef = WorkItem.SourceRefFor(WorkType.Claim, evt.ClaimId),
-                SourceId = evt.ClaimId,
-                SourceNumber = evt.ClaimNumber,
-                Attributes = AttributesOf(evt),
+                WorkType = evt.WorkType,
+                SourceRef = WorkItem.SourceRefFor(evt.WorkType, evt.SourceId),
+                SourceId = evt.SourceId,
+                SourceNumber = evt.SourceNumber,
+                Attributes = evt.Attributes,
                 Status = WorkItemStatus.Done,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -233,7 +272,7 @@ public sealed class WorkIntakeService
         if (!await _store.TryReplaceItemAsync(item, expected, ct)) return null;
         if (!wasActive) return IntakeOutcome.Ignored;
 
-        await AuditAsync(item, WorkAuditActions.Completed, evt.ActorId ?? "claims-service", fromUser: previousHolder,
+        await AuditAsync(item, WorkAuditActions.Completed, evt.ActorId ?? evt.DefaultActor, fromUser: previousHolder,
             queueId: item.QueueId, detail: evt.Resolution);
         return IntakeOutcome.Completed;
     }
@@ -359,6 +398,65 @@ public sealed class WorkIntakeService
         result.Succeeded = true;
         _logger.LogInformation(
             "Reconciled tenant {TenantId}: {Pended} pended, {Created} created, {Reopened} reopened, {Updated} updated, {Closed} closed",
+            tenantId, result.Pended, result.Created, result.Reopened, result.Updated, result.Closed);
+        return result;
+    }
+
+    /// <summary>
+    /// Brings Enrollment834 items in step with enrollment-import-service's
+    /// exceptions that need work: each becomes (or stays) an item, and every
+    /// open item whose exception no longer needs work (resolved, or on hold) is
+    /// closed. Like the claims reconcile, nothing closes unless every page was
+    /// read. Enrollment has no event stream yet, so this is how its work flows.
+    /// </summary>
+    public async Task<ReconcileResult> ReconcileEnrollmentAsync(string tenantId, IEnrollmentWorkSource source, int pageSize, CancellationToken ct = default)
+    {
+        var result = new ReconcileResult { TenantId = tenantId, StartedAt = Now };
+        var needed = new List<EnrollmentWorkSnapshot>();
+        try
+        {
+            for (var page = 1; ; page++)
+            {
+                var snapshot = await source.GetWorkablePageAsync(tenantId, page, pageSize, ct);
+                needed.AddRange(snapshot.Items);
+                if (snapshot.Items.Count == 0 || page * snapshot.PageSize >= snapshot.TotalCount) break;
+                if (page >= 10_000) throw new InvalidOperationException("Snapshot paging did not terminate.");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Enrollment reconcile for tenant {TenantId} could not read enrollment-import-service; nothing changed", tenantId);
+            result.Error = $"enrollment-import-service unavailable: {ex.Message}";
+            return result;
+        }
+
+        result.Pended = needed.Count;
+        var neededIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var snapshot in needed)
+        {
+            neededIds.Add(snapshot.ExceptionId);
+            switch (await ApplyEnrollmentNeededAsync(tenantId, snapshot, ct))
+            {
+                case IntakeOutcome.Created: result.Created++; break;
+                case IntakeOutcome.Reopened: result.Reopened++; break;
+                case IntakeOutcome.Updated or IntakeOutcome.Rerouted: result.Updated++; break;
+                default: result.Unchanged++; break;
+            }
+        }
+
+        var closeVersion = result.StartedAt.Ticks;
+        foreach (var item in await _store.ListActiveItemsAsync(tenantId, WorkType.Enrollment834, ct))
+        {
+            if (neededIds.Contains(item.SourceId) || item.SourceVersion >= closeVersion) continue;
+            var outcome = await ApplyAsync(new SourceChange(tenantId, WorkType.Enrollment834, item.SourceId, item.SourceNumber,
+                Needed: false, item.Attributes, closeVersion, $"reconcile:{item.SourceId}:{closeVersion}", ReconcileActor,
+                "Resolved or on hold in enrollment (reconcile)", ReconcileActor, null), ct);
+            if (outcome == IntakeOutcome.Completed) result.Closed++;
+        }
+
+        result.Succeeded = true;
+        _logger.LogInformation(
+            "Reconciled enrollment work for tenant {TenantId}: {Needed} needing work, {Created} created, {Reopened} reopened, {Updated} updated, {Closed} closed",
             tenantId, result.Pended, result.Created, result.Reopened, result.Updated, result.Closed);
         return result;
     }
