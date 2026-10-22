@@ -1,3 +1,4 @@
+using CloudHealthOffice.GrouperEngine.Domain;
 using CloudHealthOffice.GrouperEngine.Formulas;
 using Xunit;
 
@@ -17,7 +18,7 @@ namespace CloudHealthOffice.GrouperEngine.Tests;
 public class CodeDrivenNodeTests
 {
     private static ClaimDiagnosis Dx(int mdc, params string[] operands) =>
-        ClaimDiagnosis.Create("Z000", mdc, operands);
+        ClaimDiagnosis.Create("Z000", mdc, ComplicationLevel.None, operands);
 
     private static ClaimProcedure Pr(params string[] operands) =>
         ClaimProcedure.Create("0JH00ZZ", operands);

@@ -313,6 +313,39 @@ public class CmsJsonTableImporterTests : IDisposable
     }
 
     /// <summary>
+    /// A real release's CC exclusion lists import, and every group a principal
+    /// diagnosis names is a group the release holds.
+    ///
+    /// <para>
+    /// Skipped unless <c>CMS_MSDRG_TABLES</c> names a directory. The scale is
+    /// the point: CC exclusions are the mechanism that stops a stay being paid
+    /// twice for one clinical fact, so a version filter that matched almost
+    /// nothing would quietly raise what a large share of stays is paid.
+    /// </para>
+    /// </summary>
+    [SkippableFact]
+    public void A_real_releases_cc_exclusion_lists_import()
+    {
+        var tables = Environment.GetEnvironmentVariable("CMS_MSDRG_TABLES");
+        Skip.If(
+            string.IsNullOrWhiteSpace(tables),
+            "Set CMS_MSDRG_TABLES to a CMS MS-DRG release's table directory to run this.");
+
+        var version = Environment.GetEnvironmentVariable("CMS_MSDRG_VERSION") ?? "V440";
+        var exclusions = CmsJsonTableImporter.ImportExclusions(tables!, version);
+
+        Assert.Equal(version, exclusions.Version);
+        Assert.True(
+            exclusions.PrincipalDiagnosisCount > 20_000,
+            $"Only {exclusions.PrincipalDiagnosisCount} principal diagnoses have an "
+                + $"exclusion group for {version}.");
+
+        // A code CMS excludes against itself: tuberculous meningitis as a
+        // secondary says nothing a tuberculous-meningitis principal did not.
+        Assert.Contains("A170", exclusions.ExclusionsFor("A170"));
+    }
+
+    /// <summary>
     /// A real release's clusters import, and every cluster code they name is a
     /// code the procedure table knows.
     ///

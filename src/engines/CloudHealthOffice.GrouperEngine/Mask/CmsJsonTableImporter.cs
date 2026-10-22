@@ -2,6 +2,8 @@ using System.Collections.Frozen;
 using System.Text.Json;
 using CloudHealthOffice.GrouperEngine.Domain;
 
+using CloudHealthOffice.GrouperEngine.Severity;
+
 namespace CloudHealthOffice.GrouperEngine.Mask;
 
 /// <summary>
@@ -34,6 +36,113 @@ public static class CmsJsonTableImporter
     private const string ProcedurePatternFile = "prPatterns.json";
     private const string SexMdcFile = "codeGenderMdcs.json";
     private const string ClusterFile = "clusters.json";
+    private const string PrincipalExclusionFile = "pdxExclusionGroups.json";
+    private const string ExclusionGroupFile = "exclusionGroups.json";
+
+    /// <summary>
+    /// Imports the CC exclusion lists in <paramref name="directory"/> for
+    /// <paramref name="version"/>.
+    ///
+    /// <para>
+    /// Two files: one mapping each principal diagnosis to a group id for a
+    /// version, and one holding the groups. The groups are shared heavily —
+    /// V44 points 26,168 principal diagnoses at 3,013 groups, the largest of
+    /// which lists 5,565 codes — so each group is read once and the index
+    /// holds references to it.
+    /// </para>
+    ///
+    /// <para>
+    /// A principal diagnosis naming a group the group file does not hold is
+    /// refused rather than skipped. Skipping it would silently stop excluding
+    /// anything for that principal, and the consequence of under-excluding is
+    /// a higher-paying DRG, not an error.
+    /// </para>
+    /// </summary>
+    public static InMemoryExclusionSource ImportExclusions(string directory, string version)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+
+        using var groupDocument = ReadDocument(directory, ExclusionGroupFile);
+
+        var groups = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+
+        foreach (var group in
+            Member(groupDocument.RootElement, "exclusionGroups", ExclusionGroupFile)
+                .EnumerateObject())
+        {
+            // The secondary's code is matched case-insensitively, where CMS
+            // matches it exactly. The difference is deliberate and one-sided:
+            // CHO's own code lookup is already case-insensitive, so matching
+            // exactly here would exclude nothing for a differently-cased code
+            // that the rest of the engine recognises -- and under-excluding
+            // pays more, not less.
+            var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (group.Value.TryGetProperty("codes", out var listed))
+            {
+                foreach (var code in listed.EnumerateArray())
+                {
+                    var value = code.GetString();
+                    if (!string.IsNullOrEmpty(value))
+                    {
+                        codes.Add(value);
+                    }
+                }
+            }
+
+            groups[group.Name] = codes;
+        }
+
+        using var principalDocument = ReadDocument(directory, PrincipalExclusionFile);
+
+        var byPrincipal = new Dictionary<string, IReadOnlySet<string>>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var principal in
+            Member(principalDocument.RootElement, "pdx_exclusion_groups", PrincipalExclusionFile)
+                .EnumerateObject())
+        {
+            if (!principal.Value.TryGetProperty("groups", out var rows))
+            {
+                continue;
+            }
+
+            foreach (var row in rows.EnumerateArray())
+            {
+                if (!MentionsVersion(row, version))
+                {
+                    continue;
+                }
+
+                var id = row.TryGetProperty("groupId", out var groupId)
+                    ? groupId.GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : throw new MsDrgTableImportException(
+                        $"{PrincipalExclusionFile} has a row for '{principal.Name}' with no "
+                        + "'groupId'.");
+
+                if (!groups.TryGetValue(id, out var codes))
+                {
+                    throw new MsDrgTableImportException(
+                        $"{PrincipalExclusionFile} points '{principal.Name}' at exclusion group "
+                        + $"'{id}', which {ExclusionGroupFile} does not hold.");
+                }
+
+                if (byPrincipal.TryGetValue(principal.Name, out var already)
+                    && !ReferenceEquals(already, codes))
+                {
+                    throw new MsDrgTableImportException(
+                        $"{PrincipalExclusionFile} gives '{principal.Name}' two different "
+                        + $"exclusion groups for {version}. The release is inconsistent and "
+                        + "guessing which to use would change what the stay is paid.");
+                }
+
+                byPrincipal[principal.Name] = codes;
+            }
+        }
+
+        return new InMemoryExclusionSource(version, byPrincipal);
+    }
 
     /// <summary>
     /// Imports the procedure clusters in <paramref name="directory"/> for

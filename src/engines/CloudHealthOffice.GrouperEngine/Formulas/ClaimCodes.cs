@@ -1,3 +1,5 @@
+using CloudHealthOffice.GrouperEngine.Domain;
+
 namespace CloudHealthOffice.GrouperEngine.Formulas;
 
 /// <summary>
@@ -16,6 +18,11 @@ namespace CloudHealthOffice.GrouperEngine.Formulas;
 /// </summary>
 /// <param name="Code">The diagnosis code, for explaining a decision.</param>
 /// <param name="Mdc">The MDC the code is assigned to.</param>
+/// <param name="Severity">
+/// The code's own complication level, before the stay's exclusions are
+/// applied. What the stay is actually credited with is decided per formula;
+/// see <c>MsDrgSeverityProcessor</c>.
+/// </param>
 /// <param name="Operands">
 /// The code's operand list names, compared case-insensitively and without a
 /// position prefix, as CMS's string overload does.
@@ -23,6 +30,7 @@ namespace CloudHealthOffice.GrouperEngine.Formulas;
 public sealed record ClaimDiagnosis(
     string Code,
     int Mdc,
+    ComplicationLevel Severity,
     IReadOnlySet<string> Operands)
 {
     /// <summary>
@@ -51,7 +59,7 @@ public sealed record ClaimDiagnosis(
     /// Builds a diagnosis with the right comparer for its operand set.
     /// </summary>
     public static ClaimDiagnosis Create(
-        string code, int mdc, IEnumerable<string> operands)
+        string code, int mdc, ComplicationLevel severity, IEnumerable<string> operands)
     {
         ArgumentNullException.ThrowIfNull(operands);
 
@@ -63,7 +71,7 @@ public sealed record ClaimDiagnosis(
             names.Add(OperandName.Parse(operand).ListName);
         }
 
-        return new ClaimDiagnosis(code, mdc, names);
+        return new ClaimDiagnosis(code, mdc, severity, names);
     }
 }
 

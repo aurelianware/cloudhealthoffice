@@ -187,14 +187,24 @@ after the operand they match. `SGLANTFUSECTR` matches the operand `SGLANTCTR`
 and `SGLPOST1FUSECTR` matches `SGLPOST1CTR`. A table keyed on the member names
 leaves both counters as ordinary mask lookups, which are always false.
 
+`SeverityCheck` calls CMS's real `MsdrgSeverityProcessor` directly. Severity is
+not a property of a claim: it is recomputed for **every** formula an MDC holds,
+with that formula's own suppression list applied, and added to the mask as an
+operand before the formula is evaluated. 56 of V44's 824 formulas carry a
+suppression list; the other 768 write a list of one empty string, which matches
+no list and so suppresses nothing. The check pins that, and that both the
+suppression operand and a code's attribute are matched case-insensitively with
+any position prefix ignored.
+
 Run them after changing the formula evaluator, or on a new fiscal year's jars:
 
 ```
 CMS_MSDRG_JARS=/path/to/jars ./run.sh            # the parity corpus
 java -cp <same classpath> gov.cho.grouper.oracle.SpecialNodeCheck
 java -cp <same classpath> gov.cho.grouper.oracle.CodeDrivenNodeCheck
+java -cp <same classpath> gov.cho.grouper.oracle.SeverityCheck
 java -cp <same classpath> gov.cho.grouper.oracle.FormulaPrecedenceCheck
 ```
 
-Their answers are asserted on the .NET side in `SpecialLogicListTests` and
-`CodeDrivenNodeTests`.
+Their answers are asserted on the .NET side in `SpecialLogicListTests`,
+`CodeDrivenNodeTests` and `SeverityTests`.

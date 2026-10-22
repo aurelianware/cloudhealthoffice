@@ -1,3 +1,4 @@
+using CloudHealthOffice.GrouperEngine.Domain;
 using CloudHealthOffice.GrouperEngine.Formulas;
 using CloudHealthOffice.GrouperEngine.Models;
 
@@ -148,7 +149,7 @@ public sealed class MsDrgMaskBuilder
 
             AddDiagnosis(mask, attributes, OperandPosition.SecondaryDiagnosis);
             claimDiagnoses.Add(ClaimDiagnosis.Create(
-                secondary.Code, attributes.Mdc, attributes.Operands));
+                secondary.Code, attributes.Mdc, attributes.Severity, attributes.Operands));
         }
 
         // Clusters are resolved before the procedures are added, because a
@@ -195,7 +196,8 @@ public sealed class MsDrgMaskBuilder
         {
             AddDiagnosis(mask, principal, OperandPosition.PrincipalDiagnosis);
             claimDiagnoses.Insert(0, ClaimDiagnosis.Create(
-                request.PrincipalDiagnosis.Code, principal.Mdc, principal.Operands));
+                request.PrincipalDiagnosis.Code, principal.Mdc,
+                principal.Severity, principal.Operands));
         }
         else
         {
@@ -245,7 +247,7 @@ public sealed class MsDrgMaskBuilder
     /// </para>
     /// </summary>
     private static ClaimDiagnosis Unrecognised(string code) =>
-        ClaimDiagnosis.Create(code, -1, []);
+        ClaimDiagnosis.Create(code, -1, ComplicationLevel.None, []);
 
     /// <summary>
     /// Adds a procedure's operands, suppressed in the MDCs a cluster has
