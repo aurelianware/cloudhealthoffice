@@ -5,6 +5,7 @@ using CloudHealthOffice.ProviderEnrollmentService.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using CloudHealthOffice.Infrastructure.Logging;
+using CloudHealthOffice.Infrastructure.Middleware;
 
 namespace CloudHealthOffice.ProviderEnrollmentService.Gates;
 
@@ -19,8 +20,11 @@ namespace CloudHealthOffice.ProviderEnrollmentService.Gates;
 ///
 /// ── Gate evaluation order ─────────────────────────────────────────
 ///
-///   0. Resolve tenant context from HttpContext header "X-Tenant-Id"
-///      → no context (batch/test path) → Pass
+///   0. Tenant from the request's tenant context (HttpContext.Items["TenantId"],
+///      set by TenantMiddleware from the caller's token; never a request
+///      header) → no tenant context → throws TenantContextMissingException:
+///      without the tenant the gate cannot know whether enforcement is on,
+///      so it fails loudly rather than passing an unchecked provider
 ///   1. Load TenantEnrollmentConfig → null (not configured) → Pass
 ///   2. ResolveFor(lob) → GateMode
 ///      → Disabled → Pass
@@ -82,14 +86,17 @@ public sealed partial class StateEnrollmentGate : IEnrollmentDecisionGate
         LogEnrollmentGateEntry(_logger, npi, stateCode, taxonomy, lob, serviceDate);
 
         // ── Step 0: Resolve tenant context ───────────────────────────
+        // Only the tenant TenantMiddleware derived from the caller's token.
+        // A client header is never trusted, and a missing tenant is an
+        // error, not a pass: both callers (PAS $submit and the benefit-plan
+        // enrollment check) run behind TenantMiddleware.
         var tenantId = string.Concat(StripLineBreaks(
-            _httpContextAccessor.HttpContext?.Items["TenantId"] as string
-            ?? _httpContextAccessor.HttpContext?.Request.Headers["X-Tenant-Id"].FirstOrDefault()));
+            _httpContextAccessor.HttpContext?.GetTenantIdOrDefault()));
 
         if (string.IsNullOrEmpty(tenantId))
         {
-            _logger.LogDebug("No tenant context — enrollment gate skipped (batch/test path)");
-            return GateResult.Pass();
+            throw new TenantContextMissingException(
+                "The state enrollment gate needs the request's tenant context (TenantMiddleware); none was found.");
         }
 
         // ── Step 1: Load tenant config ───────────────────────────────
