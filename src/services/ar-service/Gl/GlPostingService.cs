@@ -503,6 +503,40 @@ public sealed class GlPostingService
         record.SourceReference = proposal.SourceReference;
         record.ClaimedAmount = proposal.ClaimedAmount;
 
+        if (envelope.Type == GlEventTypes.PaymentFileSettled)
+        {
+            var settlement = System.Text.Json.JsonSerializer.Deserialize<PaymentFileSettledEvent>(envelope.PayloadJson, GlEventTypes.Json)!;
+            var transmission = await _events.GetAsync(record.TenantId, settlement.TransmissionEventId, cancellationToken);
+            if (transmission?.Status != GlSourceEventStatus.Posted)
+            {
+                Park(record, GlParkReason.AwaitingSourceEvent, "The exact file transmission must post before settlement.", settlement.TransmissionEventId);
+                return;
+            }
+            // Do not let a valid event id for another run/file justify this cash movement.
+            PaymentFileTransmittedEvent? sent = null;
+            try { sent = System.Text.Json.JsonSerializer.Deserialize<PaymentFileTransmittedEvent>(transmission.PayloadJson, GlEventTypes.Json); }
+            catch (System.Text.Json.JsonException) { }
+            if (transmission.Type != GlEventTypes.PaymentFileTransmitted || sent is null
+                || sent.TenantId != record.TenantId || sent.PaymentRunId != settlement.PaymentRunId || sent.FileReference != settlement.FileReference
+                || sent.TotalDebitAmount != 0m || sent.TotalCreditAmount != settlement.Amount)
+            {
+                Park(record, GlParkReason.InvalidPayload, "Settlement does not match its posted transmission's run, file and amount.");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(transmission.EntryId)
+                || await _journal.GetAsync(record.TenantId, GlJournal.ReversalId(transmission.EntryId), cancellationToken) is not null)
+            {
+                Park(record, GlParkReason.InvalidPayload, "Settlement requires an unreversed transmission journal entry.");
+                return;
+            }
+            if (_options.AccountFor(record.TenantId, GlPostingRole.AchInTransit)
+                == _options.AccountFor(record.TenantId, GlPostingRole.Cash))
+            {
+                Park(record, GlParkReason.NeedsMapping, "Bank settlement requires distinct ACH-in-transit and cash accounts.");
+                return;
+            }
+        }
+
         if (await CutoverHoldAsync(record, proposal, cancellationToken) is { } hold
             && !(options.IncludeBeforeCutover && hold.Reason == GlParkReason.PreCutover))
         {

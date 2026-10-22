@@ -60,6 +60,7 @@ public static class GlEntryBuilder
                 GlEventTypes.PaymentRunExecuted => Accrual(Read<PaymentRunExecutedEvent>(envelope)),
                 GlEventTypes.ReversalRunExecuted => Recoupment(Read<ReversalRunExecutedEvent>(envelope)),
                 GlEventTypes.PaymentFileTransmitted => Transmission(Read<PaymentFileTransmittedEvent>(envelope)),
+                GlEventTypes.PaymentFileSettled => Settlement(Read<PaymentFileSettledEvent>(envelope)),
                 GlEventTypes.PaymentVoidedBeforeTransmission => Void(Read<PaymentVoidedBeforeTransmissionEvent>(envelope)),
                 // Posted by hand (see GlPostingService): an open item, never an automatic entry.
                 GlEventTypes.ProviderRefundOwed => null,
@@ -171,6 +172,28 @@ public static class GlEntryBuilder
             [
                 (GlPostingRole.ClaimsPayable, e.TotalCreditAmount, 0m, $"payable settled by file {e.FileReference} ({e.EntryCount} credits)"),
                 (GlPostingRole.AchInTransit, 0m, e.TotalCreditAmount, $"ACH in transit, file {e.FileReference}, sha256 {e.Sha256}"),
+            ],
+        };
+    }
+
+    private static GlProposedEntry Settlement(PaymentFileSettledEvent e)
+    {
+        Require(!string.IsNullOrWhiteSpace(e.PaymentRunId) && !string.IsNullOrWhiteSpace(e.FileReference)
+            && !string.IsNullOrWhiteSpace(e.TransmissionEventId) && !string.IsNullOrWhiteSpace(e.BankTransactionId),
+            "PaymentFileSettled requires run, file, transmission event and bank transaction identities.");
+        Money(e.Amount, "settlement amount");
+        Require(e.Amount > 0m, "PaymentFileSettled amount must be positive.");
+        Require(e.BankAsOfDate != default, "PaymentFileSettled requires the bank statement date.");
+        return new GlProposedEntry
+        {
+            Kind = GlEntryKind.AchSettlement, Key = $"settlement:{e.PaymentRunId}",
+            SourceDocumentId = e.PaymentRunId, SourceReference = e.FileReference,
+            EntryDate = e.BankAsOfDate.Date, PostedBy = e.SettledBy, ClaimedAmount = e.Amount,
+            RunExecutedAt = e.PaymentRunExecutedAt, PaymentRunId = e.PaymentRunId,
+            Description = $"Bank-confirmed settlement of file {e.FileReference}",
+            Lines = [
+                (GlPostingRole.AchInTransit, e.Amount, 0m, $"settled file {e.FileReference}"),
+                (GlPostingRole.Cash, 0m, e.Amount, $"bank transaction {e.BankTransactionId}"),
             ],
         };
     }

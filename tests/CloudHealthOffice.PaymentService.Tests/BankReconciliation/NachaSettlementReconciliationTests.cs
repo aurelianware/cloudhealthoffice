@@ -78,6 +78,17 @@ public class NachaSettlementReconciliationTests
         Assert.NotNull(settlement);
         Assert.Equal(15234.56m, settlement!.Amount);
         Assert.Equal(item.Id, settlement.ReconciliationItemId);
+        var message = Assert.Single(settlement.GlOutbox);
+        Assert.Equal(CloudHealthOffice.Finance.Contracts.GlEventTypes.PaymentFileSettled, message.Type);
+        var payload = System.Text.Json.JsonSerializer.Deserialize<CloudHealthOffice.Finance.Contracts.PaymentFileSettledEvent>(
+            message.PayloadJson, CloudHealthOffice.Finance.Contracts.GlEventTypes.Json)!;
+        Assert.Equal(settlement.Amount, payload.Amount);
+        Assert.Equal(settlement.BankTransactionId, payload.BankTransactionId);
+        Assert.Equal(settlement.BankAsOfDate.Date, payload.BankAsOfDate);
+        Assert.Equal(settlement.PaymentRunId, payload.PaymentRunId);
+        Assert.False(string.IsNullOrWhiteSpace(payload.TransmissionEventId));
+        Assert.Null(settlement.GlAccountingLimitation);
+
     }
 
     [Fact]
@@ -125,6 +136,10 @@ public class NachaSettlementReconciliationTests
         File("PREM-DRAFT-1", credits: 0, debits: 870.10m);
         var item = (await Reconcile(Single(new Tx("166", 87010)))).Items.Single();
         Assert.Equal(ReconciliationStatus.Matched, item.Status);
+        var settlement = await _nacha.GetAsync(Tenant, "PREM-DRAFT-1");
+        Assert.NotNull(settlement);
+        Assert.Empty(settlement.GlOutbox);
+        Assert.NotNull(settlement.GlAccountingLimitation);
     }
 
     [Fact]

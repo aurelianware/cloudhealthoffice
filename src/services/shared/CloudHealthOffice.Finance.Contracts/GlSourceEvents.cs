@@ -39,12 +39,14 @@ public static class GlEventTypes
     /// </summary>
     public const string VoidRemainderReissued = "VoidRemainderReissued";
 
+    /// <summary>A bank debit settled a whole credits-only claims NACHA file.</summary>
+    public const string PaymentFileSettled = "PaymentFileSettled";
+
     // Seams, not produced yet:
-    //   PaymentFileSettled   - bank acknowledgement / settlement: ACH in transit -> cash.
     //   PaymentFileReturned  - an ACH return: cash/in transit -> payable again.
     //   CapitationDisbursed, PremiumCashReceived - capitation-service / premium-billing-service.
 
-    public static readonly IReadOnlyList<string> All = [PaymentRunExecuted, ReversalRunExecuted, PaymentFileTransmitted, PaymentVoidedBeforeTransmission, ProviderRefundOwed, VoidRemainderReissued];
+    public static readonly IReadOnlyList<string> All = [PaymentRunExecuted, ReversalRunExecuted, PaymentFileTransmitted, PaymentVoidedBeforeTransmission, ProviderRefundOwed, VoidRemainderReissued, PaymentFileSettled];
 
     /// <summary>The JSON options every GL payload is written and read with (camelCase).</summary>
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -251,4 +253,19 @@ public sealed record VoidRemainderReissuedEvent
     public DateTime ReissuedAt { get; init; }
     public string ReissuedBy { get; init; } = string.Empty;
     public DateTime? PaymentRunExecutedAt { get; init; }
+}
+
+/// <summary>Bank-confirmed settlement, no bank account or member details.</summary>
+public sealed record PaymentFileSettledEvent
+{
+    public string EventId { get; init; } = string.Empty;
+    public string TenantId { get; init; } = string.Empty;
+    public string PaymentRunId { get; init; } = string.Empty;
+    public string FileReference { get; init; } = string.Empty;
+    public string TransmissionEventId { get; init; } = string.Empty;
+    public string BankTransactionId { get; init; } = string.Empty;
+    public decimal Amount { get; init; }
+    public DateTime BankAsOfDate { get; init; }
+    public DateTime? PaymentRunExecutedAt { get; init; }
+    public string SettledBy { get; init; } = string.Empty;
 }

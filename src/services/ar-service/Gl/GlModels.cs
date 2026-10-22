@@ -54,6 +54,9 @@ public enum GlEntryKind
     /// reversal run opened is cancelled; the recoupment already reversed the expense).
     /// </summary>
     PaymentVoid,
+
+    /// <summary>Bank-confirmed settlement: Dr ACH in transit, Cr cash.</summary>
+    AchSettlement,
 }
 
 /// <summary>One side of one account. Exactly one of Debit / Credit is positive; amounts are money (2 decimals).</summary>
