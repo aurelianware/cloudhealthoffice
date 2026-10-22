@@ -10,8 +10,10 @@ Phase 2's engine half is implemented: the canonical contract carries
 terms. Phase 2's service half is implemented too: the rate sheet is written on the
 legal contract in provider-contracts-service, a fee-for-service rate config
 posts as a term rather than to `ffs-service`, and the legal contract projects to
-the engine contract a claim would be priced from. Phases 3 to 5 are planned for
-later PRs.
+the engine contract a claim would be priced from. Phase 3's contract backfill is
+implemented as `tools/ProviderContractBackfill`, with the conflict report the
+cutover is gated on; phase 3's fee schedule re-ingest, and phases 4 and 5, are
+planned for later PRs.
 
 ## Context
 
@@ -307,22 +309,44 @@ implemented, rather than silently ignoring them.
 
 **Phase 3: backfill.**
 
-- One idempotent job per tenant builds a canonical contract for each
-  `provider_contracts` document:
-  - identity and scope come from the legal contract;
-  - terms come from its `FfsRateConfig` and `CapitationRateConfig` children;
-  - where an engine `ProviderContract` exists for the same NPI and plan, its
-    `FeeScheduleId` and `ContractLines` become terms.
-- Engine contracts with no legal contract (seeded data) become canonical
-  contracts flagged `origin: engine-only` for review.
-- Deterministic ids, so a re-run updates rather than duplicates.
-- Each run produces a conflict report: the same NPI and plan with different
-  schedules, plan-scope mismatches, and terms that reference missing
-  schedules. Conflicts block the tenant's cutover until resolved.
-- PricingApi `fee_schedule_entries` are re-ingested into global
+- **Done.** `tools/ProviderContractBackfill` — a `plan` / `hash` / `apply` tool,
+  documented at
+  [docs/operations/PROVIDER-CONTRACT-BACKFILL.md](../operations/PROVIDER-CONTRACT-BACKFILL.md).
+  `plan` only reads, and writes the canonical documents to a JSON file so that
+  what a reviewer reads is what lands; `apply` without `--execute` is a dry run;
+  `--execute` needs that plan's SHA-256 and an operator name, so an edited or
+  stale plan cannot be applied by accident. Ids are deterministic
+  (`{tenant}:{npi}:{plan}`), so a re-run replaces rather than duplicates.
+
+  Identity and scope come from the legal contract; terms from its `FfsRateConfig`
+  and `CapitationRateConfig` children and from the engine contract's
+  `ContractLines` (scoped terms, first) and `FeeScheduleId` (the last-resort
+  term); `LesserOfBilledCharges` from the engine contract, which is where the
+  provision is recorded today. A legal contract that already carries its own
+  rate sheet is used as it is. Engine contracts with no legal contract become
+  canonical contracts flagged `origin: engine-only`.
+
+  The same rate recorded in two stores is one term, but only where the one kept
+  is in force for at least as long, so collapsing can never leave a gap where no
+  rate prices. Two rates in succession are a rate history, not a disagreement.
+
+  Every run produces the conflict report, and nothing in it is written: more than
+  one rate pricing every line for the same dates, a hybrid contract with no
+  record of which services are capitated, terms naming a schedule the tenant does
+  not have, a legal contract with no plan ids, two legal contracts covering the
+  same provider and plan, a rate config with no schedule, and a sheet
+  provider-contracts-service would reject. Conflicts block the tenant's cutover
+  until resolved. A contract that is written but flagged — engine-only, not
+  Active, `TieredException` — also blocks the cutover while the flag stands.
+
+  `ProviderContractBackfillTests` runs all of this against a real mongod, with
+  the four stores seeded as they actually look.
+
+- **Open.** PricingApi `fee_schedule_entries` are re-ingested into global
   `FeeSchedule` documents through the loaders. The invariant is the
   cross-store parity test: for every code and place of service, the re-ingested
-  schedule prices to the stored legacy price.
+  schedule prices to the stored legacy price. This is a job over schedules rather
+  than contracts, and the contract backfill does not do it.
 
 **Phase 4: dual read (shadow).**
 
@@ -461,6 +485,7 @@ BenefitEngine and claims-service have no facility-rate POS list
 - `src/services/benefit-plan-service/Controllers/AdjudicationController.cs` (`resolve-rates`)
 - `src/services/provider-contracts-service/Models/ProviderContract.cs`
 - `src/services/provider-contracts-service/Models/PricingContractProjection.cs`
+- `tools/ProviderContractBackfill/` and `docs/operations/PROVIDER-CONTRACT-BACKFILL.md`
 - `src/services/provider-contracts-service/Models/ReimbursementTermRequests.cs`
 - `src/services/ffs-service/Models/FfsRateConfig.cs` (superseded; read by the phase 3 backfill)
 - `src/engines/CloudHealthOffice.FeeScheduleEngine/Models/ReimbursementTerms.cs`
