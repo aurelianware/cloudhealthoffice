@@ -99,6 +99,31 @@ using the grouper, Pricer or I/OCE outside Original Medicare claims
 processing, and the jars are Java (8 today, moving to 17; Java 8 support ends
 November 2026). A .NET platform cannot link them in-process.
 
+### What is actually in the V44 definitions manual download
+
+Checked rather than assumed, because option A stands or falls on whether the
+tables are machine-readable. `fy2027-fr-icd10-ms-drg-definitions-manual-files-v44.zip`
+(4.5 MB compressed, 67 MB of fixed-width text) holds nine files, and each one
+maps onto a table in section 5 step 2:
+
+| File | Holds | Maps to |
+| --- | --- | --- |
+| `appendix_A.txt` | 779 lines: every MS-DRG with its MDC and an `M`/`P` medical-or-surgical flag. Pre-MDC DRGs have the MDC column blank, which is how they identify themselves. | `MsDrgDefinition` (code, title, MDC, partition) |
+| `appendix_B.txt` | 90,817 lines: each ICD-10-CM code with its MDC and the MS-DRG range it defines the logic of | `MdcAssignment` |
+| `appendix_C.txt` | 209,778 lines, in three parts: the CC and MCC lists with each code's HAC category, the codes that are an MCC only for patients discharged alive, and the codes excluded from acting as a CC/MCC within named DRGs. Each CC row names its principal-diagnosis exclusion group. | `ComplicationAssignment` and `CcExclusion` |
+| `appendix_D_E.txt` | The surgical hierarchy, MDC by MDC, as an ordered list — MDC 08 runs from extensive spinal fusion down to major joint replacement at position 23 | `SurgicalClassAssignment.HierarchyRank` |
+| `appendix_F_I.txt` | The unrelated-O.R.-procedure DRGs (981-989) and their severity tables | `DrgFamilyRule` |
+| `mdcs_00_07.txt` … `mdcs_22_25.txt` | Per-MDC logic: the diagnosis codes assigned to the MDC, then each surgical class with its procedure codes | `MdcAssignment`, `SurgicalClassAssignment` |
+
+Two things fall out of this. The surgical hierarchy really is a plain ranked
+list, so modelling it as a rank per class is not a simplification. And the
+hierarchy entries are DRG ranges rather than named classes, so the importer
+derives the class key from the range — `469-470` is one class, not two.
+
+A detail the manual settles: in V44 the 469/470 family is titled "… or Total
+Ankle Replacement", not the FY 2018 wording. The seed slice carries the V44
+titles verbatim so a reviewer can diff them against Appendix A.
+
 ## Decision
 
 ### 4. The three options

@@ -34,41 +34,41 @@ public static class MsDrgSeedTables
         var drgs = new List<MsDrgDefinition>
         {
             // ── Pre-MDC: heart transplant.
-            new() { Drg = "001", Title = "Heart transplant or implant of heart assist system with MCC",
+            new() { Drg = "001", Title = "Heart Transplant or Implant of Heart Assist System with MCC",
                     Mdc = null, Partition = DrgPartition.PreMdc,
                     FamilyKey = Families.HeartTransplant, Severity = DrgSeverity.WithMcc },
-            new() { Drg = "002", Title = "Heart transplant or implant of heart assist system without MCC",
+            new() { Drg = "002", Title = "Heart Transplant or Implant of Heart Assist System without MCC",
                     Mdc = null, Partition = DrgPartition.PreMdc,
                     FamilyKey = Families.HeartTransplant, Severity = DrgSeverity.WithoutCcMcc },
 
             // ── MDC 04, medical: simple pneumonia and pleurisy. A three-way split.
-            new() { Drg = "193", Title = "Simple pneumonia and pleurisy with MCC",
+            new() { Drg = "193", Title = "Simple Pneumonia and Pleurisy with MCC",
                     Mdc = 4, Partition = DrgPartition.Medical,
                     FamilyKey = Families.SimplePneumonia, Severity = DrgSeverity.WithMcc },
-            new() { Drg = "194", Title = "Simple pneumonia and pleurisy with CC",
+            new() { Drg = "194", Title = "Simple Pneumonia and Pleurisy with CC",
                     Mdc = 4, Partition = DrgPartition.Medical,
                     FamilyKey = Families.SimplePneumonia, Severity = DrgSeverity.WithCc },
-            new() { Drg = "195", Title = "Simple pneumonia and pleurisy without CC/MCC",
+            new() { Drg = "195", Title = "Simple Pneumonia and Pleurisy without CC/MCC",
                     Mdc = 4, Partition = DrgPartition.Medical,
                     FamilyKey = Families.SimplePneumonia, Severity = DrgSeverity.WithoutCcMcc },
 
             // ── MDC 05, medical: heart failure and shock. A three-way split.
-            new() { Drg = "291", Title = "Heart failure and shock with MCC",
+            new() { Drg = "291", Title = "Heart Failure and Shock with MCC",
                     Mdc = 5, Partition = DrgPartition.Medical,
                     FamilyKey = Families.HeartFailure, Severity = DrgSeverity.WithMcc },
-            new() { Drg = "292", Title = "Heart failure and shock with CC",
+            new() { Drg = "292", Title = "Heart Failure and Shock with CC",
                     Mdc = 5, Partition = DrgPartition.Medical,
                     FamilyKey = Families.HeartFailure, Severity = DrgSeverity.WithCc },
-            new() { Drg = "293", Title = "Heart failure and shock without CC/MCC",
+            new() { Drg = "293", Title = "Heart Failure and Shock without CC/MCC",
                     Mdc = 5, Partition = DrgPartition.Medical,
                     FamilyKey = Families.HeartFailure, Severity = DrgSeverity.WithoutCcMcc },
 
             // ── MDC 08, surgical: major joint replacement. A two-way split, so a
             //    stay with a CC and no MCC pays at "without".
-            new() { Drg = "469", Title = "Major hip and knee joint replacement or reattachment of lower extremity with MCC",
+            new() { Drg = "469", Title = "Major Hip and Knee Joint Replacement or Reattachment of Lower Extremity with MCC or Total Ankle Replacement",
                     Mdc = 8, Partition = DrgPartition.Surgical,
                     FamilyKey = Families.MajorJointLower, Severity = DrgSeverity.WithMcc },
-            new() { Drg = "470", Title = "Major hip and knee joint replacement or reattachment of lower extremity without MCC",
+            new() { Drg = "470", Title = "Major Hip and Knee Joint Replacement or Reattachment of Lower Extremity without MCC",
                     Mdc = 8, Partition = DrgPartition.Surgical,
                     FamilyKey = Families.MajorJointLower, Severity = DrgSeverity.WithoutCcMcc },
         };
