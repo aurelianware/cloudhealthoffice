@@ -60,35 +60,7 @@ public class MetricsService : IMetricsService
     }
 
     // TEMPORARY: Replace when Prometheus is deployed.
-    public async Task<OperationalAlerts> GetOperationalAlertsAsync()
-    {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var alerts = await _httpClient.GetFromJsonAsync<OperationalAlerts>($"{baseUrl}/metrics/operational-alerts");
-            return alerts ?? new OperationalAlerts();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
-            throw new ServiceUnavailableException("Claims Service", ex);
-        }
-    }
 
     // TEMPORARY: Replace when Prometheus is deployed.
-    public async Task<EdiVolumeSummary> GetTodayEdiVolumeAsync()
-    {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var volume = await _httpClient.GetFromJsonAsync<EdiVolumeSummary>($"{baseUrl}/metrics/edi-volume/today");
-            return volume ?? new EdiVolumeSummary();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
-            throw new ServiceUnavailableException("Claims Service", ex);
-        }
-    }
 
 }

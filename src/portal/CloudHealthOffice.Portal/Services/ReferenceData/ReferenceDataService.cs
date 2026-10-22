@@ -1,9 +1,12 @@
+using System.Net;
 using System.Net.Http.Json;
 
 namespace CloudHealthOffice.Portal.Services;
 
 public class ReferenceDataService : IReferenceDataService
 {
+    public const string ServiceName = "Reference Data Service";
+
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ReferenceDataService> _logger;
@@ -15,67 +18,41 @@ public class ReferenceDataService : IReferenceDataService
         _logger = logger;
     }
 
-    public async Task<List<MedicalCode>> SearchCodesAsync(string? codeSystem = null, string? searchTerm = null)
+    public async Task<ReferenceCodePage> SearchCodesAsync(string codeSystem, string? search, ReferenceSearchMode mode,
+        bool? active = null, int page = 1, int pageSize = 50)
     {
-        var baseUrl = _configuration["Services:ReferenceDataService"];
+        var url = $"{CodesUrl()}?codeSystem={Uri.EscapeDataString(codeSystem)}&searchMode={mode}&page={page}&pageSize={pageSize}";
+        if (!string.IsNullOrWhiteSpace(search)) url += $"&search={Uri.EscapeDataString(search.Trim())}";
+        if (active is { } a) url += $"&active={(a ? "true" : "false")}";
         try
         {
-            var query = $"{baseUrl}/codes?";
-            if (!string.IsNullOrEmpty(codeSystem))
-                query += $"codeSystem={codeSystem}&";
-            if (!string.IsNullOrEmpty(searchTerm))
-                query += $"search={searchTerm}";
-
-            var codes = await _httpClient.GetFromJsonAsync<List<MedicalCode>>(query);
-            return codes ?? new List<MedicalCode>();
+            return await _httpClient.GetFromJsonAsync<ReferenceCodePage>(url) ?? new ReferenceCodePage();
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Reference Data Service");
-            throw new ServiceUnavailableException("Reference Data Service", ex);
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", ServiceName);
+            throw new ServiceUnavailableException(ServiceName, ex);
         }
     }
 
-    public async Task<MedicalCodeDetails?> GetCodeDetailsAsync(string codeSystem, string code)
+    public async Task<ReferenceCodeRecord?> GetCodeAsync(string codeSystem, string code)
     {
-        var baseUrl = _configuration["Services:ReferenceDataService"];
         try
         {
-            return await _httpClient.GetFromJsonAsync<MedicalCodeDetails>($"{baseUrl}/codes/{codeSystem}/{code}");
+            var response = await _httpClient.GetAsync($"{CodesUrl()}/{Uri.EscapeDataString(codeSystem)}/{Uri.EscapeDataString(code)}");
+            if (response.StatusCode == HttpStatusCode.NotFound) return null;
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ReferenceCodeRecord>();
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Reference Data Service");
-            throw new ServiceUnavailableException("Reference Data Service", ex);
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", ServiceName);
+            throw new ServiceUnavailableException(ServiceName, ex);
         }
     }
 
-    public async Task<List<string>> GetCodeSystemsAsync()
-    {
-        var baseUrl = _configuration["Services:ReferenceDataService"];
-        try
-        {
-            var systems = await _httpClient.GetFromJsonAsync<List<string>>($"{baseUrl}/code-systems");
-            return systems ?? new List<string>();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Reference Data Service");
-            throw new ServiceUnavailableException("Reference Data Service", ex);
-        }
-    }
-
-    public async Task<CodeUsageStats?> GetCodeUsageStatsAsync(string codeSystem, string code)
-    {
-        var baseUrl = _configuration["Services:ReferenceDataService"];
-        try
-        {
-            return await _httpClient.GetFromJsonAsync<CodeUsageStats>($"{baseUrl}/codes/{codeSystem}/{code}/usage");
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Reference Data Service");
-            throw new ServiceUnavailableException("Reference Data Service", ex);
-        }
-    }
+    /// <summary>Services:ReferenceDataService is the service root.</summary>
+    private string CodesUrl() =>
+        (_configuration["Services:ReferenceDataService"] ?? "http://reference-data-service.cloudhealthoffice").TrimEnd('/')
+        + "/api/reference-data/codes";
 }

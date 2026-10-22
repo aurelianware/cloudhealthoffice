@@ -7,13 +7,17 @@
 
 <PageTitle>Reference Data - Cloud Health Office</PageTitle>
 
+@* Code lookups in reference-data-service (api/reference-data/codes). One code
+   system at a time, paged on the server. Licensed sets (CPT, CDT) show only
+   what the tenant has loaded. *@
+
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h3" GutterBottom="true">
         <MudIcon Icon="@Icons.Material.Filled.Code" Class="mr-2" />
         Reference Data & Code Sets
     </MudText>
     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
-        Browse and manage medical coding standards (CPT, ICD-10, HCPCS, Revenue Codes)
+        Look up diagnosis, procedure, revenue, remittance and other codes loaded for this tenant
     </MudText>
 
     @if (_serviceError != null)
@@ -21,177 +25,113 @@
         <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true" CloseIconClicked="() => _serviceError = null">@_serviceError</MudAlert>
     }
 
-    <!-- Filters Bar -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudGrid>
-            <MudItem xs="12" md="4">
-                <MudSelect @bind-Value="_codeSystemFilter" 
-                          Label="Code System" 
-                          Variant="Variant.Outlined"
-                          T="string"
-                          AnchorOrigin="Origin.BottomCenter"
-                          @bind-Value:after="LoadCodes">
-                    <MudSelectItem Value="@("All")">All Code Systems</MudSelectItem>
-                    <MudSelectItem Value="@("CPT")">CPT (Procedure Codes)</MudSelectItem>
-                    <MudSelectItem Value="@("ICD-10-CM")">ICD-10-CM (Diagnosis Codes)</MudSelectItem>
-                    <MudSelectItem Value="@("HCPCS")">HCPCS (Supplies & Services)</MudSelectItem>
-                    <MudSelectItem Value="@("Revenue Code")">Revenue Codes</MudSelectItem>
-                    <MudSelectItem Value="@("Place of Service")">Place of Service</MudSelectItem>
-                    <MudSelectItem Value="@("DRG")">DRG (Diagnosis Related Groups)</MudSelectItem>
-                    <MudSelectItem Value="@("Modifier")">Modifiers</MudSelectItem>
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="_codeSystem" Label="Code system" Variant="Variant.Outlined" T="string" AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var (name, label) in ReferenceCodeSystems.All)
+                    {
+                        <MudSelectItem Value="@name">@label</MudSelectItem>
+                    }
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" md="8">
-                <MudTextField @bind-Value="_searchTerm" 
-                             Label="Search codes" 
-                             Placeholder="Code or description..."
-                             Variant="Variant.Outlined"
-                             Adornment="Adornment.End" 
-                             AdornmentIcon="@Icons.Material.Filled.Search"
-                             OnKeyUp="OnSearchKeyUp" />
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="_mode" Label="Match" Variant="Variant.Outlined" T="ReferenceSearchMode" AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem Value="ReferenceSearchMode.Prefix">Code starts with</MudSelectItem>
+                    <MudSelectItem Value="ReferenceSearchMode.Exact">Exact code</MudSelectItem>
+                    <MudSelectItem Value="ReferenceSearchMode.Text">Description contains</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_searchTerm" Label="Search" Variant="Variant.Outlined"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              OnKeyUp="@(async e => { if (e.Key == "Enter") await SearchAsync(1); })" />
+            </MudItem>
+            <MudItem xs="12" md="1" Class="d-flex align-center">
+                <MudCheckBox @bind-Value="_activeOnly" Label="Active" Color="Color.Primary" />
+            </MudItem>
+            <MudItem xs="12" md="2" Class="d-flex align-center">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SearchAsync(1))" Disabled="_loading" FullWidth="true">
+                    <MudIcon Icon="@Icons.Material.Filled.Search" Class="mr-1" />
+                    Search
+                </MudButton>
             </MudItem>
         </MudGrid>
     </MudPaper>
 
-    <!-- Info Cards -->
-    <MudGrid Class="mb-4">
-        <MudItem xs="12" md="3">
-            <MudCard Elevation="1">
-                <MudCardContent>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Codes</MudText>
-                    <MudText Typo="Typo.h4">@_codes.Count.ToString("N0")</MudText>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudCard Elevation="1">
-                <MudCardContent>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Active Codes</MudText>
-                    <MudText Typo="Typo.h4" Color="Color.Success">@_codes.Count(c => c.Status == "Active").ToString("N0")</MudText>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudCard Elevation="1">
-                <MudCardContent>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Code System</MudText>
-                    <MudText Typo="Typo.h6">@(_codeSystemFilter == "All" ? "All Systems" : _codeSystemFilter)</MudText>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-        <MudItem xs="12" md="3">
-            <MudCard Elevation="1">
-                <MudCardContent>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Categories</MudText>
-                    <MudText Typo="Typo.h4">@_codes.Select(c => c.Category).Distinct().Count()</MudText>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-    </MudGrid>
+    @if (_page != null)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+            @_page.Total.ToString("N0") @(_page.Total == 1 ? "code" : "codes") in @_searchedSystem
+        </MudText>
+    }
 
-    <!-- Codes Table -->
-    <MudTable Items="@_codes" 
-              Hover="true" 
-              Striped="true" 
-              Loading="@_isLoading"
-              LoadingProgressColor="Color.Primary"
-              Dense="true"
-              Elevation="2">
+    <MudTable Items="@(_page?.Items ?? new())" Hover="true" Striped="true" Dense="true" Elevation="2" Loading="_loading" LoadingProgressColor="Color.Primary">
         <HeaderContent>
-            <MudTh>Code System</MudTh>
             <MudTh>Code</MudTh>
             <MudTh>Description</MudTh>
             <MudTh>Category</MudTh>
-            <MudTh>Effective Date</MudTh>
+            <MudTh>Effective</MudTh>
             <MudTh>Status</MudTh>
-            <MudTh>Actions</MudTh>
+            <MudTh>Source</MudTh>
+            <MudTh></MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd DataLabel="Code System">
-                <MudChip Size="Size.Small" Color="GetCodeSystemColor(context.CodeSystem)">
-                    @context.CodeSystem
-                </MudChip>
-            </MudTd>
             <MudTd DataLabel="Code">
                 <MudText Typo="Typo.body2" Style="font-family: monospace; font-weight: bold;">@context.Code</MudText>
             </MudTd>
-            <MudTd DataLabel="Description">
-                <MudText Typo="Typo.body2">@context.ShortDescription</MudText>
+            <MudTd DataLabel="Description">@context.Text</MudTd>
+            <MudTd DataLabel="Category">@context.Category</MudTd>
+            <MudTd DataLabel="Effective">
+                @context.EffectiveFrom.ToString("MM/dd/yyyy")@(context.EffectiveTo is { } to ? $" to {to:MM/dd/yyyy}" : "")
             </MudTd>
-            <MudTd DataLabel="Category">
-                <MudChip Size="Size.Small" Variant="Variant.Outlined">
-                    @context.Category
-                </MudChip>
-            </MudTd>
-            <MudTd DataLabel="Effective Date">@context.EffectiveDate.ToString("MM/dd/yyyy")</MudTd>
             <MudTd DataLabel="Status">
-                <MudChip Size="Size.Small" Color="GetStatusColor(context.Status)">
-                    @context.Status
-                </MudChip>
+                <MudChip T="string" Size="Size.Small" Color="@(context.Active ? Color.Success : Color.Default)">@(context.Active ? "Active" : "Inactive")</MudChip>
             </MudTd>
-            <MudTd DataLabel="Actions">
-                <MudIconButton Icon="@Icons.Material.Filled.Info" 
-                              Size="Size.Small" 
-                              Color="Color.Primary"
-                              OnClick="@(() => OpenDetailsDialog(context.CodeSystem, context.Code))"
-                              Title="View Details" />
-                <MudIconButton Icon="@Icons.Material.Filled.BarChart" 
-                              Size="Size.Small" 
-                              Color="Color.Info"
-                              OnClick="@(() => ViewUsageStats(context.CodeSystem, context.Code))"
-                              Title="Usage Statistics" />
+            <MudTd DataLabel="Source">
+                <MudText Typo="Typo.caption">@context.SourceId @context.SourceVersion</MudText>
+            </MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Info" Size="Size.Small" Color="Color.Primary" Title="Details"
+                               OnClick="@(() => OpenDetailsDialog(context))" />
             </MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            <MudText Typo="Typo.body1" Align="Align.Center" Class="pa-4">
-                No codes found
+            <MudText Typo="Typo.body1" Align="Align.Center" Class="pa-8">
+                @(_page == null ? "Choose a code system and search." : "No codes match. Check the code system, or the set may not be loaded for this tenant.")
             </MudText>
         </NoRecordsContent>
-        <LoadingContent>
-            <MudText Typo="Typo.body1" Align="Align.Center">Loading codes...</MudText>
-        </LoadingContent>
     </MudTable>
 
-    <!-- Quick Reference -->
-    <MudPaper Class="pa-4 mt-4" Elevation="1">
-        <MudText Typo="Typo.h6" GutterBottom="true">Quick Reference</MudText>
-        <MudGrid>
-            <MudItem xs="12" md="4">
-                <MudText Typo="Typo.body2" Color="Color.Secondary">CPT Codes</MudText>
-                <MudText Typo="Typo.caption">Current Procedural Terminology - procedures and services performed by physicians and healthcare providers</MudText>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <MudText Typo="Typo.body2" Color="Color.Secondary">ICD-10-CM Codes</MudText>
-                <MudText Typo="Typo.caption">International Classification of Diseases - diagnosis codes for medical conditions and diseases</MudText>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <MudText Typo="Typo.body2" Color="Color.Secondary">HCPCS Codes</MudText>
-                <MudText Typo="Typo.caption">Healthcare Common Procedure Coding System - supplies, equipment, and non-physician services</MudText>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
+    @if (_page is { Total: > 0 } && TotalPages > 1)
+    {
+        <div class="d-flex justify-center mt-4">
+            <MudPagination Count="TotalPages" Selected="_page.PageNumber" SelectedChanged="@(p => SearchAsync(p))" Color="Color.Primary" />
+        </div>
+    }
 </MudContainer>
 
 @code {
-    private List<MedicalCode> _codes = new();
-    private bool _isLoading = true;
+    private const int PageSize = 50;
+
+    private string _codeSystem = "ICD-10-CM";
+    private ReferenceSearchMode _mode = ReferenceSearchMode.Prefix;
+    private string? _searchTerm;
+    private bool _activeOnly = true;
+    private bool _loading;
     private string? _serviceError;
+    private ReferenceCodePage? _page;
+    private string _searchedSystem = string.Empty;
 
-    private string _codeSystemFilter = "All";
-    private string _searchTerm = string.Empty;
+    private int TotalPages => _page is null ? 0 : (int)Math.Ceiling(_page.Total / (double)PageSize);
 
-    protected override async Task OnInitializedAsync()
+    private async Task SearchAsync(int page)
     {
-        await LoadCodes();
-    }
-
-    private async Task LoadCodes()
-    {
-        _isLoading = true;
+        _loading = true;
         try
         {
-            var codeSystem = _codeSystemFilter == "All" ? null : _codeSystemFilter;
-            _codes = await ReferenceDataService.SearchCodesAsync(codeSystem, _searchTerm);
+            _page = await ReferenceDataService.SearchCodesAsync(_codeSystem, _searchTerm, _mode, _activeOnly ? true : null, page, PageSize);
+            _searchedSystem = _codeSystem;
         }
         catch (ServiceUnavailableException ex)
         {
@@ -199,74 +139,22 @@
         }
         catch (Exception ex)
         {
-            _serviceError = $"An error occurred loading reference data: {ex.Message}";
+            _serviceError = $"An error occurred searching codes: {ex.Message}";
         }
         finally
         {
-            _isLoading = false;
+            _loading = false;
         }
     }
 
-    private async Task OnSearchKeyUp(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            await LoadCodes();
-        }
-    }
-
-    private async Task OpenDetailsDialog(string codeSystem, string code)
+    private async Task OpenDetailsDialog(ReferenceCodeRecord code)
     {
         var parameters = new DialogParameters<CodeDetailsDialog>
         {
-            { x => x.CodeSystem, codeSystem },
-            { x => x.Code, code }
+            { x => x.CodeSystem, code.CodeSystem },
+            { x => x.Code, code.Code },
         };
-
-        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
-        await DialogService.ShowAsync<CodeDetailsDialog>($"{codeSystem} Code: {code}", parameters, options);
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+        await DialogService.ShowAsync<CodeDetailsDialog>($"{code.CodeSystem} {code.Code}", parameters, options);
     }
-
-    private async Task ViewUsageStats(string codeSystem, string code)
-    {
-        var stats = await ReferenceDataService.GetCodeUsageStatsAsync(codeSystem, code);
-        if (stats is null)
-        {
-            await DialogService.ShowMessageBox(
-                "Code Usage Statistics",
-                $"No usage statistics are available for {codeSystem} {code}.",
-                yesText: "Close");
-            return;
-        }
-
-        var message = $"Usage Statistics for {codeSystem} {code}:\n\n" +
-            $"- Used in {stats.ClaimsCount:N0} claims\n" +
-            $"- Used in {stats.AuthorizationsCount:N0} prior authorizations\n" +
-            $"- Assigned to {stats.BenefitsCount} benefit plans\n" +
-            $"- Last used: {stats.LastUsedDate?.ToString("MM/dd/yyyy") ?? "Never"}\n" +
-            $"- Total billed amount: {stats.TotalBilledAmount:C}";
-
-        await DialogService.ShowMessageBox(
-            "Code Usage Statistics",
-            message,
-            yesText: "Close");
-    }
-
-    private Color GetCodeSystemColor(string codeSystem) => codeSystem switch
-    {
-        "CPT" => Color.Primary,
-        "ICD-10-CM" => Color.Secondary,
-        "HCPCS" => Color.Info,
-        "Revenue Code" => Color.Success,
-        "Place of Service" => Color.Warning,
-        "DRG" => Color.Tertiary,
-        _ => Color.Default
-    };
-
-    private Color GetStatusColor(string status) => status switch
-    {
-        "Active" => Color.Success,
-        "Deprecated" => Color.Warning,
-        _ => Color.Default
-    };
 }

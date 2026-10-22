@@ -40,28 +40,6 @@ public class MetricsServiceTests
         ex.ServiceName.Should().Be("Claims Service");
     }
 
-    [Fact]
-    public async Task GetOperationalAlertsAsync_WhenApiFails_ThrowsServiceUnavailableException()
-    {
-        var sut = CreateService();
-
-        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
-            () => sut.GetOperationalAlertsAsync());
-
-        ex.ServiceName.Should().Be("Claims Service");
-    }
-
-    [Fact]
-    public async Task GetTodayEdiVolumeAsync_WhenApiFails_ThrowsServiceUnavailableException()
-    {
-        var sut = CreateService();
-
-        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
-            () => sut.GetTodayEdiVolumeAsync());
-
-        ex.ServiceName.Should().Be("Claims Service");
-    }
-
     // ════════════════════════════════════════════════════════════════
     // Happy-path tests (API returns real data)
     // ════════════════════════════════════════════════════════════════
@@ -154,47 +132,4 @@ public class MetricsServiceTests
             "TotalClaims should equal Approved + Denied + Pending");
     }
 
-    [Fact]
-    public async Task GetOperationalAlertsAsync_WhenApiReturns200_DeserializesAlerts()
-    {
-        var json = JsonSerializer.Serialize(new
-        {
-            workQueueCount = 15, pendingRfais = 3, appealsDueThisWeek = 2, approachingFilingLimit = 1
-        }, JsonOpts);
-
-        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
-
-        var result = await sut.GetOperationalAlertsAsync();
-
-        result.WorkQueueCount.Should().Be(15);
-        result.PendingRfais.Should().Be(3);
-        result.AppealsDueThisWeek.Should().Be(2);
-    }
-
-    [Fact]
-    public async Task GetTodayEdiVolumeAsync_WhenApiReturns200_DeserializesVolume()
-    {
-        var json = JsonSerializer.Serialize(new
-        {
-            claims837Received = 500, era835Generated = 400, eligibility270271 = 200, priorAuth278 = 50
-        }, JsonOpts);
-
-        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
-
-        var result = await sut.GetTodayEdiVolumeAsync();
-
-        result.Claims837Received.Should().Be(500);
-        result.Era835Generated.Should().Be(400);
-    }
-
-    [Fact]
-    public async Task GetTodayEdiVolumeAsync_UrlPointsToEdiVolumeEndpoint()
-    {
-        var handler = new FakeHandler(HttpStatusCode.OK, "null");
-        var sut = CreateService(new HttpClient(handler));
-
-        await sut.GetTodayEdiVolumeAsync();
-
-        handler.CapturedUrls[0].Should().Contain("/metrics/edi-volume/today");
-    }
 }
