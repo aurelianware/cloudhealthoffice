@@ -198,6 +198,33 @@ public class CorrespondencePipelineTests : IClassFixture<CorrespondenceFactory>
     }
 
     [Fact]
+    public async Task Recent_letters_and_summary_show_only_what_the_caller_may_read()
+    {
+        var (tenant, _) = await ApprovedTemplateAsync();
+        var coordinator = As("um-1", tenant, ChoRolePermissions.UMCoordinator);
+        (await coordinator.PostAsJsonAsync($"{Base}/letters", LetterBody())).StatusCode.Should().Be(HttpStatusCode.Created);
+        (await coordinator.PostAsJsonAsync($"{Base}/letters", LetterBody(line1: null))).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+
+        var recent = await coordinator.GetFromJsonAsync<List<Letter>>($"{Base}/letters/recent", Json);
+        recent!.Select(l => l.Status).Should().BeEquivalentTo([LetterStatus.CheckFailed, LetterStatus.Rendered]);
+        (await coordinator.GetFromJsonAsync<List<Letter>>($"{Base}/letters/recent?status=CheckFailed", Json))!.Should().ContainSingle();
+        (await coordinator.GetFromJsonAsync<List<Letter>>($"{Base}/letters/recent?letterTypeCode=other", Json))!.Should().BeEmpty();
+
+        var summary = JsonNode.Parse(await coordinator.GetStringAsync($"{Base}/letters/summary"))!;
+        summary["renderedToday"]!.GetValue<long>().Should().Be(1);
+        summary["renderedLast7Days"]!.GetValue<long>().Should().Be(1);
+        summary["checkFailedLast7Days"]!.GetValue<long>().Should().Be(1);
+
+        // Roles without correspondence:read are refused.
+        var finance = As("fin-1", tenant, ChoRolePermissions.Finance);
+        (await finance.GetAsync($"{Base}/letters/recent")).StatusCode.Should().Be(HttpStatusCode.Forbidden, "Finance has no correspondence:read");
+        var compliance = As("co-1", tenant, ChoRolePermissions.ComplianceViewer);
+        (await compliance.GetAsync($"{Base}/letters/recent")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        (await As("admin-x", NewTenant()).GetFromJsonAsync<List<Letter>>($"{Base}/letters/recent", Json))!.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Another_tenant_sees_nothing()
     {
         var (tenant, templateId) = await ApprovedTemplateAsync();

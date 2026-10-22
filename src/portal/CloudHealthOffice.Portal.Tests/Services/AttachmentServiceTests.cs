@@ -58,18 +58,7 @@ public class AttachmentServiceTests
     {
         var sut = CreateService();
         var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
-            () => sut.DownloadAttachmentAsync("AUTH-001", "ATT-001"));
-        ex.ServiceName.Should().Be("Attachment Service");
-    }
-
-    // ── DeleteAttachmentAsync ──
-
-    [Fact]
-    public async Task DeleteAttachmentAsync_WhenApiFails_ThrowsServiceUnavailableException()
-    {
-        var sut = CreateService();
-        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
-            () => sut.DeleteAttachmentAsync("AUTH-001", "ATT-001"));
+            () => sut.DownloadAttachmentAsync("ATT-001"));
         ex.ServiceName.Should().Be("Attachment Service");
     }
 
@@ -114,7 +103,7 @@ public class AttachmentServiceTests
     [Fact]
     public async Task UploadAttachmentAsync_WhenApiReturns200_ExtractsAttachmentId()
     {
-        var json = JsonSerializer.Serialize(new { attachmentId = "ATT-NEW-1" }, JsonOpts);
+        var json = JsonSerializer.Serialize(new { id = "ATT-NEW-1" }, JsonOpts);
         var handler = new FakeHandler(HttpStatusCode.OK, json);
         var sut = CreateService(new HttpClient(handler));
 
@@ -123,7 +112,8 @@ public class AttachmentServiceTests
 
         result.Should().Be("ATT-NEW-1");
         handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Post);
-        handler.CapturedUrls[0].Should().Contain("/attachments/upload");
+        // attachment-service creates attachments with POST api/Attachments.
+        handler.CapturedUrls[0].Should().EndWith("/attachments");
     }
 
     [Fact]
@@ -138,23 +128,11 @@ public class AttachmentServiceTests
         });
         var sut = CreateService(new HttpClient(handler));
 
-        var stream = await sut.DownloadAttachmentAsync("AUTH-001", "ATT-1");
+        var stream = await sut.DownloadAttachmentAsync("ATT-1");
 
         using var reader = new StreamReader(stream);
         (await reader.ReadToEndAsync()).Should().Contain("file-content");
-        handler.CapturedUrls[0].Should().Contain("/attachments/AUTH-001/ATT-1");
-    }
-
-    [Fact]
-    public async Task DeleteAttachmentAsync_WhenApiReturns200_SendsDeleteToCorrectUrl()
-    {
-        var handler = new FakeHandler(HttpStatusCode.OK, "");
-        var sut = CreateService(new HttpClient(handler));
-
-        await sut.DeleteAttachmentAsync("AUTH-001", "ATT-1");
-
-        handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Delete);
-        handler.CapturedUrls[0].Should().Contain("/attachments/AUTH-001/ATT-1");
+        handler.CapturedUrls[0].Should().EndWith("/attachments/ATT-1/download");
     }
 
     [Fact]

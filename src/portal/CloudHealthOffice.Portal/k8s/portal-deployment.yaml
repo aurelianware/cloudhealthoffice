@@ -24,6 +24,8 @@ data:
   Services__CapitationService: "http://capitation-service.cloudhealthoffice/api"
   Services__AttachmentService: "http://attachment-service.cloudhealthoffice/api"
   Services__MemberDocumentService: "http://member-document-service.cloudhealthoffice"
+  Services__CorrespondenceService: "http://correspondence-service.cloudhealthoffice"
+  Services__FhirService: "http://fhir-service.cloudhealthoffice"
   Services__SponsorService: "http://sponsor-service.cloudhealthoffice/api/v1"
   Services__ReferenceDataService: "http://reference-data-service.cloudhealthoffice/api/ReferenceData"
   Services__EnrollmentImportService: "http://enrollment-import-service.cloudhealthoffice/api"
@@ -242,6 +244,16 @@ spec:
             configMapKeyRef:
               name: portal-config
               key: Services__MemberDocumentService
+        - name: Services__CorrespondenceService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__CorrespondenceService
+        - name: Services__FhirService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__FhirService
         - name: Services__SponsorService
           valueFrom:
             configMapKeyRef:

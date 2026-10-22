@@ -105,7 +105,7 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd>
-                <MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/capitation/statements/" + context.Id))"
+                <MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/finance/contracts/statements/" + context.Id))"
                            Style="font-family: monospace; color: var(--cho-accent); font-size: 0.85rem;">@context.StatementNumber</MudButton>
             </MudTd>
             <MudTd>
@@ -145,7 +145,7 @@ else
     @if (_selectedStatement != null)
     {
         <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack"
-                   OnClick="@(() => Navigation.NavigateTo("/capitation/statements"))" Class="mb-3">Back to Statements</MudButton>
+                   OnClick="@(() => Navigation.NavigateTo("/finance/contracts/statements"))" Class="mb-3">Back to Statements</MudButton>
 
         <MudPaper Class="pa-4 mb-4" Style="background: var(--cb-surface-bg-90); border: 1px solid var(--cb-accent-border-15); border-radius: 12px;">
             <div class="d-flex align-center gap-3 mb-3">

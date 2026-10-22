@@ -83,6 +83,31 @@ public class PaymentRunServiceTests
     }
 
     [Fact]
+    public async Task DownloadEraForRunAsync_ZipsOne835PerPaymentInTheRun()
+    {
+        var handler = new FakeHandler(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            var body = path.EndsWith("/paymentruns/RUN-1")
+                ? """{"paymentIds":["PAY-1","PAY-2"]}"""
+                : $"ISA*00*{path.Split('/')[^2]}~";
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        });
+        var sut = CreateService(new HttpClient(handler));
+
+        await using var zip = await sut.DownloadEraForRunAsync("RUN-1");
+
+        using var archive = new System.IO.Compression.ZipArchive(zip);
+        archive.Entries.Select(e => e.Name).Should().Equal("ERA_PAY-1.835", "ERA_PAY-2.835");
+        using (var reader = new StreamReader(archive.Entries[1].Open()))
+            (await reader.ReadToEndAsync()).Should().Be("ISA*00*PAY-2~");
+        handler.CapturedUrls.Should().Equal(
+            "http://localhost:5006/paymentruns/RUN-1",
+            "http://localhost:5006/payments/PAY-1/835",
+            "http://localhost:5006/payments/PAY-2/835");
+    }
+
+    [Fact]
     public async Task GetPaymentRunsAsync_ExceptionWrapsInnerException()
     {
         var sut = CreateService();
@@ -267,23 +292,14 @@ public class PaymentRunServiceTests
     // ── DownloadEraForRunAsync ──
 
     [Fact]
-    public async Task DownloadEraForRunAsync_WhenApiReturns200_ReturnsStream()
+    public async Task DownloadEraForRunAsync_RunWithoutPayments_SaysSo()
     {
-        var content = "ISA*00*          *00*          *ZZ*SENDER";
-        var handler = new FakeHandler(_ =>
-        {
-            var response = new HttpResponseMessage(HttpStatusCode.OK);
-            response.Content = new StringContent(content, Encoding.UTF8, "application/octet-stream");
-            return response;
-        });
+        var handler = new FakeHandler(HttpStatusCode.OK, """{"paymentIds":[]}""");
         var sut = CreateService(new HttpClient(handler));
 
-        var stream = await sut.DownloadEraForRunAsync("RUN-1");
-
-        using var reader = new StreamReader(stream);
-        var text = await reader.ReadToEndAsync();
-        text.Should().Contain("ISA");
-        handler.CapturedUrls[0].Should().Contain("/paymentruns/RUN-1/835");
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.DownloadEraForRunAsync("RUN-1"));
+        ex.Message.Should().Contain("no payments");
+        handler.CapturedUrls.Should().ContainSingle().Which.Should().EndWith("/paymentruns/RUN-1");
     }
 
     // ── PaymentRunSummary – remaining properties ──────────────────────────────

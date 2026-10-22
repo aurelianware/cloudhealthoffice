@@ -10,11 +10,6 @@ public interface IBenefitPlanService
     Task AddBenefitAsync(string planId, UpsertPlanBenefitRequest request);
     Task UpdateBenefitAsync(string planId, string benefitId, UpsertPlanBenefitRequest request);
     Task ReplaceNetworkTiersAsync(string planId, IReadOnlyList<PlanNetworkTier> networkTiers);
-    Task<List<BenefitItem>> GetAvailableBenefitsAsync();
-    Task<List<ServiceBenefitRule>> GetServiceBenefitRulesAsync(string planId);
-    Task UpdateServiceBenefitRulesAsync(UpdateServiceBenefitRulesRequest request);
-    Task<AccumulatorConfiguration?> GetAccumulatorConfigAsync(string planId);
-    Task UpdateAccumulatorConfigAsync(string planId, AccumulatorConfiguration config);
 
     /// <summary>
     /// Returns a categorized member-facing view of the plan as of the given

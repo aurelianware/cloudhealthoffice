@@ -56,7 +56,7 @@ override it.
 | Eligibility, 270/271 (`eligibility-service`) | 6.2K | — |
 | Encounters, risk adjustment (`encounter-service`, `encounter-submission-service`, `risk-adjustment-service`, engines) | 1.7K + 1.7K + 1.4K + 1.4K | No MARx/TRR or Part D (PDE) processing |
 | Work management (`work-management-service`) | 3.4K | Rule-based routing exists for claim queues only; other work types route by queue order |
-| Correspondence | — | Portal page exists, but the claims-service routes it calls (`/correspondence/...`) do not |
+| Correspondence (`correspondence-service`, PdfLayout) | 2.4K | Step 1 of [correspondence.md](../architecture/correspondence.md) §16: templates, rendering, checks, write-once storage; the portal page lists letters and templates. No triggers, delivery channels or per-letter approval yet |
 | Fee-for-service (`ffs-service`) | 0.2K | No Dockerfile or deploy workflow (CAP-20) |
 
 > **Out-of-scope for this revision.** This MODULE-STATUS register is

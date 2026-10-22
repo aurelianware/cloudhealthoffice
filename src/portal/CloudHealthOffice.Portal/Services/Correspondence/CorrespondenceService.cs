@@ -2,12 +2,15 @@ using System.Net.Http.Json;
 
 namespace CloudHealthOffice.Portal.Services;
 
-// ---------------------------------------------------------------------------
-// Correspondence Service
-// ---------------------------------------------------------------------------
-
+/// <summary>
+/// Calls correspondence-service (<c>Services:CorrespondenceService</c>). The
+/// service checks correspondence:read and, for letters, read access to one of
+/// each letter's subjects.
+/// </summary>
 public class CorrespondenceService : ICorrespondenceService
 {
+    public const string ServiceName = "Correspondence Service";
+
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<CorrespondenceService> _logger;
@@ -19,52 +22,34 @@ public class CorrespondenceService : ICorrespondenceService
         _logger = logger;
     }
 
-    public async Task<CorrespondenceSummary> GetSummaryAsync()
+    public async Task<CorrespondenceSummary> GetSummaryAsync() =>
+        await GetAsync<CorrespondenceSummary>("letters/summary") ?? new CorrespondenceSummary();
+
+    public async Task<List<CorrespondenceLetter>> GetRecentLettersAsync(string? letterTypeCode = null, string? status = null, int limit = 100)
     {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var summary = await _httpClient.GetFromJsonAsync<CorrespondenceSummary>($"{baseUrl}/correspondence/summary");
-            return summary ?? new CorrespondenceSummary();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
-            throw new ServiceUnavailableException("Claims Service", ex);
-        }
+        var path = $"letters/recent?limit={limit}";
+        if (!string.IsNullOrWhiteSpace(letterTypeCode)) path += $"&letterTypeCode={Uri.EscapeDataString(letterTypeCode)}";
+        if (!string.IsNullOrWhiteSpace(status)) path += $"&status={Uri.EscapeDataString(status)}";
+        return await GetAsync<List<CorrespondenceLetter>>(path) ?? new();
     }
 
-    public async Task<List<CorrespondenceItem>> GetQueueAsync(string? type = null,
-        string? status = null, int limit = 50)
-    {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var url = $"{baseUrl}/correspondence/queue?limit={limit}";
-            if (!string.IsNullOrEmpty(type)) url += $"&type={Uri.EscapeDataString(type)}";
-            if (!string.IsNullOrEmpty(status)) url += $"&status={Uri.EscapeDataString(status)}";
-            var items = await _httpClient.GetFromJsonAsync<List<CorrespondenceItem>>(url);
-            return items ?? new();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
-            throw new ServiceUnavailableException("Claims Service", ex);
-        }
-    }
+    public async Task<List<CorrespondenceLetterType>> GetLetterTypesAsync() =>
+        await GetAsync<List<CorrespondenceLetterType>>("letter-types") ?? new();
 
-    public async Task<List<RfaiTrackingItem>> GetOutstandingRfaisAsync()
+    public async Task<List<CorrespondenceTemplate>> GetTemplatesAsync() =>
+        await GetAsync<List<CorrespondenceTemplate>>("templates") ?? new();
+
+    private async Task<T?> GetAsync<T>(string path)
     {
-        var baseUrl = _configuration["Services:ClaimsService"];
+        var baseUrl = (_configuration["Services:CorrespondenceService"] ?? "http://correspondence-service.cloudhealthoffice").TrimEnd('/');
         try
         {
-            var items = await _httpClient.GetFromJsonAsync<List<RfaiTrackingItem>>($"{baseUrl}/correspondence/rfais/outstanding");
-            return items ?? new();
+            return await _httpClient.GetFromJsonAsync<T>($"{baseUrl}/api/v1/correspondence/{path}");
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
-            throw new ServiceUnavailableException("Claims Service", ex);
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", ServiceName);
+            throw new ServiceUnavailableException(ServiceName, ex);
         }
     }
 }

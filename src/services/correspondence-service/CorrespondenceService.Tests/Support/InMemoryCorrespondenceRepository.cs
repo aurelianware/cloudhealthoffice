@@ -83,6 +83,21 @@ public sealed class InMemoryCorrespondenceRepository : ICorrespondenceRepository
                 .OrderByDescending(x => x.CreatedAt).Take(limit).ToList());
     }
 
+    public Task<IReadOnlyList<Letter>> ListRecentLettersAsync(string tenantId, LetterStatus? status, string? letterTypeCode, int limit, CancellationToken ct = default)
+    {
+        lock (_gate)
+            return Task.FromResult<IReadOnlyList<Letter>>(Letters.Where(x => x.TenantId == tenantId && (status == null || x.Status == status)
+                    && (letterTypeCode == null || x.LetterTypeCode == letterTypeCode))
+                .OrderByDescending(x => x.CreatedAt).Take(limit).ToList());
+    }
+
+    public Task<IReadOnlyDictionary<LetterStatus, long>> CountLettersSinceAsync(string tenantId, DateTime since, CancellationToken ct = default)
+    {
+        lock (_gate)
+            return Task.FromResult<IReadOnlyDictionary<LetterStatus, long>>(Letters.Where(x => x.TenantId == tenantId && x.CreatedAt >= since)
+                .GroupBy(x => x.Status).ToDictionary(g => g.Key, g => g.LongCount()));
+    }
+
     public Task AppendEventAsync(string tenantId, string letterId, LetterEvent letterEvent, CancellationToken ct = default)
     {
         lock (_gate) Letters.FirstOrDefault(x => x.TenantId == tenantId && x.Id == letterId)?.Events.Add(letterEvent);

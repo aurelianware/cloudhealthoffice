@@ -189,7 +189,7 @@
                 </MudTooltip>
                 @if (context.Status == "Completed")
                 {
-                    <MudTooltip Text="Download ERA (835)">
+                    <MudTooltip Text="Download ERAs (835, one per payment)">
                         <MudIconButton Icon="@Icons.Material.Filled.Download"
                                        Size="Size.Small"
                                        Color="Color.Success"
@@ -366,8 +366,8 @@
             await stream.CopyToAsync(ms);
             var base64 = Convert.ToBase64String(ms.ToArray());
             await JS.InvokeVoidAsync("downloadBase64File",
-                $"ERA_{run.RunId}_{run.CreatedDate:yyyyMMdd}.835",
-                "application/x-edi",
+                $"ERA_{run.RunId}_{run.CreatedDate:yyyyMMdd}.zip",
+                "application/zip",
                 base64);
         }
         catch (Exception ex)

@@ -1,13 +1,13 @@
 namespace CloudHealthOffice.Portal.Services;
 
-// ---------------------------------------------------------------------------
-// Correspondence
-// ---------------------------------------------------------------------------
-
+/// <summary>Letters, letter types and templates from correspondence-service.</summary>
 public interface ICorrespondenceService
 {
     Task<CorrespondenceSummary> GetSummaryAsync();
-    Task<List<CorrespondenceItem>> GetQueueAsync(string? type = null,
-        string? status = null, int limit = 50);
-    Task<List<RfaiTrackingItem>> GetOutstandingRfaisAsync();
+
+    /// <summary>The tenant's newest letters the user may read; <paramref name="status"/> is "Rendered" or "CheckFailed".</summary>
+    Task<List<CorrespondenceLetter>> GetRecentLettersAsync(string? letterTypeCode = null, string? status = null, int limit = 100);
+
+    Task<List<CorrespondenceLetterType>> GetLetterTypesAsync();
+    Task<List<CorrespondenceTemplate>> GetTemplatesAsync();
 }

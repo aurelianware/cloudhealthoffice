@@ -306,9 +306,12 @@
 
                     <!-- ADMIN -->
                     <MudNavGroup Title="Admin" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="false">
-                        <MudNavLink Href="/correspondence" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Email">
-                            Correspondence
-                        </MudNavLink>
+                        @if (_canReadCorrespondence)
+                        {
+                            <MudNavLink Href="/correspondence" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Email">
+                                Correspondence
+                            </MudNavLink>
+                        }
                         @if (_canAdminWork)
                         {
                             <MudNavLink Href="/admin/work-management" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree">
@@ -425,6 +428,7 @@
     private bool _canWork;
     private bool _canAdminWork;
     private bool _canPostNotices;
+    private bool _canReadCorrespondence;
     private bool _tenantLoadComplete;
     private List<TenantSubscription> _availableTenants = new();
 
@@ -455,6 +459,7 @@
             _canWork = userContext != null && UserContextService.HasPermission("workqueue:work");
             _canAdminWork = userContext != null && UserContextService.HasPermission("workqueue:admin");
             _canPostNotices = userContext != null && UserContextService.HasPermission("notices:write");
+            _canReadCorrespondence = userContext != null && UserContextService.HasPermission("correspondence:read");
         }
         catch (Exception ex)
         {

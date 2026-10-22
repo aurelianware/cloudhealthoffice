@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
-using System.Net.Mail;
 
 namespace CloudHealthOffice.Portal.Services;
 
@@ -41,17 +40,22 @@ public class AttachmentService : IAttachmentService
         var baseUrl = _configuration["Services:AttachmentService"];
         try
         {
+            // attachment-service: POST api/Attachments (multipart). The parent
+            // is the authorization; DocumentFormat (PDF, TIFF, JPEG, PNG) must
+            // match the file's extension.
             using var content = new MultipartFormDataContent();
             var streamContent = new StreamContent(fileStream);
-            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+            streamContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
             content.Add(streamContent, "file", fileName);
-            content.Add(new StringContent(authorizationId), "authorizationId");
+            content.Add(new StringContent(authorizationId), "AuthorizationId");
+            content.Add(new StringContent(Path.GetExtension(fileName).TrimStart('.')), "DocumentFormat");
+            content.Add(new StringContent("Supporting documentation"), "DocumentType");
 
-            var response = await _httpClient.PostAsync($"{baseUrl}/attachments/upload", content);
+            var response = await _httpClient.PostAsync($"{baseUrl}/attachments", content);
             response.EnsureSuccessStatusCode();
 
             var result = await response.Content.ReadFromJsonAsync<UploadAttachmentResponse>();
-            return result?.AttachmentId ?? string.Empty;
+            return result?.Id ?? string.Empty;
         }
         catch (HttpRequestException ex)
         {
@@ -60,12 +64,12 @@ public class AttachmentService : IAttachmentService
         }
     }
 
-    public async Task<Stream> DownloadAttachmentAsync(string authorizationId, string attachmentId)
+    public async Task<Stream> DownloadAttachmentAsync(string attachmentId)
     {
         var baseUrl = _configuration["Services:AttachmentService"];
         try
         {
-            var response = await _httpClient.GetAsync($"{baseUrl}/attachments/{authorizationId}/{attachmentId}");
+            var response = await _httpClient.GetAsync($"{baseUrl}/attachments/{Uri.EscapeDataString(attachmentId)}/download");
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStreamAsync();
         }
@@ -76,23 +80,8 @@ public class AttachmentService : IAttachmentService
         }
     }
 
-    public async Task DeleteAttachmentAsync(string authorizationId, string attachmentId)
-    {
-        var baseUrl = _configuration["Services:AttachmentService"];
-        try
-        {
-            var response = await _httpClient.DeleteAsync($"{baseUrl}/attachments/{authorizationId}/{attachmentId}");
-            response.EnsureSuccessStatusCode();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Attachment Service");
-            throw new ServiceUnavailableException("Attachment Service", ex);
-        }
-    }
-
     private class UploadAttachmentResponse
     {
-        public string AttachmentId { get; set; } = string.Empty;
+        public string Id { get; set; } = string.Empty;
     }
 }

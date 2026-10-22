@@ -450,13 +450,13 @@ public class ClaimsService : IClaimsService
 
     public async Task<EobSearchResponse> SearchClaimsByMemberAsync(string memberId, MemberClaimsFilter filter)
     {
-        // The claims-service v1 route lives at the service root (not under
-        // /claims), because the controller registers [Route("api/v1/claims")].
-        // Build an absolute URL from Services:ClaimsService; strip a trailing
-        // /claims if the config value accidentally includes it.
+        // The claims-service v1 route lives at the service root
+        // ([Route("api/v1/claims")]), while Services:ClaimsService ends in /api.
         var baseUrl = (_configuration["Services:ClaimsService"] ?? string.Empty).TrimEnd('/');
         if (baseUrl.EndsWith("/claims", StringComparison.OrdinalIgnoreCase))
             baseUrl = baseUrl[..^"/claims".Length];
+        if (baseUrl.EndsWith("/api", StringComparison.OrdinalIgnoreCase))
+            baseUrl = baseUrl[..^"/api".Length];
 
         var qs = new List<string> { $"memberId={Uri.EscapeDataString(memberId)}" };
         if (filter.ServiceDateFrom.HasValue) qs.Add($"serviceDateFrom={filter.ServiceDateFrom:yyyy-MM-dd}");

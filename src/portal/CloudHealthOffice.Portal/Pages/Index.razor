@@ -100,9 +100,9 @@
 
         if (subscription.SubscriptionStatus == "Expired" || subscription.SubscriptionStatus == "Cancelled")
         {
-            Logger.LogWarning("Subscription {Status} for tenant {TenantId}, redirecting to billing",
+            Logger.LogWarning("Subscription {Status} for tenant {TenantId}, redirecting to pricing",
                 subscription.SubscriptionStatus, azureTenantId);
-            Navigation.NavigateTo("/billing");
+            Navigation.NavigateTo("/pricing");
             return;
         }
 
