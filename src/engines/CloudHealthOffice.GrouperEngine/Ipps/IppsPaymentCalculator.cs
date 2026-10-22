@@ -84,10 +84,16 @@ public enum IppsPostAcuteTransferRule
 /// <summary>
 /// The operating side of the payment, itemised.
 /// </summary>
-/// <param name="WageAdjustedStandardizedAmount">
-/// The federal operating rate after the labor split and the wage index.
+/// <param name="StandardizedAmount">
+/// The row of the year's operating rate table this hospital was paid from,
+/// before the wage index. Kept rather than reduced to the one adjusted figure
+/// because which row was chosen is three facts about the hospital, and a
+/// payment that disagrees with CMS by a few percent usually disagrees about
+/// one of them.
 /// </param>
-/// <param name="LaborRelatedShare">Which of the year's two shares was used.</param>
+/// <param name="WageAdjustedStandardizedAmount">
+/// That row after the wage index and any cost-of-living adjustment.
+/// </param>
 /// <param name="BasePayment">
 /// The wage-adjusted amount times the DRG weight: the DRG payment before any
 /// add-on.
@@ -101,8 +107,8 @@ public enum IppsPostAcuteTransferRule
 /// The per-discharge uncompensated care payment (412.106(g)).
 /// </param>
 public sealed record IppsOperatingPayment(
+    IppsStandardizedAmount StandardizedAmount,
     decimal WageAdjustedStandardizedAmount,
-    decimal LaborRelatedShare,
     decimal BasePayment,
     decimal TeachingAddOn,
     decimal DisproportionateShareAddOn,
@@ -270,22 +276,31 @@ public sealed class IppsPaymentFailedException(string message) : Exception(messa
 /// add-ons, the capital payment, the transfer per diems and the cost outliers.
 ///
 /// <para>
-/// <b>Not yet validated against CMS's PRICER.</b> Every formula here is taken
-/// from the regulation rather than from memory, and the paragraph is cited at
-/// each one — but reading a formula correctly and implementing it the way
-/// CMS's own program does are different claims, and only the second one gets a
-/// payment right. The grouper next door is trustworthy because it was run
-/// against CMS's grouper and agreed on every case, not because it was written
-/// carefully. This needs the same treatment before a plan pays on it, and
-/// <see cref="IppsPayment"/> keeps every intermediate so that run can compare
-/// step by step rather than just comparing totals.
+/// <b>Validated against CMS's own pricer</b> on the base DRG payment, the
+/// standardized amount and its labor split, every transfer fraction and the
+/// capital outlier: <c>tools/cms-ipps-pricer-oracle</c> prices a reference
+/// corpus through the CMS program and
+/// <c>IppsPricerParityTests</c> holds this code to those amounts on every
+/// build. That matters more than the care taken writing it — every formula
+/// here cites the paragraph of 42 CFR that it implements, and the parity run
+/// still reversed one of them, because reading a regulation correctly and
+/// paying a claim the way CMS's program pays it are different claims and only
+/// the second one is the amount.
 /// </para>
 ///
 /// <para>
-/// Two things are deliberately absent and would be wrong to approximate: new
-/// technology add-on payments, which are a published list of devices and
-/// amounts, and the low-volume and Medicare-dependent hospital adjustments,
-/// which turn on a hospital's status rather than on the case.
+/// <b>This is still not a Medicare payment.</b> Components CMS pays and this
+/// does not: the hospital readmissions reduction, the value-based purchasing
+/// adjustment, the low-volume adjustment and the hospital-acquired-condition
+/// penalty — all four of which are signed amounts in CMS's total and are taken
+/// in an order that is not derivable from the regulation — the
+/// hospital-specific portion for sole-community and
+/// Medicare-dependent hospitals, pass-through amounts for direct medical
+/// education and organ acquisition, new-technology add-ons (a published list
+/// of devices and amounts, so an importer rather than a formula), and the
+/// bundled-payment adjustment. <see cref="IppsPayment"/> keeps every
+/// intermediate, which is what lets the parity run find a disagreement in one
+/// line rather than in a total.
 /// </para>
 /// </summary>
 public static class IppsPaymentCalculator
@@ -307,9 +322,13 @@ public static class IppsPaymentCalculator
 
         var notes = new List<string>();
 
-        var share = rates.ShareFor(provider.WageIndex);
-        var wageAdjusted = rates.OperatingStandardizedAmount
-            * share.Adjust(provider.WageIndex, provider.CostOfLivingAdjustment);
+        // The DRG is paid from the dollar amounts in the rate table row this
+        // hospital selects; the percentage pair below is for the outlier
+        // threshold alone, which is the only place CMS uses it.
+        var standardizedAmount = rates.StandardizedAmountFor(provider);
+        var percentages = rates.PercentagesFor(provider.WageIndex);
+        var wageAdjusted = standardizedAmount.Adjust(
+            provider.WageIndex, provider.CostOfLivingAdjustment);
 
         var operatingBase = wageAdjusted * stay.RelativeWeight;
         var teachingFactor = rates.Teaching.FactorFor(provider.ResidentToBedRatio);
@@ -321,8 +340,8 @@ public static class IppsPaymentCalculator
         var dshFactor = provider.OperatingDshAdjustment * rates.EmpiricallyJustifiedDshShare;
 
         var operating = new IppsOperatingPayment(
+            standardizedAmount,
             wageAdjusted,
-            share.LaborRelated,
             operatingBase,
             TeachingAddOn: operatingBase * teachingFactor,
             DisproportionateShareAddOn: operatingBase * dshFactor,
@@ -364,7 +383,7 @@ public static class IppsPaymentCalculator
                 + $"{rates.EmpiricallyJustifiedDshShare:P0} still paid through the claim.");
         }
 
-        var outlier = Outlier(rates, provider, stay, operatingPaid, capitalPaid, share);
+        var outlier = Outlier(rates, provider, stay, operatingPaid, capitalPaid, percentages);
         if (outlier.Payment > 0)
         {
             notes.Add(
@@ -453,7 +472,7 @@ public static class IppsPaymentCalculator
         IppsStay stay,
         decimal operatingPayment,
         decimal capitalPayment,
-        IppsLaborShare share)
+        IppsLaborShare percentages)
     {
         var operatingRatio = provider.OperatingCostToChargeRatio;
         var capitalRatio = provider.CapitalCostToChargeRatio;
@@ -468,11 +487,14 @@ public static class IppsPaymentCalculator
         var factor = rates.Outlier.FactorFor(stay.Drg);
         var fixedLoss = rates.Outlier.FixedLossAmount;
 
-        // The operating side's share of the fixed loss amount, adjusted on the
-        // same labor split as the standardized amount.
+        // The operating side's share of the fixed loss amount, wage-adjusted
+        // by the year's labor percentages. This is the one place the
+        // percentages are used, and CMS uses them here and nowhere else: its
+        // threshold is the cost threshold times the percentages, with the
+        // standardized amount playing no part.
         var operatingFixedLoss = fixedLoss
             * (operatingRatio / ratio)
-            * share.Adjust(provider.WageIndex, provider.CostOfLivingAdjustment);
+            * percentages.Adjust(provider.WageIndex, provider.CostOfLivingAdjustment);
 
         // The capital side's share, adjusted by the capital geographic
         // adjustment factor instead. Capital has no labor split: the whole

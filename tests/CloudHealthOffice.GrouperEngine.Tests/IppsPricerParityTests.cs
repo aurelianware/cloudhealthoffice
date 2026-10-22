@@ -51,10 +51,6 @@ public class IppsPricerParityTests
             "CMS derives the disproportionate share adjustment from the hospital's SSI and "
             + "Medicaid day ratios; IppsProvider takes the resulting factor as an input, so "
             + "there is nothing here to compare it against.",
-        ["quality-indicator-withheld"] =
-            "The hospital quality indicator selects the full or reduced market basket update, "
-            + "and so the standardized amount itself. IppsRateSet holds one standardized amount "
-            + "and cannot express the reduced one.",
         ["transfer-fifty-fifty-special-payment-drg"] =
             "CMS refused this row with return code 12, and which post-acute rule a DRG carries "
             + "is a column of CMS's DRG table that this repository has no importer for yet.",
@@ -79,7 +75,9 @@ public class IppsPricerParityTests
         decimal OperatingCostToChargeRatio,
         decimal CapitalCostToChargeRatio,
         decimal CostOfLivingAdjustment,
-        decimal ResidentToBedRatio);
+        decimal ResidentToBedRatio,
+        bool QualityDataSubmitted,
+        bool ElectronicRecordsReduction);
 
     // ─────────────────────────────────────────────────────────
     //  Reading what the oracle wrote
@@ -134,6 +132,25 @@ public class IppsPricerParityTests
                 return defaults.GetProperty(name).GetDecimal();
             }
 
+            // The two payment-reduction indicators are strings in CMS's
+            // provider record, and CMS reads them the strict way: the quality
+            // requirement is met only on "1", and the record reduction applies
+            // only on "Y". A missing indicator is therefore not neutral, and
+            // the defaults block does not carry one for the record reduction
+            // at all, so an absent key reads as blank and not as true.
+            string Indicator(string name)
+            {
+                if (element.TryGetProperty("provider", out var overrides)
+                    && overrides.TryGetProperty(name, out var overridden))
+                {
+                    return overridden.GetString() ?? "";
+                }
+
+                return defaults.TryGetProperty(name, out var fallback)
+                    ? fallback.GetString() ?? ""
+                    : "";
+            }
+
             return new Case(
                 element.GetProperty("name").GetString()!,
                 element.GetProperty("drg").GetString()!,
@@ -143,46 +160,94 @@ public class IppsPricerParityTests
                 Provider("operatingCostToChargeRatio"),
                 Provider("capitalCostToChargeRatio"),
                 Provider("costOfLivingAdjustment"),
-                Provider("internsToBedsRatio"));
+                Provider("internsToBedsRatio"),
+                QualityDataSubmitted: Indicator("hospitalQualityIndicator") == "1",
+                ElectronicRecordsReduction: Indicator("ehrReductionIndicator") == "Y");
         }).ToList();
     }
 
     /// <summary>
+    /// Which row of CMS's operating rate table a reference stay was paid from.
+    /// </summary>
+    private static IppsRateTableKey KeyFor(Case input, Answer answer) => new(
+        input.QualityDataSubmitted,
+        input.ElectronicRecordsReduction,
+        WageIndexAboveOne: answer.Number("wage_index")!.Value > 1m);
+
+    /// <summary>
     /// The fiscal year's rates, read out of what CMS reported rather than
     /// written down here.
+    ///
+    /// <para>
+    /// The eight-row operating rate table is built from CMS's answers rather
+    /// than from its rate table file, which is the stronger check of the two:
+    /// the pricer exposes no endpoint for that file, so the only way to learn a
+    /// row is to price a claim that selects it, and that exercises CMS's own
+    /// selection branch as well as its amounts. The corpus therefore has to
+    /// carry at least one stay per row, and this fails by name if it does not.
+    /// </para>
     /// </summary>
-    private static IppsRateSet RatesFrom(IReadOnlyList<Answer> answers)
+    private static IppsRateSet RatesFrom(IReadOnlyList<Case> cases, IReadOnlyList<Answer> answers)
     {
-        // Any full-quality row carries the year's split; they all agree, and
-        // the one row that does not is the withheld-quality row, which is
-        // excluded from the comparison for exactly that reason.
-        var reference = answers.First(answer => answer.Case == "wage-index-below-one");
-        var labor = reference.Number("national_labor_cost")!.Value;
-        var nonLabor = reference.Number("national_non_labor_cost")!.Value;
-        var standardizedAmount = labor + nonLabor;
+        var byName = answers.ToDictionary(answer => answer.Case);
+        var rows = new Dictionary<int, IppsStandardizedAmount>();
+
+        foreach (var input in cases)
+        {
+            var answer = byName[input.Name];
+            var labor = answer.Number("national_labor_cost");
+            var nonLabor = answer.Number("national_non_labor_cost");
+            if (labor is null || nonLabor is null)
+                continue;
+
+            var amount = new IppsStandardizedAmount(labor.Value, nonLabor.Value);
+            var number = KeyFor(input, answer).CmsTableNumber;
+
+            // Two stays that select the same row must have been paid the same
+            // amount. If they were not, either the key is wrong or something
+            // other than these three facts moves the standardized amount, and
+            // both are worth stopping for rather than quietly keeping the last
+            // one seen.
+            if (rows.TryGetValue(number, out var already))
+            {
+                Assert.Equal(already, amount);
+                continue;
+            }
+
+            rows[number] = amount;
+        }
+
+        var missing = Enumerable.Range(1, 8).Where(number => !rows.ContainsKey(number)).ToList();
+        Assert.True(
+            missing.Count == 0,
+            "the corpus has no stay selecting CMS rate table row(s) "
+            + string.Join(", ", missing.Select(number => $"tab{number}")));
 
         // CMS reports the capital rate already multiplied by the hospital's
         // geographic adjustment factor, so the federal rate is that divided
         // back out.
+        var reference = byName["wage-index-below-one"];
         var capitalRate = reference.Number("capital_federal_rate")!.Value
             / reference.Number("capital_geographic_adjustment_factor")!.Value;
 
-        // The statutory share applies on this row, because its wage index is
-        // below 1.0. The larger share is read from a row above it.
-        var higher = answers.First(answer => answer.Case == "wage-index-above-one");
-        var higherTotal = higher.Number("national_labor_cost")!.Value
-            + higher.Number("national_non_labor_cost")!.Value;
+        // The labor percentages are the outlier threshold's, and CMS does not
+        // report them, so they are derived from a row each side of a wage index
+        // of 1.0. Derived rather than written down for the same reason as
+        // everything else here, and they come out at the published 62 and 66
+        // percent to within a rounded cent.
+        var statutory = rows[3];
+        var higher = rows[1];
 
         return new IppsRateSet(
             FiscalYear: 2026,
             FirstDischargeDate: new DateOnly(2025, 10, 1),
             LastDischargeDate: new DateOnly(2026, 9, 30),
-            OperatingStandardizedAmount: standardizedAmount,
-            HigherLaborShare: new IppsLaborShare(
-                higher.Number("national_labor_cost")!.Value / higherTotal,
-                higher.Number("national_non_labor_cost")!.Value / higherTotal),
-            StatutoryLaborShare: new IppsLaborShare(
-                labor / standardizedAmount, nonLabor / standardizedAmount),
+            OperatingRates: new IppsOperatingRateTable(rows),
+            HigherLaborPercentages: new IppsLaborShare(
+                higher.LaborRelated / higher.Total, higher.NonLaborRelated / higher.Total),
+            StatutoryLaborPercentages: new IppsLaborShare(
+                statutory.LaborRelated / statutory.Total,
+                statutory.NonLaborRelated / statutory.Total),
             CapitalFederalRate: capitalRate,
             // The threshold column is the year's fixed loss amount before any
             // geographic adjustment, which is what IppsOutlierPolicy wants.
@@ -205,6 +270,8 @@ public class IppsPricerParityTests
             ResidentToBedRatio = input.ResidentToBedRatio,
             CapitalGeographicAdjustmentFactor =
                 answer.Number("capital_geographic_adjustment_factor")!.Value,
+            QualityDataSubmitted = input.QualityDataSubmitted,
+            ElectronicRecordsReduction = input.ElectronicRecordsReduction,
         };
 
         // Review code 03 is CMS's per-diem transfer. Nothing in CHO's model
@@ -230,9 +297,10 @@ public class IppsPricerParityTests
     private static IEnumerable<(Case Input, Answer Expected, IppsPayment Actual)> Comparable()
     {
         var answers = Answers();
-        var rates = RatesFrom(answers);
+        var cases = Cases();
+        var rates = RatesFrom(cases, answers);
 
-        foreach (var input in Cases())
+        foreach (var input in cases)
         {
             if (NotComparable.ContainsKey(input.Name))
                 continue;
@@ -257,6 +325,53 @@ public class IppsPricerParityTests
         Assert.Equal(
             cases.Select(input => input.Name).OrderBy(name => name),
             answers.Select(answer => answer.Case).OrderBy(name => name));
+    }
+
+    [Fact]
+    public void The_standardized_amount_CHO_pays_from_is_the_one_CMS_paid_from()
+    {
+        var failures = new List<string>();
+        var rowsSeen = new HashSet<int>();
+
+        foreach (var (input, expected, actual) in Comparable())
+        {
+            var labor = expected.Number("national_labor_cost");
+            var nonLabor = expected.Number("national_non_labor_cost");
+            if (labor is null || nonLabor is null)
+                continue;
+
+            rowsSeen.Add(KeyFor(input, expected).CmsTableNumber);
+
+            // Exactly, not within a dollar. These are published amounts: CHO
+            // either selected the row CMS selected or it did not, and a
+            // near-miss would mean it had computed one from another, which is
+            // the rounding error IppsStandardizedAmount exists to avoid.
+            if (actual.Operating.StandardizedAmount.LaborRelated != labor.Value
+                || actual.Operating.StandardizedAmount.NonLaborRelated != nonLabor.Value)
+            {
+                failures.Add(
+                    $"{input.Name}: CHO {actual.Operating.StandardizedAmount.LaborRelated:F2}"
+                    + $"/{actual.Operating.StandardizedAmount.NonLaborRelated:F2}, "
+                    + $"CMS {labor.Value:F2}/{nonLabor.Value:F2}");
+            }
+        }
+
+        Assert.Empty(failures);
+
+        // And every row of the table was reached, or this is eight assertions
+        // about one row.
+        Assert.Equal(8, rowsSeen.Count);
+
+        // What this test does and does not establish, since the table it
+        // compares against was built from these same answers. It establishes
+        // that the three facts in IppsRateTableKey are the whole key — a
+        // calculator ignoring either indicator collides two of CMS's rows and
+        // fails in RatesFrom — and that each row is reached and used whole.
+        // It cannot catch a wrong but consistent permutation of CMS's eight
+        // table numbers, because every row would still be looked up by the
+        // same name it was stored under. That is what the numbering theory in
+        // IppsPaymentCalculatorTests is for, and it matters to a loader
+        // reading CMS's rate file rather than to this calculation.
     }
 
     [Fact]

@@ -253,6 +253,88 @@
       "provider": {
         "hospitalQualityIndicator": "0"
       }
+    },
+    {
+      "name": "quality-indicator-withheld-above-one",
+      "why": "CMS table row 2: the quality reduction above a wage index of 1.0. With the row below it this says the two axes are independent -- the reduced hospital gets the 66 percent split of its own smaller amount, not the 62 percent split of anything.",
+      "ccn": "330002",
+      "cbsa": "35614",
+      "stateCode": "33",
+      "countyCode": "33061",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "hospitalQualityIndicator": "0"
+      }
+    },
+    {
+      "name": "record-reduction-above-one",
+      "why": "CMS table row 5: the reduction for not being a meaningful electronic health record user, which is a smaller standardized amount again and independent of the quality requirement.",
+      "ccn": "330003",
+      "cbsa": "35614",
+      "stateCode": "33",
+      "countyCode": "33061",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "ehrReductionIndicator": "Y"
+      }
+    },
+    {
+      "name": "record-reduction-and-quality-withheld-above-one",
+      "why": "CMS table row 6: both reductions at once. A hospital carrying both is paid a fourth published amount, not two reductions applied in turn, which is the whole reason CMS publishes eight rows rather than a reduction factor.",
+      "ccn": "330004",
+      "cbsa": "35614",
+      "stateCode": "33",
+      "countyCode": "33061",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "ehrReductionIndicator": "Y",
+        "hospitalQualityIndicator": "0"
+      }
+    },
+    {
+      "name": "record-reduction-below-one",
+      "why": "CMS table row 7: the record reduction at or below a wage index of 1.0.",
+      "ccn": "450006",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "ehrReductionIndicator": "Y"
+      }
+    },
+    {
+      "name": "record-reduction-and-quality-withheld-below-one",
+      "why": "CMS table row 8: both reductions at or below 1.0. The eighth row, which completes the table the parity test builds and so is what lets the test assert CHO picked the same row CMS did rather than only that its arithmetic was self-consistent.",
+      "ccn": "450007",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "ehrReductionIndicator": "Y",
+        "hospitalQualityIndicator": "0"
+      }
     }
   ]
 }
