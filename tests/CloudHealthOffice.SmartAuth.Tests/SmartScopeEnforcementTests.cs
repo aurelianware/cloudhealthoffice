@@ -523,7 +523,15 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var path = request.RequestUri!.AbsolutePath;
+            // fhir-service asks claims-service on one of two paths: the
+            // member's adjudicated EOB, or the Provider Access non-financial
+            // one under a ProviderAccess segment. Which payload comes back is
+            // claims-service's decision, which this stand-in does not model, so
+            // both paths are answered the same way here. Dropping the segment
+            // keeps the canned responses in one place rather than deciding the
+            // payload in a test double.
+            var path = request.RequestUri!.AbsolutePath
+                .Replace("/fhir/ProviderAccess/", "/fhir/", StringComparison.Ordinal);
             const string searchPath = "/fhir/ExplanationOfBenefit";
             const string readPrefix = "/fhir/ExplanationOfBenefit/";
 
