@@ -17,69 +17,6 @@ public class EdiOperationsService : IEdiOperationsService
         _logger = logger;
     }
 
-    public async Task<List<Edi834Batch>> Get834BatchesAsync(DateTime? from = null, DateTime? to = null)
-    {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var url = $"{baseUrl}/edi/834-batches" +
-                (from.HasValue ? $"?from={from:yyyy-MM-dd}" : "") +
-                (to.HasValue ? (from.HasValue ? $"&to={to:yyyy-MM-dd}" : $"?to={to:yyyy-MM-dd}") : "");
-            var result = await _httpClient.GetFromJsonAsync<List<Edi834Batch>>(url);
-            return result ?? new();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "EDI Operations");
-            throw new ServiceUnavailableException("EDI Operations", ex);
-        }
-    }
-
-    public async Task<List<Enrollment834Record>> Get834BatchRecordsAsync(string batchId)
-    {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var result = await _httpClient.GetFromJsonAsync<List<Enrollment834Record>>($"{baseUrl}/edi/834-batches/{batchId}/records");
-            return result ?? new();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "EDI Operations");
-            throw new ServiceUnavailableException("EDI Operations", ex);
-        }
-    }
-
-    public async Task Resolve834RecordAsync(Edi834ResolutionRequest request)
-    {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/edi/834-batches/{request.BatchId}/resolve", request);
-            response.EnsureSuccessStatusCode();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "EDI Operations");
-            throw new ServiceUnavailableException("EDI Operations", ex);
-        }
-    }
-
-    public async Task<List<ClaimAcknowledgmentSummary>> Get277CaAcknowledgmentsAsync(DateTime? from = null, DateTime? to = null)
-    {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var result = await _httpClient.GetFromJsonAsync<List<ClaimAcknowledgmentSummary>>($"{baseUrl}/edi/277ca");
-            return result ?? new();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "EDI Operations");
-            throw new ServiceUnavailableException("EDI Operations", ex);
-        }
-    }
-
     public async Task<Stream> Download277CaAsync(string claimId)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
@@ -91,21 +28,6 @@ public class EdiOperationsService : IEdiOperationsService
         {
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "EDI Operations");
             throw new ServiceUnavailableException("EDI Operations", ex);
-        }
-    }
-
-    public async Task<List<EraSummary>> GetErasAsync(DateTime? from = null, DateTime? to = null)
-    {
-        var baseUrl = _configuration["Services:PaymentService"];
-        try
-        {
-            var result = await _httpClient.GetFromJsonAsync<List<EraSummary>>($"{baseUrl}/payments/eras");
-            return result ?? new();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Payment Service");
-            throw new ServiceUnavailableException("Payment Service", ex);
         }
     }
 
@@ -123,21 +45,4 @@ public class EdiOperationsService : IEdiOperationsService
         }
     }
 
-    public async Task<List<EdiTransactionHistoryItem>> GetTransactionHistoryAsync(DateTime? from, DateTime? to, string? transactionType, string? partnerId, string? status, int pageNumber, int pageSize)
-    {
-        var baseUrl = _configuration["Services:ClaimsService"];
-        try
-        {
-            var url = $"{baseUrl}/edi/history?page={pageNumber}&pageSize={pageSize}" +
-                (transactionType != null ? $"&type={transactionType}" : "") +
-                (status != null ? $"&status={status}" : "");
-            var result = await _httpClient.GetFromJsonAsync<List<EdiTransactionHistoryItem>>(url);
-            return result ?? new();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "EDI Operations");
-            throw new ServiceUnavailableException("EDI Operations", ex);
-        }
-    }
 }

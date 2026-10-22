@@ -290,38 +290,6 @@ public class ModelDtoPropertyTests
         sut.QualityScore.Should().BeNull();
     }
 
-    // ── ReportRequest ────────────────────────────────────────────────────────
-
-    [Fact]
-    public void ReportRequest_AllProperties_RoundTrip()
-    {
-        var from = new DateTime(2026, 1, 1);
-        var to = new DateTime(2026, 3, 31);
-        var sut = new ReportRequest
-        {
-            DateFrom = from,
-            DateTo = to,
-            ProviderId = "PRV-500",
-            SponsorId = "SP-100",
-            PlanId = "PLN-200"
-        };
-
-        sut.DateFrom.Should().Be(from);
-        sut.DateTo.Should().Be(to);
-        sut.ProviderId.Should().Be("PRV-500");
-        sut.SponsorId.Should().Be("SP-100");
-        sut.PlanId.Should().Be("PLN-200");
-    }
-
-    [Fact]
-    public void ReportRequest_NullableProperties_Default()
-    {
-        var sut = new ReportRequest();
-        sut.ProviderId.Should().BeNull();
-        sut.SponsorId.Should().BeNull();
-        sut.PlanId.Should().BeNull();
-    }
-
     // ── ServiceLine ──────────────────────────────────────────────────────────
 
     [Fact]

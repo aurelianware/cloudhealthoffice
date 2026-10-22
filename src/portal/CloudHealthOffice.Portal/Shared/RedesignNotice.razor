@@ -1,0 +1,25 @@
+@* Shown on a page whose backend was never built. The page keeps its route so
+   bookmarks land here instead of on a 404; the menu no longer links to it. *@
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+    <MudPaper Elevation="0" Class="pa-6" Outlined="true">
+        <MudText Typo="Typo.h5" GutterBottom="true">
+            <MudIcon Icon="@Icons.Material.Filled.Construction" Class="mr-2" Style="vertical-align: middle;" />
+            @Title is being redesigned
+        </MudText>
+        <MudText Typo="Typo.body1" Class="mb-4">@ChildContent</MudText>
+        @if (!string.IsNullOrEmpty(AlternativeHref))
+        {
+            <MudButton Href="@AlternativeHref" Variant="Variant.Outlined" Color="Color.Primary" EndIcon="@Icons.Material.Filled.ArrowForward">
+                @AlternativeText
+            </MudButton>
+        }
+    </MudPaper>
+</MudContainer>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? AlternativeHref { get; set; }
+    [Parameter] public string? AlternativeText { get; set; }
+}

@@ -76,6 +76,7 @@ ffs-service 42%, Portal 47% and ProviderEnrollmentService 49%.
 | `.github/copilot-instructions.md` directed assistants to write unsupported marketing claims and invented case studies | Replaced by this PR with evidence-first instructions |
 | Prospecting and early strategy documents in the public repository | Removed by this PR (kept privately) |
 | Portal Correspondence page calls claims-service routes that do not exist | Fixed 2026-10-21: the page reads correspondence-service (recent letters, summary, templates) and is shown only with `correspondence:read` |
+| A scan of every portal client against every controller route (2026-10-21) found about 30 more calls to routes that do not exist | Fixed 2026-10-21. Wrong paths corrected (member claims, authorization attachments, payment-run ERAs, dashboard health checks, capitation and billing redirects). Reference Data now reads the canonical codes API. EDI Operations, Enrollment Ops, Reports and the dashboard's alert and EDI-volume tiles had no backend: they are off the menu and show a redesign notice until they are designed (Reports to `docs/architecture/portal-reporting.md`) |
 | `ffs-service` has no Dockerfile or deploy workflow | Open (CAP-20) |
 
 ## Open items carried forward
