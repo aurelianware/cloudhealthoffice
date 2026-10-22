@@ -250,7 +250,5 @@ Changes needing a reason or a second approver use the same pattern as two-person
 4. **#1500:** merged as is; its store is interim and moves into the catalog in step 1.
 5. **Sponsor contracts** are the home of sponsor-side configuration (§9b).
 
-## 14. Open questions
-
-1. **Change requests from operations:** a "request a change" action that raises a configuration work item in CHO, or the plan's own ticketing tool?
-2. **CRM:** do account managers work renewals in a CRM (e.g. Salesforce) that CHO should link to, or is CHO's contract record the system of record?
+6. **Change requests from operations** are tracked in CHO. "Request a change" on any setting raises a configuration work item (work type `ConfigurationChange`) in work-management, carrying the setting, the node, the effective value with its source, and the member or exception that prompted it. Routing: sponsor, policy and class settings to the sponsor's account manager; program and plan settings to a configuration queue; tenant and carrier settings to the configuration manager. The request links to the resulting change set and any approval. An optional external ticket reference holds a ServiceNow or Jira number; a two-way connector waits for a pilot that needs it.
+7. **CRM:** CHO is the system of record for the signed contract terms that enrollment, claims and billing execute against. The CRM keeps the sales pipeline (prospects, quotes, brokers, renewal opportunities). The contract term stores the CRM opportunity id and link, and CHO exposes "create draft contract term" so a won opportunity can open the draft; a Salesforce connector waits for a pilot that uses it.
