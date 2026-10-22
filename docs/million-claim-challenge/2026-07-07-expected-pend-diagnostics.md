@@ -1,5 +1,12 @@
 # Expected-Pend Diagnostics — Code-Path Trace
 
+> **Historical snapshot — current-status clarification, October 22, 2026.**
+> Preserve this diagnostic run and its original findings. Current native claims
+> execute real pricing/benefit/COB stages, and complete prior-payer data supports
+> secondary/tertiary calculations. A legacy reason code cited below is not proof
+> those capabilities are absent today. Use [Capability Reconciliation](../CAPABILITY_RECONCILIATION.md)
+> for current status; this notice does not rescore the historical run.
+
 **Status: internal engineering finding. Not a published benchmark result, not an
 ADR.** This document is the static-analysis trace that motivated adding
 `--pend-diagnostics` to the MCC platform validator. It answers *why* the 1K

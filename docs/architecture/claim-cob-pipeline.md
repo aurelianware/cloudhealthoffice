@@ -114,7 +114,11 @@ builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>
 `CoordinationOfBenefitsStubStage.cs` was deleted in this PR (mirrors 5.4
 + 5.7 stub deletions).
 
-### D3 — Phase 2 hook stub with structured detection
+### D3 — Historical Phase 1 detection hook
+
+> Superseded for complete prior-payer data by the October 2026 decision table
+> below. The legacy pend reason remains for incomplete evidence; it does not
+> mean secondary or tertiary calculation is globally unsupported.
 
 5.8 detects CHO-secondary scenarios explicitly via the coverage-service
 `/cob` lookup; emits a Pend with stable machine reason
