@@ -826,6 +826,69 @@ Build order:
 5. `IppsPaymentCalculator`: wage index, labor/non-labor split, IME, DSH,
    outlier, transfer and post-acute transfer policy; plus the
    provider-specific-file home the data model is missing.
+
+   **Built, and explicitly not yet validated.** Every formula is taken from
+   42 CFR with the paragraph cited at the line that implements it — 412.64(h)
+   and (m) for the wage adjustment, 412.105 for indirect medical education,
+   412.106 for disproportionate share, 412.4 for transfers, 412.84 for cost
+   outliers. That is a weaker claim than the grouper's, and the difference
+   matters: the grouper is trustworthy because it was run against CMS's own
+   grouper and agreed on every case, not because it was written carefully.
+   Reading a formula correctly and implementing it the way CMS's PRICER does
+   are different things, and only the second gets a payment right. So
+   `IppsPayment` keeps every intermediate — the wage-adjusted amount, which
+   labor share was chosen, each add-on, the per diem, the threshold — so that
+   a PRICER parity run can compare step by step. A single total that agrees is
+   indistinguishable from one that agrees by luck.
+
+   **No rate is in the code.** A fiscal year is an `IppsRateSet` loaded like a
+   grouper version: the standardized amount, both labor splits, the capital
+   rate, the fixed loss amount, the burn DRGs, the teaching exponent and
+   multiplier. CMS republishes all of it every August for the October
+   discharges, and an engine with a rate compiled into it is wrong from
+   1 October until someone ships a release.
+
+   **The provider-specific file is input, not computation**, and two of its
+   fields look computable and are not. The disproportionate patient percentage
+   of 412.106(b) is built from Medicare/SSI and Medicaid patient days across a
+   cost reporting period; the resident-to-bed ratio of 412.105(a) from
+   full-time-equivalent residents over average available beds with several
+   categories of bed day excluded. Both are settled on the cost report, under
+   caps and category rules, with the hospital's appeal rights attached. A
+   claim-time engine that derived either would be inventing the hospital's
+   payment rather than applying it.
+
+   Three findings worth not re-deriving:
+
+   - **The labor share is a comparison, not a threshold.** 412.64(h)(3) sets
+     62 percent "unless employing that percentage would result in lower
+     payments for the hospital". That reduces to "the higher share above a
+     wage index of 1.0", which is how the trade press states it — but only
+     because the cost-of-living adjustment is usually 1.0. In Alaska and
+     Hawaii, where 412.64(m)(1)(ii) lifts the non-labor share, the *smaller*
+     labor share can pay more even at a wage index of exactly 1.0. An
+     implementation that picked the split by testing the wage index against
+     1.0 would underpay every hospital in those two states. There is a test
+     for this.
+   - **The fixed loss amount is one figure per case, not one per side.** 412.84
+     reads as though operating and capital were tested separately against their
+     own thresholds, and an earlier draft here did that — which counts the
+     threshold twice and pays outliers on ordinary cases. The two
+     cost-to-charge ratios stay separate, because 412.84(g) keeps them separate
+     and a hospital's two ratios differ, but they are applied to the charges and
+     added into one cost tested against one threshold.
+   - **One transfer line is genuinely ambiguous.** 412.4(f)(2) pays "50 percent
+     of the amount calculated under (f)(1) for each day of the stay". Read as
+     half of the whole (f)(1) amount, or as a halving applied per day, those
+     differ. The industry reading is the former and that is what is
+     implemented, with the ambiguity marked at the line. It is one of the
+     things a PRICER parity run has to settle rather than something to decide
+     from the text.
+
+   Deliberately absent, because approximating them would be worse than
+   omitting them: new technology add-on payments, which are a published list
+   of devices and amounts, and the low-volume and Medicare-dependent hospital
+   adjustments, which turn on a hospital's status rather than on the case.
 6. `AddendumBApcAssigner` and OPPS packaging: status indicators, N packaging,
    Q1/Q2/Q3 conditional packaging, J1/J2 comprehensive APCs, composite APCs,
    multiple-procedure discounting on status T.
