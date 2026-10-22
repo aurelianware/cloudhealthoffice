@@ -1,6 +1,6 @@
 # Plan configuration: settings that cascade, with overrides
 
-**Status:** Draft for review (2026-10-22).
+**Status:** Agreed in review (2026-10-22); decisions in §13.
 **Scope:** One way for every CHO service to define a business setting, set it at the right level of the plan's structure, override it further down, and explain where an effective value came from.
 
 **Related:**
@@ -124,13 +124,59 @@ resolve(key, scope, asOf) → { value, sourceLevel, sourceId, locked, clampedBy?
 
 ## 9. Where it lives
 
-**A configuration service** owns the store, the catalog, the admin API and the audit history:
+**A configuration module in tenant-service** (decided, §13) owns the store, the catalog, the admin API and the audit history. It has its own collections, its own `api/v1/configuration/...` routes, its own permissions and its own change events, so it can move to a service of its own later without callers changing:
 - **Services resolve through a shared client with a local cache.** Entries are keyed by tenant, key and scope.
 - **Cache invalidation:** a `configuration.changed.v1` event invalidates entries, with a short expiry as the fallback for deployments without Kafka. The in-memory bus is process-local, the same constraint work-management handles with reconcile.
 - **Definitions** live in a shared package, and each owning service registers its own at startup.
 - **Hierarchy records stay where they belong.** Carrier and program go in tenant-service; benefit plan stays in benefit-plan-service; sponsor policy and class go in sponsor-service. The configuration service stores ids, not copies.
 
-The alternative, a store inside each service, is what #1500 does today. It is fine for one setting. It won't scale to a single admin screen, a single audit history or a single "where is this overridden" answer.
+The alternative, a store inside each service, is what #1500 does today (its settings store and `enrollment:configure` are interim and are replaced in step 1). It is fine for one setting. It won't scale to a single admin screen, a single audit history or a single "where is this overridden" answer.
+
+## 9a. Who changes what
+
+Settings changes are driven by permissions, assigned by job function:
+
+| Permission | Allows |
+|---|---|
+| `config:read` | See effective settings and explain them for a member |
+| `config:sponsor` | Change sponsor, sponsor-contract, policy and class settings, within the product's negotiable ranges |
+| `config:product` | Change program and plan settings, including which sponsor settings are negotiable and their ranges |
+| `config:enterprise` | Change tenant and carrier settings; set and remove locks; promote change sets to production |
+| `config:approve` | Approve a two-person or out-of-range change, never one's own |
+
+| Role | Holds | Works |
+|---|---|---|
+| **AccountManager** | `config:read`, `config:sponsor` | Enters a group's terms as a draft on the sponsor contract while working the new business or renewal |
+| **Underwriter** | `config:read`, `config:approve` | Approves terms outside the negotiable ranges |
+| **ConfigurationAnalyst** | `config:read`, `config:product`, `config:sponsor` | Builds programs and plans and sets the negotiable ranges |
+| **ConfigurationManager** | all `config:*` | Locks, tenant and carrier settings, approvals, promotion |
+| Operations (enrollment, claims, member services) | `config:read` | View and explain; questions about a sponsor's terms go to its account manager |
+
+**Negotiable ranges.** For each sponsor-side setting the product team marks it fixed or negotiable on the program or plan, and gives a range (for example retro add 30–90 days, waiting period 0–90 days). An account manager's value inside the range activates with the contract; outside it, the change waits for an underwriter. A fixed setting is read-only to account managers. Locks and legal floors apply regardless.
+
+**Drafts.** Sponsor-side changes are drafted against a sponsor contract term (§9b) and take effect when the term is activated, on its start date, as one audited change set naming the account manager and the contract.
+
+## 9b. Sponsor contracts
+
+The group agreement between the sponsor and the plan, per contract term (usually a plan year), is where sponsor-side configuration lives. It is a record in sponsor-service with the signed document in the document store:
+
+| Section | Holds | Read by |
+|---|---|---|
+| Term | Contract period, renewal date, status (draft, in underwriting, signed, active, ended), the signed document | — |
+| Plans offered | One **sponsor policy** per benefit plan | Enrollment, ID cards, claims eligibility |
+| Tiers and rates | Tier structure (2-, 3- or 4-tier) and the rate for each tier | Premium billing, AR |
+| Contribution | Employer and employee shares (optional; needed when CHO bills members directly: COBRA, retirees, direct bill) | Premium billing |
+| Billing terms | List bill or self-bill, frequency, due day, grace period | Premium billing, AR (replaces the sponsor's flat billing info) |
+| Eligibility by **class** | Hours, employee types, dependent rules (age limit, domestic partners) | Enrollment |
+| Waiting period and effective-date rule | E.g. first of the month after 60 days | Enrollment |
+| Termination and retro rules | End of month or date of event; retro windows | Enrollment |
+| Life events | Allowed qualifying events, reporting windows, coverage start | Enrollment, member services |
+| Documentation requirements | Proof required per event or dependent | Enrollment exceptions, correspondence |
+| Underwriting conditions | Minimum participation and employer contribution | Renewal review |
+
+**Legal floors on these** (to be verified against the regulation text when built): group waiting periods of at most 90 days; dependent coverage to age 26; special enrollment windows of at least 30 days for group plans, and 60 days after loss of Medicaid or CHIP.
+
+**Flow:** a new group or renewal opens a draft term → the account manager enters plans, tiers, rates, eligibility and settings → anything out of range goes to underwriting → on signature the document is attached and the term activates on its start date → enrollment and billing resolve from it as of each member's dates. A detailed design follows at enrollment step 4.
 
 ## 10. Moving between environments
 
@@ -158,24 +204,33 @@ Changes needing a reason or a second approver use the same pattern as two-person
 
 ## 12. Build order
 
-1. **Catalog, store, resolver.**
+1. **Catalog, store, resolver** (in tenant-service).
    - Definitions, values with effective dating, locks and constraints.
    - The resolve and explain API, the cache client and change events.
    - Levels: tenant, line-of-business type and sponsor.
-   - Move #1500's enrollment settings into it.
-2. **Program and carrier records** in tenant-service.
+   - Move #1500's enrollment settings into it; retire its interim store, endpoints and `enrollment:configure`.
+   - The `config:*` permissions and the roles in §9a.
+2. **Program and carrier records** in tenant-service. One carrier per tenant is created automatically.
+   - Legal-entity details move from tenant configuration to the carrier: NACHA origination, payer IDs, tax ID, the name and address used on letters and ID cards.
+   - Tenant controls become catalog settings at tenant level: payment separation of duties, personal-representative activation by a second user. Technical and integration configuration (modules, region, SFTP, clearinghouse, platform adapters) stays tenant configuration.
    - Benefit plans and sponsors gain a program.
    - Line-of-business defaults move from the enum to programs (a program carries its line-of-business type).
-3. **Sponsor policy and class** in sponsor-service (enrollment step 4), and their levels in the resolver.
+3. **Sponsor contracts** (§9b) in sponsor-service, with sponsor policies and classes, draft terms and underwriting approval (enrollment step 4), and their levels in the resolver.
 4. **First consumers:**
    - enrollment retro limits, waiting periods, orphan grace and the full-replace guard;
    - the premium grace period, moved off the sponsor's billing info.
 5. **Admin screen** with explain and where-overridden.
 6. **Export and import** between environments.
 
-## 13. Open questions
+## 13. Decisions (2026-10-22)
 
-1. **Service:** a new configuration service, or a configuration module inside tenant-service? It is tenant-scoped and administrative, which suits tenant-service; a separate service keeps tenant-service small.
-2. **Carrier now or later:** build the carrier level now (one per tenant by default), or add it when a multi-entity plan needs it?
-3. **Who may override at sponsor and policy levels:** enrollment supervisors, account management, or tenant admins only? The permission could be per level, for example `config:sponsor`, `config:program`.
-4. **#1500:** merge it as is and migrate its store in step 1, or hold it and build step 1 first?
+1. **Where it lives:** a module in tenant-service with a clean boundary (§9). Carrier and program live there too, and a new service would be operational cost without a need yet.
+2. **Carrier:** built now, one per tenant by default. Legal-entity details move onto it; tenant controls become settings; technical configuration stays (step 2).
+3. **Who changes what:** permission-driven by job function (§9a). Account managers configure sponsor terms as drafts on the contract, within negotiable ranges; underwriters approve out-of-range terms; configuration analysts own products; operations staff read and explain.
+4. **#1500:** merged as is; its store is interim and moves into the catalog in step 1.
+5. **Sponsor contracts** are the home of sponsor-side configuration (§9b).
+
+## 14. Open questions
+
+1. **Change requests from operations:** a "request a change" action that raises a configuration work item in CHO, or the plan's own ticketing tool?
+2. **CRM:** do account managers work renewals in a CRM (e.g. Salesforce) that CHO should link to, or is CHO's contract record the system of record?
