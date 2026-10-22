@@ -144,7 +144,7 @@ The two share the same file layer; only the record layer differs:
 
 1. **File record and one intake path** for 834 and 837 (upload and SFTP), with the raw file in the document store. *Built 2026-10 (§9.1), except the raw file in the document store, which moves to step 4.*
 2. **Control numbers from the sequence store** for every outbound builder; outbound files recorded. *Built 2026-10 (§9.2).*
-   - **Next, ahead of step 3: large-file intake (§11)**, so state audit 834s arriving over SFTP are not refused.
+   - **Large-file intake (§11):** *built 2026-10-22 for 834 (§11.1)*: one path for every raw 834, staged and imported as a background run.
 3. **Trading partner lookup** on intake; last received/sent; the Trading Partners page on real data.
 4. **EDI Operations page:** files, file detail, acknowledgments; links into the business views.
 5. **Expected-file schedules** and `EdiMissingFile` work items.
@@ -220,12 +220,35 @@ The two share the same file layer; only the record layer differs:
 
 ## 11. Large-file intake
 
-State audit 834s run to hundreds of megabytes (about 0.5–1 GB for a million members). Today the raw intake endpoints cap uploads at 20 MB, and the whole path is in memory: the request is read into one string, the envelope check copies it, the parser builds every member before the first is applied, and the import runs inside the HTTP request. enrollment-import-service runs with a 512 MiB memory limit, so raising the cap alone would move the failure from a 413 to an out-of-memory restart.
+State audit 834s run to hundreds of megabytes (about 0.5–1 GB for a million members). Before this change the raw intake endpoints capped uploads at 20 MB and the whole path was in memory: the request was read into one string, the envelope check copied it, the parser built every member before the first was applied, and the import ran inside the HTTP request. enrollment-import-service runs with a 512 MiB memory limit, so raising the cap alone would move the failure from a 413 to an out-of-memory restart.
 
-The design (decided 2026-10-22):
+The design (decided 2026-10-22, revised the same day to one path):
 
-1. **Stage, then reference.** The SFTP workflow writes the file to object storage (the raw-file archive of decision 1) and posts a reference, not the bytes. Portal uploads stream to the same storage. Nothing large travels through HTTP or sits in one string.
-2. **Envelope check by streaming.** ISA, GS/GE and IEA are read as the file streams; the duplicate ISA13 check and TA1 work as today.
-3. **Streaming 834 parser.** Members are produced one INS loop at a time. Dependents are matched to their subscriber within the transaction set as today; a dependent whose subscriber has not been seen is held until the set ends.
-4. **Import as a run, not a request.** The intake answers `202 Accepted` with the import run and file ids; the run applies members in chunks, records progress on the import run and the file record, and can resume after a restart from the last committed chunk.
-5. **837s** follow the same path once 834 is done; their files are smaller, so they come second.
+1. **One path for every size and source.** Every raw 834, small or large, uploaded or from SFTP, is staged in the raw-file store and imported as a background run. There is no size threshold and no second path. `POST api/v1/enrollment/import/raw834` streams the upload to the store, starts the run, then waits a short configurable time (`EnrollmentImport:Runs:WaitSeconds`, default 10 s): a run that finishes in time answers `200` with the same `ImportResult` as before; otherwise `202 Accepted` with the run and file ids and `GET api/v1/enrollment/import/runs/{id}`. The SFTP workflow posts every file to the same endpoint and treats both as success.
+2. **Envelope check by streaming.** ISA, GS/GE, ST and IEA are read as the file streams; the duplicate ISA13 check and TA1 work as today.
+3. **Streaming 834 parser.** Members are produced one subscriber at a time, with the dependents that follow them.
+4. **Import as a run of units, not a request.** The run applies units, records progress on the import run and the file record, and resumes after a restart from its last checkpoint.
+5. **A seam for scatter/gather.** Units are dispatched behind an interface so a later change can publish them to Kafka and gather the results, without changing the parser, the unit or the gather:
+   - **Unit:** one subscriber loop with its dependents, or one standalone dependent. It carries the tenant, run id, EDI file id, file position and a sequence number.
+   - **Ordering key:** the subscriber id. Units with the same tenant and subscriber id apply in file order.
+   - **Dispatch:** `IEnrollmentUnitDispatcher`. Today: N in-process lanes partitioned by a stable hash of (tenant, subscriber id), N configurable, default 1. Later: the topic **`enrollment.units.v1`**, partitioned by tenant + subscriber id.
+   - **Apply once:** a unit record keyed by run id + sequence is written before the unit is applied, so a redelivered unit is never applied twice. Exceptions are already keyed by transaction id.
+   - **Gather:** the run records how many units the parse produced (expected) and counts completed and failed units with atomic increments. When completed + failed reaches expected, one step finishes the run — a compare-and-swap on its status, so exactly once — and completes the EDI file record. Reconciliation and the sponsor's error report will hang off the same step.
+6. **837s** follow the same path once 834 is done; their files are smaller, so they come second.
+
+### 11.1 What was built (2026-10-22)
+
+- **Raw-file store** (`IRawEdiFileStore`): the configured document store (Azure Blob, Google Cloud Storage or S3; container `edi-raw-files`, tagged `retention-policy=edi-raw-10y`) when `DocumentStore:Provider` is set, otherwise **GridFS** in the service's own MongoDB (bucket `edi-raw-files`), shared by every replica. Keys are `tenants/{tenant}/edi/inbound/834/{yyyy}/{MM}/{dd}/{id}`, carry no file name, and are checked against the caller's tenant on every read. The EDI file record's `RawDocumentId` is the key.
+- **Streaming envelope check** (`X12EnvelopeSkeleton`, shared): the file is read once as a stream and reduced to a skeleton the existing `X12EnvelopeReader` reads to the same findings, counts, headers and GS06/ST02 numbers (every ISA; GS, GE, ST, TA1 and IEA in full; a run of other segments as its first segment's id). The skeleton grows with groups and transaction sets, not members. Size and SHA-256 on the file record are of the bytes received. Parity tests cover 24 envelope cases.
+- **Streaming parser** (`Streaming834Parser`): reads segment by segment (`X12SegmentStreamReader`, same delimiter rules as `X12Tokenizer`) and hands `Enrollment834EdiParser` one family at a time with its transaction set's header, so the loop rules are shared. Standalone dependents are yielded after every subscriber, as the whole-file import processed them last. **One difference:** a dependent separated from its subscriber by another subscriber's loop becomes a standalone dependent (applied after its subscriber is on file) instead of being attached. Parity tests compare the units with the whole-file parse; a 50,000-member file yields its first unit after reading under 256 KB.
+- **Runs:** `EnrollmentImportRun` gains status (Queued, Running, Completed, Failed), the raw file key, accepted interchanges, claimed ISA13s, TA1 fields, expected/completed/failed units, the checkpoint and a lease. A hosted worker claims queued runs (and runs whose lease expired), counts the units in a first pass that applies nothing — a file that cannot be parsed fails there and its ISA13 is given back, as before — then dispatches from the checkpoint in chunks (`ChunkSize`, default 500), renewing its lease. On resume, units left mid-apply by a stopped worker are marked failed (they may be partly applied, so they are not applied again) and counted. After 5 attempts a run fails.
+- **Units** apply through the same `ImportEnrollmentAsync` as before, numbered from their place in the file (`INS 7`, `dependent 2 without its subscriber`), so transaction rows, exceptions and positions are unchanged.
+- **A unit that fails as a whole opens an enrollment exception**, so the change reaches the Enrollment834 queues rather than only the run's error list (the file's ISA13 is kept, so the sponsor's resend would be refused as a duplicate):
+  - a unit whose import throws: reason `UNEXPECTED_ERROR` (queue Retry); the run still finishes (before, the request failed with a 500);
+  - a unit a stopped worker left mid-apply: reason `UNIT_INTERRUPTED` (queue Data), opened when the run resumes, saying the change may be partly applied and the member should be checked before reprocessing.
+
+  The exception holds the unit's change as received — the subscriber with its dependents, or the standalone dependent — with the batch, file, EDI file, position, group and subscriber id. Its id is derived from tenant + run + sequence, so a retry or redelivery never opens a second one. Reprocess re-runs that change through the import as any other exception. The unit record keeps the exception id, and `GET import/runs/{id}` lists failed units with theirs. The text stored on the run and the unit record is the file position and a fixed message, never member data or the exception's own text (as `ClientErrorText`).
+- **Plan-code gap report** (`plan-code-gap-report/raw834`) reads the upload with the streaming parser and keeps only the plan codes.
+- **Limits:** uploads up to 1 GiB (request, multipart and Kestrel limits). ASP.NET buffers a large multipart upload to a temporary file on the pod's disk, not memory, before it is streamed to the store.
+- **Settings** (`EnrollmentImport:Runs`): `Lanes` (1), `ChunkSize` (500), `LeaseSeconds` (120), `PollSeconds` (5), `WaitSeconds` (10).
+- **Deferred:** the Kafka dispatcher; 837s on the same path; a GridFS-to-object-store move for deployments that configure a document store later; the retention job.

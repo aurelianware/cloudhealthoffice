@@ -47,6 +47,23 @@ public sealed class EnrollmentIndexInitializer : IHostedService
                 .Descending(x => x.StartedAt),
             new CreateIndexOptions { Name = "ix_tenant_started" }),
             cancellationToken: cancellationToken);
+        // The worker's claim: queued runs, and running ones whose lease ran out.
+        importRuns.Indexes.CreateOne(new CreateIndexModel<EnrollmentImportRun>(
+            Builders<EnrollmentImportRun>.IndexKeys
+                .Ascending(x => x.Status)
+                .Ascending(x => x.LeaseExpiresAt)
+                .Ascending(x => x.QueuedAt),
+            new CreateIndexOptions { Name = "ix_status_lease_queued" }),
+            cancellationToken: cancellationToken);
+
+        var units = _db.GetCollection<EnrollmentImportUnitRecord>(Services.EnrollmentImportUnitStore.CollectionName);
+        units.Indexes.CreateOne(new CreateIndexModel<EnrollmentImportUnitRecord>(
+            Builders<EnrollmentImportUnitRecord>.IndexKeys
+                .Ascending(x => x.TenantId)
+                .Ascending(x => x.RunId)
+                .Ascending(x => x.Status),
+            new CreateIndexOptions { Name = "ix_tenant_run_status" }),
+            cancellationToken: cancellationToken);
 
         var events = _db.GetCollection<EnrollmentEvent>("enrollment-events");
         events.Indexes.CreateOne(new CreateIndexModel<EnrollmentEvent>(

@@ -8,6 +8,8 @@ using EnrollmentImportService.HostedServices;
 using EnrollmentImportService.Repositories;
 using EnrollmentImportService.Services;
 using EnrollmentImportService.Services.Edi;
+using EnrollmentImportService.Services.Runs;
+using CloudHealthOffice.DocumentStore;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
@@ -64,6 +66,36 @@ builder.Services.AddSingleton<IEnrollment834EdiParser, Enrollment834EdiParser>()
 // X12 interchange control: ISA/IEA validation, TA1, duplicate ISA13 (shared library).
 builder.Services.AddChoX12Interchange(builder.Configuration);
 builder.Services.AddSingleton<IPlanCodeGapReportService, PlanCodeGapReportService>();
+
+// Raw 834s of every size: staged in the raw-file store, imported as a run of
+// units by a background worker (docs/architecture/edi-operations.md §11).
+builder.Services.Configure<EnrollmentImportRunOptions>(builder.Configuration.GetSection(EnrollmentImportRunOptions.SectionName));
+var documentStoreConfigured =
+    !string.IsNullOrWhiteSpace(builder.Configuration[$"{DocumentStoreServiceCollectionExtensions.SectionName}:Provider"])
+    || !string.IsNullOrWhiteSpace(builder.Configuration[DocumentStoreServiceCollectionExtensions.LegacyAzureConnectionStringKey]);
+if (documentStoreConfigured)
+{
+    // The configured object store (Azure Blob, Google Cloud Storage or S3) is the raw-file archive.
+    builder.Services.AddChoDocumentStore(builder.Environment.EnvironmentName);
+    builder.Services.AddSingleton<IRawEdiFileStore, DocumentStoreRawEdiFileStore>();
+}
+else
+{
+    // No object store configured: GridFS in the service's own MongoDB, shared by every replica.
+    builder.Services.AddSingleton<IRawEdiFileStore, GridFsRawEdiFileStore>();
+}
+builder.Services.AddSingleton<IStreaming834Parser, Streaming834Parser>();
+builder.Services.AddSingleton<IEnrollmentImportUnitStore, EnrollmentImportUnitStore>();
+builder.Services.AddScoped<EnrollmentRunFinisher>();
+builder.Services.AddSingleton<IEnrollmentUnitApplier, EnrollmentUnitApplier>();
+builder.Services.AddSingleton<IEnrollmentUnitDispatcher, InProcessEnrollmentUnitDispatcher>();
+builder.Services.AddScoped<EnrollmentImportRunProcessor>();
+builder.Services.AddSingleton<EnrollmentImportRunSignal>();
+builder.Services.AddSingleton<IEnrollmentImportRunScheduler>(sp => sp.GetRequiredService<EnrollmentImportRunSignal>());
+builder.Services.AddScoped<Raw834Intake>();
+builder.Services.AddHostedService<EnrollmentImportRunWorker>();
+builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(o =>
+    o.Limits.MaxRequestBodySize = EnrollmentImportService.Controllers.EnrollmentController.MaxRawUploadBytes);
 
 builder.Services.AddHostedService<EnrollmentIndexInitializer>();
 

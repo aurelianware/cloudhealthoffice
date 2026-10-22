@@ -47,6 +47,18 @@ public class EnrollmentReconcileTests
         WorkEntitlements.OpenUrl(a).Should().Be("/enrollment-ops/exceptions/a");
     }
 
+    [Theory]
+    [InlineData("UNEXPECTED_ERROR", "enrollment.retry")]
+    [InlineData("UNIT_INTERRUPTED", "enrollment.data")]
+    public async Task UnitsThatFailedInARun_RouteToTheirQueues(string reason, string queue)
+    {
+        _source.Items.Add(Exception("u", reason));
+
+        await Reconcile();
+
+        (await _kit.Store.GetItemAsync(T, ItemId("u")))!.QueueId.Should().Be(WorkTestKit.QueueId(queue));
+    }
+
     [Fact]
     public async Task IsIdempotent_AndClosesItemsNoLongerNeedingWork()
     {

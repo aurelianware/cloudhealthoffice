@@ -84,9 +84,11 @@ public class EnrollmentImportService : IEnrollmentImportService
             result.Errors.Add(warning);
         }
 
-        for (int i = 0; i < enrollment.Enrollments.Count; i++)
+        for (int k = 0; k < enrollment.Enrollments.Count; k++)
         {
-            var memberEnrollment = enrollment.Enrollments[i];
+            // i: the subscriber's position in the whole file (a run's unit carries its offset).
+            var i = enrollment.SubscriberIndexOffset + k;
+            var memberEnrollment = enrollment.Enrollments[k];
             var txnStatus = "Accepted";
             var validation = _validator.Validate(memberEnrollment);
             if (!validation.IsValid)
@@ -147,7 +149,7 @@ public class EnrollmentImportService : IEnrollmentImportService
         // create, or write onto, a subscriber record.
         for (var k = 0; k < enrollment.DependentEnrollments.Count; k++)
         {
-            await ProcessStandaloneDependentAsync(enrollment.DependentEnrollments[k], ctx, k);
+            await ProcessStandaloneDependentAsync(enrollment.DependentEnrollments[k], ctx, enrollment.DependentIndexOffset + k);
         }
 
         result.CompletedAt = DateTime.UtcNow;
@@ -156,7 +158,8 @@ public class EnrollmentImportService : IEnrollmentImportService
             "Import completed: {SuccessCount} success, {FailedCount} failed, {SkippedCount} skipped, {DependentsFailed} attached dependent(s) failed",
             result.SuccessCount, result.FailedCount, result.SkippedCount, result.DependentsFailed);
 
-        await RecordRunAsync(tenantId, enrollment.ActorId, enrollment.EdiFileId, result);
+        if (enrollment.RecordRun)
+            await RecordRunAsync(tenantId, enrollment.ActorId, enrollment.EdiFileId, result);
 
         return result;
     }

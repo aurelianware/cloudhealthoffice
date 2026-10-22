@@ -59,13 +59,13 @@ public static class DefaultEnrollmentQueues
     public static readonly IReadOnlyList<DefaultClaimQueues.Definition> All =
     [
         new("enrollment.retry", "Enrollment: Service Unavailable", "A CHO service was unavailable or busy; reprocess as received.", 10,
-            ["DOWNSTREAM_UNAVAILABLE", "CONCURRENT_UPDATE"], 2),
+            ["DOWNSTREAM_UNAVAILABLE", "CONCURRENT_UPDATE", "UNEXPECTED_ERROR"], 2),
         new("enrollment.matching", "Enrollment: Member Matching", "The subscriber is not on file, a dependent cannot be identified, or the member may already exist.", 20,
             ["SUBSCRIBER_NOT_FOUND", "DEPENDENT_NOT_IDENTIFIED", "POSSIBLE_DUPLICATE"], 5),
         new("enrollment.retro", "Enrollment: Retro Changes", "Retroactive changes beyond the limit, or touching paid claims, awaiting approval.", 30,
             ["RETRO_BEYOND_LIMIT", "RETRO_AFFECTS_PAID_CLAIMS"], 3),
         new("enrollment.data", "Enrollment: Data and Validation", "The change failed validation, was not allowed, or was refused by a CHO service.", 40,
-            ["VALIDATION_FAILED", "INVALID_TRANSACTION", "DOWNSTREAM_REJECTED", "PLAN_CODE_UNMAPPED", "STATE_GATE"], 5),
+            ["VALIDATION_FAILED", "INVALID_TRANSACTION", "DOWNSTREAM_REJECTED", "PLAN_CODE_UNMAPPED", "STATE_GATE", "UNIT_INTERRUPTED"], 5),
         new("enrollment.other", "Enrollment: Other", "Every enrollment exception no other queue matched.", 1000, [], 5, Fallback: true),
     ];
 

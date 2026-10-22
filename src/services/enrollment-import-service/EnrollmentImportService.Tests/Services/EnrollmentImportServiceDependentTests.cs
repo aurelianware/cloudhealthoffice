@@ -31,6 +31,7 @@ public class EnrollmentImportServiceDependentTests
         public List<string> CoverageReinstatements { get; } = new();
         public List<EnrollmentTransaction> Transactions { get; } = new();
         public Support.InMemoryEnrollmentExceptionRepository Exceptions { get; } = new();
+        public int RunsCreated { get; private set; }
         public InMemoryEnrollmentEventRepository Events { get; } = new();
         public string? ResolvedPlanId { get; set; } = "resolved-plan-id";
         public bool ReturnCreatedCoverageId { get; set; } = true;
@@ -156,6 +157,7 @@ public class EnrollmentImportServiceDependentTests
                 .ReturnsAsync((EnrollmentTransaction t) => t);
             var importRuns = new Mock<IEnrollmentImportRunRepository>();
             importRuns.Setup(r => r.CreateAsync(It.IsAny<EnrollmentImportRun>()))
+                .Callback(() => RunsCreated++)
                 .ReturnsAsync((EnrollmentImportRun r) => r);
 
             var publisher = new EnrollmentEventPublisher(Events, NullLogger<EnrollmentEventPublisher>.Instance);
@@ -1478,6 +1480,73 @@ public class EnrollmentImportServiceDependentTests
         (await service.ReprocessAsync("t1", first.Id, "s", null, null, null)).Outcome.Should().Be(ExceptionActionOutcome.Invalid);
         (await service.HoldAsync("t2", second.Id, "s", now.AddDays(1), null)).Outcome.Should().Be(ExceptionActionOutcome.NotFound, "another tenant's exception");
     }
+
+    // ── A unit of a larger file (edi-operations.md §11) ─────────────────
+
+    [Fact]
+    public async Task AUnitOfARun_IsNumberedFromItsPlaceInTheFile_AndWritesNoRunOfItsOwn()
+    {
+        var h = new Harness();
+        var invalid = Subscriber("SUB7", "021");
+        invalid.MaintenanceType = "";
+        var baby = Child("BABY", "20260115", "021");
+        baby.SubscriberId = "SUB-MISSING";
+
+        await h.ImportAsync(new Enrollment834
+        {
+            BatchId = "RUN1", Enrollments = { invalid }, DependentEnrollments = { baby },
+            SubscriberIndexOffset = 6, DependentIndexOffset = 2, RecordRun = false,
+        });
+
+        h.Transactions.Should().Contain(t => t.FilePosition == "INS 7");
+        h.Transactions.Should().Contain(t => t.FilePosition == "dependent 3 without its subscriber");
+        h.Exceptions.All.Select(e => e.FilePosition).Should().BeEquivalentTo(["INS 7", "dependent 3 without its subscriber"]);
+        h.RunsCreated.Should().Be(0, "the run, not the unit, is the import's record");
+    }
+
+    [Fact]
+    public async Task AFailedSubscriberUnitsException_ReprocessesTheSubscriberWithItsDependents_AndResolves()
+    {
+        var h = new Harness();
+        var unit = UnitOf(new Enrollment834 { FileName = "acme.834", Enrollments = { Subscriber("SUB1", "021", Child("EMMA", "20120304", "021")) } });
+        var exception = global::EnrollmentImportService.Services.Runs.EnrollmentUnitExceptions.Build(unit, unit.Batch,
+            EnrollmentRejectionReasons.UnexpectedError, "x", DateTime.UtcNow);
+        await h.Exceptions.TryCreateAsync(exception);
+
+        var result = await h.ExceptionService().ReprocessAsync("t1", exception.Id, "specialist", null, null, null);
+
+        result.Exception!.Status.Should().Be(EnrollmentExceptionStatus.Resolved);
+        result.Exception.Resolution.Should().Be(EnrollmentExceptionResolution.Applied);
+        h.Created.Select(c => c.FirstName).Should().BeEquivalentTo(["JOHN", "EMMA"], "the subscriber and the dependent it carried, once each");
+        h.Exceptions.All.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task AnInterruptedDependentUnitsException_ReprocessesTheDependent_AndResolves()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var baby = Child("BABY", "20260115", "021");
+        baby.SubscriberId = "SUB1";
+        var unit = UnitOf(new Enrollment834 { FileName = "acme.834", DependentEnrollments = { baby } }, global::EnrollmentImportService.Services.Edi.EnrollmentUnitKind.StandaloneDependent);
+        var exception = global::EnrollmentImportService.Services.Runs.EnrollmentUnitExceptions.Build(unit, unit.Batch,
+            EnrollmentRejectionReasons.UnitInterrupted, global::EnrollmentImportService.Services.EnrollmentImportUnitStore.InterruptedError, DateTime.UtcNow);
+        exception.SourceKind.Should().Be(EnrollmentExceptionSourceKind.Dependent);
+        await h.Exceptions.TryCreateAsync(exception);
+
+        var result = await h.ExceptionService().ReprocessAsync("t1", exception.Id, "specialist", null, null, "checked the member");
+
+        result.Exception!.Status.Should().Be(EnrollmentExceptionStatus.Resolved);
+        h.Created.Should().ContainSingle(c => c.FirstName == "BABY");
+    }
+
+    private static global::EnrollmentImportService.Services.Runs.EnrollmentUnit UnitOf(Enrollment834 batch,
+        global::EnrollmentImportService.Services.Edi.EnrollmentUnitKind kind = global::EnrollmentImportService.Services.Edi.EnrollmentUnitKind.Subscriber) => new()
+    {
+        TenantId = "t1", RunId = "run-1", BatchId = "RUN1", EdiFileId = "EDIFILE-1", Sequence = 0,
+        FilePosition = kind == global::EnrollmentImportService.Services.Edi.EnrollmentUnitKind.Subscriber ? "INS 1" : "dependent 1 without its subscriber",
+        OrderingKey = "SUB1", Kind = kind, Batch = batch,
+    };
 
     private static string FindRepoFile(string relative)
     {

@@ -13,6 +13,9 @@ public interface IPlanCodeGapReportService
     /// exactly which mappings still need to be loaded.
     /// </summary>
     Task<PlanCodeGapReport> BuildReportAsync(Enrollment834 enrollment, string tenantId, CancellationToken ct = default);
+
+    /// <summary>The same report from a streamed 834 (edi-operations.md §11): only the plan codes are kept as the units go by.</summary>
+    Task<PlanCodeGapReport> BuildReportAsync(IAsyncEnumerable<Edi.ParsedEnrollmentUnit> units, string fileName, string tenantId, CancellationToken ct = default);
 }
 
 public sealed class PlanCodeGapReportService : IPlanCodeGapReportService
@@ -25,11 +28,27 @@ public sealed class PlanCodeGapReportService : IPlanCodeGapReportService
     }
 
     public async Task<PlanCodeGapReport> BuildReportAsync(
+        IAsyncEnumerable<Edi.ParsedEnrollmentUnit> units, string fileName, string tenantId, CancellationToken ct = default)
+    {
+        var report = new PlanCodeGapReport { FileName = fileName };
+        var triples = new HashSet<(string GroupNumber, string InsuranceLineCode, string ExternalPlanCode)>();
+        await foreach (var unit in units.WithCancellation(ct))
+            CollectBatch(unit.Batch, triples, report);
+        return await ResolveAsync(triples, report, tenantId, ct);
+    }
+
+    public Task<PlanCodeGapReport> BuildReportAsync(
         Enrollment834 enrollment, string tenantId, CancellationToken ct = default)
     {
         var report = new PlanCodeGapReport { FileName = enrollment.FileName };
         var triples = new HashSet<(string GroupNumber, string InsuranceLineCode, string ExternalPlanCode)>();
+        CollectBatch(enrollment, triples, report);
+        return ResolveAsync(triples, report, tenantId, ct);
+    }
 
+    private static void CollectBatch(Enrollment834 enrollment,
+        HashSet<(string GroupNumber, string InsuranceLineCode, string ExternalPlanCode)> triples, PlanCodeGapReport report)
+    {
         foreach (var member in enrollment.Enrollments)
         {
             Collect(member.Coverage, member.GroupNumber, triples, report);
@@ -45,7 +64,12 @@ public sealed class PlanCodeGapReportService : IPlanCodeGapReportService
         {
             Collect(dependent.Coverage, dependent.GroupNumber, triples, report);
         }
+    }
 
+    private async Task<PlanCodeGapReport> ResolveAsync(
+        HashSet<(string GroupNumber, string InsuranceLineCode, string ExternalPlanCode)> triples,
+        PlanCodeGapReport report, string tenantId, CancellationToken ct)
+    {
         foreach (var (groupNumber, insuranceLineCode, externalPlanCode) in triples)
         {
             var planId = await _benefitPlanClient.ResolvePlanIdAsync(

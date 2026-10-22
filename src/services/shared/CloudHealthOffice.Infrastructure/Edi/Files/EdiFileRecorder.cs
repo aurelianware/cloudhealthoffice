@@ -21,6 +21,17 @@ public sealed class EdiFileIntake
     public string? FileName { get; init; }
     public string? SourcePath { get; init; }
     public string? ReceivedBy { get; init; }
+
+    /// <summary>
+    /// Size and SHA-256 of the file's bytes, when <see cref="Content"/> is not
+    /// the file itself (a streamed file's envelope skeleton,
+    /// <see cref="X12EnvelopeSkeleton"/>). Null: computed from Content.
+    /// </summary>
+    public long? SizeBytes { get; init; }
+    public string? Sha256 { get; init; }
+
+    /// <summary>Where the raw file is stored, when it was (edi-operations.md §11).</summary>
+    public string? RawDocumentId { get; init; }
 }
 
 /// <summary>What processing the file's accepted contents produced.</summary>
@@ -163,7 +174,7 @@ public sealed class EdiFileRecorder : IEdiFileRecorder
 
     internal static EdiFile Build(EdiFileIntake intake, InterchangeIntakeResult? envelope, DateTime now)
     {
-        var bytes = Encoding.UTF8.GetBytes(intake.Content);
+        var bytes = intake.SizeBytes is null || intake.Sha256 is null ? Encoding.UTF8.GetBytes(intake.Content) : null;
         var file = new EdiFile
         {
             TenantId = intake.TenantId,
@@ -173,8 +184,9 @@ public sealed class EdiFileRecorder : IEdiFileRecorder
             FileName = intake.FileName,
             SourcePath = string.IsNullOrWhiteSpace(intake.SourcePath) ? null : intake.SourcePath.Trim(),
             ReceivedBy = intake.ReceivedBy,
-            SizeBytes = bytes.LongLength,
-            Sha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+            SizeBytes = bytes?.LongLength ?? intake.SizeBytes!.Value,
+            Sha256 = bytes is null ? intake.Sha256!.ToLowerInvariant() : Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+            RawDocumentId = intake.RawDocumentId,
             ReceivedAt = now,
             UpdatedAt = now,
         };
