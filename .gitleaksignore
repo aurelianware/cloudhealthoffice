@@ -37,3 +37,10 @@ e8f5b011cc8a1d2bc6981cf5176739765966013b:test-attachment-oauth.sh:generic-api-ke
 # that trading-partner-service must refuse in a request body. Refusal is by
 # field name, so the test now uses a plain placeholder.
 cf28912105e19ae3335b54d7c2c17664088a01d7:tests/CloudHealthOffice.TradingPartnerService.Tests/Security/TradingPartnerPipelineAuthTests.cs:private-key:430
+#
+# A route literal, "fhir/ExplanationOfBenefit", in the Provider Access EOB
+# change (generic-api-key matched the ternary assigning it). Not a
+# credential; the line was reworked in a later commit, so only the
+# history scan sees it.
+a1c47e95c1883b41f7d208b7eb5001e14e79dc6b:src/services/fhir-service/Controllers/ExplanationOfBenefitController.cs:generic-api-key:159
+a1c47e95c1883b41f7d208b7eb5001e14e79dc6b:src/services/fhir-service/Controllers/ExplanationOfBenefitController.cs:generic-api-key:265
