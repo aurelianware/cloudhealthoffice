@@ -77,10 +77,17 @@ public sealed class EnrollmentImportRunMongoTests(MongoRunnerFixture mongo) : IA
         await units.TryBeginAsync("t1", "r1", 1, "INS 2", Now);
         await units.FinishAsync("t1", "r1", 0, false, null, Now);
 
-        (await units.FailInterruptedAsync("t1", "r1", Now)).Should().Be(1);
+        (await units.FailInterruptedAsync("t1", "r1", Now)).Should().Equal(1);
         (await units.CountAsync("t1", "r1", EnrollmentImportUnitStatus.Done)).Should().Be(1);
         (await units.CountAsync("t1", "r1", EnrollmentImportUnitStatus.Failed)).Should().Be(1);
         (await units.CountAsync("t2", "r1", EnrollmentImportUnitStatus.Done)).Should().Be(0);
+
+        var failed = (await units.ListFailedWithoutExceptionAsync("t1", "r1")).Should().ContainSingle().Subject;
+        failed.Error.Should().Be($"INS 2: {EnrollmentImportUnitStore.InterruptedError}");
+        await units.SetExceptionAsync("t1", "r1", 1, "unit-x");
+        (await units.ListFailedWithoutExceptionAsync("t1", "r1")).Should().BeEmpty();
+        (await units.ListFailedAsync("t1", "r1")).Single().ExceptionId.Should().Be("unit-x");
+        (await units.ListFailedAsync("t2", "r1")).Should().BeEmpty();
     }
 
     [Fact]

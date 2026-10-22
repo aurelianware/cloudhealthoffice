@@ -139,7 +139,11 @@ public sealed class EnrollmentImportUnitRecord
 
     /// <summary>Applying, Done or Failed.</summary>
     public string Status { get; set; } = EnrollmentImportUnitStatus.Applying;
+    /// <summary>Why it failed: the file position and a fixed text, never member data (as <c>ClientErrorText</c>).</summary>
     public string? Error { get; set; }
+
+    /// <summary>The enrollment exception opened for a failed unit, where its change is worked.</summary>
+    public string? ExceptionId { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime? FinishedAt { get; set; }
 

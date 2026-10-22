@@ -24,8 +24,15 @@ public sealed class EnrollmentImportRunStatusResponse
     public string? AcknowledgmentTa1 { get; init; }
     public string StatusUrl { get; init; } = string.Empty;
 
-    public static EnrollmentImportRunStatusResponse From(EnrollmentImportRun run) => new()
+    /// <summary>Failed units (first 100, file order), each with the enrollment exception its change is worked in.</summary>
+    public IReadOnlyList<FailedUnitView> FailedUnitDetails { get; init; } = [];
+
+    public static EnrollmentImportRunStatusResponse From(EnrollmentImportRun run, IReadOnlyList<EnrollmentImportUnitRecord>? failedUnits = null) => new()
     {
+        FailedUnitDetails = (failedUnits ?? []).Select(u => new FailedUnitView
+        {
+            Sequence = u.Sequence, FilePosition = u.FilePosition, Error = u.Error, ExceptionId = u.ExceptionId,
+        }).ToList(),
         ImportRunId = run.Id,
         Status = run.Status,
         EdiFileId = run.EdiFileId,
@@ -45,4 +52,12 @@ public sealed class EnrollmentImportRunStatusResponse
         AcknowledgmentTa1 = run.AcknowledgmentTa1,
         StatusUrl = $"api/v1/enrollment/import/runs/{run.Id}",
     };
+}
+
+public sealed class FailedUnitView
+{
+    public int Sequence { get; init; }
+    public string FilePosition { get; init; } = string.Empty;
+    public string? Error { get; init; }
+    public string? ExceptionId { get; init; }
 }

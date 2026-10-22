@@ -183,6 +183,7 @@ public sealed class EnrollmentUnitApplier(
             var units = services.GetRequiredService<IEnrollmentImportUnitStore>();
             var runs = services.GetRequiredService<IEnrollmentImportRunRepository>();
             var finisher = services.GetRequiredService<EnrollmentRunFinisher>();
+            var exceptions = services.GetService<Repositories.IEnrollmentExceptionRepository>();
             if (!await units.TryBeginAsync(unit.TenantId, unit.RunId, unit.Sequence, unit.FilePosition, clock.GetUtcNow().UtcDateTime, ct))
             {
                 logger.LogDebug("Unit {Sequence} of import run {RunId} was already applied; skipped", unit.Sequence, LogSanitizer.Sanitize(unit.RunId));
@@ -191,7 +192,10 @@ public sealed class EnrollmentUnitApplier(
 
             ImportResult result;
             string? error = null;
+            string? exceptionId = null;
             var batch = unit.Batch;
+            // The change as received, for an exception should the whole unit fail.
+            var received = EnrollmentUnitExceptions.Copy(batch);
             batch.BatchId = unit.BatchId;
             batch.ActorId = unit.ActorId;
             batch.EdiFileId = unit.EdiFileId;
@@ -205,19 +209,42 @@ public sealed class EnrollmentUnitApplier(
             {
                 logger.LogError(ex, "Unit {Sequence} ({Position}) of import run {RunId} failed", unit.Sequence,
                     LogSanitizer.Sanitize(unit.FilePosition), LogSanitizer.Sanitize(unit.RunId));
-                error = ClientErrorText.For(ex);
-                result = new ImportResult { Errors = [$"{unit.FilePosition}: {error}"] };
+                // The file position and a fixed text: the exception's own text (which can
+                // carry member data or hosts) stays in the log, as ClientErrorText.
+                error = $"{unit.FilePosition}: {EnrollmentImportUnitStore.FailedError}";
+                result = new ImportResult { Errors = [error] };
+                exceptionId = await OpenExceptionAsync(exceptions, unit, received,
+                    EnrollmentRejectionReasons.UnexpectedError, EnrollmentImportUnitStore.FailedError, ct);
             }
 
             var failed = error is not null;
-            await units.FinishAsync(unit.TenantId, unit.RunId, unit.Sequence, failed, error, clock.GetUtcNow().UtcDateTime, ct);
+            await units.FinishAsync(unit.TenantId, unit.RunId, unit.Sequence, failed, error, clock.GetUtcNow().UtcDateTime, exceptionId, ct);
             await runs.AddUnitResultAsync(unit.TenantId, unit.RunId, result, failed, ct);
             await finisher.TryFinishAsync(unit.TenantId, unit.RunId, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The unit record stays Applying; the run's next attempt marks it failed.
+            // The unit record stays Applying; the run's next attempt marks it failed and opens its exception.
             logger.LogError(ex, "Could not record unit {Sequence} of import run {RunId}", unit.Sequence, LogSanitizer.Sanitize(unit.RunId));
+        }
+    }
+
+    /// <summary>Opens the unit's exception (once: its id is deterministic). Null when it could not be stored.</summary>
+    internal async Task<string?> OpenExceptionAsync(Repositories.IEnrollmentExceptionRepository? exceptions, EnrollmentUnit unit,
+        Enrollment834 received, string reasonCode, string message, CancellationToken ct)
+    {
+        if (exceptions is null) return null;
+        var exception = EnrollmentUnitExceptions.Build(unit, received, reasonCode, message, clock.GetUtcNow().UtcDateTime);
+        try
+        {
+            await exceptions.TryCreateAsync(exception, ct);
+            return exception.Id;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Could not open the enrollment exception for unit {Sequence} of import run {RunId}",
+                unit.Sequence, LogSanitizer.Sanitize(unit.RunId));
+            return null;
         }
     }
 }

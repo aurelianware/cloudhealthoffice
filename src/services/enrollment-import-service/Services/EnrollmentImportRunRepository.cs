@@ -179,21 +179,34 @@ public interface IEnrollmentImportUnitStore
     /// <summary>Records that the unit is being applied. False when it was already begun: it must not be applied again.</summary>
     Task<bool> TryBeginAsync(string tenantId, string runId, int sequence, string filePosition, DateTime at, CancellationToken ct = default);
 
-    Task FinishAsync(string tenantId, string runId, int sequence, bool failed, string? error, DateTime at, CancellationToken ct = default);
+    Task FinishAsync(string tenantId, string runId, int sequence, bool failed, string? error, DateTime at,
+        string? exceptionId = null, CancellationToken ct = default);
 
     Task<int> CountAsync(string tenantId, string runId, string status, CancellationToken ct = default);
 
     /// <summary>
     /// Units left Applying by a worker that stopped are marked Failed (they
-    /// may be partly applied, so they are not applied again). Returns how many.
+    /// may be partly applied, so they are not applied again). Returns their sequence numbers.
     /// </summary>
-    Task<int> FailInterruptedAsync(string tenantId, string runId, DateTime at, CancellationToken ct = default);
+    Task<IReadOnlyList<int>> FailInterruptedAsync(string tenantId, string runId, DateTime at, CancellationToken ct = default);
+
+    /// <summary>Failed units whose change has no enrollment exception yet (an interrupted unit, a recording failure).</summary>
+    Task<IReadOnlyList<EnrollmentImportUnitRecord>> ListFailedWithoutExceptionAsync(string tenantId, string runId, CancellationToken ct = default);
+
+    Task SetExceptionAsync(string tenantId, string runId, int sequence, string exceptionId, CancellationToken ct = default);
+
+    /// <summary>The run's failed units, in file order.</summary>
+    Task<IReadOnlyList<EnrollmentImportUnitRecord>> ListFailedAsync(string tenantId, string runId, int limit = 100, CancellationToken ct = default);
 }
 
 public sealed class EnrollmentImportUnitStore(IMongoDatabase database) : IEnrollmentImportUnitStore
 {
     public const string CollectionName = "enrollment-import-units";
-    public const string InterruptedError = "The import stopped while this unit was being applied; it was not applied again. Check the member and reprocess if needed.";
+    /// <summary>Stored after the unit's file position; carries no member data.</summary>
+    public const string InterruptedError = "The import stopped while this change was being applied, so it may be partly applied. It was not applied again; check the member's enrollment before reprocessing.";
+
+    /// <summary>Stored after the unit's file position; the exception itself stays in the service log.</summary>
+    public const string FailedError = "The change could not be applied: an unexpected error occurred; it has been logged.";
 
     private readonly IMongoCollection<EnrollmentImportUnitRecord> _collection =
         database.GetCollection<EnrollmentImportUnitRecord>(CollectionName);
@@ -219,29 +232,53 @@ public sealed class EnrollmentImportUnitStore(IMongoDatabase database) : IEnroll
         }
     }
 
-    public Task FinishAsync(string tenantId, string runId, int sequence, bool failed, string? error, DateTime at, CancellationToken ct = default)
+    public Task FinishAsync(string tenantId, string runId, int sequence, bool failed, string? error, DateTime at,
+        string? exceptionId = null, CancellationToken ct = default)
     {
         var id = EnrollmentImportUnitRecord.IdFor(runId, sequence);
         return _collection.UpdateOneAsync(x => x.TenantId == tenantId && x.Id == id,
             Builders<EnrollmentImportUnitRecord>.Update
                 .Set(x => x.Status, failed ? EnrollmentImportUnitStatus.Failed : EnrollmentImportUnitStatus.Done)
                 .Set(x => x.Error, error)
+                .Set(x => x.ExceptionId, exceptionId)
                 .Set(x => x.FinishedAt, at),
             cancellationToken: ct);
     }
 
+    public async Task<IReadOnlyList<EnrollmentImportUnitRecord>> ListFailedWithoutExceptionAsync(string tenantId, string runId, CancellationToken ct = default) =>
+        await _collection.Find(x => x.TenantId == tenantId && x.RunId == runId
+                                    && x.Status == EnrollmentImportUnitStatus.Failed && x.ExceptionId == null)
+            .SortBy(x => x.Sequence).ToListAsync(ct);
+
+    public Task SetExceptionAsync(string tenantId, string runId, int sequence, string exceptionId, CancellationToken ct = default)
+    {
+        var id = EnrollmentImportUnitRecord.IdFor(runId, sequence);
+        return _collection.UpdateOneAsync(x => x.TenantId == tenantId && x.Id == id,
+            Builders<EnrollmentImportUnitRecord>.Update.Set(x => x.ExceptionId, exceptionId), cancellationToken: ct);
+    }
+
+    public async Task<IReadOnlyList<EnrollmentImportUnitRecord>> ListFailedAsync(string tenantId, string runId, int limit = 100, CancellationToken ct = default) =>
+        await _collection.Find(x => x.TenantId == tenantId && x.RunId == runId && x.Status == EnrollmentImportUnitStatus.Failed)
+            .SortBy(x => x.Sequence).Limit(limit).ToListAsync(ct);
+
     public async Task<int> CountAsync(string tenantId, string runId, string status, CancellationToken ct = default) =>
         (int)await _collection.CountDocumentsAsync(x => x.TenantId == tenantId && x.RunId == runId && x.Status == status, cancellationToken: ct);
 
-    public async Task<int> FailInterruptedAsync(string tenantId, string runId, DateTime at, CancellationToken ct = default)
+    public async Task<IReadOnlyList<int>> FailInterruptedAsync(string tenantId, string runId, DateTime at, CancellationToken ct = default)
     {
-        var result = await _collection.UpdateManyAsync(
-            x => x.TenantId == tenantId && x.RunId == runId && x.Status == EnrollmentImportUnitStatus.Applying,
-            Builders<EnrollmentImportUnitRecord>.Update
-                .Set(x => x.Status, EnrollmentImportUnitStatus.Failed)
-                .Set(x => x.Error, InterruptedError)
-                .Set(x => x.FinishedAt, at),
-            cancellationToken: ct);
-        return (int)result.ModifiedCount;
+        var applying = await _collection.Find(x => x.TenantId == tenantId && x.RunId == runId && x.Status == EnrollmentImportUnitStatus.Applying)
+            .Project(x => new { x.Sequence, x.FilePosition }).ToListAsync(ct);
+        foreach (var unit in applying)
+        {
+            var id = EnrollmentImportUnitRecord.IdFor(runId, unit.Sequence);
+            await _collection.UpdateOneAsync(
+                x => x.TenantId == tenantId && x.Id == id && x.Status == EnrollmentImportUnitStatus.Applying,
+                Builders<EnrollmentImportUnitRecord>.Update
+                    .Set(x => x.Status, EnrollmentImportUnitStatus.Failed)
+                    .Set(x => x.Error, $"{unit.FilePosition}: {InterruptedError}")
+                    .Set(x => x.FinishedAt, at),
+                cancellationToken: ct);
+        }
+        return applying.Select(u => u.Sequence).OrderBy(s => s).ToList();
     }
 }

@@ -20,6 +20,7 @@ public class EnrollmentController : ControllerBase
     private readonly ICurrentActor _actor;
     private readonly ILogger<EnrollmentController> _logger;
     private readonly Raw834Intake? _raw834;
+    private readonly IEnrollmentImportUnitStore? _units;
     private readonly IStreaming834Parser _streamingParser;
 
     public EnrollmentController(
@@ -30,8 +31,10 @@ public class EnrollmentController : ControllerBase
         ICurrentActor actor,
         ILogger<EnrollmentController> logger,
         Raw834Intake? raw834 = null,
-        IStreaming834Parser? streamingParser = null)
+        IStreaming834Parser? streamingParser = null,
+        IEnrollmentImportUnitStore? units = null)
     {
+        _units = units;
         _raw834 = raw834;
         _streamingParser = streamingParser ?? new Streaming834Parser();
         _importService = importService;
@@ -124,7 +127,9 @@ public class EnrollmentController : ControllerBase
     public async Task<IActionResult> GetImportRun(string id, CancellationToken ct)
     {
         var run = await _importRuns.GetAsync(TenantId, id, ct);
-        return run is null ? NotFound() : Ok(EnrollmentImportRunStatusResponse.From(run));
+        if (run is null) return NotFound();
+        var failed = run.FailedUnits > 0 && _units is not null ? await _units.ListFailedAsync(run.TenantId, run.Id, 100, ct) : null;
+        return Ok(EnrollmentImportRunStatusResponse.From(run, failed));
     }
 
     private ActionResult<ImportResult> RunResponse(EnrollmentImportRun run)

@@ -199,6 +199,7 @@ SFTP files reaching the same import path with the duplicate check is a prerequis
   - `DOWNSTREAM_REJECTED` or `DOWNSTREAM_UNAVAILABLE`: a 5xx or 429 from member-, coverage- or sponsor-service, safe to reprocess;
   - `CONCURRENT_UPDATE`;
   - `UNEXPECTED_ERROR`;
+  - `UNIT_INTERRUPTED`: a unit of a raw-file import run was interrupted mid-apply and may be partly applied ([edi-operations.md](edi-operations.md) §11.1);
   - `TERM_SKIPPED_NOT_ON_FILE`: a note on an accepted termination that found no one to terminate.
 - Stored messages follow the import's existing rule: an unexpected exception's text stays in the log. A downstream refusal is recorded by service and HTTP status, not by its body.
 - Each transaction from an uploaded or SFTP file carries `EdiFileId`, the EDI file record it came in ([edi-operations.md](edi-operations.md) §3).

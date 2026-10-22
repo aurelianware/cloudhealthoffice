@@ -162,7 +162,101 @@ public class EnrollmentImportRunTests
         import.Applied.SelectMany(b => b.Enrollments).Select(e => e.SubscriberId)
             .Should().BeEquivalentTo(["SUB4", "SUB5"], "units 0–1 were applied before, unit 2 may be partly applied");
         import.Applied.Should().Contain(b => b.DependentEnrollments.Count == 1);
-        kit.Units.All.Single(u => u.Sequence == 2).Error.Should().Be(EnrollmentImportUnitStore.InterruptedError);
+        kit.Units.All.Single(u => u.Sequence == 2).Error.Should().Be($"INS 3: {EnrollmentImportUnitStore.InterruptedError}");
+    }
+
+    [Fact]
+    public async Task AUnitThatThrows_OpensAnException_ForItsWholeChange_AndKeepsMemberDataOffTheRun()
+    {
+        var import = new RecordingImport { FailWith = b => b.Enrollments.Any(e => e.SubscriberId == "SUB2") ? new InvalidOperationException("SUB2 DOE exploded") : null };
+        var kit = new RunTestKit(import);
+        var controller = kit.Controller();
+
+        await controller.ImportRaw834(Upload(File834(3)));
+
+        var run = kit.Runs.All.Single();
+        var exception = kit.Exceptions.All.Should().ContainSingle().Subject;
+        exception.Id.Should().Be(EnrollmentUnitExceptions.IdFor("t1", run.Id, 1));
+        exception.ReasonCode.Should().Be(EnrollmentRejectionReasons.UnexpectedError);
+        exception.SourceKind.Should().Be(EnrollmentExceptionSourceKind.Subscriber);
+        exception.Subscriber!.SubscriberId.Should().Be("SUB2");
+        exception.Subscriber.Dependents.Should().ContainSingle(d => d.FirstName == "K2", "the subscriber with its dependents, as received");
+        (exception.FilePosition, exception.BatchId, exception.EdiFileId, exception.SubscriberId, exception.FileName)
+            .Should().Be(("INS 2", run.BatchId, run.EdiFileId, "SUB2", "acme.834"));
+
+        var unit = kit.Units.All.Single(u => u.Status == EnrollmentImportUnitStatus.Failed);
+        unit.ExceptionId.Should().Be(exception.Id);
+        // Only the position and a fixed text: no member names or ids, no exception text.
+        foreach (var text in run.Errors.Append(unit.Error!))
+        {
+            text.Should().Be($"INS 2: {EnrollmentImportUnitStore.FailedError}");
+            text.Should().NotContain("SUB2").And.NotContain("DOE").And.NotContain("exploded");
+        }
+
+        var status = (EnrollmentImportRunStatusResponse)Assert.IsType<OkObjectResult>(await controller.GetImportRun(run.Id, CancellationToken.None)).Value!;
+        status.FailedUnitDetails.Should().ContainSingle(f => f.FilePosition == "INS 2" && f.ExceptionId == exception.Id);
+
+        // A redelivery of the failed unit neither applies it again nor opens a second exception.
+        await kit.Services.GetRequiredService<IEnrollmentUnitApplier>().ApplyAsync(new EnrollmentUnit
+        {
+            TenantId = "t1", RunId = run.Id, BatchId = run.BatchId, Sequence = 1, FilePosition = "INS 2", OrderingKey = "SUB2",
+            Kind = EnrollmentUnitKind.Subscriber, Batch = new Enrollment834 { Enrollments = { new MemberEnrollment { SubscriberId = "SUB2" } } },
+        });
+        kit.Exceptions.All.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ReprocessingAThrownUnitsException_ReappliesItsChangeOnce()
+    {
+        var failures = 0;
+        var import = new RecordingImport
+        {
+            FailWith = b => b.ReprocessExceptionId is null && b.Enrollments.Any(e => e.SubscriberId == "SUB2") && failures++ == 0
+                ? new InvalidOperationException("boom") : null,
+        };
+        var kit = new RunTestKit(import);
+        await kit.Controller().ImportRaw834(Upload(File834(3)));
+        var exception = kit.Exceptions.All.Single();
+
+        var service = new EnrollmentExceptionService(kit.Exceptions, import, TimeProvider.System);
+        var result = await service.ReprocessAsync("t1", exception.Id, "specialist", null, null, "member-service is back");
+
+        result.Outcome.Should().Be(ExceptionActionOutcome.Done);
+        var reprocessed = import.Applied.Where(b => b.ReprocessExceptionId == exception.Id).Should().ContainSingle().Subject;
+        reprocessed.Enrollments.Single().SubscriberId.Should().Be("SUB2");
+        reprocessed.Enrollments.Single().Dependents.Should().ContainSingle(d => d.FirstName == "K2");
+        reprocessed.BatchId.Should().Be($"{exception.BatchId}-RP1");
+        import.Applied.SelectMany(b => b.Enrollments).Count(e => e.SubscriberId == "SUB2").Should().Be(1, "applied once: by the reprocess");
+    }
+
+    [Fact]
+    public async Task AnInterruptedUnit_OpensAnException_WhenItsRunResumes()
+    {
+        var import = new RecordingImport();
+        var kit = new RunTestKit(import);
+        kit.Scheduler.Paused = true;
+        await kit.Controller().ImportRaw834(Upload(File834(3)));
+        var run = kit.Runs.All.Single();
+        await kit.Runs.SetExpectedUnitsAsync("t1", run.Id, 4);
+        kit.Units.LeaveApplying("t1", run.Id, 1);
+        kit.Runs.ExpireLease(run.Id);
+
+        await kit.Scheduler.RunPendingAsync();
+
+        var exception = kit.Exceptions.All.Should().ContainSingle().Subject;
+        exception.Id.Should().Be(EnrollmentUnitExceptions.IdFor("t1", run.Id, 1));
+        exception.ReasonCode.Should().Be(EnrollmentRejectionReasons.UnitInterrupted);
+        exception.Errors.Single().Message.Should().Contain("partly applied").And.Contain("before reprocessing");
+        exception.Subscriber!.SubscriberId.Should().Be("SUB2");
+        exception.Subscriber.Dependents.Should().ContainSingle();
+        kit.Units.All.Single(u => u.Sequence == 1).ExceptionId.Should().Be(exception.Id);
+        import.Applied.SelectMany(b => b.Enrollments).Select(e => e.SubscriberId).Should().BeEquivalentTo(["SUB1", "SUB3"]);
+        kit.Runs.All.Single().Status.Should().Be(EnrollmentImportRunStatus.Completed);
+
+        // A further resume opens nothing more.
+        kit.Runs.ExpireLease(run.Id);
+        await kit.Scheduler.RunPendingAsync();
+        kit.Exceptions.All.Should().ContainSingle();
     }
 
     [Fact]

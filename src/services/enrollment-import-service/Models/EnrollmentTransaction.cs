@@ -98,6 +98,13 @@ public static class EnrollmentRejectionReasons
     /// <summary>Anything else; details are in the service log.</summary>
     public const string UnexpectedError = "UNEXPECTED_ERROR";
 
+    /// <summary>
+    /// The import stopped while this unit of a run was being applied
+    /// (edi-operations.md §11): it may be partly applied, so it was not
+    /// applied again. Check the member before reprocessing.
+    /// </summary>
+    public const string UnitInterrupted = "UNIT_INTERRUPTED";
+
     /// <summary>Accepted, but nothing was changed: a termination for a member not on file.</summary>
     public const string TermSkippedNotOnFile = "TERM_SKIPPED_NOT_ON_FILE";
 }

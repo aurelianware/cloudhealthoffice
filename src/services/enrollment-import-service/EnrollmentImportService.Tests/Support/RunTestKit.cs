@@ -156,16 +156,40 @@ public sealed class InMemoryEnrollmentImportUnitStore : IEnrollmentImportUnitSto
         }
     }
 
-    public Task FinishAsync(string tenantId, string runId, int sequence, bool failed, string? error, DateTime at, CancellationToken ct = default)
+    public Task FinishAsync(string tenantId, string runId, int sequence, bool failed, string? error, DateTime at,
+        string? exceptionId = null, CancellationToken ct = default)
     {
         lock (_gate)
         {
             var unit = _units[EnrollmentImportUnitRecord.IdFor(runId, sequence)];
             unit.Status = failed ? EnrollmentImportUnitStatus.Failed : EnrollmentImportUnitStatus.Done;
             unit.Error = error;
+            unit.ExceptionId = exceptionId;
             unit.FinishedAt = at;
         }
         return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<EnrollmentImportUnitRecord>> ListFailedWithoutExceptionAsync(string tenantId, string runId, CancellationToken ct = default)
+    {
+        lock (_gate)
+            return Task.FromResult<IReadOnlyList<EnrollmentImportUnitRecord>>(_units.Values
+                .Where(u => u.TenantId == tenantId && u.RunId == runId && u.Status == EnrollmentImportUnitStatus.Failed && u.ExceptionId is null)
+                .OrderBy(u => u.Sequence).ToList());
+    }
+
+    public Task SetExceptionAsync(string tenantId, string runId, int sequence, string exceptionId, CancellationToken ct = default)
+    {
+        lock (_gate) _units[EnrollmentImportUnitRecord.IdFor(runId, sequence)].ExceptionId = exceptionId;
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<EnrollmentImportUnitRecord>> ListFailedAsync(string tenantId, string runId, int limit = 100, CancellationToken ct = default)
+    {
+        lock (_gate)
+            return Task.FromResult<IReadOnlyList<EnrollmentImportUnitRecord>>(_units.Values
+                .Where(u => u.TenantId == tenantId && u.RunId == runId && u.Status == EnrollmentImportUnitStatus.Failed)
+                .OrderBy(u => u.Sequence).Take(limit).ToList());
     }
 
     public Task<int> CountAsync(string tenantId, string runId, string status, CancellationToken ct = default)
@@ -173,7 +197,7 @@ public sealed class InMemoryEnrollmentImportUnitStore : IEnrollmentImportUnitSto
         lock (_gate) return Task.FromResult(_units.Values.Count(u => u.TenantId == tenantId && u.RunId == runId && u.Status == status));
     }
 
-    public Task<int> FailInterruptedAsync(string tenantId, string runId, DateTime at, CancellationToken ct = default)
+    public Task<IReadOnlyList<int>> FailInterruptedAsync(string tenantId, string runId, DateTime at, CancellationToken ct = default)
     {
         lock (_gate)
         {
@@ -181,15 +205,15 @@ public sealed class InMemoryEnrollmentImportUnitStore : IEnrollmentImportUnitSto
             foreach (var unit in interrupted)
             {
                 unit.Status = EnrollmentImportUnitStatus.Failed;
-                unit.Error = EnrollmentImportUnitStore.InterruptedError;
+                unit.Error = $"{unit.FilePosition}: {EnrollmentImportUnitStore.InterruptedError}";
             }
-            return Task.FromResult(interrupted.Count);
+            return Task.FromResult<IReadOnlyList<int>>(interrupted.Select(u => u.Sequence).OrderBy(s => s).ToList());
         }
     }
 
     /// <summary>A unit a stopped worker left half-applied.</summary>
     public void LeaveApplying(string tenantId, string runId, int sequence) =>
-        TryBeginAsync(tenantId, runId, sequence, "INS ?", DateTime.UtcNow).GetAwaiter().GetResult();
+        TryBeginAsync(tenantId, runId, sequence, $"INS {sequence + 1}", DateTime.UtcNow).GetAwaiter().GetResult();
 }
 
 /// <summary>Runs a scheduled run straight away, so an upload's wait sees it finished.</summary>
@@ -220,6 +244,7 @@ public sealed class RunTestKit
     public InMemoryRawEdiFileStore RawFiles { get; } = new();
     public InMemoryX12InterchangeStore Interchanges { get; } = new();
     public InMemoryEdiFileStore Files { get; } = new();
+    public InMemoryEnrollmentExceptionRepository Exceptions { get; } = new();
     public EnrollmentImportRunOptions Options { get; } = new() { WaitSeconds = 0, ChunkSize = 2 };
     public ServiceProvider Services { get; }
 
@@ -234,6 +259,7 @@ public sealed class RunTestKit
         services.AddSingleton(import);
         services.AddSingleton<IEnrollmentImportRunRepository>(Runs);
         services.AddSingleton<IEnrollmentImportUnitStore>(Units);
+        services.AddSingleton<EnrollmentImportService.Repositories.IEnrollmentExceptionRepository>(Exceptions);
         services.AddSingleton<IRawEdiFileStore>(RawFiles);
         services.AddSingleton<IX12InterchangeStore>(Interchanges);
         services.AddSingleton<IEdiFileStore>(Files);
@@ -261,6 +287,7 @@ public sealed class RunTestKit
             Moq.Mock.Of<IPlanCodeGapReportService>(), Runs, new TestActor(tenantId: tenantId),
             NullLogger<EnrollmentController>.Instance,
             raw834: scope.ServiceProvider.GetRequiredService<Raw834Intake>(),
-            streamingParser: Services.GetRequiredService<IStreaming834Parser>());
+            streamingParser: Services.GetRequiredService<IStreaming834Parser>(),
+            units: Units);
     }
 }

@@ -29,7 +29,8 @@ public sealed class EnrollmentImportRunProcessor(
     EnrollmentRunFinisher finisher,
     IOptions<EnrollmentImportRunOptions> options,
     TimeProvider clock,
-    ILogger<EnrollmentImportRunProcessor> logger)
+    ILogger<EnrollmentImportRunProcessor> logger,
+    Repositories.IEnrollmentExceptionRepository? exceptions = null)
 {
     private readonly EnrollmentImportRunOptions _options = options.Value;
 
@@ -78,8 +79,10 @@ public sealed class EnrollmentImportRunProcessor(
             logger.LogInformation("Import run {RunId}: {Units} unit(s) to apply", LogSanitizer.Sanitize(run.Id), expected);
         }
 
-        // 2. A previous attempt's units: any left mid-apply are failed, not applied twice.
+        // 2. A previous attempt's units: any left mid-apply are failed, not applied twice,
+        // and every failed unit without an exception gets one as its unit comes by below.
         await units.FailInterruptedAsync(tenantId, run.Id, clock.GetUtcNow().UtcDateTime, ct);
+        var needException = (await units.ListFailedWithoutExceptionAsync(tenantId, run.Id, ct)).ToDictionary(u => u.Sequence);
         var checkpoint = run.DispatchedThrough;
         await CheckpointAsync(run, checkpoint, ct);
 
@@ -89,8 +92,13 @@ public sealed class EnrollmentImportRunProcessor(
             var sinceCheckpoint = 0;
             await foreach (var parsed in parser.ParseAsync(stream, run.FileName ?? string.Empty, run.AcceptedInterchanges, ct))
             {
+                if (needException.Remove(parsed.Sequence, out var failedUnit))
+                {
+                    await OpenExceptionAsync(run, parsed, failedUnit, ct);
+                    continue;
+                }
                 if (parsed.Sequence < checkpoint) continue;
-                await dispatcher.DispatchAsync(ToUnit(run, parsed), ct);
+                await dispatcher.DispatchAsync(EnrollmentUnitExceptions.ToUnit(run, parsed), ct);
                 if (++sinceCheckpoint < Math.Max(1, _options.ChunkSize)) continue;
 
                 await dispatcher.DrainAsync(ct);
@@ -130,19 +138,30 @@ public sealed class EnrollmentImportRunProcessor(
         await runs.SetProgressAsync(run.TenantId, run.Id, dispatchedThrough, completed, failed, ct);
     }
 
-    private static EnrollmentUnit ToUnit(EnrollmentImportRun run, ParsedEnrollmentUnit parsed) => new()
+    /// <summary>
+    /// A unit that failed with no exception yet: interrupted mid-apply (it may be
+    /// partly applied), or one whose exception could not be stored when it failed.
+    /// The change as parsed again from the stored file is what the exception reprocesses.
+    /// </summary>
+    private async Task OpenExceptionAsync(EnrollmentImportRun run, ParsedEnrollmentUnit parsed, EnrollmentImportUnitRecord failed, CancellationToken ct)
     {
-        TenantId = run.TenantId,
-        RunId = run.Id,
-        EdiFileId = run.EdiFileId,
-        BatchId = run.BatchId,
-        ActorId = run.ActorId,
-        Sequence = parsed.Sequence,
-        FilePosition = parsed.FilePosition,
-        OrderingKey = parsed.OrderingKey,
-        Kind = parsed.Kind,
-        Batch = parsed.Batch,
-    };
+        if (exceptions is null) return;
+        var interrupted = failed.Error?.Contains(EnrollmentImportUnitStore.InterruptedError, StringComparison.Ordinal) == true;
+        var exception = EnrollmentUnitExceptions.Build(EnrollmentUnitExceptions.ToUnit(run, parsed), parsed.Batch,
+            interrupted ? EnrollmentRejectionReasons.UnitInterrupted : EnrollmentRejectionReasons.UnexpectedError,
+            interrupted ? EnrollmentImportUnitStore.InterruptedError : EnrollmentImportUnitStore.FailedError,
+            clock.GetUtcNow().UtcDateTime);
+        try
+        {
+            await exceptions.TryCreateAsync(exception, ct);
+            await units.SetExceptionAsync(run.TenantId, run.Id, parsed.Sequence, exception.Id, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Could not open the enrollment exception for unit {Sequence} of import run {RunId}",
+                parsed.Sequence, LogSanitizer.Sanitize(run.Id));
+        }
+    }
 
     private static bool IsMissingFile(Exception ex) =>
         ex is FileNotFoundException or DocumentNotFoundException or UnauthorizedAccessException;
