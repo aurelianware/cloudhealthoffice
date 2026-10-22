@@ -76,8 +76,14 @@ public class IppsPricerParityTests
         decimal CapitalCostToChargeRatio,
         decimal CostOfLivingAdjustment,
         decimal ResidentToBedRatio,
+        decimal UncompensatedCarePerDischarge,
         bool QualityDataSubmitted,
-        bool ElectronicRecordsReduction);
+        bool ElectronicRecordsReduction,
+        decimal? ReadmissionsAdjustmentFactor,
+        decimal? ValueBasedPurchasingAdjustmentFactor,
+        bool LowVolumeTemporaryRelief,
+        decimal LowVolumeAdjustmentFactor,
+        bool HospitalAcquiredConditionReduction);
 
     // ─────────────────────────────────────────────────────────
     //  Reading what the oracle wrote
@@ -161,8 +167,24 @@ public class IppsPricerParityTests
                 Provider("capitalCostToChargeRatio"),
                 Provider("costOfLivingAdjustment"),
                 Provider("internsToBedsRatio"),
+                Provider("uncompensatedCareAmount"),
                 QualityDataSubmitted: Indicator("hospitalQualityIndicator") == "1",
-                ElectronicRecordsReduction: Indicator("ehrReductionIndicator") == "Y");
+                ElectronicRecordsReduction: Indicator("ehrReductionIndicator") == "Y",
+                // CMS's participant indicators say whether the hospital is in
+                // the programme at all, which is a different thing from a
+                // factor of 1.0 — so a non-participant reads as null here and
+                // not as a neutral factor.
+                ReadmissionsAdjustmentFactor: Indicator("hrrParticipantIndicator") == "1"
+                    ? Provider("hrrAdjustment")
+                    : null,
+                ValueBasedPurchasingAdjustmentFactor:
+                    Indicator("vbpParticipantIndicator") == "Y"
+                        ? Provider("vbpAdjustment")
+                        : null,
+                LowVolumeTemporaryRelief: Indicator("temporaryReliefIndicator") == "Y",
+                LowVolumeAdjustmentFactor: Provider("lowVolumeAdjustmentFactor"),
+                HospitalAcquiredConditionReduction:
+                    Indicator("hacReductionParticipantIndicator") == "Y");
         }).ToList();
     }
 
@@ -270,8 +292,14 @@ public class IppsPricerParityTests
             ResidentToBedRatio = input.ResidentToBedRatio,
             CapitalGeographicAdjustmentFactor =
                 answer.Number("capital_geographic_adjustment_factor")!.Value,
+            UncompensatedCarePerDischarge = input.UncompensatedCarePerDischarge,
             QualityDataSubmitted = input.QualityDataSubmitted,
             ElectronicRecordsReduction = input.ElectronicRecordsReduction,
+            ReadmissionsAdjustmentFactor = input.ReadmissionsAdjustmentFactor,
+            ValueBasedPurchasingAdjustmentFactor = input.ValueBasedPurchasingAdjustmentFactor,
+            LowVolumeTemporaryRelief = input.LowVolumeTemporaryRelief,
+            LowVolumeAdjustmentFactor = input.LowVolumeAdjustmentFactor,
+            HospitalAcquiredConditionReduction = input.HospitalAcquiredConditionReduction,
         };
 
         // Review code 03 is CMS's per-diem transfer. Nothing in CHO's model
@@ -372,6 +400,48 @@ public class IppsPricerParityTests
         // same name it was stored under. That is what the numbering theory in
         // IppsPaymentCalculatorTests is for, and it matters to a loader
         // reading CMS's rate file rather than to this calculation.
+    }
+
+    [Fact]
+    public void The_four_hospital_level_adjustments_agree_with_CMS_one_by_one()
+    {
+        var failures = new List<string>();
+        var compared = 0;
+
+        foreach (var (input, expected, actual) in Comparable())
+        {
+            void Compare(string column, decimal cho)
+            {
+                var cms = expected.Number(column) ?? 0m;
+                if (cms == 0m && cho == 0m)
+                    return;
+
+                compared++;
+                var difference = Math.Abs(cho - cms);
+                if (difference > Dollar)
+                {
+                    failures.Add(
+                        $"{input.Name} {column}: CHO {cho:F2}, CMS {cms:F2}, "
+                        + $"off by {difference:F2}");
+                }
+            }
+
+            Compare("low_volume_payment", actual.Adjustments.LowVolume);
+            Compare("readmissions_adjustment", actual.Adjustments.Readmissions);
+            Compare(
+                "value_based_purchasing_adjustment", actual.Adjustments.ValueBasedPurchasing);
+            Compare(
+                "hospital_acquired_condition_payment",
+                actual.Adjustments.HospitalAcquiredConditionPenalty);
+        }
+
+        Assert.Empty(failures);
+
+        // One by one rather than on the total, because the four are taken in an
+        // order 42 CFR does not give and a wrong order agrees on each in
+        // isolation. The corpus has a row carrying all four at once for that,
+        // and this count fails if these rows are dropped.
+        Assert.True(compared >= 8, $"only {compared} adjustment amounts compared");
     }
 
     [Fact]
