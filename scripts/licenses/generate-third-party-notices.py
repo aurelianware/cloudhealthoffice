@@ -253,7 +253,7 @@ def main() -> int:
         "",
         "| Asset | Licence | Where | Note |",
         "|---|---|---|---|",
-        "| Noto Sans Regular and SemiBold 2.015 (subset), © 2022 The Noto Project Authors | SIL OFL 1.1 | idcard-service (`src/services/idcard-service/Fonts/`, licence in `OFL.txt`) | Embedded so ID card PDFs render without system fonts; Latin subset built by `scripts/fonts/subset-idcard-fonts.sh`. |",
+        "| Noto Sans Regular and SemiBold 2.015 (subset), © 2022 The Noto Project Authors | SIL OFL 1.1 | idcard-service (`src/services/idcard-service/Fonts/`) and correspondence-service via CloudHealthOffice.PdfLayout (`src/services/shared/CloudHealthOffice.PdfLayout/Fonts/`), licence in `OFL.txt` beside each | Embedded so ID card and letter PDFs render without system fonts; Latin subset built by `scripts/fonts/subset-idcard-fonts.sh`. |",
         "",
         "## .NET packages (shipped)",
         "",

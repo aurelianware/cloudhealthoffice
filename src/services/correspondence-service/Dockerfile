@@ -1,0 +1,49 @@
+ARG REGISTRY=mcr.microsoft.com
+FROM ${REGISTRY}/dotnet/sdk:8.0 AS build
+WORKDIR /repo
+# Central Package Management: every PackageReference resolves its version from
+# Directory.Packages.props, so restore fails without it in the build context.
+COPY Directory.Packages.props ./
+# Required by src/Directory.Build.props: retain the repository-wide warning gate.
+COPY Directory.Build.props ./
+# Carries the CVE-motivated pins applied to every project under src/.
+COPY src/Directory.Build.props src/
+
+# Copy csproj files and restore (preserves layer caching)
+COPY src/services/correspondence-service/correspondence-service.csproj src/services/correspondence-service/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PdfLayout/CloudHealthOffice.PdfLayout.csproj src/services/shared/CloudHealthOffice.PdfLayout/
+RUN dotnet restore src/services/correspondence-service/correspondence-service.csproj
+
+# Copy source code and build
+COPY src/services/correspondence-service/ src/services/correspondence-service/
+COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.PdfLayout/ src/services/shared/CloudHealthOffice.PdfLayout/
+RUN dotnet build src/services/correspondence-service/correspondence-service.csproj -c Release --no-restore
+
+# Publish stage
+FROM build AS publish
+RUN dotnet publish src/services/correspondence-service/correspondence-service.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore --no-build
+
+# Runtime stage
+FROM ${REGISTRY}/dotnet/aspnet:8.0 AS runtime
+WORKDIR /app
+
+# libfontconfig1: SkiaSharp's native library loads it, though letters use
+# only the Noto Sans fonts embedded in CloudHealthOffice.PdfLayout.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl libfontconfig1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=publish /app/publish .
+
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health/live || exit 1
+
+ENTRYPOINT ["dotnet", "correspondence-service.dll"]

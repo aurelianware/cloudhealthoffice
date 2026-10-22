@@ -504,7 +504,7 @@ Depends on [document-store.md](document-store.md) §9 steps 1–2 (storage provi
 
 **Independent, can start now:** ID card request history in the portal (§10.1): the order-list endpoint, request reason and requester, the tab's request history, the Overview status line, and work items for failed orders.
 
-1. **Model, template registry and rendering:** letter types, the four template kinds with locked text, required blocks and attachments, SkiaSharp PDF rendering with Fluid merge fields, pre-release checks, write-once storage in the document store.
+1. **Model, template registry and rendering** *(built 2026-10, see below)*: letter types, the four template kinds with locked text, required blocks and attachments, SkiaSharp PDF rendering with Fluid merge fields, pre-release checks, write-once storage in the document store.
 2. **Appeal notices:** acknowledgment, extension and resolution letters for the Texas Medicaid and Medicare Advantage packs, including the IDN and the HHSC Notice 1 and 2 templates; triggers from appeals-service; rule pack `notices` entries.
 3. **Approval gate** through work management.
 4. **Portal inbox and the first print-and-mail API adapter,** with IMb serials, USPS events and `LeftPlanControl`.
@@ -515,6 +515,20 @@ Depends on [document-store.md](document-store.md) §9 steps 1–2 (storage provi
 9. **More letter families:** authorization and claim notices, RFAI letters, EOBs, provider letters.
 10. **Template authoring UI** with preview, version diff and checks.
 11. **Reply matching** (§13.4), once the document store's fax and scan intake exists.
+
+### 16.1 What step 1 built
+
+`src/services/correspondence-service` (port 5033 in compose), with PDF layout in the shared `CloudHealthOffice.PdfLayout` library.
+
+- **Letter types and template versions** under `api/v1/correspondence`. A version is Draft, Approved or Retired; only a draft changes. Approval is by someone other than the author (`Correspondence:RequireSeparateApprover`, off only in local Development) and stamps a SHA-256 on each locked block. A new version of a Standardized or State-prescribed template must keep every locked block word for word, and both kinds need a form number. A non-English version needs its translator recorded before approval.
+- **Template choice** (§6 step 2): approved, in the recipient's language and format, effective on the letter date, scope matching the case; plan outranks product, product outranks state, state outranks line of business. No match, or two equally specific templates, refuses the letter with the reason.
+- **Rendering:** Liquid merge fields (Fluid, no HTML encoding), US Letter PDF with embedded Noto Sans, a footer with the letter id and "Page n of m", attachments from their own letter types' templates on new pages. The fonts are the Latin subset the ID cards use: enough for English and Spanish; other scripts need their fonts added before their templates are approved.
+- **Pre-release checks** on every letter: locked text matches its approval hash, required blocks present and non-empty, attachments found, no text below the template's minimum (12 pt; 18 pt for large print), every merge field resolved, recipient address complete, form not expired, and, when the template sets a maximum, the Flesch-Kincaid grade of plan-authored English text.
+- **Letters:** a letter that passes is stored once in the document catalog (on behalf of the requester, linked to every subject, `LetterId` external id) and recorded with its template version, a canonical snapshot of the merge data and its hash, the checks and its events. A letter that fails is recorded as `CheckFailed` and nothing is stored; a catalog failure records nothing. Requesting a letter needs `correspondence:write` and read access to every subject; reading one needs `correspondence:read` and read access to one of its subjects, and the PDF is opened through the catalog, which audits it.
+- **Permissions:** `correspondence:read` and `correspondence:write` (UMCoordinator), `correspondence:templates` (TenantAdmin) and `correspondence:approve` (ComplianceOfficer, TenantAdmin).
+- **Previews** render a draft or approved version against sample data with the same checks; nothing is stored.
+
+Not in step 1: triggers from other services, delivery channels, the approval gate for individual letters (step 3) and any portal screens.
 
 **Later phases:** case file packets (§14.1), the correspondence operations dashboard (§14.2), and AI-assisted letters (§14.3).
 

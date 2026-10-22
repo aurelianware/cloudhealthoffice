@@ -130,6 +130,7 @@ data:
       { "clientId": "claims-examiner-service", "objectId": "<CLAIMS_EXAMINER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
       { "clientId": "claims-service", "objectId": "<CLAIMS_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
       { "clientId": "consent-service", "objectId": "<CONSENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "correspondence-service", "objectId": "<CORRESPONDENCE_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
       { "clientId": "coverage-service", "objectId": "<COVERAGE_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
       { "clientId": "eligibility-service", "objectId": "<ELIGIBILITY_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
       { "clientId": "encounter-service", "objectId": "<ENCOUNTER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },

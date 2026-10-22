@@ -197,13 +197,15 @@ public static class StandardRoles
     public static readonly TenantRole ComplianceOfficer = new()
     {
         RoleName = "ComplianceOfficer",
-        Description = "Read access to all functions, audit logs and compliance reports; sets and releases legal holds",
+        Description = "Read access to all functions, audit logs and compliance reports; sets and releases legal holds; approves letter templates",
         IsBuiltIn = true,
         Permissions = new List<string>
         {
             "workspace:use",
             "*:read", "audit:read", "compliance:read", "reports:compliance",
             "records:legal-hold",
+            // Compliance signs off the wording of member notices.
+            "correspondence:approve",
             // Exact-only: *:read does not reach it.
             "documents:read-sensitive"
         }

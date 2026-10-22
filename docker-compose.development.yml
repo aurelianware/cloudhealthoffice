@@ -335,6 +335,22 @@ services:
         condition: service_started
     healthcheck: *service-healthcheck
 
+  correspondence-service:
+    build:
+      context: .
+      dockerfile: src/services/correspondence-service/Dockerfile
+    ports:
+      - "5033:8080"
+    environment:
+      <<: *common-env
+      Services__DocumentService: http://document-service:8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      document-service:
+        condition: service_started
+    healthcheck: *service-healthcheck
+
   document-service:
     build:
       context: .

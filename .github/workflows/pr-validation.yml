@@ -162,9 +162,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          # The canonical 37-service list. MUST stay in sync with
+          # The canonical 38-service list. MUST stay in sync with
           # .github/paths-filter.yml (per-service filter names) and with
-          # deploy-azure-aks.yml's matrix (34 entries; this list adds
+          # deploy-azure-aks.yml's matrix (35 entries; this list adds
           # document-service, idcard-service and provider-verification-service
           # which are PR-validated but not yet AKS deploy-targeted, and
           # provider-eligibility-api, which deploys to Container Apps via
@@ -190,6 +190,7 @@ jobs:
             {"service":"claims-service"},
             {"service":"CloudHealthOffice.PricingApi","image_name":"cloudhealthoffice-pricing-api"},
             {"service":"consent-service"},
+            {"service":"correspondence-service"},
             {"service":"coverage-service"},
             {"service":"document-service"},
             {"service":"eligibility-service"},

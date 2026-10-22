@@ -24,7 +24,7 @@
 #     containerized, so a "build" filter would never have a matching
 #     Dockerfile to invoke.
 #
-# Service set: 37 services = 34 currently in deploy-azure-aks.yml's matrix
+# Service set: 38 services = 35 currently in deploy-azure-aks.yml's matrix
 # plus document-service (new; not AKS deploy-targeted until it has a managed
 # identity there), idcard-service and provider-verification-service (both already
 # PR-validated by docker-build.yml today; preserved here so δ3 doesn't
@@ -32,7 +32,7 @@
 # main: they build but don't deploy. That's a pre-existing condition, not
 # a δ3 concern.
 #
-# provider-eligibility-api is the 37th: it is not an AKS service. It deploys
+# provider-eligibility-api is the 38th: it is not an AKS service. It deploys
 # into the CloudDentalOffice Container Apps environment through
 # infrastructure/azure/provider-eligibility-container-app.bicep.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -53,6 +53,7 @@ claims-examiner-service:       ['src/services/claims-examiner-service/**']
 claims-service:                ['src/services/claims-service/**']
 CloudHealthOffice.PricingApi:  ['src/services/CloudHealthOffice.PricingApi/**']
 consent-service:               ['src/services/consent-service/**']
+correspondence-service:        ['src/services/correspondence-service/**']
 coverage-service:              ['src/services/coverage-service/**']
 document-service:              ['src/services/document-service/**']
 eligibility-service:           ['src/services/eligibility-service/**']
@@ -82,7 +83,7 @@ work-management-service:       ['src/services/work-management-service/**']
 # ── Meta filters (any match → validate ALL services) ────────────────────────
 # shared-libs: src/services/shared/ contains CloudHealthOffice.Infrastructure,
 # CloudHealthOffice.Events, CloudHealthOffice.Appeals.Contracts,
-# CloudHealthOffice.Consent.Contracts — every
+# CloudHealthOffice.Consent.Contracts, CloudHealthOffice.PdfLayout — every
 # service's Dockerfile COPYs from here, so any change can break every build.
 shared-libs:
   - 'src/services/shared/**'

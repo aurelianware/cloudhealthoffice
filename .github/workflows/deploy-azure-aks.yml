@@ -225,6 +225,7 @@ jobs:
           - capitation-service
           - encounter-submission-service
           - member-document-service
+          - correspondence-service
           - personal-representative-service
           - work-management-service
         include:
