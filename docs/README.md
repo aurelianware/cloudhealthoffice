@@ -119,6 +119,7 @@ healthcare payer systems.
 - [Payer-to-Payer member data and member match from CHO's own services](adr/020-payer-to-payer-from-cho-services.md)
 - [Provider Access shares unless the member opts out](adr/021-provider-access-opt-out.md)
 - [Payer-to-Payer consent comes from the requesting payer, bound to it](adr/022-payer-to-payer-consent-from-the-requesting-payer.md)
+- [MS-DRG and APC grouping](adr/024-ms-drg-and-apc-grouping.md)
 
 ## Roadmap
 
