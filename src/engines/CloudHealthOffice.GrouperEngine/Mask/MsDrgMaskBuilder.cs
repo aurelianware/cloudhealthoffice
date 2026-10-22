@@ -56,10 +56,15 @@ public sealed class MsDrgMaskBuilder
     private const string AnyDiagnosisPresent = "ANYDX";
     private const string Alive = "ALIVE";
     private const string TransferToAcuteOperand = "XFRNBA";
-    private const string InvalidPrincipalDiagnosis = "INVALID_PDX";
-    private const string PrincipalDiagnosisIsExternalCause = "PDX_ECODE";
+    private const string InvalidPrincipalDiagnosis = "invalid_pdx";
+    private const string PrincipalDiagnosisIsExternalCause = "pdx_ecode";
+    // The MCE edit operands are lower case here and upper case in the
+    // formulas. That is not a typo on either side: CMS resolves the formula's
+    // spelling case-insensitively and then looks for the tables' spelling, so
+    // the mask has to hold the tables' one. Verified against CMS's own
+    // grouper, which answers false for an upper-case mask entry.
     private const string InvalidDischargeStatus = "invalid_dstat";
-    private const string InvalidSex = "INVALID_SEX";
+    private const string InvalidSex = "invalid_sex";
     private const string LeftAgainstMedicalAdvice = "AMA";
     private const string Died = "DIED";
 

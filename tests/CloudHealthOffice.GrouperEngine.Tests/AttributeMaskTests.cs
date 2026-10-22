@@ -108,19 +108,28 @@ public class AttributeMaskTests
     /// <summary>
     /// A formula evaluated against a real mask, with the same list under two
     /// prefixes deciding the answer.
+    ///
+    /// <para>
+    /// Note the operand chosen. An earlier version of this test used
+    /// <c>incident</c>, which looks like the perfect example and is the one
+    /// case where it does not hold: <c>incident</c> is a special logic list,
+    /// so CMS discards the prefix and tests it at <c>ONLY:</c> whatever the
+    /// formula wrote. <c>strauma</c> is an ordinary list and does behave as it
+    /// reads. See <see cref="SpecialLogicListTests"/>.
+    /// </para>
     /// </summary>
     [Fact]
     public void A_formula_evaluates_against_a_mask()
     {
-        var formula = DrgFormulaParser.Parse("PDX:incident & ~SDX:incident");
+        var formula = DrgFormulaParser.Parse("PDX:strauma & ~SDX:strauma");
 
         var principalOnly = new AttributeMask(
-            [new OperandName(OperandPosition.PrincipalDiagnosis, "incident")]);
+            [new OperandName(OperandPosition.PrincipalDiagnosis, "strauma")]);
         Assert.True(formula.Evaluate(principalOnly));
 
         var both = new AttributeMask([
-            new OperandName(OperandPosition.PrincipalDiagnosis, "incident"),
-            new OperandName(OperandPosition.SecondaryDiagnosis, "incident"),
+            new OperandName(OperandPosition.PrincipalDiagnosis, "strauma"),
+            new OperandName(OperandPosition.SecondaryDiagnosis, "strauma"),
         ]);
         Assert.False(formula.Evaluate(both));
     }

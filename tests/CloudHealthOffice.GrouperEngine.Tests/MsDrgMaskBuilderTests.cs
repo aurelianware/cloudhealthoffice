@@ -204,7 +204,7 @@ public class MsDrgMaskBuilderTests
 
         Assert.Equal(["NOTACODE"], unrecognised);
         Assert.True(mask.Contains(
-            new OperandName(OperandPosition.PrincipalDiagnosis, "INVALID_PDX")));
+            new OperandName(OperandPosition.PrincipalDiagnosis, "invalid_pdx")));
     }
 
     [Theory]
@@ -226,7 +226,7 @@ public class MsDrgMaskBuilderTests
         Assert.Equal(
             expected,
             mask.Contains(new OperandName(
-                OperandPosition.PrincipalDiagnosis, "PDX_ECODE")));
+                OperandPosition.PrincipalDiagnosis, "pdx_ecode")));
     }
 
     /// <summary>
@@ -254,7 +254,7 @@ public class MsDrgMaskBuilderTests
         var mask = builder.Build(Stay("N4ary", sex: sex), out _);
 
         Assert.Equal(
-            expected, mask.Contains(new OperandName(OperandPosition.Unqualified, "INVALID_SEX")));
+            expected, mask.Contains(new OperandName(OperandPosition.Unqualified, "invalid_sex")));
     }
 
     [Fact]
@@ -267,7 +267,7 @@ public class MsDrgMaskBuilderTests
 
         var mask = builder.Build(Stay("J181", sex: null), out _);
 
-        Assert.False(mask.Contains(new OperandName(OperandPosition.Unqualified, "INVALID_SEX")));
+        Assert.False(mask.Contains(new OperandName(OperandPosition.Unqualified, "invalid_sex")));
     }
 
     [Fact]

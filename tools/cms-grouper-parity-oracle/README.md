@@ -149,3 +149,29 @@ CHO-authored code: the compatibility shim, the oracle, the corpus, and the
 grouper's answers for those 34 invented stays. The MS-DRG definitions, the code
 attribute tables and the grouper logic stay in CMS's distribution, and this tool
 is useless without it.
+
+## Asking CMS what an operand means
+
+`SpecialNodeCheck` drives CMS's own node supplier over chosen formulas and
+masks and prints its answers. About a dozen operand names in CMS's data are not
+set lookups — they are "special logic lists" that the supplier turns into nodes
+with real behaviour — and two of the ways they differ cannot be seen in the
+formula text:
+
+* The names are resolved case-insensitively and then **normalised to the
+  tables' spelling**. A formula says `INVALID_PDX`; the attribute the node
+  looks for is `invalid_pdx`.
+* The lookup is on the list name alone, with the **position prefix discarded**,
+  so `PDX:incident` is evaluated as `ONLY:incident`.
+
+Running it found both of those as live defects in work that had already been
+reviewed and merged. Run it after changing the formula evaluator, or on a new
+fiscal year's jars:
+
+```
+CMS_MSDRG_JARS=/path/to/jars ./run.sh            # the parity corpus
+java -cp <same classpath> gov.cho.grouper.oracle.SpecialNodeCheck
+java -cp <same classpath> gov.cho.grouper.oracle.FormulaPrecedenceCheck
+```
+
+Its answers are asserted on the .NET side in `SpecialLogicListTests`.

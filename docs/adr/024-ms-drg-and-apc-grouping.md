@@ -427,9 +427,11 @@ Build order:
      `PT:` say where the codes must appear — any diagnosis, the principal only,
      a secondary only, every diagnosis, or a patient attribute. 196 of the 452
      distinct operands in V44's 824 formulas are prefixed (`PDX` 170, `ANY` 14,
-     `SDX` 11, `ONLY` 1). The same list appears under three different prefixes
-     (`ONLY:incident`, `PDX:incident`, `SDX:incident`), so a grouper that
-     ignored the prefix would collapse three different tests into one.
+     `SDX` 11, `ONLY` 1). A grouper that ignored the prefix would collapse
+     different tests into one. (The example this ADR used to give —
+     `ONLY:incident`, `PDX:incident`, `SDX:incident` — turned out to be the one
+     case where the prefix does *not* decide the answer. See the correction
+     below.)
 
      CMS does not treat `:` as punctuation, so a prefixed operand is a single
      atom — the parser needed no change, and the split belongs where the
@@ -568,9 +570,48 @@ Build order:
    mask. Had that gone the other way round it would have been a wrong DRG on
    every stay with a cluster.
 
+   **Second correction, and this one was found by asking CMS rather than
+   reading it.** `SpecialNodeCheck` in the oracle tool drives CMS's real node
+   supplier over chosen formulas and masks and prints its answers. Doing that
+   found two defects in work this ADR had already called done:
+
+   - **The MCE edit operands are spelled in the wrong case.** CMS's tables
+     spell them `invalid_pdx`, `invalid_sex`, `pdx_ecode`, `invalid_dstat`;
+     its *formulas* spell them `INVALID_PDX`, `INVALID_SEX`, `PDX_ECODE`,
+     `INVALID_DSTAT`. The resolution is case-insensitive and then normalises to
+     the tables' spelling, so the mask must hold the lower-case one. CHO's mask
+     held the upper-case one for three of the four. Since attribute matching is
+     case-sensitive, those three edits could never have fired, and a claim with
+     an invalid principal diagnosis would have grouped as though it had a valid
+     one. No error, just the wrong DRG. CMS confirms an upper-case mask entry
+     answers false.
+
+   - **A position prefix on a special list name is discarded.** The node
+     supplier looks the name up without the prefix, so `PDX:incident` and
+     `SDX:incident` are both evaluated as `ONLY:incident`. CMS answers true for
+     `PDX:incident` against a mask holding only `ONLY:incident`, and false
+     against one holding only `PDX:incident`. So the real V44 MDC 15 formula
+     `(PDX:incident & SDX:mdc15fallthrough) | (PDX:mdc15fallthrough &
+     SDX:incident) | ANY:drg794codes` does not test the two positions
+     separately, however much it reads as though it does — and `incident` was
+     exactly the example used above to argue that prefixes matter. It was the
+     wrong example.
+
+   Both are fixed, and the 22 answers CMS gave are now assertions rather than
+   claims. The lesson is the one from step 3: where a question can be put to
+   CMS's own grouper, reading its source is the slower and less reliable way to
+   answer it.
+
+   The code-driven operands — significant trauma, bilateral pairs, the fusion,
+   vessel and stent counts, MDC fall-through — are now **declared and refuse**.
+   Each is the whole condition of the formula it appears in, so answering false
+   would move the stay quietly to a different DRG; there is no safe default, so
+   evaluation throws and the caller has to refuse the claim.
+
    What is left:
 
-   - the dozen special-logic operand nodes, counting nodes included;
+   - the code-driven operand nodes themselves, which need the claim's codes
+     rather than its mask;
    - driving the ranked formula lists per MDC — 824 formulas for V44 — with
      `reRouteMdcId` (20 formulas) and `severitySuppressionOperand` (56).
 

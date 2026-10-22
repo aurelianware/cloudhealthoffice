@@ -38,22 +38,35 @@ public class OperandNameTests
         Assert.Equal(operand, parsed.ListName);
     }
 
+    /// <summary>
+    /// One list under three prefixes parses as three different operands.
+    ///
+    /// <para>
+    /// This is about parsing, and it is where a caveat belongs. V44 writes
+    /// <c>ONLY:incident</c>, <c>PDX:incident</c> and <c>SDX:incident</c>, and
+    /// parsing them does give three distinct operands — but <c>incident</c> is
+    /// one of CMS's special logic lists, and for those CMS discards the prefix
+    /// and tests the list at its own prescribed position. So those three parse
+    /// differently and evaluate identically, which is the opposite of what the
+    /// formula text suggests. <c>strauma</c> below is an ordinary list, where
+    /// the prefix does decide the answer; the <c>incident</c> case is pinned
+    /// in <see cref="SpecialLogicListTests"/> against CMS's own grouper.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void The_same_list_under_three_prefixes_is_three_different_tests()
+    public void The_same_list_under_three_prefixes_parses_as_three_operands()
     {
-        // V44 uses all three of these. A grouper that ignored the prefix would
-        // collapse them into one test and group the same stay three ways.
-        var only = OperandName.Parse("ONLY:incident");
-        var principal = OperandName.Parse("PDX:incident");
-        var secondary = OperandName.Parse("SDX:incident");
+        var any = OperandName.Parse("ANY:strauma");
+        var principal = OperandName.Parse("PDX:strauma");
+        var secondary = OperandName.Parse("SDX:strauma");
 
-        Assert.Equal("incident", only.ListName);
-        Assert.Equal(only.ListName, principal.ListName);
-        Assert.Equal(only.ListName, secondary.ListName);
+        Assert.Equal("strauma", any.ListName);
+        Assert.Equal(any.ListName, principal.ListName);
+        Assert.Equal(any.ListName, secondary.ListName);
 
-        Assert.NotEqual(only, principal);
+        Assert.NotEqual(any, principal);
         Assert.NotEqual(principal, secondary);
-        Assert.NotEqual(only, secondary);
+        Assert.NotEqual(any, secondary);
     }
 
     [Fact]
