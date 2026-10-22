@@ -124,6 +124,56 @@ A detail the manual settles: in V44 the 469/470 family is titled "… or Total
 Ankle Replacement", not the FY 2018 wording. The seed slice carries the V44
 titles verbatim so a reviewer can diff them against Appendix A.
 
+### What the V44 jars turned out to contain
+
+The jars were opened rather than reasoned about, and they change the design
+more than the Appendix inventory above did. `tools/cms-grouper-table-extractor`
+reads them; its README has the detail. Three findings matter here.
+
+**The tables are a protobuf buffer, readable with two jars.** They live in
+`runtime_buffers/msdrg_combined.bin` inside `msdrg-binary-access`, described by
+the release's own generated classes. Reading it needs that jar and
+`protobuf-java` — not the grouper, and not `com.mmm.his.cer:foundation`, the 3M
+library the grouper's runtime options extend, which is **not on Maven Central**.
+That last point is the only real obstacle to step 7: extracting the data is
+easy, running CMS's grouper as an oracle is not, because its dependencies are
+only in a 278 MB Windows installer. Step 7 has to solve that (pull the jars out
+of the installer, or vendor the dependency) and is no longer the cheap part.
+
+Extracted from V44: 75,005 diagnosis codes, 83,558 procedure codes, 4,111
+procedure clusters, formula lists for 28 MDCs, the CC and PDX exclusion groups,
+and the HAC categories and their logic — 16 tables, about 30 MB of JSON.
+
+**CMS's grouping logic is boolean formulas over code attributes, not rule
+rows.** Each MDC holds a ranked list of entries carrying a base DRG, a DRG, a
+surgical flag, a re-route MDC, a severity, and an expression:
+
+```
+MDC 8, rank 3:   drg 525  base 523  SURGICAL   fuse9plus | cmadifd | tulip
+MDC 8, rank 74:  drg 519  base 518  SURGICAL   (CC & backneck)
+MDC 5, rank 16:  drg 234  base 233  SURGICAL   (sensor | NORcardcath) & bypass
+MDC 5, rank 87:                                (ANY:ami) & (ami)
+```
+
+The operands are attributes attached to codes (`I509` carries `nbmaj`;
+`0SRC0J9` carries `replacex`, `rightknee`, `or_allowed_in_768` and five more);
+`CC` and `MCC` are the resolved severity; `ANY:` scopes an operand across the
+claim. `msdrg-core` ships a lexer and parser for the expression language. The
+logic is data, which is the strongest possible argument for this ADR's
+approach — and it means the rule-row model in step 1's `MsDrgTableSet` is a
+simplification that will not reach parity. **Step 3 is therefore a port of
+CMS's evaluator, not an extension of the current rule matcher**: code →
+attributes, a ranked formula list per MDC, and an expression evaluator. The
+surgical hierarchy then falls out of `rank`, MDC re-routing out of
+`reRouteMdcId`, and CC exclusion out of `severitySuppressionOperand` and the
+exclusion groups, rather than each being modelled by hand.
+
+**One extract covers nine versions.** Every row names the versions it applies
+to (`V400` to `V440`) and each version has its own hierarchy rank, so grouping
+a stay by discharge date is satisfiable from a single extracted set. That is
+what `MsDrgTableSet`'s effective-date window was built for, and it survives
+unchanged.
+
 ## Decision
 
 ### What other payer platforms actually do
