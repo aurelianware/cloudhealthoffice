@@ -6,6 +6,10 @@ connection, certified operation set or production acceptance is asserted here.
 Use the [connector onboarding template](CORE-CONNECTOR-ONBOARDING.md) and
 [adapter QRE](../features/questionnaires/qre-core-admin-adapter-questions.md).
 
+The [core data and interface specification](../integration/CORE-DATA-CONTRACT.md)
+defines vendor-neutral requirements and field-mapping/acceptance deliverables.
+The SI must bind these to the payer's actual licensed QNXT interfaces.
+
 ## Architecture and interface selection
 
 CHO's native services are the reference backend. A QNXT connector implements the

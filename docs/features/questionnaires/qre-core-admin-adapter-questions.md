@@ -6,6 +6,10 @@ CHO is the reference backend implementation; QNXT, Facets and HealthEdge use sep
 
 The questions follow the format of the existing transaction QREs (278, 275). Answers fill in the CHO tenant configuration described in the appendix.
 
+The [core data and interface specification](../../integration/CORE-DATA-CONTRACT.md)
+defines the domain data requirements, code integration points, X12/FHIR references
+and mapping deliverables for architects and SI teams across all core vendors.
+
 > **Status:** CHO's own adapters and backends (`cho`) are the reference implementation for every domain. The QNXT, Facets and HealthEdge adapters ship as interface stubs, and each one is implemented per engagement from this questionnaire. An unimplemented legacy-core adapter is intentionally scoped engagement work, not a generic CHO product gap: the same workflow runs natively in CHO in Replace mode. Augment (shadow) comparison also depends on the per-engagement adapter, which supplies the core's results for CHO to compare against.
 
 ## From questionnaire to implementation

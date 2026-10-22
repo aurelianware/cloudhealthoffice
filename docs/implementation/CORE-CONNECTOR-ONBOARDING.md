@@ -8,6 +8,9 @@ approval, interface licensing, native completeness or production acceptance.
 Record non-secret configuration/evidence references here; exchange credentials,
 PHI and customer-specific datasets only through approved engagement channels.
 
+Use the [core data and interface specification](../integration/CORE-DATA-CONTRACT.md)
+for required data, standard anchors, actual code seams and SI deliverables.
+
 ## 1. Engagement identity and responsibility
 
 | Item | Agreed value / owner / evidence reference |
