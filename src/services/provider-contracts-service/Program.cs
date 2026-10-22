@@ -34,8 +34,10 @@ builder.Services.AddSwaggerGen(c =>
         Title = "Provider Contracts Service API",
         Version = "v1",
         Description = "Master provider contract management. Holds the legal agreement between " +
-                     "the health plan and a provider/group. Payment-method-specific configuration " +
-                     "(capitation rates, FFS fee schedules) are child records referencing contracts by ContractId."
+                     "the health plan and a provider/group, and what it pays: a contract's " +
+                     "reimbursement terms are the ordered rate sheet the pricing engine evaluates " +
+                     "(ADR 016). Capitation rates are still child records referencing contracts by " +
+                     "ContractId; fee-for-service rates are terms on the contract itself."
     });
 });
 

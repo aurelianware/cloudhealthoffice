@@ -4,15 +4,29 @@ using System.Text.Json.Serialization;
 namespace FfsService.Models;
 
 /// <summary>
-/// Fee-for-service rate configuration stub for a provider contract.
-/// Child record of ProviderContract — references parent by ContractId.
+/// Fee-for-service rate configuration for a provider contract. Child record of
+/// ProviderContract — references parent by ContractId.
 ///
-/// QNXT analog: Fee Schedule module > Schedule Assignment that references
+/// QNXT analog: Fee Schedule module &gt; Schedule Assignment that references
 /// the parent Contract record.
 ///
-/// This is a placeholder for the full FFS rate engine. It establishes the
-/// schema and parent-child relationship so hybrid contracts can reference
-/// both capitation and FFS rate configs.
+/// <para>
+/// <b>Superseded by the contract's reimbursement terms (ADR 016 phase 2).</b>
+/// This service never grew a controller or a repository, so nothing wrote these
+/// documents and nothing priced from them. A fee-for-service rate is now a
+/// reimbursement term on the contract itself — the fee schedule, the percentage
+/// of it and the two modifier toggles below map one-to-one onto a
+/// <c>FeeScheduleRef</c> term's schedule, multiplier and modifier rules — which
+/// is where the pricing engine already reads it:
+/// <c>POST /api/v1/contracts/{id}/reimbursement-terms/from-ffs-rate-config</c>
+/// in provider-contracts-service takes exactly these fields.
+/// </para>
+///
+/// <para>
+/// The model stays for the phase 3 backfill, which reads any documents a tenant
+/// has in the <c>FfsRateConfig</c> collection and turns them into terms. Do not
+/// add an API over it.
+/// </para>
 /// </summary>
 public class FfsRateConfig
 {

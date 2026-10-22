@@ -88,7 +88,8 @@ public class RateResolutionService : IRateResolutionService
     /// per claim rather than on every line.
     /// </summary>
     private readonly record struct LineResolution(
-        PricingResult Result, FeeScheduleLine? RateLine, bool IsPerStay, bool LesserOfBilled);
+        PricingResult Result, FeeScheduleLine? RateLine, bool IsPerStay, bool LesserOfBilled,
+        bool MultipleProcedureReduction = true);
 
     /// <summary>
     /// Prices one line and also returns the matched rate line so batch pricing can
@@ -108,15 +109,46 @@ public class RateResolutionService : IRateResolutionService
             request.TenantId, request.ProviderNpi, request.PlanId, request.ServiceDate, ct);
 
         var networkStatus = contract?.NetworkStatus ?? NetworkStatus.Unknown;
-        var lesserOfBilled = contract?.LesserOfBilledCharges ?? false;
 
-        // 2. Determine which fee schedule applies
-        var feeScheduleId = ResolveScheduleId(contract, request.ProcedureCode);
+        // 2. The contract rule that prices this line: the first reimbursement
+        //    term whose scope and dates match it, or — for a contract with no
+        //    terms — its legacy FeeScheduleId and ContractLines (ADR 016 §2).
+        var term = ResolveContractTerm(contract, request);
+        var lesserOfBilled = term.LesserOfBilled ?? contract?.LesserOfBilledCharges ?? false;
+
+        // A term that matched but cannot be priced (a provision the engine
+        // stores without evaluating, or a term missing the field its method
+        // needs) pends the line. It must not fall through to the plan default,
+        // which would quietly pay a rate the contract does not name.
+        if (term.PendReason is not null)
+            return TermUnpriceable(request, networkStatus, term);
+
+        // Capitated and percent-of-billed terms read no fee schedule.
+        if (term.Method == ReimbursementMethod.Capitation)
+            return CapitatedLine(request, networkStatus, term);
+
+        if (term.Method == ReimbursementMethod.PercentOfBilled)
+            return PercentOfBilledLine(
+                request, networkStatus, term, lesserOfBilled, applyMultipleProcedureReduction);
+
+        var feeScheduleId = term.FeeScheduleId;
         FeeSchedule? schedule = null;
 
         if (feeScheduleId is not null)
         {
             schedule = await _feeScheduleRepo.GetByIdAsync(request.TenantId, feeScheduleId, ct);
+        }
+
+        // A reimbursement term that names a fee schedule the store does not hold
+        // is a broken contract, not an absent one: pend the line rather than pay
+        // it from the plan default, which is not the rate the contract names.
+        if (schedule is null && feeScheduleId is not null && term.Method is not null)
+        {
+            return TermUnpriceable(request, networkStatus, term with
+            {
+                PendReason = $"contract term names fee schedule {feeScheduleId}, which this tenant has no " +
+                             "schedule for; the line is pended rather than priced from another schedule",
+            });
         }
 
         // If no contracted schedule, fall back to plan default
@@ -183,6 +215,26 @@ public class RateResolutionService : IRateResolutionService
             }, rateLine, IsPerStay: false, LesserOfBilled: false);
         }
 
+        // 4a. A term's multiplier scales the rate the schedule produced — the
+        //     FfsRateConfig percentage of a fee schedule, or the percentage of
+        //     the Medicare allowed amount — before modifiers, units, the
+        //     multiple procedure reduction and lesser-of. A legacy contract and
+        //     a term that pays the schedule's own rate both carry 1.0, which
+        //     leaves the amount and the adjustment list untouched.
+        var termAdjustments = new List<RateAdjustment>();
+        if (term.RateMultiplier != 1.0m)
+        {
+            var scheduleAmount = baseAmount;
+            baseAmount = MoneyRounding.ToCents(scheduleAmount * term.RateMultiplier);
+            termAdjustments.Add(new RateAdjustment
+            {
+                Modifier = string.Empty,
+                Description = $"{term.Describe()}: {term.RateMultiplier:P2} of the {scheduleType} rate {scheduleAmount:0.00}",
+                AdjustmentFactor = term.RateMultiplier,
+                AdjustmentAmount = baseAmount - scheduleAmount,
+            });
+        }
+
         // 5. Apply modifier adjustments (not applicable for DRG/PerDiem/Capitation)
         IReadOnlyList<RateAdjustment> adjustments;
         decimal finalAmount;
@@ -191,12 +243,17 @@ public class RateResolutionService : IRateResolutionService
         {
             // DRG, per diem, and capitation rates are not subject to modifier adjustments
             finalAmount = baseAmount;
-            adjustments = [];
+            adjustments = termAdjustments;
         }
         else
         {
             (finalAmount, adjustments) = ApplyModifierAdjustments(
-                baseAmount, request, rateLine, applyMultipleProcedureReduction);
+                baseAmount, request, rateLine,
+                applyMultipleProcedureReduction && term.MultipleProcedureReduction,
+                term.BilateralAdjustment);
+
+            if (termAdjustments.Count > 0)
+                adjustments = [.. termAdjustments, .. adjustments];
         }
 
         // 6. Apply units (not for DRG — case rate is per-admission regardless of line count —
@@ -214,10 +271,14 @@ public class RateResolutionService : IRateResolutionService
         var isPerStay = rateSource == RateSource.Drg
             || (rateSource == RateSource.PerDiem && schedule?.PerDiemRate is not null && request.LengthOfStay is not null);
 
-        // 7. Flag lines whose multiple procedure treatment could not be determined
+        // 7. Flag lines whose multiple procedure treatment could not be determined,
+        //    and a term whose method does not match the schedule it names.
         var warnings = multipleProcedureContext
             ? MultipleProcedureIndicatorWarnings(request, rateLine, rateSource, scheduleType)
             : [];
+
+        if (TermMethodWarning(term, schedule) is { } methodWarning)
+            warnings = [.. warnings, methodWarning];
 
         return new LineResolution(new PricingResult
         {
@@ -234,7 +295,7 @@ public class RateResolutionService : IRateResolutionService
             Adjustments     = adjustments,
             IsPerStayRate   = isPerStay,
             Warnings        = warnings,
-        }, rateLine, isPerStay, lesserOfBilled);
+        }, rateLine, isPerStay, lesserOfBilled, term.MultipleProcedureReduction);
     }
 
     /// <summary>
@@ -286,7 +347,7 @@ public class RateResolutionService : IRateResolutionService
 
         // Phase 2: Rank the lines eligible for multiple procedure reduction
         var rankByIndex = Enumerable.Range(0, initialResults.Count)
-            .Where(i => IsMultipleProcedureEligible(initialResults[i].Result, initialResults[i].RateLine))
+            .Where(i => IsMultipleProcedureEligible(initialResults[i]))
             .OrderByDescending(i => initialResults[i].Result.AllowedAmount)
             .ThenBy(i => initialResults[i].Result.LineNumber)
             .Select((index, rank) => (index, rank))
@@ -538,8 +599,13 @@ public class RateResolutionService : IRateResolutionService
     /// <summary>
     /// A line participates in multiple procedure ranking only when it was priced from a
     /// fee schedule line with MPFS indicator 2 (standard multiple surgery). Unresolved, billed-charge,
-    /// DRG, per diem and capitation lines never participate.
+    /// DRG, per diem and capitation lines never participate, nor does a line whose
+    /// contract term turns the reduction off
+    /// (<see cref="TermModifierRules.MultipleProcedureReduction"/>).
     /// </summary>
+    private static bool IsMultipleProcedureEligible(LineResolution line)
+        => line.MultipleProcedureReduction && IsMultipleProcedureEligible(line.Result, line.RateLine);
+
     private static bool IsMultipleProcedureEligible(PricingResult result, FeeScheduleLine? rateLine)
         => rateLine is { MultipleProcedureReductionApplies: true }
            && result.RateSource is not (RateSource.Unresolved or RateSource.BilledCharges)
@@ -587,8 +653,364 @@ public class RateResolutionService : IRateResolutionService
         return [warning];
     }
 
+    // ── Contract term resolution (ADR 016 §2) ──────────────────────────
+
+    /// <summary>
+    /// The contract rule that prices one claim line, read either from the first
+    /// matching reimbursement term or from the contract's legacy fee schedule
+    /// fields. The engine prices from this and never from the contract document
+    /// again, so the two shapes meet in one place.
+    /// </summary>
+    /// <param name="FeeScheduleId">
+    /// The schedule to price from, or null when the rule names none (no
+    /// contract, no matching term, or a method that reads no schedule).
+    /// </param>
+    /// <param name="RateMultiplier">
+    /// What the rule pays as a fraction of the rate it is based on: a fee
+    /// schedule percentage, a percentage of the Medicare allowed amount, or a
+    /// percentage of billed charges. 1.0 for every legacy contract.
+    /// </param>
+    /// <param name="Method">
+    /// The term's method, or null when the line is priced the legacy way.
+    /// Null is what tells the two paths apart.
+    /// </param>
+    /// <param name="MultipleProcedureReduction">False when the term turns the CMS multiple procedure reduction off.</param>
+    /// <param name="BilateralAdjustment">False when the term turns the modifier-50 adjustment off.</param>
+    /// <param name="LesserOfBilled">The term's lesser-of-billed override, or null to use the contract's setting.</param>
+    /// <param name="PendReason">Why a matched term cannot price the line, or null when it can.</param>
+    /// <param name="TermId">The matched term's id, for audit.</param>
+    /// <param name="TermDescription">The matched term's description, for the audit trail.</param>
+    private readonly record struct ContractTermResolution(
+        string? FeeScheduleId,
+        decimal RateMultiplier,
+        ReimbursementMethod? Method,
+        bool MultipleProcedureReduction,
+        bool BilateralAdjustment,
+        bool? LesserOfBilled,
+        string? PendReason,
+        string? TermId,
+        string? TermDescription)
+    {
+        /// <summary>
+        /// The rule in one phrase, for a pricing adjustment's description: the
+        /// term's own description when it has one, else its method.
+        /// </summary>
+        public string Describe()
+            => TermDescription is { Length: > 0 } description
+                ? $"Contract term \"{description}\""
+                : Method is { } method
+                    ? $"Contract term ({method})"
+                    : "Contract rate";
+    }
+
+    /// <summary>No contract, or a contract whose terms do not cover this line.</summary>
+    private static readonly ContractTermResolution NoContractRule =
+        new(null, 1.0m, null, true, true, null, null, null, null);
+
+    /// <summary>
+    /// The rule that prices <paramref name="request"/> under
+    /// <paramref name="contract"/>.
+    ///
+    /// <para>
+    /// A contract with no reimbursement terms — every contract written before
+    /// ADR 016 phase 2 — is read exactly as before: its
+    /// <see cref="ProviderContract.ContractLines"/> route procedure-code ranges
+    /// to schedules and <see cref="ProviderContract.FeeScheduleId"/> is the
+    /// last resort. A contract with terms is priced by the first term whose
+    /// scope covers the line and whose dates cover the service date, and its
+    /// legacy fields are not read, so the two shapes never combine.
+    /// </para>
+    ///
+    /// <para>
+    /// A contract with terms, none of which covers the line, is the same
+    /// situation as a contract that names no schedule for it: the line falls
+    /// through to the plan default. A term that <i>does</i> cover the line but
+    /// cannot be priced carries a <see cref="ContractTermResolution.PendReason"/>
+    /// instead, and the line is pended — the contract has an answer for this
+    /// line and the engine cannot compute it, which is not the same as the
+    /// contract being silent.
+    /// </para>
+    /// </summary>
+    private static ContractTermResolution ResolveContractTerm(
+        ProviderContract? contract, PricingRequest request)
+    {
+        if (contract is null)
+            return NoContractRule;
+
+        if (contract.ReimbursementTerms.Count == 0)
+            return NoContractRule with
+            {
+                FeeScheduleId = ResolveScheduleId(contract, request.ProcedureCode),
+            };
+
+        var term = contract.ReimbursementTerms.FirstOrDefault(
+            t => t.IsEffectiveOn(request.ServiceDate) && TermCovers(t.Scope, request));
+
+        if (term is null)
+            return NoContractRule;
+
+        return new ContractTermResolution(
+            FeeScheduleId: term.Method switch
+            {
+                ReimbursementMethod.PercentOfMedicare =>
+                    string.IsNullOrWhiteSpace(term.BaseScheduleId) ? null : term.BaseScheduleId,
+                ReimbursementMethod.PercentOfBilled or ReimbursementMethod.Capitation => (string?)null,
+                _ => string.IsNullOrWhiteSpace(term.FeeScheduleId) ? null : term.FeeScheduleId,
+            },
+            RateMultiplier: term.Method switch
+            {
+                ReimbursementMethod.PercentOfMedicare or ReimbursementMethod.PercentOfBilled
+                    => term.Percent ?? 1.0m,
+                _ => term.Multiplier,
+            },
+            Method: term.Method,
+            MultipleProcedureReduction: term.ModifierRules?.MultipleProcedureReduction ?? true,
+            BilateralAdjustment: term.ModifierRules?.BilateralAdjustment ?? true,
+            LesserOfBilled: term.LesserOfBilled,
+            PendReason: TermPendReason(term),
+            TermId: term.Id,
+            TermDescription: term.Description);
+    }
+
+    /// <summary>
+    /// Why a matched term cannot price the line, or null when it can. Fail
+    /// closed: a term whose provisions the engine does not evaluate, or that
+    /// is missing the field its method needs, pends the line rather than being
+    /// paid as though the contract said something else. The term's own
+    /// <c>Validate()</c> keeps such a document out of the store; this is the
+    /// engine's guard for one that is already in it.
+    /// </summary>
+    private static string? TermPendReason(ReimbursementTerm term)
+    {
+        if (term.UnevaluatedProvisionReason is { } provision)
+            return provision;
+
+        return term.Method switch
+        {
+            ReimbursementMethod.FeeScheduleRef or ReimbursementMethod.CaseRate or ReimbursementMethod.PerDiem
+                when string.IsNullOrWhiteSpace(term.FeeScheduleId)
+                => $"contract term names no fee schedule for its {term.Method} method",
+
+            ReimbursementMethod.PercentOfMedicare when string.IsNullOrWhiteSpace(term.BaseScheduleId)
+                => "contract term names no Medicare base schedule for its percent-of-Medicare method",
+
+            ReimbursementMethod.PercentOfMedicare or ReimbursementMethod.PercentOfBilled
+                when term.Percent is null or <= 0m
+                => $"contract term names no usable percentage for its {term.Method} method",
+
+            ReimbursementMethod.FeeScheduleRef or ReimbursementMethod.CaseRate or ReimbursementMethod.PerDiem
+                when term.Multiplier <= 0m
+                => $"contract term's multiplier {term.Multiplier:0.####} is not a payable rate",
+
+            ReimbursementMethod.FeeScheduleRef or ReimbursementMethod.PercentOfMedicare
+                or ReimbursementMethod.PercentOfBilled or ReimbursementMethod.CaseRate
+                or ReimbursementMethod.PerDiem or ReimbursementMethod.Capitation
+                => null,
+
+            // A document written by a later build, naming a method this one
+            // does not implement. Never guess at it.
+            var unknown => $"contract term names reimbursement method {(int)unknown}, " +
+                           "which this build of the pricing engine does not implement",
+        };
+    }
+
+    /// <summary>
+    /// Whether a term's scope covers this line. Every condition the scope sets
+    /// must hold; a condition it does not set matches everything, so an empty
+    /// scope covers every line.
+    /// </summary>
+    private static bool TermCovers(ReimbursementTermScope scope, PricingRequest request)
+    {
+        if (scope.IsUnconditional)
+            return true;
+
+        if (scope.ProcedureCodeFrom is not null
+            && !(request.ProcedureCode.Length > 0
+                 && IsInCodeRange(request.ProcedureCode, scope.ProcedureCodeFrom, scope.ProcedureCodeTo)))
+            return false;
+
+        if (scope.RevenueCodes.Count > 0)
+        {
+            var revenueCode = NormalizeRevenueCode(request.RevenueCode);
+            if (revenueCode is null
+                || !scope.RevenueCodes.Any(c => string.Equals(
+                        NormalizeRevenueCode(c), revenueCode, StringComparison.OrdinalIgnoreCase)))
+                return false;
+        }
+
+        var institutional = InstitutionalClaimKind.IsInstitutional(request);
+
+        // An institutional line's PlaceOfServiceCode holds the 837I facility
+        // type code, not a CMS place of service, so it is never matched against
+        // one: a term that names places of service does not cover it.
+        if (scope.PlacesOfService.Count > 0)
+        {
+            if (institutional
+                || !scope.PlacesOfService.Any(c => string.Equals(
+                        c?.Trim(), request.PlaceOfServiceCode.Trim(), StringComparison.OrdinalIgnoreCase)))
+                return false;
+        }
+
+        return scope.ClaimType switch
+        {
+            ContractClaimType.Any => true,
+            ContractClaimType.Professional => !institutional,
+            ContractClaimType.Institutional => institutional,
+            ContractClaimType.InstitutionalInpatient =>
+                institutional && InstitutionalClaimKind.IsInpatient(request) == true,
+            ContractClaimType.InstitutionalOutpatient =>
+                institutional && InstitutionalClaimKind.IsInpatient(request) == false,
+            // A claim-type condition this build does not know never matches.
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// A line a matched contract term cannot price: allowed $0,
+    /// <see cref="RateSource.Unresolved"/> and the reason, so the caller pends
+    /// the claim. No schedule was read, so no schedule is reported.
+    /// </summary>
+    private LineResolution TermUnpriceable(
+        PricingRequest request, NetworkStatus networkStatus, ContractTermResolution term)
+    {
+        _logger.LogWarning(
+            "Contract term {TermId} cannot price {ProcedureCode}: {Reason}",
+            LogSanitizer.Sanitize(term.TermId, 256), LogSanitizer.Sanitize(request.ProcedureCode, 256),
+            LogSanitizer.Sanitize(term.PendReason, 512));
+
+        return new LineResolution(new PricingResult
+        {
+            LineNumber       = request.LineNumber,
+            ProcedureCode    = request.ProcedureCode,
+            AllowedAmount    = 0m,
+            BilledAmount     = request.BilledAmount,
+            FeeScheduleType  = FeeScheduleType.Ucr,
+            RateSource       = RateSource.Unresolved,
+            NetworkStatus    = networkStatus,
+            UnresolvedReason = term.PendReason,
+        }, RateLine: null, IsPerStay: false, LesserOfBilled: false);
+    }
+
+    /// <summary>
+    /// A line covered by a capitation term: the provider is paid PMPM for it, so
+    /// the claim line is priced at $0 and reported as capitated. No fee schedule
+    /// is read, and modifiers, units and lesser-of do not apply — the same
+    /// treatment a capitation fee schedule gets.
+    /// </summary>
+    private static LineResolution CapitatedLine(
+        PricingRequest request, NetworkStatus networkStatus, ContractTermResolution term)
+        => new(new PricingResult
+        {
+            LineNumber      = request.LineNumber,
+            ProcedureCode   = request.ProcedureCode,
+            AllowedAmount   = 0m,
+            BaseAmount      = 0m,
+            BilledAmount    = request.BilledAmount,
+            FeeScheduleType = FeeScheduleType.Capitation,
+            RateSource      = RateSource.Capitation,
+            NetworkStatus   = networkStatus,
+            Adjustments     =
+            [
+                new RateAdjustment
+                {
+                    Modifier = string.Empty,
+                    Description = $"{term.Describe()}: covered by the provider's capitation payment, not paid fee-for-service",
+                    AdjustmentFactor = 0m,
+                    AdjustmentAmount = -MoneyRounding.ToCents(Math.Max(request.BilledAmount, 0m)),
+                },
+            ],
+        }, RateLine: null, IsPerStay: false, LesserOfBilled: false);
+
+    /// <summary>
+    /// A line covered by a percent-of-billed term: the allowed amount is a
+    /// percentage of the provider's billed charge for the line. No fee schedule
+    /// is read, so the line is never unpriceable for want of a rate. The amount
+    /// already covers every unit on the line (<see cref="PricingRequest.BilledAmount"/>
+    /// is the line total, 837 SV102/SV203), so units are not applied again —
+    /// the same treatment a <see cref="FeeScheduleRateType.PercentOfBilled"/>
+    /// schedule line gets. Modifier adjustments do apply, and a lesser-of-billed
+    /// provision can only bind when the term pays more than 100% of billed.
+    /// </summary>
+    private LineResolution PercentOfBilledLine(
+        PricingRequest request, NetworkStatus networkStatus, ContractTermResolution term,
+        bool lesserOfBilled, bool applyMultipleProcedureReduction)
+    {
+        var baseAmount = MoneyRounding.ToCents(request.BilledAmount * term.RateMultiplier);
+
+        var (finalAmount, modifierAdjustments) = ApplyModifierAdjustments(
+            baseAmount, request, line: null,
+            applyMultipleProcedureReduction && term.MultipleProcedureReduction,
+            term.BilateralAdjustment);
+
+        var adjustments = new List<RateAdjustment>
+        {
+            new()
+            {
+                Modifier = string.Empty,
+                Description = $"{term.Describe()}: {term.RateMultiplier:P2} of billed charges {request.BilledAmount:0.00}",
+                AdjustmentFactor = term.RateMultiplier,
+                AdjustmentAmount = baseAmount - MoneyRounding.ToCents(request.BilledAmount),
+            },
+        };
+        adjustments.AddRange(modifierAdjustments);
+
+        return new LineResolution(new PricingResult
+        {
+            LineNumber      = request.LineNumber,
+            ProcedureCode   = request.ProcedureCode,
+            AllowedAmount   = MoneyRounding.ToCents(finalAmount),
+            BaseAmount      = baseAmount,
+            BilledAmount    = request.BilledAmount,
+            FeeScheduleType = FeeScheduleType.Custom,
+            RateSource      = RateSource.ContractedRate,
+            NetworkStatus   = networkStatus,
+            Adjustments     = adjustments,
+        }, RateLine: null, IsPerStay: false, LesserOfBilled: lesserOfBilled,
+            MultipleProcedureReduction: term.MultipleProcedureReduction);
+    }
+
+    /// <summary>
+    /// A warning when a term's method does not match the schedule it names — a
+    /// case-rate term pointing at an MPFS schedule, a fee-schedule term pointing
+    /// at a DRG schedule. The schedule decides how the line prices either way
+    /// (the engine prices by <see cref="FeeSchedule.Type"/>), so the amount is
+    /// not in doubt; what the term says it pays is, and that is a contract
+    /// loading error worth seeing. Null when they agree, or when there is no
+    /// term or no schedule.
+    /// </summary>
+    private static string? TermMethodWarning(ContractTermResolution term, FeeSchedule? schedule)
+    {
+        if (term.Method is not { } method || schedule is null)
+            return null;
+
+        var expected = method switch
+        {
+            ReimbursementMethod.CaseRate => FeeScheduleType.Drg,
+            ReimbursementMethod.PerDiem => FeeScheduleType.PerDiem,
+            _ => (FeeScheduleType?)null,
+        };
+
+        if (expected is { } wanted && schedule.Type != wanted)
+            return $"Contract term's {method} method names fee schedule {schedule.Id}, which is a " +
+                   $"{schedule.Type} schedule, not {wanted}; the line priced as a {schedule.Type} rate";
+
+        if (method is ReimbursementMethod.FeeScheduleRef
+            && schedule.Type is FeeScheduleType.Drg or FeeScheduleType.PerDiem or FeeScheduleType.Capitation)
+            return $"Contract term's fee-schedule reference names {schedule.Id}, a {schedule.Type} schedule; " +
+                   $"the line priced as a {schedule.Type} rate, not a fee-schedule rate";
+
+        return null;
+    }
+
     // ── Schedule selection ─────────────────────────────────────────────
 
+    /// <summary>
+    /// The legacy contract shape: the first <see cref="ProviderContractLine"/>
+    /// whose procedure-code range covers the code, else the contract's default
+    /// <see cref="ProviderContract.FeeScheduleId"/>. Read only for a contract
+    /// with no <see cref="ProviderContract.ReimbursementTerms"/>; ADR 016
+    /// phase 3 backfills these two fields into terms.
+    /// </summary>
     private static string? ResolveScheduleId(ProviderContract? contract, string procedureCode)
     {
         if (contract is null) return null;
@@ -1018,11 +1440,19 @@ public class RateResolutionService : IRateResolutionService
 
     // ── Modifier adjustments ───────────────────────────────────────────
 
+    /// <summary>
+    /// <paramref name="bilateralAdjustmentApplies"/> is the contract term's
+    /// bilateral toggle (<see cref="TermModifierRules.BilateralAdjustment"/>):
+    /// false suppresses the modifier-50 adjustment whatever the rate line says.
+    /// True — every legacy contract, and a term that does not override it — leaves
+    /// the decision to the rate line, as before.
+    /// </summary>
     private (decimal finalAmount, IReadOnlyList<RateAdjustment> adjustments) ApplyModifierAdjustments(
         decimal baseAmount,
         PricingRequest request,
         FeeScheduleLine? line,
-        bool applyMultipleProcedureReduction)
+        bool applyMultipleProcedureReduction,
+        bool bilateralAdjustmentApplies = true)
     {
         var modifiers = request.Modifiers;
         var adjustments = new List<RateAdjustment>();
@@ -1042,6 +1472,7 @@ public class RateResolutionService : IRateResolutionService
 
         // 50 — bilateral procedure (150%)
         if (modifiers.Contains(PaymentModifiers.Bilateral, StringComparer.OrdinalIgnoreCase)
+            && bilateralAdjustmentApplies
             && (line?.BilateralAdjustmentApplies ?? true))
         {
             var adj = amount * 0.50m;

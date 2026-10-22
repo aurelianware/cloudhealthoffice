@@ -193,7 +193,11 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemDefaultMappi
 // Crosswalk from a trading partner's own 834 plan code to this platform's
 // PlanId (see Enrollment834PlanCodeMapping).
 builder.Services.AddScoped<IEnrollment834PlanCodeMappingRepository, Enrollment834PlanCodeMappingRepositoryMongo>();
-builder.Services.AddFeeScheduleEngine().UseMongoRepositories();
+builder.Services.AddFeeScheduleEngine()
+    .UseMongoRepositories()
+    // ADR 016 phase 4: a no-op until a deployment names a tenant for the
+    // dual-read window. Inside it, claims price twice and pay on legacy.
+    .UseDualReadContracts(builder.Configuration);
 builder.Services.AddClaimsScrubEngine();
 builder.Services.AddNcciEngine().UseMongoRepository();
 builder.Services.AddScoped<IAccumulatorAuditWriter, MongoAccumulatorAuditWriter>();

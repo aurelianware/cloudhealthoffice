@@ -33,10 +33,25 @@ public class FeeScheduleRepositoryMongo : IFeeScheduleRepository, IProviderContr
         IMongoDatabase database,
         IConfiguration configuration,
         ILogger<FeeScheduleRepositoryMongo> logger)
+        : this(
+            database,
+            configuration["FeeScheduleEngine:FeeScheduleCollection"] ?? "FeeSchedules",
+            configuration["FeeScheduleEngine:ProviderContractCollection"] ?? "ProviderContracts",
+            logger)
     {
-        var scheduleCollection = configuration["FeeScheduleEngine:FeeScheduleCollection"] ?? "FeeSchedules";
-        var contractCollection = configuration["FeeScheduleEngine:ProviderContractCollection"] ?? "ProviderContracts";
+    }
 
+    /// <summary>
+    /// Binds named collections rather than reading them from configuration, so
+    /// one process can hold two of these over two contract collections — which
+    /// is what the dual read of ADR 016 phase 4 needs.
+    /// </summary>
+    public FeeScheduleRepositoryMongo(
+        IMongoDatabase database,
+        string scheduleCollection,
+        string contractCollection,
+        ILogger<FeeScheduleRepositoryMongo> logger)
+    {
         _scheduleCollection = database.GetCollection<FeeSchedule>(scheduleCollection);
         _contractCollection = database.GetCollection<ProviderContract>(contractCollection);
         _logger = logger;
