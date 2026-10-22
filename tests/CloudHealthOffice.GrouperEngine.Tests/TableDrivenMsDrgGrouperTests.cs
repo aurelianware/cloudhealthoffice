@@ -12,7 +12,7 @@ namespace CloudHealthOffice.GrouperEngine.Tests;
 /// <see cref="MsDrgSeedTables"/>. These assert the <i>logic</i> — severity
 /// resolution, the surgical hierarchy, CC exclusions, the MCE edits — not
 /// agreement with CMS, which needs the real tables and the parity corpus
-/// (ADR 024 §5 step 7).
+/// (ADR 024 §5 step 3).
 /// </summary>
 public class TableDrivenMsDrgGrouperTests
 {

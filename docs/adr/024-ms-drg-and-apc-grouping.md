@@ -135,10 +135,11 @@ reads them; its README has the detail. Three findings matter here.
 the release's own generated classes. Reading it needs that jar and
 `protobuf-java` — not the grouper, and not `com.mmm.his.cer:foundation`, the 3M
 library the grouper's runtime options extend, which is **not on Maven Central**.
-That last point is the only real obstacle to step 7: extracting the data is
+That last point is the real obstacle to the parity oracle: extracting the data is
 easy, running CMS's grouper as an oracle is not, because its dependencies are
-only in a 278 MB Windows installer. Step 7 has to solve that (pull the jars out
-of the installer, or vendor the dependency) and is no longer the cheap part.
+only in a 278 MB Windows installer. That has to be solved (pull the jars out of
+the installer, or vendor the dependency), it is no longer the cheap part, and it
+is why the parity corpus moves to the front of the build order below.
 
 Extracted from V44: 75,005 diagnosis codes, 83,558 procedure codes, 4,111
 procedure clusters, formula lists for 28 MDCs, the CC and PDX exclusion groups,
@@ -161,7 +162,7 @@ The operands are attributes attached to codes (`I509` carries `nbmaj`;
 claim. `msdrg-core` ships a lexer and parser for the expression language. The
 logic is data, which is the strongest possible argument for this ADR's
 approach — and it means the rule-row model in step 1's `MsDrgTableSet` is a
-simplification that will not reach parity. **Step 3 is therefore a port of
+simplification that will not reach parity. **The grouper step is therefore a port of
 CMS's evaluator, not an extension of the current rule matcher**: code →
 attributes, a ranked formula list per MDC, and an expression evaluator. The
 surgical hierarchy then falls out of `rank`, MDC re-routing out of
@@ -308,7 +309,7 @@ fallback — which the market evidence above sharpens in three ways.
    who asks for it.
 3. **The parity target is now a known quantity**: >50,000 reference claims at
    100% match has been done by someone else against the same software. That is
-   the bar for step 7, and "we agree with CMS V44 on N claims" is the sentence
+   the bar for the parity corpus, and "we agree with CMS V44 on N claims" is the sentence
    diligence should get.
 
 Build order:
@@ -320,18 +321,35 @@ Build order:
    CMS jars and cross-check them against the Appendix files, not the reverse
    (see above). Include the ICD-10 forward-mapping tables, so an old stay can
    be re-grouped under a current version.
-3. `TableDrivenMsDrgGrouper`: MDC, pre-MDC, surgical hierarchy, CC/MCC with
-   exclusions, sex/age/discharge-status edits.
-4. `IppsPaymentCalculator`: wage index, labor/non-labor split, IME, DSH,
+3. **Stand the CMS parity oracle up now, not last.** This was step 7 until the
+   jars were opened; two things moved it. The oracle's dependencies are not on
+   Maven Central and ship inside a Windows installer, so whether we can run
+   CMS's grouper at all is an open risk — and the whole case for building
+   rather than buying rests on being able to say we agree with it. A risk that
+   invalidates the plan belongs at the front of the plan, not the end. It also
+   pays for itself immediately: the evaluator in step 4 is far easier to write
+   against a corpus that can answer "what does CMS say for this stay?" on
+   demand than against a hand-built expectation.
+4. The MS-DRG grouper proper: a port of CMS's expression evaluator over the
+   extracted attribute tables and ranked formula lists, with the surgical
+   hierarchy, MDC re-routing, severity suppression and the MCE edits falling
+   out of the data rather than being modelled by hand (see above). Grown
+   against the parity corpus from step 3, not against the seed slice.
+5. `IppsPaymentCalculator`: wage index, labor/non-labor split, IME, DSH,
    outlier, transfer and post-acute transfer policy; plus the
    provider-specific-file home the data model is missing.
-5. `AddendumBApcAssigner` and OPPS packaging: status indicators, N packaging,
+6. `AddendumBApcAssigner` and OPPS packaging: status indicators, N packaging,
    Q1/Q2/Q3 conditional packaging, J1/J2 comprehensive APCs, composite APCs,
    multiple-procedure discounting on status T.
-6. Wire into `PricingStage` and `RepricingService` behind a per-plan toggle,
+7. **The licensed-grouper adapter.** Listed as a build step rather than as a
+   deployment note, because it is a commercial requirement and not optional
+   architecture: every payer platform in this market integrates one, a
+   prospect who already licences GPCS or EASYGroup will ask on the first call,
+   and APR-DRG and EAPG cannot be had any other way. Shipping the adapter is
+   what makes "or bring your own grouper" a true sentence.
+8. Wire into `PricingStage` and `RepricingService` behind a per-plan toggle,
    so a plan can keep paying the billed DRG until it has been through parity
    testing.
-7. The CMS sidecar provider and the CI parity corpus.
 
 ### 6. Consequences
 
