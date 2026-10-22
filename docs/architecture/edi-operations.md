@@ -144,6 +144,7 @@ The two share the same file layer; only the record layer differs:
 
 1. **File record and one intake path** for 834 and 837 (upload and SFTP), with the raw file in the document store. *Built 2026-10 (§9.1), except the raw file in the document store, which moves to step 4.*
 2. **Control numbers from the sequence store** for every outbound builder; outbound files recorded. *Built 2026-10 (§9.2).*
+   - **Next, ahead of step 3: large-file intake (§11)**, so state audit 834s arriving over SFTP are not refused.
 3. **Trading partner lookup** on intake; last received/sent; the Trading Partners page on real data.
 4. **EDI Operations page:** files, file detail, acknowledgments; links into the business views.
 5. **Expected-file schedules** and `EdiMissingFile` work items.
@@ -201,9 +202,30 @@ The two share the same file layer; only the record layer differs:
   - `EdiFile` recording in capitation, encounter and attachment, which register no file store yet (step 7). Their outbound interchange records are written.
   - A re-download whose ISA sender or receiver differs from the first issue (the 271 download names the payer and provider ids where the real-time reply swapped the 270's) keeps the first numbers; the step 3 partner lookup will make both use the same ids.
 
-## 10. Open questions
+## 10. Decisions (2026-10-22)
 
-1. **Raw file retention:** how long to keep raw inbound files (the 7–10 year record rules, or shorter with the parsed records kept)?
-2. **Unknown sender:** hold every file from an unknown sender, or allow a per-tenant setting to accept and attribute later?
-3. **835 delivery:** SFTP per partner first, or through the clearinghouse gateway?
-4. **Permissions:** add `edi:read` / `edi:operate` / `edi:raw` as new permissions, granting `edi:read` to ClaimsSupervisor and EnrollmentSpecialist?
+1. **Raw file retention:** 10 years by default, per tenant and transaction type; a tenant may lengthen it but not go below a platform floor. Files move to archive storage after about 90 days. Deletion at the end of retention is a logged job. Opening a raw file needs `edi:raw` and is audited.
+2. **Unknown sender:** hold the file as `UnknownPartner` and raise an EDI work item. When the SFTP folder belongs to a known partner, the item says so ("sender ID 123 in Sponsor X's folder") and one action adds the ID to the partner and releases the file. Nothing is accepted automatically, including a known folder with an unknown ID. The TA1/999 is sent only after release.
+3. **835 delivery:** through a clearinghouse first, configured per tenant (Stedi first, then the pilot plan's own clearinghouse, likely Availity); direct SFTP for large health systems later. A record of which providers are enrolled for ERA comes with it, and every 835 sent is on the file record with its delivery status.
+4. **Permissions:**
+
+   | Permission | Allows | Roles |
+   |---|---|---|
+   | `edi:read` | Files, file detail, acknowledgments, counts; no PHI | New **EdiAnalyst**, ClaimsSupervisor, EnrollmentSpecialist, ComplianceOfficer |
+   | `edi:operate` | Reprocess, mark duplicate, re-send, release held files, partner IDs and schedules | EdiAnalyst |
+   | `edi:raw` | Download a raw file (audited) | Nobody by default; granted by name |
+
+   `edi:raw` is exact-only: no wildcard role and no service token satisfies it. Drilling from a file into members or claims still needs that domain's read permission.
+5. **Large files:** see §11.
+
+## 11. Large-file intake
+
+State audit 834s run to hundreds of megabytes (about 0.5–1 GB for a million members). Today the raw intake endpoints cap uploads at 20 MB, and the whole path is in memory: the request is read into one string, the envelope check copies it, the parser builds every member before the first is applied, and the import runs inside the HTTP request. enrollment-import-service runs with a 512 MiB memory limit, so raising the cap alone would move the failure from a 413 to an out-of-memory restart.
+
+The design (decided 2026-10-22):
+
+1. **Stage, then reference.** The SFTP workflow writes the file to object storage (the raw-file archive of decision 1) and posts a reference, not the bytes. Portal uploads stream to the same storage. Nothing large travels through HTTP or sits in one string.
+2. **Envelope check by streaming.** ISA, GS/GE and IEA are read as the file streams; the duplicate ISA13 check and TA1 work as today.
+3. **Streaming 834 parser.** Members are produced one INS loop at a time. Dependents are matched to their subscriber within the transaction set as today; a dependent whose subscriber has not been seen is held until the set ends.
+4. **Import as a run, not a request.** The intake answers `202 Accepted` with the import run and file ids; the run applies members in chunks, records progress on the import run and the file record, and can resume after a restart from the last committed chunk.
+5. **837s** follow the same path once 834 is done; their files are smaller, so they come second.
