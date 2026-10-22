@@ -34,6 +34,9 @@ public class EnrollmentTransaction
 
     public string? FileName { get; set; }
 
+    /// <summary>The EDI file record (docs/architecture/edi-operations.md §3) of the file this came in; null for manual and JSON imports.</summary>
+    public string? EdiFileId { get; set; }
+
     public string? SubscriberId { get; set; }
 
     /// <summary>The sponsor's maintenance reason (INS04), e.g. "07" termination of benefits.</summary>
