@@ -48,8 +48,8 @@ public class IppsPaymentCalculatorTests
         decimal geometricMean = 4m,
         decimal charges = 0m,
         int drg = 470,
-        bool halfAndHalf = false) =>
-        new(drg, weight, geometricMean, los, charges, kind, halfAndHalf);
+        IppsPostAcuteTransferRule transferRule = IppsPostAcuteTransferRule.None) =>
+        new(drg, weight, geometricMean, los, charges, kind, transferRule);
 
     // ─────────────────────────────────────────────────────────
     //  The wage adjustment (42 CFR 412.64(h))
@@ -72,8 +72,10 @@ public class IppsPaymentCalculatorTests
         var payment = IppsPaymentCalculator.Pay(
             Year(), IppsProvider.Plain("123456", wageIndex: 1.5m), Stay());
 
-        // 412.64(h)(3) entitles the hospital to whichever share pays more, and
-        // above 1.0 that is the larger labor share: 0.60 × 1.5 + 0.40 = 1.30.
+        // Above a wage index of 1.0 CMS uses the annual rule's larger labor
+        // share: 0.60 × 1.5 + 0.40 = 1.30. It also happens to be the share
+        // that pays more here, which is why the two readings of 412.64(h)(3)
+        // agree on this row.
         Assert.Equal(0.60m, payment.Operating.LaborRelatedShare);
         Assert.Equal(StandardizedAmount * 1.30m, payment.Operating.WageAdjustedStandardizedAmount);
     }
@@ -84,9 +86,9 @@ public class IppsPaymentCalculatorTests
         var payment = IppsPaymentCalculator.Pay(
             Year(), IppsProvider.Plain("123456", wageIndex: 0.5m), Stay());
 
-        // 0.50 × 0.5 + 0.50 = 0.75, against 0.60 × 0.5 + 0.40 = 0.70. The
-        // regulation is written as the comparison, not as a test against 1.0,
-        // and this is the direction a hard-coded comparison gets wrong.
+        // At or below 1.0 CMS uses the statutory share: 0.50 × 0.5 + 0.50 =
+        // 0.75, against 0.60 × 0.5 + 0.40 = 0.70. Again both readings agree,
+        // because the cost-of-living adjustment is 1.0.
         Assert.Equal(0.50m, payment.Operating.LaborRelatedShare);
         Assert.Equal(StandardizedAmount * 0.75m, payment.Operating.WageAdjustedStandardizedAmount);
     }
@@ -106,20 +108,43 @@ public class IppsPaymentCalculatorTests
         // the answer 7,500.
         Assert.NotEqual(StandardizedAmount * 1.25m, payment.Operating.WageAdjustedStandardizedAmount);
 
-        // And it is the SMALLER labor share that applies, which is not
-        // obvious: at a wage index of 1.0 the two splits would pay the same,
-        // but a cost-of-living adjustment above 1.0 rewards whichever split
-        // leaves more in the non-labor share. 0.50 × 1.0 + 0.50 × 1.25 =
-        // 1.125, against 0.60 × 1.0 + 0.40 × 1.25 = 1.10.
-        //
-        // That follows from the regulation rather than from a special case for
-        // Alaska and Hawaii: 412.64(h)(3) entitles the hospital to the share
-        // that pays it more, and nothing there limits the comparison to the
-        // wage index. An implementation that chose the split by testing the
-        // wage index against 1.0 would underpay every hospital in those two
-        // states.
-        Assert.Equal(0.50m, payment.Operating.LaborRelatedShare);
+        // And the share is chosen by the wage index alone, which is where the
+        // regulation and CMS's program part company. At a wage index of 1.0
+        // the statutory split applies, giving 0.50 × 1.0 + 0.50 × 1.25 =
+        // 1.125. Read as 412.64(h)(3) is written -- whichever share pays more
+        // -- that is also the answer here, because 0.60 × 1.0 + 0.40 × 1.25 =
+        // 1.10 is less. The two readings come apart above a wage index of 1.0,
+        // which is the next test.
         Assert.Equal(StandardizedAmount * 1.125m, payment.Operating.WageAdjustedStandardizedAmount);
+    }
+
+    [Fact]
+    public void A_cost_of_living_adjustment_does_not_make_the_calculator_pick_the_other_share()
+    {
+        // This is the row the parity run reversed. At a wage index above 1.0
+        // with a cost-of-living adjustment above 1.0 -- an Alaskan or Hawaiian
+        // hospital -- the two readings of 412.64(h)(3) give different answers,
+        // and CMS's pricer follows the wage index.
+        //
+        // Larger share:  0.60 × 1.2 + 0.40 × 1.25 = 1.22
+        // Statutory:     0.50 × 1.2 + 0.50 × 1.25 = 1.225   <- pays more
+        //
+        // So the regulation's "unless employing that percentage would result
+        // in lower payments" reading would take the statutory share and pay
+        // 1.225. CMS takes the larger share and pays 1.22. The amount CMS pays
+        // is the amount that is correct, so this calculator pays 1.22 and an
+        // earlier version of it overpaid every hospital in those two states.
+        var provider = IppsProvider.Plain("123456", wageIndex: 1.2m) with
+        {
+            CostOfLivingAdjustment = 1.25m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay());
+
+        Assert.Equal(0.60m, payment.Operating.LaborRelatedShare);
+        Assert.Equal(StandardizedAmount * 1.22m, payment.Operating.WageAdjustedStandardizedAmount);
+        Assert.NotEqual(
+            StandardizedAmount * 1.225m, payment.Operating.WageAdjustedStandardizedAmount);
     }
 
     [Fact]
@@ -239,7 +264,7 @@ public class IppsPaymentCalculatorTests
 
         Assert.NotNull(payment.Transfer);
         Assert.Equal(2, payment.Transfer!.DaysPaid);
-        Assert.Equal(perDiem, payment.Transfer.PerDiem);
+        Assert.Equal(2m / 10m, payment.Transfer.Fraction);
         Assert.Equal(perDiem * 2m, payment.PaymentBeforeOutliers);
     }
 
@@ -286,7 +311,7 @@ public class IppsPaymentCalculatorTests
                 kind: IppsDischargeKind.TransferredToPostAcuteCare,
                 los: 1,
                 geometricMean: 10m,
-                halfAndHalf: true));
+                transferRule: IppsPostAcuteTransferRule.HalfAndHalf));
 
         // 412.4(f)(6): half the full rate for the first day plus half the
         // (f)(1) amount. Two per diems of a tenth each is a fifth of the full
@@ -305,7 +330,7 @@ public class IppsPaymentCalculatorTests
                 kind: IppsDischargeKind.TransferredToAcuteCare,
                 los: 1,
                 geometricMean: 10m,
-                halfAndHalf: true));
+                transferRule: IppsPostAcuteTransferRule.HalfAndHalf));
 
         // The qualifying-DRG rules live in 412.4(c)'s post-acute paragraphs.
         Assert.False(payment.Transfer!.HalfAndHalf);
@@ -350,18 +375,23 @@ public class IppsPaymentCalculatorTests
     }
 
     [Fact]
-    public void An_outlier_pays_eighty_percent_of_the_cost_above_the_threshold()
+    public void An_outlier_pays_eighty_percent_of_the_cost_above_each_threshold()
     {
         var provider = WithRatios(0.30m, 0.05m);
         var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay(charges: 400_000m));
 
-        // 412.84(k). Cost is 400,000 × 0.35 = 140,000; the threshold is the
-        // case payment plus the 30,000 fixed loss amount, unadjusted here
-        // because the wage index is 1.0.
+        // 412.84(k). The operating cost is 400,000 x 0.30 and the capital cost
+        // 400,000 x 0.05, each tested against its own side's payment plus its
+        // own share of the fixed loss amount.
+        Assert.Equal(120_000m, payment.Outlier.Operating.EstimatedCost);
+        Assert.Equal(20_000m, payment.Outlier.Capital.EstimatedCost);
         Assert.Equal(140_000m, payment.Outlier.EstimatedCost);
-        Assert.Equal(payment.PaymentBeforeOutliers + 30_000m, payment.Outlier.Threshold);
         Assert.Equal(0.80m, payment.Outlier.MarginalCostFactor);
-        Assert.Equal(0.80m * (140_000m - payment.Outlier.Threshold), payment.Outlier.Payment);
+
+        var expected =
+            (0.80m * (120_000m - payment.Outlier.Operating.Threshold))
+            + (0.80m * (20_000m - payment.Outlier.Capital.Threshold));
+        Assert.Equal(expected, payment.Outlier.Payment);
     }
 
     [Fact]
@@ -383,35 +413,84 @@ public class IppsPaymentCalculatorTests
         var both = IppsPaymentCalculator.Pay(
             Year(), WithRatios(0.30m, 0.05m), Stay(charges: 100_000m));
 
-        // 412.84(g) keeps them separate; the costs they produce add.
+        // 412.84(g) keeps them separate, and each side's cost is its own.
         Assert.Equal(30_000m, operatingOnly.Outlier.EstimatedCost);
+        Assert.Equal(0m, operatingOnly.Outlier.Capital.EstimatedCost);
         Assert.Equal(35_000m, both.Outlier.EstimatedCost);
     }
 
     [Fact]
-    public void The_fixed_loss_amount_is_wage_adjusted_like_the_standardized_amount()
+    public void A_hospital_with_only_an_operating_ratio_bears_the_whole_fixed_loss_amount()
     {
-        var provider = WithRatios(0.30m, 0.05m) with { WageIndex = 1.5m };
+        // The apportionment is by cost-to-charge ratio, so a hospital with no
+        // capital ratio puts all of the fixed loss amount on the operating
+        // side rather than losing the capital share of it.
+        var payment = IppsPaymentCalculator.Pay(
+            Year(), WithRatios(0.30m, 0m), Stay(charges: 400_000m));
 
-        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay(charges: 400_000m));
-
-        // The same 1.30 multiplier the standardized amount got, so the
-        // threshold sits the same distance above the payment in a high-wage
-        // area as in a low-wage one.
-        Assert.Equal(payment.PaymentBeforeOutliers + (30_000m * 1.30m), payment.Outlier.Threshold);
+        Assert.Equal(30_000m, payment.Outlier.Operating.FixedLossShare);
+        Assert.Equal(0m, payment.Outlier.Capital.FixedLossShare);
     }
 
     [Fact]
-    public void The_fixed_loss_amount_is_counted_once_and_not_once_per_side()
+    public void The_operating_fixed_loss_share_is_wage_adjusted_like_the_standardized_amount()
+    {
+        var provider = WithRatios(0.30m, 0m) with { WageIndex = 1.5m };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay(charges: 400_000m));
+
+        // The same 1.30 multiplier the standardized amount got. With no capital
+        // ratio the operating side carries the whole amount, which keeps the
+        // apportionment out of the arithmetic being checked here.
+        Assert.Equal(30_000m * 1.30m, payment.Outlier.Operating.FixedLossShare);
+        Assert.Equal(
+            payment.Outlier.Operating.Threshold - (30_000m * 1.30m),
+            payment.Operating.Total);
+    }
+
+    [Fact]
+    public void The_capital_fixed_loss_share_is_adjusted_by_the_capital_geographic_factor()
+    {
+        // Capital has no labor split: 412.84 adjusts the whole capital rate by
+        // one geographic factor, and the capital side of the threshold with it.
+        // A calculator that reused the labor split here would get a different
+        // number for every hospital whose wage index and geographic adjustment
+        // factor differ, which is most of them.
+        var provider = WithRatios(0m, 0.05m) with
+        {
+            WageIndex = 1.5m,
+            CapitalGeographicAdjustmentFactor = 1.2m
+        };
+
+        var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay(charges: 400_000m));
+
+        Assert.Equal(30_000m * 1.2m, payment.Outlier.Capital.FixedLossShare);
+    }
+
+    [Fact]
+    public void The_fixed_loss_amount_is_apportioned_once_and_not_applied_twice()
     {
         var provider = WithRatios(0.30m, 0.05m);
         var payment = IppsPaymentCalculator.Pay(Year(), provider, Stay(charges: 400_000m));
 
-        // An earlier draft tested operating and capital separately against the
-        // payment plus the full fixed loss amount each, which counts the
-        // threshold twice and pays outliers on ordinary cases. The threshold
-        // must exceed the payment by exactly one fixed loss amount.
-        Assert.Equal(30_000m, payment.Outlier.Threshold - payment.PaymentBeforeOutliers);
+        // The history here is worth the test. The first draft tested each side
+        // against the payment plus the *whole* fixed loss amount, which counts
+        // it twice. The correction added the two costs and tested them against
+        // one threshold, which is not what CMS does either. CMS apportions the
+        // one amount between the sides by cost-to-charge ratio, so the two
+        // shares add back to it -- here undivided by any geographic factor,
+        // because this hospital's are all 1.0.
+        var apportioned =
+            payment.Outlier.Operating.FixedLossShare + payment.Outlier.Capital.FixedLossShare;
+        Assert.Equal(30_000m, Math.Round(apportioned, 6));
+
+        // And the shares are in the ratio of the two cost-to-charge ratios.
+        Assert.Equal(
+            Math.Round(0.30m / 0.05m, 6),
+            Math.Round(
+                payment.Outlier.Operating.FixedLossShare
+                    / payment.Outlier.Capital.FixedLossShare,
+                6));
     }
 
     [Fact]
@@ -429,9 +508,10 @@ public class IppsPaymentCalculatorTests
                 los: 1,
                 geometricMean: 10m));
 
-        // 412.4(f)(4) allows an outlier on a transfer, and the threshold is
-        // measured from what the case is paid.
-        Assert.True(transferred.Outlier.Threshold < discharged.Outlier.Threshold);
+        // 412.4(f)(4) allows an outlier on a transfer, and each side's
+        // threshold is measured from what that side is paid.
+        Assert.True(
+            transferred.Outlier.Operating.Threshold < discharged.Outlier.Operating.Threshold);
         Assert.True(transferred.Outlier.Payment > discharged.Outlier.Payment);
     }
 

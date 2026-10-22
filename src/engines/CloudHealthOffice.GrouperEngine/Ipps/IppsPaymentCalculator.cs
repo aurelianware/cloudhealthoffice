@@ -42,12 +42,11 @@ public enum IppsDischargeKind
 /// (412.84(g)).
 /// </param>
 /// <param name="Kind">How the stay ended.</param>
-/// <param name="QualifiesForHalfAndHalfTransfer">
-/// Whether this DRG is one the post-acute transfer rules pay half the full
-/// amount plus half the per diem for (412.4(f)(5), (f)(6)). A property of the
-/// DRG in the annual rule — a geometric mean above 4 days and one-day
-/// discharge charges at least half the DRG's average — so it arrives as an
-/// answer rather than being worked out here.
+/// <param name="PostAcuteTransferRule">
+/// Which post-acute transfer rule this DRG carries. Read from the DRG table
+/// beside the weight and the geometric mean, not decided here and not asserted
+/// by the caller: CMS's own pricer takes it from two columns of its DRG table
+/// and ignores what the claim says about it.
 /// </param>
 public sealed record IppsStay(
     int Drg,
@@ -56,7 +55,31 @@ public sealed record IppsStay(
     int LengthOfStayDays,
     decimal CoveredCharges,
     IppsDischargeKind Kind,
-    bool QualifiesForHalfAndHalfTransfer = false);
+    IppsPostAcuteTransferRule PostAcuteTransferRule = IppsPostAcuteTransferRule.None);
+
+/// <summary>
+/// Which post-acute transfer rule a DRG carries (42 CFR 412.4(f)).
+///
+/// <para>
+/// A property of the DRG, published in the annual rule and held in the DRG
+/// table as two columns. An earlier version of <see cref="IppsStay"/> had the
+/// caller assert the half-and-half case as a boolean, which is the same
+/// misplacement as deriving a hospital's disproportionate patient percentage
+/// from a claim: the answer exists, it is published, and working it out at
+/// payment time can only get it wrong.
+/// </para>
+/// </summary>
+public enum IppsPostAcuteTransferRule
+{
+    /// <summary>Not a qualifying DRG: a post-acute transfer is paid in full.</summary>
+    None = 0,
+
+    /// <summary>The graduated per diem of 412.4(f)(1).</summary>
+    PerDiem,
+
+    /// <summary>Half the full payment plus half the per diem, 412.4(f)(2).</summary>
+    HalfAndHalf
+}
 
 /// <summary>
 /// The operating side of the payment, itemised.
@@ -112,43 +135,93 @@ public sealed record IppsCapitalPayment(
 /// <summary>
 /// How a transfer reduced the payment, or why it did not.
 /// </summary>
-/// <param name="PerDiem">The full payment divided by the DRG's geometric mean stay.</param>
+/// <param name="Fraction">
+/// The fraction of the full payment this transfer is paid, after the cap.
+/// </param>
 /// <param name="DaysPaid">
-/// The per diems paid. The first day is paid twice under 412.4(f)(1), so this
-/// is the length of stay plus one.
+/// The per diems paid. The first day is paid twice under 412.4(f)(1), and CMS
+/// floors the length of stay at one day before adding it, so this is
+/// <c>max(length of stay, 1) + 1</c>.
 /// </param>
 /// <param name="CappedAtFullPayment">
 /// Whether the per diem arithmetic reached the full DRG payment and was capped
 /// there, which 412.4(f)(1) requires. True on any transfer that stayed at
-/// least as long as the DRG's geometric mean, so not an edge case.
+/// least as long as the DRG's geometric mean -- and, because of that extra
+/// first day, on every stay in a DRG whose geometric mean is under two days,
+/// where no transfer reduction is possible at all.
 /// </param>
 /// <param name="HalfAndHalf">
 /// Whether the half-the-full-amount-plus-half-the-per-diem rule applied
 /// (412.4(f)(2), (f)(5), (f)(6)).
 /// </param>
 public sealed record IppsTransferReduction(
-    decimal PerDiem,
+    decimal Fraction,
     int DaysPaid,
     bool CappedAtFullPayment,
     bool HalfAndHalf);
 
 /// <summary>
-/// A cost outlier, and the arithmetic that found one.
+/// One side's cost outlier, and the arithmetic that found it.
 /// </summary>
 /// <param name="EstimatedCost">
-/// Charges times the cost-to-charge ratio, operating and capital together.
+/// This side's charges times this side's cost-to-charge ratio.
 /// </param>
-/// <param name="Threshold">
-/// The case's payment plus the year's fixed loss amount, the fixed loss amount
-/// wage-adjusted by the same labor split as the standardized amount.
+/// <param name="FixedLossShare">
+/// This side's portion of the year's single fixed loss amount, apportioned by
+/// cost-to-charge ratio and then adjusted by this side's own geographic factor.
 /// </param>
-/// <param name="MarginalCostFactor">80 percent, or 90 for a burn DRG.</param>
-/// <param name="Payment">The outlier payment, zero when the cost did not reach the threshold.</param>
-public sealed record IppsOutlier(
+/// <param name="Threshold">This side's payment plus that portion.</param>
+/// <param name="Payment">
+/// The outlier payment, zero when the cost did not reach the threshold.
+/// </param>
+public sealed record IppsOutlierSide(
     decimal EstimatedCost,
+    decimal FixedLossShare,
     decimal Threshold,
-    decimal MarginalCostFactor,
     decimal Payment);
+
+/// <summary>
+/// A cost outlier (42 CFR 412.84).
+///
+/// <para>
+/// Two thresholds from one fixed loss amount, which is the shape that took
+/// three attempts to get right. The first draft here tested operating and
+/// capital each against the <i>whole</i> fixed loss amount, which counts it
+/// twice and pays outliers on ordinary cases. The correction went too far the
+/// other way, adding the two costs and testing them against one threshold. CMS
+/// does neither: it apportions the single fixed loss amount between the two
+/// sides <b>in proportion to the hospital's two cost-to-charge ratios</b>, so
+/// the shares sum to one and the amount is counted exactly once, and then
+/// adjusts each side by its own geographic factor — the wage index and
+/// cost-of-living split for operating, the capital geographic adjustment factor
+/// for capital. Those factors differ, so the apportionment is not cosmetic.
+/// </para>
+///
+/// <para>
+/// This is the structure the parity run in <c>tools/cms-ipps-pricer-oracle</c>
+/// established, and it reproduces CMS's outlier on the corpus's cost-outlier
+/// stay to within rounding on the operating side and exactly on the capital
+/// side.
+/// </para>
+/// </summary>
+/// <param name="Operating">The operating side.</param>
+/// <param name="Capital">The capital side.</param>
+/// <param name="MarginalCostFactor">80 percent, or 90 for a burn DRG.</param>
+public sealed record IppsOutlier(
+    IppsOutlierSide Operating,
+    IppsOutlierSide Capital,
+    decimal MarginalCostFactor)
+{
+    /// <summary>No outlier: the hospital has no cost-to-charge ratio on file.</summary>
+    public static readonly IppsOutlier None = new(
+        new IppsOutlierSide(0m, 0m, 0m, 0m), new IppsOutlierSide(0m, 0m, 0m, 0m), 0m);
+
+    /// <summary>Both sides' estimated cost.</summary>
+    public decimal EstimatedCost => Operating.EstimatedCost + Capital.EstimatedCost;
+
+    /// <summary>The outlier paid, both sides together.</summary>
+    public decimal Payment => Operating.Payment + Capital.Payment;
+}
 
 /// <summary>
 /// What a stay is paid under IPPS, with every intermediate kept.
@@ -234,7 +307,7 @@ public static class IppsPaymentCalculator
 
         var notes = new List<string>();
 
-        var share = rates.ShareFor(provider.WageIndex, provider.CostOfLivingAdjustment);
+        var share = rates.ShareFor(provider.WageIndex);
         var wageAdjusted = rates.OperatingStandardizedAmount
             * share.Adjust(provider.WageIndex, provider.CostOfLivingAdjustment);
 
@@ -263,8 +336,18 @@ public static class IppsPaymentCalculator
             TeachingAddOn: capitalBase * provider.CapitalIndirectMedicalEducationFactor,
             DisproportionateShareAddOn: capitalBase * provider.CapitalDisproportionateShareFactor);
 
-        var fullPayment = operating.Total + capital.Total;
-        var (paid, transfer) = ApplyTransfer(stay, fullPayment, notes);
+        // A transfer reduces the payment by a fraction, and each side is
+        // reduced by it separately, because each side's outlier threshold is
+        // then measured from its own reduced payment. The uncompensated care
+        // payment is left out of the reduction: 412.106(g) pays it per
+        // discharge, so nothing about it scales with the length of the stay.
+        var (fraction, transfer) = TransferFraction(stay, notes);
+        var operatingPaid =
+            (operating.BasePayment + operating.TeachingAddOn + operating.DisproportionateShareAddOn)
+                * fraction
+            + operating.UncompensatedCarePayment;
+        var capitalPaid = capital.Total * fraction;
+        var paid = operatingPaid + capitalPaid;
 
         if (provider.ResidentToBedRatio > 0)
         {
@@ -281,12 +364,14 @@ public static class IppsPaymentCalculator
                 + $"{rates.EmpiricallyJustifiedDshShare:P0} still paid through the claim.");
         }
 
-        var outlier = Outlier(rates, provider, stay, paid, share);
+        var outlier = Outlier(rates, provider, stay, operatingPaid, capitalPaid, share);
         if (outlier.Payment > 0)
         {
             notes.Add(
-                $"Cost outlier: an estimated cost of {outlier.EstimatedCost:C} against a threshold "
-                + $"of {outlier.Threshold:C}, paid at {outlier.MarginalCostFactor:P0} of the excess.");
+                $"Cost outlier of {outlier.Payment:C} at {outlier.MarginalCostFactor:P0} of the "
+                + $"excess: an operating cost of {outlier.Operating.EstimatedCost:C} against a "
+                + $"threshold of {outlier.Operating.Threshold:C}, and a capital cost of "
+                + $"{outlier.Capital.EstimatedCost:C} against {outlier.Capital.Threshold:C}.");
         }
 
         return new IppsPayment(rates.FiscalYear, operating, capital, transfer, outlier, notes)
@@ -295,104 +380,121 @@ public static class IppsPaymentCalculator
         };
     }
 
-    private static (decimal Paid, IppsTransferReduction? Transfer) ApplyTransfer(
-        IppsStay stay, decimal fullPayment, List<string> notes)
+    /// <summary>
+    /// The fraction of the full payment a transfer is paid, and how it was
+    /// arrived at. One on a discharge, and on a transfer that reached the cap.
+    /// </summary>
+    private static (decimal Fraction, IppsTransferReduction? Transfer) TransferFraction(
+        IppsStay stay, List<string> notes)
     {
         if (stay.Kind == IppsDischargeKind.Discharged)
-            return (fullPayment, null);
+            return (1m, null);
 
         if (stay.GeometricMeanLengthOfStay <= 0)
         {
+            // Stricter than CMS, which leaves the payment unreduced in this
+            // case. Deliberately so: a DRG with no geometric mean reaching a
+            // transfer means the DRG table is wrong, and paying the stay in
+            // full hides that behind a plausible amount.
             throw new IppsPaymentFailedException(
                 $"DRG {stay.Drg:000} has no geometric mean length of stay, so the per diem a "
                 + "transfer is paid by cannot be computed.");
         }
 
-        var perDiem = fullPayment / stay.GeometricMeanLengthOfStay;
-
         // 412.4(f)(1): twice the per diem for the first day, then one per diem
-        // for each later day, up to the full DRG payment. Which is the length
-        // of stay plus one, and the cap is reached by any transfer that stayed
-        // as long as the DRG's geometric mean.
-        var graduated = perDiem * (stay.LengthOfStayDays + 1);
-        var daysPaid = stay.LengthOfStayDays + 1;
+        // for each later day. That is the length of stay plus one — except that
+        // CMS floors the length of stay at one day first, so a same-day
+        // transfer is paid two per diems and not one. The corpus's
+        // transfer-zero-length-of-stay row is there because this code used to
+        // pay that stay half what CMS pays it.
+        var daysPaid = Math.Max(stay.LengthOfStayDays, 1) + 1;
+        var graduated = daysPaid / stay.GeometricMeanLengthOfStay;
 
-        var halfAndHalf = stay.Kind == IppsDischargeKind.TransferredToPostAcuteCare
-            && stay.QualifiesForHalfAndHalfTransfer;
+        var halfAndHalf = stay.PostAcuteTransferRule == IppsPostAcuteTransferRule.HalfAndHalf
+            && stay.Kind == IppsDischargeKind.TransferredToPostAcuteCare;
 
-        // 412.4(f)(2): 50 percent of the full rate for the first day, plus 50
-        // percent of the (f)(1) amount, capped at the full payment. The
+        // 412.4(f)(2): half the full rate plus half the (f)(1) amount. The
         // regulation's "50 percent of the amount calculated under (f)(1) for
-        // each day" is read here as half of the whole (f)(1) amount, which is
-        // how the industry implements it -- but the wording admits a reading
-        // where the halving is per day, and the two differ. This is one of the
-        // lines a PRICER parity run has to settle.
-        var amount = halfAndHalf
-            ? (0.5m * fullPayment) + (0.5m * Math.Min(graduated, fullPayment))
-            : graduated;
+        // each day" admits a second reading, where the halving is per day, and
+        // the two differ. CMS computes `0.5 + ((0.5 x per diem days) / mean)`,
+        // which is the first reading, so the ambiguity is settled and this is
+        // no longer a guess.
+        var fraction = halfAndHalf ? 0.5m + (0.5m * graduated) : graduated;
 
-        var capped = amount >= fullPayment;
-        var paid = Math.Min(amount, fullPayment);
+        var capped = fraction >= 1m;
+        fraction = Math.Min(fraction, 1m);
 
         notes.Add(halfAndHalf
-            ? $"Post-acute transfer on a qualifying DRG: half the full payment plus half the "
-              + $"per diem amount, {(capped ? "capped at the full payment" : "under the cap")}."
-            : $"Transfer paid {daysPaid} per diems of {perDiem:C}"
+            ? $"Post-acute transfer on a qualifying DRG: half the full payment plus half of "
+              + $"{daysPaid} per diems out of {stay.GeometricMeanLengthOfStay:0.#}"
+              + $"{(capped ? ", capped at the full payment" : "")}."
+            : $"Transfer paid {daysPaid} per diems out of "
+              + $"{stay.GeometricMeanLengthOfStay:0.#}"
               + $"{(capped ? ", capped at the full payment" : "")}.");
 
-        return (paid, new IppsTransferReduction(perDiem, daysPaid, capped, halfAndHalf));
+        return (fraction, new IppsTransferReduction(fraction, daysPaid, capped, halfAndHalf));
     }
 
     /// <summary>
-    /// The case's cost outlier (42 CFR 412.84(k), (l)).
+    /// The case's cost outlier (42 CFR 412.84(k), (l)), tested on each side
+    /// against its own share of the year's fixed loss amount.
     ///
     /// <para>
-    /// One outlier, not two. 412.84 reads as though operating and capital were
-    /// tested separately against their own thresholds, and the older form of
-    /// the policy did exactly that — but the fixed loss amount CMS publishes is
-    /// a single annual figure for the case, so testing each side against the
-    /// payment-plus-that-amount counts the threshold twice and pays an outlier
-    /// on cases that are nowhere near one. The two cost-to-charge ratios are
-    /// still separate, because 412.84(g) keeps them separate and a hospital's
-    /// two ratios differ; they are applied to the charges and added.
-    /// </para>
-    ///
-    /// <para>
-    /// The threshold is measured from what the case is actually paid, so a
-    /// transfer's reduced payment lowers it — which is the behaviour 412.4(f)(4)
-    /// implies by allowing an outlier on a transfer at all.
+    /// Each side's threshold is measured from what that side is actually paid,
+    /// so a transfer's reduced payment lowers it — which is the behaviour
+    /// 412.4(f)(4) implies by allowing an outlier on a transfer at all. See
+    /// <see cref="IppsOutlier"/> for why the fixed loss amount is apportioned
+    /// rather than applied whole or combined.
     /// </para>
     /// </summary>
     private static IppsOutlier Outlier(
         IppsRateSet rates,
         IppsProvider provider,
         IppsStay stay,
-        decimal payment,
+        decimal operatingPayment,
+        decimal capitalPayment,
         IppsLaborShare share)
     {
-        var ratio = provider.OperatingCostToChargeRatio + provider.CapitalCostToChargeRatio;
+        var operatingRatio = provider.OperatingCostToChargeRatio;
+        var capitalRatio = provider.CapitalCostToChargeRatio;
+        var ratio = operatingRatio + capitalRatio;
 
         // A hospital with no ratio on file gets no outlier, rather than one
-        // computed from a cost of zero. The same answer today, and the right
-        // one if the arithmetic below ever changes.
+        // computed from a cost of zero. It also keeps the apportionment below
+        // from dividing by zero, which is the other reason to test it here.
         if (ratio <= 0)
-            return new IppsOutlier(0m, 0m, 0m, 0m);
+            return IppsOutlier.None;
 
-        var cost = stay.CoveredCharges * ratio;
+        var factor = rates.Outlier.FactorFor(stay.Drg);
+        var fixedLoss = rates.Outlier.FixedLossAmount;
 
-        // The fixed loss amount is wage-adjusted on the same split as the
-        // standardized amount, so that the threshold sits at the same distance
-        // above the payment in a high-wage area as in a low-wage one.
-        var fixedLoss = rates.Outlier.FixedLossAmount
+        // The operating side's share of the fixed loss amount, adjusted on the
+        // same labor split as the standardized amount.
+        var operatingFixedLoss = fixedLoss
+            * (operatingRatio / ratio)
             * share.Adjust(provider.WageIndex, provider.CostOfLivingAdjustment);
 
-        var threshold = payment + fixedLoss;
-        var factor = rates.Outlier.FactorFor(stay.Drg);
+        // The capital side's share, adjusted by the capital geographic
+        // adjustment factor instead. Capital has no labor split: the whole
+        // capital rate is geographically adjusted as one.
+        var capitalFixedLoss = fixedLoss
+            * (capitalRatio / ratio)
+            * provider.CapitalGeographicAdjustmentFactor
+            * provider.CostOfLivingAdjustment;
 
         return new IppsOutlier(
-            cost,
-            threshold,
-            factor,
-            Payment: cost > threshold ? factor * (cost - threshold) : 0m);
+            Side(stay.CoveredCharges * operatingRatio, operatingFixedLoss, operatingPayment),
+            Side(stay.CoveredCharges * capitalRatio, capitalFixedLoss, capitalPayment),
+            factor);
+
+        IppsOutlierSide Side(decimal cost, decimal fixedLossShare, decimal payment)
+        {
+            var threshold = payment + fixedLossShare;
+            return new IppsOutlierSide(
+                cost,
+                fixedLossShare,
+                threshold,
+                Payment: cost > threshold ? factor * (cost - threshold) : 0m);
+        }
     }
 }

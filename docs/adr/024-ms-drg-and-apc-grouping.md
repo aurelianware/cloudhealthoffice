@@ -827,7 +827,8 @@ Build order:
    outlier, transfer and post-acute transfer policy; plus the
    provider-specific-file home the data model is missing.
 
-   **Built, and explicitly not yet validated.** Every formula is taken from
+   **Built, and now validated against CMS's own pricer.** Every formula is
+   taken from
    42 CFR with the paragraph cited at the line that implements it — 412.64(h)
    and (m) for the wage adjustment, 412.105 for indirect medical education,
    412.106 for disproportionate share, 412.4 for transfers, 412.84 for cost
@@ -858,32 +859,79 @@ Build order:
    claim-time engine that derived either would be inventing the hospital's
    payment rather than applying it.
 
-   Three findings worth not re-deriving:
+   **The parity run exists, and it reversed one of the three findings this
+   step shipped with.** CMS retired the downloadable PC Pricer in favour of a
+   browser tool, which would have made a poor oracle — but it still publishes
+   the pricer itself as a runnable jar, to satisfy Freedom of Information Act
+   requests, along with its Java source *with the original COBOL quoted as
+   comments above each rule*. `tools/cms-ipps-pricer-oracle` runs it over
+   fourteen invented stays and commits what it paid;
+   `IppsPricerParityTests` holds the calculator to those amounts on every
+   build, with no CMS artifact present. The tool's README has the whole of it,
+   including the five undocumented provider-record fields that stop a
+   well-formed request before any arithmetic happens.
 
-   - **The labor share is a comparison, not a threshold.** 412.64(h)(3) sets
-     62 percent "unless employing that percentage would result in lower
-     payments for the hospital". That reduces to "the higher share above a
-     wage index of 1.0", which is how the trade press states it — but only
-     because the cost-of-living adjustment is usually 1.0. In Alaska and
-     Hawaii, where 412.64(m)(1)(ii) lifts the non-labor share, the *smaller*
-     labor share can pay more even at a wage index of exactly 1.0. An
-     implementation that picked the split by testing the wage index against
-     1.0 would underpay every hospital in those two states. There is a test
-     for this.
-   - **The fixed loss amount is one figure per case, not one per side.** 412.84
-     reads as though operating and capital were tested separately against their
-     own thresholds, and an earlier draft here did that — which counts the
-     threshold twice and pays outliers on ordinary cases. The two
-     cost-to-charge ratios stay separate, because 412.84(g) keeps them separate
-     and a hospital's two ratios differ, but they are applied to the charges and
-     added into one cost tested against one threshold.
-   - **One transfer line is genuinely ambiguous.** 412.4(f)(2) pays "50 percent
-     of the amount calculated under (f)(1) for each day of the stay". Read as
-     half of the whole (f)(1) amount, or as a halving applied per day, those
-     differ. The industry reading is the former and that is what is
-     implemented, with the ambiguity marked at the line. It is one of the
-     things a PRICER parity run has to settle rather than something to decide
-     from the text.
+   The calculator now agrees with CMS on the base DRG payment, the labor split,
+   every transfer fraction, and the capital outlier exactly, on every stay whose
+   inputs it can express. What the run corrected:
+
+   - **The labor share is a threshold after all, not a comparison — and this
+     ADR previously asserted the opposite.** 412.64(h)(3) sets 62 percent
+     "unless employing that percentage would result in lower payments for the
+     hospital", which is written as a comparison, and that is how this was
+     implemented. The two readings agree wherever the cost-of-living adjustment
+     is 1.0 and come apart in Alaska and Hawaii, where 412.64(m)(1)(ii) lifts
+     the non-labor share. CMS's `CalculateNationalPercentages` takes the larger
+     share and then replaces it with the statutory one
+     `IF (H-WAGE-INDEX < 01.0000 OR H-WAGE-INDEX = 01.0000)` — the wage index
+     alone, with the cost-of-living adjustment playing no part in the choice.
+     On the corpus's Alaska stay CMS pays 15,368.43 where the comparison
+     reading pays 15,424, so CHO was *over*paying those two states on the
+     strength of a correct reading of the regulation. The lesson generalises:
+     where the regulation and CMS's program differ, the program is what gets
+     paid.
+   - **The fixed loss amount is apportioned per side, not applied whole and not
+     combined.** Three attempts. The first tested operating and capital each
+     against the whole amount, which counts it twice and pays outliers on
+     ordinary cases. The correction added the two costs and tested them against
+     one threshold. CMS does neither: it splits the one amount between the
+     sides *in proportion to the hospital's two cost-to-charge ratios*, so the
+     shares sum to one, and adjusts each side by its own geographic factor —
+     the labor split and wage index for operating, the capital geographic
+     adjustment factor for capital. Those differ for almost every hospital.
+   - **A same-day transfer is paid two per diems, not one.** 412.4(f)(1) pays
+     twice the per diem for the first day and one for each later day, which is
+     the length of stay plus one — but CMS floors the length of stay at one day
+     *before* adding it. CHO paid a zero-day transfer half what CMS pays it.
+     The same rule has a consequence worth stating: because every stay is paid
+     at least two per diems, **no transfer reduction is possible at all in a
+     DRG whose geometric mean is under two days**, which is why the corpus's
+     transfer rows had to be moved off DRG 470.
+   - **The ambiguous transfer line is settled, and the guess was right.**
+     412.4(f)(2) pays "50 percent of the amount calculated under (f)(1) for
+     each day of the stay", which admits a reading where the halving is per
+     day. CMS computes `0.5 + ((0.5 × per diem days) / mean)`, the
+     whole-amount reading, which is what was implemented.
+   - **Which post-acute rule a DRG carries is DRG table data.** It arrived as a
+     boolean the caller asserted, which is the same misplacement as deriving a
+     hospital's disproportionate patient percentage from a claim. It is now an
+     `IppsPostAcuteTransferRule` read beside the weight and the geometric mean,
+     and CMS's own pricer takes it from two columns of its DRG table and
+     ignores what the claim says.
+
+   **What the run showed is still missing**, and why this is not yet wired into
+   adjudication. CMS pays several components the calculator has no notion of:
+   the value-based purchasing and hospital-readmissions-reduction adjustments,
+   the low-volume adjustment, the hospital-specific portion for sole-community
+   and Medicare-dependent hospitals, pass-through amounts for direct medical
+   education and organ acquisition, new-technology add-ons, and the
+   hospital-acquired-condition and electronic-health-record reductions. The
+   hospital quality indicator selects the full or reduced market basket update
+   and so the standardized amount itself, which `IppsRateSet` cannot express
+   with one amount. And CMS works in covered days and lifetime reserve days,
+   reporting regular, reserve and outlier days used, where `IppsStay` has no
+   beneficiary-day concept at all. Several of those scale the DRG payment, so
+   they are not optional extras.
 
    Deliberately absent, because approximating them would be worse than
    omitting them: new technology add-on payments, which are a published list
