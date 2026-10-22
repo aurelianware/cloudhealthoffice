@@ -254,6 +254,7 @@ public class ClaimEventPublisher : IClaimEventPublisher, IClaimWorkEventPublishe
         {
             TenantId = tenantId,
             ClaimId = claim.Id,
+            ClaimVersionId = string.IsNullOrWhiteSpace(claim.ClaimVersionId) ? claim.Id : claim.ClaimVersionId,
             ClaimNumber = claim.ClaimNumber,
             MemberId = claim.MemberId,
             PlanYearStart = planYearStart,

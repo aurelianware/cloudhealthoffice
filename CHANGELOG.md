@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Finalized claims publish to the plan's managed FHIR store, streaming to
+  BigQuery and Vertex AI (ADR 023).** With `ManagedFhirStore:Provider` set to
+  `GcpHealthcare`, fhir-service consumes `claims.finalized.v1` and writes each
+  claim's ExplanationOfBenefit (the claims-service projection, at its version
+  chain id) into a Google Cloud Healthcare API FHIR store. The store streams
+  every write to BigQuery as SQL-on-FHIR tables, and BigQuery ML can call
+  Vertex AI models over them. CHO stays the system of record; publishing is
+  off by default, idempotent, limited to one tenant per store, and fails
+  closed when a named provider is incompletely configured.
+  `infrastructure/gcp/fhir-store.tf` provisions the store, BigQuery streaming,
+  Pub/Sub notifications, an export bucket and the Vertex AI connection behind
+  `enable_managed_fhir_store` / `enable_vertex_ai`, and the GKE deploy wires
+  fhir-service to it through Workload Identity. `claims.finalized.v1` gains an
+  additive `ClaimVersionId`. See
+  `docs/architecture/managed-fhir-store-analytics.md`.
 - **Demo persona seeder (`tools/DemoPersonaSeeder`).** Seeds a demo tenant
   with named synthetic personas through the services' own APIs, and writes a
   demo script with the IDs to type. The cast:

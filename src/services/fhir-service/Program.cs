@@ -13,6 +13,7 @@ using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.PriorAuthRuleEngine.Configuration;
 using MongoDB.Driver;
+using CloudHealthOffice.ManagedFhirStore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -615,6 +616,18 @@ builder.Services.Configure<DtrConfig>(builder.Configuration.GetSection("Cms0057:
 builder.Services.AddSingleton<IDtrResourceStore, MongoDtrResourceStore>();
 builder.Services.AddSingleton<IDtrService, DtrService>();
 builder.Services.AddSingleton<IBulkExportService, BulkExportService>();
+
+// ── Managed FHIR store publishing (ADR 023) ──────────────────────────────────
+// Off unless ManagedFhirStore:Provider names a provider. When on, finalized
+// claims' ExplanationOfBenefit projections are copied into the plan's cloud
+// FHIR store (Google Cloud Healthcare API today), from which the store's own
+// configuration streams them to BigQuery. A provider that is named but
+// incompletely configured stops start-up instead of silently not publishing.
+if (builder.Services.AddChoManagedFhirStore(builder.Configuration, builder.Environment.EnvironmentName))
+{
+    builder.Services.AddSingleton<FhirService.Services.ManagedFhirStore.ManagedFhirStoreProjector>();
+    builder.Services.AddHostedService<FhirService.Services.ManagedFhirStore.ManagedFhirStoreProjectionConsumer>();
+}
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
 // NOTE: fhir-service intentionally does NOT call AddCloudHealthOfficeJsonOptions().

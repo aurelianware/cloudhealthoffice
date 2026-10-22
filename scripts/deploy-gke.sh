@@ -50,6 +50,11 @@
 #                            stores rendered letters there)
 #                            (terraform outputs documents_bucket and documents_service_account in
 #                            infrastructure/gcp). Without them, uploaded documents are not stored.
+#   MANAGED_FHIR_STORE  MANAGED_FHIR_STORE_SERVICE_ACCOUNT  [MANAGED_FHIR_STORE_TENANT]
+#                            Publish finalized claims' ExplanationOfBenefit to a Cloud Healthcare API
+#                            FHIR store, which streams to BigQuery (terraform outputs
+#                            managed_fhir_store_id and managed_fhir_store_service_account with
+#                            enable_managed_fhir_store = true; ADR 023). Optional; off without them.
 
 set -Eeuo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -335,6 +340,15 @@ if [[ -n "${DOCUMENTS_BUCKET:-}" && -n "${DOCUMENTS_SERVICE_ACCOUNT:-}" ]]; then
   render_args+=(--documents-bucket "$DOCUMENTS_BUCKET" --documents-service-account "$DOCUMENTS_SERVICE_ACCOUNT")
 else
   warn "DOCUMENTS_BUCKET / DOCUMENTS_SERVICE_ACCOUNT not set: attachment and member document uploads will fail (no storage). Set them from the infrastructure/gcp outputs."
+fi
+if [[ -n "${MANAGED_FHIR_STORE:-}" && -n "${MANAGED_FHIR_STORE_SERVICE_ACCOUNT:-}" ]]; then
+  render_args+=(--managed-fhir-store "$MANAGED_FHIR_STORE"
+    --managed-fhir-store-service-account "$MANAGED_FHIR_STORE_SERVICE_ACCOUNT"
+    --managed-fhir-store-tenant "${MANAGED_FHIR_STORE_TENANT:-demo}")
+  [[ "$ENABLE_KAFKA" == true ]] \
+    || warn "MANAGED_FHIR_STORE is set but Kafka is off: nothing will be published (fhir-service reads claims.finalized.v1)"
+elif [[ -n "${MANAGED_FHIR_STORE:-}${MANAGED_FHIR_STORE_SERVICE_ACCOUNT:-}" ]]; then
+  warn "MANAGED_FHIR_STORE and MANAGED_FHIR_STORE_SERVICE_ACCOUNT go together; managed FHIR store publishing is off"
 fi
 rendered="$(mktemp)"
 python3 deploy/gcp/render_manifests.py "${render_args[@]}" > "$rendered"
