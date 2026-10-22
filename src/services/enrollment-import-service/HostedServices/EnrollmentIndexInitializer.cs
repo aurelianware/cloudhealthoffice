@@ -95,6 +95,28 @@ public sealed class EnrollmentIndexInitializer : IHostedService
                 .Ascending(x => x.MemberId),
             new CreateIndexOptions { Name = "ix_tenant_member" }),
             cancellationToken: cancellationToken);
+        // Orphan retry: a tenant's unresolved dependents waiting on one subscriber.
+        exceptions.Indexes.CreateOne(new CreateIndexModel<EnrollmentException>(
+            Builders<EnrollmentException>.IndexKeys
+                .Ascending(x => x.TenantId)
+                .Ascending(x => x.ReasonCode)
+                .Ascending("Dependent.SubscriberId"),
+            new CreateIndexOptions { Name = "ix_tenant_reason_dependent_subscriber" }),
+            cancellationToken: cancellationToken);
+        // Orphan sweep: automatic holds whose grace period has ended.
+        exceptions.Indexes.CreateOne(new CreateIndexModel<EnrollmentException>(
+            Builders<EnrollmentException>.IndexKeys
+                .Ascending(x => x.AutoHeld)
+                .Ascending(x => x.Status)
+                .Ascending(x => x.HeldUntil)
+                .Ascending(x => x.TenantId),
+            new CreateIndexOptions { Name = "ix_autoheld_status_helduntil_tenant" }),
+            cancellationToken: cancellationToken);
+        var settings = _db.GetCollection<Services.Settings.EnrollmentSettingOverride>(Services.Settings.MongoEnrollmentSettingsStore.CollectionName);
+        settings.Indexes.CreateOne(new CreateIndexModel<Services.Settings.EnrollmentSettingOverride>(
+            Builders<Services.Settings.EnrollmentSettingOverride>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.Level),
+            new CreateIndexOptions { Name = "ix_tenant_level" }),
+            cancellationToken: cancellationToken);
 
         _logger.LogInformation("Enrollment-import-service Mongo indexes ensured.");
         return Task.CompletedTask;

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Data;
 using EnrollmentImportService.Models;
 using MongoDB.Driver;
 
@@ -19,6 +20,18 @@ public interface IEnrollmentExceptionRepository
 
     /// <summary>Open exceptions, and held ones whose hold has run out at <paramref name="now"/>, oldest first.</summary>
     Task<(IReadOnlyList<EnrollmentException> Items, long Total)> ListWorkableAsync(string tenantId, DateTime now, int page, int pageSize, CancellationToken ct = default);
+
+    /// <summary>
+    /// Unresolved dependents (Open or Held) rejected because the subscriber
+    /// <paramref name="subscriberId"/> was not on file: what to retry when it arrives.
+    /// </summary>
+    Task<IReadOnlyList<EnrollmentException>> ListOrphansForSubscriberAsync(string tenantId, string subscriberId, CancellationToken ct = default);
+
+    /// <summary>Tenants with an automatically held orphan whose grace period has ended at <paramref name="now"/>.</summary>
+    Task<IReadOnlyList<string>> ListTenantsWithExpiredAutoHeldAsync(DateTime now, CancellationToken ct = default);
+
+    /// <summary>Automatically held orphans whose grace period has ended, oldest hold first.</summary>
+    Task<IReadOnlyList<EnrollmentException>> ListExpiredAutoHeldAsync(string tenantId, DateTime now, int limit, CancellationToken ct = default);
 }
 
 public sealed class EnrollmentExceptionQuery
@@ -82,6 +95,34 @@ public sealed class EnrollmentExceptionRepository : IEnrollmentExceptionReposito
             .SortByDescending(x => x.CreatedAt)
             .Limit(Math.Clamp(query.Limit, 1, 500))
             .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<EnrollmentException>> ListOrphansForSubscriberAsync(string tenantId, string subscriberId, CancellationToken ct = default)
+    {
+        var f = Builders<EnrollmentException>.Filter;
+        var filter = f.Eq(x => x.TenantId, tenantId)
+                     & f.Eq(x => x.ReasonCode, EnrollmentRejectionReasons.SubscriberNotFound)
+                     & f.Eq(x => x.Dependent!.SubscriberId, subscriberId)
+                     & f.Eq(x => x.SourceKind, EnrollmentExceptionSourceKind.Dependent)
+                     & f.In(x => x.Status, new[] { EnrollmentExceptionStatus.Open, EnrollmentExceptionStatus.Held });
+        return await _collection.Find(filter).SortBy(x => x.CreatedAt).Limit(200).ToListAsync(ct);
+    }
+
+    [CrossTenantQuery("The orphan sweep finds the tenants with ended grace periods, then works each under its own tenant (ListExpiredAutoHeldAsync).")]
+    public async Task<IReadOnlyList<string>> ListTenantsWithExpiredAutoHeldAsync(DateTime now, CancellationToken ct = default)
+    {
+        var f = Builders<EnrollmentException>.Filter;
+        var filter = f.Eq(x => x.AutoHeld, true) & f.Eq(x => x.Status, EnrollmentExceptionStatus.Held) & f.Lte(x => x.HeldUntil, now);
+        using var cursor = await _collection.DistinctAsync(x => x.TenantId, filter, cancellationToken: ct);
+        return await cursor.ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<EnrollmentException>> ListExpiredAutoHeldAsync(string tenantId, DateTime now, int limit, CancellationToken ct = default)
+    {
+        var f = Builders<EnrollmentException>.Filter;
+        var filter = f.Eq(x => x.TenantId, tenantId) & f.Eq(x => x.AutoHeld, true)
+                     & f.Eq(x => x.Status, EnrollmentExceptionStatus.Held) & f.Lte(x => x.HeldUntil, now);
+        return await _collection.Find(filter).SortBy(x => x.HeldUntil).Limit(Math.Clamp(limit, 1, 1000)).ToListAsync(ct);
     }
 
     public async Task<(IReadOnlyList<EnrollmentException> Items, long Total)> ListWorkableAsync(

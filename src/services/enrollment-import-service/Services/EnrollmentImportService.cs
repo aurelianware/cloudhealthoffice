@@ -43,9 +43,12 @@ public class EnrollmentImportService : IEnrollmentImportService
         IEnrollmentEventPublisher eventPublisher,
         IEnrollmentValidator validator,
         ILogger<EnrollmentImportService> logger,
-        Repositories.IEnrollmentExceptionRepository? exceptions = null)
+        Repositories.IEnrollmentExceptionRepository? exceptions = null,
+        Orphans.IOrphanGracePolicy? orphanGrace = null,
+        TimeProvider? clock = null)
     {
-        _exceptionRecorder = new EnrollmentExceptionRecorder(exceptions, logger);
+        _exceptionRecorder = new EnrollmentExceptionRecorder(exceptions, logger, orphanGrace);
+        _clock = clock ?? TimeProvider.System;
         _memberClient = memberClient;
         _sponsorClient = sponsorClient;
         _benefitPlanClient = benefitPlanClient;
@@ -58,6 +61,7 @@ public class EnrollmentImportService : IEnrollmentImportService
     }
 
     private readonly EnrollmentExceptionRecorder _exceptionRecorder;
+    private readonly TimeProvider _clock;
 
     public async Task<ImportResult> ImportEnrollmentAsync(Enrollment834 enrollment, string tenantId)
     {
@@ -138,6 +142,12 @@ public class EnrollmentImportService : IEnrollmentImportService
             if (rejection is null && result.SkippedCount > skippedBefore)
                 rejection = EnrollmentRejection.Note(EnrollmentRejectionReasons.TermSkippedNotOnFile,
                     "Member not on file; nothing to terminate.");
+
+            // The subscriber is on file now: dependents held waiting for them can be retried
+            // (enrollment-operations.md §10, decision 5). A termination is not an arrival.
+            if (rejection is null && txnStatus == "Accepted" && memberEnrollment.MaintenanceType != "024"
+                && !string.IsNullOrWhiteSpace(memberEnrollment.SubscriberId))
+                result.SubscribersOnFile.Add(memberEnrollment.SubscriberId);
 
             await RecordTransactionAsync(tenantId, batchId, enrollment, memberEnrollment, txnStatus,
                 position: Position(i), rejection: rejection, source: ExceptionSource.ForSubscriber(memberEnrollment));
@@ -395,7 +405,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 Errors = rejection?.Errors.ToList() ?? new(),
             });
             if (source is not null)
-                await _exceptionRecorder.RecordAsync(tenantId, batch, txn, source, DateTime.UtcNow);
+                await _exceptionRecorder.RecordAsync(tenantId, batch, txn, source, _clock.GetUtcNow().UtcDateTime);
         }
         catch (Exception ex)
         {
@@ -1758,6 +1768,15 @@ public class ImportResult
     public int CoverageRecordsTerminated { get; set; }
     public int CoverageMappingsUnresolved { get; set; }
     public List<string> Errors { get; set; } = new();
+
+    /// <summary>
+    /// Subscribers this import put on file or changed (not terminations), in
+    /// file order: the orphan retry looks for dependents waiting on them. Not
+    /// part of the API response.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
+    public List<string> SubscribersOnFile { get; set; } = new();
 
     /// <summary>The EDI file record for a raw 834 upload (<c>GET api/v1/enrollment/edi/files/{id}</c>); null otherwise.</summary>
     public string? EdiFileId { get; set; }

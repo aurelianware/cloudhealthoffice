@@ -12,6 +12,12 @@ public interface ISponsorServiceClient
     Task<bool> ExistsAsync(string tenantId, string groupNumber, CancellationToken ct = default);
 
     Task CreateAsync(string tenantId, CreateSponsorRequestDto request, CancellationToken ct = default);
+
+    /// <summary>
+    /// The sponsor's line of business as sponsor-service reports it (its enum,
+    /// by number or name), or null when the sponsor is not on file.
+    /// </summary>
+    Task<string?> GetLineOfBusinessAsync(string tenantId, string groupNumber, CancellationToken ct = default);
 }
 
 /// <summary>Mirrors sponsor-service's CreateSponsorRequest (SponsorsController.cs).</summary>

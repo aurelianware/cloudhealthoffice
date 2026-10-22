@@ -50,11 +50,13 @@ internal sealed class EnrollmentExceptionRecorder
 {
     private readonly IEnrollmentExceptionRepository? _exceptions;
     private readonly ILogger _logger;
+    private readonly Orphans.IOrphanGracePolicy? _orphanGrace;
 
-    public EnrollmentExceptionRecorder(IEnrollmentExceptionRepository? exceptions, ILogger logger)
+    public EnrollmentExceptionRecorder(IEnrollmentExceptionRepository? exceptions, ILogger logger, Orphans.IOrphanGracePolicy? orphanGrace = null)
     {
         _exceptions = exceptions;
         _logger = logger;
+        _orphanGrace = orphanGrace;
     }
 
     public async Task RecordAsync(string tenantId, Enrollment834 batch, EnrollmentTransaction txn, ExceptionSource source, DateTime now)
@@ -97,6 +99,7 @@ internal sealed class EnrollmentExceptionRecorder
                 CreatedAt = now,
                 UpdatedAt = now,
             };
+            await HoldOrphanAsync(tenantId, exception, now);
             await _exceptions.TryCreateAsync(exception);
         }
         catch (Exception ex)
@@ -105,6 +108,46 @@ internal sealed class EnrollmentExceptionRecorder
                 LogSanitizer.Sanitize(txn.Id));
         }
     }
+
+    /// <summary>
+    /// A dependent whose subscriber is not on file waits for the subscriber's
+    /// file for the grace period (enrollment-operations.md §10, decision 5)
+    /// instead of entering the Matching queue. A grace period of 0 leaves it open.
+    /// </summary>
+    private async Task HoldOrphanAsync(string tenantId, EnrollmentException exception, DateTime now)
+    {
+        if (_orphanGrace is null || !Orphans.OrphanDependents.IsOrphan(exception) || exception.Dependent is null) return;
+        Settings.ResolvedEnrollmentSetting grace;
+        try
+        {
+            grace = await _orphanGrace.ResolveAsync(tenantId, exception.Dependent);
+        }
+        catch (Exception ex)
+        {
+            // Never lose the exception over the grace period: it opens instead.
+            _logger.LogWarning(ex, "Could not resolve the orphan grace period for exception {ExceptionId}; it opens now",
+                LogSanitizer.Sanitize(exception.Id));
+            return;
+        }
+        if (grace.Value <= 0) return;
+        var days = Math.Min(grace.Value, 90);
+        exception.Status = EnrollmentExceptionStatus.Held;
+        exception.HeldUntil = now.AddDays(days);
+        exception.AutoHeld = true;
+        exception.Actions.Add(new EnrollmentExceptionAction
+        {
+            Action = Orphans.OrphanDependents.AutoHeldAction,
+            Actor = Orphans.OrphanDependents.Actor,
+            At = now,
+            Note = $"Waiting {days} day(s) for the subscriber's file (orphan grace period, {DescribeSource(grace)}).",
+        });
+    }
+
+    private static string DescribeSource(Settings.ResolvedEnrollmentSetting s) => s.Source switch
+    {
+        "Default" => s.SourceKey is null ? "platform default" : $"platform default for {s.SourceKey}",
+        _ => $"{s.Source} setting",
+    };
 
     private async Task RecordReprocessOutcomeAsync(string tenantId, string exceptionId, string? actor, EnrollmentTransaction txn, DateTime now)
     {
