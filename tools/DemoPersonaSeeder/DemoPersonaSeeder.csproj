@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Seeds a demo tenant with a small cast of named, synthetic personas through the
+    services' own HTTP APIs, and writes a demo script with the IDs to type.
+    See tools/DemoPersonaSeeder/README.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DemoPersonaSeeder</RootNamespace>
+    <AssemblyName>demo-persona-seeder</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DemoPersonaSeeder.Tests" />
+  </ItemGroup>
+
+</Project>
