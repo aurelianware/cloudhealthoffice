@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Edi.Files;
 using MongoDB.Driver;
 
 namespace CloudHealthOffice.Infrastructure.Edi.Interchange;
@@ -42,6 +43,8 @@ public static class X12InterchangeServiceCollectionExtensions
 
         services.TryAddScoped<IX12InterchangeIntake, X12InterchangeIntake>();
         services.TryAddScoped<IOutboundInterchangeTracker, OutboundInterchangeTracker>();
+        // The file record every intake path writes (edi-operations.md §3).
+        services.AddChoEdiFiles();
         return services;
     }
 

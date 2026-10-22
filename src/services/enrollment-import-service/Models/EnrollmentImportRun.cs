@@ -22,6 +22,9 @@ public class EnrollmentImportRun
 
     public string? FileName { get; set; }
 
+    /// <summary>The EDI file record (<c>GET api/v1/enrollment/edi/files/{id}</c>), for a raw 834 upload.</summary>
+    public string? EdiFileId { get; set; }
+
     /// <summary>The user (token subject) who ran the import.</summary>
     public string? ActorId { get; set; }
 

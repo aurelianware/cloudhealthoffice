@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Files;
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Services;
 using EnrollmentImportService.Services.Edi;
@@ -20,6 +21,7 @@ public class EnrollmentController : ControllerBase
     private readonly ICurrentActor _actor;
     private readonly ILogger<EnrollmentController> _logger;
     private readonly IX12InterchangeIntake? _interchangeIntake;
+    private readonly IEdiFileRecorder? _ediFiles;
 
     /// <summary>
     /// Set once the raw 834 reached ImportEnrollmentAsync. The import writes
@@ -36,8 +38,10 @@ public class EnrollmentController : ControllerBase
         ICurrentActor actor,
         ILogger<EnrollmentController> logger,
         IX12InterchangeIntake? interchangeIntake = null,
-        Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null)
+        Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null,
+        IEdiFileRecorder? ediFiles = null)
     {
+        _ediFiles = ediFiles;
         _interchangeIntake = interchangeOptions?.Value.Enabled == false ? null : interchangeIntake;
         _importService = importService;
         _ediParser = ediParser;
@@ -75,7 +79,9 @@ public class EnrollmentController : ControllerBase
     [HttpPost("import/raw834")]
     [RequestSizeLimit(20_000_000)]
     public async Task<ActionResult<ImportResult>> ImportRaw834(
-        [FromForm] IFormFile file)
+        [FromForm] IFormFile file,
+        [FromForm] string? source = null,
+        [FromForm] string? sourcePath = null)
     {
         var tenantId = TenantId;
 
@@ -104,7 +110,23 @@ public class EnrollmentController : ControllerBase
                 FileName = file.FileName,
             };
             envelope = await _interchangeIntake.ReceiveAsync(intakeRequest, HttpContext?.RequestAborted ?? CancellationToken.None);
+        }
 
+        // The file record (edi-operations.md §3): written for every file,
+        // whether its envelope was accepted, rejected or a duplicate.
+        var ediFile = _ediFiles is null ? null : await _ediFiles.RecordReceivedAsync(new EdiFileIntake
+        {
+            TenantId = tenantId,
+            Content = ediContent,
+            TransactionType = "834",
+            Source = source,
+            FileName = file.FileName,
+            SourcePath = sourcePath,
+            ReceivedBy = _actor.UserId,
+        }, envelope, HttpContext?.RequestAborted ?? CancellationToken.None);
+
+        if (envelope is not null)
+        {
             if (envelope.IsRejected)
             {
                 _logger.LogWarning("Uploaded 834 file {FileName} for tenant {TenantId} rejected at the interchange envelope",
@@ -112,6 +134,7 @@ public class EnrollmentController : ControllerBase
                 return BadRequest(new
                 {
                     error = "The interchange envelope (ISA/IEA) was rejected: " + string.Join("; ", envelope.RejectionReasons),
+                    ediFileId = ediFile?.Id,
                     interchangeAcknowledgmentCode = Ta1AckCodes.Rejected,
                     acknowledgmentTa1 = envelope.Ta1,
                     ta1AcknowledgmentIds = envelope.AcknowledgmentIds,
@@ -124,9 +147,10 @@ public class EnrollmentController : ControllerBase
         // back, so the partner's resend is not refused as a duplicate.
         try
         {
-            var imported = await ImportAcceptedRaw834Async(file, tenantId, ediContent, envelope);
+            var imported = await ImportAcceptedRaw834Async(file, tenantId, ediContent, envelope, ediFile?.Id);
             if (imported.Result is ObjectResult { StatusCode: >= 400 } && envelope is not null && !_raw834ImportStarted)
                 await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
+            await CompleteEdiFileAsync(ediFile, imported);
             return imported;
         }
         catch when (envelope is not null && !_raw834ImportStarted)
@@ -136,8 +160,23 @@ public class EnrollmentController : ControllerBase
         }
     }
 
+    /// <summary>Records what the import made of the file on its <see cref="EdiFile"/>.</summary>
+    private Task CompleteEdiFileAsync(EdiFile? ediFile, ActionResult<ImportResult> imported)
+    {
+        if (_ediFiles is null || ediFile is null) return Task.CompletedTask;
+        var body = imported.Result is ObjectResult objectResult ? objectResult.Value : imported.Value;
+        var result = body as ImportResult;
+        var failed = imported.Result is ObjectResult { StatusCode: >= 400 };
+        return _ediFiles.CompleteAsync(ediFile, new EdiFileCompletion
+        {
+            AcceptedRecords = failed ? 0 : result?.SuccessCount ?? 0,
+            RejectedRecords = failed ? 0 : result?.FailedCount ?? 0,
+            Errors = failed && body is string error ? [error] : [],
+        }, CancellationToken.None);
+    }
+
     private async Task<ActionResult<ImportResult>> ImportAcceptedRaw834Async(
-        IFormFile file, string tenantId, string ediContent, InterchangeIntakeResult? envelope)
+        IFormFile file, string tenantId, string ediContent, InterchangeIntakeResult? envelope, string? ediFileId)
     {
         Enrollment834 enrollment;
         try
@@ -156,8 +195,10 @@ public class EnrollmentController : ControllerBase
 
         // The importing user is the token subject; nothing in the body can claim it.
         enrollment.ActorId = _actor.UserId;
+        enrollment.EdiFileId = ediFileId;
         _raw834ImportStarted = true;
         var result = await _importService.ImportEnrollmentAsync(enrollment, tenantId);
+        result.EdiFileId = ediFileId;
 
         if (envelope is not null)
         {

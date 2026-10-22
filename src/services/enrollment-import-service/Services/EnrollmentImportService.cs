@@ -141,7 +141,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             "Import completed: {SuccessCount} success, {FailedCount} failed, {SkippedCount} skipped, {DependentsFailed} attached dependent(s) failed",
             result.SuccessCount, result.FailedCount, result.SkippedCount, result.DependentsFailed);
 
-        await RecordRunAsync(tenantId, enrollment.ActorId, result);
+        await RecordRunAsync(tenantId, enrollment.ActorId, enrollment.EdiFileId, result);
 
         return result;
     }
@@ -153,7 +153,7 @@ public class EnrollmentImportService : IEnrollmentImportService
     /// moment of the API call. Failure here must not fail the import itself;
     /// same posture as <see cref="RecordTransactionAsync"/>.
     /// </summary>
-    private async Task RecordRunAsync(string tenantId, string? actorId, ImportResult result)
+    private async Task RecordRunAsync(string tenantId, string? actorId, string? ediFileId, ImportResult result)
     {
         try
         {
@@ -162,6 +162,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 TenantId = tenantId,
                 BatchId = result.BatchId,
                 FileName = result.FileName,
+                EdiFileId = ediFileId,
                 ActorId = actorId,
                 StartedAt = result.StartedAt,
                 CompletedAt = result.CompletedAt,
@@ -1694,6 +1695,9 @@ public class ImportResult
     public int CoverageRecordsTerminated { get; set; }
     public int CoverageMappingsUnresolved { get; set; }
     public List<string> Errors { get; set; } = new();
+
+    /// <summary>The EDI file record for a raw 834 upload (<c>GET api/v1/enrollment/edi/files/{id}</c>); null otherwise.</summary>
+    public string? EdiFileId { get; set; }
 
     /// <summary>Interchange envelope outcome (TA104: A, E or R) for a raw 834 upload; null otherwise.</summary>
     public string? InterchangeAcknowledgmentCode { get; set; }

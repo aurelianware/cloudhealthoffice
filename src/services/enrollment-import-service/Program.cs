@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Files;
 using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using EnrollmentImportService;
 using CloudHealthOffice.Infrastructure.Extensions;
@@ -151,6 +152,7 @@ app.UseChoAuthentication();
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.MapControllers();
 app.MapChoX12InterchangeEndpoints("api/v1/enrollment/interchange");
+app.MapChoEdiFileEndpoints("api/v1/enrollment/edi");
 
 app.MapChoHealthChecks();
 

@@ -19,6 +19,9 @@ public class ClaimImportTransaction
 
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
+    /// <summary>The file the claim arrived in (<c>EdiFile</c>), when it came from a raw 837.</summary>
+    public string? EdiFileId { get; set; }
+
     [Required]
     public string ClaimNumber { get; set; } = string.Empty;
 
