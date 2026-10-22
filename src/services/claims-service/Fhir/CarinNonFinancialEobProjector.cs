@@ -46,11 +46,13 @@ namespace ClaimsService.Fhir;
 /// <para>
 /// Known conformance limits, stated rather than papered over, and checked by
 /// the HL7 validator in CI (see <c>scripts/interop/fhir-validate.sh</c>):
-/// <c>insurer</c>, <c>provider</c>, <c>careTeam.provider</c> and
-/// <c>insurance.coverage</c> are references by identifier and display, because
-/// CHO publishes no <c>Organization</c>, <c>Practitioner</c> or
-/// <c>Coverage</c> resource for them to point at; the C4BB
-/// <c>targetProfile</c>s on those elements therefore go unsatisfied. The
+/// <c>insurer</c>, the header <c>provider</c> and <c>insurance.coverage</c> are
+/// references by identifier and display, because CHO publishes no
+/// <c>Organization</c> or <c>Coverage</c> resource for them to point at, and a
+/// billing NPI may denote either a group or an individual; the C4BB
+/// <c>targetProfile</c>s on those elements therefore go unsatisfied.
+/// <c>careTeam.provider</c> does carry a literal <c>Practitioner</c> reference.
+/// The
 /// Inpatient profile requires a revenue code on every line, which an 837I
 /// carries but the model allows to be null.
 /// </para>
@@ -238,16 +240,28 @@ public sealed class CarinNonFinancialEobProjector : ICarinNonFinancialEobProject
     }
 
     /// <summary>
-    /// A provider reference by NPI. CHO publishes no <c>Practitioner</c> or
-    /// <c>Organization</c> resource, so there is no literal reference to give:
-    /// a reference carrying an identifier and a display is valid FHIR and says
-    /// what is known without inventing a resource that would 404.
+    /// A provider reference by NPI.
+    ///
+    /// <para>
+    /// <paramref name="resourceType"/> is given only when CHO can say which
+    /// kind of resource the NPI denotes. An 837's rendering provider is an
+    /// individual by definition, so it gets a literal
+    /// <c>Practitioner/{npi}</c> — provider-service keys its
+    /// <c>us-core-practitioner</c> projection by NPI and fhir-service serves
+    /// it from the same <c>fhir/r4</c> base as this EOB, so the relative
+    /// reference resolves against a live server. A billing NPI may belong to a
+    /// group, and CHO does not know which from the claim alone, so it stays an
+    /// identifier-and-display reference rather than asserting a type that may
+    /// 404.
+    /// </para>
     /// </summary>
-    private static JsonObject ProviderReference(string? npi, string? name)
+    private static JsonObject ProviderReference(string? npi, string? name, string? resourceType = null)
     {
         var reference = new JsonObject();
         if (!string.IsNullOrWhiteSpace(npi))
         {
+            if (resourceType is not null)
+                reference["reference"] = $"{resourceType}/{npi}";
             reference["identifier"] = new JsonObject
             {
                 ["system"] = NpiSystem,
@@ -282,11 +296,12 @@ public sealed class CarinNonFinancialEobProjector : ICarinNonFinancialEobProject
     /// </list>
     ///
     /// <para>
-    /// The invariant is still unmet for the rendering provider, because CHO
-    /// publishes no <c>Practitioner</c> resource for the reference to resolve to
-    /// and holds no name to build one from. That is recorded in
-    /// <c>conformance/validator-baseline.txt</c> rather than worked around by
-    /// choosing a role the invariant ignores.
+    /// The rendering provider therefore carries a literal
+    /// <c>Practitioner/{npi}</c> reference, which provider-service serves. The
+    /// validator still reports the invariant against a golden, because a
+    /// single-file instance gives <c>resolve()</c> nothing to find; that
+    /// standalone-only residue is recorded in
+    /// <c>conformance/validator-baseline.txt</c>.
     /// </para>
     /// </summary>
     private static JsonArray CareTeam(Claim claim, ProfileShape shape)
@@ -298,7 +313,7 @@ public sealed class CarinNonFinancialEobProjector : ICarinNonFinancialEobProject
             careTeam.Add(new JsonObject
             {
                 ["sequence"] = 1,
-                ["provider"] = ProviderReference(claim.RenderingProviderNPI, null),
+                ["provider"] = ProviderReference(claim.RenderingProviderNPI, claim.RenderingProviderName, "Practitioner"),
                 ["role"] = Concept(shape.DefaultCareTeamRoleSystem, shape.DefaultCareTeamRole, null),
             });
         }

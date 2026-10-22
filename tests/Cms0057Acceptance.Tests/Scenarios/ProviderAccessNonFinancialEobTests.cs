@@ -6,6 +6,7 @@ using ClaimsService.Fhir;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
 using FhirService.Controllers;
+using ProviderService.Controllers;
 using FluentAssertions;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
@@ -52,6 +53,9 @@ public class ProviderAccessNonFinancialEobTests
 {
     private const string Member = "MEM-PROV-1";
     private const string OtherMember = "MEM-PROV-2";
+
+    /// <summary>The rendering provider on every synthetic claim here.</summary>
+    private const string RenderingNpi = "1245319599";
 
     [Fact]
     [Trait("Scenario", "PROV-01")]
@@ -191,6 +195,86 @@ public class ProviderAccessNonFinancialEobTests
         bundle.Entry.Should().BeEmpty();
         path.Upstream.Should().Contain(u => u.Contains($"patient={Member}", StringComparison.Ordinal));
         path.Upstream.Should().NotContain(u => u.Contains($"patient={OtherMember}", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    [Trait("Scenario", "PROV-01")]
+    [Trait("Backend", "Replace")]
+    public async Task The_care_team_reference_resolves_to_a_practitioner_the_directory_serves()
+    {
+        // CARIN BB's care-team invariant says a rendering role must resolve to
+        // a Practitioner. Declaring the reference is the easy half; this walks
+        // it. The EOB is read through the Provider Access path, the literal
+        // reference is taken off the payload rather than assumed, and the same
+        // string is handed to the service that owns the Practitioner
+        // projection — so a reference that pointed at a resource CHO does not
+        // serve would fail here instead of in a caller's validator.
+        var path = new Path();
+        path.Add(ProfessionalClaim("clm-1", Member));
+
+        var eob = await path.ReadAsProvider(Member, "clm-1");
+
+        var reference = eob.CareTeam.Should().ContainSingle().Which.Provider.Reference;
+        reference.Should().Be($"Practitioner/{RenderingNpi}",
+            "the 837's rendering provider is an individual, so its type is known");
+
+        var practitioner = await ProviderDirectory(RenderingNpi).ReadPractitioner(
+            reference!.Split('/')[1], CancellationToken.None);
+
+        var body = JsonDocument.Parse(((ContentResult)practitioner).Content!).RootElement;
+        ((ContentResult)practitioner).StatusCode.Should().Be(200);
+        body.GetProperty("resourceType").GetString().Should().Be("Practitioner");
+        body.GetProperty("id").GetString().Should().Be(RenderingNpi,
+            "the reference is relative, so the id it names has to be the NPI");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PROV-01")]
+    [Trait("Backend", "Replace")]
+    public async Task The_billing_provider_is_named_but_not_typed()
+    {
+        // The header provider comes from the claim's billing NPI, which may
+        // belong to a group. C4BB allows either an Organization or a
+        // Practitioner there, and CHO cannot tell which from the claim alone,
+        // so it says what it knows — the identifier — and asserts no type. A
+        // literal Practitioner reference here would be a guess that 404s for
+        // every group practice.
+        var path = new Path();
+        path.Add(ProfessionalClaim("clm-1", Member));
+
+        var eob = await path.ReadAsProvider(Member, "clm-1");
+
+        eob.Provider.Reference.Should().BeNull();
+        eob.Provider.Identifier.Value.Should().Be("1234567893");
+    }
+
+    /// <summary>
+    /// provider-service's Practitioner endpoint over one synthetic individual
+    /// provider — the service fhir-service proxies <c>fhir/r4/Practitioner</c>
+    /// to (capability 5.7).
+    /// </summary>
+    private static FhirPractitionerController ProviderDirectory(string npi)
+    {
+        var provider = new ProviderService.Models.Provider
+        {
+            NPI = npi,
+            ProviderType = ProviderService.Models.ProviderType.Individual,
+            Status = ProviderService.Models.ProviderStatus.Active,
+            VersionState = ProviderService.Models.ProviderVersionState.Active,
+            FirstName = "Dana",
+            LastName = "Okafor",
+        };
+
+        var repository = new Mock<ProviderService.Repositories.IProviderRepository>();
+        repository.Setup(r => r.GetByNPIAsync(npi)).ReturnsAsync(provider);
+
+        return new FhirPractitionerController(
+            repository.Object,
+            new ProviderService.Services.FhirPractitionerProjector(),
+            NullLogger<FhirPractitionerController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
     }
 
     // ── the path under test ──────────────────────────────────────────────────
@@ -354,7 +438,7 @@ public class ProviderAccessNonFinancialEobTests
         ClaimType = ChoClaimType.Professional,
         BillingProviderNPI = "1234567893",
         BillingProviderName = "Example Clinic",
-        RenderingProviderNPI = "1245319599",
+        RenderingProviderNPI = RenderingNpi,
         PlaceOfServiceCode = "11",
         TotalChargeAmount = 430m,
         ServiceDateFrom = new DateTime(2026, 9, 16, 0, 0, 0, DateTimeKind.Utc),
