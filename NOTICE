@@ -1,5 +1,5 @@
 Cloud Health Office
-Copyright 2024-2026 Aurelianware, Inc.
+Copyright 2025-2026 Aurelianware, Inc.
 
 This product is licensed under the Business Source License 1.1.
 See the LICENSE file for the full license text.
@@ -8,3 +8,10 @@ The Licensed Work converts to Apache License, Version 2.0 on the Change Date
 specified in the LICENSE file (2030-03-08).
 
 For commercial licensing inquiries: licensing@cloudhealthoffice.com
+
+Third-party components are listed, with their licences, in
+THIRD-PARTY-NOTICES.md. Each remains under its own licence.
+
+idcard-service embeds Noto Sans (Copyright 2022 The Noto Project Authors),
+licensed under the SIL Open Font License 1.1; the licence text ships with the
+font in src/services/idcard-service/Fonts/OFL.txt.
