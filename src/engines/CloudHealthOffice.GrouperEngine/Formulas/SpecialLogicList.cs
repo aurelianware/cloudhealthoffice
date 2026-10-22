@@ -95,19 +95,82 @@ public sealed record SpecialLogicList(
         // Tests over the claim's codes. The names here are the values CMS's
         // enumeration carries, which for two of the counting lists differ from
         // the enum member's own name: SGLANTFUSECTR is spelled SGLANTCTR in the
-        // data, and SGLPOST1FUSECTR is SGLPOST1CTR.
-        new("MULTST", SpecialLogicKind.CodeDriven),
-        new("BILATERAL", SpecialLogicKind.CodeDriven),
-        new("FOUR_VESSELS", SpecialLogicKind.CodeDriven),
-        new("FOUR_STENTS", SpecialLogicKind.CodeDriven),
-        new("SINGLEFUSIONCTR", SpecialLogicKind.CodeDriven),
-        new("SGLANTSECTXCTR", SpecialLogicKind.CodeDriven),
-        new("SGLANTCTR", SpecialLogicKind.CodeDriven),
-        new("SGLPOSTFUSECTR", SpecialLogicKind.CodeDriven),
-        new("SGLPOST1CTR", SpecialLogicKind.CodeDriven),
-        new("MULTFUSE", SpecialLogicKind.CodeDriven),
-        new("MDC_20_FALL_THRU", SpecialLogicKind.CodeDriven),
+        // data, and SGLPOST1FUSECTR is SGLPOST1CTR. Keying this table on the
+        // member names would have left both counters as ordinary mask lookups,
+        // and a mask lookup on one of these names is always false.
+        new("MULTST", SpecialLogicKind.CodeDriven)
+        {
+            Rule = CodeDrivenRule.TwoDistinctDiagnosisLists,
+            Terms = Lists(
+                "sthead", "stchest", "stabdom", "stkidney",
+                "sturin", "stpel", "stuplimb", "stlolimb"),
+        },
+        new("BILATERAL", SpecialLogicKind.CodeDriven)
+        {
+            Rule = CodeDrivenRule.TwoDistinctProcedureLists,
+            Terms = Lists(
+                "righthip", "rightknee", "rightankle",
+                "lefthip", "leftknee", "leftankle"),
+        },
+        new("FOUR_VESSELS", SpecialLogicKind.CodeDriven)
+        {
+            Rule = CodeDrivenRule.WeightedOccurrencesReachingFour,
+            Terms =
+            [
+                new("vessel1", 1), new("vessel2", 2),
+                new("vessel3", 3), new("vessel4", 4),
+            ],
+        },
+        new("FOUR_STENTS", SpecialLogicKind.CodeDriven)
+        {
+            Rule = CodeDrivenRule.WeightedOccurrencesReachingFour,
+            Terms =
+            [
+                new("stent1", 1), new("stent2", 2),
+                new("stent3", 3), new("stent4", 4),
+            ],
+        },
+        new("SINGLEFUSIONCTR", SpecialLogicKind.CodeDriven)
+        {
+            Rule = CodeDrivenRule.EveryListAndThreeOccurrences,
+            Terms = Lists("sglantfuse", "sglpostfuse"),
+        },
+        new("MULTFUSE", SpecialLogicKind.CodeDriven)
+        {
+            Rule = CodeDrivenRule.TwoOccurrences,
+            Terms = Lists("sglantfuse", "sglpostfuse1"),
+        },
+        new("SGLANTCTR", SpecialLogicKind.CodeDriven)
+        {
+            Rule = CodeDrivenRule.EveryListAndTwoOccurrences,
+            Terms = Lists("sglantfuse"),
+        },
+        new("SGLPOST1CTR", SpecialLogicKind.CodeDriven)
+        {
+            Rule = CodeDrivenRule.EveryListAndTwoOccurrences,
+            Terms = Lists("sglpostfuse1"),
+        },
+        // The capital X is the tables' spelling and procedure attributes are
+        // matched case-sensitively, so it is not a typo to tidy.
+        new("SGLANTSECTXCTR", SpecialLogicKind.CodeDriven)
+        {
+            Rule = CodeDrivenRule.TwoOccurrences,
+            Terms = Lists("sglantsectXfuse"),
+        },
+        new("SGLPOSTFUSECTR", SpecialLogicKind.CodeDriven)
+        {
+            Rule = CodeDrivenRule.TwoOccurrences,
+            Terms = Lists("sglpostfuse"),
+        },
+        new("MDC_20_FALL_THRU", SpecialLogicKind.CodeDriven)
+        {
+            Rule = CodeDrivenRule.PrincipalDiagnosisInMdc,
+            FallThroughMdc = 20,
+        },
     ];
+
+    private static CodeDrivenTerm[] Lists(params string[] names) =>
+        [.. names.Select(name => new CodeDrivenTerm(name))];
 
     private static readonly Dictionary<string, SpecialLogicList> ByName =
         All.ToDictionary(list => list.CanonicalName, StringComparer.OrdinalIgnoreCase);
@@ -121,6 +184,25 @@ public sealed record SpecialLogicList(
         ArgumentNullException.ThrowIfNull(listName);
         return ByName.TryGetValue(listName, out list!);
     }
+
+    /// <summary>
+    /// For a code-driven list, how it decides. <see cref="CodeDrivenRule.None"/>
+    /// for everything else — and for a code-driven list nothing implements,
+    /// which is refused rather than answered false.
+    /// </summary>
+    public CodeDrivenRule Rule { get; init; } = CodeDrivenRule.None;
+
+    /// <summary>
+    /// For a code-driven list, the lists it looks for on the claim's codes and
+    /// what an occurrence of each is worth.
+    /// </summary>
+    public IReadOnlyList<CodeDrivenTerm> Terms { get; init; } = [];
+
+    /// <summary>
+    /// For <see cref="CodeDrivenRule.PrincipalDiagnosisInMdc"/>, the MDC the
+    /// principal diagnosis has to be in.
+    /// </summary>
+    public int FallThroughMdc { get; init; }
 
     /// <summary>
     /// The attribute this operand looks for: the canonical name at the

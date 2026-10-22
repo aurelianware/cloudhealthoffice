@@ -289,4 +289,70 @@ public class MsDrgMaskBuilderTests
     {
         Assert.Empty(MsDrgMaskBuilder.NotYetBuilt);
     }
+
+    /// <summary>
+    /// The builder hands back the claim's codes as well as its mask, because
+    /// eleven V44 operands read the codes and not the mask. The principal
+    /// diagnosis comes first, matching CMS's own evaluation context, which is
+    /// what <c>MDC_20_FALL_THRU</c> depends on.
+    /// </summary>
+    [Fact]
+    public void The_builder_returns_the_claims_codes_principal_first()
+    {
+        var builder = BuilderWith(
+            diagnoses: new Dictionary<string, DiagnosisCodeAttributes>
+            {
+                ["S0690AA"] = InMemoryCodeAttributeSource.DiagnosisWithOperands(
+                    24, ComplicationLevel.Mcc, "sthead"),
+                ["S2740XA"] = InMemoryCodeAttributeSource.DiagnosisWithOperands(
+                    24, ComplicationLevel.Cc, "stchest"),
+            },
+            procedures: new Dictionary<string, ProcedureCodeAttributes>
+            {
+                ["0SRB0JZ"] = InMemoryCodeAttributeSource.Procedure("righthip"),
+            });
+
+        var built = builder.BuildClaim(Stay("S0690AA", ["S2740XA"], ["0SRB0JZ"]));
+
+        Assert.Empty(built.UnrecognisedCodes);
+        Assert.Equal(
+            ["S0690AA", "S2740XA"],
+            built.Codes.Diagnoses.Select(diagnosis => diagnosis.Code));
+        Assert.Equal(
+            ["0SRB0JZ"],
+            built.Codes.Procedures.Select(procedure => procedure.Code));
+        Assert.True(built.Codes.Diagnoses[0].HasOperand("sthead"));
+        Assert.True(built.Codes.Procedures[0].HasOperand("righthip"));
+
+        // And the operands those codes carry do satisfy MULTST.
+        Assert.True(DrgFormulaParser.Parse("MULTST").Evaluate(
+            new DrgFormulaEvaluation(
+                built.Mask, Mdc: 24, ApplySuppression: true, Claim: built.Codes)));
+    }
+
+    /// <summary>
+    /// An unrecognised code keeps its place in the claim's code list, so that
+    /// the operands that read positions do not see the list shift under them.
+    /// It carries no operands and an MDC of -1, which is why an unrecognised
+    /// code is reported as a reason to refuse rather than grouped around.
+    /// </summary>
+    [Fact]
+    public void An_unrecognised_code_keeps_its_place_in_the_claims_codes()
+    {
+        var builder = BuilderWith(
+            diagnoses: new Dictionary<string, DiagnosisCodeAttributes>
+            {
+                ["S2740XA"] = InMemoryCodeAttributeSource.DiagnosisWithOperands(
+                    24, ComplicationLevel.Cc, "stchest"),
+            });
+
+        var built = builder.BuildClaim(Stay("NOPE1", ["S2740XA"]));
+
+        Assert.Equal(["NOPE1"], built.UnrecognisedCodes);
+        Assert.Equal(
+            ["NOPE1", "S2740XA"],
+            built.Codes.Diagnoses.Select(diagnosis => diagnosis.Code));
+        Assert.Equal(-1, built.Codes.Diagnoses[0].Mdc);
+        Assert.Empty(built.Codes.Diagnoses[0].Operands);
+    }
 }

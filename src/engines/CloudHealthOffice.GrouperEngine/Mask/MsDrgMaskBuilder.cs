@@ -104,10 +104,36 @@ public sealed class MsDrgMaskBuilder
     public AttributeMask Build(
         MsDrgGroupingRequest request, out IReadOnlyList<string> unrecognisedCodes)
     {
+        var built = BuildClaim(request);
+        unrecognisedCodes = built.UnrecognisedCodes;
+        return built.Mask;
+    }
+
+    /// <summary>
+    /// Builds the mask and the claim's codes together.
+    ///
+    /// <para>
+    /// The codes are needed as well as the mask because eleven V44 operands do
+    /// not read the mask at all: they walk the claim's diagnoses or procedures
+    /// and count. Building both here keeps the two in step — the codes are the
+    /// same ones, in the same order, that contributed the mask.
+    /// </para>
+    /// </summary>
+    /// <param name="request">The stay.</param>
+    public MsDrgMaskedClaim BuildClaim(MsDrgGroupingRequest request)
+    {
         ArgumentNullException.ThrowIfNull(request);
 
         var unrecognised = new List<string>();
         var mask = new AttributeMask();
+
+        // CMS's own evaluation context holds the principal diagnosis first and
+        // then the secondaries, and the procedures exactly as submitted. A
+        // satisfied cluster's pseudo-code is NOT among them: a cluster reaches
+        // the formulas through the mask only. MDC_20_FALL_THRU reads
+        // diagnoses[0] and nothing else, so the order is not cosmetic.
+        var claimDiagnoses = new List<ClaimDiagnosis>();
+        var claimProcedures = new List<ClaimProcedure>();
 
         // CMS builds the secondaries first and the principal last. The order is
         // visible in a trace and in the audit record, so it is kept.
@@ -116,10 +142,13 @@ public sealed class MsDrgMaskBuilder
             if (!codes.TryGetDiagnosis(secondary.Code, out var attributes))
             {
                 unrecognised.Add(secondary.Code);
+                claimDiagnoses.Add(Unrecognised(secondary.Code));
                 continue;
             }
 
             AddDiagnosis(mask, attributes, OperandPosition.SecondaryDiagnosis);
+            claimDiagnoses.Add(ClaimDiagnosis.Create(
+                secondary.Code, attributes.Mdc, attributes.Operands));
         }
 
         // Clusters are resolved before the procedures are added, because a
@@ -134,11 +163,17 @@ public sealed class MsDrgMaskBuilder
             if (!codes.TryGetProcedure(procedure.Code, out var attributes))
             {
                 unrecognised.Add(procedure.Code);
+                claimProcedures.Add(ClaimProcedure.Create(procedure.Code, []));
                 continue;
             }
 
             suppressionByCode.TryGetValue(procedure.Code, out var suppressed);
             AddProcedure(mask, attributes, suppressed);
+
+            // The counting operands read the code's own attributes, which
+            // cluster suppression does not touch: suppression removes an
+            // operand from the mask, and these operands never consult it.
+            claimProcedures.Add(ClaimProcedure.Create(procedure.Code, attributes.Operands));
         }
 
         // A satisfied cluster's own code is looked up in the procedure table
@@ -159,10 +194,13 @@ public sealed class MsDrgMaskBuilder
         if (principalRecognised)
         {
             AddDiagnosis(mask, principal, OperandPosition.PrincipalDiagnosis);
+            claimDiagnoses.Insert(0, ClaimDiagnosis.Create(
+                request.PrincipalDiagnosis.Code, principal.Mdc, principal.Operands));
         }
         else
         {
             unrecognised.Add(request.PrincipalDiagnosis.Code);
+            claimDiagnoses.Insert(0, Unrecognised(request.PrincipalDiagnosis.Code));
 
             // An unrecognised principal diagnosis is itself an operand: the
             // formulas for the ungroupable DRGs test for it. So the mask is
@@ -189,9 +227,25 @@ public sealed class MsDrgMaskBuilder
         AddOnlyIncident(mask, request, principalRecognised ? principal : null);
         AddSexEdit(mask, request, principalRecognised ? principal : null);
 
-        unrecognisedCodes = unrecognised;
-        return mask;
+        return new MsDrgMaskedClaim(
+            mask,
+            new ClaimCodes(claimDiagnoses, claimProcedures),
+            unrecognised);
     }
+
+    /// <summary>
+    /// A code the tables do not know, kept in the claim's code list so that
+    /// positions do not shift under the operands that read them.
+    ///
+    /// <para>
+    /// Its MDC is -1, which no formula asks for. That is safe only because an
+    /// unrecognised code is a reason to refuse the claim, reported in
+    /// <see cref="MsDrgMaskedClaim.UnrecognisedCodes"/>; it is not a default
+    /// that should ever decide a DRG.
+    /// </para>
+    /// </summary>
+    private static ClaimDiagnosis Unrecognised(string code) =>
+        ClaimDiagnosis.Create(code, -1, []);
 
     /// <summary>
     /// Adds a procedure's operands, suppressed in the MDCs a cluster has

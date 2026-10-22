@@ -159,7 +159,13 @@ public abstract record DrgFormulaExpression
 
             if (Special.Kind == SpecialLogicKind.CodeDriven)
             {
-                throw new DrgFormulaUnsupportedException(Name);
+                if (!CodeDrivenOperand.Evaluate(Special, context.Codes))
+                {
+                    return false;
+                }
+
+                matched?.Add(Special.CanonicalName);
+                return true;
             }
 
             // An MCE edit ignores cluster suppression -- CMS's own node does a

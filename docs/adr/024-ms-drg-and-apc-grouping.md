@@ -602,16 +602,49 @@ Build order:
    CMS's own grouper, reading its source is the slower and less reliable way to
    answer it.
 
-   The code-driven operands — significant trauma, bilateral pairs, the fusion,
-   vessel and stent counts, MDC fall-through — are now **declared and refuse**.
-   Each is the whole condition of the formula it appears in, so answering false
-   would move the stay quietly to a different DRG; there is no safe default, so
-   evaluation throws and the caller has to refuse the claim.
+   **The code-driven operands are now built, and asking CMS paid for itself a
+   second time.** Eleven V44 operands read the claim's codes rather than its
+   mask, and every one of them appears in a real V440 formula. `CodeDrivenNodeCheck`
+   runs CMS's own nodes over synthetic codes, and four of the rules turned out
+   not to be what the operand names say:
+
+   - `MULTST` and `BILATERAL` take **at most one list per code**. CMS takes
+     from each code the first list it carries that it has not already found and
+     then moves on, so one diagnosis on both the head and the chest trauma
+     lists is not a multiple-trauma stay. Two codes carrying one each are.
+   - `BILATERAL` is satisfied by **any two** of its six lists, so a right hip
+     and a right knee satisfy it. It never checks that the two are a left/right
+     pair.
+   - `MULTFUSE` wants two occurrences but **not** two different lists, where
+     `SINGLEFUSIONCTR` wants both — and the two are built from the same fusion
+     lists. The same list twice satisfies one and not the other.
+   - The vessel and stent counts are **weighted**: `vessel3` is worth three, so
+     one code can satisfy `FOUR_VESSELS` alone while three `vessel1` codes
+     cannot.
+
+   And a fifth trap, in CMS's naming rather than its logic: two of its
+   node-factory members are not named after the operand they match.
+   `SGLANTFUSECTR` matches the operand `SGLANTCTR`, and `SGLPOST1FUSECTR`
+   matches `SGLPOST1CTR`. A table keyed on the member names — the obvious way
+   to build one — leaves both counters as ordinary mask lookups, and a mask
+   lookup on one of these names is always false. That is two of the eleven
+   silently dead, with no error to notice.
+
+   Two smaller points of faithfulness that the same run settled. A diagnosis
+   list name is matched **case-insensitively and without its prefix**, because
+   CMS's diagnosis lookup walks the list comparing names; a procedure's is
+   matched **exactly**, because its lookup is a hash-set lookup. So a diagnosis
+   carrying `STHEAD` satisfies `MULTST` and a procedure carrying `RIGHTHIP`
+   does not satisfy `BILATERAL`. And a satisfied cluster's pseudo-code is
+   **not** among the procedures these operands walk: a cluster reaches the
+   formulas through the mask only.
+
+   The guard that refused these operands is kept, now for a special list with
+   no rule, so the next fiscal year's new list is loud rather than quietly
+   false.
 
    What is left:
 
-   - the code-driven operand nodes themselves, which need the claim's codes
-     rather than its mask;
    - driving the ranked formula lists per MDC — 824 formulas for V44 — with
      `reRouteMdcId` (20 formulas) and `severitySuppressionOperand` (56).
 

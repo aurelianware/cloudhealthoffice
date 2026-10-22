@@ -165,13 +165,36 @@ formula text:
   so `PDX:incident` is evaluated as `ONLY:incident`.
 
 Running it found both of those as live defects in work that had already been
-reviewed and merged. Run it after changing the formula evaluator, or on a new
-fiscal year's jars:
+reviewed and merged.
+
+`CodeDrivenNodeCheck` does the same for the eleven operands that read the
+claim's codes rather than its mask — significant trauma, bilateral pairs, the
+fusion, vessel and stent counters, MDC fall-through. It builds synthetic
+diagnosis and procedure codes carrying chosen lists and runs CMS's real nodes
+over them. Four of those rules are not what the operand names say:
+
+* `MULTST` and `BILATERAL` take **at most one list per code**, so one diagnosis
+  on both the head and chest lists is not a multiple-trauma stay.
+* `BILATERAL` takes any two of its six lists, so a right hip and a right knee
+  satisfy it. It never checks that the two are a pair.
+* `MULTFUSE` wants two occurrences but not two different lists, where
+  `SINGLEFUSIONCTR` wants both — and they are built from the same fusion lists.
+* The vessel and stent counts are **weighted**: one `vessel4` satisfies
+  `FOUR_VESSELS`, three `vessel1` do not.
+
+And a naming trap it caught: two of CMS's node-factory members are not named
+after the operand they match. `SGLANTFUSECTR` matches the operand `SGLANTCTR`
+and `SGLPOST1FUSECTR` matches `SGLPOST1CTR`. A table keyed on the member names
+leaves both counters as ordinary mask lookups, which are always false.
+
+Run them after changing the formula evaluator, or on a new fiscal year's jars:
 
 ```
 CMS_MSDRG_JARS=/path/to/jars ./run.sh            # the parity corpus
 java -cp <same classpath> gov.cho.grouper.oracle.SpecialNodeCheck
+java -cp <same classpath> gov.cho.grouper.oracle.CodeDrivenNodeCheck
 java -cp <same classpath> gov.cho.grouper.oracle.FormulaPrecedenceCheck
 ```
 
-Its answers are asserted on the .NET side in `SpecialLogicListTests`.
+Their answers are asserted on the .NET side in `SpecialLogicListTests` and
+`CodeDrivenNodeTests`.

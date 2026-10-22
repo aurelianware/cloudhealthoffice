@@ -32,8 +32,17 @@ public readonly record struct DrgFormulaEvaluation(
     IAttributeMask Mask,
     int Mdc = -1,
     bool ApplySuppression = false,
-    GrouperReturnCodeSink? ReturnCodes = null)
+    GrouperReturnCodeSink? ReturnCodes = null,
+    ClaimCodes? Claim = null)
 {
+    /// <summary>
+    /// The claim's codes, which the code-driven operands read. Empty when the
+    /// caller did not supply them, in which case every one of those operands
+    /// is false — which is what CMS answers for a claim with no codes, but is
+    /// not what it answers for a real stay. A grouping caller supplies them.
+    /// </summary>
+    public ClaimCodes Codes => Claim ?? ClaimCodes.Empty;
+
     /// <summary>True when the stay satisfies <paramref name="attribute"/>.</summary>
     public bool Satisfies(OperandName attribute) => ApplySuppression
         ? Mask.ContainsUnsuppressed(attribute, Mdc)

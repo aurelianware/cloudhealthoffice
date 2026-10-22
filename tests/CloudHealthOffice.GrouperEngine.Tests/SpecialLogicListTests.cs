@@ -124,17 +124,11 @@ public class SpecialLogicListTests
     }
 
     /// <summary>
-    /// The code-driven operands cannot be answered from the mask, and CMS
-    /// answers false for them when the claim's codes do not meet the
-    /// condition — including when the operand's own name is in the mask, which
-    /// is what these were checked against.
-    ///
-    /// <para>
-    /// This engine does not implement them yet, and refuses rather than
-    /// answering false. Each is the whole condition of the formula it appears
-    /// in, so a false answer would move the stay quietly to a different DRG;
-    /// there is no safe default and the gap has to be loud.
-    /// </para>
+    /// The code-driven operands cannot be answered from the mask. CMS answers
+    /// false for them when the claim's codes do not meet the condition, and
+    /// that holds even when the operand's own name is in the mask — which is
+    /// what these were checked against. The conditions themselves are pinned
+    /// in <see cref="CodeDrivenNodeTests"/>.
     /// </summary>
     [Theory]
     [InlineData("MULTST")]
@@ -143,37 +137,49 @@ public class SpecialLogicListTests
     [InlineData("FOUR_STENTS")]
     [InlineData("MULTFUSE")]
     [InlineData("SINGLEFUSIONCTR")]
+    [InlineData("SGLANTCTR")]
+    [InlineData("SGLPOST1CTR")]
+    [InlineData("SGLANTSECTXCTR")]
+    [InlineData("SGLPOSTFUSECTR")]
     [InlineData("MDC_20_FALL_THRU")]
-    public void A_code_driven_operand_refuses_rather_than_answering_false(string operand)
+    public void A_code_driven_operand_is_not_answered_from_the_mask(string operand)
     {
+        Assert.False(Evaluate(operand, MaskOf(operand)));
+    }
+
+    /// <summary>
+    /// Two of CMS's node-factory members are not named after the operand they
+    /// match: <c>SGLANTFUSECTR</c> matches <c>SGLANTCTR</c> and
+    /// <c>SGLPOST1FUSECTR</c> matches <c>SGLPOST1CTR</c>. So the member names
+    /// are ordinary operands — a plain mask lookup, prefix and case exact —
+    /// and a table built from them would have left both counters dead.
+    /// </summary>
+    [Theory]
+    [InlineData("SGLANTFUSECTR")]
+    [InlineData("SGLPOST1FUSECTR")]
+    public void The_enums_java_name_is_an_ordinary_operand(string operand)
+    {
+        Assert.False(SpecialLogicList.TryResolve(operand, out _));
+        Assert.True(Evaluate(operand, MaskOf(operand)));
+    }
+
+    /// <summary>
+    /// A special list with no rule is refused rather than answered false. None
+    /// is in that state today, so this drives the guard directly: each of
+    /// these operands is the whole condition of the formula it appears in, and
+    /// a false answer would move the stay to a different DRG without saying
+    /// so.
+    /// </summary>
+    [Fact]
+    public void A_code_driven_list_with_no_rule_is_refused()
+    {
+        var unimplemented = new SpecialLogicList(
+            "NOTBUILTYET", SpecialLogicKind.CodeDriven);
+
         var error = Assert.Throws<DrgFormulaUnsupportedException>(
-            () => Evaluate(operand, MaskOf(operand)));
+            () => CodeDrivenOperand.Evaluate(unimplemented, ClaimCodes.Empty));
 
-        Assert.Equal(operand, error.Operand);
-    }
-
-    /// <summary>
-    /// A real V44 formula that mixes a code-driven operand with an ordinary
-    /// one. Short-circuiting does not rescue it: CMS evaluates left first, so
-    /// the ordinary operand is tested and then the unsupported one is reached.
-    /// </summary>
-    [Fact]
-    public void A_formula_containing_a_code_driven_operand_cannot_be_evaluated()
-    {
-        Assert.Throws<DrgFormulaUnsupportedException>(
-            () => Evaluate("PDX:strauma & MULTST", MaskOf("PDX:strauma"), mdc: 24));
-    }
-
-    /// <summary>
-    /// But short-circuiting does rescue it when the left side settles the
-    /// answer, exactly as in CMS — the unsupported operand is never reached,
-    /// so there is nothing to refuse.
-    /// </summary>
-    [Fact]
-    public void An_unreached_code_driven_operand_is_not_a_problem()
-    {
-        Assert.False(Evaluate("PDX:strauma & MULTST", MaskOf("SDX:strauma"), mdc: 24));
-        Assert.True(Evaluate("PDX:strauma | MULTST", MaskOf("PDX:strauma"), mdc: 24));
+        Assert.Equal("NOTBUILTYET", error.Operand);
     }
 
     /// <summary>
