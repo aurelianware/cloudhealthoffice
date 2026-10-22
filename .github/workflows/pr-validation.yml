@@ -185,6 +185,7 @@ jobs:
             {"service":"authorization-service"},
             {"service":"benefit-plan-service"},
             {"service":"capitation-service"},
+            {"service":"care-management-service"},
             {"service":"CHO.TerminologyService","image_name":"cloudhealthoffice-terminology-service"},
             {"service":"claims-examiner-service"},
             {"service":"claims-service"},

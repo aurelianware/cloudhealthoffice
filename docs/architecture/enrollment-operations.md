@@ -38,7 +38,7 @@ The EDI analyst never fixes members. Once a file is accepted, every member-level
 - `WorkType.Enrollment834` exists in work-management, with the `enrollment:process` permission.
 
 **Missing:**
-- **Rejection reasons are not stored.** A rejected member is saved as `Rejected` with no reason; the text survives only in the run's error list. The Enrollment tab's Reason column is always empty.
+- ~~**Rejection reasons are not stored.**~~ Built (§9.1).
 - **Nothing creates `Enrollment834` work items,** and there is no fix-and-reprocess action. Today the only remedy is re-sending the file or a manual enrollment.
 - **The BGN segment is not read,** so CHO cannot tell a change file from a full or audit file, and there is no reconciliation.
 - **Retro changes are flagged but not acted on.** Events dated more than 30 days back get `IsRetro`; nothing tells claims.
@@ -165,7 +165,7 @@ The page reads enrollment and work-management data only. Member detail needs `me
 
 ## 9. Build order
 
-1. **Store the reason** on every rejected transaction, with the INS position and file link. Show it on the member's Enrollment tab.
+1. **Store the reason** on every rejected transaction, with the INS position and file link. Show it on the member's Enrollment tab. *Built 2026-10-22 (§9.1); the file link arrives with the EDI file record.*
 2. **Exceptions and work items:** the `EnrollmentException` record, `Enrollment834` items with SLAs, and the specialist actions (reprocess, match, hold, no action, send back).
 3. **Enrollment Ops page:** the exceptions view, then sponsors.
 4. **Retro rules:** line-of-business, plan and sponsor settings; the commercial floor; two-person approval; the claims-impact event and claims review items.
@@ -179,6 +179,30 @@ The page reads enrollment and work-management data only. Member detail needs `me
 8. **Marketplace reconciliation file (RCNI),** when a Marketplace plan needs it.
 
 SFTP files reaching the same import path with the duplicate check is a prerequisite of steps 2 and 6, owned by [edi-operations.md](edi-operations.md) §9 step 1.
+
+### 9.1 What step 1 built
+
+- `EnrollmentTransaction` keeps, beside the status:
+  - the sponsor's maintenance reason (INS04) and the coverage dates sent;
+  - the position in the file ("INS 3", "INS 3, dependent 1", "dependent 2 without its subscriber");
+  - a **reason code**;
+  - the individual errors (code, field, message).
+- **Reason codes:**
+  - `VALIDATION_FAILED`, with each failed rule;
+  - `SUBSCRIBER_NOT_FOUND`;
+  - `DEPENDENT_NOT_IDENTIFIED`;
+  - `INVALID_TRANSACTION`;
+  - `DOWNSTREAM_REJECTED` or `DOWNSTREAM_UNAVAILABLE`: a 5xx or 429 from member-, coverage- or sponsor-service, safe to reprocess;
+  - `CONCURRENT_UPDATE`;
+  - `UNEXPECTED_ERROR`;
+  - `TERM_SKIPPED_NOT_ON_FILE`: a note on an accepted termination that found no one to terminate.
+- Stored messages follow the import's existing rule: an unexpected exception's text stays in the log. A downstream refusal is recorded by service and HTTP status, not by its body.
+- member-service passes the fields through on `GET /api/v1/members/{id}/834-transactions`. The member record's Enrollment tab shows:
+  - the file and position;
+  - the sponsor's reason (INS04) in its own column;
+  - a "Why" column with the reason in words and each error.
+  
+  EDI Transactions shows the same under each 834 transaction's status.
 
 ## 10. Open questions
 

@@ -1,0 +1,124 @@
+# Workload identity for care-management-service: its user-assigned managed identity, federated to
+# system:serviceaccount:cloudhealthoffice:care-management-service-sa. token-service issues this
+# service's CHO service tokens to that identity only (ServiceTokens:ServiceClients); the service
+# holds no signing key. See docs/security/portal-token-service.md ("Service tokens").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: care-management-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<CARE_MANAGEMENT_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: care-management-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  MongoDb__DatabaseName: "CloudHealthOffice"
+  MongoDb__CareCasesCollection: "CareCases"
+  # Care activities are queued here. Unset, activities are still recorded on
+  # the case; they are simply in nobody's work queue.
+  Services__WorkManagementServiceUrl: "http://work-management-service"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: care-management-service
+  namespace: cloudhealthoffice
+  labels:
+    app: care-management-service
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: care-management-service
+  template:
+    metadata:
+      labels:
+        azure.workload.identity/use: "true"
+        app: care-management-service
+        tier: backend
+    spec:
+      serviceAccountName: care-management-service-sa
+      containers:
+      - name: care-management-service
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-care-management-service:latest
+        imagePullPolicy: Always
+        envFrom:
+        # Source=TokenService, token-service URL and Entra scope (shared by all services).
+        - configMapRef:
+            name: cho-service-tokens
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: ChoAuth__ServiceToken__ClientId
+          value: "care-management-service"
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: care-management-service-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: connectionString
+        - name: MongoDb__DatabaseName
+          valueFrom:
+            configMapKeyRef:
+              name: care-management-service-config
+              key: MongoDb__DatabaseName
+        - name: MongoDb__CareCasesCollection
+          valueFrom:
+            configMapKeyRef:
+              name: care-management-service-config
+              key: MongoDb__CareCasesCollection
+        - name: Services__WorkManagementServiceUrl
+          valueFrom:
+            configMapKeyRef:
+              name: care-management-service-config
+              key: Services__WorkManagementServiceUrl
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: care-management-service
+  namespace: cloudhealthoffice
+  labels:
+    app: care-management-service
+spec:
+  type: ClusterIP
+  selector:
+    app: care-management-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP

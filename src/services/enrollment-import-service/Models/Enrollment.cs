@@ -58,6 +58,13 @@ public class Enrollment834
     /// </summary>
     [JsonIgnore]
     public string? ActorId { get; set; }
+
+    /// <summary>
+    /// The EDI file record this batch came from (raw 834 uploads). Set by the
+    /// controller; [JsonIgnore] so a structured request cannot claim a file.
+    /// </summary>
+    [JsonIgnore]
+    public string? EdiFileId { get; set; }
 }
 
 public class MemberEnrollment

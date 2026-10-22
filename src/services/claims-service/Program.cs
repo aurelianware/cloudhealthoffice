@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Files;
 using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
@@ -522,6 +523,7 @@ app.UseChoInfrastructure(builder.Configuration);
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.MapControllers();
 app.MapChoX12InterchangeEndpoints("api/v1/claims/interchange");
+app.MapChoEdiFileEndpoints("api/v1/claims/edi");
 
 app.Run();
 
