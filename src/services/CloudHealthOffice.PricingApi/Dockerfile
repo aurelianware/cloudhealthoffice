@@ -15,6 +15,10 @@ COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infr
 # Repricing runs on the shared rate resolution engine (ADR 016) + its ReferenceData dependency.
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj src/engines/CloudHealthOffice.FeeScheduleEngine/
 COPY src/engines/CloudHealthOffice.ReferenceData/CloudHealthOffice.ReferenceData.csproj src/engines/CloudHealthOffice.ReferenceData/
+# The MS-DRG grouper seam (ADR 024): an inpatient claim without a DRG is put to
+# a grouper rather than refused. Without this copy, restore skips the project
+# ("because it was not found") and the build fails on the namespace.
+COPY src/engines/CloudHealthOffice.GrouperEngine/CloudHealthOffice.GrouperEngine.csproj src/engines/CloudHealthOffice.GrouperEngine/
 RUN dotnet restore src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj
 
 # Copy source code and build
@@ -22,6 +26,7 @@ COPY src/services/CloudHealthOffice.PricingApi/ src/services/CloudHealthOffice.P
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
 COPY src/engines/CloudHealthOffice.ReferenceData/ src/engines/CloudHealthOffice.ReferenceData/
+COPY src/engines/CloudHealthOffice.GrouperEngine/ src/engines/CloudHealthOffice.GrouperEngine/
 RUN dotnet build src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj -c Release --no-restore
 
 # Publish stage
