@@ -59,13 +59,20 @@ public class ExplanationOfBenefitController : FhirControllerBase
     internal const string PriorAuthorizationPath = "fhir/ExplanationOfBenefit/prior-authorization";
 
     /// <summary>
+    /// claims-service's Patient Access route: the adjudicated claim EOB, money
+    /// included. Named like <see cref="PriorAuthorizationPath"/> — after the
+    /// record it serves — rather than repeated inline at each call site.
+    /// </summary>
+    internal const string ClaimEobPath = "fhir/ExplanationOfBenefit";
+
+    /// <summary>
     /// claims-service's Provider Access route: the same claims as CARIN Blue
     /// Button <b>non-financial</b> ExplanationOfBenefits. An attributed provider
     /// is served from here rather than from the Patient Access route, because
     /// PDex points Provider Access at the Basis profiles and because the plan's
     /// financial terms are not the provider's business.
     /// </summary>
-    internal const string ProviderAccessPath = "fhir/ProviderAccess/ExplanationOfBenefit";
+    internal const string ProviderAccessEobPath = "fhir/ProviderAccess/ExplanationOfBenefit";
 
     /// <summary>
     /// Resource-id prefix authorization-service puts on a prior-authorization
@@ -156,7 +163,7 @@ public class ExplanationOfBenefitController : FhirControllerBase
 
         if (RequireChoPermission(ClaimsReadPermission) is { } claimsRefused) return Task.FromResult(claimsRefused);
 
-        var readPath = IsProviderAccessRequest ? ProviderAccessPath : "fhir/ExplanationOfBenefit";
+        var readPath = IsProviderAccessRequest ? ProviderAccessEobPath : ClaimEobPath;
         return ProxyClaimsServiceAsync(
             "ExplanationOfBenefit",
             $"{readPath}/{Uri.EscapeDataString(id)}",
@@ -262,7 +269,7 @@ public class ExplanationOfBenefitController : FhirControllerBase
                 "Provide a patient-scoped token or an explicit patient search parameter."));
         }
 
-        var searchBase = IsProviderAccessRequest ? ProviderAccessPath : "fhir/ExplanationOfBenefit";
+        var searchBase = IsProviderAccessRequest ? ProviderAccessEobPath : ClaimEobPath;
         var path = searchBase + BuildUpstreamQueryString(query, effectivePatient);
         return ProxyClaimsServiceAsync("ExplanationOfBenefit", path, ct,
             leavesConfinement: leavesConfinement);

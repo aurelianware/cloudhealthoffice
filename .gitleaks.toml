@@ -117,4 +117,12 @@ useDefault = true
     '''^whsec_test_0123456789abcdef$''',
     # A .NET type name the generic-api-key rule picks up after a "key" parameter
     '''^X509Certificate2$''',
+    # FHIR route literals. generic-api-key fires on a string assigned next to an
+    # identifier containing "access" — e.g. ProviderAccessEobPath — and a FHIR
+    # resource path has enough entropy to clear the threshold. Both values are
+    # public API routes, documented in the CapabilityStatement; neither is a
+    # credential. Matched exactly, so this exempts these two routes and nothing
+    # else that happens to look like them.
+    '''^fhir/ExplanationOfBenefit$''',
+    '''^fhir/ProviderAccess/ExplanationOfBenefit$''',
   ]
