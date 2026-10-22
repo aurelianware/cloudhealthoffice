@@ -26,7 +26,12 @@ namespace FhirService.Controllers;
 /// </para>
 /// </summary>
 [Route("fhir/r4")]
-[FhirAccess(smart: true, cho: "claims:read")]
+// Two owners behind one resource type (see PriorAuthorizationPath): claims EOBs
+// need claims:read, prior-authorization EOBs need authorizations:read. The
+// policy admits either, and each branch then checks the one it actually needs
+// (RequireChoPermission), so a CHO caller holding only one of them cannot read
+// the other's data.
+[FhirAccess(smart: true, cho: "claims:read,authorizations:read")]
 public class ExplanationOfBenefitController : FhirControllerBase
 {
     /// <summary>
@@ -37,7 +42,48 @@ public class ExplanationOfBenefitController : FhirControllerBase
     /// </summary>
     public const string ClaimsServiceClientName = UpstreamClientNames.ClaimsService;
 
+    /// <summary>
+    /// The <c>use</c> search value that selects prior authorizations rather than
+    /// claims. Da Vinci PDex represents a prior authorization as an
+    /// <c>ExplanationOfBenefit</c> with <c>use = preauthorization</c>, and
+    /// CMS-0057-F's PA-data requirement is served through it (gap matrix G-31,
+    /// and the PA half of G-33 and G-35).
+    /// </summary>
+    public const string PreauthorizationUse = "preauthorization";
+
+    /// <summary>
+    /// authorization-service's prior-authorization EOB route. Owned there
+    /// because the record is owned there, exactly as claims-service owns the
+    /// claim projection; fhir-service adds nothing but the façade.
+    /// </summary>
+    internal const string PriorAuthorizationPath = "fhir/ExplanationOfBenefit/prior-authorization";
+
+    /// <summary>
+    /// Resource-id prefix authorization-service puts on a prior-authorization
+    /// EOB (<c>pa-{authorizationNumber}</c>). Claim EOB ids are claim-version
+    /// ids and never start with it, so a read routes to the owning service from
+    /// the id alone without asking both.
+    /// </summary>
+    internal const string PriorAuthorizationIdPrefix = "pa-";
+
+    /// <summary>
+    /// The Da Vinci PDex profile the prior-authorization projection is shaped
+    /// toward, advertised in the CapabilityStatement. It names what CHO is
+    /// implementing; it is not a conformance claim, because no profile
+    /// validation has run against the projection (authorization-service's
+    /// <c>PriorAuthorizationEobProjector</c> lists what is missing).
+    /// </summary>
+    public const string PdexPriorAuthorizationProfile =
+        "http://hl7.org/fhir/us/davinci-pdex/StructureDefinition/pdex-prior-authorization";
+
+    /// <summary>CHO permission a claims-EOB request needs.</summary>
+    private const string ClaimsReadPermission = "claims:read";
+
+    /// <summary>CHO permission a prior-authorization-EOB request needs.</summary>
+    private const string AuthorizationsReadPermission = "authorizations:read";
+
     private readonly HttpClient _claimsServiceClient;
+    private readonly HttpClient _authorizationServiceClient;
     private readonly ILogger<ExplanationOfBenefitController> _logger;
 
     public ExplanationOfBenefitController(
@@ -45,7 +91,27 @@ public class ExplanationOfBenefitController : FhirControllerBase
         ILogger<ExplanationOfBenefitController> logger)
     {
         _claimsServiceClient = httpClientFactory.CreateClient(UpstreamClientNames.ClaimsService);
+        _authorizationServiceClient = httpClientFactory.CreateClient(UpstreamClientNames.AuthorizationService);
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Enforces the permission the branch actually needs for a CHO caller. The
+    /// controller policy admits <c>claims:read</c> OR
+    /// <c>authorizations:read</c> because one resource type has two owners;
+    /// without this a caller holding only one could read the other's data. A
+    /// SMART caller is governed by its scopes and the confinement checks, not
+    /// by CHO permissions, so it passes through.
+    /// </summary>
+    private IActionResult? RequireChoPermission(string permission)
+    {
+        if (!FhirService.Services.Identity.FhirCallerSchemes.IsCho(User)) return null;
+        if (CloudHealthOffice.Infrastructure.Security.ChoPrincipal.HasPermission(User, permission)) return null;
+
+        _logger.LogWarning(
+            "ExplanationOfBenefit request refused: CHO caller lacks {Permission}",
+            permission);
+        return FhirForbidden("Not permitted to read this ExplanationOfBenefit.");
     }
 
     /// <summary>
@@ -59,13 +125,43 @@ public class ExplanationOfBenefitController : FhirControllerBase
     [HttpGet("ExplanationOfBenefit/{id}")]
     [Produces("application/fhir+json")]
     public Task<IActionResult> ReadEob(string id, CancellationToken ct)
-        => ProxyClaimsServiceAsync(
+    {
+        // Both branches apply the same patient confinement: the upstream answers
+        // for the tenant, not for a patient, so a patient-bound token (or a
+        // provider just authorized for one member) may only see a resource
+        // whose patient is that member.
+        var confinement = AuthorizedMemberId is null
+            ? (Func<string, bool>?)null
+            : body => !IsOutsidePatientContext(EobPatientReference(body));
+
+        if (IsPriorAuthorizationId(id))
+        {
+            if (RequireChoPermission(AuthorizationsReadPermission) is { } refused) return Task.FromResult(refused);
+
+            return ProxyAuthorizationServiceAsync(
+                "ExplanationOfBenefit",
+                $"{PriorAuthorizationPath}/{Uri.EscapeDataString(id)}",
+                ct,
+                confinement);
+        }
+
+        if (RequireChoPermission(ClaimsReadPermission) is { } claimsRefused) return Task.FromResult(claimsRefused);
+
+        return ProxyClaimsServiceAsync(
             "ExplanationOfBenefit",
             $"fhir/ExplanationOfBenefit/{Uri.EscapeDataString(id)}",
             ct,
-            // claims-service answers for the tenant, not for a patient: a
-            // patient-bound token may only see an EOB whose patient is its own.
-            AuthorizedMemberId is null ? null : body => !IsOutsidePatientContext(EobPatientReference(body)));
+            confinement);
+    }
+
+    /// <summary>
+    /// True when the id names a prior-authorization EOB, which
+    /// authorization-service owns. Claim EOB ids are claim-version ids and
+    /// never carry the prefix.
+    /// </summary>
+    internal static bool IsPriorAuthorizationId(string? id)
+        => !string.IsNullOrWhiteSpace(id)
+           && id.Trim().StartsWith(PriorAuthorizationIdPrefix, StringComparison.Ordinal);
 
     /// <summary>The EOB's <c>patient.reference</c>; null when absent or unreadable.</summary>
     internal static string? EobPatientReference(string body)
@@ -120,6 +216,35 @@ public class ExplanationOfBenefitController : FhirControllerBase
         var effectivePatient = AuthorizedMemberId
             ?? (string.IsNullOrEmpty(explicitPatient) ? null : explicitPatient);
 
+        var leavesConfinement = AuthorizedMemberId is null
+            ? (Func<string, bool>?)null
+            : body => BundlePatientReferences(body) is not { } patients || patients.Any(IsOutsidePatientContext);
+
+        // PDex serves a prior authorization as an ExplanationOfBenefit with
+        // use=preauthorization, so that is the discriminator between the two
+        // owners of this resource type. A search WITHOUT `use` is the claims
+        // search it has always been — the two result sets are not merged,
+        // because one bundle cannot be paged coherently across two upstreams
+        // with independent cursors. The CapabilityStatement says so, and names
+        // `use` as the parameter that selects prior authorizations.
+        if (WantsPriorAuthorizations(query))
+        {
+            if (RequireChoPermission(AuthorizationsReadPermission) is { } refused) return Task.FromResult(refused);
+
+            if (string.IsNullOrEmpty(effectivePatient))
+            {
+                return Task.FromResult(FhirBadRequest(
+                    "Prior-authorization ExplanationOfBenefit search requires the patient search parameter. " +
+                    "Provide a patient-scoped token or an explicit patient search parameter."));
+            }
+
+            var priorAuthPath = PriorAuthorizationPath + BuildPriorAuthorizationQueryString(query, effectivePatient);
+            return ProxyAuthorizationServiceAsync(
+                "ExplanationOfBenefit", priorAuthPath, ct, leavesConfinement: leavesConfinement);
+        }
+
+        if (RequireChoPermission(ClaimsReadPermission) is { } claimsRefused) return Task.FromResult(claimsRefused);
+
         if (string.IsNullOrEmpty(effectivePatient) && string.IsNullOrEmpty(explicitId))
         {
             return Task.FromResult(FhirBadRequest(
@@ -129,9 +254,42 @@ public class ExplanationOfBenefitController : FhirControllerBase
 
         var path = "fhir/ExplanationOfBenefit" + BuildUpstreamQueryString(query, effectivePatient);
         return ProxyClaimsServiceAsync("ExplanationOfBenefit", path, ct,
-            leavesConfinement: AuthorizedMemberId is null
-                ? null
-                : body => BundlePatientReferences(body) is not { } patients || patients.Any(IsOutsidePatientContext));
+            leavesConfinement: leavesConfinement);
+    }
+
+    /// <summary>
+    /// True when the search asks for prior authorizations: any <c>use</c> value
+    /// of <c>preauthorization</c>. A <c>use</c> naming something else (a claim,
+    /// a predetermination) is NOT a prior-auth search and falls through to the
+    /// claims upstream, which decides what it supports.
+    /// </summary>
+    internal static bool WantsPriorAuthorizations(IQueryCollection query)
+        => query["use"].Any(v =>
+            string.Equals(v?.Trim(), PreauthorizationUse, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The query string for authorization-service's prior-authorization route.
+    /// Unlike the claims proxy this does NOT forward every inbound parameter:
+    /// <c>use</c> is consumed here (it selected this upstream and means nothing
+    /// downstream), and the route takes <c>patient</c>, <c>status</c>,
+    /// <c>_count</c> and <c>_page</c>. Forwarding the rest would imply support
+    /// this path does not have.
+    /// </summary>
+    private static string BuildPriorAuthorizationQueryString(
+        IQueryCollection inbound, string effectivePatient)
+    {
+        var sb = new StringBuilder();
+        var first = true;
+        AppendParam(sb, ref first, "patient", effectivePatient);
+
+        foreach (var name in new[] { "status", "_count", "_page" })
+        {
+            var value = inbound[name].FirstOrDefault();
+            if (!string.IsNullOrEmpty(value))
+                AppendParam(sb, ref first, name, value);
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>
@@ -238,6 +396,22 @@ public class ExplanationOfBenefitController : FhirControllerBase
         => ProxyUpstreamServiceAsync(
             _claimsServiceClient,
             "claims-service",
+            resourceLabel,
+            path,
+            _logger,
+            ct,
+            successBodyAllowed,
+            leavesConfinement);
+
+    private Task<IActionResult> ProxyAuthorizationServiceAsync(
+        string resourceLabel,
+        string path,
+        CancellationToken ct,
+        Func<string, bool>? successBodyAllowed = null,
+        Func<string, bool>? leavesConfinement = null)
+        => ProxyUpstreamServiceAsync(
+            _authorizationServiceClient,
+            "authorization-service",
             resourceLabel,
             path,
             _logger,

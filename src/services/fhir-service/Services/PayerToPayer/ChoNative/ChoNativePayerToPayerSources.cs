@@ -245,6 +245,22 @@ public sealed class ChoNativePayerToPayerExportSource : IPayerToPayerExportSourc
             .OrderBy(e => e["id"]?.GetValue<string>(), StringComparer.Ordinal)
             .Select(e => new FhirJsonResource(PayerToPayerEobRedaction.Redact(e))));
 
+        // Prior authorizations as ExplanationOfBenefit (use = preauthorization):
+        // the PA data CMS-0057-F requires a prior payer to hand over, so the
+        // receiving payer can honour what is already approved (gap matrix G-35).
+        // authorization-service has already excluded drug authorizations.
+        //
+        // The window is NOT the claims lookback. CMS-0057-F asks for the
+        // authorizations that still matter — active and pending ones, and those
+        // decided recently — so the filter is on the authorization's own dates,
+        // and a still-open request is in regardless of age because a receiving
+        // payer inherits it.
+        var priorAuths = await _directory.GetPriorAuthorizationsAsync(tenantId, member.MemberId, ct);
+        resources.AddRange(priorAuths
+            .Where(a => PayerToPayerExportPolicy.IncludePriorAuthorization(a, request.ExchangeDateUtc))
+            .OrderBy(a => a["id"]?.GetValue<string>(), StringComparer.Ordinal)
+            .Select(a => new FhirJsonResource(PayerToPayerEobRedaction.RedactPriorAuthorization(a))));
+
         return resources;
     }
 }

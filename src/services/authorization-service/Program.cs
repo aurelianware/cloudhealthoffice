@@ -102,6 +102,13 @@ builder.Services.AddScoped<AuthorizationService.Services.BenefitExclusion.IDrugE
 builder.Services.AddScoped<AuthorizationService.Services.BenefitExclusion.IAuthorizationExclusionService,
     AuthorizationService.Services.BenefitExclusion.AuthorizationExclusionService>();
 
+// CMS-0057-F PA data as FHIR (G-31, and the PA half of G-33 / G-35):
+// authorization-service owns the prior-authorization ExplanationOfBenefit
+// projection because it owns the record, as claims-service owns the claim one.
+// Stateless and dependency-free, so a singleton.
+builder.Services.AddSingleton<AuthorizationService.Services.Fhir.IPriorAuthorizationEobProjector,
+    AuthorizationService.Services.Fhir.PriorAuthorizationEobProjector>();
+
 builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackend,
     AuthorizationService.Backends.ChoAuthorizationBackend>();
 builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackend,

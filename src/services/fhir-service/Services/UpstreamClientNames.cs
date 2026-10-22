@@ -26,4 +26,15 @@ internal static class UpstreamClientNames
     /// the FHIR caller arrived with.
     /// </summary>
     public const string ClaimsService = "ClaimsService";
+
+    /// <summary>
+    /// Typed HttpClient for authorization-service. Registered in
+    /// <c>Program.cs</c> for the PAS <c>$inquire</c> / <c>$submit</c> path and
+    /// reused by <see cref="Controllers.ExplanationOfBenefitController"/> for
+    /// the CMS-0057-F prior-authorization EOB projection (G-31). Same
+    /// TenantHeaderPropagationHandler + CorrelationIdPropagationHandler chain,
+    /// so authorization-service reads the tenant the FHIR caller arrived with
+    /// rather than its default partition.
+    /// </summary>
+    public const string AuthorizationService = "AuthorizationService";
 }

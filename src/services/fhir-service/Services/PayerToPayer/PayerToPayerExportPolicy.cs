@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 using FhirService.Models;
 
 namespace FhirService.Services.PayerToPayer;
@@ -56,4 +57,55 @@ public static class PayerToPayerExportPolicy
     /// basis) — the hook exists so the exclusion lands here, not in the mapper.
     /// </summary>
     private static bool IsExcludedCategory(ChoPaymentDocument payment) => false;
+
+    /// <summary>
+    /// How far back a DECIDED prior authorization is still handed over. A year
+    /// past the end of its approved period: long enough that a receiving payer
+    /// sees the recent history behind a member's current care, short enough
+    /// that it is not an archive dump. Matches the prior-auth retention anchor
+    /// (life of the authorization plus one year), so nothing is offered here
+    /// that CHO would already have purged.
+    /// </summary>
+    public const int PriorAuthorizationLookbackYears = 1;
+
+    /// <summary>
+    /// Whether a prior-authorization <c>ExplanationOfBenefit</c>
+    /// (<c>use = preauthorization</c>) belongs in the export.
+    ///
+    /// <para>
+    /// CMS-0057-F asks the prior payer for the authorizations that still matter
+    /// to the member: the ACTIVE and PENDING ones, and the recently decided.
+    /// So:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item>still in flight (<c>outcome</c> = <c>queued</c>) — always in,
+    ///   whatever its age: the receiving payer inherits an open request.</item>
+    ///   <item>decided — in while its approved period has not ended more than
+    ///   <see cref="PriorAuthorizationLookbackYears"/> ago, or, with no approved
+    ///   period, while the request itself is that recent.</item>
+    /// </list>
+    ///
+    /// <para>
+    /// An authorization whose dates cannot be read at all is EXCLUDED, the same
+    /// conservative reading a payment with no parseable date gets: a record
+    /// whose window cannot be established is not assumed to be inside it.
+    /// </para>
+    /// </summary>
+    public static bool IncludePriorAuthorization(JsonObject priorAuthorization, DateTime exchangeDateUtc)
+    {
+        ArgumentNullException.ThrowIfNull(priorAuthorization);
+
+        // Still in flight: in, regardless of date.
+        if (string.Equals(priorAuthorization["outcome"]?.GetValue<string>(), "queued", StringComparison.Ordinal))
+            return true;
+
+        // The approved period's end is what decides a decided authorization;
+        // its start, then the request date, stand in when there is no end.
+        var benefit = priorAuthorization["benefitPeriod"] as JsonObject;
+        var candidate = benefit?["end"]?.GetValue<string>()
+                        ?? benefit?["start"]?.GetValue<string>()
+                        ?? priorAuthorization["created"]?.GetValue<string>();
+
+        return WithinLookback(candidate, exchangeDateUtc, PriorAuthorizationLookbackYears);
+    }
 }
