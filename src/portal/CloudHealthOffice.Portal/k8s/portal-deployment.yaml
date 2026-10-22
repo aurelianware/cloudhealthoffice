@@ -27,7 +27,7 @@ data:
   Services__CorrespondenceService: "http://correspondence-service.cloudhealthoffice"
   Services__FhirService: "http://fhir-service.cloudhealthoffice"
   Services__SponsorService: "http://sponsor-service.cloudhealthoffice/api/v1"
-  Services__ReferenceDataService: "http://reference-data-service.cloudhealthoffice/api/ReferenceData"
+  Services__ReferenceDataService: "http://reference-data-service.cloudhealthoffice"
   Services__EnrollmentImportService: "http://enrollment-import-service.cloudhealthoffice/api"
   Services__ArService: "http://ar-service.cloudhealthoffice/api"
   Services__ProviderContractsService: "http://provider-contracts-service.cloudhealthoffice/api"
