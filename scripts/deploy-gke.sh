@@ -46,7 +46,8 @@
 #                                 so they can sign in through Access and add other users
 #   DOCUMENTS_BUCKET  DOCUMENTS_SERVICE_ACCOUNT
 #                            Google Cloud Storage for document-service (attachment- and
-#                            member-document-service file through it)
+#                            member-document-service file through it; correspondence-service
+#                            stores rendered letters there)
 #                            (terraform outputs documents_bucket and documents_service_account in
 #                            infrastructure/gcp). Without them, uploaded documents are not stored.
 
@@ -193,6 +194,7 @@ upsert_secret email-config SmtpHost=localhost SmtpPort=1025 EnableSsl=false \
   Username=demo Password=demo
 upsert_secret attachment-service-secret MongoDb__ConnectionString="$MONGO_CONN"
 upsert_secret member-document-service-secret MongoDb__ConnectionString="$MONGO_CONN"
+upsert_secret correspondence-service-secret MongoDb__ConnectionString="$MONGO_CONN"
 upsert_secret sponsor-service-secrets MongoDb__ConnectionString="$MONGO_CONN"
 upsert_secret smart-auth-service-secrets MongoDb__ConnectionString="$MONGO_CONN" \
   MongoDb__DatabaseName=CloudHealthOffice

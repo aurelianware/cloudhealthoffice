@@ -57,6 +57,25 @@ public static class ChoRolePermissions
     /// </summary>
     public const string WorkspaceUse = "workspace:use";
 
+    /// <summary>
+    /// Outbound letters (correspondence-service). Reading a letter also needs
+    /// the read permission of one of its subjects; requesting one needs read
+    /// access to every subject.
+    /// </summary>
+    public const string CorrespondenceRead = "correspondence:read";
+
+    /// <inheritdoc cref="CorrespondenceRead"/>
+    public const string CorrespondenceWrite = "correspondence:write";
+
+    /// <summary>Author letter types and template drafts, and preview them. TenantAdmin holds it through <c>*:*</c>.</summary>
+    public const string CorrespondenceTemplates = "correspondence:templates";
+
+    /// <summary>
+    /// Approve and retire template versions: the wording members receive.
+    /// Approval is by someone other than the version's author.
+    /// </summary>
+    public const string CorrespondenceApprove = "correspondence:approve";
+
     /// <summary>Post, edit and withdraw plan notices. TenantAdmin holds it through <c>*:*</c>.</summary>
     public const string NoticesWrite = "notices:write";
 
@@ -138,7 +157,7 @@ public static class ChoRolePermissions
                 "authorizations:read", "authorizations:write", "authorizations:decide",
                 "appeals:read", "appeals:write",
                 "rfai:read", "rfai:write",
-                "correspondence:read", "correspondence:write",
+                CorrespondenceRead, CorrespondenceWrite,
                 "members:read", "claims:read",
                 "terminology:read", "reference-data:read",
                 "attachments:read", "attachments:write", "benefits:read", "consent:read",
@@ -194,6 +213,8 @@ public static class ChoRolePermissions
                 WorkspaceUse,
                 "*:read", "audit:read", "compliance:read", "reports:compliance",
                 LegalHold,
+                // Compliance signs off the wording of member notices.
+                CorrespondenceApprove,
                 // Investigations and HIPAA accounting reach sensitive records;
                 // *:read alone does not.
                 DocumentsReadSensitive

@@ -102,6 +102,7 @@ BUILT_IMAGES = {
     "claims-examiner-service": "src/services/claims-examiner-service/Dockerfile",
     "claims-service": "src/services/claims-service/Dockerfile",
     "consent-service": "src/services/consent-service/Dockerfile",
+    "correspondence-service": "src/services/correspondence-service/Dockerfile",
     "coverage-service": "src/services/coverage-service/Dockerfile",
     "document-service": "src/services/document-service/Dockerfile",
     "eligibility-service": "src/services/eligibility-service/Dockerfile",
@@ -141,6 +142,7 @@ IMAGE_PREFIX = "cloudhealthoffice-"
 # placeholders and would overwrite the real values, so they are dropped.
 MANAGED_SECRETS = {
     "attachment-service-secret",
+    "correspondence-service-secret",
     "member-document-service-secret",
     "provider-verification-service-secrets",
 }

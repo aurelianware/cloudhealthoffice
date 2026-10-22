@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CloudHealthOffice.PdfLayout</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Noto Sans, SIL OFL 1.1 (Fonts/OFL.txt): embedded so PDFs render the same without system fonts.
+         Latin subset; rebuild with scripts/fonts/subset-idcard-fonts.sh. -->
+    <EmbeddedResource Include="Fonts\NotoSans-Regular.ttf" LogicalName="CloudHealthOffice.PdfLayout.Fonts.NotoSans-Regular.ttf" />
+    <EmbeddedResource Include="Fonts\NotoSans-SemiBold.ttf" LogicalName="CloudHealthOffice.PdfLayout.Fonts.NotoSans-SemiBold.ttf" />
+    <None Include="Fonts\OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -137,6 +137,7 @@ declare -A SERVICES=(
   [idcard-service]="src/services/idcard-service/Dockerfile"
   [document-service]="src/services/document-service/Dockerfile"
   [member-document-service]="src/services/member-document-service/Dockerfile"
+  [correspondence-service]="src/services/correspondence-service/Dockerfile"
   [personal-representative-service]="src/services/personal-representative-service/Dockerfile"
   [terminology-service]="src/services/CHO.TerminologyService/Dockerfile"
   [pricing-api]="src/services/CloudHealthOffice.PricingApi/Dockerfile"

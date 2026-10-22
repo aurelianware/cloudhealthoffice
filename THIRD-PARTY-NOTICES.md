@@ -11,15 +11,15 @@ adding or upgrading a dependency.
 
 ## Summary
 
-- **Shipped .NET packages** (production projects, transitive included): 366
+- **Shipped .NET packages** (production projects, transitive included): 369
 - **Shipped npm packages** (production dependencies): 183
 - **Test and build tooling** (not shipped): 172 NuGet, 447 npm
 
 | Licence | Shipped packages |
 |---|---|
-| MIT | 433 |
+| MIT | 435 |
 | Apache-2.0 | 81 |
-| BSD-3-Clause | 22 |
+| BSD-3-Clause | 23 |
 | ISC | 5 |
 | BSD-2-Clause | 2 |
 | PostgreSQL | 2 |
@@ -54,7 +54,7 @@ Files shipped inside CHO's own assemblies rather than as packages:
 
 | Asset | Licence | Where | Note |
 |---|---|---|---|
-| Noto Sans Regular and SemiBold 2.015 (subset), © 2022 The Noto Project Authors | SIL OFL 1.1 | idcard-service (`src/services/idcard-service/Fonts/`, licence in `OFL.txt`) | Embedded so ID card PDFs render without system fonts; Latin subset built by `scripts/fonts/subset-idcard-fonts.sh`. |
+| Noto Sans Regular and SemiBold 2.015 (subset), © 2022 The Noto Project Authors | SIL OFL 1.1 | idcard-service (`src/services/idcard-service/Fonts/`) and correspondence-service via CloudHealthOffice.PdfLayout (`src/services/shared/CloudHealthOffice.PdfLayout/Fonts/`), licence in `OFL.txt` beside each | Embedded so ID card and letter PDFs render without system fonts; Latin subset built by `scripts/fonts/subset-idcard-fonts.sh`. |
 
 ## .NET packages (shipped)
 
@@ -92,6 +92,7 @@ Files shipped inside CHO's own assemblies rather than as packages:
 | EphemeralMongo | 3.2.0 | Apache-2.0 | [link](https://github.com/asimmon/ephemeral-mongo) |
 | ExCSS | 4.2.3 | MIT | [link](https://github.com/TylerBrinks/ExCSS) |
 | Fhir.Metrics | 1.3.0 | BSD-3-Clause | [link](https://github.com/FirelyTeam/Fhir.Metrics) |
+| Fluid.Core | 2.31.0 | MIT | [link](https://github.com/sebastienros/fluid) |
 | Google.Api.CommonProtos | 2.17.0 | BSD-3-Clause | [link](https://github.com/googleapis/gax-dotnet) |
 | Google.Api.Gax | 4.13.1 | BSD-3-Clause | [link](https://github.com/googleapis/gax-dotnet) |
 | Google.Api.Gax.Grpc | 4.13.1 | BSD-3-Clause | [link](https://github.com/googleapis/gax-dotnet) |
@@ -320,6 +321,7 @@ Files shipped inside CHO's own assemblies rather than as packages:
 | OpenTelemetry.Instrumentation.AspNetCore | 1.15.0 | Apache-2.0 | [link](https://opentelemetry.io/) |
 | OpenTelemetry.Instrumentation.Http | 1.15.0 | Apache-2.0 | [link](https://opentelemetry.io/) |
 | OpenTelemetry.Instrumentation.StackExchangeRedis | 1.15.0-beta.1 | Apache-2.0 | [link](https://opentelemetry.io/) |
+| Parlot | 1.5.2 | BSD-3-Clause | [link](https://github.com/sebastienros/parlot) |
 | PdfPig | 0.1.14 | Apache-2.0 | [link](https://github.com/UglyToad/PdfPig) |
 | Pipelines.Sockets.Unofficial | 2.2.16 | MIT | [link](https://github.com/mgravell/Pipelines.Sockets.Unofficial) |
 | Polly | 7.2.4 | BSD-3-Clause | [link](https://github.com/App-vNext/Polly) |
@@ -425,6 +427,7 @@ Files shipped inside CHO's own assemblies rather than as packages:
 | System.Threading.Tasks.Extensions | 4.5.4 | MIT | [link](https://dot.net/) |
 | System.ValueTuple | 4.5.0 | MIT | [link](https://dot.net/) |
 | System.Windows.Extensions | 6.0.0 | MIT | [link](https://dot.net/) |
+| TimeZoneConverter | 7.2.0 | MIT | [link](https://github.com/mattjohnsonpint/TimeZoneConverter) |
 | ZstdSharp.Port | 0.7.3 | MIT | [link](https://github.com/oleg-st/ZstdSharp) |
 
 ## npm packages (shipped)
