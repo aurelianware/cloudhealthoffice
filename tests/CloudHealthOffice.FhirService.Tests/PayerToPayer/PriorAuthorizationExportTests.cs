@@ -97,8 +97,8 @@ public class PriorAuthorizationExportTests
     [Fact]
     public void WithNoApprovedPeriodAtAll_TheRequestDateDecides()
     {
-        // A denial has no approved period; it is still recent history the
-        // receiving payer can use.
+        // An approval without a recorded period uses its request date.
+        // Denials are excluded separately regardless of their dates.
         PayerToPayerExportPolicy
             .IncludePriorAuthorization(PriorAuth(created: "2026-09-15"), Exchange)
             .Should().BeTrue();
@@ -119,6 +119,28 @@ public class PriorAuthorizationExportTests
         PayerToPayerExportPolicy
             .IncludePriorAuthorization(PriorAuth(created: "not a date"), Exchange)
             .Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("complete")]
+    [InlineData("queued")]
+    public void DenialsNeverLeaveEvenWithRecentDatesOrAnOpenOutcome(string outcome)
+    {
+        var denied = PriorAuth(outcome, benefitEnd: "2027-01-01", created: "2026-10-01");
+        denied["disposition"] = "Denied";
+
+        PayerToPayerExportPolicy.IncludePriorAuthorization(denied, Exchange).Should().BeFalse();
+        denied["disposition"]!.GetValue<string>().Should().Be("Denied");
+    }
+
+    [Fact]
+    public void PartialApprovalsWithDenialReasonsStillLeave()
+    {
+        var partial = PriorAuth("partial", benefitEnd: "2027-01-01");
+        partial["disposition"] = "Approved in part";
+        partial["processNote"] = new JsonArray { new JsonObject { ["text"] = "Some units denied" } };
+
+        PayerToPayerExportPolicy.IncludePriorAuthorization(partial, Exchange).Should().BeTrue();
     }
 
     // ── what of each one leaves ──────────────────────────────────────────────

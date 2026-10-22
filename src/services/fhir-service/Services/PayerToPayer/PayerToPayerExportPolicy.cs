@@ -73,7 +73,8 @@ public static class PayerToPayerExportPolicy
     /// (<c>use = preauthorization</c>) belongs in the export.
     ///
     /// <para>
-    /// CMS-0057-F asks the prior payer for the authorizations that still matter
+    /// Denied authorizations are excluded from Payer-to-Payer exchange (unlike
+    /// Patient and Provider Access). The remaining authorizations that matter
     /// to the member: the ACTIVE and PENDING ones, and the recently decided.
     /// So:
     /// </para>
@@ -94,6 +95,16 @@ public static class PayerToPayerExportPolicy
     public static bool IncludePriorAuthorization(JsonObject priorAuthorization, DateTime exchangeDateUtc)
     {
         ArgumentNullException.ThrowIfNull(priorAuthorization);
+
+        // CMS excludes denied PAs from Payer-to-Payer, but not Patient/Provider
+        // Access. Apply this only at the export boundary, before date/open checks.
+        // The owning service's PriorAuthorizationEobProjector emits the exact
+        // disposition "Denied" for AuthorizationStatus.Denied. outcome=complete
+        // cannot distinguish a denial from an approval. Do not infer denial from
+        // line reasons: Modified/partial approvals remain transferable.
+        if (string.Equals(priorAuthorization["disposition"]?.GetValue<string>()?.Trim(),
+                "Denied", StringComparison.OrdinalIgnoreCase))
+            return false;
 
         // Still in flight: in, regardless of date.
         if (string.Equals(priorAuthorization["outcome"]?.GetValue<string>(), "queued", StringComparison.Ordinal))
