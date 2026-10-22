@@ -5,14 +5,26 @@ namespace CloudHealthOffice.GrouperEngine.Ipps;
 /// area wage index and the portion that is not.
 ///
 /// <para>
-/// A year has two of these, and which one a hospital gets is not a lookup.
-/// 42 CFR 412.64(h)(3) sets the labor-related share at 62 percent "unless
-/// employing that percentage would result in lower payments for the hospital"
-/// than the share CMS sets in the annual rule. So the rule is written as
-/// whichever of the two pays more, and it happens to reduce to "the higher
-/// share when the wage index is above 1.0" — which is how the trade press
-/// states it, and why a calculator that hard-codes the comparison against 1.0
-/// is right by accident rather than by the regulation.
+/// A year has two of these, and which one a hospital gets is a comparison of
+/// the wage index against 1.0 — nothing else. 42 CFR 412.64(h)(3) is written
+/// differently: it sets the labor-related share at 62 percent "unless employing
+/// that percentage would result in lower payments for the hospital" than the
+/// share CMS sets in the annual rule, which reads as whichever of the two pays
+/// more. Those two readings agree wherever the cost-of-living adjustment is
+/// 1.0, and come apart in Alaska and Hawaii, where 412.64(m)(1)(ii) lifts the
+/// non-labor share.
+/// </para>
+///
+/// <para>
+/// <b>CMS's own pricer implements the threshold, not the comparison</b>, and
+/// the paid amount is whatever its program says. An earlier version of this
+/// type did the comparison, on the strength of the regulation's wording, and
+/// the parity run in <c>tools/cms-ipps-pricer-oracle</c> showed it overpaying:
+/// on the corpus's Alaska stay, at a wage index of 1.1438 with a cost-of-living
+/// adjustment of 1.25, CMS pays 15,368.43 using the larger labor share while
+/// the "whichever pays more" reading would have paid 15,424 using the smaller
+/// one. Reading the regulation correctly and paying the claim correctly turned
+/// out to be different things, which is the entire argument for the oracle.
 /// </para>
 /// </summary>
 /// <param name="LaborRelated">
@@ -161,14 +173,18 @@ public sealed record IppsRateSet(
         && (LastDischargeDate is null || dischargeDate <= LastDischargeDate);
 
     /// <summary>
-    /// The labor share that pays this hospital more, which is what
-    /// 412.64(h)(3) entitles it to.
+    /// The labor share for a wage index: the annual rule's larger share above
+    /// 1.0, and the statutory 62 percent at or below it.
+    ///
+    /// <para>
+    /// The cost-of-living adjustment is deliberately not a parameter. It scales
+    /// the non-labor side of the payment, so it does affect which share pays
+    /// more — but it does not affect which share CMS chooses, and choosing the
+    /// other one overpays. See the note on <see cref="IppsLaborShare"/>.
+    /// </para>
     /// </summary>
-    public IppsLaborShare ShareFor(decimal wageIndex, decimal costOfLiving) =>
-        HigherLaborShare.Adjust(wageIndex, costOfLiving)
-            >= StatutoryLaborShare.Adjust(wageIndex, costOfLiving)
-            ? HigherLaborShare
-            : StatutoryLaborShare;
+    public IppsLaborShare ShareFor(decimal wageIndex) =>
+        wageIndex > 1m ? HigherLaborShare : StatutoryLaborShare;
 }
 
 /// <summary>

@@ -1,0 +1,258 @@
+{
+  "comment": [
+    "Reference stays for the IPPS payment parity run (ADR 024 step 5).",
+    "",
+    "Every figure here is invented. There is no member, no claim number and no",
+    "real provider: the CMS certification numbers are fabricated and chosen only",
+    "so their first two digits are a plausible state code, because CMS's pricer",
+    "reads the state from them. The wage-index localities are real published CBSA",
+    "codes, which is public reference data and the only way to exercise the real",
+    "wage adjustment.",
+    "",
+    "`why` says what each row pins. A row that pins nothing does not belong here:",
+    "the corpus is for distinguishing a correct calculator from a plausible wrong",
+    "one, not for covering lines.",
+    "",
+    "`providerDefaults` holds the fields CMS's pricer requires before it will",
+    "price anything at all, with the values that mean 'none of this applies'.",
+    "Five of them are traps and are commented where they sit."
+  ],
+  "fiscalYear": 2026,
+  "providerDefaults": {
+    "effectiveDate": "2025-10-01",
+    "fiscalYearBeginDate": "2025-10-01",
+    "bedSize": 150,
+    "bundleModel1Discount": 0.0,
+    "capitalCostToChargeRatio": 0.0,
+    "capitalExceptionPaymentRate": 0.0,
+    "capitalIndirectMedicalEducationRatio": 0.0,
+    "costOfLivingAdjustment": 1.0,
+    "hrrAdjustment": 0.0,
+    "internsToBedsRatio": 0.0,
+    "lowVolumeAdjustmentFactor": 0.0,
+    "medicaidRatio": 0.0,
+    "oldCapitalHoldHarmlessRate": 0.0,
+    "operatingCostToChargeRatio": 0.0,
+    "passThroughAmountForDirectMedicalEducation": 0.0,
+    "passThroughAmountForOrganAcquisition": 0.0,
+    "passThroughTotalAmount": 0.0,
+    "ppsFacilitySpecificRate": 0.0,
+    "supplementalSecurityIncomeRatio": 0.0,
+    "uncompensatedCareAmount": 0.0,
+    "vbpAdjustment": 0.0,
+    "capitalPpsPaymentCode": "C",
+    "hrrParticipantIndicator": "0",
+    "vbpParticipantIndicator": "N",
+    "hospitalQualityIndicator": "1"
+  },
+  "cases": [
+    {
+      "name": "wage-index-below-one",
+      "why": "42 CFR 412.64(h)(3): below a wage index of 1.0 the statutory 62 percent labor share pays more, so it is the one CMS must use. Pins IppsRateSet.ShareFor on the low side.",
+      "ccn": "450001",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00"
+    },
+    {
+      "name": "wage-index-above-one",
+      "why": "The other side of the same comparison: above 1.0 the annual rule's larger labor share pays more. A calculator that hard-codes one share fails exactly one of these two rows.",
+      "ccn": "330001",
+      "cbsa": "35614",
+      "stateCode": "33",
+      "countyCode": "33061",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00"
+    },
+    {
+      "name": "alaska-cost-of-living",
+      "why": "412.64(m)(1)(ii) lifts the non-labor share in Alaska. This is the row where the comparison and the 'wage index above 1.0' shortcut can disagree, and the one CHO's own test predicts the smaller labor share wins.",
+      "ccn": "020001",
+      "cbsa": "02",
+      "stateCode": "02",
+      "countyCode": "02020",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "costOfLivingAdjustment": 1.25
+      }
+    },
+    {
+      "name": "teaching-hospital",
+      "why": "412.105: the indirect medical education factor is ((1 + ratio) ^ 0.405 - 1) x 1.35. Pins IppsTeachingPolicy against CMS's own arithmetic rather than against my reading of it.",
+      "ccn": "450002",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "internsToBedsRatio": 0.25
+      }
+    },
+    {
+      "name": "disproportionate-share",
+      "why": "412.106: the DSH adjustment, and 412.106(f)'s 75 percent reduction. CHO takes the adjustment factor as an input; CMS derives it from the SSI and Medicaid ratios, so this row is also the test of whether that difference matters to the paid amount.",
+      "ccn": "450003",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "supplementalSecurityIncomeRatio": 0.15,
+        "medicaidRatio": 0.35,
+        "uncompensatedCareAmount": 400.0
+      }
+    },
+    {
+      "name": "cost-outlier",
+      "why": "412.84: charges far above the threshold, with both cost-to-charge ratios set. The row that catches the fixed-loss-amount double count, because a calculator testing operating and capital separately pays visibly more here.",
+      "ccn": "450004",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 12,
+      "coveredDays": 12,
+      "coveredCharges": 400000.0,
+      "reviewCode": "00",
+      "provider": {
+        "operatingCostToChargeRatio": 0.32,
+        "capitalCostToChargeRatio": 0.04
+      }
+    },
+    {
+      "name": "no-outlier-just-below-threshold",
+      "why": "The same hospital with charges chosen to sit under the threshold. An outlier calculation that is wrong in the generous direction pays something here, and nothing should be paid.",
+      "ccn": "450004",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 4,
+      "coveredDays": 4,
+      "coveredCharges": 60000.0,
+      "reviewCode": "00",
+      "provider": {
+        "operatingCostToChargeRatio": 0.32,
+        "capitalCostToChargeRatio": 0.04
+      }
+    },
+    {
+      "name": "transfer-per-diem-short-stay",
+      "why": "412.4: review code 03 is the per-diem transfer. Length of stay 1 against DRG 871's geometric mean of 4.8 days, so two per diems are paid out of 4.8 and the payment is a fraction of the DRG.",
+      "ccn": "450001",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 1,
+      "coveredDays": 1,
+      "coveredCharges": 20000.0,
+      "reviewCode": "03"
+    },
+    {
+      "name": "transfer-per-diem-capped-at-full",
+      "why": "412.4 caps the per diem at the full DRG payment. Length of stay 9 against a geometric mean of 4.8 would otherwise pay more than a discharge, which is the error the cap exists to prevent.",
+      "ccn": "450001",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 9,
+      "coveredDays": 9,
+      "coveredCharges": 40000.0,
+      "reviewCode": "03"
+    },
+    {
+      "name": "transfer-zero-length-of-stay",
+      "why": "A same-day transfer. CMS floors the length of stay at one day before adding the extra first-day per diem, so this stay is paid two per diems out of 4.8 and not one. CHO adds one to the length of stay as given, which pays one.",
+      "ccn": "450001",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 0,
+      "coveredDays": 0,
+      "coveredCharges": 9000.0,
+      "reviewCode": "03"
+    },
+    {
+      "name": "transfer-fifty-fifty-special-payment-drg",
+      "why": "412.4(f)(2)'s half-and-half transfer, review code 09. Which transfer rule a stay gets is a property of the DRG table \u2014 postAcuteCare and specialPaymentPostAcuteCare \u2014 and not something the caller asserts, which is where CHO's IppsStay flag puts it.",
+      "ccn": "450001",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 1,
+      "coveredDays": 1,
+      "coveredCharges": 20000.0,
+      "reviewCode": "09"
+    },
+    {
+      "name": "burn-drg-outlier-marginal-cost",
+      "why": "412.84(l) pays 90 percent of the excess rather than 80 for the burn DRGs. DRG 927 with charges well over the threshold, so the marginal cost factor is visible in the amount.",
+      "ccn": "450004",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "927",
+      "lengthOfStay": 30,
+      "coveredDays": 30,
+      "coveredCharges": 900000.0,
+      "reviewCode": "00",
+      "provider": {
+        "operatingCostToChargeRatio": 0.32,
+        "capitalCostToChargeRatio": 0.04
+      }
+    },
+    {
+      "name": "long-stay-no-transfer",
+      "why": "A plain discharge well past the geometric mean. Nothing should be adjusted: the row that catches a calculator applying a per diem to ordinary discharges.",
+      "ccn": "450001",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "871",
+      "lengthOfStay": 9,
+      "coveredDays": 9,
+      "coveredCharges": 55000.0,
+      "reviewCode": "00"
+    },
+    {
+      "name": "quality-indicator-withheld",
+      "why": "A hospital that did not meet the quality reporting requirement. CMS pays it from a reduced standardized amount, which changes the labor and non-labor split itself. CHO's IppsRateSet holds one standardized amount and cannot express this.",
+      "ccn": "450005",
+      "cbsa": "10180",
+      "stateCode": "45",
+      "countyCode": "45441",
+      "drg": "470",
+      "lengthOfStay": 3,
+      "coveredDays": 3,
+      "coveredCharges": 40000.0,
+      "reviewCode": "00",
+      "provider": {
+        "hospitalQualityIndicator": "0"
+      }
+    }
+  ]
+}
