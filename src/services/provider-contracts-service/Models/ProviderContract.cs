@@ -1,6 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
+// The engine declares a ProviderContract of its own (the pricing contract this
+// one projects to), so the term type is aliased rather than the namespace
+// imported: an unqualified ProviderContract in this file is always the legal one.
+using ReimbursementTerm = CloudHealthOffice.FeeScheduleEngine.Models.ReimbursementTerm;
 
 namespace ProviderContractsService.Models;
 
@@ -174,6 +178,32 @@ public class ProviderContract
     [Required]
     public ProviderContractStatus Status { get; set; }
         = ProviderContractStatus.Draft;
+
+    // ── Reimbursement terms (ADR 016 §2) ──────────────────────────────────
+
+    /// <summary>
+    /// What this contract pays, as an ordered rate sheet: the first term whose
+    /// scope covers a claim line and whose effective dates cover the service
+    /// date prices it, so the carve-outs come first and the default term — one
+    /// with an empty scope — comes last.
+    ///
+    /// <para>
+    /// These are the same <see cref="ReimbursementTerm"/> documents the pricing
+    /// engine evaluates, which is what makes this contract the one the engine
+    /// reads (ADR 016). They are not editable through <c>PUT /contracts/{id}</c>:
+    /// rates are money, so they go through
+    /// <c>PUT /contracts/{id}/reimbursement-terms</c>, which validates them.
+    /// </para>
+    ///
+    /// <para>
+    /// Empty means the contract names no rates of its own. Until the phase 3
+    /// backfill runs, that is every contract: rates still live in the
+    /// <c>FfsRateConfig</c> and <c>CapitationRateConfig</c> children and in the
+    /// engine's own contract store.
+    /// </para>
+    /// </summary>
+    [ValidateNever]
+    public List<ReimbursementTerm> ReimbursementTerms { get; set; } = new();
 
     // ── Child Config References (denormalized for portal queries) ─────────
 

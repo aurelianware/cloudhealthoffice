@@ -12,11 +12,19 @@ COPY src/Directory.Build.props src/
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/provider-contracts-service/provider-contracts-service.csproj src/services/provider-contracts-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+# The reimbursement terms on a contract are the engine's own type, so that the
+# shape this service writes and the shape the engine evaluates cannot drift
+# (ADR 016). That project reference has to be in the build context.
+COPY src/engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj src/engines/CloudHealthOffice.FeeScheduleEngine/
+# The engine references it in turn.
+COPY src/engines/CloudHealthOffice.ReferenceData/CloudHealthOffice.ReferenceData.csproj src/engines/CloudHealthOffice.ReferenceData/
 RUN dotnet restore src/services/provider-contracts-service/provider-contracts-service.csproj
 
 # Copy source code and build
 COPY src/services/provider-contracts-service/ src/services/provider-contracts-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
+COPY src/engines/CloudHealthOffice.ReferenceData/ src/engines/CloudHealthOffice.ReferenceData/
 RUN dotnet build src/services/provider-contracts-service/provider-contracts-service.csproj -c Release --no-restore
 
 # Publish stage

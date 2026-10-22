@@ -247,8 +247,20 @@ public class FeeScheduleLine
 /// Links a provider to a fee schedule for a specific plan.
 /// Multiple contracts can exist for one provider across different plans or date ranges.
 ///
+/// <para>
+/// This is becoming the canonical contract of ADR 016 §2: the identity fields
+/// that tie it to the legal agreement in provider-contracts-service, and
+/// <see cref="ReimbursementTerms"/>, the ordered rate sheet the engine
+/// evaluates. Both are additive. A contract with no terms prices exactly as it
+/// did before, from <see cref="FeeScheduleId"/> and <see cref="ContractLines"/>;
+/// a contract with terms is priced by them and its legacy fields are not read.
+/// Extra elements are ignored so a document written by a build that knows more
+/// fields still deserializes.
+/// </para>
+///
 /// QNXT equivalent: CONTRACT + CONTRACT_LINE + PROV_PLAN
 /// </summary>
+[BsonIgnoreExtraElements]
 public class ProviderContract
 {
     [JsonPropertyName("id")]
@@ -281,6 +293,68 @@ public class ProviderContract
     /// E.g. a provider may have a separate schedule for mental health or DME.
     /// </summary>
     public List<ProviderContractLine> ContractLines { get; set; } = new();
+
+    /// <summary>
+    /// The ordered rate sheet (ADR 016 §2). The engine prices a line by the
+    /// first term whose scope matches it and whose effective dates cover the
+    /// service date, so the carve-outs come first and the contract's default
+    /// term — one with an empty scope — comes last.
+    ///
+    /// <para>
+    /// Empty (the default, and every contract written before this field existed)
+    /// means the contract is priced the legacy way, from
+    /// <see cref="FeeScheduleId"/> and <see cref="ContractLines"/>. Non-empty
+    /// means the terms are authoritative and those two fields are not read.
+    /// When no term matches a line, the line falls through to the plan default
+    /// schedule, exactly as a contract with no matching
+    /// <see cref="ContractLines"/> and no <see cref="FeeScheduleId"/> does.
+    /// </para>
+    /// </summary>
+    public List<ReimbursementTerm> ReimbursementTerms { get; set; } = new();
+
+    // ── Canonical contract identity (ADR 016 §2) ─────────────────
+    // Carried so one document can be traced to the legal agreement it came
+    // from. The engine does not price by them; the backfill (phase 3) writes
+    // them and the conflict report and portal read them.
+
+    /// <summary>
+    /// The <c>ProviderContract.Id</c> of the legal agreement in
+    /// provider-contracts-service this contract's terms come from. Null for a
+    /// contract that exists only in the engine store (seeded or portal-less
+    /// data), which the backfill flags for review.
+    /// </summary>
+    public string? LegalContractId { get; set; }
+
+    /// <summary>
+    /// The legal agreement's user-facing contract number (<c>CTR-{NPI}-{year}</c>),
+    /// denormalized for display and for the backfill's conflict report.
+    /// </summary>
+    public string? ContractNumber { get; set; }
+
+    /// <summary>
+    /// The legal agreement's line of business, as its own enum name
+    /// (<c>Commercial</c>, <c>Medicare</c>, <c>Medicaid</c>, <c>Exchange</c>,
+    /// <c>TRICARE</c>, <c>VA</c>). A string, not an enum: the engine does not
+    /// price by line of business and must not fail to read a value a later
+    /// service adds.
+    /// </summary>
+    public string? LineOfBusiness { get; set; }
+
+    /// <summary>
+    /// Every plan the legal agreement covers; empty means all plans in the line
+    /// of business. <see cref="PlanId"/> stays the field the engine looks a
+    /// contract up by (it is part of <see cref="MakeId"/>), so a legal contract
+    /// covering several plans backfills to one engine contract per plan, each
+    /// carrying the whole list for traceability.
+    /// </summary>
+    public List<string> PlanIds { get; set; } = new();
+
+    /// <summary>
+    /// How this contract came to exist: null or <c>"legal"</c> for one backfilled
+    /// from a legal agreement, <c>"engine-only"</c> for one that had no legal
+    /// agreement when the backfill ran (ADR 016 phase 3) and needs review.
+    /// </summary>
+    public string? Origin { get; set; }
 
     /// <summary>
     /// Lesser-of-billed provision. When true, each line's allowed amount is the

@@ -553,6 +553,37 @@ public static class ChoMetrics
         Interlocked.Exchange(ref _appealOutboxPending, pending);
     }
 
+    /// <summary>
+    /// Counter tracking the contract parity of ADR 016 phase 4: one per claim
+    /// line, comparing what the legacy contract paid with what the canonical
+    /// contract would have allowed.
+    ///
+    /// Dimensions: cho.tenant, cho.outcome (match | same_amount_different_route |
+    /// amount_delta | canonical_pends | legacy_pends | no_canonical_contract |
+    /// shadow_failed).
+    ///
+    /// The phase 4 window closes for a tenant when a full monthly claim cycle
+    /// produces no outcome other than <c>match</c> that nobody can explain.
+    /// Matches are counted too: "no deltas" means nothing beside how many lines
+    /// were compared. Never labeled with member identity.
+    /// </summary>
+    public static readonly Counter<long> ContractParityLines =
+        Meter.CreateCounter<long>(
+            "cho.pricing.contract_parity.total",
+            unit: "{line}",
+            description: "Claim lines priced against both the legacy and the canonical provider contract");
+
+    /// <summary>
+    /// Histogram tracking the size of a contract parity difference, in dollars,
+    /// recorded only for lines whose allowed amounts disagree. Dimensions:
+    /// cho.tenant.
+    /// </summary>
+    public static readonly Histogram<double> ContractParityAmountDelta =
+        Meter.CreateHistogram<double>(
+            "cho.pricing.contract_parity.amount_delta",
+            unit: "USD",
+            description: "Absolute difference between the legacy and canonical allowed amount on a claim line");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

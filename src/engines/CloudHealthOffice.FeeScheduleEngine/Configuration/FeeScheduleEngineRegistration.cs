@@ -3,6 +3,8 @@ using CloudHealthOffice.FeeScheduleEngine.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using MongoDB.Driver;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Configuration;
 
@@ -55,6 +57,77 @@ public class FeeScheduleEngineBuilder
     /// </summary>
     public FeeScheduleEngineBuilder UseRepositoriesFromConfiguration(IConfiguration configuration)
         => UseMongoRepositories();
+
+    /// <summary>
+    /// Turns on the dual read of ADR 016 phases 4 and 5: every claim is priced
+    /// with both the legacy and the canonical provider contract, and the
+    /// difference is reported per line as
+    /// <c>cho.pricing.contract_parity.total</c>.
+    ///
+    /// <para>
+    /// Which one pays is per tenant. In phase 4's window it is legacy, so opening
+    /// the window changes no payment; after phase 5's cutover it is the canonical
+    /// contract, with legacy still priced in the shadow for one more cycle.
+    /// Rollback is the same setting, moved back.
+    /// </para>
+    ///
+    /// <para>
+    /// Chain it after <see cref="UseMongoRepositories"/>. It is a no-op until a
+    /// deployment names a tenant, so a service can call it unconditionally — see
+    /// <see cref="ContractDualReadOptions"/>.
+    /// </para>
+    ///
+    /// <para>
+    /// Inside the window a claim costs two pricing passes. The shadow pass reads
+    /// no database of its own: it prices out of the contracts the paid pass
+    /// already fetched, so the two passes cannot see different stores, and a
+    /// shadow failure can never stop a claim from being paid.
+    /// </para>
+    /// </summary>
+    public FeeScheduleEngineBuilder UseDualReadContracts(IConfiguration configuration)
+    {
+        var options = ContractDualReadOptions.FromConfiguration(configuration);
+        _services.AddSingleton(options);
+
+        if (!options.IsEnabled)
+            return this;
+
+        _services.AddScoped<ContractShadowLedger>();
+        _services.AddScoped<IPricingParityRecorder, MetricPricingParityRecorder>();
+
+        var scheduleCollection = configuration["FeeScheduleEngine:FeeScheduleCollection"] ?? "FeeSchedules";
+
+        _services.AddScoped<IProviderContractRepository>(sp => new DualReadProviderContractRepository(
+            // The legacy read keeps the cache it already had: inside the window
+            // it is still the read that pays the claim.
+            legacy: CreateFeeScheduleCache<FeeScheduleRepositoryMongo>(sp),
+            canonical: new FeeScheduleRepositoryMongo(
+                sp.GetRequiredService<IMongoDatabase>(),
+                scheduleCollection,
+                options.CanonicalContractCollection,
+                sp.GetRequiredService<ILogger<FeeScheduleRepositoryMongo>>()),
+            ledger: sp.GetRequiredService<ContractShadowLedger>(),
+            options: options,
+            logger: sp.GetRequiredService<ILogger<DualReadProviderContractRepository>>()));
+
+        _services.AddScoped<IRateResolutionService>(sp =>
+        {
+            var schedules = sp.GetRequiredService<IFeeScheduleRepository>();
+            var engineLogger = sp.GetRequiredService<ILogger<RateResolutionService>>();
+            var ledger = sp.GetRequiredService<ContractShadowLedger>();
+
+            return new ShadowPricingRateResolutionService(
+                paid: new RateResolutionService(
+                    schedules, sp.GetRequiredService<IProviderContractRepository>(), engineLogger),
+                shadow: new RateResolutionService(
+                    schedules, new ShadowContractRepository(ledger), engineLogger),
+                ledger: ledger,
+                recorder: sp.GetRequiredService<IPricingParityRecorder>(),
+                logger: sp.GetRequiredService<ILogger<ShadowPricingRateResolutionService>>());
+        });
+
+        return this;
+    }
 
     private static CachingFeeScheduleRepository CreateFeeScheduleCache<TRepository>(IServiceProvider sp)
         where TRepository : class, IFeeScheduleRepository, IProviderContractRepository

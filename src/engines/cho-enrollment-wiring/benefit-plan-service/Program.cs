@@ -59,7 +59,11 @@ builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IBenefitPlan
                            BenefitPlanService.Services.ChoBenefitPlanProvider>();
 builder.Services.AddScoped<CloudHealthOffice.BenefitEngine.Services.IServiceCategoryMappingRepository,
                            BenefitPlanService.Services.NullServiceCategoryMappingRepository>();
-builder.Services.AddFeeScheduleEngine().UseMongoRepositories();
+builder.Services.AddFeeScheduleEngine()
+    .UseMongoRepositories()
+    // ADR 016 phase 4: a no-op until a deployment names a tenant for the
+    // dual-read window. Inside it, claims price twice and pay on legacy.
+    .UseDualReadContracts(builder.Configuration);
 builder.Services.AddClaimsScrubEngine();
 builder.Services.AddNcciEngine().UseMongoRepository();
 builder.Services.AddScoped<IAccumulatorAuditWriter, MongoAccumulatorAuditWriter>();

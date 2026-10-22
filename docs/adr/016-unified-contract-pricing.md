@@ -4,7 +4,21 @@
 
 Accepted. Phase 1 (one engine) is implemented. The engine's facility rule now
 follows the CMS site-of-service list (section 5; the facility rule risk is fixed).
-Phases 2 to 5 (one contract model) are planned for later PRs.
+Phase 2's engine half is implemented: the canonical contract carries
+`ReimbursementTerms[]` and the engine evaluates them, with the legacy
+`FeeScheduleId` + `ContractLines` path unchanged for a contract that has no
+terms. Phase 2's service half is implemented too: the rate sheet is written on the
+legal contract in provider-contracts-service, a fee-for-service rate config
+posts as a term rather than to `ffs-service`, and the legal contract projects to
+the engine contract a claim would be priced from. Phase 3's contract backfill is
+implemented as `tools/ProviderContractBackfill`, with the conflict report the
+cutover is gated on. Phase 4's dual read is implemented: inside a per-tenant
+window every claim is priced with both the legacy and the canonical contract and
+**paid on legacy**, with the difference reported per line, and phase 5's
+per-tenant cutover flag moves payment onto the canonical contract with the
+comparison still running the other way. Phase 3's fee schedule re-ingest, phase
+4's PricingApi schedule fallback, and the retirement of the legacy stores that
+closes phase 5, are planned for later PRs.
 
 ## Context
 
@@ -213,56 +227,206 @@ implemented, rather than silently ignoring them.
 
 **Phase 2: canonical schema, no behaviour change.**
 
-- Add `ReimbursementTerms[]` and the contract identity fields to the engine's
-  `ProviderContract` (additive; `[BsonIgnoreExtraElements]`).
-- The engine evaluates terms when present, and otherwise uses
-  `FeeScheduleId` + `ContractLines` exactly as today. Existing engine tests
-  must pass unchanged, and new tests prove that a term-shaped contract and its
-  legacy equivalent price identically.
-- Give ffs-service its API, or fold it into provider-contracts-service: FFS
-  terms become `reimbursementTerms` edited on the contract. Prefer the fold,
-  because a rate config never exists without its contract.
+- **Done.** `ReimbursementTerms[]` and the contract identity fields
+  (`LegalContractId`, `ContractNumber`, `LineOfBusiness`, `PlanIds`, `Origin`)
+  are on the engine's `ProviderContract`, additive and
+  `[BsonIgnoreExtraElements]`.
+- **Done.** The engine evaluates terms when present, and otherwise uses
+  `FeeScheduleId` + `ContractLines` exactly as today. `ReimbursementTermPricingTests`
+  prices the same claim through a term-shaped contract and the legacy contract
+  it was built from and asserts every field the 835 and the benefit engine read
+  is identical — allowed amount, base amount, rate source, schedule, per-stay
+  flag, lesser-of flag and the ordered adjustment list.
+
+  How a term is evaluated: the first term whose scope (procedure-code range,
+  revenue codes, places of service, claim type) covers the line and whose
+  effective dates cover the service date wins. A term's multiplier scales the
+  rate the schedule produced, before modifiers, units, the multiple procedure
+  reduction and lesser-of, so a multiplier of 1.0 — every legacy contract —
+  changes nothing. `PercentOfBilled` and `Capitation` read no schedule at all.
+  The term's `modifierRules` can turn the multiple procedure reduction or the
+  bilateral adjustment off, and its `lesserOfBilled` overrides the contract's
+  setting.
+
+  Three things fail closed, so a contract the engine cannot honour pends the
+  claim rather than paying something the contract does not say: a term carrying
+  a stop-loss or cost outlier provision (stored, not evaluated), a term missing
+  the field its method needs or naming a method this build does not implement,
+  and a term naming a fee schedule the tenant does not have — that last one
+  does **not** fall back to the plan default, which a legacy contract naming a
+  missing schedule still does. A term whose method disagrees with the type of
+  the schedule it names (a case rate pointing at an MPFS schedule) prices from
+  the schedule and carries a warning: the amount is not in doubt, the contract
+  load is.
+
+  Service category is in the target model's term scope but not in phase 2: the
+  engine's `PricingRequest` carries no service category, and a condition nothing
+  populates would silently never match. It lands with the field.
+
+- **Done.** ffs-service is folded into provider-contracts-service rather than
+  given an API of its own, because a rate config never exists without its
+  contract. The legal `ProviderContract` carries `ReimbursementTerms[]` — the
+  engine's own term type, by project reference, so the two shapes cannot drift —
+  and three endpoints own it:
+
+  | Endpoint | What it is for |
+  | --- | --- |
+  | `GET /api/v1/contracts/{id}/reimbursement-terms` | the contract's rate sheet, in evaluation order |
+  | `PUT /api/v1/contracts/{id}/reimbursement-terms` | replace the whole sheet, validated |
+  | `POST /api/v1/contracts/{id}/reimbursement-terms/from-ffs-rate-config` | append an `FfsRateConfig`-shaped rate as a term |
+  | `GET /api/v1/contracts/{id}/pricing-contract` | the engine contract this legal contract projects to |
+
+  The replace takes the whole sheet, not one term, because the order *is* the
+  contract: a carve-out placed after the default term it carves out of would
+  never price a line. Validation is each term's own `Validate()` plus the rules
+  that only hold for the list — duplicate term ids, and a term an earlier
+  unconditional term always answers before, which is rejected rather than stored
+  because at pricing time an unreachable term is invisible. Terms are not
+  editable through `PUT /contracts/{id}`: the portal does not send them, so a
+  portal edit would otherwise wipe a contract's rates.
+
+  `FfsRateConfig` maps one-to-one onto a `FeeScheduleRef` term — `FeeScheduleId`
+  to the term's schedule, `FeeSchedulePercentage` to its multiplier, the two
+  toggles to its modifier rules — so the fold needed no new concepts. The model
+  stays in ffs-service for the phase 3 backfill to read; nothing should give it
+  an API.
+
+- **Done.** The pricing contract's admin surface is
+  `GET /contracts/{id}/pricing-contract`: `PricingContractProjection` derives the
+  engine contract from the legal one, as a pure function. That is the link the
+  ADR says is missing, and it is deliberately the same derivation phase 3 will
+  write and phase 4 will regenerate after every edit, so there is one mapping
+  rather than three. One engine contract per plan (the engine looks a contract
+  up by a single plan id, the legal contract covers a list), deterministic ids,
+  the terms carried as the rate sheet and the legacy `FeeScheduleId` /
+  `ContractLines` left empty, `Origin: legal`, and no TIN — pricing needs the
+  NPI, the plan and the terms.
+
+  Its `warnings` are what the backfill's conflict report will carry: a contract
+  that is not Active, one with no terms, a plan scope with no plan ids that has
+  to be expanded against the plan catalogue, and `TieredException`, which the
+  engine's `NetworkStatus` has no value for (it projects as in-network, and the
+  tiering has to be carried by the terms' scopes).
+
+  Reading this is how a reviewer sees what a contract would price as, before
+  anything is written to the engine's store. Nothing writes it yet: phase 2
+  introduces no second writer.
 
 **Phase 3: backfill.**
 
-- One idempotent job per tenant builds a canonical contract for each
-  `provider_contracts` document:
-  - identity and scope come from the legal contract;
-  - terms come from its `FfsRateConfig` and `CapitationRateConfig` children;
-  - where an engine `ProviderContract` exists for the same NPI and plan, its
-    `FeeScheduleId` and `ContractLines` become terms.
-- Engine contracts with no legal contract (seeded data) become canonical
-  contracts flagged `origin: engine-only` for review.
-- Deterministic ids, so a re-run updates rather than duplicates.
-- Each run produces a conflict report: the same NPI and plan with different
-  schedules, plan-scope mismatches, and terms that reference missing
-  schedules. Conflicts block the tenant's cutover until resolved.
-- PricingApi `fee_schedule_entries` are re-ingested into global
+- **Done.** `tools/ProviderContractBackfill` — a `plan` / `hash` / `apply` tool,
+  documented at
+  [docs/operations/PROVIDER-CONTRACT-BACKFILL.md](../operations/PROVIDER-CONTRACT-BACKFILL.md).
+  `plan` only reads, and writes the canonical documents to a JSON file so that
+  what a reviewer reads is what lands; `apply` without `--execute` is a dry run;
+  `--execute` needs that plan's SHA-256 and an operator name, so an edited or
+  stale plan cannot be applied by accident. Ids are deterministic
+  (`{tenant}:{npi}:{plan}`), so a re-run replaces rather than duplicates.
+
+  The canonical contracts go in their own collection
+  (`ProviderContractsCanonical`), beside the engine's `ProviderContracts` rather
+  than over it. Phase 4 prices every claim with both and pays on the legacy one,
+  which it can only do while both exist — and it makes undoing the backfill a
+  dropped collection rather than a restored dump. The backfill never writes the
+  legacy collection; it only reads it.
+
+  Identity and scope come from the legal contract; terms from its `FfsRateConfig`
+  and `CapitationRateConfig` children and from the engine contract's
+  `ContractLines` (scoped terms, first) and `FeeScheduleId` (the last-resort
+  term); `LesserOfBilledCharges` from the engine contract, which is where the
+  provision is recorded today. A legal contract that already carries its own
+  rate sheet is used as it is. Engine contracts with no legal contract become
+  canonical contracts flagged `origin: engine-only`.
+
+  The same rate recorded in two stores is one term, but only where the one kept
+  is in force for at least as long, so collapsing can never leave a gap where no
+  rate prices. Two rates in succession are a rate history, not a disagreement.
+
+  Every run produces the conflict report, and nothing in it is written: more than
+  one rate pricing every line for the same dates, a hybrid contract with no
+  record of which services are capitated, terms naming a schedule the tenant does
+  not have, a legal contract with no plan ids, two legal contracts covering the
+  same provider and plan, a rate config with no schedule, and a sheet
+  provider-contracts-service would reject. Conflicts block the tenant's cutover
+  until resolved. A contract that is written but flagged — engine-only, not
+  Active, `TieredException` — also blocks the cutover while the flag stands.
+
+  `ProviderContractBackfillTests` runs all of this against a real mongod, with
+  the four stores seeded as they actually look.
+
+- **Open.** PricingApi `fee_schedule_entries` are re-ingested into global
   `FeeSchedule` documents through the loaders. The invariant is the
   cross-store parity test: for every code and place of service, the re-ingested
-  schedule prices to the stored legacy price.
+  schedule prices to the stored legacy price. This is a job over schedules rather
+  than contracts, and the contract backfill does not do it.
 
 **Phase 4: dual read (shadow).**
 
-- The engine's contract repository reads the canonical contract and the legacy
-  contract, and prices with both. Both repositories are behind the existing
-  `IProviderContractRepository` seam.
-- It **pays on legacy** and emits a parity metric per line (match, amount
-  delta, reason). PricingApi reads the canonical schedule store first and falls
-  back to `fee_schedule_entries` (`EngineStoreScheduleSource`, then
-  `LegacyEntryScheduleSource`).
-- Writes go to the canonical contract only. The legacy engine contract is
-  regenerated from it, so the two cannot drift during the window.
-- Run it for at least one full monthly claim cycle per tenant. Exit criterion:
-  zero unexplained deltas on adjudicated lines.
+- **Done.** `DualReadProviderContractRepository` reads both contracts behind the
+  existing `IProviderContractRepository` seam and answers with the legacy one, so
+  opening the window changes no payment. It records the canonical contract in
+  `ContractShadowLedger`, and `ShadowPricingRateResolutionService` prices the
+  same lines a second time against it. Documented at
+  [docs/operations/CONTRACT-DUAL-READ-WINDOW.md](../operations/CONTRACT-DUAL-READ-WINDOW.md).
+
+  The shadow pass reads **no database**: its contract repository is that ledger,
+  so the two passes cannot see stores that moved between them, and the canonical
+  contract is read once per claim rather than once per line. The result returned
+  to the caller is always the paid pass, and a shadow pass that throws — or a
+  canonical store that is down — is recorded as an outcome and the claim is paid
+  on legacy.
+
+  Every line emits `cho.pricing.contract_parity.total`, tagged by tenant and by
+  outcome: `match`, `same_amount_different_route` (the same money by another
+  schedule or route — not a payment difference, but a contract that does not say
+  what the one paying says), `amount_delta` (with the dollar size on
+  `cho.pricing.contract_parity.amount_delta`), `canonical_pends`, `legacy_pends`,
+  `no_canonical_contract` and `shadow_failed`. Each non-match is also logged with
+  the provider, plan, procedure code, both amounts and the reason. No member
+  identity on either.
+
+  The window is per tenant and off until a deployment names one
+  (`FeeScheduleEngine:ContractDualRead`), because it costs a second pricing pass
+  per claim. Run it for at least one full monthly claim cycle per tenant. Exit
+  criterion: zero unexplained deltas on adjudicated lines.
+
+  Writes through the engine's repository go to the canonical store only. The ADR
+  originally called for regenerating the legacy engine contract from it; nothing
+  writes the legacy collection in the live path — that it has no admin API is
+  this ADR's own finding — so there is nothing to regenerate while the window is
+  open, and the runbook says to leave that collection alone instead.
+
+- **Open.** PricingApi reads the canonical schedule store first and falls back to
+  `fee_schedule_entries` (`EngineStoreScheduleSource`, then
+  `LegacyEntryScheduleSource`). That is a job over schedules rather than
+  contracts and depends on the re-ingest phase 3 left open.
 
 **Phase 5: cutover.**
 
-- A per-tenant flag switches payment to the canonical result. Rollback is the
-  same flag; legacy reads stay available for one more cycle.
-- Then the legacy engine `ProviderContracts` collection becomes read-only and
-  is archived, `fee_schedule_entries` is retired, and the dual-read code is
-  removed.
+- **Done.** `FeeScheduleEngine:ContractDualRead:CanonicalTenants` is the
+  per-tenant flag: a tenant on it is paid on the canonical contract, and the
+  legacy contract is priced in the shadow instead, so the comparison keeps
+  running in the other direction for one more cycle. The parity record names its
+  two amounts by store rather than by which one paid, and the delta is always
+  canonical minus legacy, so a dashboard built during the window still reads
+  correctly after the cutover.
+
+  Rollback is the same flag, moved back. Nothing is migrated in either direction
+  and no claim is rewritten, so there is no window during which a rollback is
+  unsafe.
+
+  One deliberate fallback: a cut-over tenant whose provider has no canonical
+  contract is still paid on the legacy contract rather than dropped to the plan
+  default. The cutover is gated on an empty conflict report, so that is a
+  provider which appeared since — it pays correctly and the line is recorded as
+  `no_canonical_contract`, which is reported even though both passes then price
+  identically.
+
+- **Open.** The legacy engine `ProviderContracts` collection becomes read-only
+  and is archived, `fee_schedule_entries` is retired, and the dual-read code is
+  removed. None of that can happen until every tenant has been cut over and has
+  stayed cut over, because until then the legacy contract is what a rollback pays
+  on.
 - provider-contracts-service is the only contract writer. The engine owns only
   schedules and evaluation.
 
@@ -378,7 +542,18 @@ BenefitEngine and claims-service have no facility-rate POS list
 - `src/services/claims-service/Services/Adjudication/Stages/PricingStage.cs`
 - `src/services/benefit-plan-service/Controllers/AdjudicationController.cs` (`resolve-rates`)
 - `src/services/provider-contracts-service/Models/ProviderContract.cs`
-- `src/services/ffs-service/Models/FfsRateConfig.cs`
+- `src/services/provider-contracts-service/Models/PricingContractProjection.cs`
+- `tools/ProviderContractBackfill/` and `docs/operations/PROVIDER-CONTRACT-BACKFILL.md`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Persistence/DualReadProviderContractRepository.cs`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Persistence/ContractShadowLedger.cs`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Services/ShadowPricingRateResolutionService.cs`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Services/PricingParity.cs` and `docs/operations/CONTRACT-DUAL-READ-WINDOW.md`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Configuration/ContractDualReadOptions.cs`
+- `tests/CloudHealthOffice.FeeScheduleEngine.Tests/ContractDualReadTests.cs`
+- `src/services/provider-contracts-service/Models/ReimbursementTermRequests.cs`
+- `src/services/ffs-service/Models/FfsRateConfig.cs` (superseded; read by the phase 3 backfill)
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Models/ReimbursementTerms.cs`
 - `tests/CloudHealthOffice.PricingApi.Tests/UnifiedPricingParityTests.cs`
 - `tests/CloudHealthOffice.FeeScheduleEngine.Tests/ContractTermsTests.cs`
+- `tests/CloudHealthOffice.FeeScheduleEngine.Tests/ReimbursementTermPricingTests.cs`
 - [ADR 006: Persistence boundaries](006-persistence-boundaries.md)
