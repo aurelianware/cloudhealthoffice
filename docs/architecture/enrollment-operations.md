@@ -124,7 +124,9 @@ The Enrollment Ops page shows the current cycle per sponsor.
 - how far back a term may go, and to what date;
 - whether a term beyond the limit is applied at the limit, held, or applied with approval.
 
-**Waiting periods are a separate setting** at the same three levels: how long a new hire waits before coverage starts, which decides the effective date an add should carry. A sponsor with a 90-day waiting period does not thereby get a 90-day retro window.
+**Sponsor policy and class levels.** Retro limits and waiting periods also resolve at the sponsor's policy (the sponsor's offering of one benefit plan for a date range) and, for waiting periods, the employee class under it (full-time / part-time, hourly / salaried). The full order is line of business → benefit plan → sponsor → sponsor policy → class, most specific wins, and the commercial floor below applies at every level. The orphan grace period (§10, decision 5) and the full-replace guard (§5) stay at sponsor level: they follow the sponsor's file, which covers all its policies. The settings lookup is built as a chain of levels from the start, so the policy and class levels slot in when the sponsor policy record exists.
+
+**Waiting periods are a separate setting** at the same levels: how long a new hire waits before coverage starts, which decides the effective date an add should carry. A sponsor with a 90-day waiting period does not thereby get a 90-day retro window.
 
 **Proposed defaults:**
 
@@ -170,7 +172,7 @@ The page reads enrollment and work-management data only. Member detail needs `me
 1. **Store the reason** on every rejected transaction, with the INS position and file link. Show it on the member's Enrollment tab. *Built 2026-10-22 (§9.1), including the link to the EDI file record.*
 2. **Exceptions and work items:** the `EnrollmentException` record, `Enrollment834` items with SLAs, and the specialist actions (reprocess, match, hold, no action, send back). *Built 2026-10-22 (§9.2), API only; the screen is step 3.*
 3. **Enrollment Ops page:** the exceptions view, then sponsors. Ahead of it: the automatic orphan-dependent retry (§10, decision 5).
-4. **Retro rules:** line-of-business, plan and sponsor settings; the commercial floor; two-person approval; the claims-impact event and claims review items.
+4. **Sponsor policy record, then retro rules.** The record: sponsor policy (sponsor, benefit plan, effective and end dates, contract terms) with optional classes under it (eligibility rule such as hours per week or pay type, waiting period). It is the equivalent of QNXT group / subgroup / plan and Facets group / subgroup / class, and also carries premium rates by tier, eligibility rules by class and open enrollment per plan as those move off the flat sponsor record. Then the **retro rules:** line-of-business, plan and sponsor settings; the commercial floor; two-person approval; the claims-impact event and claims review items.
 5. **Sponsor error reports:** generated per file into the document store, plus the sponsor-contact notice.
 6. **Reconciliation:**
    - read BGN08;
