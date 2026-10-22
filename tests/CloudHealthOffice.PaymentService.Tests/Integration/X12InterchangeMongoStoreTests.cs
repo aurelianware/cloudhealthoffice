@@ -138,23 +138,35 @@ public sealed class X12InterchangeMongoStoreTests : IAsyncLifetime
         var inner = Substitute.For<IEraEnvelopeRepository>();
         inner.CreateAsync(Arg.Any<EraEnvelopeRecord>()).Returns(ci => ci.Arg<EraEnvelopeRecord>());
         var tracker = new OutboundInterchangeTracker(_store, NullLogger<OutboundInterchangeTracker>.Instance);
-        var repo = new TrackingEraEnvelopeRepository(inner, tracker);
+        var repo = new TrackingEraEnvelopeRepository(inner, tracker, new X12ControlNumberAllocator(_store));
 
-        var envelope = await repo.CreateAsync(new EraEnvelopeRecord { TenantId = "t1", TradingPartnerId = "tp-1", EdiContent = era });
+        var envelope = await repo.CreateAsync(new EraEnvelopeRecord { TenantId = "t1", TradingPartnerId = "tp-1", EdiContent = era, ControlNumber = "000000555" });
+
+        // The generator's 555 was a placeholder: the stored envelope carries the
+        // first number of the CHO → PAYEE01 sequence, in ISA13/IEA02, GS06/GE02 and ST02/SE02.
+        Assert.Equal("000000001", envelope.ControlNumber);
+        Assert.Contains("*00501*000000001*1*P*:~", envelope.EdiContent);
+        Assert.Contains("*20261010*0900*1*X*005010X221A1~ST*835*0001~SE*2*0001~GE*1*1~IEA*1*000000001~", envelope.EdiContent);
 
         var pending = Assert.Single(await _store.ListOutboundAsync("t1", OutboundAckStatus.Pending, 10));
         Assert.Equal("835", pending.TransactionType);
         Assert.Equal(envelope.Id, pending.SourceReference);
+        Assert.Equal("000000001", pending.ControlNumber);
+        Assert.Equal(["1"], pending.GroupControlNumbers);
+        Assert.Equal(["0001"], pending.TransactionSetControlNumbers);
+
+        var next = await repo.CreateAsync(new EraEnvelopeRecord { TenantId = "t1", TradingPartnerId = "tp-1", EdiContent = era });
+        Assert.Equal("000000002", next.ControlNumber);
 
         const string ta1 =
             "ISA*00*          *00*          *ZZ*PAYEE01        *ZZ*CHO            *261010*1000*^*00501*000000901*0*P*:~" +
-            "TA1*000000555*261010*0900*R*022~IEA*0*000000901~";
+            "TA1*000000001*261010*0900*R*022~IEA*0*000000901~";
         var result = await tracker.ProcessInboundTa1Async("t1", ta1, "ta1.edi");
 
         Assert.Equal(Ta1MatchStatus.Matched, Assert.Single(result.Results).Status);
         var rejected = Assert.Single(await _store.ListOutboundAsync("t1", OutboundAckStatus.Rejected, 10));
         Assert.Equal("022", rejected.AckNoteCode);
-        Assert.Empty(await _store.ListOutboundAsync("t1", OutboundAckStatus.Pending, 10));
+        Assert.Single(await _store.ListOutboundAsync("t1", OutboundAckStatus.Pending, 10)); // the second envelope
         Assert.Single(await _store.ListAcknowledgmentsAsync("t1", new InterchangeAcknowledgmentQuery { Direction = Ta1Direction.Received }));
     }
 }

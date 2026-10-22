@@ -50,7 +50,7 @@ EDI Operations is the analyst's console for the file layer, across every transac
 **Missing:**
 1. ~~**No file record.**~~ *Built for 834 and 837 (§9.1).* Other transaction types still keep records per transaction only.
 2. ~~**SFTP bypasses the checks.**~~ *Fixed for 834 and 837 (§9.1):* the Argo SFTP workflows now send the raw file through the upload path.
-3. **Outbound control numbers are not assigned properly.** ISA13 comes from the clock or a random number. GS06 and ST02 are hard-coded to `1` and `0001` for 277CA, 835 and 271. Only TA1 uses the sequence store.
+3. ~~**Outbound control numbers are not assigned properly.**~~ *Fixed (§9.2):* every outbound builder takes ISA13, GS06 and ST02 from the sequence store, and outbound files are recorded.
 4. **Trading partners are not linked to files.** No file record points at a partner, nothing looks a partner up by ISA06/GS02, and `LastSuccessfulTransmission` is never written. The Trading Partners page shows mock data.
 5. **Inbound and outbound gaps:**
    - nothing reads a partner's 999;
@@ -90,9 +90,12 @@ The Argo workflows stop posting parsed JSON to the services. They hand the raw f
 
 ## 5. Control numbers
 
-Every outbound interchange takes ISA13 from the sequence store already used for TA1: per tenant and sender/receiver pair, nine digits, never reused within the duplicate window. GS06 and ST02 are assigned per interchange.
+Every outbound interchange takes its numbers from the sequence store already used for TA1, in one atomic increment per number, scoped to the tenant:
+- **ISA13 / IEA02:** per tenant and ISA sender → receiver pair (the TA1's own sequence), nine digits, wrapping from 999999999 to 1, so it is never reused within the duplicate window;
+- **GS06 / GE02:** per tenant and application sender → receiver (GS02 → GS03);
+- **ST02 / SE02:** 0001, 0002, … within the interchange.
 
-The 277CA, 835, 271, 999, 824, encounter 837 and FMMIS builders all take numbers from the sequence store instead of clocks, randoms or constants. This closes the audit's outbound control number finding. Regenerating a file for download reuses its recorded numbers; re-sending as a new interchange takes new ones and records the link to the original.
+The 277CA, 835, 271, 999, 824, encounter 837 and FMMIS builders all take numbers from the sequence store instead of clocks, randoms or constants. This closes the audit's outbound control number finding. Regenerating a file for download reuses its recorded numbers; re-sending as a new interchange takes new ones and records the link to the original (the re-send action is step 6).
 
 ## 6. Trading partners
 
@@ -140,7 +143,7 @@ The two share the same file layer; only the record layer differs:
 ## 9. Build order
 
 1. **File record and one intake path** for 834 and 837 (upload and SFTP), with the raw file in the document store. *Built 2026-10 (§9.1), except the raw file in the document store, which moves to step 4.*
-2. **Control numbers from the sequence store** for every outbound builder; outbound files recorded.
+2. **Control numbers from the sequence store** for every outbound builder; outbound files recorded. *Built 2026-10 (§9.2).*
 3. **Trading partner lookup** on intake; last received/sent; the Trading Partners page on real data.
 4. **EDI Operations page:** files, file detail, acknowledgments; links into the business views.
 5. **Expected-file schedules** and `EdiMissingFile` work items.
@@ -172,6 +175,31 @@ The two share the same file layer; only the record layer differs:
 - **Deferred:**
   - **The raw file in the document store.** The catalog needs an EDI-file subject and `edi:raw` first (step 4), so `RawDocumentId` is empty for now and the SHA-256 identifies the file.
   - **The other transaction types** (step 7).
+
+### 9.2 What step 2 built
+
+- **One allocator** (`IX12ControlNumberAllocator`, shared, `CloudHealthOffice.Infrastructure.Edi.Interchange`). Builders keep writing placeholder numbers; the allocator reads the finished interchange and stamps ISA13/IEA02, every GS06/GE02 and every ST02/SE02 with numbers from the sequence store (collection `x12-control-sequences`, `findOneAndUpdate` with `$inc`, so concurrent sends never share a number). It is registered by `AddChoX12ControlNumbers()` (included in `AddChoX12Interchange`).
+  - A sequence store failure fails the send: nothing goes out with a number that may repeat.
+  - Content with no ISA that can carry the numbers is sent as built and takes no numbers.
+- **Every builder uses it:**
+
+  | Outbound | Where | Re-download reuses its numbers | `EdiFile` recorded |
+  |---|---|---|---|
+  | 277CA | claims `GET api/claims/{id}/277ca` | Yes (per claim and status) | Yes |
+  | 999 for a raw 837 | claims `import/raw837` (the validate-only call is numbered, not recorded) | n/a, sent once | Yes, linked to the inbound file |
+  | 835, batch (ERA envelopes) | payment `TrackingEraEnvelopeRepository` | n/a, one per envelope | Yes |
+  | 835, per payment | payment `GET api/payments/{id}/835` | Yes | Yes |
+  | 271 | eligibility real-time `270` and `GET {id}/271` | Yes: the download carries the real-time reply's numbers | Yes |
+  | 835, capitation statement | capitation `statements/{id}/era` | Yes (per statement and payer) | Deferred |
+  | Encounter 837 | encounter `GET {id}/837` | Yes (per encounter and control number) | Deferred |
+  | 999 / 824 for a 275 | attachment `{id}/acknowledgment` | n/a, sent once | Deferred |
+  | FMMIS | `FmmisFileBuilder.BuildAsync` | n/a | Deferred (the builder has no production caller yet) |
+
+  Every row writes an outbound interchange record (for TA1 matching) that now also keeps the GS06 and ST02 lists, which is what lets a re-download reuse all of them.
+- **Outbound files:** an `EdiFile` with direction `Outbound`, source `Generated`, status `Sent`, the source reference (claim, payment, response, file) and the ids of its outbound interchange records; each record links back by `EdiFileId`. Recording is best-effort like step 1.
+- **Deferred:**
+  - `EdiFile` recording in capitation, encounter and attachment, which register no file store yet (step 7). Their outbound interchange records are written.
+  - A re-download whose ISA sender or receiver differs from the first issue (the 271 download names the payer and provider ids where the real-time reply swapped the 270's) keeps the first numbers; the step 3 partner lookup will make both use the same ids.
 
 ## 10. Open questions
 

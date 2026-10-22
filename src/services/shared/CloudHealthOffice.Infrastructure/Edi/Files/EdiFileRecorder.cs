@@ -43,8 +43,28 @@ public sealed class EdiFileCompletion
 /// best-effort: a store failure is logged and never fails the intake, the
 /// same posture as the per-record transaction logs.
 /// </summary>
+/// <summary>An outbound file CHO generated, after its control numbers were assigned.</summary>
+public sealed class EdiFileOutbound
+{
+    public required string TenantId { get; init; }
+    public required string Content { get; init; }
+
+    /// <summary>The label of what was sent (999, 277CA, 271, 835 ...).</summary>
+    public string? TransactionType { get; init; }
+
+    public string? SourceReference { get; init; }
+
+    public IReadOnlyList<string> OutboundInterchangeIds { get; init; } = [];
+}
+
 public interface IEdiFileRecorder
 {
+    /// <summary>
+    /// Records a file CHO sent (direction Outbound, source Generated, status
+    /// Sent). Never throws; returns null when the record could not be written.
+    /// </summary>
+    Task<EdiFile?> RecordSentAsync(EdiFileOutbound outbound, CancellationToken ct = default);
+
     /// <summary>
     /// Records a received file after the envelope gate. <paramref name="envelope"/>
     /// is the intake's decision (null when the gate is off). Returns the record,
@@ -82,6 +102,33 @@ public sealed class EdiFileRecorder : IEdiFileRecorder
         {
             _logger.LogError(ex, "Failed to record received {TransactionType} file {FileName}",
                 LogSanitizer.Sanitize(intake.TransactionType, 16), LogSanitizer.Sanitize(intake.FileName));
+            return null;
+        }
+    }
+
+    public async Task<EdiFile?> RecordSentAsync(EdiFileOutbound outbound, CancellationToken ct = default)
+    {
+        var now = _clock.GetUtcNow().UtcDateTime;
+        try
+        {
+            var file = Build(new EdiFileIntake
+            {
+                TenantId = outbound.TenantId,
+                Content = outbound.Content,
+                TransactionType = outbound.TransactionType,
+                Source = EdiFileSource.Generated,
+            }, envelope: null, now);
+            file.Direction = EdiFileDirection.Outbound;
+            file.SourceReference = outbound.SourceReference;
+            file.OutboundInterchangeIds.AddRange(outbound.OutboundInterchangeIds);
+            file.History.Clear();
+            Move(file, EdiFileStatus.Sent, now, null);
+            await _store.CreateAsync(file, ct);
+            return file;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Failed to record sent {TransactionType} file", LogSanitizer.Sanitize(outbound.TransactionType, 16));
             return null;
         }
     }

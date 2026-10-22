@@ -166,9 +166,30 @@ public class X12InterchangeControlTests
         var second = await tracker.GetOrRecordSentAsync("t1", Ca("222222222"), "277CA", "claim-1:Approved");
         var otherStatus = await tracker.GetOrRecordSentAsync("t1", Ca("333333333"), "277CA", "claim-1:Paid");
 
-        first.Should().Contain("*111111111*");
-        second.Should().Be(Ca("111111111"));
-        otherStatus.Should().Contain("*333333333*");
+        // The builder's numbers are placeholders: the first download gets the
+        // first number of the CHO → SUBMITTER01 sequence, a repeat reuses it,
+        // another claim status is another interchange with the next number.
+        first.Should().Be(Ca("000000001"));
+        second.Should().Be(Ca("000000001"));
+        otherStatus.Should().Contain("*000000002*").And.Contain("IEA*1*000000002~");
         (await _store.ListOutboundAsync("t1", null, 10)).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task RepeatedDownload_OfARecordFromBeforeGroupNumbersWereKept_ReusesItsIsa13()
+    {
+        await _store.SaveOutboundAsync(new OutboundInterchangeRecord
+        {
+            TenantId = "t1", TransactionType = "277CA", ControlNumber = "000000777",
+            SenderId = "CHO", ReceiverId = "SUBMITTER01", SourceReference = "claim-9:Approved",
+        });
+        var tracker = new OutboundInterchangeTracker(_store, NullLogger<OutboundInterchangeTracker>.Instance);
+        const string ca =
+            "ISA*00*          *00*          *ZZ*CHO            *ZZ*SUBMITTER01    *261010*0900*^*00501*123456789*0*P*:~" +
+            "GS*HN*CHO*SUBMITTER01*20261010*0900*1*X*005010X214~ST*277*0001~SE*2*0001~GE*1*1~IEA*1*123456789~";
+
+        var again = await tracker.GetOrRecordSentAsync("t1", ca, "277CA", "claim-9:Approved");
+
+        again.Should().Contain("*000000777*0*P*").And.Contain("IEA*1*000000777~");
     }
 }

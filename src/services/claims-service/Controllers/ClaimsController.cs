@@ -1184,9 +1184,9 @@ public class ClaimsController : ControllerBase
 
         var edi = _ackService.Generate277CA(claim, cfg);
 
-        // Remember the 277CA's envelope so the submitter's TA1 for it can be
-        // matched. One interchange per claim status: a repeat download reuses
-        // the ISA13 already recorded instead of minting a new one.
+        // Assign the 277CA's sequenced control numbers and record it, so the
+        // submitter's TA1 for it can be matched. One interchange per claim
+        // status: a repeat download reuses the numbers already recorded.
         if (outboundTracker is not null)
             edi = await outboundTracker.GetOrRecordSentAsync(TryGetTenantId(), edi, "277CA", $"{claim.Id}:{claim.Status}",
                 HttpContext?.RequestAborted ?? CancellationToken.None);

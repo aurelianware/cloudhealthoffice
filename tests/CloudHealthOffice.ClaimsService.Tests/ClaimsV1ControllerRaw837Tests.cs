@@ -171,6 +171,30 @@ public class ClaimsV1ControllerRaw837Tests : IClassFixture<ClaimsApiFactory>
     }
 
     [Fact]
+    public async Task ImportRaw837_999ControlNumbers_ComeFromTheSequenceStore()
+    {
+        _service
+            .SubmitAsync(Arg.Any<AdapterClaim>(), "test-tenant",
+                Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ClaimSubmissionResult.Ok(ci.Arg<AdapterClaim>()));
+
+        var first = await (await _client.PostAsync("/api/v1/claims/import/raw837", BuildFileContent(SingleClaimSample)))
+            .Content.ReadFromJsonAsync<Raw837ImportResult>();
+        var second = await (await _client.PostAsync("/api/v1/claims/import/raw837",
+                BuildFileContent(SingleClaimSample.Replace("CLM-RAW837-0001", "CLM-RAW837-0003", StringComparison.Ordinal), "second.837")))
+            .Content.ReadFromJsonAsync<Raw837ImportResult>();
+
+        // Consecutive values of the tenant's sequence for this sender → receiver
+        // pair (never a random number), one per 999, each with its own GS06.
+        var a = Infrastructure.Edi.Interchange.X12ControlNumberStamper.Read(first!.Acknowledgment999).Single();
+        var b = Infrastructure.Edi.Interchange.X12ControlNumberStamper.Read(second!.Acknowledgment999).Single();
+        Assert.Matches("^[0-9]{9}$", a.InterchangeControlNumber);
+        Assert.Equal(long.Parse(a.InterchangeControlNumber) + 1, long.Parse(b.InterchangeControlNumber));
+        Assert.Equal(long.Parse(a.GroupControlNumbers.Single()) + 1, long.Parse(b.GroupControlNumbers.Single()));
+        Assert.Equal("0001", b.TransactionSetControlNumbers.Single());
+    }
+
+    [Fact]
     public async Task ImportRaw837_SnipRejectedSet_IsNotSubmittedAndIsLoggedWithSnipErrors()
     {
         var unbalanced = SnipCleanClaim("CLM-RAW837-0009",

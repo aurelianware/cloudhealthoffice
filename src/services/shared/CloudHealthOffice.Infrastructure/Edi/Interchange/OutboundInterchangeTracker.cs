@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using CloudHealthOffice.Infrastructure.Edi.Files;
 using CloudHealthOffice.Infrastructure.Logging;
 
 namespace CloudHealthOffice.Infrastructure.Edi.Interchange;
@@ -45,12 +46,21 @@ public interface IOutboundInterchangeTracker
     Task<OutboundInterchangeRecord?> RecordSentAsync(string tenantId, string ediContent, string? transactionType, string? sourceReference, CancellationToken ct = default);
 
     /// <summary>
-    /// For an interchange that can be produced again on demand (a 277CA
-    /// download): the first time, records it as <see cref="RecordSentAsync"/>
-    /// does; after that, returns <paramref name="ediContent"/> with the ISA13
-    /// (and IEA02) already recorded for this <paramref name="sourceReference"/>,
-    /// so repeat downloads are one interchange and one outbound record.
-    /// Never throws.
+    /// For an interchange CHO is about to send: assigns its control numbers
+    /// (<see cref="IX12ControlNumberAllocator"/>, replacing whatever the builder
+    /// wrote), records each interchange and the outbound EDI file, and returns
+    /// the content to send. Recording never throws; a failure to assign
+    /// numbers does, because the interchange must not go out without them.
+    /// </summary>
+    Task<string> AssignAndRecordAsync(string tenantId, string ediContent, string transactionType, string? sourceReference, CancellationToken ct = default);
+
+    /// <summary>
+    /// For an interchange that can be produced again on demand (a 277CA,
+    /// a payment's 835, a stored 271): the first time, assigns and records it as
+    /// <see cref="AssignAndRecordAsync"/> does; after that, returns
+    /// <paramref name="ediContent"/> with the control numbers already recorded
+    /// for this <paramref name="sourceReference"/>, so repeat downloads are one
+    /// interchange and one outbound record.
     /// </summary>
     Task<string> GetOrRecordSentAsync(string tenantId, string ediContent, string transactionType, string sourceReference, CancellationToken ct = default);
 
@@ -67,64 +77,144 @@ public sealed class OutboundInterchangeTracker : IOutboundInterchangeTracker
     private readonly IX12InterchangeStore _store;
     private readonly ILogger<OutboundInterchangeTracker> _logger;
     private readonly TimeProvider _clock;
+    private readonly IX12ControlNumberAllocator _allocator;
+    private readonly IEdiFileRecorder? _files;
 
-    public OutboundInterchangeTracker(IX12InterchangeStore store, ILogger<OutboundInterchangeTracker> logger, TimeProvider? clock = null)
+    public OutboundInterchangeTracker(
+        IX12InterchangeStore store,
+        ILogger<OutboundInterchangeTracker> logger,
+        TimeProvider? clock = null,
+        IEdiFileRecorder? files = null,
+        IX12ControlNumberAllocator? allocator = null)
     {
         _store = store;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
+        _files = files;
+        _allocator = allocator ?? new X12ControlNumberAllocator(store);
+    }
+
+    public async Task<string> AssignAndRecordAsync(string tenantId, string ediContent, string transactionType, string? sourceReference, CancellationToken ct = default)
+    {
+        var assignment = await _allocator.AssignAsync(tenantId, ediContent, ct);
+        if (assignment.Interchanges.Count == 0)
+        {
+            _logger.LogWarning("Outbound {TransactionType} content has no ISA that can carry control numbers; sent as built",
+                LogSanitizer.Sanitize(transactionType, 64));
+            return ediContent;
+        }
+        await RecordAllAsync(tenantId, assignment.Content, transactionType, sourceReference, ct);
+        return assignment.Content;
     }
 
     public async Task<string> GetOrRecordSentAsync(string tenantId, string ediContent, string transactionType, string sourceReference, CancellationToken ct = default)
     {
+        OutboundInterchangeRecord? existing = null;
         try
         {
-            var existing = await _store.FindOutboundBySourceAsync(tenantId, transactionType, sourceReference, ct);
-            if (existing is not null)
-                return X12InterchangeRewriter.WithControlNumber(ediContent, existing.ControlNumber) ?? ediContent;
+            existing = await _store.FindOutboundBySourceAsync(tenantId, transactionType, sourceReference, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Outbound {TransactionType} lookup failed; recording it as new", LogSanitizer.Sanitize(transactionType, 64));
+            _logger.LogWarning(ex, "Outbound {TransactionType} lookup failed; assigning it as new", LogSanitizer.Sanitize(transactionType, 64));
         }
-        await RecordSentAsync(tenantId, ediContent, transactionType, sourceReference, ct);
-        return ediContent;
+
+        if (existing is not null)
+        {
+            // Same numbers as the first time. A record from before group and set
+            // numbers were kept reuses its ISA13 only.
+            var reused = existing.GroupControlNumbers.Count > 0 || existing.TransactionSetControlNumbers.Count > 0
+                ? X12ControlNumberStamper.Apply(ediContent,
+                    [new X12InterchangeNumbers(existing.ControlNumber, existing.GroupControlNumbers, existing.TransactionSetControlNumbers)])
+                : X12InterchangeRewriter.WithControlNumber(ediContent, existing.ControlNumber);
+            if (reused is not null) return reused;
+            _logger.LogInformation("Outbound {TransactionType} for {Source} changed shape since it was first sent; assigning new control numbers",
+                LogSanitizer.Sanitize(transactionType, 64), LogSanitizer.Sanitize(sourceReference, 128));
+        }
+        return await AssignAndRecordAsync(tenantId, ediContent, transactionType, sourceReference, ct);
     }
 
     public async Task<OutboundInterchangeRecord?> RecordSentAsync(string tenantId, string ediContent, string? transactionType, string? sourceReference, CancellationToken ct = default)
     {
+        var records = await RecordAllAsync(tenantId, ediContent, transactionType, sourceReference, ct);
+        return records.FirstOrDefault();
+    }
+
+    /// <summary>One outbound record per interchange, then the outbound file. Never throws.</summary>
+    private async Task<IReadOnlyList<OutboundInterchangeRecord>> RecordAllAsync(
+        string tenantId, string ediContent, string? transactionType, string? sourceReference, CancellationToken ct)
+    {
+        var records = new List<OutboundInterchangeRecord>();
         try
         {
             var read = X12EnvelopeReader.Read(ediContent);
-            var env = read.Interchanges.FirstOrDefault();
-            if (!read.IsReadable || env?.Header is null)
+            if (!read.IsReadable || read.Interchanges.All(i => i.Header is null))
             {
                 _logger.LogWarning("Outbound {TransactionType} interchange not tracked: no readable ISA", LogSanitizer.Sanitize(transactionType, 64));
-                return null;
+                return records;
             }
 
-            var h = env.Header;
-            var record = new OutboundInterchangeRecord
+            var numbers = X12ControlNumberStamper.Read(ediContent);
+            var now = _clock.GetUtcNow().UtcDateTime;
+            var index = 0;
+            foreach (var env in read.Interchanges)
             {
-                TenantId = tenantId,
-                TransactionType = transactionType ?? env.TransactionSetIds.FirstOrDefault() ?? "unknown",
-                ControlNumber = h.ControlNumber,
-                SenderQualifier = h.SenderQualifier,
-                SenderId = h.SenderId,
-                ReceiverQualifier = h.ReceiverQualifier,
-                ReceiverId = h.ReceiverId,
-                AckRequested = h.AckRequested == "1",
-                SourceReference = sourceReference,
-                SentAt = _clock.GetUtcNow().UtcDateTime,
-            };
-            await _store.SaveOutboundAsync(record, ct);
-            return record;
+                if (env.Header is not { } h) continue;
+                var n = index < numbers.Count ? numbers[index] : null;
+                index++;
+                var record = new OutboundInterchangeRecord
+                {
+                    TenantId = tenantId,
+                    TransactionType = transactionType ?? env.TransactionSetIds.FirstOrDefault() ?? "unknown",
+                    ControlNumber = h.ControlNumber,
+                    SenderQualifier = h.SenderQualifier,
+                    SenderId = h.SenderId,
+                    ReceiverQualifier = h.ReceiverQualifier,
+                    ReceiverId = h.ReceiverId,
+                    AckRequested = h.AckRequested == "1",
+                    SourceReference = sourceReference,
+                    SentAt = now,
+                    GroupControlNumbers = n?.GroupControlNumbers.ToList() ?? new(),
+                    TransactionSetControlNumbers = n?.TransactionSetControlNumbers.ToList() ?? new(),
+                };
+                await _store.SaveOutboundAsync(record, ct);
+                records.Add(record);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Outbound {TransactionType} interchange not tracked", LogSanitizer.Sanitize(transactionType, 64));
-            return null;
+            return records;
         }
+
+        if (_files is not null && records.Count > 0)
+        {
+            var file = await _files.RecordSentAsync(new EdiFileOutbound
+            {
+                TenantId = tenantId,
+                Content = ediContent,
+                TransactionType = transactionType,
+                SourceReference = sourceReference,
+                OutboundInterchangeIds = records.Select(r => r.Id).ToList(),
+            }, ct);
+            if (file is not null)
+            {
+                try
+                {
+                    foreach (var record in records)
+                    {
+                        record.EdiFileId = file.Id;
+                        await _store.SaveOutboundAsync(record, ct);
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Could not link outbound {TransactionType} interchanges to file {FileId}",
+                        LogSanitizer.Sanitize(transactionType, 64), file.Id);
+                }
+            }
+        }
+        return records;
     }
 
     public async Task<Ta1ProcessingResult> ProcessInboundTa1Async(string tenantId, string content, string? fileName, CancellationToken ct = default)

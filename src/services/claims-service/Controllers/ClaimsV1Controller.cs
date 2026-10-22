@@ -60,6 +60,8 @@ public class ClaimsV1Controller : ControllerBase
     private readonly Snip.Snip837ValidationOptions _snipOptions;
     private readonly IX12InterchangeIntake? _interchangeIntake;
     private readonly IEdiFileRecorder? _ediFiles;
+    private readonly IOutboundInterchangeTracker? _outbound;
+    private readonly IX12ControlNumberAllocator? _controlNumbers;
 
     /// <summary>
     /// Set (1) once any claim of the raw 837 upload reached SubmitAsync. From
@@ -81,8 +83,12 @@ public class ClaimsV1Controller : ControllerBase
         IX12InterchangeIntake? interchangeIntake = null,
         Microsoft.Extensions.Options.IOptions<X12InterchangeOptions>? interchangeOptions = null,
         IInboundClaimCorrectionService? corrections = null,
-        IEdiFileRecorder? ediFiles = null)
+        IEdiFileRecorder? ediFiles = null,
+        IOutboundInterchangeTracker? outbound = null,
+        IX12ControlNumberAllocator? controlNumbers = null)
     {
+        _outbound = outbound;
+        _controlNumbers = controlNumbers;
         _corrections = corrections;
         _ediFiles = ediFiles;
         _interchangeIntake = interchangeOptions?.Value.Enabled == false ? null : interchangeIntake;
@@ -281,12 +287,14 @@ public class ClaimsV1Controller : ControllerBase
             if (_snipOptions.Enabled)
             {
                 snip = _snipValidator.Validate(ediContent);
-                var control = Random.Shared.NextInt64(1, 1_000_000_000);
-                acknowledgment = Snip.X12999AcknowledgmentBuilder.Build(snip, new Snip.X12999AcknowledgmentBuilder.Options
-                {
-                    ControlNumber = control,
-                });
-                acknowledgmentControl = acknowledgment is null ? null : control.ToString("D9", System.Globalization.CultureInfo.InvariantCulture);
+                // The builder's numbers are placeholders: the tracker assigns the
+                // sequenced ISA13/GS06/ST02 and records the 999 as sent (edi-operations.md §5).
+                acknowledgment = Snip.X12999AcknowledgmentBuilder.Build(snip);
+                if (acknowledgment is not null && _outbound is not null)
+                    acknowledgment = await _outbound.AssignAndRecordAsync(GetTenantId(), acknowledgment, "999", ediFileId ?? file.FileName, ct);
+                acknowledgmentControl = acknowledgment is null
+                    ? null
+                    : X12ControlNumberStamper.Read(acknowledgment).FirstOrDefault()?.InterchangeControlNumber;
 
                 if (snip.Document is null || !snip.FunctionalGroups.Any())
                 {
@@ -472,10 +480,11 @@ public class ClaimsV1Controller : ControllerBase
         }
 
         var snip = _snipValidator.Validate(ediContent);
-        var acknowledgment = Snip.X12999AcknowledgmentBuilder.Build(snip, new Snip.X12999AcknowledgmentBuilder.Options
-        {
-            ControlNumber = Random.Shared.NextInt64(1, 1_000_000_000),
-        });
+        // A validation run sends nothing, so its 999 is not recorded; it still
+        // gets real control numbers rather than a random ISA13.
+        var acknowledgment = Snip.X12999AcknowledgmentBuilder.Build(snip);
+        if (acknowledgment is not null && _controlNumbers is not null)
+            acknowledgment = (await _controlNumbers.AssignAsync(GetTenantId(), acknowledgment, ct)).Content;
 
         return Ok(WithTa1(new Raw837ImportResult
         {

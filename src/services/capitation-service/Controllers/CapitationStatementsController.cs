@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using Microsoft.AspNetCore.Mvc;
 using CapitationService.Models;
 using CapitationService.Repositories;
@@ -181,7 +182,8 @@ public class CapitationStatementsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult> GenerateEra(string id, [FromBody] CapitationEraTradingPartnerInfo? tradingPartner = null)
+    public async Task<ActionResult> GenerateEra(string id, [FromBody] CapitationEraTradingPartnerInfo? tradingPartner = null,
+        [FromServices] IOutboundInterchangeTracker? outbound = null)
     {
         var statement = await _statementRepository.GetByIdAsync(id);
         if (statement == null)
@@ -210,6 +212,12 @@ public class CapitationStatementsController : ControllerBase
                 id.Replace("\r", "").Replace("\n", ""), ChoProblemResults.TraceId(HttpContext));
             return this.ServerError("835 cannot be generated");
         }
+
+        // Sequenced ISA13/GS06/ST02 (edi-operations.md §5); the same numbers
+        // each time this statement's 835 is produced for the same payer.
+        if (outbound is not null)
+            edi = await outbound.GetOrRecordSentAsync(_actor.TenantId, edi, "835", $"capitation-statement:{id}:{tp.PayerId}",
+                HttpContext?.RequestAborted ?? CancellationToken.None);
 
         return Content(edi, "text/plain");
     }

@@ -237,6 +237,34 @@ public class PaymentsControllerTests : IClassFixture<PaymentApiFactory>
     }
 
     [Fact]
+    public async Task GetEra835_RepeatDownload_ReusesItsControlNumbers_AndAnotherPaymentGetsTheNext()
+    {
+        static string Era(string receiver) =>
+            $"ISA*00*          *00*          *ZZ*CHOPAYER       *ZZ*{receiver,-15}*260315*1200*^*00501*123456789*0*P*:~" +
+            $"GS*HP*CHOPAYER*{receiver}*20260315*1200*1*X*005010X221A1~ST*835*0001*005010X221A1~BPR*I~SE*3*0001~GE*1*1~IEA*1*123456789~";
+
+        var payment = CreateValidPayment();
+        payment.Id = "pay-835-reuse";
+        var other = CreateValidPayment();
+        other.Id = "pay-835-reuse-other";
+        _repo.GetByIdAsync("pay-835-reuse").Returns(payment);
+        _repo.GetByIdAsync("pay-835-reuse-other").Returns(other);
+        _eraGenerator.Generate835(Arg.Is<Payment>(p => p.Id.StartsWith("pay-835-reuse")), Arg.Any<TradingPartnerInfo>())
+            .Returns(Era("REUSEPROV01"));
+
+        var first = await _client.GetStringAsync("/api/payments/pay-835-reuse/835");
+        var again = await _client.GetStringAsync("/api/payments/pay-835-reuse/835");
+        var next = await _client.GetStringAsync("/api/payments/pay-835-reuse-other/835");
+
+        var sent = CloudHealthOffice.Infrastructure.Edi.Interchange.X12ControlNumberStamper.Read(first).Single();
+        Assert.Equal("000000001", sent.InterchangeControlNumber);
+        Assert.Equal(first, again);
+        var nextNumbers = CloudHealthOffice.Infrastructure.Edi.Interchange.X12ControlNumberStamper.Read(next).Single();
+        Assert.Equal("000000002", nextNumbers.InterchangeControlNumber);
+        Assert.Equal("2", nextNumbers.GroupControlNumbers.Single());
+    }
+
+    [Fact]
     public async Task GetEra835_NonexistentPayment_Returns404()
     {
         _repo.GetByIdAsync("nonexistent").Returns((Payment?)null);
@@ -372,7 +400,9 @@ public class PaymentsControllerTests : IClassFixture<PaymentApiFactory>
         Assert.Equal("text/plain", response.Content.Headers.ContentType?.MediaType);
 
         var body = await response.Content.ReadAsStringAsync();
-        Assert.Equal(ediContent, body);
+        // The generator's file, with its control numbers assigned from the sequence store.
+        var numbers = CloudHealthOffice.Infrastructure.Edi.Interchange.X12ControlNumberStamper.Read(body);
+        Assert.Equal(CloudHealthOffice.Infrastructure.Edi.Interchange.X12ControlNumberStamper.Apply(ediContent, numbers), body);
 
         // Verify attachment filename
         var contentDisposition = response.Content.Headers.ContentDisposition;

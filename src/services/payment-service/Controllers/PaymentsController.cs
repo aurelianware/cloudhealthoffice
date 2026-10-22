@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Edi.Interchange;
 using CloudHealthOffice.Infrastructure.Audit;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
@@ -235,7 +236,8 @@ public class PaymentsController : ControllerBase
     [HttpGet("{id}/835")]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetEra835(string id, [FromServices] RecordAccessWriter? accessLog = null)
+    public async Task<IActionResult> GetEra835(string id, [FromServices] RecordAccessWriter? accessLog = null,
+        [FromServices] IOutboundInterchangeTracker? outbound = null)
     {
         var payment = await _paymentRepository.GetByIdAsync(id);
 
@@ -278,6 +280,12 @@ public class PaymentsController : ControllerBase
             await RecordEraAsync(accessLog, id, payment, StatusCodes.Status500InternalServerError);
             return this.ServerError("835 cannot be generated");
         }
+
+        // Sequenced ISA13/GS06/ST02, recorded once per payment: a repeat
+        // download is the same interchange (edi-operations.md §5).
+        if (outbound is not null)
+            era = await outbound.GetOrRecordSentAsync(_actor.TenantId, era, "835", $"payment:{id}",
+                HttpContext?.RequestAborted ?? CancellationToken.None);
 
         var filename = $"835_{payment.CheckNumber}.edi";
         Response.Headers["Content-Disposition"] = $"attachment; filename=\"{filename}\"";

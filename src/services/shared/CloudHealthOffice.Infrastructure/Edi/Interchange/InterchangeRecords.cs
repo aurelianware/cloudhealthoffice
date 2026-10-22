@@ -124,6 +124,15 @@ public sealed class OutboundInterchangeRecord
 
     /// <summary>The stored received TA1 (<see cref="InterchangeAcknowledgmentRecord.Id"/>).</summary>
     public string? AcknowledgmentId { get; set; }
+
+    /// <summary>GS06 of each functional group as sent, in order (empty for records written before control numbers were assigned).</summary>
+    public List<string> GroupControlNumbers { get; set; } = new();
+
+    /// <summary>ST02 of each transaction set as sent, in order.</summary>
+    public List<string> TransactionSetControlNumbers { get; set; } = new();
+
+    /// <summary>The outbound EDI file record (<c>EdiFile.Id</c>), when one was written.</summary>
+    public string? EdiFileId { get; set; }
 }
 
 /// <summary>Filter for listing stored TA1s.</summary>

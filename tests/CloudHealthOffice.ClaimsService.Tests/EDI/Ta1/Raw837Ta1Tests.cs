@@ -220,8 +220,13 @@ public class Raw837Ta1Tests : IClassFixture<Ta1ClaimsApiFactory>
         var first = await _client.GetStringAsync("/api/claims/claim-277-ta1/277ca");
         var second = await _client.GetStringAsync("/api/claims/claim-277-ta1/277ca");
 
+        // The builder's numbers are placeholders; the first download takes the
+        // sequence's numbers and the repeat reuses them.
         Assert.Equal(first, second);
-        Assert.Contains("*111111111*", second);
+        Assert.DoesNotContain("*111111111*", first);
+        var sent = CloudHealthOffice.Infrastructure.Edi.Interchange.X12ControlNumberStamper.Read(first).Single();
+        Assert.Matches("^[0-9]{9}$", sent.InterchangeControlNumber);
+        Assert.Equal("0001", sent.TransactionSetControlNumbers.Single());
         var outbound = await _client.GetFromJsonAsync<List<OutboundInterchangeRecord>>("/api/v1/claims/interchange/outbound");
         Assert.Single(outbound!, o => o.SourceReference == "claim-277-ta1:Approved");
     }
