@@ -86,6 +86,14 @@ public class MetadataController : FhirControllerBase
                             ("status",       SearchParamType.Token),
                             ("type",         SearchParamType.Token)
                         ]),
+                        // Two projections share this resource type. Without `use`
+                        // the search returns claims (claims-service's
+                        // projection); `use=preauthorization` returns prior
+                        // authorizations (authorization-service's projection),
+                        // which is how CMS-0057-F PA data is served through
+                        // Patient Access, Provider Access and Payer-to-Payer.
+                        // The two sets are not merged into one bundle, so `use`
+                        // is how a consumer asks for PA data.
                         BuildResource("ExplanationOfBenefit",
                         [
                             ("_id",          SearchParamType.Token),
@@ -93,7 +101,16 @@ public class MetadataController : FhirControllerBase
                             ("patient",      SearchParamType.Reference),
                             ("created",      SearchParamType.Date),
                             ("type",         SearchParamType.Token),
-                            ("status",       SearchParamType.Token)
+                            ("status",       SearchParamType.Token),
+                            ("use",          SearchParamType.Token)
+                        ],
+                        supportedProfiles:
+                        [
+                            // What the prior-authorization projection is shaped
+                            // toward. Declared as the target, not as a passed
+                            // conformance claim: no profile validation has run
+                            // against it (see PriorAuthorizationEobProjector).
+                            ExplanationOfBenefitController.PdexPriorAuthorizationProfile
                         ]),
                         BuildResource("Encounter",
                         [

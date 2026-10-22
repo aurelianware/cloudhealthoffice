@@ -38,6 +38,12 @@ public sealed class ChoNativeMemberDirectory
     /// <summary>Most EOB pages read for one member: 10,000 EOBs.</summary>
     public const int MaxEobPages = 50;
 
+    /// <summary>The page size used against authorization-service's prior-auth search (its maximum).</summary>
+    public const int PriorAuthorizationPageSize = 200;
+
+    /// <summary>Most prior-auth pages read for one member: 2,000 authorizations.</summary>
+    public const int MaxPriorAuthorizationPages = 10;
+
     private readonly IHttpClientFactory _clients;
     private readonly IHttpContextAccessor _http;
     private readonly ILogger<ChoNativeMemberDirectory> _logger;
@@ -173,6 +179,73 @@ public sealed class ChoNativeMemberDirectory
             if (offset + entries.Count >= total) break;
         }
         return all;
+    }
+
+    /// <summary>
+    /// The member's prior authorizations as ExplanationOfBenefit
+    /// (<c>use = preauthorization</c>), as authorization-service projects them —
+    /// the PA data CMS-0057-F requires in a Payer-to-Payer export (gap matrix
+    /// G-35). Drug authorizations are out of that scope and authorization-service
+    /// has already removed them.
+    ///
+    /// <para>
+    /// Paged like the EOB read, with the same two refusals: more than
+    /// <see cref="MaxPriorAuthorizationPages"/> pages raises, and a record for
+    /// another member raises. Unlike the claim search, the upstream's
+    /// <c>total</c> is the PAGE's count (it cannot know the post-filter total
+    /// across pages), so the loop ends on a short page rather than on a running
+    /// total — a full page means there may be more, a short one means there is
+    /// not.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<JsonObject>> GetPriorAuthorizationsAsync(
+        string tenantId, string memberId, CancellationToken ct = default)
+    {
+        RequireRequestTenant(tenantId);
+        const string route = "fhir/ExplanationOfBenefit/prior-authorization";
+        var all = new List<JsonObject>();
+
+        for (var page = 1; page <= MaxPriorAuthorizationPages; page++)
+        {
+            var body = await GetAsync(UpstreamClientNames.AuthorizationService, "ExplanationOfBenefit",
+                $"{route}?patient={Escape(memberId)}&_count={PriorAuthorizationPageSize}&_page={page}", route, ct);
+
+            JsonArray entries;
+            try
+            {
+                var bundle = JsonNode.Parse(body) as JsonObject ?? throw new FormatException("not an object");
+                if (bundle["resourceType"]?.GetValue<string>() != "Bundle") throw new FormatException("not a Bundle");
+                entries = bundle["entry"] as JsonArray ?? [];
+            }
+            catch (Exception ex) when (ex is FormatException or JsonException or InvalidOperationException)
+            {
+                throw Unreadable("ExplanationOfBenefit", ex);
+            }
+
+            foreach (var entry in entries)
+            {
+                var resource = entry?["resource"] as JsonObject ?? throw Unreadable("ExplanationOfBenefit");
+                // Defence in depth, as for the claim search: authorization-service
+                // filters by member, and anything else in the answer is never
+                // exported as this member's.
+                var patient = resource["patient"]?["reference"]?.GetValue<string>();
+                if (!string.Equals(patient, $"Patient/{memberId}", StringComparison.Ordinal))
+                {
+                    _logger.LogError(
+                        "Prior-authorization search returned a record for another patient; the export is refused.");
+                    throw new FhirUpstreamException("ExplanationOfBenefit",
+                        "ExplanationOfBenefit upstream returned records outside the member.");
+                }
+                all.Add(resource.DeepClone().AsObject());
+            }
+
+            // A page shorter than the requested size is the last one.
+            if (entries.Count < PriorAuthorizationPageSize) return all;
+        }
+
+        // The page bound was reached with records still unread: refuse rather
+        // than export a silently partial set.
+        throw TooMany("ExplanationOfBenefit");
     }
 
     private async Task<DirectoryMembers> MembersAsync(string filter, int max, CancellationToken ct)

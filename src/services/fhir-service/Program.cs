@@ -500,12 +500,15 @@ builder.Services.AddSingleton<FhirService.Services.Cdex.IAttachmentContentScanne
     FhirService.Services.Cdex.UnscannedAttachmentContentScanner>();
 
 // ── HTTP clients ──────────────────────────────────────────────────────────────
-builder.Services.AddHttpClient("AuthorizationService", client =>
+builder.Services.AddHttpClient(UpstreamClientNames.AuthorizationService, client =>
 {
     client.BaseAddress = new Uri(
         builder.Configuration["Services:AuthorizationServiceUrl"]
             ?? "http://authorization-service.cloudhealthoffice/");
     client.DefaultRequestHeaders.Add("Accept", "application/json");
+    // The same client also fetches the prior-authorization ExplanationOfBenefit
+    // projection (G-31), which authorization-service serves as FHIR.
+    client.DefaultRequestHeaders.Add("Accept", "application/fhir+json");
 })
 // Without the tenant header authorization-service falls back to its default
 // partition, so a PAS $inquire would read (and a $submit would write) the wrong

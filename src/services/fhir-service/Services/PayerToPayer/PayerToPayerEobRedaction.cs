@@ -49,6 +49,49 @@ public static class PayerToPayerEobRedaction
 
     private static readonly HashSet<string> Meta = new(StringComparer.Ordinal) { "lastUpdated", "profile" };
 
+    // ── Prior authorization (use = preauthorization) ─────────────────────────
+    // A separate allowlist, deliberately not a widening of the claim one: what a
+    // receiving payer needs from a prior authorization is almost the opposite of
+    // what it needs from a claim. The decision IS the payload — a payer taking
+    // over a member has to know what was approved, for what period, and why
+    // anything was refused, so that it can honour an existing authorization
+    // rather than make the member start again. On a claim those same fields
+    // (disposition, process notes, item adjudication) are CHO's internal
+    // adjudication and money, and stay home.
+    //
+    // Nothing monetary is listed here, and the projection carries no amounts to
+    // begin with: a prior-auth EOB has units, not dollars. Cost-sharing and
+    // remittance therefore cannot leave by this path.
+
+    private static readonly HashSet<string> PriorAuthHeader = new(StringComparer.Ordinal)
+    {
+        "resourceType", "id", "meta", "identifier", "status", "type", "subType", "use", "patient",
+        "created", "insurer", "provider", "outcome", "disposition", "preAuthRef", "preAuthRefPeriod",
+        "billablePeriod", "benefitPeriod", "diagnosis", "procedure", "insurance", "item", "processNote",
+    };
+
+    private static readonly HashSet<string> PriorAuthItem = new(StringComparer.Ordinal)
+    {
+        "sequence", "revenue", "category", "productOrService", "modifier", "programCode",
+        "servicedDate", "servicedPeriod", "locationCodeableConcept", "locationAddress",
+        "quantity", "adjudication",
+    };
+
+    /// <summary>
+    /// A redacted copy of a prior-authorization <c>ExplanationOfBenefit</c>
+    /// (<c>use = preauthorization</c>); the original is untouched. Use this for
+    /// prior authorizations and <see cref="Redact"/> for claims — the two
+    /// allowlists are not interchangeable.
+    /// </summary>
+    public static JsonObject RedactPriorAuthorization(JsonObject eob)
+    {
+        var copy = Keep(eob, PriorAuthHeader);
+        if (copy["meta"] is JsonObject meta) copy["meta"] = Keep(meta, Meta);
+        if (copy["insurance"] is JsonArray insurance) copy["insurance"] = KeepEach(insurance, Insurance, null);
+        if (copy["item"] is JsonArray items) copy["item"] = KeepEach(items, PriorAuthItem, null);
+        return copy;
+    }
+
     /// <summary>A redacted copy of <paramref name="eob"/>; the original is untouched.</summary>
     public static JsonObject Redact(JsonObject eob)
     {

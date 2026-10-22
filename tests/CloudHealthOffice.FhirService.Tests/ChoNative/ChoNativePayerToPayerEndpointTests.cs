@@ -77,6 +77,12 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
                 "/fhir/ExplanationOfBenefit" when query.Contains("patient=pat-002") =>
                     Json(Bundle(Eob("eob-new", "pat-002", "2026-01-15"), Eob("eob-old", "pat-002", "2015-01-15"))),
                 "/fhir/ExplanationOfBenefit" => Json(Bundle()),
+                // authorization-service's prior-auth projection (G-31): the
+                // second page is empty, which is how the directory learns the
+                // first was the last.
+                "/fhir/ExplanationOfBenefit/prior-authorization" when query.Contains("patient=pat-002") && query.Contains("_page=1") =>
+                    Json(Bundle(PriorAuth("pa-PA-1", "pat-002", "2026-02-01"))),
+                "/fhir/ExplanationOfBenefit/prior-authorization" => Json(Bundle()),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound),
             };
         }
@@ -87,6 +93,9 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
 
         public static string Coverage(string id, string member, string start) =>
             "{\"resource\":{\"resourceType\":\"Coverage\",\"id\":\"" + id + "\",\"status\":\"active\",\"beneficiary\":{\"reference\":\"Patient/" + member + "\"},\"period\":{\"start\":\"" + start + "\"},\"payor\":[{\"display\":\"Plan\"}]}}";
+
+        public static string PriorAuth(string id, string member, string start) =>
+            "{\"resource\":{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"" + id + "\",\"status\":\"active\",\"use\":\"preauthorization\",\"patient\":{\"reference\":\"Patient/" + member + "\"},\"benefitPeriod\":{\"start\":\"" + start + "\"},\"outcome\":\"complete\",\"disposition\":\"Approved\",\"payment\":{\"amount\":{\"value\":100}}}}";
 
         public static string Eob(string id, string member, string start) =>
             "{\"resource\":{\"resourceType\":\"ExplanationOfBenefit\",\"id\":\"" + id + "\",\"status\":\"active\",\"patient\":{\"reference\":\"Patient/" + member + "\"},\"billablePeriod\":{\"start\":\"" + start + "\"},\"outcome\":\"complete\"}}";
@@ -116,6 +125,7 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
                 services.AddHttpClient(ChoNativeFhirDataAdapter.MemberServiceClient).ConfigurePrimaryHttpMessageHandler(() => Upstream);
                 services.AddHttpClient(ChoNativeFhirDataAdapter.CoverageServiceClient).ConfigurePrimaryHttpMessageHandler(() => Upstream);
                 services.AddHttpClient(ExplanationOfBenefitController.ClaimsServiceClientName).ConfigurePrimaryHttpMessageHandler(() => Upstream);
+                services.AddHttpClient(global::FhirService.Services.UpstreamClientNames.AuthorizationService).ConfigurePrimaryHttpMessageHandler(() => Upstream);
             });
         }
     }
@@ -164,11 +174,57 @@ public class ChoNativePayerToPayerEndpointTests : IClassFixture<ChoNativePayerTo
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var resources = await Resources(response);
         resources.Select(r => r.GetProperty("resourceType").GetString() + "/" + r.GetProperty("id").GetString())
-            .Should().Equal("Patient/pat-002", "Coverage/cov-2", "ExplanationOfBenefit/eob-new");
+            .Should().Equal("Patient/pat-002", "Coverage/cov-2", "ExplanationOfBenefit/eob-new",
+                "ExplanationOfBenefit/pa-PA-1");
         resources[0].GetProperty("birthDate").GetString().Should().Be("1962-03-22");
         resources[0].GetProperty("name")[0].GetProperty("family").GetString().Should().Be("Jones");
         resources[1].GetProperty("beneficiary").GetProperty("reference").GetString().Should().Be("Patient/pat-002");
         resources[2].GetProperty("outcome").GetString().Should().Be("complete");
+    }
+
+    [Fact]
+    public async Task Export_sends_the_members_prior_authorizations_as_authorization_service_projects_them()
+    {
+        // CMS-0057-F's Payer-to-Payer PA data (G-35), end to end: the receiving
+        // payer gets the decision and the approved period so it can honour what
+        // is already authorized, and nothing monetary goes with it.
+        var response = await Post(ExportPath, new { memberId = "pat-002" });
+
+        var priorAuth = (await Resources(response))
+            .Single(r => r.TryGetProperty("use", out var use) && use.GetString() == "preauthorization");
+
+        priorAuth.GetProperty("id").GetString().Should().Be("pa-PA-1");
+        priorAuth.GetProperty("outcome").GetString().Should().Be("complete");
+        priorAuth.GetProperty("disposition").GetString().Should().Be("Approved");
+        priorAuth.GetProperty("benefitPeriod").GetProperty("start").GetString().Should().Be("2026-02-01");
+        priorAuth.TryGetProperty("payment", out _).Should().BeFalse("the PA allowlist carries no money");
+    }
+
+    [Fact]
+    public async Task Export_reads_authorization_service_for_the_members_prior_authorizations()
+    {
+        await Post(ExportPath, new { memberId = "pat-002" });
+
+        List<(string PathAndQuery, string? Tenant, string? Authorization)> calls;
+        lock (_host.Upstream) calls = _host.Upstream.Calls.ToList();
+        calls.Should().Contain(c =>
+            c.PathAndQuery.StartsWith("/fhir/ExplanationOfBenefit/prior-authorization?patient=pat-002"));
+    }
+
+    [Fact]
+    public async Task Export_answers_502_when_the_prior_authorization_read_fails_and_sends_nothing()
+    {
+        // A partial record set is worse than none: a receiving payer that is
+        // told nothing is pending would make the member start again.
+        _host.Upstream.Override = r =>
+            r.RequestUri!.AbsolutePath == "/fhir/ExplanationOfBenefit/prior-authorization"
+                ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                : null;
+
+        var response = await Post(ExportPath, new { memberId = "pat-002" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadGateway);
+        (await response.Content.ReadAsStringAsync()).Should().NotContain("Jones");
     }
 
     [Fact]
