@@ -131,7 +131,7 @@ var fhirDataBindings = FhirDataBindings.From(
     builder.Configuration.GetSection(FhirAdapterOptions.SectionName).Get<FhirAdapterOptions>()
     ?? new FhirAdapterOptions());
 builder.Services.AddSingleton(fhirDataBindings);
-builder.Services.AddSingleton<MockFhirDataAdapter>();
+builder.Services.AddFhirSyntheticSources(fhirDataBindings, builder.Configuration, builder.Environment);
 if (fhirDataBindings.AnyNative)
 {
     void AddChoNativeClient(string name, string urlKey, string resource)
@@ -171,16 +171,6 @@ builder.Services.AddSingleton<IFhirDataAdapter>(sp => new RoutingFhirDataAdapter
     sp.GetRequiredService<MockFhirDataAdapter>(),
     sp.GetService<ChoNativeFhirDataAdapter>()));
 builder.Services.AddSingleton<FhirBundleBuilder>();
-// The Patient Access data provider is the in-memory mock (no CHO-native one
-// yet): only Development, Testing or a declared synthetic-data demo may run it.
-CloudHealthOffice.Infrastructure.Security.ChoSyntheticData.EnsureAllowed(
-    builder.Environment, builder.Configuration, "The Patient Access data provider (MockPatientAccessDataProvider)");
-builder.Services.AddSingleton<MockPatientAccessDataProvider>();
-builder.Services.AddSingleton<IPatientAccessDataProvider>(sp =>
-    sp.GetRequiredService<MockPatientAccessDataProvider>());
-// Same authoritative store also serves the CHO member directory (P2P-04 member-match).
-builder.Services.AddSingleton<FhirService.Services.IChoMemberDirectory>(sp =>
-    sp.GetRequiredService<MockPatientAccessDataProvider>());
 builder.Services.AddSingleton<ICms0057ComplianceChecker, Cms0057ComplianceChecker>();
 
 // ── Payer-to-Payer inbound respond (CMS-0057-F P2P-01) ────────────────────────
