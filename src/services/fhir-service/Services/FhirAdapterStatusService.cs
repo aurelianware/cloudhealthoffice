@@ -124,10 +124,13 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
             + "origins. Demo mode trusts the bundled smart-auth-service and fails startup outside a "
             + "development host. No customer production identity provider is connected in this "
             + "repository; see docs/architecture/idp-integration-contract.md"),
-        // Provider Access over CHO-owned data. NOT a complete capability:
-        // attribution panels come from configuration, so no live roster feed from
-        // a payer source system is wired up (engagement integration behind
-        // IProviderAttributionSource); Payer-to-Payer imported member HISTORY is
+        // Provider Access over CHO-owned data. NOT a complete capability: no
+        // live roster feed from a payer source system is wired up (engagement
+        // integration behind IProviderAttributionSource), so attribution comes
+        // from configured panels and, where a deployment enables it, from the
+        // plan's own claims history (PROV-02 — a treatment relationship the
+        // plan can evidence, which is not the same thing as a roster);
+        // Payer-to-Payer imported member HISTORY is
         // not yet projected into these reads (imported CLINICAL data is — see
         // the Clinical entry above); and no external-core (QNXT/Facets/
         // HealthEdge) Provider Access integration exists.
@@ -222,6 +225,32 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
                     resolvedSource = "MockFhirDataAdapter";
                 }
             }
+            if (resource == "ProviderAccess")
+            {
+                // Which attribution sources are live, because "attribution is
+                // enforced" means something different depending on whether the
+                // panels came from a configuration file or from the plan's own
+                // claims. Hybrid when claims history is on: the relationship is
+                // then evidenced by real records rather than declared.
+                var claimsHistory = _config.GetValue(
+                    "Cms0057:ProviderAttribution:ClaimsHistory:Enabled", false);
+                if (claimsHistory)
+                {
+                    var lookback = _config.GetValue(
+                        "Cms0057:ProviderAttribution:ClaimsHistory:LookbackMonths", 24);
+                    mode = ResolveMode(resource, FhirAdapterModes.Hybrid);
+                    resolvedSource = source
+                        + "; attribution from configured panels OR claims-service treatment history "
+                        + $"(billing or rendering NPI on a current, non-voided claim within {lookback} months), "
+                        + "composed as a disjunction and fail-closed on either source being unreadable";
+                }
+                else
+                {
+                    resolvedSource = source
+                        + "; attribution from configured panels only — no claims history and no roster feed";
+                }
+            }
+
             if (resource == "Appeal")
             {
                 var useMock = _config.GetValue("Appeals:UseMockAdapter", true);

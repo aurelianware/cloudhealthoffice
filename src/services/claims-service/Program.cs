@@ -100,6 +100,12 @@ builder.Services.AddSingleton<IClaimFhirProjector, ClaimFhirProjector>();
 builder.Services.AddSingleton<ICarinNonFinancialEobProjector, CarinNonFinancialEobProjector>();
 builder.Services.AddScoped<IClaimFhirSearchRepository, ClaimFhirSearchRepositoryMongo>();
 
+// Provider Access attribution from claims history (CMS-0057-F PROV-02): the
+// treatment-relationship question fhir-service asks before serving an
+// attributed provider. Answers a boolean over the tenant's own claims; the
+// lookback window is the caller's policy, not this service's.
+builder.Services.AddScoped<IProviderAttributionRepository, ProviderAttributionRepositoryMongo>();
+
 // 277CA acknowledgment generator
 builder.Services.AddScoped<IClaimAcknowledgmentService, ClaimAcknowledgmentService>();
 

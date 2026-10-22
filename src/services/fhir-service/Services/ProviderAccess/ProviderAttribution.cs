@@ -40,6 +40,43 @@ public sealed class ProviderAttributionOptions
 
     /// <summary>Attributed panels, keyed by tenant id.</summary>
     public Dictionary<string, List<ConfiguredProviderPanel>> PanelsByTenant { get; set; } = new();
+
+    /// <summary>
+    /// Attribution derived from the plan's own claims history. Off by default,
+    /// so enabling it is a deployment decision that shows up in configuration
+    /// review rather than something a clone starts doing silently.
+    /// </summary>
+    public ClaimsHistoryAttributionOptions ClaimsHistory { get; set; } = new();
+}
+
+/// <summary>
+/// Attribution from treatment that actually happened: the provider appears as
+/// the billing or rendering provider on one of the member's own claims inside
+/// a lookback window.
+///
+/// <para>
+/// This is what a payer with no roster file has, and it is what the rule
+/// describes — a treatment relationship, not a contract. It does not replace
+/// configured panels, because a panel can carry a relationship claims cannot
+/// show yet: a member assigned to a PCP who has not yet been seen.
+/// </para>
+/// </summary>
+public sealed class ClaimsHistoryAttributionOptions
+{
+    /// <summary>
+    /// Whether to ask claims history at all. False leaves attribution exactly
+    /// as it was, on configured panels alone.
+    /// </summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// How far back treatment counts, in months. Twenty-four is the common
+    /// payer convention and the default; a plan with a different rule sets its
+    /// own. A value of zero or less is a misconfiguration and is refused at
+    /// start-up rather than read as "no lookback", which would attribute no one
+    /// and look identical to a plan with no claims.
+    /// </summary>
+    public int LookbackMonths { get; set; } = 24;
 }
 
 /// <summary>One provider's attributed panel within a tenant.</summary>
