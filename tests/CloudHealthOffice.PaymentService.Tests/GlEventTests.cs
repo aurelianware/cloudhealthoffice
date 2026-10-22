@@ -232,6 +232,29 @@ public sealed class MongoGlOutboxStoreTests : IAsyncLifetime
     };
 
     [Fact]
+    public async Task Settlement_outbox_survives_store_recreation_and_marks_only_the_tenant_event()
+    {
+        var collection = _db.GetCollection<global::PaymentService.BankReconciliation.NachaFileSettlement>(
+            global::PaymentService.BankReconciliation.NachaSettlementStoreMongo.CollectionName);
+        await collection.InsertManyAsync(new[]
+        {
+            new global::PaymentService.BankReconciliation.NachaFileSettlement { Id = "s-a", TenantId = "t1", FileReference = "same", GlOutbox = { Message("settle-a", 1) } },
+            new global::PaymentService.BankReconciliation.NachaFileSettlement { Id = "s-b", TenantId = "t2", FileReference = "same", GlOutbox = { Message("settle-b", 2) } },
+        });
+        var first = new MongoGlOutboxStore(_db);
+        var pending = Assert.Single(await first.ListUnpublishedAsync("t1"));
+        Assert.Equal(GlOutboxSource.NachaSettlement, pending.Source);
+        var restarted = new MongoGlOutboxStore(_db);
+        Assert.Equal("settle-a", Assert.Single(await restarted.ListUnpublishedAsync("t1")).Message.EventId);
+        await restarted.MarkPublishedAsync(pending, DateTime.UtcNow);
+        Assert.Empty(await first.ListUnpublishedAsync("t1"));
+        Assert.Equal("settle-b", Assert.Single(await first.ListUnpublishedAsync("t2")).Message.EventId);
+        var saved = await collection.Find(x => x.Id == "s-a").SingleAsync();
+        Assert.Equal("same", saved.FileReference);
+        Assert.NotNull(Assert.Single(saved.GlOutbox).PublishedAt);
+    }
+
+    [Fact]
     public async Task Undelivered_events_are_listed_across_collections_and_marked_in_place()
     {
         await _db.GetCollection<PaymentRun>("PaymentRuns").InsertManyAsync(new[]

@@ -32,7 +32,7 @@ public sealed class GlEventOptions
 }
 
 /// <summary>Where an outbox event lives.</summary>
-public enum GlOutboxSource { PaymentRun, ReversalRun, PaymentFileTransmission }
+public enum GlOutboxSource { PaymentRun, ReversalRun, PaymentFileTransmission, NachaSettlement }
 
 /// <summary>An undelivered outbox event and the document holding it.</summary>
 public sealed record PendingGlEvent(GlOutboxSource Source, string DocumentId, string TenantId, PaymentFileOutboxMessage Message);
@@ -61,9 +61,11 @@ public sealed class MongoGlOutboxStore : IGlOutboxStore
     private readonly IMongoCollection<PaymentRun> _runs;
     private readonly IMongoCollection<ReversalRun> _reversals;
     private readonly IMongoCollection<PaymentFileTransmission> _transmissions;
+    private readonly IMongoCollection<PaymentService.BankReconciliation.NachaFileSettlement> _settlements;
 
     public MongoGlOutboxStore(IMongoDatabase database)
     {
+        _settlements = database.GetCollection<PaymentService.BankReconciliation.NachaFileSettlement>(PaymentService.BankReconciliation.NachaSettlementStoreMongo.CollectionName);
         _runs = database.GetCollection<PaymentRun>("PaymentRuns");
         _reversals = database.GetCollection<ReversalRun>("ReversalRuns");
         _transmissions = database.GetCollection<PaymentFileTransmission>(Repositories.PaymentFileTransmissionRepositoryMongo.CollectionName);
@@ -82,6 +84,9 @@ public sealed class MongoGlOutboxStore : IGlOutboxStore
         result.AddRange(await FindAsync(_runs, GlOutboxSource.PaymentRun, r => r.GlOutbox, nameof(PaymentRun.GlOutbox), r => r.Id, r => r.TenantId, tenantId, dueBy, limit, cancellationToken));
         result.AddRange(await FindAsync(_reversals, GlOutboxSource.ReversalRun, r => r.GlOutbox, nameof(ReversalRun.GlOutbox), r => r.Id, r => r.TenantId, tenantId, dueBy, limit, cancellationToken));
         result.AddRange(await FindAsync(_transmissions, GlOutboxSource.PaymentFileTransmission, t => t.Outbox, nameof(PaymentFileTransmission.Outbox), t => t.Id, t => t.TenantId, tenantId, dueBy, limit, cancellationToken));
+        result.AddRange(await FindAsync(_settlements, GlOutboxSource.NachaSettlement, t => t.GlOutbox,
+            nameof(PaymentService.BankReconciliation.NachaFileSettlement.GlOutbox), t => t.Id, t => t.TenantId,
+            tenantId, dueBy, limit, cancellationToken));
         return result.OrderBy(e => e.Message.CreatedAt).ThenBy(e => e.Message.EventId, StringComparer.Ordinal).Take(limit).ToList();
     }
 
@@ -152,7 +157,9 @@ public sealed class MongoGlOutboxStore : IGlOutboxStore
         {
             GlOutboxSource.PaymentRun => (_runs.Database.GetCollection<BsonDocument>(_runs.CollectionNamespace.CollectionName), nameof(PaymentRun.GlOutbox)),
             GlOutboxSource.ReversalRun => (_reversals.Database.GetCollection<BsonDocument>(_reversals.CollectionNamespace.CollectionName), nameof(ReversalRun.GlOutbox)),
-            _ => (_transmissions.Database.GetCollection<BsonDocument>(_transmissions.CollectionNamespace.CollectionName), nameof(PaymentFileTransmission.Outbox)),
+            GlOutboxSource.PaymentFileTransmission => (_transmissions.Database.GetCollection<BsonDocument>(_transmissions.CollectionNamespace.CollectionName), nameof(PaymentFileTransmission.Outbox)),
+            GlOutboxSource.NachaSettlement => (_settlements.Database.GetCollection<BsonDocument>(_settlements.CollectionNamespace.CollectionName), nameof(PaymentService.BankReconciliation.NachaFileSettlement.GlOutbox)),
+            _ => throw new InvalidOperationException("Unknown GL outbox source."),
         };
         var filter = new BsonDocument
         {

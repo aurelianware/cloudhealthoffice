@@ -34,6 +34,10 @@ public sealed class NachaFileSettlement
     public string SettledBy { get; set; } = string.Empty;
     public DateTime SettledAt { get; set; }
 
+    /// <summary>Inserted atomically with the settlement, recoverable after a crash.</summary>
+    public List<PaymentFileOutboxMessage> GlOutbox { get; set; } = new();
+    public string? GlAccountingLimitation { get; set; }
+
     public static string KeyFor(string tenantId, string fileReference) =>
         $"settle:{Uri.EscapeDataString(tenantId)}:{Uri.EscapeDataString(fileReference)}";
 }

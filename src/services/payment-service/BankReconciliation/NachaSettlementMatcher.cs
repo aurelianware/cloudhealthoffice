@@ -135,6 +135,37 @@ public sealed class NachaSettlementMatcher : IBankTransactionMatcher
             SettledAt = _clock.GetUtcNow().UtcDateTime,
         };
 
+        // Attach before the insert: a crash after persistence must not lose
+        // accounting just because subsequent matching skips settled files.
+        if (file.Status == PaymentFileTransmissionStatus.Transmitted
+            && file.TenantId == tx.TenantId && file.TotalDebitAmount == 0m
+            && file.TotalCreditAmount == tx.Amount && tx.Amount > 0m
+            && tx.Direction == Bai2Direction.Debit)
+        {
+            var type = CloudHealthOffice.Finance.Contracts.GlEventTypes.PaymentFileSettled;
+            var eventId = CloudHealthOffice.Finance.Contracts.GlEventTypes.EventIdFor(tx.TenantId,
+                "settlement:" + file.FileReference, type);
+            var payload = new CloudHealthOffice.Finance.Contracts.PaymentFileSettledEvent
+            {
+                EventId = eventId, TenantId = tx.TenantId, PaymentRunId = file.PaymentRunId,
+                FileReference = file.FileReference,
+                TransmissionEventId = PaymentService.Services.PaymentFileTransmissionService.EventIdFor(file,
+                    PaymentFileOutboxMessage.TransmittedType),
+                BankTransactionId = tx.Id, Amount = tx.Amount, BankAsOfDate = tx.AsOfDate.Date,
+                PaymentRunExecutedAt = file.RunExecutedAt, SettledBy = settledBy,
+            };
+            settlement.GlOutbox.Add(new PaymentFileOutboxMessage
+            {
+                EventId = eventId, Type = type, CreatedAt = settlement.SettledAt,
+                PayloadJson = System.Text.Json.JsonSerializer.Serialize(payload,
+                    CloudHealthOffice.Finance.Contracts.GlEventTypes.Json),
+            });
+        }
+        else
+        {
+            settlement.GlAccountingLimitation = "Automatic GL settlement supports matching bank debits for whole, transmitted, credits-only claims files only.";
+        }
+
         if (!await _settlements.TryInsertAsync(settlement, ct))
         {
             var existing = await _settlements.GetAsync(tx.TenantId, file.FileReference, ct);
