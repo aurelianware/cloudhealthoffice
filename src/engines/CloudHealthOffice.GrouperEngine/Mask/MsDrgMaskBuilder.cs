@@ -69,6 +69,38 @@ public sealed class MsDrgMaskBuilder
     private const string LeftAgainstMedicalAdvice = "AMA";
     private const string Died = "DIED";
 
+    /// <summary>
+    /// The operands this builder writes itself rather than reading off a code
+    /// table, each at the position it writes them.
+    ///
+    /// <para>
+    /// Published because it is the rest of the mask's vocabulary: an operand a
+    /// formula names is satisfiable only if some code carries it or it is one
+    /// of these, and that is how a row can be shown to be unreachable rather
+    /// than merely unmatched on one claim.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>invalid_age</c> is deliberately absent. It is one of CMS's five MCE
+    /// edit operands, but no V44 formula names it and CMS's own mask builder
+    /// writes no age operand either, so there is nothing for it to do.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<OperandName> DerivedOperands { get; } =
+    [
+        new(OperandPosition.Unqualified, OperatingRoomProcedure),
+        new(OperandPosition.Only, Incident),
+        new(OperandPosition.Unqualified, AnyDiagnosisPresent),
+        new(OperandPosition.Unqualified, Alive),
+        new(OperandPosition.Unqualified, TransferToAcuteOperand),
+        new(OperandPosition.Unqualified, LeftAgainstMedicalAdvice),
+        new(OperandPosition.Unqualified, Died),
+        new(OperandPosition.PrincipalDiagnosis, InvalidPrincipalDiagnosis),
+        new(OperandPosition.PrincipalDiagnosis, PrincipalDiagnosisIsExternalCause),
+        new(OperandPosition.Unqualified, InvalidDischargeStatus),
+        new(OperandPosition.Unqualified, InvalidSex),
+    ];
+
     /// <summary>CMS's sentinel for a sex it cannot read.</summary>
     private const int UnknownSex = -1;
 

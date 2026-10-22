@@ -41,13 +41,20 @@ public enum DrgTablePartition
 ///
 /// <para>
 /// <b>Not every row is a DRG.</b> 56 of V44's 824 rows carry DRG 0 and no
-/// partition: the <c>MDCnn</c> rows that decide which MDC a stay belongs to,
-/// and the MCE edits. They live in the same table and are ranked alongside the
-/// DRG rows, and in 14 MDCs an <c>MDCnn</c> row shares a rank with a real DRG
-/// row. That tie is harmless, because no diagnosis or procedure code in V44
-/// carries an <c>MDCnn</c> operand, so the row cannot match while a DRG is
-/// being assigned — but it is a tie, so equal ranks keep the table's own
-/// order rather than being reordered.
+/// partition, and they are of three kinds: 7 MCE edits, which refuse the
+/// claim through the return code they raise; 20 rows that reroute the stay to
+/// another MDC; and 29 that cannot match at all — 27 <c>MDCnn</c>/<c>ERRORDRG</c>
+/// rows naming an operand no code carries, plus two rows whose formulas are
+/// unsatisfiable for the same reason. Those 29 are the ones that look like MDC
+/// assignment and are not: CMS reads a stay's MDC off its principal
+/// diagnosis's own row in the code table, never from a formula.
+///
+/// <para>
+/// All 56 live in the same table and are ranked alongside the DRG rows, and in
+/// several MDCs one of them shares a rank with a real DRG row. The tie is
+/// harmless only because the row cannot match — but it is a tie, so equal
+/// ranks keep the table's own order rather than being reordered. A row that
+/// did match and assigned no DRG would end grouping with no answer.
 /// </para>
 /// </summary>
 /// <param name="Mdc">The MDC whose ranking this row belongs to.</param>

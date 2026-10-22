@@ -85,18 +85,18 @@ public sealed record MsDrgMdcEvaluation(
 ///   </description></item>
 ///   <item><description>
 ///     <b>Rank ties keep the table's order.</b> CMS sorts by rank with a
-///     stable sort, and in 14 MDCs an <c>MDCnn</c> row shares a rank with a
-///     real DRG row.
+///     stable sort, and in several MDCs a row that assigns no DRG shares a
+///     rank with a real DRG row.
 ///   </description></item>
 /// </list>
 ///
 /// <para>
-/// <b>What this does not do.</b> It takes the MDC as given. Deciding which MDC
-/// a stay belongs to — the pre-MDC rules, the <c>MDCnn</c> rows, and the
-/// re-routing that <see cref="MsDrgFormulaRow.ReRouteMdc"/> carries on 20 V44
-/// rows — is a step above this one and is not built. So this is the engine's
-/// branching logic, not yet a grouper: a caller has to know the MDC, and
-/// nothing here will tell it that the MDC it chose was the wrong one.
+/// <b>What this does not do.</b> It takes the MDC as given, and nothing here
+/// will tell a caller that the MDC it chose was the wrong one. Choosing it —
+/// the pre-MDC pass, the principal diagnosis's own MDC, and the re-routing
+/// that <see cref="MsDrgFormulaRow.ReRouteMdc"/> carries on 20 V44 rows — is
+/// <see cref="MsDrgGrouper"/>'s job, and that is the entry point a caller
+/// wants.
 /// </para>
 /// </summary>
 public static class MsDrgMdcEvaluator

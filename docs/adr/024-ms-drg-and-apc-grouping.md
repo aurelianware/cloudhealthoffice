@@ -656,10 +656,9 @@ Build order:
      a suppression list of one empty string, matching nothing — would hide
      that nothing was wrong.
    - **Rank ties keep the table's own order**, because CMS's sort is stable.
-     In 14 MDCs an `MDCnn` row shares a rank with a real DRG row. That tie is
-     harmless, and checkably so: no V44 diagnosis or procedure code carries an
-     `MDCnn` operand, so the row cannot match while a DRG is being assigned.
-     A gated test asserts exactly that against a real release.
+     In several MDCs a row that assigns no DRG shares a rank with a real DRG
+     row. That tie is harmless, and checkably so: the row cannot match at all.
+     A gated test asserts that against a real release.
 
    Severity also needed the **CC exclusion lists**, which are the mechanism
    that stops a stay being paid twice for one clinical fact. V44 lists a group
@@ -672,24 +671,79 @@ Build order:
    is not, so the severity processor takes the set as a parameter and its
    contract says a caller who cannot supply it must refuse the claim.
 
-   **A step this ADR had not separated out: MDC assignment.** 56 of the 824
-   rows assign no DRG. They are the `MDCnn` rows that decide which MDC a stay
-   belongs to, plus the MCE edits, ranked in the same table as the DRG rows.
-   Deciding the MDC — the pre-MDC rules for transplants, tracheostomy and
-   ECMO, those `MDCnn` rows, and the re-routing that `reRouteMdcId` carries on
-   20 rows — is a step above the driver and is not built. So what exists is
-   the branching logic, not yet a grouper: a caller has to know the MDC, and
-   nothing will tell it that the MDC it chose was the wrong one.
+   **MDC assignment is built, and it is not what this ADR said it was.** The
+   previous revision of this section said the MDC comes from the `MDCnn` rows
+   in the DRG logic table. It does not. Reading CMS's own chain settled it:
+   `PdxMdcGrouping` is one line — `processingData.getPrincipalDx().getMdc()`
+   — so a stay's MDC is read straight off its principal diagnosis's row in
+   the code table, and no formula is searched for it. The `MDCnn` rows are
+   vestigial: no V44 code carries an `MDCnn` operand, so they cannot match.
+
+   That matters beyond the wording, because the wrong reading would have built
+   a search where CMS has a lookup, and a search over rows that can never
+   match answers "no MDC" on every claim.
+
+   What CMS does instead is three passes over rankings, in this order, and the
+   order is the whole of it:
+
+   1. **Pre-MDC.** MDC 0's ranking runs on every stay. It holds the transplant
+      DRGs, 7 MCE edit rows, and 3 rows that route a stay out to multiple
+      trauma (24), HIV (25) or kidney transplant (11).
+   2. **The principal diagnosis's MDC** — but *only* if the pre-MDC pass
+      matched nothing. A pre-MDC match skips this pass even when it assigns no
+      DRG.
+   3. **Re-routing**, at most two hops. Not a loop: CMS looks at the reroute
+      on the second hop's match and stops.
+
+   Four details of that chain are each quiet when got wrong, and all four are
+   asserted by tests:
+
+   - An MCE edit can fire at **any** of the three passes, not just the
+     pre-MDC one: V44 carries edit rows in MDC 0, 5, 15 and 20.
+   - The **first** hop's MDC is recorded and the second's is not, and the MDC
+     CMS reports is read off the end of that list — so a two-hop stay
+     reports the first destination, not where its DRG came from. MDC 29 is a
+     shared destination and reports the MDC the stay was routed out of.
+   - A hop that matches nothing leaves the stay on a row that assigns no DRG,
+     which ends grouping with no answer rather than keeping the pre-reroute
+     DRG. CMS throws there and so does CHO.
+   - The severity reported is the **last** ranking's, not the pre-MDC pass's.
+
+   The 56 rows that assign no DRG now have a checked account of themselves: 7
+   MCE edits, 20 reroutes, and 29 that cannot match at all. The last 29 are
+   safe for a reason the table nowhere states — they name an operand nothing
+   supplies — so a gated test re-derives that from each release rather than
+   trusting it. Two of them are subtler than the `MDCnn` rows: MDC 5 rank 87 is
+   `(ANY:ami) & (ami)`, dead only because a diagnosis's lists enter the mask
+   with a position and the unprefixed half can never be satisfied, and MDC 15
+   rank 2 is the single operand `5`.
+
+   One more thing that run settled: `invalid_age`, one of CMS's five MCE edit
+   operands, appears in **no** V44 formula, and CMS's own mask builder writes
+   no age operand. So CHO's not writing one is correct rather than a hole.
+
+   **Confidence.** This step is the least evidenced part of the grouper. The
+   code-driven operands and the severity count were each built against answers
+   printed by CMS's own classes; this chain was read off `GrouperChain`,
+   `PreMdcGrouping`, `PdxMdcGrouping`, `MdcRerouteGrouping` and
+   `MsdrgDrgResults` and asserted against hand-built tables. The end-to-end
+   parity run is what will confirm the order.
 
    What is left in this stage:
 
-   - MDC assignment, as above. This is the last piece before an end-to-end
-     parity run against the oracle corpus is meaningful.
    - HAC determination, which the severity count needs to be trustworthy.
+     CMS groups **twice** — once before the HAC rules run and once after —
+     because a HAC takes a secondary diagnosis out of the severity count and
+     can therefore change the DRG. CHO runs the single pass and takes the HAC
+     codes as given, so a caller passing an empty set is claiming the stay had
+     none.
+   - The end-to-end parity run against the oracle corpus, which this step was
+     the last piece before.
 
    None of this changes the recommendation or the build order. It does mean
-   step 4 is larger than this ADR implied two commits ago, and that the CMS
-   extracted tables cannot simply be committed.
+   step 4 is larger than this ADR first implied, that one thing this ADR
+   asserted about MDC assignment was wrong, and that the CMS extracted tables
+   cannot simply be committed.
 5. `IppsPaymentCalculator`: wage index, labor/non-labor split, IME, DSH,
    outlier, transfer and post-acute transfer policy; plus the
    provider-specific-file home the data model is missing.

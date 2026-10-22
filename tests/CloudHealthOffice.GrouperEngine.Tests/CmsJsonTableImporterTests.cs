@@ -1,6 +1,8 @@
 using System.Text.Json;
 using CloudHealthOffice.GrouperEngine.Data;
 using CloudHealthOffice.GrouperEngine.Domain;
+using CloudHealthOffice.GrouperEngine.Formulas;
+using CloudHealthOffice.GrouperEngine.Grouping;
 using CloudHealthOffice.GrouperEngine.Mask;
 using Xunit;
 
@@ -352,10 +354,11 @@ public class CmsJsonTableImporterTests : IDisposable
             Assert.Equal(ranks.Order(), ranks);
         }
 
-        // The rows that assign no DRG are CMS's MDC-assignment rows and MCE
-        // edits. In several MDCs one of them shares a rank with a real DRG
-        // row, which is only harmless because no code carries an MDCnn
-        // operand -- so the row cannot match while a DRG is being assigned.
+        // The rows that assign no DRG are the MCE edits, the rows that reroute
+        // a stay to another MDC, and a set that cannot match at all -- the
+        // MDCnn rows among them. In several MDCs one of those shares a rank
+        // with a real DRG row, which is only harmless because no code carries
+        // an MDCnn operand.
         var mdcOperands = formulas.Mdcs
             .SelectMany(formulas.ForMdc)
             .Where(row => !row.AssignsDrg)
@@ -372,6 +375,137 @@ public class CmsJsonTableImporterTests : IDisposable
             .ToList();
 
         Assert.Empty(carried);
+    }
+
+    /// <summary>
+    /// Every row in a real release that assigns no DRG is accounted for: it
+    /// raises an MCE return code, it reroutes the stay to another MDC, or it
+    /// cannot match at all.
+    ///
+    /// <para>
+    /// Skipped unless <c>CMS_MSDRG_TABLES</c> names a directory. This is the
+    /// check that matters most about those rows, because a row that matches
+    /// and assigns no DRG ends grouping with no answer: CMS throws, and so
+    /// does <see cref="MsDrgGrouper"/>. V44 has 56 of them and all 56 are safe
+    /// -- but only for three different reasons, and the third one is a
+    /// coincidence of the operand vocabulary rather than anything the table
+    /// states.
+    /// </para>
+    ///
+    /// <para>
+    /// A row is shown to be unmatchable here by naming an operand nothing can
+    /// supply: not a special logic list, not carried by any diagnosis at the
+    /// position the formula asks for, not carried by any procedure, and not
+    /// one of the operands the mask builder writes itself. That argument needs
+    /// the formula to be a plain conjunction -- an <c>|</c> or a <c>~</c>
+    /// would break it -- so that is asserted rather than assumed.
+    /// </para>
+    /// </summary>
+    [SkippableFact]
+    public void A_real_releases_rows_that_assign_no_drg_are_all_accounted_for()
+    {
+        var tables = Environment.GetEnvironmentVariable("CMS_MSDRG_TABLES");
+        Skip.If(
+            string.IsNullOrWhiteSpace(tables),
+            "Set CMS_MSDRG_TABLES to a CMS MS-DRG release's table directory to run this.");
+
+        var version = Environment.GetEnvironmentVariable("CMS_MSDRG_VERSION") ?? "V440";
+        var formulas = CmsJsonTableImporter.ImportFormulas(tables!, version);
+        var codes = CmsJsonTableImporter.Import(tables!, version);
+
+        var noDrg = formulas.Mdcs
+            .SelectMany(formulas.ForMdc)
+            .Where(row => !row.AssignsDrg)
+            .ToList();
+
+        Assert.NotEmpty(noDrg);
+
+        var edits = new List<MsDrgFormulaRow>();
+        var reroutes = new List<MsDrgFormulaRow>();
+        var unmatchable = new List<MsDrgFormulaRow>();
+        var unaccounted = new List<MsDrgFormulaRow>();
+
+        foreach (var row in noDrg)
+        {
+            var tokens = DrgFormulaLexer.Tokenize(row.FormulaText);
+
+            var raisesReturnCode = tokens
+                .Where(token => token.Kind == DrgFormulaTokenKind.Operand)
+                .Any(token =>
+                    SpecialLogicList.TryResolve(
+                        OperandName.Parse(token.Text).ListName, out var list)
+                    && list.Kind == SpecialLogicKind.GrouperReturnCode);
+
+            if (raisesReturnCode)
+            {
+                edits.Add(row);
+            }
+            else if (row.ReRouteMdc != 0)
+            {
+                reroutes.Add(row);
+            }
+            else if (CannotMatch(tokens, codes))
+            {
+                unmatchable.Add(row);
+            }
+            else
+            {
+                unaccounted.Add(row);
+            }
+        }
+
+        Assert.Empty(unaccounted);
+        Assert.NotEmpty(edits);
+        Assert.NotEmpty(reroutes);
+        Assert.NotEmpty(unmatchable);
+        Assert.Equal(noDrg.Count, edits.Count + reroutes.Count + unmatchable.Count);
+    }
+
+    /// <summary>
+    /// Whether a plain conjunction of operands can never be satisfied, because
+    /// one of its operands is in nothing that writes the mask.
+    /// </summary>
+    private static bool CannotMatch(
+        IReadOnlyList<DrgFormulaToken> tokens, ImportedCodeTables codes)
+    {
+        // Only a conjunction. An alternation could be satisfied through its
+        // other branch, and a negation is satisfied by absence.
+        if (tokens.Any(token =>
+                token.Kind is DrgFormulaTokenKind.Or or DrgFormulaTokenKind.Not))
+        {
+            return false;
+        }
+
+        foreach (var token in tokens.Where(
+            token => token.Kind == DrgFormulaTokenKind.Operand))
+        {
+            var operand = OperandName.Parse(token.Text);
+
+            if (SpecialLogicList.TryResolve(operand.ListName, out _))
+            {
+                continue;
+            }
+
+            if (MsDrgMaskBuilder.DerivedOperands.Any(derived =>
+                    string.Equals(
+                        derived.ListName, operand.ListName, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            // A diagnosis's lists only ever enter the mask with a position; a
+            // procedure's only ever without one.
+            var supplied = operand.Position == OperandPosition.Unqualified
+                ? codes.CarriesProcedureOperand(operand.ListName)
+                : codes.CarriesDiagnosisOperand(operand.ListName);
+
+            if (!supplied)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
