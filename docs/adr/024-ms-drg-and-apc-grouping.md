@@ -451,7 +451,8 @@ Build order:
    back `grc=OK` — the edit lives in the formula logic and the gender tables
    (`codeGenderMdcs`), not in a demographic pre-check. So CHO's
    `GroupingStatus.DemographicConflict` is modelled in the wrong place and
-   should come out of the formula evaluation instead.
+   should come out of the formula evaluation instead. The mask builder now does
+   exactly that.
 
    **How the default operand actually evaluates**, since the correction above
    could be read as casting doubt on it: it is mask membership, and the first
@@ -483,27 +484,58 @@ Build order:
    of `MsDrgGroupingResult`: the DRG alone never says which diagnosis or
    procedure earned it, and that is what an appeal turns on.
 
+   **The mask is now built**, in `GrouperEngine/Mask/`, as a port of CMS's own
+   `MsdrgMaskBuilder` read from the V440 sources rather than inferred from
+   behaviour. Three things in it were not what a reasonable design would have
+   guessed, and each would have been a wrong DRG rather than an error:
+
+   - **An unprefixed operand does not reach a diagnosis at all.** CMS attaches
+     `PDX:` to the principal diagnosis's operands, `SDX:` to each secondary's,
+     and no prefix to procedures. Its matching rule then has exactly one
+     special case: `ANY:` on either side matches `PDX:` or `SDX:` on the other.
+     So a bare operand in a formula is a procedure or claim-level test, which
+     is why 196 of the 452 operands carry a prefix — the diagnosis lists cannot
+     be reached without one.
+
+   - **The mask cannot be a set.** Because `ANY:x` matches `PDX:x` and `ANY:x`
+     matches `SDX:x` while `PDX:x` does not match `SDX:x`, the matching
+     relation is not transitive, and a non-transitive relation cannot be
+     hash-code equality. CMS reaches the same conclusion by construction: its
+     mask is an `ArrayList` and every lookup is a linear scan. CHO's
+     `AttributeMask` is the same, with a test that fails if someone
+     "optimises" it into a `HashSet`.
+
+   - **Several operands are claim-level and derived, not looked up.** `ORPROC`
+     is computed per procedure from membership of `d477` or `d468`. `ALIVE` is
+     the *absence* of a death, so an unreadable discharge status is alive and
+     invalid, not dead. `XFRNBA` marks six specific statuses. `ONLY:incident`
+     is the one operand meaning "all of them". And `INVALID_SEX` turns out to
+     fire only when the sex is *unknown* against a sex-specific principal
+     diagnosis — a stated sex the code does not allow is still a conflict, but
+     CMS falls the MDC back to the code's female entry and groups the stay. A
+     claim that contradicts itself and one that is merely incomplete are
+     treated differently, and only the second is ungroupable.
+
+   Because the tables are CMS table data and cannot be vendored, the engine
+   depends on an `IMsDrgCodeAttributeSource` interface and the tables are
+   imported at run time from a release the operator licences. Unknown codes are
+   reported out of the build rather than swallowed, which is the mechanism the
+   parity run said step 4 needed.
+
    What is left:
 
-   - building the mask from `dxPatterns`, `prPatterns`, `codeToClusterIds` and
-     `clusters`, honouring the position prefix;
+   - the runtime importer for `diagnoses`, `procedures`, `dxPatterns` and
+     `prPatterns` behind that interface;
+   - procedure **clusters**: CMS resolves combinations of codes into a
+     synthetic procedure and suppresses the individual codes' operands in
+     named MDCs, which the mask builder declares as its one remaining gap;
    - the dozen special-logic operand nodes, counting nodes included;
    - driving the ranked formula lists per MDC — 824 formulas for V44 — with
-     `reRouteMdcId` (20 formulas) and `severitySuppressionOperand` (56);
-   - the unknown-code decision forced by the parity run: CHO must distinguish
-     "not a complication" from "not in my table set", and refuse rather than
-     guess.
+     `reRouteMdcId` (20 formulas) and `severitySuppressionOperand` (56).
 
    None of this changes the recommendation or the build order. It does mean
-   step 4 is larger than this ADR implied a commit ago, and that the CMS
-   extracted tables cannot simply be committed — they are CMS table data, so
-   they have to be imported at runtime rather than vendored.
-
-   A port of CMS's expression evaluator over the
-   extracted attribute tables and ranked formula lists, with the surgical
-   hierarchy, MDC re-routing, severity suppression and the MCE edits falling
-   out of the data rather than being modelled by hand (see above). Grown
-   against the parity corpus from step 3, not against the seed slice.
+   step 4 is larger than this ADR implied two commits ago, and that the CMS
+   extracted tables cannot simply be committed.
 5. `IppsPaymentCalculator`: wage index, labor/non-labor split, IME, DSH,
    outlier, transfer and post-acute transfer policy; plus the
    provider-specific-file home the data model is missing.

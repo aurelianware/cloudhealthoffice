@@ -4,25 +4,51 @@ namespace CloudHealthOffice.GrouperEngine.Formulas;
 /// A parsed DRG logic formula: a boolean expression over operand names.
 ///
 /// <para>
-/// Evaluation takes the set of operand names a stay satisfies and answers true
-/// or false. That is the whole of MS-DRG's branching logic — CMS's own
-/// evaluator does exactly this, with each operand name resolved by
-/// <c>Collection.contains</c> against the stay's satisfied operands. The work
-/// of deciding <i>which</i> operands a stay satisfies belongs to the code
-/// attribute tables, not here.
+/// Evaluation takes the operands a stay satisfies and answers true or false.
+/// That is the whole of MS-DRG's branching logic — CMS's own evaluator does
+/// exactly this, with each operand resolved by a lookup against the stay's
+/// mask. Deciding <i>which</i> operands a stay satisfies is the mask's job,
+/// not this type's; see <see cref="AttributeMask"/>.
+/// </para>
+///
+/// <para>
+/// There are two evaluation entry points, and the difference matters. The
+/// <see cref="IAttributeMask"/> overload is the real one: an operand is
+/// matched by list name <i>and</i> position prefix, with CMS's <c>ANY:</c>
+/// special case. The <see cref="IReadOnlySet{T}"/> overload compares the
+/// operand's literal text instead, which is a convenience for tests and for
+/// reasoning about a formula's shape — it is not how a claim is grouped.
 /// </para>
 /// </summary>
 public abstract record DrgFormulaExpression
 {
+    /// <summary>Evaluates the expression against a stay's mask.</summary>
+    public bool Evaluate(IAttributeMask mask) => Evaluate(mask, null);
+
     /// <summary>
-    /// Evaluates the expression against the operand names a stay satisfies.
+    /// Evaluates the expression against a stay's mask, recording into
+    /// <paramref name="matched"/> every operand that tested true.
+    /// </summary>
+    /// <param name="mask">The operands this stay satisfies.</param>
+    /// <param name="matched">
+    /// Collects the operands that tested true, in evaluation order. May be
+    /// <see langword="null"/> when the caller only wants the answer. See the
+    /// remarks on the literal-text overload for what the record does and does
+    /// not contain.
+    /// </param>
+    public abstract bool Evaluate(IAttributeMask mask, ICollection<string>? matched);
+
+    /// <summary>
+    /// Evaluates the expression by comparing each operand's literal text
+    /// against <paramref name="satisfiedOperands"/>, prefixes included as
+    /// written.
     /// </summary>
     public bool Evaluate(IReadOnlySet<string> satisfiedOperands) =>
         Evaluate(satisfiedOperands, null);
 
     /// <summary>
-    /// Evaluates the expression, recording into <paramref name="matched"/> every
-    /// operand that tested true.
+    /// Evaluates the expression by literal operand text, recording into
+    /// <paramref name="matched"/> every operand that tested true.
     ///
     /// <para>
     /// This is how a grouping decision becomes explainable: the DRG alone does
@@ -58,7 +84,9 @@ public abstract record DrgFormulaExpression
     ///   </item>
     /// </list>
     /// </summary>
-    /// <param name="satisfiedOperands">The operands this stay satisfies.</param>
+    /// <param name="satisfiedOperands">
+    /// The operand text this stay satisfies, prefixes included as written.
+    /// </param>
     /// <param name="matched">
     /// Collects the operands that tested true, in evaluation order. May be
     /// <see langword="null"/> when the caller only wants the answer.
@@ -78,10 +106,33 @@ public abstract record DrgFormulaExpression
     /// <param name="Name">The operand name, as CMS spells it.</param>
     public sealed record Operand(string Name) : DrgFormulaExpression
     {
+        /// <summary>
+        /// The operand split into its position prefix and list name. Parsed
+        /// once, here, rather than on every evaluation: a single stay is tested
+        /// against hundreds of formulas.
+        /// </summary>
+        public OperandName Parsed { get; } = OperandName.Parse(Name);
+
+        /// <inheritdoc/>
+        public override bool Evaluate(IAttributeMask mask, ICollection<string>? matched)
+        {
+            ArgumentNullException.ThrowIfNull(mask);
+
+            if (!mask.Contains(Parsed))
+            {
+                return false;
+            }
+
+            matched?.Add(Name);
+            return true;
+        }
+
         /// <inheritdoc/>
         public override bool Evaluate(
             IReadOnlySet<string> satisfiedOperands, ICollection<string>? matched)
         {
+            ArgumentNullException.ThrowIfNull(satisfiedOperands);
+
             if (!satisfiedOperands.Contains(Name))
             {
                 return false;
@@ -100,6 +151,10 @@ public abstract record DrgFormulaExpression
         : DrgFormulaExpression
     {
         /// <inheritdoc/>
+        public override bool Evaluate(IAttributeMask mask, ICollection<string>? matched) =>
+            Left.Evaluate(mask, matched) && Right.Evaluate(mask, matched);
+
+        /// <inheritdoc/>
         public override bool Evaluate(
             IReadOnlySet<string> satisfiedOperands, ICollection<string>? matched) =>
             Left.Evaluate(satisfiedOperands, matched)
@@ -114,6 +169,10 @@ public abstract record DrgFormulaExpression
         : DrgFormulaExpression
     {
         /// <inheritdoc/>
+        public override bool Evaluate(IAttributeMask mask, ICollection<string>? matched) =>
+            Left.Evaluate(mask, matched) || Right.Evaluate(mask, matched);
+
+        /// <inheritdoc/>
         public override bool Evaluate(
             IReadOnlySet<string> satisfiedOperands, ICollection<string>? matched) =>
             Left.Evaluate(satisfiedOperands, matched)
@@ -126,6 +185,10 @@ public abstract record DrgFormulaExpression
     /// <summary>Logical NOT.</summary>
     public sealed record Not(DrgFormulaExpression Inner) : DrgFormulaExpression
     {
+        /// <inheritdoc/>
+        public override bool Evaluate(IAttributeMask mask, ICollection<string>? matched) =>
+            !Inner.Evaluate(mask, matched);
+
         /// <inheritdoc/>
         public override bool Evaluate(
             IReadOnlySet<string> satisfiedOperands, ICollection<string>? matched) =>
