@@ -40,6 +40,14 @@ public enum PinKind
 
     /// <summary>A bare upstream commit SHA.</summary>
     Commit,
+
+    /// <summary>
+    /// A file attached to an upstream release, pinned by its SHA-256. Used for a
+    /// conformance tool the harness runs as a local command rather than starts as
+    /// a service — the HL7 validator jar, for one. A release asset can be
+    /// replaced in place, so the tag alone would not be a pin; the hash is.
+    /// </summary>
+    ReleaseAsset,
 }
 
 /// <summary>The exact, reproducible upstream version an external target is pinned to.</summary>
@@ -53,6 +61,8 @@ public sealed record ExternalPin
     [JsonPropertyName("reference")] public string Reference { get; init; } = "";
 
     [JsonPropertyName("tag")] public string? Tag { get; init; }
+    [JsonPropertyName("asset")] public string? Asset { get; init; }
+    [JsonPropertyName("sha256")] public string? Sha256 { get; init; }
     [JsonPropertyName("commit")] public string? Commit { get; init; }
     [JsonPropertyName("sourceCommit")] public string? SourceCommit { get; init; }
     [JsonPropertyName("sourceCommitProvenance")] public string? SourceCommitProvenance { get; init; }
@@ -64,6 +74,7 @@ public sealed record ExternalPin
         "imageDigest" => PinKind.ImageDigest,
         "releaseTag" => PinKind.ReleaseTag,
         "commit" => PinKind.Commit,
+        "releaseAsset" => PinKind.ReleaseAsset,
         _ => throw new InvalidOperationException($"Unknown pin kind '{Kind}'."),
     };
 
@@ -78,11 +89,18 @@ public sealed record ExternalPin
                                && Reference.Contains('@'),
         PinKind.ReleaseTag => !string.IsNullOrWhiteSpace(Tag) && IsSha(Commit),
         PinKind.Commit => IsSha(Commit),
+        // The tag is not what makes this reproducible — a release asset can be
+        // replaced in place. The hash is, and whatever runs the tool must refuse
+        // a file that does not match it.
+        PinKind.ReleaseAsset => !string.IsNullOrWhiteSpace(Asset) && IsSha256(Sha256),
         _ => false,
     };
 
     private static bool IsSha(string? value) =>
         value is { Length: 40 } && value.All(Uri.IsHexDigit);
+
+    private static bool IsSha256(string? value) =>
+        value is { Length: 64 } && value.All(Uri.IsHexDigit);
 }
 
 /// <summary>Compose placement for an external target.</summary>

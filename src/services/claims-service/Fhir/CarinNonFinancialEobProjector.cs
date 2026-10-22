@@ -82,8 +82,6 @@ public sealed class CarinNonFinancialEobProjector : ICarinNonFinancialEobProject
     private const string Icd10CmSystem = "http://hl7.org/fhir/sid/icd-10-cm";
     private const string Cpt4System = "http://www.ama-assn.org/go/cpt";
     private const string NpiSystem = "http://hl7.org/fhir/sid/us-npi";
-    private const string PlaceOfServiceSystem =
-        "https://www.cms.gov/Medicare/Coding/place-of-service-codes/Place_of_Service_Code_Set";
     private const string RevenueCodeSystem = "https://www.nubc.org/CodeSystem/RevenueCodes";
     private const string TypeOfBillSystem = "https://www.nubc.org/CodeSystem/TypeOfBill";
 
@@ -485,7 +483,7 @@ public sealed class CarinNonFinancialEobProjector : ICarinNonFinancialEobProject
             {
                 var placeOfService = line.PlaceOfServiceCode ?? claim.PlaceOfServiceCode;
                 if (!string.IsNullOrWhiteSpace(placeOfService))
-                    item["locationCodeableConcept"] = Concept(PlaceOfServiceSystem, placeOfService, null);
+                    item["locationCodeableConcept"] = Concept(ClaimFhirProjector.PlaceOfServiceSystem, placeOfService, null);
             }
 
             if (line.Units > 0)
