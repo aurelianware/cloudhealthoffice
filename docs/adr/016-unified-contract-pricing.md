@@ -4,7 +4,12 @@
 
 Accepted. Phase 1 (one engine) is implemented. The engine's facility rule now
 follows the CMS site-of-service list (section 5; the facility rule risk is fixed).
-Phases 2 to 5 (one contract model) are planned for later PRs.
+Phase 2's engine half is implemented: the canonical contract carries
+`ReimbursementTerms[]` and the engine evaluates them, with the legacy
+`FeeScheduleId` + `ContractLines` path unchanged for a contract that has no
+terms. Phase 2's service half (one contract writer: fold `ffs-service` into
+provider-contracts-service, and give the pricing contract an admin API) and
+phases 3 to 5 are planned for later PRs.
 
 ## Context
 
@@ -213,15 +218,46 @@ implemented, rather than silently ignoring them.
 
 **Phase 2: canonical schema, no behaviour change.**
 
-- Add `ReimbursementTerms[]` and the contract identity fields to the engine's
-  `ProviderContract` (additive; `[BsonIgnoreExtraElements]`).
-- The engine evaluates terms when present, and otherwise uses
-  `FeeScheduleId` + `ContractLines` exactly as today. Existing engine tests
-  must pass unchanged, and new tests prove that a term-shaped contract and its
-  legacy equivalent price identically.
-- Give ffs-service its API, or fold it into provider-contracts-service: FFS
-  terms become `reimbursementTerms` edited on the contract. Prefer the fold,
-  because a rate config never exists without its contract.
+- **Done.** `ReimbursementTerms[]` and the contract identity fields
+  (`LegalContractId`, `ContractNumber`, `LineOfBusiness`, `PlanIds`, `Origin`)
+  are on the engine's `ProviderContract`, additive and
+  `[BsonIgnoreExtraElements]`.
+- **Done.** The engine evaluates terms when present, and otherwise uses
+  `FeeScheduleId` + `ContractLines` exactly as today. `ReimbursementTermPricingTests`
+  prices the same claim through a term-shaped contract and the legacy contract
+  it was built from and asserts every field the 835 and the benefit engine read
+  is identical — allowed amount, base amount, rate source, schedule, per-stay
+  flag, lesser-of flag and the ordered adjustment list.
+
+  How a term is evaluated: the first term whose scope (procedure-code range,
+  revenue codes, places of service, claim type) covers the line and whose
+  effective dates cover the service date wins. A term's multiplier scales the
+  rate the schedule produced, before modifiers, units, the multiple procedure
+  reduction and lesser-of, so a multiplier of 1.0 — every legacy contract —
+  changes nothing. `PercentOfBilled` and `Capitation` read no schedule at all.
+  The term's `modifierRules` can turn the multiple procedure reduction or the
+  bilateral adjustment off, and its `lesserOfBilled` overrides the contract's
+  setting.
+
+  Three things fail closed, so a contract the engine cannot honour pends the
+  claim rather than paying something the contract does not say: a term carrying
+  a stop-loss or cost outlier provision (stored, not evaluated), a term missing
+  the field its method needs or naming a method this build does not implement,
+  and a term naming a fee schedule the tenant does not have — that last one
+  does **not** fall back to the plan default, which a legacy contract naming a
+  missing schedule still does. A term whose method disagrees with the type of
+  the schedule it names (a case rate pointing at an MPFS schedule) prices from
+  the schedule and carries a warning: the amount is not in doubt, the contract
+  load is.
+
+  Service category is in the target model's term scope but not in phase 2: the
+  engine's `PricingRequest` carries no service category, and a condition nothing
+  populates would silently never match. It lands with the field.
+
+- **Open.** Give ffs-service its API, or fold it into
+  provider-contracts-service: FFS terms become `reimbursementTerms` edited on
+  the contract. Prefer the fold, because a rate config never exists without its
+  contract. The pricing contract still has no admin API.
 
 **Phase 3: backfill.**
 
@@ -379,6 +415,8 @@ BenefitEngine and claims-service have no facility-rate POS list
 - `src/services/benefit-plan-service/Controllers/AdjudicationController.cs` (`resolve-rates`)
 - `src/services/provider-contracts-service/Models/ProviderContract.cs`
 - `src/services/ffs-service/Models/FfsRateConfig.cs`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Models/ReimbursementTerms.cs`
 - `tests/CloudHealthOffice.PricingApi.Tests/UnifiedPricingParityTests.cs`
 - `tests/CloudHealthOffice.FeeScheduleEngine.Tests/ContractTermsTests.cs`
+- `tests/CloudHealthOffice.FeeScheduleEngine.Tests/ReimbursementTermPricingTests.cs`
 - [ADR 006: Persistence boundaries](006-persistence-boundaries.md)
