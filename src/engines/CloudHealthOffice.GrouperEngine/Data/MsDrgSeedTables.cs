@@ -11,9 +11,12 @@ namespace CloudHealthOffice.GrouperEngine.Data;
 /// <b>This is not the CMS table set.</b> It covers four families out of about
 /// 330 and a few dozen codes out of about 74,000, and it exists so the
 /// grouping logic can be exercised end to end before the definitions-manual
-/// importer lands (ADR 024 §5 step 2). The DRG numbers, titles, MDCs and
-/// severity splits in it are real; the CC exclusion row is illustrative and
-/// is marked as such. Nothing here may be used to pay a claim — a tenant with
+/// importer lands (ADR 024 §5 step 2). The DRG numbers, titles, MDCs, severity
+/// splits, complication levels and the one CC exclusion row are all real, and
+/// since the parity oracle landed they are checked against CMS's own grouper
+/// rather than taken from a reading of the definitions manual — which is how
+/// two wrong complication levels in this file were found and corrected.
+/// Nothing here may be used to pay a claim — a tenant with
 /// no imported CMS version must group to
 /// <see cref="GroupingStatus.NoTablesForDischargeDate"/> rather than fall back
 /// to this.
@@ -103,12 +106,12 @@ public static class MsDrgSeedTables
             new("J9600", ComplicationLevel.Mcc),  // Acute respiratory failure, unspecified
             new("J9601", ComplicationLevel.Mcc),  // Acute respiratory failure with hypoxia
             new("N170", ComplicationLevel.Mcc),   // Acute kidney failure with tubular necrosis
+            new("J181", ComplicationLevel.Mcc),   // Lobar pneumonia, unspecified organism
+            new("L89314", ComplicationLevel.Mcc), // Pressure ulcer of right buttock, stage 4
 
             // CCs.
             new("N179", ComplicationLevel.Cc),    // Acute kidney failure, unspecified
-            new("E1165", ComplicationLevel.Cc),   // Type 2 diabetes with hyperglycaemia
             new("D62", ComplicationLevel.Cc),     // Acute post-haemorrhagic anaemia
-            new("J181", ComplicationLevel.Cc),    // Lobar pneumonia, unspecified organism
         };
 
         var ccExclusions = new List<CcExclusion>

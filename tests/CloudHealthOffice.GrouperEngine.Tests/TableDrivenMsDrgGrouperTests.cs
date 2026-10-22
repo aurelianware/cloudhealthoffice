@@ -216,8 +216,15 @@ public class TableDrivenMsDrgGrouperTests
     //  CC exclusions and hospital-acquired conditions
     // ─────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// J181 is an MCC, and it is on the exclusion list for J189 because a
+    /// second pneumonia does not complicate a pneumonia. Its level is asserted
+    /// as MCC on the CMS grouper's authority: the parity oracle reports it as
+    /// <c>MCC_EXCLUDED</c> for this exact stay (corpus row
+    /// <c>pneumonia-excluded-cc</c>).
+    /// </summary>
     [Fact]
-    public async Task A_cc_excluded_by_the_principal_diagnosis_does_not_count_and_is_recorded()
+    public async Task A_complication_excluded_by_the_principal_diagnosis_does_not_count_and_is_recorded()
     {
         var result = await Grouper().GroupAsync(new MsDrgGroupingRequest
         {
@@ -230,7 +237,7 @@ public class TableDrivenMsDrgGrouperTests
         Assert.Equal(ComplicationLevel.None, result.ComplicationLevel);
         var excluded = Assert.Single(result.ExcludedComplications);
         Assert.Equal("J181", excluded.Code);
-        Assert.Equal(ComplicationLevel.Cc, excluded.Level);
+        Assert.Equal(ComplicationLevel.Mcc, excluded.Level);
         Assert.Contains("CC exclusion", excluded.Reason);
     }
 

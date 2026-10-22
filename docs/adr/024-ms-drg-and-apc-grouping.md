@@ -149,16 +149,44 @@ The full set to run the grouper is therefore:
 | Dependency | Version | Where from |
 | --- | --- | --- |
 | `msdrg-core`, `msdrg-model-v2`, `msdrg-binary-access` | 44.0.0.3 / 2.12.2 / 1.6.4 | the CMS Java jars download |
-| `gfc-base-api` (`com.mmm.his.cer.gfc.gfc-api`) | 3.4.9 | the Solventum repo above, built from source with Maven |
+| `gfc-base-api` (`com.mmm.his.cer.gfc.gfc-api`) | 3.4.9 | **not needed — see below** |
 | `protobuf-java` | 3.25.5 | Maven Central |
 | `slf4j-api` | 1.7.36 | Maven Central |
 
 plus a Java 17 or newer runtime. The guide also documents the calling sequence
 (`MsdrgRuntimeOption` → `RuntimeOptions` → `MsdrgInput.builder()` →
 `MsdrgComponent.process(claim)` → `claim.getOutput()`), so the oracle harness is
-a known quantity rather than reverse engineering. The one piece of plumbing left
-is that `gfc-base-api` has no published binary, so the parity job has to build it
-from source — ordinary CI work, not a research problem.
+a known quantity rather than reverse engineering.
+
+#### The foundation library turned out not to be needed at all
+
+`gfc-base-api` has no published binary — a search of Maven Central for
+`gfc-base-api` returns nothing — so the plan was for the parity job to build it
+from the Solventum source. It does not have to. The CMS jars reference exactly
+five types from that library, and the required member set is readable straight
+out of their bytecode constant pools:
+
+| Type | What the jars actually use |
+| --- | --- |
+| `GfcPoa` | the constants `Y N U W E ONE BLANK INVALID`, and `toString()` |
+| `ComponentRuntime` | the no-arg constructor, then `Map.get` and `Map.containsKey` |
+| `Claim` | the no-arg constructor |
+| `FoundationException` | `(String)` and `(String, Throwable)` |
+| `FoundationRuntimeException` | `(String)` |
+
+plus `Processable`, `ComponentName`, `ComponentPackage`, `ComponentVersion` and
+`IClaim`, which appear only in signatures. `tools/cms-grouper-parity-oracle/`
+implements that much and nothing more, and the grouper runs.
+
+A shim in an oracle would normally be unacceptable, because an oracle whose own
+code decides anything is worthless. This one decides nothing, and that is
+checkable rather than asserted: there is no `Class.forName` anywhere in the
+jars, so no code path is selected by this code; `ComponentRuntime` is read only
+through `Map` methods, so a `HashMap` subclass reproduces it entirely; and
+`GfcPoa.toString()` is called from one place, `TraceUtility`, which writes trace
+text and never reaches grouping. Every grouping decision stays in CMS's
+compiled classes driven by CMS's own table buffer, and a shim wrong in any way
+that mattered would fail to link rather than group quietly to a wrong answer.
 
 The corpus still moves to the front of the build order below, for the second
 reason given there: the evaluator is much easier to write against a corpus that
@@ -344,15 +372,42 @@ Build order:
    CMS jars and cross-check them against the Appendix files, not the reverse
    (see above). Include the ICD-10 forward-mapping tables, so an old stay can
    be re-grouped under a current version.
-3. **Stand the CMS parity oracle up now, not last.** This was step 7 until the
-   jars were opened. The whole case for building rather than buying rests on
-   being able to say we agree with CMS, so the harness that proves it should
-   exist before the thing it judges, not after — and the dependency set for it
-   is now known (see above), so this is a CI job to write rather than a
-   question to answer. It also
-   pays for itself immediately: the evaluator in step 4 is far easier to write
-   against a corpus that can answer "what does CMS say for this stay?" on
-   demand than against a hand-built expectation.
+3. **Stand the CMS parity oracle up now, not last.** ✅ **Done**, in
+   `tools/cms-grouper-parity-oracle/`. CMS's V44 grouper runs over a 34-stay
+   invented corpus and its answers are committed, so the .NET test
+   `CmsParityTests` holds CHO to them on every build without the licensed jars
+   being present.
+
+   This was step 7 until the jars were opened. The whole case for building
+   rather than buying rests on being able to say we agree with CMS, so the
+   harness that proves it should exist before the thing it judges, not after.
+   It paid for itself on its first run, before a line of the real grouper was
+   written, by correcting five things that had been written down as fact on a
+   reading of the definitions manual:
+
+   - **Two complication levels in the seed slice were wrong.** `J181` is an
+     MCC, not a CC; `E1165` is neither. Both are now fixed, and one unit test
+     that asserted the wrong level with it.
+   - **An unrecognised secondary diagnosis or procedure is not an error.** The
+     claim groups anyway and the code is reported as `NEITHER`. Only an
+     unrecognised *principal* diagnosis returns `INVALID_PDX`.
+   - **`J9600` is acceptable as a principal diagnosis** and groups to 189.
+   - **The sex edit did not fire.** `N400` on a female stay groups to 726 with
+     `grc=OK`, exactly as on a male stay. Until that is explained, CHO must not
+     produce the `DemographicConflict` status it currently declares. Open
+     question for step 4.
+   - **A partial table set must refuse to group, not guess.** Four corpus rows
+     had CHO reaching a confident *wrong* DRG, every one because its 40-code
+     seed slice cannot tell "this code is genuinely not a complication" from
+     "this code is not in my slice" — so it guesses, and guesses low. A wrong
+     DRG is worse than no DRG. Step 4 must make unknown-code handling explicit
+     rather than inheriting a default of "not a complication".
+
+   The oracle also reports more than the DRG: the return code, HAC status and
+   per-code severity usage (`CC`, `MCC`, `NEITHER`, `MCC_EXCLUDED`). Two
+   groupers can agree on the DRG while disagreeing about which code earned the
+   severity, and a harness comparing only the DRG calls that a pass and breaks
+   on the next claim.
 4. The MS-DRG grouper proper: a port of CMS's expression evaluator over the
    extracted attribute tables and ranked formula lists, with the surgical
    hierarchy, MDC re-routing, severity suppression and the MCE edits falling
