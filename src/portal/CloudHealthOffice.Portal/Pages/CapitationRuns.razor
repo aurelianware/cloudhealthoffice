@@ -201,7 +201,7 @@ else
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd><MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/capitation/statements/" + context.Id))"
+                <MudTd><MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/finance/contracts/statements/" + context.Id))"
                                   Style="font-family: monospace; color: var(--cho-accent); font-size: 0.85rem;">@context.StatementNumber</MudButton></MudTd>
                 <MudTd>
                     <MudText Typo="Typo.body2">@context.ProviderName</MudText>

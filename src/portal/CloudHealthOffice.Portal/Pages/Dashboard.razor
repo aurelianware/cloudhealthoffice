@@ -781,15 +781,18 @@
     private async Task CheckSystemHealthAsync()
     {
         var config = Configuration;
+        // Health endpoints live at each service's root: keep only scheme, host and port.
+        static string Origin(string? url) =>
+            Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.GetLeftPart(UriPartial.Authority) : "";
         var checks = new Dictionary<string, string>
         {
-            ["Claims"] = config["Services:ClaimsService"]?.Replace("/api", "") ?? "",
-            ["Members"] = config["Services:MemberService"]?.Replace("/api", "") ?? "",
-            ["Providers"] = config["Services:ProviderService"]?.Replace("/api", "") ?? "",
-            ["Eligibility"] = config["Services:EligibilityService"]?.Replace("/api", "") ?? "",
-            ["Payments"] = config["Services:PaymentService"]?.Replace("/api", "") ?? "",
-            ["Benefits"] = config["Services:BenefitPlanService"]?.Replace("/api", "") ?? "",
-            ["FHIR"] = config["Services:ClaimsService"]?.Replace("5001", "5011").Replace("/api", "") ?? ""
+            ["Claims"] = Origin(config["Services:ClaimsService"]),
+            ["Members"] = Origin(config["Services:MemberService"]),
+            ["Providers"] = Origin(config["Services:ProviderService"]),
+            ["Eligibility"] = Origin(config["Services:EligibilityService"]),
+            ["Payments"] = Origin(config["Services:PaymentService"]),
+            ["Benefits"] = Origin(config["Services:BenefitPlanService"]),
+            ["FHIR"] = Origin(config["Services:FhirService"]),
         };
 
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };

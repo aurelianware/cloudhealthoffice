@@ -58,6 +58,21 @@ public class MemberLinkageTests
     }
 
     [Fact]
+    public async Task SearchClaimsByMemberAsync_WithTheDeployedApiBase_DoesNotDoubleApi()
+    {
+        // appsettings.json and the k8s config set Services:ClaimsService to ".../api".
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Services:ClaimsService"] = "http://claims-service.cloudhealthoffice/api" })
+            .Build();
+        var handler = new FakeHandler(HttpStatusCode.OK, "{\"total\":0,\"page\":1,\"pageSize\":10,\"resources\":[]}");
+        var sut = new ClaimsService(new HttpClient(handler), configuration, new Mock<ILogger<ClaimsService>>().Object);
+
+        await sut.SearchClaimsByMemberAsync("MEM-7", new MemberClaimsFilter());
+
+        handler.CapturedUrls[0].Should().StartWith("http://claims-service.cloudhealthoffice/api/v1/claims?memberId=MEM-7");
+    }
+
+    [Fact]
     public async Task GetMemberArSummaryAsync_Returns404AsNull()
     {
         var handler = new FakeHandler(HttpStatusCode.NotFound);
