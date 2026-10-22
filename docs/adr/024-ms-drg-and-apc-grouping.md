@@ -542,11 +542,34 @@ Build order:
    roundabout way of asking a question the tables answer directly. They now
    agree on every code.
 
+   **Procedure clusters are in**, which closes the mask builder's last
+   declared gap. A cluster is a combination of procedure codes that qualifies a
+   stay for something no single code does: it is satisfied when the claim
+   carries a code from every one of its choice groups, and V44 has 4,084 of
+   them over 594 distinct procedure codes, so most claims need no cluster work
+   at all. Two parts of the mechanism are easy to get backwards and both are
+   pinned by tests:
+
+   - A satisfied cluster's own code is looked up in the **procedure** table
+     like any other procedure, because that is what it now is to the rest of
+     the grouper. Every V44 cluster code is a code that table knows, which the
+     gated test checks over the whole release.
+   - The contributing codes' operands then stop counting in the MDCs the
+     cluster restricts, so the stay is credited for the combination and not
+     also for its parts. The cluster's own operands are never suppressed —
+     suppressing those would suppress the very thing the cluster exists to
+     contribute.
+
+   Suppression turned out to be a property of the **evaluation**, not of the
+   operand: CMS builds two evaluators over the same formula text, one whose
+   plain operands respect cluster suppression and one whose do not, and chooses
+   between them by which path is grouping. So CHO's evaluator now takes a
+   context — mask, MDC, and whether suppression applies — rather than a bare
+   mask. Had that gone the other way round it would have been a wrong DRG on
+   every stay with a cluster.
+
    What is left:
 
-   - procedure **clusters**: CMS resolves combinations of codes into a
-     synthetic procedure and suppresses the individual codes' operands in
-     named MDCs, which the mask builder declares as its one remaining gap;
    - the dozen special-logic operand nodes, counting nodes included;
    - driving the ranked formula lists per MDC — 824 formulas for V44 — with
      `reRouteMdcId` (20 formulas) and `severitySuppressionOperand` (56).

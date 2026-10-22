@@ -13,30 +13,47 @@ namespace CloudHealthOffice.GrouperEngine.Formulas;
 ///
 /// <para>
 /// There are two evaluation entry points, and the difference matters. The
-/// <see cref="IAttributeMask"/> overload is the real one: an operand is
+/// <see cref="DrgFormulaEvaluation"/> overload is the real one: an operand is
 /// matched by list name <i>and</i> position prefix, with CMS's <c>ANY:</c>
-/// special case. The <see cref="IReadOnlySet{T}"/> overload compares the
-/// operand's literal text instead, which is a convenience for tests and for
-/// reasoning about a formula's shape — it is not how a claim is grouped.
+/// special case and cluster suppression. The <see cref="IReadOnlySet{T}"/>
+/// overload compares the operand's literal text instead, which is a
+/// convenience for tests and for reasoning about a formula's shape — it is not
+/// how a claim is grouped.
 /// </para>
 /// </summary>
 public abstract record DrgFormulaExpression
 {
     /// <summary>Evaluates the expression against a stay's mask.</summary>
-    public bool Evaluate(IAttributeMask mask) => Evaluate(mask, null);
+    public bool Evaluate(IAttributeMask mask) =>
+        Evaluate(new DrgFormulaEvaluation(mask), null);
 
     /// <summary>
-    /// Evaluates the expression against a stay's mask, recording into
-    /// <paramref name="matched"/> every operand that tested true.
+    /// Evaluates the expression against a stay's mask, recording what matched.
+    /// Cluster suppression does not apply; see
+    /// <see cref="DrgFormulaEvaluation"/> for the grouping path.
     /// </summary>
-    /// <param name="mask">The operands this stay satisfies.</param>
+    public bool Evaluate(IAttributeMask mask, ICollection<string>? matched) =>
+        Evaluate(new DrgFormulaEvaluation(mask), matched);
+
+    /// <summary>Evaluates the expression in the given context.</summary>
+    public bool Evaluate(DrgFormulaEvaluation context) => Evaluate(context, null);
+
+    /// <summary>
+    /// Evaluates the expression, recording into <paramref name="matched"/>
+    /// every operand that tested true.
+    /// </summary>
+    /// <param name="context">
+    /// The stay's mask, the MDC being tried, and whether cluster suppression
+    /// applies.
+    /// </param>
     /// <param name="matched">
     /// Collects the operands that tested true, in evaluation order. May be
     /// <see langword="null"/> when the caller only wants the answer. See the
     /// remarks on the literal-text overload for what the record does and does
     /// not contain.
     /// </param>
-    public abstract bool Evaluate(IAttributeMask mask, ICollection<string>? matched);
+    public abstract bool Evaluate(
+        DrgFormulaEvaluation context, ICollection<string>? matched);
 
     /// <summary>
     /// Evaluates the expression by comparing each operand's literal text
@@ -114,11 +131,10 @@ public abstract record DrgFormulaExpression
         public OperandName Parsed { get; } = OperandName.Parse(Name);
 
         /// <inheritdoc/>
-        public override bool Evaluate(IAttributeMask mask, ICollection<string>? matched)
+        public override bool Evaluate(
+            DrgFormulaEvaluation context, ICollection<string>? matched)
         {
-            ArgumentNullException.ThrowIfNull(mask);
-
-            if (!mask.Contains(Parsed))
+            if (!context.Satisfies(Parsed))
             {
                 return false;
             }
@@ -151,8 +167,9 @@ public abstract record DrgFormulaExpression
         : DrgFormulaExpression
     {
         /// <inheritdoc/>
-        public override bool Evaluate(IAttributeMask mask, ICollection<string>? matched) =>
-            Left.Evaluate(mask, matched) && Right.Evaluate(mask, matched);
+        public override bool Evaluate(
+            DrgFormulaEvaluation context, ICollection<string>? matched) =>
+            Left.Evaluate(context, matched) && Right.Evaluate(context, matched);
 
         /// <inheritdoc/>
         public override bool Evaluate(
@@ -169,8 +186,9 @@ public abstract record DrgFormulaExpression
         : DrgFormulaExpression
     {
         /// <inheritdoc/>
-        public override bool Evaluate(IAttributeMask mask, ICollection<string>? matched) =>
-            Left.Evaluate(mask, matched) || Right.Evaluate(mask, matched);
+        public override bool Evaluate(
+            DrgFormulaEvaluation context, ICollection<string>? matched) =>
+            Left.Evaluate(context, matched) || Right.Evaluate(context, matched);
 
         /// <inheritdoc/>
         public override bool Evaluate(
@@ -186,8 +204,9 @@ public abstract record DrgFormulaExpression
     public sealed record Not(DrgFormulaExpression Inner) : DrgFormulaExpression
     {
         /// <inheritdoc/>
-        public override bool Evaluate(IAttributeMask mask, ICollection<string>? matched) =>
-            !Inner.Evaluate(mask, matched);
+        public override bool Evaluate(
+            DrgFormulaEvaluation context, ICollection<string>? matched) =>
+            !Inner.Evaluate(context, matched);
 
         /// <inheritdoc/>
         public override bool Evaluate(

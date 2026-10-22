@@ -28,20 +28,11 @@ public sealed class MsDrgMaskBuilder
 {
     /// <summary>
     /// Operands this builder does not yet contribute, and so formulas that
-    /// cannot yet be trusted.
-    ///
-    /// <list type="bullet">
-    ///   <item><description>
-    ///   <b>Procedure clusters.</b> CMS resolves combinations of procedure
-    ///   codes — a cluster requires one code from each of its choice groups —
-    ///   into a synthetic procedure whose operands join the mask, and marks the
-    ///   individual procedures with the MDCs in which their own operands must
-    ///   then be suppressed. Until that is built, a stay whose qualifying
-    ///   procedure is a combination rather than a single code is under-coded.
-    ///   </description></item>
-    /// </list>
+    /// cannot yet be trusted. Empty, and kept so that the next gap is declared
+    /// here rather than left to be discovered: a mask that silently lacks an
+    /// operand produces a wrong DRG, not an error.
     /// </summary>
-    public static IReadOnlyList<string> NotYetBuilt { get; } = ["procedure clusters"];
+    public static IReadOnlyList<string> NotYetBuilt { get; } = [];
 
     /// <summary>
     /// Discharge statuses that mean a transfer to another acute setting, which
@@ -76,12 +67,22 @@ public sealed class MsDrgMaskBuilder
     private const int UnknownSex = -1;
 
     private readonly IMsDrgCodeAttributeSource codes;
+    private readonly IMsDrgClusterSource clusters;
 
     /// <summary>Builds masks from the given CMS code tables.</summary>
-    public MsDrgMaskBuilder(IMsDrgCodeAttributeSource codes)
+    /// <param name="codes">The code-to-operand tables.</param>
+    /// <param name="clusters">
+    /// The cluster definitions. Omit for a table set that has none; a stay with
+    /// a qualifying <i>combination</i> of procedures rather than a single
+    /// qualifying procedure is then under-coded, which is why the production
+    /// path passes them.
+    /// </param>
+    public MsDrgMaskBuilder(
+        IMsDrgCodeAttributeSource codes, IMsDrgClusterSource? clusters = null)
     {
         ArgumentNullException.ThrowIfNull(codes);
         this.codes = codes;
+        this.clusters = clusters ?? IMsDrgClusterSource.None;
     }
 
     /// <summary>
@@ -116,6 +117,13 @@ public sealed class MsDrgMaskBuilder
             AddDiagnosis(mask, attributes, OperandPosition.SecondaryDiagnosis);
         }
 
+        // Clusters are resolved before the procedures are added, because a
+        // satisfied cluster decides which of those procedures' operands stop
+        // counting.
+        var procedureCodes = request.Procedures.Select(procedure => procedure.Code).ToList();
+        var satisfied = MsDrgClusterResolver.Resolve(clusters, procedureCodes);
+        var suppressionByCode = SuppressionByCode(satisfied);
+
         foreach (var procedure in request.Procedures)
         {
             if (!codes.TryGetProcedure(procedure.Code, out var attributes))
@@ -124,18 +132,19 @@ public sealed class MsDrgMaskBuilder
                 continue;
             }
 
-            foreach (var operand in attributes.Operands)
-            {
-                mask.Add(new OperandName(OperandPosition.Unqualified, operand));
-            }
+            suppressionByCode.TryGetValue(procedure.Code, out var suppressed);
+            AddProcedure(mask, attributes, suppressed);
+        }
 
-            // ORPROC is not in the tables: CMS derives it from the procedure's
-            // own lists, once per qualifying procedure.
-            if (attributes.Operands.Contains(OperatingRoomListOne)
-                || attributes.Operands.Contains(OperatingRoomListTwo))
+        // A satisfied cluster's own code is looked up in the procedure table
+        // like any other procedure, because that is what it now is to the rest
+        // of the grouper. Its operands are never suppressed -- only the
+        // individual codes' are, which is the whole point of the mechanism.
+        foreach (var cluster in satisfied)
+        {
+            if (codes.TryGetProcedure(cluster.Cluster.ClusterCode, out var attributes))
             {
-                mask.Add(new OperandName(
-                    OperandPosition.Unqualified, OperatingRoomProcedure));
+                AddProcedure(mask, attributes, suppressedMdcs: 0);
             }
         }
 
@@ -177,6 +186,56 @@ public sealed class MsDrgMaskBuilder
 
         unrecognisedCodes = unrecognised;
         return mask;
+    }
+
+    /// <summary>
+    /// Adds a procedure's operands, suppressed in the MDCs a cluster has
+    /// claimed them for, plus <c>ORPROC</c> where the procedure earns it.
+    /// </summary>
+    private static void AddProcedure(
+        AttributeMask mask, ProcedureCodeAttributes attributes, int suppressedMdcs)
+    {
+        foreach (var operand in attributes.Operands)
+        {
+            mask.Add(new MaskAttribute(
+                new OperandName(OperandPosition.Unqualified, operand), suppressedMdcs));
+        }
+
+        // ORPROC is not in the tables: CMS derives it from the procedure's own
+        // lists, once per qualifying procedure, and it carries the same
+        // suppression as the operands it was derived from.
+        if (attributes.Operands.Contains(OperatingRoomListOne)
+            || attributes.Operands.Contains(OperatingRoomListTwo))
+        {
+            mask.Add(new MaskAttribute(
+                new OperandName(OperandPosition.Unqualified, OperatingRoomProcedure),
+                suppressedMdcs));
+        }
+    }
+
+    /// <summary>
+    /// The MDCs each contributing procedure code is suppressed in. A code that
+    /// contributed to two clusters is suppressed in the union of their
+    /// restrictions.
+    /// </summary>
+    private static Dictionary<string, int> SuppressionByCode(
+        IReadOnlyList<SatisfiedCluster> satisfied)
+    {
+        var suppression = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var cluster in satisfied)
+        {
+            var restricted = MaskAttribute.MdcMask(cluster.Cluster.RestrictedMdcs);
+
+            foreach (var code in cluster.ContributingCodes)
+            {
+                suppression[code] = suppression.TryGetValue(code, out var already)
+                    ? already | restricted
+                    : restricted;
+            }
+        }
+
+        return suppression;
     }
 
     private static void AddDiagnosis(

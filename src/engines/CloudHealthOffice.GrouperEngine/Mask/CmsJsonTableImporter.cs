@@ -33,6 +33,129 @@ public static class CmsJsonTableImporter
     private const string DiagnosisPatternFile = "dxPatterns.json";
     private const string ProcedurePatternFile = "prPatterns.json";
     private const string SexMdcFile = "codeGenderMdcs.json";
+    private const string ClusterFile = "clusters.json";
+
+    /// <summary>
+    /// Imports the procedure clusters in <paramref name="directory"/> for
+    /// <paramref name="version"/>.
+    ///
+    /// <para>
+    /// Separate from <see cref="Import"/> because the two are used at
+    /// different points and a table set without clusters is a coherent thing
+    /// to have in a test — but not in production, where a stay whose
+    /// qualifying procedure is a combination would be under-coded.
+    /// </para>
+    /// </summary>
+    public static InMemoryClusterSource ImportClusters(string directory, string version)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+
+        using var document = ReadDocument(directory, ClusterFile);
+
+        var clusters = new List<MsDrgCluster>();
+
+        foreach (var cluster in Member(document.RootElement, "clusters", ClusterFile)
+            .EnumerateObject())
+        {
+            if (!TryClusterRowForVersion(cluster.Value, version, cluster.Name, out var row))
+            {
+                continue;
+            }
+
+            // CMS numbers the choice groups from one and the numbering need not
+            // be dense, so the groups are collected by their own number and
+            // then flattened in that order rather than indexed positionally.
+            var byChoice = new SortedDictionary<int, HashSet<string>>();
+
+            if (row.TryGetProperty("choices", out var choices))
+            {
+                foreach (var choice in choices.EnumerateArray())
+                {
+                    var number = choice.TryGetProperty("choice", out var numbered)
+                        ? numbered.GetInt32()
+                        : byChoice.Count + 1;
+
+                    if (!byChoice.TryGetValue(number, out var group))
+                    {
+                        group = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        byChoice[number] = group;
+                    }
+
+                    if (choice.TryGetProperty("codes", out var codes))
+                    {
+                        foreach (var code in codes.EnumerateArray())
+                        {
+                            var value = code.GetString();
+                            if (!string.IsNullOrEmpty(value))
+                            {
+                                group.Add(value);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (byChoice.Count == 0)
+            {
+                continue;
+            }
+
+            var restricted = new HashSet<int>();
+            if (row.TryGetProperty("suppressionMdcs", out var mdcs))
+            {
+                foreach (var mdc in mdcs.EnumerateArray())
+                {
+                    restricted.Add(mdc.GetInt32());
+                }
+            }
+
+            clusters.Add(new MsDrgCluster(
+                cluster.Name,
+                byChoice.Values.Cast<IReadOnlySet<string>>().ToList(),
+                restricted));
+        }
+
+        if (clusters.Count == 0)
+        {
+            throw new MsDrgTableImportException(
+                $"The release in '{directory}' carries no clusters for version '{version}'. "
+                + "Check the version against the release's own tables rather than grouping "
+                + "without clusters, which under-codes any stay whose qualifying procedure is "
+                + "a combination.");
+        }
+
+        return new InMemoryClusterSource(clusters);
+    }
+
+    /// <summary>
+    /// A cluster's rows sit under <c>cluster</c> rather than <c>list</c>, so
+    /// the version pick is its own method. Unlike a code, a cluster that offers
+    /// two rows for one version is not refused: CMS's own reader takes them as
+    /// it finds them, and a cluster is a set of codes rather than a claim about
+    /// one code, so the first is as good an answer as the release gives.
+    /// </summary>
+    private static bool TryClusterRowForVersion(
+        JsonElement cluster, string version, string name, out JsonElement row)
+    {
+        row = default;
+
+        if (!cluster.TryGetProperty("cluster", out var rows))
+        {
+            return false;
+        }
+
+        foreach (var candidate in rows.EnumerateArray())
+        {
+            if (MentionsVersion(candidate, version))
+            {
+                row = candidate;
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Imports the tables in <paramref name="directory"/> for

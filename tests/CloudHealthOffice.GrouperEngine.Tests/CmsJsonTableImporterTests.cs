@@ -313,6 +313,45 @@ public class CmsJsonTableImporterTests : IDisposable
     }
 
     /// <summary>
+    /// A real release's clusters import, and every cluster code they name is a
+    /// code the procedure table knows.
+    ///
+    /// <para>
+    /// That second part is the one worth checking. A cluster is only useful
+    /// because its own code is looked up in the procedure table like any other
+    /// procedure; a cluster whose code is absent from that table contributes
+    /// nothing, and the stay would group as though the combination had never
+    /// been recognised.
+    /// </para>
+    /// </summary>
+    [SkippableFact]
+    public void A_real_releases_clusters_import_and_resolve_to_procedure_codes()
+    {
+        var tables = Environment.GetEnvironmentVariable("CMS_MSDRG_TABLES");
+        Skip.If(
+            string.IsNullOrWhiteSpace(tables),
+            "Set CMS_MSDRG_TABLES to a CMS MS-DRG release's table directory to run this.");
+
+        var version = Environment.GetEnvironmentVariable("CMS_MSDRG_VERSION") ?? "V440";
+        var codes = CmsJsonTableImporter.Import(tables!, version);
+        var clusters = CmsJsonTableImporter.ImportClusters(tables!, version);
+
+        // Only a small fraction of procedure codes take part in a cluster, so
+        // the index should be small -- and not empty.
+        Assert.InRange(clusters.IndexedCodeCount, 1, 5_000);
+
+        var unknown = clusters
+            .ClustersMentioning(clusters.AllIndexedCodes)
+            .Select(cluster => cluster.ClusterCode)
+            .Where(code => !codes.TryGetProcedure(code, out _))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(10)
+            .ToList();
+
+        Assert.Empty(unknown);
+    }
+
+    /// <summary>
     /// Every complication level in CHO's seed tables agrees with the CMS
     /// release's.
     ///

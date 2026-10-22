@@ -14,7 +14,21 @@ public interface IAttributeMask
 {
     /// <summary>
     /// True when the stay satisfies <paramref name="attribute"/> as a formula
-    /// would test it — the position prefix included.
+    /// would test it — the position prefix included, cluster suppression
+    /// ignored.
     /// </summary>
     bool Contains(OperandName attribute);
+
+    /// <summary>
+    /// True when the stay satisfies <paramref name="attribute"/> through an
+    /// entry that still counts in <paramref name="mdc"/>.
+    ///
+    /// <para>
+    /// The distinction is not "does the operand match and is it suppressed".
+    /// It is "is there a matching entry that is not suppressed" — a stay can
+    /// satisfy the same operand twice, once through a procedure a cluster has
+    /// suppressed and once through one it has not, and then the operand counts.
+    /// </para>
+    /// </summary>
+    bool ContainsUnsuppressed(OperandName attribute, int mdc);
 }

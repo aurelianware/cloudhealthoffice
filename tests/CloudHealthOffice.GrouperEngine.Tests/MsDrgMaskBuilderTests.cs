@@ -280,13 +280,13 @@ public class MsDrgMaskBuilderTests
 
     /// <summary>
     /// The gaps are declared rather than left to be discovered. A mask that
-    /// silently lacks an operand produces a wrong DRG, not an error, so this
-    /// test exists to make the list visible and to fail when it is emptied
-    /// without the tests that should come with that.
+    /// silently lacks an operand produces a wrong DRG, not an error, so the
+    /// list is a declaration and this test keeps it honest: the list is empty
+    /// now, and the next gap belongs on it rather than in someone's memory.
     /// </summary>
     [Fact]
     public void The_remaining_gaps_are_declared()
     {
-        Assert.Equal(["procedure clusters"], MsDrgMaskBuilder.NotYetBuilt);
+        Assert.Empty(MsDrgMaskBuilder.NotYetBuilt);
     }
 }

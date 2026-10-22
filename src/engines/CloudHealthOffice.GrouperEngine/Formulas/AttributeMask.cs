@@ -31,9 +31,9 @@ namespace CloudHealthOffice.GrouperEngine.Formulas;
 /// scan is not worth optimising away.
 /// </para>
 /// </summary>
-public sealed class AttributeMask : IAttributeMask, IEnumerable<OperandName>
+public sealed class AttributeMask : IAttributeMask, IEnumerable<MaskAttribute>
 {
-    private readonly List<OperandName> entries = [];
+    private readonly List<MaskAttribute> entries = [];
 
     /// <summary>An empty mask.</summary>
     public AttributeMask()
@@ -41,10 +41,23 @@ public sealed class AttributeMask : IAttributeMask, IEnumerable<OperandName>
     }
 
     /// <summary>A mask holding the given entries, in order.</summary>
-    public AttributeMask(IEnumerable<OperandName> entries)
+    public AttributeMask(IEnumerable<MaskAttribute> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);
         this.entries.AddRange(entries);
+    }
+
+    /// <summary>
+    /// A mask holding the given operands, none of them suppressed. The
+    /// convenient form for a test.
+    /// </summary>
+    public AttributeMask(IEnumerable<OperandName> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        foreach (var entry in entries)
+        {
+            this.entries.Add(new MaskAttribute(entry));
+        }
     }
 
     /// <summary>How many entries the mask holds, duplicates included.</summary>
@@ -55,10 +68,13 @@ public sealed class AttributeMask : IAttributeMask, IEnumerable<OperandName>
     /// what the claim contributed, and two secondary diagnoses on the same list
     /// are two contributions.
     /// </summary>
-    public void Add(OperandName attribute) => entries.Add(attribute);
+    public void Add(OperandName attribute) => entries.Add(new MaskAttribute(attribute));
+
+    /// <summary>Adds an entry, with the MDCs it is suppressed in.</summary>
+    public void Add(MaskAttribute attribute) => entries.Add(attribute);
 
     /// <summary>Adds every entry in <paramref name="attributes"/>.</summary>
-    public void AddRange(IEnumerable<OperandName> attributes)
+    public void AddRange(IEnumerable<MaskAttribute> attributes)
     {
         ArgumentNullException.ThrowIfNull(attributes);
         entries.AddRange(attributes);
@@ -69,7 +85,21 @@ public sealed class AttributeMask : IAttributeMask, IEnumerable<OperandName>
     {
         foreach (var entry in entries)
         {
-            if (Matches(attribute, entry))
+            if (Matches(attribute, entry.Name))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public bool ContainsUnsuppressed(OperandName attribute, int mdc)
+    {
+        foreach (var entry in entries)
+        {
+            if (Matches(attribute, entry.Name) && !entry.IsSuppressedIn(mdc))
             {
                 return true;
             }
@@ -116,7 +146,7 @@ public sealed class AttributeMask : IAttributeMask, IEnumerable<OperandName>
     }
 
     /// <inheritdoc/>
-    public IEnumerator<OperandName> GetEnumerator() => entries.GetEnumerator();
+    public IEnumerator<MaskAttribute> GetEnumerator() => entries.GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
