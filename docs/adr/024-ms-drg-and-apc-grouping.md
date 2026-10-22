@@ -777,10 +777,44 @@ Build order:
    oracle-confirmed, with one exception worth naming: the HAC 6 gate is
    confirmed against the release's own tables, not just against CMS's code.
 
+   **The parity run is done, and the engine agrees with CMS on every row.** All
+   33 rows of the oracle corpus that CMS grouped match on **five** things each
+   — DRG, MDC, base DRG, severity and the medical/surgical partition — not on
+   the DRG alone, because a right DRG reached through the wrong MDC is a
+   coincidence waiting to stop happening. The 34th row, which CMS refuses, is
+   asserted separately: it refuses with the same return code.
+
+   The corpus rows exist to separate a correct grouper from a plausible wrong
+   one: three-way severity splits, CC exclusions, the pre-MDC rules, the
+   surgical hierarchy, the sex edit, and the present-on-admission cases where a
+   hospital-acquired condition moves the stay to a lower-paying DRG. So the two
+   source-derived chains above — MDC assignment and the HAC policy — now have
+   evidence behind them and not only a careful reading.
+
+   **The run found one defect, and it was in CHO's policy rather than its
+   logic.** The engine refused any claim carrying a code outside the release's
+   tables, on the reasoning that an unrecognised code is not an absent one.
+   That is stricter than CMS and wrong in the direction that matters: CMS groups
+   a stay with an unknown secondary diagnosis or procedure as though the code
+   were absent, and refuses an unknown *principal* through its own
+   `invalid_pdx` edit with a return code attached. Three corpus rows
+   disagreed for that reason alone. The engine now groups all three the way CMS
+   does and reports the unrecognised codes alongside the answer, so a caller can
+   still reject the claim back to the biller — as its own policy, not as the
+   grouper's answer.
+
+   A second run, over a broad sample of the release's own codes rather than the
+   corpus, grouped 1,684 of 1,876 stays and refused 192 with **nothing thrown**.
+   That is not parity — nothing in it knows what CMS would have said — but it
+   is the run that exercises every part of the chain at scale, and the failure it
+   exists to catch is a chain that works on hand-built tables and falls over on
+   CMS's own.
+
    What is left in this stage:
 
-   - The end-to-end parity run against the oracle corpus, which MDC assignment
-     was the last piece blocking. It is what will confirm both chains.
+   - A larger corpus. 34 rows is enough to catch a wrong chain and not enough to
+     claim parity in general; the oracle takes a corpus file, so growing it is
+     work rather than design.
    - CMS's two marking passes, which record which codes affected the DRG. The
      matched operands carry most of the same information from the other
      direction.

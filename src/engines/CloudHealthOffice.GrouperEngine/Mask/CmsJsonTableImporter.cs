@@ -4,6 +4,7 @@ using CloudHealthOffice.GrouperEngine.Domain;
 
 using CloudHealthOffice.GrouperEngine.Formulas;
 using CloudHealthOffice.GrouperEngine.Hac;
+using CloudHealthOffice.GrouperEngine.Services;
 using CloudHealthOffice.GrouperEngine.Severity;
 
 namespace CloudHealthOffice.GrouperEngine.Mask;
@@ -200,6 +201,29 @@ public static class CmsJsonTableImporter
         }
 
         return values;
+    }
+
+    /// <summary>
+    /// Imports every table one release needs, in one call.
+    ///
+    /// <para>
+    /// Six files are read: the code tables, the clusters, the DRG logic table,
+    /// the two CC exclusion files and the two HAC files. A release missing any
+    /// of them is refused here rather than part-way through grouping a claim.
+    /// </para>
+    /// </summary>
+    public static MsDrgRelease ImportRelease(string directory, string version)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+
+        return new MsDrgRelease(
+            version,
+            Import(directory, version),
+            ImportClusters(directory, version),
+            ImportFormulas(directory, version),
+            ImportExclusions(directory, version),
+            ImportHac(directory, version));
     }
 
     /// <summary>
