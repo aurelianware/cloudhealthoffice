@@ -299,6 +299,37 @@ public sealed class CorrespondenceController : ControllerBase
         return Ok(letter);
     }
 
+    /// <summary>
+    /// The tenant's newest letters, newest first. Only letters with a subject
+    /// the caller can read are returned, so the list can come up short of
+    /// <paramref name="limit"/>.
+    /// </summary>
+    [HttpGet("letters/recent")]
+    [RequirePermission(Read)]
+    public async Task<IActionResult> ListRecentLetters([FromQuery] LetterStatus? status, [FromQuery] string? letterTypeCode,
+        [FromQuery] int limit = 100, CancellationToken ct = default)
+    {
+        var letters = await _repository.ListRecentLettersAsync(TenantId, status, letterTypeCode?.Trim().ToUpperInvariant(), limit, ct);
+        return Ok(letters.Where(l => LetterAccess.CanRead(_actor, l)).ToList());
+    }
+
+    /// <summary>Counts of the tenant's letters: today (UTC) and the last seven days, by outcome. No PHI.</summary>
+    [HttpGet("letters/summary")]
+    [RequirePermission(Read)]
+    public async Task<IActionResult> LetterSummary(CancellationToken ct)
+    {
+        var now = Now;
+        var today = now.Date;
+        var week = await _repository.CountLettersSinceAsync(TenantId, today.AddDays(-6), ct);
+        var day = await _repository.CountLettersSinceAsync(TenantId, today, ct);
+        long Get(IReadOnlyDictionary<LetterStatus, long> d, LetterStatus s) => d.TryGetValue(s, out var n) ? n : 0;
+        return Ok(new LetterSummary(
+            Get(day, LetterStatus.Rendered),
+            Get(week, LetterStatus.Rendered),
+            Get(week, LetterStatus.CheckFailed),
+            now));
+    }
+
     /// <summary>Letters about one subject, newest first.</summary>
     [HttpGet("letters")]
     [RequirePermission(Read)]
@@ -368,3 +399,6 @@ public sealed class CorrespondenceController : ControllerBase
 
     private BadRequestObjectResult Problem400(string error) => BadRequest(new { error });
 }
+
+/// <summary>Letter counts for the correspondence page.</summary>
+public sealed record LetterSummary(long RenderedToday, long RenderedLast7Days, long CheckFailedLast7Days, DateTime AsOf);

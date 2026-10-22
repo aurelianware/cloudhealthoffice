@@ -100,6 +100,13 @@ public sealed class CorrespondenceRepositoryMongoTests : IAsyncLifetime
 
         await _repo.AppendEventAsync(Builders.Tenant, "LTR-1", new LetterEvent { Type = "Viewed", OccurredAt = DateTime.UtcNow });
         await _repo.AppendEventAsync("tenant-b", "LTR-1", new LetterEvent { Type = "Spoofed", OccurredAt = DateTime.UtcNow });
+        (await _repo.ListRecentLettersAsync(Builders.Tenant, null, null, 10)).Select(l => l.Id).Should().Equal("LTR-2", "LTR-1");
+        (await _repo.ListRecentLettersAsync(Builders.Tenant, LetterStatus.CheckFailed, null, 10)).Should().BeEmpty();
+        (await _repo.ListRecentLettersAsync(Builders.Tenant, null, "OTHER", 10)).Should().BeEmpty();
+        var counts = await _repo.CountLettersSinceAsync(Builders.Tenant, DateTime.UtcNow.AddMinutes(-1));
+        counts[LetterStatus.Rendered].Should().Be(2);
+        (await _repo.CountLettersSinceAsync("tenant-b", DateTime.UtcNow.AddMinutes(-1)))[LetterStatus.Rendered].Should().Be(1);
+
         var loaded = (await _repo.GetLetterAsync(Builders.Tenant, "LTR-1"))!;
         loaded.Events.Select(e => e.Type).Should().Equal("Requested", "Viewed");
         loaded.LetterDate.Should().Be(Builders.Today);

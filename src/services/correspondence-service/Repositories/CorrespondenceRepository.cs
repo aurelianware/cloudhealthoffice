@@ -32,6 +32,12 @@ public interface ICorrespondenceRepository
     Task<Letter?> GetLetterAsync(string tenantId, string letterId, CancellationToken ct = default);
     Task<IReadOnlyList<Letter>> ListLettersForSubjectAsync(string tenantId, string subjectKind, string subjectId, int limit, CancellationToken ct = default);
 
+    /// <summary>The tenant's newest letters, optionally of one status and letter type.</summary>
+    Task<IReadOnlyList<Letter>> ListRecentLettersAsync(string tenantId, LetterStatus? status, string? letterTypeCode, int limit, CancellationToken ct = default);
+
+    /// <summary>How many of the tenant's letters were created since <paramref name="since"/>, by status.</summary>
+    Task<IReadOnlyDictionary<LetterStatus, long>> CountLettersSinceAsync(string tenantId, DateTime since, CancellationToken ct = default);
+
     /// <summary>Appends to a letter's event log; existing events never change.</summary>
     Task AppendEventAsync(string tenantId, string letterId, LetterEvent letterEvent, CancellationToken ct = default);
 }
@@ -71,8 +77,12 @@ public sealed class CorrespondenceRepositoryMongo : ICorrespondenceRepository
                 Builders<LetterTemplate>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.LetterTypeCode)
                     .Ascending(x => x.Status).Ascending(x => x.Language)),
         ]);
-        _letters.Indexes.CreateOne(new CreateIndexModel<Letter>(
-            Builders<Letter>.IndexKeys.Ascending(x => x.TenantId).Ascending("Subjects.Kind").Ascending("Subjects.Id")));
+        _letters.Indexes.CreateMany([
+            new CreateIndexModel<Letter>(
+                Builders<Letter>.IndexKeys.Ascending(x => x.TenantId).Ascending("Subjects.Kind").Ascending("Subjects.Id")),
+            new CreateIndexModel<Letter>(
+                Builders<Letter>.IndexKeys.Ascending(x => x.TenantId).Descending(x => x.CreatedAt)),
+        ]);
     }
 
     public async Task<LetterType?> GetLetterTypeAsync(string tenantId, string code, CancellationToken ct = default) =>
@@ -153,6 +163,27 @@ public sealed class CorrespondenceRepositoryMongo : ICorrespondenceRepository
             .SortByDescending(x => x.CreatedAt)
             .Limit(Math.Clamp(limit, 1, 500))
             .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Letter>> ListRecentLettersAsync(
+        string tenantId, LetterStatus? status, string? letterTypeCode, int limit, CancellationToken ct = default)
+    {
+        var filter = Builders<Letter>.Filter.Eq(x => x.TenantId, tenantId);
+        if (status is { } s) filter &= Builders<Letter>.Filter.Eq(x => x.Status, s);
+        if (!string.IsNullOrWhiteSpace(letterTypeCode)) filter &= Builders<Letter>.Filter.Eq(x => x.LetterTypeCode, letterTypeCode);
+        return await _letters.Find(filter)
+            .SortByDescending(x => x.CreatedAt)
+            .Limit(Math.Clamp(limit, 1, 500))
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyDictionary<LetterStatus, long>> CountLettersSinceAsync(string tenantId, DateTime since, CancellationToken ct = default)
+    {
+        var counts = await _letters.Aggregate()
+            .Match(x => x.TenantId == tenantId && x.CreatedAt >= since)
+            .Group(x => x.Status, g => new { Status = g.Key, Count = g.LongCount() })
+            .ToListAsync(ct);
+        return counts.ToDictionary(c => c.Status, c => c.Count);
+    }
 
     public Task AppendEventAsync(string tenantId, string letterId, LetterEvent letterEvent, CancellationToken ct = default) =>
         _letters.UpdateOneAsync(

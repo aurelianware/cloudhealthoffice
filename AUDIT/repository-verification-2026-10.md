@@ -75,7 +75,7 @@ ffs-service 42%, Portal 47% and ProviderEnrollmentService 49%.
 | `docs/POSITIONING.md` Canonical Facts from July 2026 (190K lines, 45 test projects) | Fixed by this PR; `scripts/verify-canonical-facts.sh` now recomputes them |
 | `.github/copilot-instructions.md` directed assistants to write unsupported marketing claims and invented case studies | Replaced by this PR with evidence-first instructions |
 | Prospecting and early strategy documents in the public repository | Removed by this PR (kept privately) |
-| Portal Correspondence page calls claims-service routes that do not exist | Open; recorded in the module snapshot |
+| Portal Correspondence page calls claims-service routes that do not exist | Fixed 2026-10-21: the page reads correspondence-service (recent letters, summary, templates) and is shown only with `correspondence:read` |
 | `ffs-service` has no Dockerfile or deploy workflow | Open (CAP-20) |
 
 ## Open items carried forward
