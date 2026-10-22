@@ -55,6 +55,36 @@ public class EligibilityErrorResponseTests
     }
 
     [Fact]
+    public async Task Inquiry_CoverageFailure_Is503RatherThanAnEligibilityResponse()
+    {
+        var (controller, service, _) = Build();
+        service.ProcessInquiryAsync(Arg.Any<EligibilityInquiry>()).ThrowsAsync(
+            new CoverageLookupUnavailableException(new HttpRequestException(Secret)));
+
+        var result = await controller.SubmitInquiry(new EligibilityInquiry { SubscriberId = "M1" });
+
+        var obj = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(503, obj.StatusCode);
+        var problem = Assert.IsType<ProblemDetails>(obj.Value);
+        Assert.DoesNotContain("hunter2", problem.Detail);
+        Assert.True(problem.Extensions.ContainsKey("traceId"));
+    }
+
+    [Fact]
+    public async Task QuickCheck_CoverageFailure_Is503RatherThanFalseIneligibility()
+    {
+        var (controller, service, _) = Build();
+        service.QuickEligibilityCheckAsync("t1", "M1", null, Arg.Any<DateTime>()).ThrowsAsync(
+            new CoverageLookupUnavailableException(new HttpRequestException(Secret)));
+
+        var result = await controller.QuickCheck("M1");
+
+        var obj = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(503, obj.StatusCode);
+        Assert.IsType<ProblemDetails>(obj.Value);
+    }
+
+    [Fact]
     public async Task Edi270_UnexpectedParserFailure_Is400_WithoutTheExceptionText()
     {
         var (controller, _, parser) = Build("ISA*00*...");

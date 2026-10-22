@@ -1,4 +1,3 @@
-using System.Text.Json;
 using EligibilityService.Models;
 using CloudHealthOffice.Infrastructure.Logging;
 
@@ -27,8 +26,6 @@ public class TemporalEligibilityService : ITemporalEligibilityService
     private readonly IAccumulatorClient _accumulators;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TemporalEligibilityService> _logger;
-
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     public TemporalEligibilityService(
         IHttpClientFactory httpClientFactory,
@@ -107,38 +104,12 @@ public class TemporalEligibilityService : ITemporalEligibilityService
             ?? "http://coverage-service.cloudhealthoffice/api/v1";
         var client = _httpClientFactory.CreateClient("EligibilityDefault");
 
-        var request = new HttpRequestMessage(
+        using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            $"{baseUrl}/coverage/member/{memberId}/active?serviceDate={serviceDate:yyyy-MM-dd}");
+            $"{baseUrl}/coverage/member/{Uri.EscapeDataString(memberId)}/active?serviceDate={serviceDate:yyyy-MM-dd}");
         request.Headers.Add("X-Tenant-ID", tenantId);
 
-        HttpResponseMessage response;
-        try
-        {
-            response = await client.SendAsync(request, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Coverage-service unreachable for tenant {Tenant} member {Member}",
-                LogSanitizer.Sanitize(tenantId), LogSanitizer.MaskId(memberId));
-            return new List<CoverageDto>();
-        }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogDebug(
-                "Coverage-service returned {Status} for member {Member}",
-                response.StatusCode, LogSanitizer.MaskId(memberId));
-            return new List<CoverageDto>();
-        }
-
-        var json = await response.Content.ReadAsStringAsync(ct);
-        if (string.IsNullOrWhiteSpace(json))
-            return new List<CoverageDto>();
-
-        return JsonSerializer.Deserialize<List<CoverageDto>>(json, JsonOpts)
-               ?? new List<CoverageDto>();
+        return await CoverageLookup.ReadAsync<CoverageDto>(client, request, ct);
     }
 
     /// <summary>

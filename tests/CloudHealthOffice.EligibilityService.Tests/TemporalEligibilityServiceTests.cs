@@ -137,14 +137,13 @@ public class TemporalEligibilityServiceTests
     }
 
     [Fact]
-    public async Task GetAsOf_CoverageServiceUnavailable_ReturnsEmpty()
+    public async Task GetAsOf_CoverageServiceUnavailable_IsNotANegativeDetermination()
     {
         var handler = new StaticHandler(HttpStatusCode.InternalServerError, "");
         var svc = CreateService(handler);
 
-        var result = await svc.GetAsOfAsync("t1", "MBR-1", new DateTime(2026, 1, 1));
-
-        Assert.Empty(result.Coverages);
+        await Assert.ThrowsAsync<CoverageLookupUnavailableException>(
+            () => svc.GetAsOfAsync("t1", "MBR-1", new DateTime(2026, 1, 1)));
     }
 
     private class StaticHandler : HttpMessageHandler

@@ -32,6 +32,7 @@ public class TemporalEligibilityController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(TemporalEligibilityResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<TemporalEligibilityResult>> Get(
         [FromQuery] string memberId,
         [FromQuery] DateTime serviceDate,
@@ -47,7 +48,15 @@ public class TemporalEligibilityController : ControllerBase
             "Temporal eligibility lookup for member {Member} on {Date}",
             LogSanitizer.MaskId(memberId), serviceDate.ToString("yyyy-MM-dd"));
 
-        var result = await _temporal.GetAsOfAsync(TenantId, memberId, serviceDate, ct);
-        return Ok(result);
+        try
+        {
+            var result = await _temporal.GetAsOfAsync(TenantId, memberId, serviceDate, ct);
+            return Ok(result);
+        }
+        catch (CoverageLookupUnavailableException ex)
+        {
+            _logger.LogWarning(ex, "Coverage verification unavailable (trace id {TraceId})", ChoProblemResults.TraceId(HttpContext));
+            return this.ServerError("Coverage verification temporarily unavailable", StatusCodes.Status503ServiceUnavailable);
+        }
     }
 }

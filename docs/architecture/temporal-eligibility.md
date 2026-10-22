@@ -188,3 +188,18 @@ Creates:
 - Promote the `IBatchQueueSender` / `IBatchQueueProcessor` abstractions to
   `shared/CloudHealthOffice.Infrastructure` if another service adopts
   Service Bus (currently only batch eligibility uses it).
+
+## Coverage lookup failures
+
+The temporal endpoint, CHO inquiry adapter, and quick-check service share the
+coverage lookup contract: a coverage-service `404` or valid `200 []` is a
+negative coverage result. Other HTTP errors (including authentication failures
+and throttling), transport/timeouts, malformed JSON, blank bodies and `null`
+responses are verification failures, not evidence that the member lacks coverage.
+The affected HTTP controller paths return a generic `503 application/problem+json`
+with a trace ID. No completed negative inquiry response is stored for a failed
+lookup. Caller cancellation is preserved on cancellation-aware lookup paths.
+
+This does not implement historical accumulators or remove the existing synthetic
+accumulator startup guard. Those remain separate work; disabling that guard
+without a correct historical data source would hide the limitation.
