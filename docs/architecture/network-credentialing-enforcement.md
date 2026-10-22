@@ -1,6 +1,11 @@
 # Network &amp; Credentialing Enforcement (Capability 5.6)
 
-Status: 5.6 — Claims Phase 1
+> **Current interpretation (October 22, 2026):** the “five stub stages” below
+> describes the original 5.5 baseline. Current claims host registrations use real
+> stages; this is not a current platform-wide gap. See the
+> [capability ledger](../CAPABILITY_RECONCILIATION.md) for current scoped limits.
+
+Status: 5.6 — Claims Phase 1 historical design
 Services: `src/services/provider-service`, `src/services/claims-service`
 Depends on: Provider 5.6 (event-sourced credentialing), BP 5.5 (NetworkTier
 as Organization reference), BP 5.10 (`HttpProviderIntegrityGate` cached-or-live

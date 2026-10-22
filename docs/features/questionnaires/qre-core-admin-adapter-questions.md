@@ -2,9 +2,23 @@
 
 This questionnaire collects what we need to connect Cloud Health Office (CHO) to a health plan's existing core administration platform (for example TriZetto QNXT, TriZetto Facets, or HealthEdge HealthRules Payer). Every plan runs a different core, a different version and its own configuration, so each legacy-core adapter is built per implementation. The plan's answers define how that adapter is built.
 
+CHO is the reference backend implementation; QNXT, Facets and HealthEdge use separate connector implementations of the adapter contracts. See [ADR 027](../../adr/027-core-adapter-engagement-boundary.md) for the intentional scope and assessment classification.
+
 The questions follow the format of the existing transaction QREs (278, 275). Answers fill in the CHO tenant configuration described in the appendix.
 
-> **Status:** CHO's own adapters and backends (`cho`) are the reference implementation for every domain. The QNXT, Facets and HealthEdge adapters ship as interface stubs, and each one is implemented per engagement from this questionnaire. A stubbed legacy-core adapter is an integration gap, not a product gap: the same workflow runs natively in CHO in Replace mode. Augment (shadow) comparison also depends on the per-engagement adapter, which supplies the core's results for CHO to compare against.
+The [core data and interface specification](../../integration/CORE-DATA-CONTRACT.md)
+defines the domain data requirements, code integration points, X12/FHIR references
+and mapping deliverables for architects and SI teams across all core vendors.
+
+> **Status:** CHO's own adapters and backends (`cho`) are the reference implementation for every domain. The QNXT, Facets and HealthEdge adapters ship as interface stubs, and each one is implemented per engagement from this questionnaire. An unimplemented legacy-core adapter is intentionally scoped engagement work, not a generic CHO product gap: the same workflow runs natively in CHO in Replace mode. Augment (shadow) comparison also depends on the per-engagement adapter, which supplies the core's results for CHO to compare against.
+
+## From questionnaire to implementation
+
+After discovery, complete the [connector onboarding and acceptance checklist](../../implementation/CORE-CONNECTOR-ONBOARDING.md). For the first QNXT engagement, use the [connectivity, security and partnership design](../../implementation/QNXT-CONNECTIVITY-ENGAGEMENT.md); licensed specifications and test access remain pending.
+It records the agreed environment/access matrix, domain scope, mapping and
+failure contracts, reconciliation controls, traceable acceptance evidence and
+cutover/support ownership. QRE answers scope the work; they are not themselves
+proof that a connector is implemented or deployed.
 
 ## Contact Information and Milestones
 - Provide plan contacts for executive sponsor, core platform owner, configuration lead, EDI/integration lead, utilization management lead, interoperability (CMS-0057-F) lead, information security, and claims operations (name, phone, email for each).

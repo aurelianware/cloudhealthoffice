@@ -14,6 +14,7 @@ deployment guarantee.
 
 | Topic | Start here |
 | --- | --- |
+| Reference backend vs payer-specific core connectors | [ADR 027](../adr/027-core-adapter-engagement-boundary.md), [QRE](../features/questionnaires/qre-core-admin-adapter-questions.md) |
 | System architecture | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Claims processing pipeline | [claim-adjudication-pipeline.md](claim-adjudication-pipeline.md), [ADJUDICATION-PIPELINE.md](ADJUDICATION-PIPELINE.md) |
 | FHIR integration | [fhir-conformance.md](fhir-conformance.md), [fhir-endpoint-projection.md](fhir-endpoint-projection.md), [claim-fhir-projection.md](claim-fhir-projection.md) |

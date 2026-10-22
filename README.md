@@ -36,6 +36,17 @@ progressively expanded. Current evidence is strongest around local Kubernetes
 claims adjudication, workflow scoring, pended-claim observability, and operator
 console inspection through the Million Claim Challenge.
 
+## Reference backend and core connectors
+
+CHO is the reference backend implementation behind the domain adapter contracts.
+QNXT, Facets and HealthEdge use separate connectors implemented per payer
+engagement, based on platform version/configuration, licensed interfaces,
+solution architecture and hosting. Their interface templates are intentional
+integration work, not evidence that the corresponding native workflow is missing.
+A named connector is not working vendor connectivity until implemented and
+accepted. See [ADR 027](docs/adr/027-core-adapter-engagement-boundary.md) and the
+[core adapter QRE](docs/features/questionnaires/qre-core-admin-adapter-questions.md).
+
 ## Who It Is For
 
 - Health plan engineering teams evaluating CAPS modernization paths.

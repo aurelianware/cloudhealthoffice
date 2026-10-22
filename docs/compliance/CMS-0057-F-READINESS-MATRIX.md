@@ -1,6 +1,6 @@
 # CMS-0057-F Readiness Matrix
 
-**Reviewed:** October 19, 2026; evidence refreshed through merged main `3b5a2035`. Later main `1b38d780` changes published interoperability evidence only.
+**Current scoped source review:** October 22, 2026, main `dc23d47e` (includes #1480/#1484). Earlier executed evidence remains tied to its original baselines in the canonical ledger. Open PR fixes are proposed until merged.
 **Owner:** Cloud Health Office product / compliance engineering
 **Purpose:** requirement and deployment context for the CMS
 Interoperability and Prior Authorization Final Rule (CMS-0057-F).
@@ -54,9 +54,9 @@ workstream:
 
 | CMS-0057-F area | Cloud Health Office status | Repo evidence | Gap / implementation note | Buyer-facing position |
 | --- | --- | --- | --- | --- |
-| Patient Access API expansion | **Unverified** (complete payer workflow) | CAP-05, CAP-22 | Resource surfaces and SMART controls exist; default data-provider bindings remain mocks. The May 2026 claims assessment is historical, not current proof that member access or resource breadth is missing. Validate the complete payer-specific workflow. | "Patient-access building blocks; end-to-end source, identity and consent integration requires verification." |
-| Provider Access API | **Unverified** (complete payer workflow) | CAP-05; provider/FHIR projections and consent integration records | Validate attributed access, opt-out policy, source data and minimization against the selected deployment. Older inventories are not fresh test results. | "Provider/FHIR building blocks; payer-specific access policy and integration require verification." |
-| Payer-to-Payer API | **Partially Implemented** | CAP-10, CAP-14, CAP-22 | System-client/registered-payer binding is tested. Recipient-specific consent and full source/exchange integration are not established; bulk export remains a scaffold. | "Implemented payer-client binding with remaining consent, export and integration limits." |
+| Patient Access API expansion | **Unverified** (complete payer workflow) | CAP-05, CAP-22 | Patient, Coverage, Encounter and Claim have CHO-native sources; SMART controls and imported clinical reads exist. The host still unconditionally requires a legacy synthetic provider. The May 2026 claims assessment is historical, not current proof that member access or resource breadth is missing. Validate the complete payer-specific workflow. | "Patient-access building blocks; end-to-end source, identity and consent integration requires verification." |
+| Provider Access API | **Unverified** (complete payer workflow) | CAP-05; provider/FHIR projections and consent integration records | Attribution/opt-out controls and nonfinancial CARIN claim EOB projection exist. Live attribution, nonfinancial encounter EOBs and full conformance remain incomplete/unverified. Validate selected deployment behavior. | "Provider/FHIR building blocks; payer-specific access policy and integration require verification." |
+| Payer-to-Payer API | **Partially Implemented** | CAP-10, CAP-14, CAP-22 | Registered-payer binding, purpose-specific consent/attestation, native member match/export and financial redaction exist. Complete clinical/supporting-document export and Bulk remain incomplete; fully denied PA filtering merged in #1485 (`8e3413a2`). Deployment validation remains separate. | "Implemented payer-client binding with remaining consent, export and integration limits." |
 | Prior Authorization API / Da Vinci PAS | **Implemented** (scoped behavior) | PAS controller/recorder, automated-decision API; real-host Mongo seam and recording tests (CAP-01/02) | Submit stores mapped request/decision before response; failure issues no preAuthRef. Stored service-line outcomes are projected. Full profile/response conformance, notification and payer deployment diligence remain separate. | "Persisted PAS submission, inquiry and service-line decision capabilities; full conformance and production readiness require further validation." |
 | CRD requirements discovery | **Partially Implemented** | CrdService, CrdController; CrdFailClosedTests (CAP-03) | Unknown/uncoded input and evaluation failures produce uncertainty; explicit classifications can permit no-PA-needed. Full member context and structured coverage actions are separate. | "CRD discovery/cards with explicit uncertainty handling; broader conformance requires validation." |
 | DTR documentation templates | **Partially Implemented** | DtrService, MongoDtrResourceStore, host binding and real-Mongo tests (CAP-04/15) | Creates, conditional updates, reads, searches and existence checks use Mongo across pods. Full answer validation/canonical resolution and package semantics remain incomplete. | "Mongo-backed DTR resource operations and searches, with remaining validation, canonical and package limitations." |
@@ -81,10 +81,11 @@ commit and limits whenever citing them.
 1. **Overclaim drift.** Older docs still use phrases such as "100% compliant"
    or "production-ready" for broad CMS-0057-F posture. Derivative materials
    must use the canonical capability ledger before reuse.
-2. **Mock data adapters in every environment.** `fhir-service` registers the
-   mock FHIR data adapter unconditionally (`FS/Program.cs:144-151`), in every
-   environment, and it ignores tenant (gap matrix G-30). Buyer-facing demos should label
-   demo mode explicitly and show which resources are backed by live services.
+2. **Production source composition still needs work.** Patient, Coverage,
+   Encounter and Claim can all use CHO-native services (#1480); the manifest binds
+   these resources to native sources. The host's unconditional legacy synthetic
+   provider guard remains a separate startup blocker. Label demo/hybrid/live
+   behavior from the configured bindings, not from the mere presence of a mock class.
 3. **Payer-to-payer workflow is not yet turnkey.** Bulk export and consent
    services are useful building blocks, but a deployable payer-to-payer package
    needs more workflow, security, and audit evidence.
@@ -112,7 +113,7 @@ commit and limits whenever citing them.
 - Publish sample `/fhir/r4/compliance-status` output for a demo tenant.
 - Review the existing public metrics template against the implemented aggregates and remaining appeal/extension limitations.
 - Add a demo script covering Patient Access, Provider Directory, PAS `$submit`,
-  pended/denied status, and Bulk Export job flow.
+  pended/denied status, and the explicitly unfinished Bulk Export boundary.
 - Document demo-mode vs live-adapter behavior.
 
 ### Deployment integration

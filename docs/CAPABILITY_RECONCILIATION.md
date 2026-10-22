@@ -1,5 +1,56 @@
 # Capability Reconciliation
 
+## Current refresh — October 22, 2026
+
+**Source baseline:** merged main [`dc23d47e`](https://github.com/aurelianware/cloudhealthoffice/tree/dc23d47e), including PRs #1480 and #1484. This scoped source refresh supersedes conflicting gap claims in earlier sections; older test results remain attached to their recorded commits and are not rerun results for this baseline. Deployment, performance and full conformance remain unverified.
+
+| Scope | Current status | Executing evidence and precise remaining work |
+| --- | --- | --- |
+| Native adjudication, benefits and COB | Implemented scoped business logic | [Claims host](../src/services/claims-service/Program.cs) registers real pricing, benefit, COB, provider/network, NCCI and plan-edit stages. [Benefit host](../src/services/benefit-plan-service/Program.cs) overrides the generic plan-provider placeholder. [COB stage](../src/services/claims-service/Services/Adjudication/Stages/CoordinationOfBenefitsStage.cs) handles prior-payer-complete secondary/tertiary cases; its legacy pend code does not mean all secondary claims are unsupported. Plan completeness, reference content, production replay and scale are separate. |
+| Member/provider administration | Partially Implemented | Native lifecycle, networks and credentialing exist. [PCP assignment](../src/services/coverage-service/Services/PcpAssignmentService.cs) still reads panel capacity before inserting; reconciliation has no scheduler. [Contract child sync](../src/services/provider-contracts-service/Controllers/ProviderContractsController.cs) remains 501 for capitation fields. A specific adapter stub is not proof network administration is absent. |
+| Native FHIR data — CAP-22/27/30 update | Implemented scoped bindings; overall exchange partial | [Bindings](../src/services/fhir-service/Services/ChoNative/FhirDataBindings.cs) and [router](../src/services/fhir-service/Services/ChoNative/RoutingFhirDataAdapter.cs) now support Patient, Coverage, Encounter and Claim; native P2P and PA EOBs also exist. G-30 is closed for these bindings by #1480. The [host](../src/services/fhir-service/Program.cs) still unconditionally requires the legacy synthetic Patient Access provider. Native support is not a claim that the production host starts without synthetic permission. |
+| Provider access and clinical data | Partially Implemented | [Provider authorization](../src/services/fhir-service/Services/ProviderAccess/ProviderAccessAuthorizationService.cs) enforces attribution/opt-out. [Clinical projector](../src/services/fhir-service/Services/Clinical/ClinicalResourceProjector.cs) serves twelve imported resource types; lack of full US Core conformance is not lack of endpoints. #1480 adds nonfinancial CARIN claim EOBs. Encounter-derived nonfinancial EOBs, live attribution, complete P2P clinical/document export and full validation remain separate. |
+| Premium, payments and banking | Implemented scoped workflows; integrated close partial | [Rating](../src/services/premium-billing-service/Rating/PremiumRatingEngine.cs), [cash application](../src/services/premium-billing-service/Services/CashApplicationService.cs), [payment service](../src/services/payment-service/Services) and [BAI2 settlement](../src/services/payment-service/BankReconciliation/NachaSettlementMatcher.cs) are real implementations. [GL event contracts](../src/services/shared/CloudHealthOffice.Finance.Contracts/GlSourceEvents.cs) still name unproduced settlement/return/premium/capitation seams. [AR aging](../src/services/ar-service/Controllers/ArBalancesController.cs) sums stored buckets without recalculating them; premium invoice aging is a separate implemented path. |
+| Eligibility production behavior | Confirmed gap, narrower than “all accumulators fake” | [Normal native adapter](../src/services/eligibility-service/Adapters/ChoEligibilityAdapter.cs) calls real benefit accumulation. [Temporal client](../src/services/eligibility-service/Services/IAccumulatorClient.cs) returns synthetic zeros; [host guard](../src/services/eligibility-service/Program.cs) is unconditional. Upstream failures can appear as no coverage on this baseline. No historical snapshot or production startup proof is claimed. |
+| CMS reporting, bulk and conformance | Partially Implemented / confirmed remaining gaps | [Reporting](../src/services/authorization-service/Services/Cms0057/Cms0057Reporting.cs) computes core aggregates but explicitly does not track appeal/extension outcomes. [Bulk](../src/services/fhir-service/Services/BulkExportService.cs) does not produce files. [Validator script](../scripts/interop/fhir-validate.sh) disables terminology and tolerates [baselined errors](../conformance/validator-baseline.txt); green fixture CI is not full deployed conformance. |
+
+### Intentional engagement boundary: external core adapters
+
+CHO is the reference backend implementation behind the adapter contracts.
+[ADR 027](adr/027-core-adapter-engagement-boundary.md) records the assessment rule.
+QNXT, Facets and HealthEdge use different connector implementations completed per payer
+engagement. Platform version/release, tenant configuration, licensed interfaces,
+solution architecture, hosting and data access differ by implementation. A named
+interface whose methods throw is therefore **engagement work**, not evidence of
+a missing CHO-native feature or an unfinished universal connector commitment.
+It also is not a working integration until implemented and accepted for that payer.
+
+Use the existing [core adapter QRE](features/questionnaires/qre-core-admin-adapter-questions.md)
+and its [example](features/questionnaires/examples/qre-core-admin-adapter-example.md)
+to define access, mapping, licensing, environments and acceptance scope. The QRE
+analogy describes implementation discovery (as in a clearinghouse engagement),
+not an assertion of vendor partnership, Availity compatibility, certification or
+interchangeable effort. External adapter work does not gate native-core
+acceptance unless that deployment actually requires it. CAP-17's older
+“Confirmed Gap” describes the absence of a tested QNXT connector at its baseline;
+it must not be reused as a generic CHO product-defect classification.
+
+### Follow-up changes: merged versus proposed
+
+As checked against the source baseline above (merge updates follow):
+
+- [#1485](https://github.com/aurelianware/cloudhealthoffice/pull/1485): **merged** as `8e3413a2`; P2P fully denied PA exclusion. 63 focused tests at the reviewed head; main merge recorded separately from the initial dc23d47e refresh.
+- [#1486](https://github.com/aurelianware/cloudhealthoffice/pull/1486): **merged** as `8547225e`; coverage failures are unavailable, not negative determinations; 59 focused tests at its reviewed head.
+- [#1487](https://github.com/aurelianware/cloudhealthoffice/pull/1487): **merged** as `9a3367f8`; removes fabricated Bulk completion, returns 501; this does **not** implement durable export. The aligned security harness and completed CI passed before merge.
+
+- [#1489](https://github.com/aurelianware/cloudhealthoffice/pull/1489): **merged** as `e5b9a6d`; native-only FHIR Production source composition, with 30 focused tests including a Production host startup test; does not prove deployed availability.
+- [#1490](https://github.com/aurelianware/cloudhealthoffice/pull/1490): **merged** as `ece14dee`; explicit unavailable temporal accumulator source outside development, with 14 focused tests; does not implement historical accumulation. The existing accumulator service is a plan-year snapshot source, not point-in-time history.
+- [#1491](https://github.com/aurelianware/cloudhealthoffice/pull/1491): **proposed** durable bank-confirmed claims ACH settlement GL events; 254 AR and 573 payment tests passed at its reviewed head. Debit/mixed files, returns, premium cash application and historical backfill remain separate.
+
+Unmerged changes are proposed, never evidence of main or a deployed tenant. Merged changes still do not establish deployed behavior. On merge, update this section with the merge commit and actual completed validation. Follow [the production acceptance workstream](implementation/PRODUCTION-ACCEPTANCE-WORKSTREAM.md); do not infer closure from issue/PR titles.
+
+## Historical evidence baselines
+
 **Verified:** October 19, 2026 (America/Phoenix)
 **Initial implementation baseline:** remote `main` at `d5af561d490f1c440c7cd7fb1098fa3e18d8521c`.
 
@@ -200,7 +251,7 @@ The following is an index of historical D/G identifiers, not a new finding list.
 | G-25 | Unverified in this reconciliation; retain the historical assessment pending focused review. |
 | G-26 | Unverified in this reconciliation; retain the historical assessment pending focused review. |
 | G-27 | Unverified in this reconciliation; retain the historical assessment pending focused review. |
-| G-30 | Unverified in this reconciliation; retain the historical assessment pending focused review. |
+| G-30 | Closed for all IFhirDataAdapter native bindings in #1480; see the October 22 refresh. Production synthetic-provider dependency remains a distinct limitation. |
 | G-31 | Unverified in this reconciliation; retain the historical assessment pending focused review. |
 | G-33 | Unverified in this reconciliation; retain the historical assessment pending focused review. |
 | G-34 | Unverified in this reconciliation; retain the historical assessment pending focused review. |

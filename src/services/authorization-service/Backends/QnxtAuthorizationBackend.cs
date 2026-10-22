@@ -13,9 +13,11 @@ namespace AuthorizationService.Backends;
 /// explicitly configured for Augment mode with the "qnxt" backend; it is NEVER
 /// a silent fallback. Replace mode does not use it.
 ///
-/// A missing/stubbed QNXT integration is an <em>integration-capability</em> gap,
-/// not a Cloud Health Office <em>product-capability</em> gap: the same workflow
-/// passes on <see cref="ChoAuthorizationBackend"/> in Replace mode.
+/// CHO is the reference backend; QNXT uses a different connector implementation
+/// tailored per payer engagement, not a universal bundled connector. See
+/// docs/adr/027-core-adapter-engagement-boundary.md and the core adapter QRE.
+/// Evaluate native capability on <see cref="ChoAuthorizationBackend"/> separately
+/// from this engagement's implementation and deployed acceptance.
 /// </summary>
 /// <remarks>
 /// TODO(qnxt-authorization): integrate with the QNXT authorization transaction
